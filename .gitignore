@@ -1,0 +1,19 @@
+# Secrets
+.env
+*.env.local
+
+# Build
+server/target/
+client/node_modules/
+client/dist/
+
+# Logs
+.logs/
+*.log
+
+# Uploads
+server/uploads/
+
+# IDE
+.vscode/
+.idea/
