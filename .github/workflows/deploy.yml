@@ -1,7 +1,11 @@
 name: Deploy ForgeChat
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
     inputs:
       deploy:
         description: "Deploy to VPS"
