@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, Navigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2 } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
 import MessageList from '../components/chat/MessageList'
 import MessageInput from '../components/chat/MessageInput'
 import MemberList from '../components/chat/MemberList'
-import VoiceChannelPage from './VoiceChannelPage'
-import VideoChannelPage from './VideoChannelPage'
+import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
 import toast from 'react-hot-toast'
@@ -104,7 +103,7 @@ export default function ChannelPage() {
   if (!channelId && serverLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+        <Loader2 size={32} className="animate-spin text-fc-accent" />
       </div>
     )
   }
@@ -129,21 +128,16 @@ export default function ChannelPage() {
   if (!channelId) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+        <Loader2 size={32} className="animate-spin text-fc-accent" />
       </div>
     )
   }
 
   const currentChannel = channels.find((c: any) => c.id === channelId)
 
-  // Canal vocal
-  if (currentChannel?.type === 'voice' || currentChannel?.type === 'stage') {
-    return <VoiceChannelPage channel={currentChannel} serverId={serverId} />
-  }
-
-  // Canal vidéo
-  if (currentChannel?.type === 'video') {
-    return <VideoChannelPage channel={currentChannel} serverId={serverId} />
+  // Canal vocal / vidéo / scène — même composant WebRTC
+  if (currentChannel?.type === 'voice' || currentChannel?.type === 'video' || currentChannel?.type === 'stage') {
+    return <VoiceVideoPage channel={currentChannel} serverId={serverId} />
   }
 
   // Forum
@@ -193,13 +187,11 @@ export default function ChannelPage() {
           channelId={channelId}
           serverId={serverId}
           onDeleteMessage={(id) => deleteMsg.mutate(id)}
-          onEditMessage={(id, content) => {
-            const newContent = window.prompt('Modifier le message :', content)
-            if (newContent !== null && newContent !== content && newContent.trim()) {
-              editMsg.mutate({ msgId: id, content: newContent.trim() })
-            }
-          }}
+          onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
           onOpenThread={(msgId) => setActiveThreadId(msgId)}
+          onAddReaction={(msgId, emoji) =>
+            api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+          }
         />
 
         {/* Input */}
