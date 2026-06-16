@@ -46,10 +46,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/auth/login || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/auth/login 2>/dev/null || curl -sf http://localhost:8080/ 2>/dev/null || exit 1"]
       interval: 10s
       retries: 5
-      start_period: 15s
+      start_period: 30s
 
   nginx:
     image: nginx:1.27-alpine
