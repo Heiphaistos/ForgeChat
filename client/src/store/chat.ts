@@ -7,6 +7,8 @@ interface Message {
   content: string | null
   type: string
   reply_to: string | null
+  reply_to_content: string | null
+  reply_to_username: string | null
   pinned: boolean
   edited_at: string | null
   created_at: string

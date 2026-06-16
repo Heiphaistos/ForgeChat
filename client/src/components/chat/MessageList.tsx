@@ -168,9 +168,16 @@ export default function MessageList({
                 <>
                   {/* Message de reply référencé */}
                   {msg.reply_to && (
-                    <div className="flex items-center gap-1.5 mb-1 pl-2 border-l-2 border-fc-muted/40 text-xs text-fc-muted">
-                      <CornerUpLeft size={10} />
-                      <span className="italic truncate max-w-xs">Réponse à un message</span>
+                    <div className="flex items-center gap-1.5 mb-1 pl-2 border-l-2 border-fc-accent/40 text-xs text-fc-muted">
+                      <CornerUpLeft size={10} className="text-fc-accent flex-shrink-0" />
+                      {msg.reply_to_username && (
+                        <span className="font-semibold text-white/80">{msg.reply_to_username}</span>
+                      )}
+                      <span className="italic truncate max-w-xs">
+                        {msg.reply_to_content
+                          ? msg.reply_to_content.slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
+                          : 'Message original supprimé'}
+                      </span>
                     </div>
                   )}
 

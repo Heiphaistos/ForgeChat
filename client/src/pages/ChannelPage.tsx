@@ -6,7 +6,7 @@ import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
 import MessageList from '../components/chat/MessageList'
-import MessageInput from '../components/chat/MessageInput'
+import MessageInput, { ReplyTarget } from '../components/chat/MessageInput'
 import MemberList from '../components/chat/MemberList'
 import PinnedPanel from '../components/chat/PinnedPanel'
 import SearchPanel from '../components/chat/SearchPanel'
@@ -35,6 +35,7 @@ export default function ChannelPage() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [showPinned, setShowPinned] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
 
   // All hooks first — no conditional hooks
   const { data: serverData, isLoading: serverLoading } = useQuery({
@@ -83,8 +84,8 @@ export default function ChannelPage() {
   }, [channelId])
 
   const sendMsg = useMutation({
-    mutationFn: (content: string) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content }),
+    mutationFn: ({ content, reply_to }: { content: string; reply_to?: string }) =>
+      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to }),
     onError: () => toast.error("Échec de l'envoi"),
   })
 
@@ -209,6 +210,7 @@ export default function ChannelPage() {
               .then(() => toast.success('Message épinglé'))
               .catch(() => toast.error('Épinglage impossible'))
           }
+          onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
         />
 
         {/* Input */}
@@ -216,7 +218,9 @@ export default function ChannelPage() {
           channelId={channelId}
           serverId={serverId}
           placeholder={`Message dans #${currentChannel?.name ?? '...'}`}
-          onSend={(content) => sendMsg.mutate(content)}
+          onSend={(content, replyToId) => sendMsg.mutate({ content, reply_to: replyToId })}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
         />
       </div>
 

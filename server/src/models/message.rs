@@ -22,6 +22,8 @@ pub struct MessageWithAuthor {
     pub content: Option<String>,
     pub r#type: String,
     pub reply_to: Option<Uuid>,
+    pub reply_to_content: Option<String>,
+    pub reply_to_username: Option<String>,
     pub pinned: bool,
     pub edited_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,

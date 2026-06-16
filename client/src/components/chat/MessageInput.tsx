@@ -1,16 +1,24 @@
 import { useRef, useState, useEffect } from 'react'
-import { Plus, SmilePlus, Send } from 'lucide-react'
+import { Plus, SmilePlus, Send, X, CornerUpLeft } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 
+export interface ReplyTarget {
+  id: string
+  author_username: string
+  content: string | null
+}
+
 interface Props {
   channelId: string
   serverId: string
   placeholder?: string
-  onSend: (content: string) => void
+  onSend: (content: string, replyTo?: string) => void
+  replyTo?: ReplyTarget | null
+  onCancelReply?: () => void
 }
 
 interface MentionUser {
@@ -20,7 +28,7 @@ interface MentionUser {
   discriminator: string
 }
 
-export default function MessageInput({ channelId, serverId, placeholder, onSend }: Props) {
+export default function MessageInput({ channelId, serverId, placeholder, onSend, replyTo, onCancelReply }: Props) {
   const [content, setContent] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [mentionQuery, setMentionQuery] = useState('')
@@ -117,10 +125,11 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend 
   const submit = () => {
     const trimmed = content.trim()
     if (!trimmed && files.length === 0) return
-    if (trimmed) onSend(trimmed)
+    if (trimmed) onSend(trimmed, replyTo?.id)
     setContent('')
     setFiles([])
     setShowMentions(false)
+    onCancelReply?.()
     textareaRef.current?.focus()
   }
 
@@ -134,6 +143,25 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend 
   return (
     <div {...getRootProps()} className={`px-4 pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset' : ''}`}>
       <input {...getInputProps()} />
+
+      {/* Barre de réponse */}
+      {replyTo && (
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-fc-input/60 rounded-t-lg border-b border-fc-hover text-xs">
+          <CornerUpLeft size={12} className="text-fc-accent flex-shrink-0" />
+          <span className="text-fc-muted">Réponse à</span>
+          <span className="font-semibold text-white">{replyTo.author_username}</span>
+          {replyTo.content && (
+            <span className="text-fc-muted truncate max-w-xs">{replyTo.content.slice(0, 80)}</span>
+          )}
+          <button
+            onClick={onCancelReply}
+            className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+            title="Annuler la réponse"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Dropdown mentions */}
       {showMentions && mentionResults.length > 0 && (

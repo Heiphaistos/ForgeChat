@@ -24,8 +24,12 @@ pub async fn get_messages(
 
     let messages = if let Some(before) = params.before {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar
-             FROM messages m JOIN users u ON u.id = m.user_id
+            "SELECT m.*, u.username, u.discriminator, u.avatar,
+                    rm.content as reply_to_content, ru.username as reply_to_username
+             FROM messages m
+             JOIN users u ON u.id = m.user_id
+             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at < (SELECT created_at FROM messages WHERE id=$2)
              ORDER BY m.created_at DESC LIMIT $3"
         )
@@ -33,8 +37,12 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar
-             FROM messages m JOIN users u ON u.id = m.user_id
+            "SELECT m.*, u.username, u.discriminator, u.avatar,
+                    rm.content as reply_to_content, ru.username as reply_to_username
+             FROM messages m
+             JOIN users u ON u.id = m.user_id
+             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1
              ORDER BY m.created_at DESC LIMIT $2"
         )
@@ -79,6 +87,8 @@ pub async fn get_messages(
             content: row.get("content"),
             r#type: row.get("type"),
             reply_to: row.get("reply_to"),
+            reply_to_content: row.try_get("reply_to_content").ok().flatten(),
+            reply_to_username: row.try_get("reply_to_username").ok().flatten(),
             pinned: row.get("pinned"),
             edited_at: row.get("edited_at"),
             created_at: row.get("created_at"),
@@ -137,12 +147,32 @@ pub async fn send_message(
     .await?;
 
     use sqlx::Row;
+    let reply_to_id: Option<Uuid> = msg.get("reply_to");
+    let (reply_to_content, reply_to_username) = if let Some(rid) = reply_to_id {
+        let row = sqlx::query(
+            "SELECT m.content, u.username FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id=$1"
+        )
+        .bind(rid)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None);
+        if let Some(r) = row {
+            (r.get::<Option<String>, _>("content"), Some(r.get::<String, _>("username")))
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     let full_msg = MessageWithAuthor {
         id: msg.get("id"),
         channel_id,
         content: msg.get("content"),
         r#type: msg.get("type"),
-        reply_to: msg.get("reply_to"),
+        reply_to: reply_to_id,
+        reply_to_content,
+        reply_to_username,
         pinned: msg.get("pinned"),
         edited_at: msg.get("edited_at"),
         created_at: msg.get("created_at"),
@@ -373,8 +403,12 @@ pub async fn search_messages(
 
     let pattern = format!("%{}%", q.to_lowercase());
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, u.avatar
-         FROM messages m JOIN users u ON u.id = m.user_id
+        "SELECT m.*, u.username, u.discriminator, u.avatar,
+                rm.content as reply_to_content, ru.username as reply_to_username
+         FROM messages m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN messages rm ON rm.id = m.reply_to
+         LEFT JOIN users ru ON ru.id = rm.user_id
          WHERE m.channel_id=$1 AND LOWER(m.content) LIKE $2
          ORDER BY m.created_at DESC LIMIT 50"
     )
@@ -390,6 +424,8 @@ pub async fn search_messages(
         content: r.get("content"),
         r#type: r.get("type"),
         reply_to: r.get("reply_to"),
+        reply_to_content: r.try_get("reply_to_content").ok().flatten(),
+        reply_to_username: r.try_get("reply_to_username").ok().flatten(),
         pinned: r.get("pinned"),
         edited_at: r.get("edited_at"),
         created_at: r.get("created_at"),
