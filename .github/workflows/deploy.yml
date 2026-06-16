@@ -1,42 +1,33 @@
 name: Deploy ForgeChat
+# ci-test-v3
 
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   deploy:
-    name: Build & Deploy
+    name: Deploy to VPS
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
-
-      - name: Build client
+      - name: Setup SSH key
         run: |
-          cd client
-          npm ci
-          npm run build
+          echo "${{ secrets.VPS_SSH_KEY }}" | base64 --decode --ignore-garbage > /tmp/dk
+          chmod 600 /tmp/dk
 
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
+      - name: Deploy to VPS via SSH
+        run: |
+          ssh -i /tmp/dk -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} '
             set -e
             cd /opt/forgechat
-            git pull origin main
+            git fetch origin
+            git reset --hard origin/main
             cd client && npm ci && npm run build && cd ..
             docker compose up -d --build --remove-orphans
-            docker compose ps
-            echo "✅ Déployé à $(date)"
+            echo "Deployed $(date)"
+          '
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/dk

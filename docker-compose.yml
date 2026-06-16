@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -29,6 +27,8 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3013:8080"
     environment:
       DATABASE_URL: postgres://forgechat:${POSTGRES_PASSWORD}@postgres:5432/forgechat
       REDIS_URL: redis://redis:6379
@@ -37,8 +37,6 @@ services:
       UPLOAD_DIR: /app/uploads
       FRONTEND_URL: ${FRONTEND_URL:-https://forgechat.heiphaistos.org}
       RUST_LOG: forgechat=info,tower_http=warn
-    ports:
-      - "127.0.0.1:3013:8080"
     volumes:
       - uploads:/app/uploads
     depends_on:
@@ -48,10 +46,10 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8080/api/auth/login || exit 1"]
+      test: ["CMD-SHELL", "curl -s http://localhost:8080/api/auth/login > /dev/null 2>&1"]
       interval: 10s
       retries: 5
-      start_period: 15s
+      start_period: 30s
 
 volumes:
   pgdata:
