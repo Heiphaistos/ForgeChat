@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
+import { usePresence } from './store/presence'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import InvitePage from './pages/InvitePage'
@@ -22,7 +23,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { fetchMe, user } = useAuth()
-  const { connect, disconnect } = useWs()
+  const { connect, disconnect, on } = useWs()
+  const setStatus = usePresence(s => s.setStatus)
 
   useEffect(() => { fetchMe() }, [])
 
@@ -32,6 +34,14 @@ export default function App() {
     if (token) connect(token)
     return () => disconnect()
   }, [user?.id])
+
+  // Écouter les mises à jour de présence globalement
+  useEffect(() => {
+    const off = on('PRESENCE_UPDATE', (d: any) => {
+      setStatus(d.user_id, d.status)
+    })
+    return off
+  }, [])
 
   return (
     <BrowserRouter>

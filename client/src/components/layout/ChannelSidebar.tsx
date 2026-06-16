@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import api from '../../api/client'
+import { usePresence } from '../../store/presence'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
@@ -34,6 +35,7 @@ export default function ChannelSidebar() {
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const getStatus = usePresence(s => s.getStatus)
 
   const { data } = useQuery({
     queryKey: ['server', serverId],
@@ -53,24 +55,32 @@ export default function ChannelSidebar() {
         <div className="px-2 py-2 text-xs font-semibold text-fc-muted uppercase tracking-wide">
           Messages directs
         </div>
-        {dms.map((dm: any) => (
-          <button
-            key={dm.id}
-            onClick={() => nav(`/dms/${dm.id}`)}
-            className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-          >
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white">
-                {dm.username.charAt(0).toUpperCase()}
+        {dms.map((dm: any) => {
+          const liveStatus = getStatus(dm.other_user_id) || dm.status
+          const isOnline = liveStatus === 'online'
+          return (
+            <button
+              key={dm.id}
+              onClick={() => nav(`/dms/${dm.id}`)}
+              className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+            >
+              <div className="relative flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
+                  {dm.avatar
+                    ? <img src={dm.avatar} alt="" className="w-full h-full object-cover" />
+                    : dm.username.charAt(0).toUpperCase()}
+                </div>
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${isOnline ? 'bg-fc-green' : 'bg-fc-muted'}`} />
               </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${dm.status === 'online' ? 'bg-fc-green' : 'bg-fc-muted'}`} />
-            </div>
-            <div className="min-w-0 text-left">
-              <div className="text-sm font-medium text-fc-text truncate">{dm.username}</div>
-              <div className="text-xs text-fc-muted">{dm.status === 'online' ? 'En ligne' : 'Hors ligne'}</div>
-            </div>
-          </button>
-        ))}
+              <div className="min-w-0 text-left">
+                <div className="text-sm font-medium text-fc-text truncate">{dm.username}</div>
+                <div className={`text-xs ${isOnline ? 'text-fc-green' : 'text-fc-muted'}`}>
+                  {isOnline ? 'En ligne' : 'Hors ligne'}
+                </div>
+              </div>
+            </button>
+          )
+        })}
       </div>
     )
   }

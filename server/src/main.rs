@@ -114,6 +114,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/reactions/:emoji", put(handlers::messages::add_reaction))
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/reactions/:emoji", delete(handlers::messages::remove_reaction))
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", post(handlers::messages::pin_message))
+        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", delete(handlers::messages::unpin_message))
+        .route("/servers/:server_id/channels/:channel_id/messages/search", get(handlers::messages::search_messages))
         // Uploads
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file))
         // Roles

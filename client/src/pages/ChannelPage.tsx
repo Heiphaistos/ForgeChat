@@ -8,6 +8,8 @@ import { useWs } from '../store/ws'
 import MessageList from '../components/chat/MessageList'
 import MessageInput from '../components/chat/MessageInput'
 import MemberList from '../components/chat/MemberList'
+import PinnedPanel from '../components/chat/PinnedPanel'
+import SearchPanel from '../components/chat/SearchPanel'
 import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
@@ -31,6 +33,8 @@ export default function ChannelPage() {
   const { on, subscribeChannel } = useWs()
   const [showMembers, setShowMembers] = useState(true)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [showPinned, setShowPinned] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
 
   // All hooks first — no conditional hooks
   const { data: serverData, isLoading: serverLoading } = useQuery({
@@ -163,10 +167,18 @@ export default function ChannelPage() {
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
-            <button className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover" title="Rechercher">
+            <button
+              onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              title="Rechercher"
+            >
               <Search size={18} />
             </button>
-            <button className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover" title="Messages épinglés">
+            <button
+              onClick={() => { setShowPinned(!showPinned); setShowSearch(false); setActiveThreadId(null) }}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              title="Messages épinglés"
+            >
               <Pin size={18} />
             </button>
             <button className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover" title="Notifications">
@@ -188,9 +200,14 @@ export default function ChannelPage() {
           serverId={serverId}
           onDeleteMessage={(id) => deleteMsg.mutate(id)}
           onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
-          onOpenThread={(msgId) => setActiveThreadId(msgId)}
+          onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
           onAddReaction={(msgId, emoji) =>
             api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+          }
+          onPinMessage={(msgId) =>
+            api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
+              .then(() => toast.success('Message épinglé'))
+              .catch(() => toast.error('Épinglage impossible'))
           }
         />
 
@@ -213,8 +230,28 @@ export default function ChannelPage() {
         />
       )}
 
+      {/* Panneau épingles */}
+      {showPinned && !activeThreadId && (
+        <PinnedPanel
+          serverId={serverId}
+          channelId={channelId}
+          channelName={currentChannel?.name ?? ''}
+          onClose={() => setShowPinned(false)}
+        />
+      )}
+
+      {/* Panneau recherche */}
+      {showSearch && !activeThreadId && (
+        <SearchPanel
+          serverId={serverId}
+          channelId={channelId}
+          channelName={currentChannel?.name ?? ''}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
       {/* Liste membres */}
-      {showMembers && !activeThreadId && <MemberList serverId={serverId} />}
+      {showMembers && !activeThreadId && !showPinned && !showSearch && <MemberList serverId={serverId} />}
     </div>
   )
 }

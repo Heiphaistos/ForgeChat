@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
 
@@ -12,6 +12,7 @@ interface Props {
   onEditMessage: (msgId: string, content: string) => void
   onOpenThread?: (msgId: string) => void
   onAddReaction?: (msgId: string, emoji: string) => void
+  onPinMessage?: (msgId: string) => void
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
@@ -35,6 +36,7 @@ export default function MessageList({
   onEditMessage,
   onOpenThread,
   onAddReaction,
+  onPinMessage,
 }: Props) {
   const { user } = useAuth()
   const messages = useChat(s => s.messagesByChannel[channelId] ?? [])
@@ -257,6 +259,16 @@ export default function MessageList({
                     title="Ouvrir thread"
                   >
                     <MessagesSquare size={14} />
+                  </button>
+                )}
+
+                {onPinMessage && (
+                  <button
+                    onClick={() => onPinMessage(msg.id)}
+                    className={`p-1.5 rounded hover:bg-fc-hover transition ${msg.pinned ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                    title={msg.pinned ? 'Épinglé' : 'Épingler'}
+                  >
+                    <Pin size={14} />
                   </button>
                 )}
 

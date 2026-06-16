@@ -260,7 +260,7 @@ export default function VoiceVideoPage({ channel }: Props) {
             stream={p.stream}
             muted={p.isLocal}
             label={p.username}
-            avatar={p.avatar}
+            avatar={p.avatar ?? undefined}
             isLocal={p.isLocal}
             audioEnabled={p.isLocal ? audioEnabled : p.audioEnabled}
             videoEnabled={p.isLocal ? videoEnabled : p.videoEnabled}

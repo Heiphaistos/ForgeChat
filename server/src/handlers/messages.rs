@@ -300,9 +300,7 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    use crate::handlers::servers::require_permission;
-    use crate::models::role::Permissions;
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    require_member(&state, claims.sub, server_id).await?;
 
     sqlx::query(
         "INSERT INTO pinned_messages (channel_id, message_id, pinned_by) VALUES ($1, $2, $3)
@@ -319,5 +317,89 @@ pub async fn pin_message(
         .execute(&state.db)
         .await?;
 
+    let event = serde_json::json!({
+        "type": "MESSAGE_PIN_UPDATE",
+        "channel_id": channel_id,
+        "message_id": message_id,
+        "pinned": true,
+        "pinned_by": claims.sub,
+    });
+    state.broadcast_to_channel(channel_id, event.to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn unpin_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    sqlx::query("DELETE FROM pinned_messages WHERE channel_id=$1 AND message_id=$2")
+        .bind(channel_id)
+        .bind(message_id)
+        .execute(&state.db)
+        .await?;
+
+    sqlx::query("UPDATE messages SET pinned=false WHERE id=$1")
+        .bind(message_id)
+        .execute(&state.db)
+        .await?;
+
+    let event = serde_json::json!({
+        "type": "MESSAGE_PIN_UPDATE",
+        "channel_id": channel_id,
+        "message_id": message_id,
+        "pinned": false,
+    });
+    state.broadcast_to_channel(channel_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn search_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<MessageWithAuthor>>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    let q = params.get("q").cloned().unwrap_or_default();
+    if q.trim().len() < 2 {
+        return Ok(Json(vec![]));
+    }
+
+    let pattern = format!("%{}%", q.to_lowercase());
+    let rows = sqlx::query(
+        "SELECT m.*, u.username, u.discriminator, u.avatar
+         FROM messages m JOIN users u ON u.id = m.user_id
+         WHERE m.channel_id=$1 AND LOWER(m.content) LIKE $2
+         ORDER BY m.created_at DESC LIMIT 50"
+    )
+    .bind(channel_id)
+    .bind(&pattern)
+    .fetch_all(&state.db)
+    .await?;
+
+    use sqlx::Row;
+    let result = rows.iter().map(|r| MessageWithAuthor {
+        id: r.get("id"),
+        channel_id,
+        content: r.get("content"),
+        r#type: r.get("type"),
+        reply_to: r.get("reply_to"),
+        pinned: r.get("pinned"),
+        edited_at: r.get("edited_at"),
+        created_at: r.get("created_at"),
+        author_id: r.get("user_id"),
+        author_username: r.get("username"),
+        author_discriminator: r.get("discriminator"),
+        author_avatar: r.get("avatar"),
+        attachments: vec![],
+        reactions: vec![],
+    }).collect();
+
+    Ok(Json(result))
 }

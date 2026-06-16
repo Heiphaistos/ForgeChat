@@ -41,6 +41,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, token: String, secret
         .execute(&state.db)
         .await;
 
+    broadcast_presence(&state, user_id, "online").await;
+
     let (mut sender, mut receiver) = socket.split();
     let mut rx = tx.subscribe();
 
@@ -77,11 +79,27 @@ async fn handle_socket(socket: WebSocket, state: AppState, token: String, secret
         .bind(user_id)
         .execute(&state.db)
         .await;
+    broadcast_presence(&state, user_id, "offline").await;
 
     // Quitter le salon vocal automatiquement
     cleanup_voice(&state, user_id).await;
 
     tracing::info!("WS déconnecté: {}", user_id);
+}
+
+async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
+    let event = serde_json::json!({
+        "type": "PRESENCE_UPDATE",
+        "user_id": user_id,
+        "status": status,
+    })
+    .to_string();
+    let clients = state.clients.read().await;
+    for (uid, tx) in clients.iter() {
+        if *uid != user_id {
+            let _ = tx.send(event.clone());
+        }
+    }
 }
 
 async fn cleanup_voice(state: &AppState, user_id: Uuid) {
