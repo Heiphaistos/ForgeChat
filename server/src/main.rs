@@ -91,7 +91,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("ForgeChat v2.3.0 écoute sur {addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    ).await?;
 
     Ok(())
 }
@@ -106,13 +109,26 @@ async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
     .unwrap_or_default();
 
     let count = rows.len();
-    let base = PathBuf::from(upload_dir);
+    let base = PathBuf::from(upload_dir).canonicalize().unwrap_or_else(|_| PathBuf::from(upload_dir));
+
     for row in rows {
         use sqlx::Row;
         let url: String = row.get("url");
         if let Some(relative) = url.strip_prefix("/uploads/") {
+            // Rejeter les séquences de traversal avant de joindre
+            if relative.contains("..") || relative.contains('\0') {
+                tracing::warn!("Tentative de path traversal détectée dans cleanup: {}", url);
+                continue;
+            }
             let path = base.join(relative);
-            let _ = tokio::fs::remove_file(&path).await;
+            // Vérifier que le chemin canonique reste dans upload_dir
+            if let Ok(canonical) = path.canonicalize() {
+                if canonical.starts_with(&base) {
+                    let _ = tokio::fs::remove_file(&canonical).await;
+                } else {
+                    tracing::warn!("Path traversal bloqué : {:?} hors de {:?}", canonical, base);
+                }
+            }
         }
     }
 

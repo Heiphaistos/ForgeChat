@@ -14,6 +14,8 @@ pub enum AppError {
     BadRequest(String),
     #[error("{0}")]
     Conflict(String),
+    #[error("Trop de tentatives — réessayez dans 15 minutes")]
+    TooManyRequests,
     #[error("Erreur interne: {0}")]
     Internal(#[from] anyhow::Error),
     #[error("DB: {0}")]
@@ -28,6 +30,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
+            AppError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
             AppError::Internal(e) => {
                 tracing::error!("Internal error: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur".into())

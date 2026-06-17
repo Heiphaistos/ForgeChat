@@ -1,7 +1,13 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{ConnectInfo, State},
+    http::HeaderMap,
+    Json,
+};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::Utc;
 use rand::Rng;
+use redis::AsyncCommands;
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
@@ -10,6 +16,37 @@ use crate::{
     models::user::{AuthResponse, LoginRequest, PendingRegistration, RegisterRequest, UserPublic},
     state::AppState,
 };
+
+/// Vérifie et incrémente le compteur de tentatives de login par IP.
+/// Retourne Err(AppError::TooManyRequests) si la limite est atteinte.
+async fn check_login_rate_limit(state: &AppState, ip: &str) -> Result<()> {
+    let key = format!("login_attempts:{}", ip);
+    let mut redis = state.redis.lock().await;
+
+    // Récupérer le compteur actuel
+    let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
+    let count = count.unwrap_or(0);
+
+    if count >= 10 {
+        return Err(AppError::TooManyRequests);
+    }
+
+    // Incrémenter et définir TTL de 15 minutes
+    let _: () = redis.incr(&key, 1).await.unwrap_or(());
+    // Définir TTL seulement si c'est la première tentative
+    if count == 0 {
+        let _: () = redis.expire(&key, 900).await.unwrap_or(());
+    }
+
+    Ok(())
+}
+
+/// Réinitialise le compteur après un login réussi
+async fn reset_login_rate_limit(state: &AppState, ip: &str) {
+    let key = format!("login_attempts:{}", ip);
+    let mut redis = state.redis.lock().await;
+    let _: () = redis.del(&key).await.unwrap_or(());
+}
 
 pub async fn register(
     State(state): State<AppState>,
@@ -130,8 +167,22 @@ pub async fn verify_email(
 
 pub async fn login(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>> {
+    // Extraire l'IP réelle (derrière reverse proxy nginx)
+    // X-Forwarded-For est injecté par nginx avec proxy_set_header
+    let client_ip = headers
+        .get("x-real-ip")
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string());
+
+    // Rate limiting : 10 tentatives max / 15 min par IP
+    check_login_rate_limit(&state, &client_ip).await?;
+
     let user = sqlx::query_as::<_, crate::models::user::User>(
         "SELECT * FROM users WHERE email=$1",
     )
@@ -145,6 +196,9 @@ pub async fn login(
     if !valid {
         return Err(AppError::Unauthorized);
     }
+
+    // Login réussi — réinitialiser le compteur
+    reset_login_rate_limit(&state, &client_ip).await;
 
     sqlx::query("UPDATE users SET status='online', updated_at=NOW() WHERE id=$1")
         .bind(user.id)
@@ -261,16 +315,11 @@ fn generate_refresh_token() -> String {
 
 fn hash_token(token: &str) -> String {
     use base64::Engine;
-    let digest = ring_or_simple_hash(token.as_bytes());
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    let digest = hasher.finalize();
     base64::engine::general_purpose::STANDARD.encode(digest)
-}
-
-fn ring_or_simple_hash(data: &[u8]) -> Vec<u8> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    hasher.finish().to_le_bytes().to_vec()
 }
 
 async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Result<()> {

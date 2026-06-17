@@ -134,11 +134,20 @@ pub async fn delete_emoji(
     .await?
     .ok_or_else(|| AppError::NotFound("Emoji introuvable".into()))?;
 
-    // Supprimer le fichier physique
+    // Supprimer le fichier physique — protection contre path traversal
     let upload_dir = PathBuf::from(&state.config.upload_dir);
+    let base = upload_dir.canonicalize().unwrap_or(upload_dir.clone());
     if let Some(relative) = row.strip_prefix("/uploads/") {
-        let path = upload_dir.join(relative);
-        let _ = tokio::fs::remove_file(&path).await;
+        if !relative.contains("..") && !relative.contains('\0') {
+            let path = upload_dir.join(relative);
+            if let Ok(canonical) = path.canonicalize() {
+                if canonical.starts_with(&base) {
+                    let _ = tokio::fs::remove_file(&canonical).await;
+                } else {
+                    tracing::warn!("Path traversal bloqué pour emoji delete : {:?}", canonical);
+                }
+            }
+        }
     }
 
     sqlx::query("DELETE FROM custom_emojis WHERE id=$1")

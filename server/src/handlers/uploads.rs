@@ -55,10 +55,31 @@ pub async fn upload_file(
             return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
         }
 
-        let ext = std::path::Path::new(&original_name)
+        // Valider et normaliser l'extension — bloquer les types dangereux
+        let raw_ext = std::path::Path::new(&original_name)
             .extension()
             .and_then(|e| e.to_str())
-            .unwrap_or("bin");
+            .unwrap_or("bin")
+            .to_lowercase();
+
+        // Liste blanche d'extensions autorisées
+        const ALLOWED_EXTENSIONS: &[&str] = &[
+            "jpg", "jpeg", "png", "gif", "webp", "svg",
+            "mp4", "webm", "mov", "mkv",
+            "mp3", "ogg", "wav", "flac",
+            "pdf", "txt", "md",
+            "zip", "tar", "gz", "7z", "rar",
+            "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+            "bin",
+        ];
+
+        if !ALLOWED_EXTENSIONS.contains(&raw_ext.as_str()) {
+            return Err(AppError::BadRequest(
+                format!("Extension .{} non autorisée", raw_ext)
+            ));
+        }
+
+        let ext = raw_ext;
 
         let file_id = Uuid::new_v4();
         let filename = format!("{}.{}", file_id, ext);

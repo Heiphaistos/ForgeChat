@@ -318,24 +318,89 @@ pub struct OgMeta {
     pub url: String,
 }
 
+/// Vérifie qu'une URL n'est pas une adresse privée/locale (protection SSRF)
+fn is_ssrf_safe_url(url: &str) -> bool {
+    use std::net::IpAddr;
+
+    // Doit commencer par https:// uniquement (pas http:// — pas de redirections non chiffrées)
+    if !url.starts_with("https://") {
+        return false;
+    }
+
+    // Extraire l'hôte
+    let without_scheme = &url["https://".len()..];
+    let host = without_scheme.split('/').next().unwrap_or("");
+    // Retirer le port éventuel
+    let host = host.split(':').next().unwrap_or("");
+
+    if host.is_empty() {
+        return false;
+    }
+
+    // Bloquer les hostnames locaux évidents
+    let blocked_hosts = ["localhost", "127.0.0.1", "::1", "0.0.0.0",
+        "metadata.google.internal", "169.254.169.254"];
+    for bh in &blocked_hosts {
+        if host.eq_ignore_ascii_case(bh) {
+            return false;
+        }
+    }
+
+    // Bloquer les domaines .local et .internal
+    let lh = host.to_lowercase();
+    if lh.ends_with(".local") || lh.ends_with(".internal") || lh.ends_with(".localhost") {
+        return false;
+    }
+
+    // Bloquer les IPs privées / loopback
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(v4) => {
+                if v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
+                    || v4.is_broadcast()
+                    || v4.is_unspecified()
+                {
+                    return false;
+                }
+            }
+            IpAddr::V6(v6) => {
+                if v6.is_loopback() || v6.is_unspecified() {
+                    return false;
+                }
+            }
+        }
+    }
+
+    true
+}
+
 pub async fn og_preview(
     _state: State<AppState>,
     _claims: Extension<Claims>,
     Query(q): Query<OgQuery>,
 ) -> Result<Json<OgMeta>, AppError> {
-    // Validation URL basique
-    if !q.url.starts_with("http://") && !q.url.starts_with("https://") {
-        return Err(AppError::BadRequest("URL invalide".into()));
+    // Validation URL anti-SSRF
+    if !is_ssrf_safe_url(&q.url) {
+        return Err(AppError::BadRequest("URL invalide ou non autorisée".into()));
     }
 
-    // Fetch via reqwest (timeout strict)
+    // Fetch via reqwest (timeout strict, pas de redirections vers IPs privées)
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
+        .redirect(reqwest::redirect::Policy::limited(3))
         .user_agent("ForgeChat/2.3.0 (+https://forgechat.heiphaistos.org)")
         .build()
         .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
     let resp = client.get(&q.url).send().await.map_err(|_| AppError::NotFound("URL inaccessible".into()))?;
+
+    // Vérifier que la réponse finale ne redirige pas vers une IP privée
+    let final_url = resp.url().to_string();
+    if !is_ssrf_safe_url(&final_url) {
+        return Err(AppError::BadRequest("Redirection vers URL non autorisée".into()));
+    }
     let html = resp.text().await.map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
     // Parse OG tags avec regex simple
@@ -378,13 +443,8 @@ pub async fn og_preview(
 }
 
 async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Result<(), AppError> {
-    use sqlx::Row;
-    let row = sqlx::query("SELECT owner_id FROM servers WHERE id=$1")
-        .bind(server_id).fetch_optional(&state.db).await?
-        .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
-    let owner: Uuid = row.get("owner_id");
-    if owner != user_id {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
+    use crate::handlers::servers::require_permission;
+    use crate::models::role::Permissions;
+    // Déléguer à require_permission qui gère owner + ADMINISTRATOR + MANAGE_SERVER
+    require_permission(state, user_id, server_id, Permissions::MANAGE_SERVER).await
 }

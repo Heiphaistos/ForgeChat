@@ -15,7 +15,8 @@ pub struct WebhookRow {
     pub channel_id: Uuid,
     pub name: String,
     pub avatar: Option<String>,
-    pub token: String,
+    // Token masqué dans la liste — retourné uniquement à la création
+    pub token_preview: String,
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
 }
@@ -35,15 +36,20 @@ pub async fn list_webhooks(
     .fetch_all(&state.db)
     .await?;
 
-    let webhooks = rows.iter().map(|r| WebhookRow {
-        id: r.get("id"),
-        server_id: r.get("server_id"),
-        channel_id: r.get("channel_id"),
-        name: r.get("name"),
-        avatar: r.get("avatar"),
-        token: r.get("token"),
-        created_by: r.get("created_by"),
-        created_at: r.get("created_at"),
+    let webhooks = rows.iter().map(|r| {
+        let token: String = r.get("token");
+        // Masquer le token — afficher uniquement les 8 premiers chars + "..."
+        let token_preview = format!("{}...", &token[..token.len().min(8)]);
+        WebhookRow {
+            id: r.get("id"),
+            server_id: r.get("server_id"),
+            channel_id: r.get("channel_id"),
+            name: r.get("name"),
+            avatar: r.get("avatar"),
+            token_preview,
+            created_by: r.get("created_by"),
+            created_at: r.get("created_at"),
+        }
     }).collect();
 
     Ok(Json(webhooks))
@@ -154,13 +160,7 @@ pub async fn execute_webhook(
 }
 
 async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Result<(), AppError> {
-    use sqlx::Row;
-    let row = sqlx::query("SELECT owner_id FROM servers WHERE id=$1")
-        .bind(server_id).fetch_optional(&state.db).await?
-        .ok_or_else(|| AppError::NotFound("Serveur introuvable".into()))?;
-    let owner: Uuid = row.get("owner_id");
-    if owner != user_id {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
+    use crate::handlers::servers::require_permission;
+    use crate::models::role::Permissions;
+    require_permission(state, user_id, server_id, Permissions::MANAGE_SERVER).await
 }
