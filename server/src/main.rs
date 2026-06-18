@@ -14,7 +14,7 @@ use axum::{
 use sqlx::postgres::PgPoolOptions;
 use std::{path::PathBuf, time::Duration};
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::CorsLayer,
     services::ServeDir,
     trace::TraceLayer,
 };
@@ -61,8 +61,19 @@ async fn main() -> anyhow::Result<()> {
 
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::PATCH,
+            axum::http::Method::DELETE,
+        ])
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+        ])
+        .allow_credentials(false);
 
     let app = Router::new()
         // Auth publique

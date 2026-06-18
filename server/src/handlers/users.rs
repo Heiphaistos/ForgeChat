@@ -92,15 +92,15 @@ pub async fn upload_avatar(
             .unwrap_or("image/jpeg")
             .to_string();
 
-        if !content_type.starts_with("image/") {
-            return Err(AppError::BadRequest("Type de fichier non supporté".into()));
-        }
-
+        // Valider le content-type — liste blanche stricte pour les avatars
         let ext = match content_type.as_str() {
             "image/png" => "png",
             "image/gif" => "gif",
             "image/webp" => "webp",
-            _ => "jpg",
+            "image/jpeg" | "image/jpg" => "jpg",
+            _ => return Err(AppError::BadRequest(
+                "Type de fichier non supporté. Acceptés: PNG, GIF, WEBP, JPEG".into()
+            )),
         };
 
         let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;

@@ -203,6 +203,19 @@ pub async fn bot_send_message(
 
     let bot_id = bot_user_id.ok_or(AppError::Unauthorized)?;
 
+    // Vérifier que le channel appartient bien au server indiqué
+    let channel_in_server = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
+    )
+    .bind(body.channel_id)
+    .bind(body.server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !channel_in_server {
+        return Err(AppError::Forbidden);
+    }
+
     let content = body.content.trim();
     if content.is_empty() {
         return Err(AppError::BadRequest("Contenu vide".into()));

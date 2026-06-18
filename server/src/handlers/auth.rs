@@ -1,6 +1,5 @@
 use axum::{
     extract::{ConnectInfo, State},
-    http::HeaderMap,
     Json,
 };
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -133,7 +132,8 @@ pub async fn verify_email(
         ));
     }
 
-    if pending.code != code {
+    // Comparaison constant-time pour éviter les timing attacks
+    if !constant_time_eq(pending.code.as_bytes(), code.as_bytes()) {
         return Err(AppError::BadRequest("Code incorrect".into()));
     }
 
@@ -311,6 +311,18 @@ fn generate_refresh_token() -> String {
         .take(64)
         .collect();
     String::from_utf8(bytes).unwrap()
+}
+
+/// Comparaison constant-time pour éviter les timing attacks
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 fn hash_token(token: &str) -> String {

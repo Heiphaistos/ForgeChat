@@ -207,7 +207,7 @@ pub async fn get_dm_messages(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50);
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
 
     let messages = sqlx::query(
         "SELECT dm.*, u.username, u.avatar FROM dm_messages dm

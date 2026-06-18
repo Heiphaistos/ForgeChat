@@ -208,10 +208,11 @@ pub async fn edit_message(
     require_member(&state, claims.sub, server_id).await?;
 
     let owner = sqlx::query_scalar::<_, bool>(
-        "SELECT user_id=$2 FROM messages WHERE id=$1"
+        "SELECT user_id=$2 FROM messages WHERE id=$1 AND channel_id=$3"
     )
     .bind(message_id)
     .bind(claims.sub)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
@@ -247,9 +248,10 @@ pub async fn delete_message(
     require_member(&state, claims.sub, server_id).await?;
 
     let msg_user = sqlx::query_scalar::<_, Uuid>(
-        "SELECT user_id FROM messages WHERE id=$1"
+        "SELECT user_id FROM messages WHERE id=$1 AND channel_id=$2"
     )
     .bind(message_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;

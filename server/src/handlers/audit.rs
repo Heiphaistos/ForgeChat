@@ -277,6 +277,13 @@ pub async fn mark_dm_read(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // Vérifier que l'user appartient au DM
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(AppError::Forbidden); }
+
     sqlx::query(
         "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
          VALUES ($1,$2,NOW())
@@ -291,6 +298,13 @@ pub async fn get_dm_read(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>, AppError> {
+    // Vérifier que l'user appartient au DM
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(AppError::Forbidden); }
+
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT user_id, last_read_at FROM dm_read_receipts WHERE dm_id=$1"
@@ -401,7 +415,23 @@ pub async fn og_preview(
     if !is_ssrf_safe_url(&final_url) {
         return Err(AppError::BadRequest("Redirection vers URL non autorisée".into()));
     }
-    let html = resp.text().await.map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
+
+    // Vérifier le content-type — on n'accepte que du HTML
+    let ct = resp.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !ct.contains("text/html") && !ct.contains("text/plain") {
+        return Err(AppError::BadRequest("Type de contenu non supporté pour preview".into()));
+    }
+
+    // Limiter la taille de réponse à 512KB pour éviter un DOS
+    const MAX_HTML_SIZE: usize = 512 * 1024;
+    let bytes = resp.bytes().await.map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
+    if bytes.len() > MAX_HTML_SIZE {
+        return Err(AppError::BadRequest("Page trop volumineuse".into()));
+    }
+    let html = String::from_utf8_lossy(&bytes).into_owned();
 
     // Parse OG tags avec regex simple
     fn extract_meta(html: &str, property: &str) -> Option<String> {
