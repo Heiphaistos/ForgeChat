@@ -15,8 +15,8 @@ export default function RegisterPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await register(username, email, password)
-      nav('/verify-email', { state: { email } })
+      const result = await register(username, email, password)
+      nav('/verify-email', { state: { email, dev_code: result?.dev_code } })
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? 'Erreur lors de l\'inscription')
     } finally {

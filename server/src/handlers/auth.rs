@@ -93,12 +93,22 @@ pub async fn register(
     .execute(&state.db)
     .await?;
 
-    if let Err(e) = crate::email::send_verification_email(&state.config, &email_lower, &code).await
-    {
-        tracing::error!("Erreur envoi email vérification : {}", e);
+    let smtp_sent = match crate::email::send_verification_email(&state.config, &email_lower, &code).await {
+        Ok(sent) => sent,
+        Err(e) => {
+            tracing::error!("Erreur envoi email vérification : {}", e);
+            false
+        }
+    };
+
+    // Si SMTP non configuré, retourner le code dans la réponse (self-hosted)
+    let mut resp = serde_json::json!({ "pending": true, "email": email_lower });
+    if !smtp_sent {
+        resp["dev_code"] = serde_json::json!(code);
+        resp["smtp_configured"] = serde_json::json!(false);
     }
 
-    Ok(Json(serde_json::json!({ "pending": true, "email": email_lower })))
+    Ok(Json(resp))
 }
 
 pub async fn verify_email(

@@ -6,18 +6,15 @@ use lettre::{
 
 use crate::config::Config;
 
-pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> anyhow::Result<()> {
+/// Retourne `Ok(true)` si l'email a été envoyé, `Ok(false)` si SMTP non configuré.
+pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> anyhow::Result<bool> {
     let (Some(host), Some(user), Some(pass)) = (
         &config.smtp_host,
         &config.smtp_user,
         &config.smtp_pass,
     ) else {
-        // Ne pas logger le code en clair — risque de fuite dans les logs
-        tracing::warn!(
-            "SMTP non configuré — code de vérification généré pour {} (non envoyé)",
-            to
-        );
-        return Ok(());
+        tracing::warn!("SMTP non configuré — inscription en attente pour {}", to);
+        return Ok(false);
     };
 
     let body = format!(
@@ -48,5 +45,5 @@ pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> a
             .build();
 
     mailer.send(email).await?;
-    Ok(())
+    Ok(true)
 }

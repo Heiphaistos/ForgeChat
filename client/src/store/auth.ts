@@ -17,7 +17,7 @@ interface AuthState {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (username: string, email: string, password: string) => Promise<{ pending: boolean; email: string; dev_code?: string } | undefined>
   logout: () => Promise<void>
   fetchMe: () => Promise<void>
   updateMe: (data: Partial<User>) => void
@@ -36,8 +36,8 @@ export const useAuth = create<AuthState>()(
     },
 
     register: async (username, email, password) => {
-      // Retourne { pending: true, email } — la vérification se fait dans VerifyEmailPage
-      await api.post('/auth/register', { username, email, password })
+      const { data } = await api.post('/auth/register', { username, email, password })
+      return data as { pending: boolean; email: string; dev_code?: string; smtp_configured?: boolean }
     },
 
     logout: async () => {

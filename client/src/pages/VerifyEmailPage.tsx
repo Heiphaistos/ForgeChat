@@ -10,9 +10,9 @@ export default function VerifyEmailPage() {
   const { fetchMe } = useAuth()
 
   const email = (location.state as any)?.email ?? ''
-  const [digits, setDigits] = useState(['', '', '', ''])
+  const devCode = (location.state as any)?.dev_code as string | undefined
+  const [digits, setDigits] = useState(devCode ? devCode.split('') : ['', '', '', ''])
   const [loading, setLoading] = useState(false)
-  const [resending, setResending] = useState(false)
   const refs = [
     useRef<HTMLInputElement>(null),
     useRef<HTMLInputElement>(null),
@@ -22,7 +22,7 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     if (!email) nav('/register')
-    refs[0].current?.focus()
+    if (!devCode) refs[0].current?.focus()
   }, [])
 
   const handleDigit = (i: number, val: string) => {
@@ -68,19 +68,6 @@ export default function VerifyEmailPage() {
     }
   }
 
-  const resend = async () => {
-    setResending(true)
-    try {
-      const [username] = ['utilisateur']
-      await api.post('/auth/register', { username, email, password: '__resend__' })
-      toast.success('Nouveau code envoyé !')
-    } catch {
-      toast.error("Impossible de renvoyer, recommence l'inscription")
-    } finally {
-      setResending(false)
-    }
-  }
-
   return (
     <div className="flex items-center justify-center min-h-screen bg-fc-bg">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md text-center">
@@ -92,9 +79,17 @@ export default function VerifyEmailPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-white mb-2">Vérifie ton email</h1>
-        <p className="text-fc-muted text-sm mb-1">
-          Un code de vérification a été envoyé à
-        </p>
+
+        {devCode ? (
+          <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-left">
+            <p className="text-yellow-400 text-xs font-medium mb-1">⚠ SMTP non configuré — mode self-hosted</p>
+            <p className="text-fc-muted text-xs">Ton code est affiché directement ici. Configure SMTP pour envoyer de vrais emails.</p>
+          </div>
+        ) : (
+          <p className="text-fc-muted text-sm mb-1">
+            Un code de vérification a été envoyé à
+          </p>
+        )}
         <p className="text-fc-accent font-medium mb-6">{email}</p>
 
         <div className="flex justify-center gap-3 mb-6" onPaste={handlePaste}>
@@ -124,12 +119,11 @@ export default function VerifyEmailPage() {
         </button>
 
         <p className="text-fc-muted text-sm">
-          Pas reçu le code ?{' '}
           <button
             onClick={() => nav('/register')}
             className="text-fc-accent hover:underline"
           >
-            Recommencer l'inscription
+            ← Recommencer l'inscription
           </button>
         </p>
       </div>
