@@ -50,7 +50,7 @@ async fn reset_login_rate_limit(state: &AppState, ip: &str) {
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
-) -> Result<Json<serde_json::Value>> {
+) -> Result<Json<AuthResponse>> {
     if body.username.len() < 2 || body.username.len() > 32 {
         return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
     }
@@ -75,40 +75,27 @@ pub async fn register(
     let password_hash = hash(&body.password, DEFAULT_COST)
         .map_err(|e| AppError::Internal(e.into()))?;
 
-    let code: String = format!("{:04}", rand::thread_rng().gen_range(0..=9999));
-    let expires_at = Utc::now() + chrono::Duration::minutes(15);
-
-    sqlx::query(
-        "INSERT INTO pending_registrations (email, username, password_hash, discriminator, code, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (email) DO UPDATE
-           SET username=$2, password_hash=$3, discriminator=$4, code=$5, expires_at=$6, created_at=NOW()",
+    let user = sqlx::query_as::<_, crate::models::user::User>(
+        "INSERT INTO users (username, discriminator, email, password_hash, is_verified)
+         VALUES ($1, $2, $3, $4, true) RETURNING *",
     )
-    .bind(&email_lower)
     .bind(&body.username)
-    .bind(&password_hash)
     .bind(&discriminator)
-    .bind(&code)
-    .bind(expires_at)
-    .execute(&state.db)
+    .bind(&email_lower)
+    .bind(&password_hash)
+    .fetch_one(&state.db)
     .await?;
 
-    let smtp_sent = match crate::email::send_verification_email(&state.config, &email_lower, &code).await {
-        Ok(sent) => sent,
-        Err(e) => {
-            tracing::error!("Erreur envoi email vérification : {}", e);
-            false
-        }
-    };
+    let access_token = create_token(user.id, &state.config.jwt_secret)
+        .map_err(|e| AppError::Internal(e.into()))?;
+    let refresh_token = generate_refresh_token();
+    store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    // Si SMTP non configuré, retourner le code dans la réponse (self-hosted)
-    let mut resp = serde_json::json!({ "pending": true, "email": email_lower });
-    if !smtp_sent {
-        resp["dev_code"] = serde_json::json!(code);
-        resp["smtp_configured"] = serde_json::json!(false);
-    }
-
-    Ok(Json(resp))
+    Ok(Json(AuthResponse {
+        access_token,
+        refresh_token,
+        user: user.into(),
+    }))
 }
 
 pub async fn verify_email(

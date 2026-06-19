@@ -17,7 +17,7 @@ interface AuthState {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<{ pending: boolean; email: string; dev_code?: string } | undefined>
+  register: (username: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   fetchMe: () => Promise<void>
   updateMe: (data: Partial<User>) => void
@@ -37,7 +37,9 @@ export const useAuth = create<AuthState>()(
 
     register: async (username, email, password) => {
       const { data } = await api.post('/auth/register', { username, email, password })
-      return data as { pending: boolean; email: string; dev_code?: string; smtp_configured?: boolean }
+      localStorage.setItem('access_token', data.access_token)
+      localStorage.setItem('refresh_token', data.refresh_token)
+      set(s => { s.user = data.user })
     },
 
     logout: async () => {
