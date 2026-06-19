@@ -9,7 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::{middleware::auth::verify_token, state::{AppState, VoiceStateData}};
+use crate::{middleware::auth::verify_token, models::role::Permissions, state::{AppState, VoiceStateData}};
 // bcrypt est importé via le crate root (Cargo.toml)
 
 pub async fn ws_handler(
@@ -132,7 +132,7 @@ async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
 }
 
 async fn cleanup_voice(state: &AppState, user_id: Uuid) {
-    if let Some((channel_id, _remaining)) = state.voice_leave(user_id).await {
+    if let Some((channel_id, remaining)) = state.voice_leave(user_id).await {
         let event = serde_json::json!({
             "type": "VOICE_USER_LEFT",
             "user_id": user_id,
@@ -140,6 +140,43 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
         });
         // Broadcast à tous les clients connectés (sidebar participantes globale)
         broadcast_to_all(state, user_id, event.to_string()).await;
+
+        // Si canal temporaire et dernier participant → supprimer automatiquement
+        if remaining.is_empty() {
+            let is_temp: bool = sqlx::query_scalar(
+                "SELECT is_temporary FROM channels WHERE id=$1"
+            )
+            .bind(channel_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None)
+            .unwrap_or(false);
+
+            if is_temp {
+                // Récupérer server_id avant suppression
+                let server_id_opt: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT server_id FROM channels WHERE id=$1"
+                )
+                .bind(channel_id)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or(None)
+                .flatten();
+
+                let _ = sqlx::query("DELETE FROM channels WHERE id=$1 AND is_temporary=TRUE")
+                    .bind(channel_id)
+                    .execute(&state.db)
+                    .await;
+
+                if let Some(server_id) = server_id_opt {
+                    let del_event = serde_json::json!({
+                        "type": "CHANNEL_DELETE",
+                        "channel_id": channel_id,
+                    });
+                    state.broadcast_to_channel(server_id, del_event.to_string()).await;
+                }
+            }
+        }
     }
 }
 
@@ -233,19 +270,25 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 return;
             };
 
-            // Vérification user_limit et voice_password
+            // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
-                "SELECT user_limit, voice_password_hash FROM channels WHERE id=$1"
+                "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id FROM channels WHERE id=$1"
             )
             .bind(channel_id)
             .fetch_optional(&state.db)
             .await
             .unwrap_or(None);
 
-            if let Some(row) = channel_row {
+            // Destination effective (peut changer si canal auto-create)
+            let mut effective_channel_id = channel_id;
+
+            if let Some(ref row) = channel_row {
                 use sqlx::Row;
                 let user_limit: Option<i32> = row.get("user_limit");
                 let password_hash: Option<String> = row.get("voice_password_hash");
+                let is_auto_create: bool = row.get("is_auto_create");
+                let auto_create_name: Option<String> = row.get("auto_create_name");
+                let server_id_col: Option<Uuid> = row.get("server_id");
 
                 // Vérification mot de passe vocal
                 if let Some(ref hash) = password_hash {
@@ -282,9 +325,49 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                         }
                     }
                 }
+
+                // Canal auto-create : créer un canal temporaire pour cet utilisateur
+                if is_auto_create {
+                    if let (Some(server_id), Ok(Some(urow))) = (
+                        server_id_col,
+                        sqlx::query("SELECT username FROM users WHERE id=$1")
+                            .bind(user_id)
+                            .fetch_optional(&state.db)
+                            .await,
+                    ) {
+                        use sqlx::Row as _;
+                        let username: String = urow.get("username");
+                        let template = auto_create_name
+                            .as_deref()
+                            .unwrap_or("{username}'s Channel");
+                        let new_name = template.replace("{username}", &username);
+
+                        if let Ok(new_ch) = sqlx::query_as::<_, crate::models::channel::Channel>(
+                            "INSERT INTO channels (server_id, name, type, is_temporary, created_by_auto, position)
+                             VALUES ($1, $2, 'voice', TRUE, $3,
+                               (SELECT COALESCE(MAX(position), 0) + 1 FROM channels WHERE server_id=$1))
+                             RETURNING *"
+                        )
+                        .bind(server_id)
+                        .bind(&new_name)
+                        .bind(user_id)
+                        .fetch_one(&state.db)
+                        .await
+                        {
+                            effective_channel_id = new_ch.id;
+                            // Notifier tous les clients du nouveau canal
+                            let create_event = serde_json::json!({
+                                "type": "CHANNEL_CREATE",
+                                "channel": new_ch,
+                            });
+                            // Broadcast au channel du serveur (abonnés)
+                            state.broadcast_to_channel(server_id, create_event.to_string()).await;
+                        }
+                    }
+                }
             }
 
-            let existing_ids = state.voice_join(user_id, channel_id).await;
+            let existing_ids = state.voice_join(user_id, effective_channel_id).await;
 
             // Construire la liste des pairs existants avec leur état vocal
             let mut existing_peers = Vec::new();
@@ -312,7 +395,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
 
             state.broadcast_to_user(user_id, serde_json::json!({
                 "type": "VOICE_EXISTING_PEERS",
-                "channel_id": channel_id,
+                "channel_id": effective_channel_id,
                 "peers": existing_peers,
             }).to_string()).await;
 
@@ -327,7 +410,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 use sqlx::Row;
                 let notif = serde_json::json!({
                     "type": "VOICE_USER_JOINED",
-                    "channel_id": channel_id,
+                    "channel_id": effective_channel_id,
                     "user_id": user_id,
                     "username": row.get::<String, _>("username"),
                     "avatar": row.get::<Option<String>, _>("avatar"),
@@ -335,6 +418,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 });
                 // Broadcast global : tous les clients voient le join (sidebar)
                 broadcast_to_all(state, user_id, notif.to_string()).await;
+
+                // Si canal temporaire différent du canal cliqué, notifier le client de la redirection
+                if effective_channel_id != channel_id {
+                    state.broadcast_to_user(user_id, serde_json::json!({
+                        "type": "VOICE_REDIRECT",
+                        "from_channel_id": channel_id,
+                        "channel_id": effective_channel_id,
+                    }).to_string()).await;
+                }
             }
         }
 
@@ -351,6 +443,43 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             let video = msg["video"].as_bool().unwrap_or(false);
             let screen = msg["screen"].as_bool().unwrap_or(false);
 
+            // Vérifier si l'utilisateur a la permission PRIORITY_SPEAKER
+            let server_id_opt = sqlx::query_scalar::<_, Option<Uuid>>(
+                "SELECT server_id FROM channels WHERE id=$1"
+            )
+            .bind(channel_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None)
+            .flatten();
+
+            let priority_speaker = if let Some(server_id) = server_id_opt {
+                // Vérifier via les rôles du membre
+                let perms: Option<i64> = sqlx::query_scalar(
+                    "SELECT BIT_OR(r.permissions) FROM roles r
+                     JOIN member_roles mr ON mr.role_id = r.id
+                     WHERE mr.user_id = $1 AND r.server_id = $2"
+                )
+                .bind(user_id)
+                .bind(server_id)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or(None)
+                .flatten();
+
+                let combined = perms.unwrap_or(0);
+                combined & Permissions::ADMINISTRATOR != 0
+                    || combined & Permissions::PRIORITY_SPEAKER != 0
+            } else {
+                false
+            };
+
+            // Récupérer l'ancien état screen pour détecter changements Go Live
+            let prev_screen = {
+                let states = state.voice_states.read().await;
+                states.get(&user_id).map(|s| s.screen).unwrap_or(false)
+            };
+
             state.voice_states.write().await.insert(user_id, VoiceStateData {
                 channel_id, muted, deafened, video, screen,
             });
@@ -363,9 +492,36 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 "deafened": deafened,
                 "video": video,
                 "screen": screen,
+                "priority_speaker": priority_speaker,
             });
             // Broadcast à toute la room + à tous pour la sidebar
             broadcast_to_all(state, user_id, event.to_string()).await;
+
+            // Go Live : émettre STREAM_START / STREAM_END selon changement d'état screen
+            if screen && !prev_screen {
+                if let Ok(Some(row)) = sqlx::query("SELECT username FROM users WHERE id=$1")
+                    .bind(user_id)
+                    .fetch_optional(&state.db)
+                    .await
+                {
+                    use sqlx::Row;
+                    let username: String = row.get("username");
+                    let stream_event = serde_json::json!({
+                        "type": "STREAM_START",
+                        "user_id": user_id,
+                        "username": username,
+                        "channel_id": channel_id,
+                    });
+                    broadcast_to_all(state, user_id, stream_event.to_string()).await;
+                }
+            } else if !screen && prev_screen {
+                let stream_event = serde_json::json!({
+                    "type": "STREAM_END",
+                    "user_id": user_id,
+                    "channel_id": channel_id,
+                });
+                broadcast_to_all(state, user_id, stream_event.to_string()).await;
+            }
         }
 
         Some("VOICE_SIGNAL") => {

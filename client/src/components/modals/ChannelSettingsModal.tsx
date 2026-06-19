@@ -26,6 +26,8 @@ interface Channel {
   user_limit?: number
   is_nsfw: boolean
   voice_password_hash?: string | null
+  is_auto_create?: boolean
+  auto_create_name?: string | null
 }
 
 interface Props {
@@ -48,6 +50,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   const [voicePassword, setVoicePassword] = useState('')
   const [removePassword, setRemovePassword] = useState(false)
   const [hasExistingPassword] = useState(!!channel.voice_password_hash)
+  const [isAutoCreate, setIsAutoCreate] = useState(channel.is_auto_create ?? false)
+  const [autoCreateName, setAutoCreateName] = useState(channel.auto_create_name ?? '')
 
   const save = useMutation({
     mutationFn: () => {
@@ -64,6 +68,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
         } else if (voicePassword.trim()) {
           payload.voice_password = voicePassword.trim()
         }
+        payload.is_auto_create = isAutoCreate
+        payload.auto_create_name = autoCreateName.trim() || null
       }
       return api.patch(`/servers/${serverId}/channels/${channel.id}`, payload)
     },
@@ -209,6 +215,38 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                   autoComplete="new-password"
                   className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                 />
+              )}
+            </div>
+          )}
+
+          {/* Canal auto-create (canaux vocaux) */}
+          {isVoice(channel.type) && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-lg">
+                <div>
+                  <div className="text-sm font-medium text-white">Canal auto-create</div>
+                  <div className="text-xs text-fc-muted">Crée un vocal temporaire au join (style Discord "Créer un vocal")</div>
+                </div>
+                <button
+                  onClick={() => setIsAutoCreate(v => !v)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${isAutoCreate ? 'bg-fc-accent' : 'bg-fc-hover'}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isAutoCreate ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              {isAutoCreate && (
+                <div>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
+                    Nom template (utilise {'{username}'})
+                  </label>
+                  <input
+                    value={autoCreateName}
+                    onChange={e => setAutoCreateName(e.target.value)}
+                    placeholder="{username}'s Channel"
+                    maxLength={100}
+                    className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
+                  />
+                </div>
               )}
             </div>
           )}

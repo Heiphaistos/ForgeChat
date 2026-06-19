@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
-  Mic, MicOff, Monitor, Clock, Lock,
+  Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
 } from 'lucide-react'
 import { useState } from 'react'
 import api from '../../api/client'
@@ -57,6 +57,7 @@ export default function ChannelSidebar() {
   })
 
   const roomParticipants = useVoice(s => s.roomParticipants)
+  const activeStreams = useVoice(s => s.activeStreams)
   const voiceChannelId = useVoice(s => s.channelId)
   const voiceJoin = useVoice(s => s.join)
   const { on: wsOn } = useWs()
@@ -167,6 +168,13 @@ export default function ChannelSidebar() {
     const hasPassword = !!ch.voice_password_hash
     const userLimit = ch.user_limit ?? 0
     const slowmodeDelay = ch.slowmode_delay ?? 0
+    const isAutoCreate = !!ch.is_auto_create
+    const isTemporary = !!ch.is_temporary
+    // Streams actifs dans ce canal vocal
+    const channelStreams = isVoiceCh
+      ? Object.values(activeStreams).filter(s => s.channelId === ch.id)
+      : []
+    const hasLiveStream = channelStreams.length > 0
 
     return (
       <div key={ch.id}>
@@ -183,10 +191,26 @@ export default function ChannelSidebar() {
           {hasPassword && isVoiceCh && (
             <Lock size={10} className="text-yellow-400 flex-shrink-0 -mr-0.5" />
           )}
+          {/* Icône auto-create */}
+          {isAutoCreate && (
+            <PlusCircle size={10} className="text-green-400 flex-shrink-0 -mr-0.5" />
+          )}
+          {/* Icône temporaire */}
+          {isTemporary && !isAutoCreate && (
+            <Timer size={10} className="text-purple-400 flex-shrink-0 -mr-0.5" />
+          )}
           <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 ? 'text-white' : 'text-fc-muted'}>
             <ChannelIcon type={ch.type} size={16} />
           </span>
           <span className="text-sm truncate flex-1">{ch.name}</span>
+
+          {/* Badge LIVE si stream actif dans ce canal */}
+          {hasLiveStream && (
+            <span className="flex items-center gap-0.5 bg-red-600 rounded-full px-1 py-0.5 flex-shrink-0 animate-pulse">
+              <span className="w-1 h-1 bg-white rounded-full" />
+              <span className="text-[9px] text-white font-bold">LIVE</span>
+            </span>
+          )}
 
           {/* Badge slowmode */}
           {slowmodeDelay > 0 && !isVoiceCh && (
@@ -239,6 +263,18 @@ export default function ChannelSidebar() {
                 {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
                 {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
               </div>
+            ))}
+            {/* Streams Go Live actifs dans ce canal */}
+            {channelStreams.map(s => (
+              <button
+                key={s.userId}
+                onClick={() => nav(`/servers/${serverId}/channels/${ch.id}`)}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-red-500/10 w-full text-left transition"
+                title={`Regarder le live de ${s.username}`}
+              >
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                <span className="text-[11px] text-red-400 truncate flex-1">{s.username} est en live</span>
+              </button>
             ))}
           </div>
         )}

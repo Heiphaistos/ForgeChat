@@ -14,6 +14,8 @@ pub struct Server {
     pub invite_code: Option<String>,
     pub member_count: i32,
     pub is_public: bool,
+    pub verification_enabled: bool,
+    pub verification_rules: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 

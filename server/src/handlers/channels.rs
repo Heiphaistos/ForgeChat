@@ -92,7 +92,9 @@ pub async fn update_channel(
                 slowmode_delay = COALESCE($5, slowmode_delay),
                 is_nsfw = COALESCE($6, is_nsfw),
                 user_limit = COALESCE($7, user_limit),
-                voice_password_hash = $8
+                voice_password_hash = $8,
+                is_auto_create = COALESCE($9, is_auto_create),
+                auto_create_name = COALESCE($10, auto_create_name)
              WHERE id=$1 RETURNING *"
         )
         .bind(channel_id)
@@ -103,6 +105,8 @@ pub async fn update_channel(
         .bind(body.is_nsfw)
         .bind(body.user_limit)
         .bind(new_hash)
+        .bind(body.is_auto_create)
+        .bind(body.auto_create_name)
         .fetch_one(&state.db)
         .await?
     } else {
@@ -114,7 +118,9 @@ pub async fn update_channel(
                 position = COALESCE($4, position),
                 slowmode_delay = COALESCE($5, slowmode_delay),
                 is_nsfw = COALESCE($6, is_nsfw),
-                user_limit = COALESCE($7, user_limit)
+                user_limit = COALESCE($7, user_limit),
+                is_auto_create = COALESCE($8, is_auto_create),
+                auto_create_name = COALESCE($9, auto_create_name)
              WHERE id=$1 RETURNING *"
         )
         .bind(channel_id)
@@ -124,6 +130,8 @@ pub async fn update_channel(
         .bind(body.slowmode_delay)
         .bind(body.is_nsfw)
         .bind(body.user_limit)
+        .bind(body.is_auto_create)
+        .bind(body.auto_create_name)
         .fetch_one(&state.db)
         .await?
     };

@@ -98,10 +98,24 @@ pub async fn get_server(
     .fetch_all(&state.db)
     .await?;
 
+    // Statut de vérification du membre courant
+    let member = sqlx::query(
+        "SELECT verified_at FROM server_members WHERE user_id=$1 AND server_id=$2"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .map(|r| {
+        use sqlx::Row;
+        serde_json::json!({ "verified_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("verified_at") })
+    });
+
     Ok(Json(serde_json::json!({
         "server": server,
         "channels": channels,
         "roles": roles,
+        "member": member,
     })))
 }
 
@@ -512,6 +526,65 @@ pub async fn require_permission(
     } else {
         Err(AppError::Forbidden)
     }
+}
+
+// ─── Verification Gate ──────────────────────────────────────
+
+pub async fn verify_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    // Vérifie que le serveur a bien la vérification activée
+    let verification_enabled = sqlx::query_scalar::<_, bool>(
+        "SELECT verification_enabled FROM servers WHERE id=$1"
+    )
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or(false);
+
+    if !verification_enabled {
+        return Err(AppError::BadRequest("La vérification n'est pas activée sur ce serveur".into()));
+    }
+
+    sqlx::query(
+        "UPDATE server_members SET verified_at=NOW() WHERE user_id=$1 AND server_id=$2"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn update_server_verification(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<Server>> {
+    require_owner(&state, claims.sub, server_id).await?;
+
+    let verification_enabled = body["verification_enabled"].as_bool();
+    let verification_rules = body["verification_rules"].as_str();
+
+    let server = sqlx::query_as::<_, Server>(
+        "UPDATE servers SET
+            verification_enabled = COALESCE($2, verification_enabled),
+            verification_rules = COALESCE($3, verification_rules)
+         WHERE id=$1 RETURNING *"
+    )
+    .bind(server_id)
+    .bind(verification_enabled)
+    .bind(verification_rules)
+    .fetch_one(&state.db)
+    .await?;
+
+    Ok(Json(server))
 }
 
 fn generate_invite_code() -> String {

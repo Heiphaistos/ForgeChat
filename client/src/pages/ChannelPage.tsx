@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
@@ -16,6 +16,7 @@ import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
+import VerificationGateModal from '../components/modals/VerificationGateModal'
 import toast from 'react-hot-toast'
 
 function channelIcon(type: string, size = 18) {
@@ -35,6 +36,7 @@ export default function ChannelPage() {
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
   const markRead = useUnread(s => s.markRead)
+  const qc = useQueryClient()
   const [showMembers, setShowMembers] = useState(true)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [showPinned, setShowPinned] = useState(false)
@@ -159,6 +161,26 @@ export default function ChannelPage() {
   }, [channelId, serverId, hasMore])
 
   if (!serverId) return null
+
+  const server = serverData?.server ?? serverData
+  // Vérification Gate : si le serveur a la vérification activée et que le membre n'est pas vérifié
+  const needsVerification =
+    !!server?.verification_enabled &&
+    serverData?.member?.verified_at == null &&
+    serverData !== undefined
+
+  if (needsVerification) {
+    return (
+      <VerificationGateModal
+        serverId={serverId}
+        serverName={server?.name ?? ''}
+        rules={server?.verification_rules ?? ''}
+        onVerified={() => {
+          qc.invalidateQueries({ queryKey: ['server', serverId] })
+        }}
+      />
+    )
+  }
 
   // Loading state — FIX du bug page noire
   if (!channelId && serverLoading) {

@@ -56,5 +56,6 @@ impl Permissions {
     pub const MUTE_MEMBERS: i64 = 1 << 15;
     pub const DEAFEN_MEMBERS: i64 = 1 << 16;
     pub const MOVE_MEMBERS: i64 = 1 << 17;
+    pub const PRIORITY_SPEAKER: i64 = 1 << 18;
     pub const ADMINISTRATOR: i64 = 1 << 31;
 }

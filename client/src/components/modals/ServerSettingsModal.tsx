@@ -23,6 +23,8 @@ interface Server {
   welcome_message?: string | null
   is_public: boolean
   member_count: number
+  verification_enabled?: boolean
+  verification_rules?: string | null
 }
 
 interface Props {
@@ -39,6 +41,8 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
   const [welcomeMessage, setWelcomeMessage] = useState(server.welcome_message ?? '')
   const [bannerUrl, setBannerUrl] = useState(server.banner ?? '')
   const [isPublic, setIsPublic] = useState(server.is_public)
+  const [verificationEnabled, setVerificationEnabled] = useState(server.verification_enabled ?? false)
+  const [verificationRules, setVerificationRules] = useState(server.verification_rules ?? '')
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
@@ -66,6 +70,18 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
       toast.success('Bannière mise à jour')
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload bannière'),
+  })
+
+  const updateVerification = useMutation({
+    mutationFn: () => api.patch(`/servers/${server.id}/verification`, {
+      verification_enabled: verificationEnabled,
+      verification_rules: verificationRules || null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['server', server.id] })
+      toast.success('Vérification mise à jour')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
   const update = useMutation({
@@ -361,6 +377,51 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                 >
                   {update.isPending ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
                 </button>
+
+                {/* ─── Verification Gate ─── */}
+                <div className="border-t border-fc-hover pt-6 mt-2">
+                  <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <Shield size={16} className="text-fc-accent" />
+                    Vérification requise
+                  </h3>
+
+                  <div className="flex items-center justify-between p-4 bg-fc-channel rounded-lg mb-4">
+                    <div>
+                      <div className="font-medium text-white text-sm">Activer la vérification</div>
+                      <div className="text-xs text-fc-muted">Les membres doivent accepter les règles avant d'accéder aux canaux</div>
+                    </div>
+                    <button onClick={() => setVerificationEnabled(!verificationEnabled)}
+                      className={`w-11 h-6 rounded-full transition relative ${verificationEnabled ? 'bg-fc-green' : 'bg-fc-muted'}`}
+                    >
+                      <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${verificationEnabled ? 'left-6' : 'left-1'}`} />
+                    </button>
+                  </div>
+
+                  {verificationEnabled && (
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                        Règles du serveur
+                        <span className="ml-1 normal-case font-normal text-fc-muted/60">({verificationRules.length}/2000)</span>
+                      </label>
+                      <textarea
+                        value={verificationRules}
+                        onChange={e => setVerificationRules(e.target.value)}
+                        maxLength={2000}
+                        rows={6}
+                        placeholder="Écris les règles que les membres devront accepter..."
+                        className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => updateVerification.mutate()}
+                    disabled={updateVerification.isPending}
+                    className="px-5 py-2 bg-fc-channel hover:bg-fc-hover border border-fc-hover text-white rounded font-medium text-sm transition disabled:opacity-50"
+                  >
+                    {updateVerification.isPending ? 'Sauvegarde...' : 'Sauvegarder la vérification'}
+                  </button>
+                </div>
               </div>
             )}
 

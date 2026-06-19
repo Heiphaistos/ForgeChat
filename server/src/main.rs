@@ -108,8 +108,9 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))
         // WebSocket
         .route("/ws", get(handlers::websocket::ws_handler))
-        // Route bot (sans JWT — auth via Bearer token)
+        // Routes bot (sans JWT — auth via Bearer token)
         .route("/api/bot/messages", post(handlers::bots::bot_send_message))
+        .route("/api/bots/:bot_id/commands", post(handlers::bots::register_bot_command))
         // Webhook entrant (sans JWT — auth via token dans l'URL)
         .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook))
         // Routes protégées
@@ -272,6 +273,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/bots", post(handlers::bots::create_bot))
         .route("/servers/:server_id/bots/:bot_id", delete(handlers::bots::delete_bot))
         .route("/servers/:server_id/bots/:bot_id/token", post(handlers::bots::regenerate_token))
+        // Slash commands bots (lecture — auth user)
+        .route("/servers/:server_id/commands", get(handlers::bots::list_server_commands))
         // Bans
         .route("/servers/:server_id/bans", get(handlers::server_settings::list_bans))
         .route("/servers/:server_id/bans/:user_id", delete(handlers::server_settings::unban_member))
@@ -324,10 +327,22 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/feeds/:feed_id/toggle", patch(handlers::feeds::toggle_channel_feed))
         // Historique des éditions de messages
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/edits", get(handlers::messages::get_message_edits))
+        // Forward message
+        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/forward", post(handlers::messages::forward_message))
         // Messages programmés
         .route("/servers/:server_id/channels/:channel_id/scheduled", post(handlers::scheduled::create_scheduled))
         .route("/servers/:server_id/channels/:channel_id/scheduled", get(handlers::scheduled::list_scheduled))
         .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled))
+        // ICE config pour WebRTC (STUN + TURN)
+        .route("/voice/ice-config", get(handlers::voice::get_ice_config))
+        // Server Templates
+        .route("/servers/:id/template", post(handlers::templates::create_template_from_server))
+        .route("/templates", get(handlers::templates::list_templates))
+        .route("/templates/:id/use", post(handlers::templates::use_template))
+        .route("/templates/:id", delete(handlers::templates::delete_template))
+        // Verification Gate
+        .route("/servers/:id/verify", post(handlers::servers::verify_member))
+        .route("/servers/:id/verification", patch(handlers::servers::update_server_verification))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

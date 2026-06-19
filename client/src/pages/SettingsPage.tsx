@@ -7,6 +7,7 @@ import {
   Trash2, Copy, Eye, EyeOff, KeyRound,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
+import { useVoice } from '../store/voice'
 import api, { SERVER_URL } from '../api/client'
 import toast from 'react-hot-toast'
 
@@ -634,12 +635,15 @@ function NotificationsSection() {
 // ─── AUDIO & VIDÉO ────────────────────────────────────────────────────────────
 
 function AudioSection() {
+  const { setNoiseSuppressionEnabled } = useVoice()
   const [inputDevice, setInputDevice] = useState('')
   const [outputDevice, setOutputDevice] = useState('')
   const [inputVol, setInputVol] = useState(100)
   const [outputVol, setOutputVol] = useState(100)
   const [echoCancellation, setEchoCancellation] = useState(true)
-  const [noiseSuppression, setNoiseSuppression] = useState(true)
+  const [noiseSuppression, setNoiseSuppression] = useState(
+    () => localStorage.getItem('fc_noise_suppression') !== 'false'
+  )
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
 
   const loadDevices = async () => {
@@ -711,10 +715,10 @@ function AudioSection() {
       />
 
       <Toggle
-        label="Réduction du bruit"
-        description="Filtre les bruits de fond"
+        label="Suppression de bruit (Web Audio)"
+        description="Filtre haute-passe 80Hz + compresseur dynamique — s'applique au prochain appel vocal"
         value={noiseSuppression}
-        onChange={setNoiseSuppression}
+        onChange={(v) => { setNoiseSuppression(v); setNoiseSuppressionEnabled(v) }}
       />
     </div>
   )

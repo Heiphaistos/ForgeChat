@@ -24,6 +24,8 @@ pub struct MessageWithAuthor {
     pub reply_to: Option<Uuid>,
     pub reply_to_content: Option<String>,
     pub reply_to_username: Option<String>,
+    pub forward_from_id: Option<Uuid>,
+    pub forward_from_username: Option<String>,
     pub pinned: bool,
     pub edited_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -73,3 +75,9 @@ pub struct GetMessagesQuery {
     pub after: Option<Uuid>,
     pub limit: Option<i64>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ForwardMessageRequest {
+    pub channel_id: Uuid,
+}
+

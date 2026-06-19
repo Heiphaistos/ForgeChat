@@ -18,6 +18,8 @@ interface Message {
   reply_to: string | null
   reply_to_content: string | null
   reply_to_username: string | null
+  forward_from_id: string | null
+  forward_from_username: string | null
   pinned: boolean
   edited_at: string | null
   created_at: string

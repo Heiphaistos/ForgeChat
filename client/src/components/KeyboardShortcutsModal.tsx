@@ -45,17 +45,24 @@ const GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['P'], description: 'Push-to-Talk (maintenir)' },
       { keys: ['Espace'], description: 'Push-to-Talk (maintenir)' },
-      { keys: ['M'], description: 'Mute / Unmute micro' },
-      { keys: ['D'], description: 'Déafen / Réactiver son' },
+      { keys: ['Ctrl', 'Shift', 'M'], description: 'Mute / Unmute micro' },
+      { keys: ['Ctrl', 'Shift', 'D'], description: 'Déafen / Réactiver son' },
       { keys: ['V'], description: 'Toggle caméra' },
-      { keys: ['S'], description: 'Screen share' },
+      { keys: ['S'], description: 'Screen share / Go Live' },
+    ],
+  },
+  {
+    title: 'Formatage messages',
+    shortcuts: [
+      { keys: ['Ctrl', 'B'], description: 'Gras (**texte**)' },
+      { keys: ['Ctrl', 'I'], description: 'Italique (*texte*)' },
+      { keys: ['Ctrl', 'U'], description: 'Souligné (__texte__)' },
     ],
   },
   {
     title: 'Interface',
     shortcuts: [
       { keys: ['?'], description: 'Raccourcis clavier (ce modal)' },
-      { keys: ['Ctrl', 'B'], description: 'Afficher/masquer la liste membres' },
     ],
   },
 ]

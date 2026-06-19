@@ -160,6 +160,8 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     reply_to: None,
                     reply_to_content: None,
                     reply_to_username: None,
+                    forward_from_id: None,
+                    forward_from_username: None,
                     pinned: false,
                     edited_at: None,
                     created_at: msg_row.get("created_at"),

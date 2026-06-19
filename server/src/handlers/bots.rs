@@ -250,6 +250,8 @@ pub async fn bot_send_message(
         reply_to: None,
         reply_to_content: None,
         reply_to_username: None,
+        forward_from_id: None,
+        forward_from_username: None,
         pinned: false,
         edited_at: None,
         created_at: msg.get("created_at"),
@@ -271,4 +273,134 @@ pub async fn bot_send_message(
 fn generate_raw_token() -> String {
     let raw: Vec<u8> = (0..48).map(|_| rand::thread_rng().gen::<u8>()).collect();
     URL_SAFE_NO_PAD.encode(&raw)
+}
+
+// ─────────────────────────────────────────────
+// Slash Commands Bot
+// ─────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct RegisterCommandRequest {
+    pub name: String,
+    pub description: String,
+}
+
+/// POST /bots/:bot_id/commands — auth Bot token
+/// Enregistre ou met à jour une slash command pour ce bot.
+pub async fn register_bot_command(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(bot_id): Path<Uuid>,
+    Json(body): Json<RegisterCommandRequest>,
+) -> crate::error::Result<axum::Json<serde_json::Value>> {
+    // Auth via "Authorization: Bot <token>"
+    let raw_token = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bot "))
+        .ok_or(AppError::Unauthorized)?;
+
+    let token_hash = hash_bot_token(raw_token);
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT id, server_id FROM bot_tokens WHERE id=$1 AND token_hash=$2"
+    )
+    .bind(bot_id)
+    .bind(&token_hash)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(AppError::Unauthorized)?;
+
+    let token_row_id: Uuid = row.get("id");
+    let server_id: Uuid = row.get("server_id");
+
+    // Validation du nom de commande
+    let name = body.name.trim().to_lowercase();
+    if name.is_empty() || name.len() > 32 || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        return Err(AppError::BadRequest("Nom de commande invalide (1-32 chars alphanumériques)".into()));
+    }
+    let desc = body.description.trim().to_string();
+    if desc.is_empty() || desc.len() > 100 {
+        return Err(AppError::BadRequest("Description invalide (1-100 chars)".into()));
+    }
+
+    sqlx::query(
+        "INSERT INTO bot_commands (bot_id, server_id, name, description)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (bot_id, server_id, name) DO UPDATE SET description=EXCLUDED.description"
+    )
+    .bind(token_row_id)
+    .bind(server_id)
+    .bind(&name)
+    .bind(&desc)
+    .execute(&state.db)
+    .await?;
+
+    Ok(axum::Json(serde_json::json!({ "ok": true, "name": name })))
+}
+
+/// GET /servers/:server_id/commands — auth user JWT
+/// Liste toutes les slash commands des bots d'un serveur.
+pub async fn list_server_commands(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> crate::error::Result<axum::Json<Vec<serde_json::Value>>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT bc.name, bc.description, bt.name as bot_name, u.username as bot_username, u.avatar as bot_avatar
+         FROM bot_commands bc
+         JOIN bot_tokens bt ON bt.id = bc.bot_id
+         JOIN users u ON u.id = bt.bot_user_id
+         WHERE bc.server_id=$1
+         ORDER BY bc.name"
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let commands: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "name": r.get::<String, _>("name"),
+        "description": r.get::<String, _>("description"),
+        "bot_name": r.get::<String, _>("bot_name"),
+        "bot_username": r.get::<String, _>("bot_username"),
+        "bot_avatar": r.get::<Option<String>, _>("bot_avatar"),
+    })).collect();
+
+    Ok(axum::Json(commands))
+}
+
+/// Envoi d'une slash command à un bot — appelé depuis send_message quand le contenu commence par /
+/// Broadcast WS SLASH_COMMAND au canal pour que les bots connectés reçoivent la commande.
+pub async fn dispatch_slash_command(
+    state: &AppState,
+    channel_id: Uuid,
+    server_id: Uuid,
+    user_id: Uuid,
+    command: &str,
+    args: &str,
+) {
+    // Vérifier si la commande existe pour ce serveur
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM bot_commands WHERE server_id=$1 AND name=$2)"
+    )
+    .bind(server_id)
+    .bind(command)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(false);
+
+    if exists {
+        let event = serde_json::json!({
+            "type": "SLASH_COMMAND",
+            "command": command,
+            "args": args,
+            "channel_id": channel_id,
+            "server_id": server_id,
+            "user_id": user_id,
+        });
+        state.broadcast_to_channel(channel_id, event.to_string()).await;
+    }
 }

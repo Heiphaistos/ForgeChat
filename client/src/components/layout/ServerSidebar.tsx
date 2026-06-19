@@ -1,15 +1,124 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass } from 'lucide-react'
-import { useState } from 'react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+
+// ─── Types ─────────────────────────────────────────────────
+
+interface ServerFolder {
+  name: string
+  color: string
+  serverIds: string[]
+}
+
+interface FoldersMap {
+  [folderId: string]: ServerFolder
+}
+
+const FOLDER_COLORS = ['#5865F2', '#57F287', '#FEE75C', '#EB459E', '#ED4245', '#FF7A00', '#00B8D9']
+
+// ─── Helpers localStorage ───────────────────────────────────
+
+function loadFolders(): FoldersMap {
+  try {
+    const raw = localStorage.getItem('fc_server_folders')
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveFolders(folders: FoldersMap) {
+  localStorage.setItem('fc_server_folders', JSON.stringify(folders))
+}
+
+function genFolderId() {
+  return `folder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+}
+
+// ─── Built-in Templates ─────────────────────────────────────
+
+const BUILTIN_TEMPLATES = [
+  {
+    id: '__gaming__',
+    name: 'Gaming',
+    description: 'Serveur pour jouer ensemble',
+    template_data: {
+      categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
+      channels: [
+        { id: '__c1__', name: 'général', type: 'text', position: 0, category_id: '__cat1__' },
+        { id: '__c2__', name: 'stratégie', type: 'text', position: 1, category_id: '__cat1__' },
+        { id: '__c3__', name: 'recrutement', type: 'text', position: 2, category_id: '__cat1__' },
+        { id: '__c4__', name: 'Gaming', type: 'voice', position: 0, category_id: '__cat2__' },
+        { id: '__c5__', name: 'AFK', type: 'voice', position: 1, category_id: '__cat2__' },
+      ],
+      roles: [],
+    },
+  },
+  {
+    id: '__community__',
+    name: 'Communauté',
+    description: 'Serveur communautaire ouvert',
+    template_data: {
+      categories: [{ id: '__cat1__', name: 'Info', position: 0 }, { id: '__cat2__', name: 'Discussion', position: 1 }],
+      channels: [
+        { id: '__c1__', name: 'accueil', type: 'text', position: 0, category_id: '__cat1__' },
+        { id: '__c2__', name: 'règles', type: 'text', position: 1, category_id: '__cat1__' },
+        { id: '__c3__', name: 'général', type: 'text', position: 0, category_id: '__cat2__' },
+        { id: '__c4__', name: 'événements', type: 'text', position: 1, category_id: '__cat2__' },
+        { id: '__c5__', name: 'Salon principal', type: 'voice', position: 0, category_id: null },
+      ],
+      roles: [],
+    },
+  },
+  {
+    id: '__study__',
+    name: 'Étude',
+    description: 'Groupe de révision et d\'entraide',
+    template_data: {
+      categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
+      channels: [
+        { id: '__c1__', name: 'général', type: 'text', position: 0, category_id: '__cat1__' },
+        { id: '__c2__', name: 'ressources', type: 'text', position: 1, category_id: '__cat1__' },
+        { id: '__c3__', name: 'entraide', type: 'text', position: 2, category_id: '__cat1__' },
+        { id: '__c4__', name: 'Révisions ensemble', type: 'voice', position: 0, category_id: '__cat2__' },
+      ],
+      roles: [],
+    },
+  },
+  {
+    id: '__team__',
+    name: 'Team',
+    description: 'Espace de travail collaboratif',
+    template_data: {
+      categories: [{ id: '__cat1__', name: 'Général', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
+      channels: [
+        { id: '__c1__', name: 'annonces', type: 'announcement', position: 0, category_id: '__cat1__' },
+        { id: '__c2__', name: 'général', type: 'text', position: 1, category_id: '__cat1__' },
+        { id: '__c3__', name: 'tâches', type: 'text', position: 2, category_id: '__cat1__' },
+        { id: '__c4__', name: 'Standup', type: 'voice', position: 0, category_id: '__cat2__' },
+      ],
+      roles: [],
+    },
+  },
+]
+
+// ─── ServerSidebar ──────────────────────────────────────────
 
 export default function ServerSidebar() {
   const { serverId } = useParams()
   const nav = useNavigate()
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
+  const [folders, setFolders] = useState<FoldersMap>(loadFolders)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; serverId: string
+  } | null>(null)
+  const [draggedServerId, setDraggedServerId] = useState<string | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
@@ -17,17 +126,173 @@ export default function ServerSidebar() {
   })
 
   const createServer = useMutation({
-    mutationFn: (name: string) => api.post('/servers', { name }),
+    mutationFn: (payload: { name: string; template_data?: any }) => {
+      if (payload.template_data) {
+        return api.post('/servers', { name: payload.name }).then(async res => {
+          const newServerId = res.data.id
+          const tdata = payload.template_data
+          const catMap: Record<string, string> = {}
+          for (const cat of (tdata.categories ?? [])) {
+            try {
+              const cr = await api.post(`/servers/${newServerId}/categories`, { name: cat.name, position: cat.position })
+              catMap[cat.id] = cr.data.id
+            } catch { /* ignore */ }
+          }
+          for (const ch of (tdata.channels ?? [])) {
+            const newCatId = ch.category_id ? catMap[ch.category_id] : undefined
+            try {
+              await api.post(`/servers/${newServerId}/channels`, {
+                name: ch.name,
+                type: ch.type,
+                position: ch.position,
+                category_id: newCatId ?? null,
+              })
+            } catch { /* ignore */ }
+          }
+          return res
+        })
+      }
+      return api.post('/servers', { name: payload.name })
+    },
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['servers'] })
       nav(`/servers/${res.data.id}`)
       setShowCreate(false)
       toast.success('Serveur créé !')
     },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
+  // Fermer context menu en cliquant ailleurs
+  useEffect(() => {
+    if (!contextMenu) return
+    const handler = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [contextMenu])
+
+  const persistFolders = useCallback((next: FoldersMap) => {
+    setFolders(next)
+    saveFolders(next)
+  }, [])
+
+  const toggleFolder = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      return next
+    })
+  }
+
+  // Construire la liste d'affichage : ids de serveurs dans un dossier
+  const serverIdsInFolders = new Set(
+    Object.values(folders).flatMap(f => f.serverIds)
+  )
+
+  // Séquence : serveurs libres + dossiers (en ordre d'insertion)
+  const freeServers = (servers as any[]).filter(s => !serverIdsInFolders.has(s.id))
+
+  // Context menu actions
+  const handleContextMenu = (e: React.MouseEvent, sId: string) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, serverId: sId })
+  }
+
+  const addToNewFolder = (sId: string) => {
+    const folderId = genFolderId()
+    const color = FOLDER_COLORS[Math.floor(Math.random() * FOLDER_COLORS.length)]
+    persistFolders({
+      ...folders,
+      [folderId]: { name: 'Nouveau dossier', color, serverIds: [sId] },
+    })
+    setExpandedFolders(prev => new Set([...prev, folderId]))
+    setContextMenu(null)
+  }
+
+  const addToExistingFolder = (sId: string, folderId: string) => {
+    const f = folders[folderId]
+    if (!f || f.serverIds.includes(sId)) return
+    persistFolders({
+      ...folders,
+      [folderId]: { ...f, serverIds: [...f.serverIds, sId] },
+    })
+    setContextMenu(null)
+  }
+
+  const removeFromFolder = (sId: string, folderId: string) => {
+    const f = folders[folderId]
+    if (!f) return
+    const newIds = f.serverIds.filter(id => id !== sId)
+    const next = { ...folders }
+    if (newIds.length === 0) {
+      delete next[folderId]
+    } else {
+      next[folderId] = { ...f, serverIds: newIds }
+    }
+    persistFolders(next)
+  }
+
+  // Trouver dans quel dossier est un serveur
+  const getFolderOfServer = (sId: string): string | null => {
+    for (const [fid, f] of Object.entries(folders)) {
+      if (f.serverIds.includes(sId)) return fid
+    }
+    return null
+  }
+
+  // Drag & drop — drop sur un autre serveur libre → crée dossier
+  const handleDragStart = (sId: string) => {
+    setDraggedServerId(sId)
+  }
+
+  const handleDropOnServer = (targetId: string) => {
+    if (!draggedServerId || draggedServerId === targetId) {
+      setDraggedServerId(null)
+      return
+    }
+    // Si les deux sont libres → nouveau dossier
+    const folderId = genFolderId()
+    const color = FOLDER_COLORS[Math.floor(Math.random() * FOLDER_COLORS.length)]
+    const next = { ...folders }
+    // Retirer les 2 de tout dossier existant où ils pourraient être
+    for (const [fid, f] of Object.entries(next)) {
+      const ids = f.serverIds.filter(id => id !== draggedServerId && id !== targetId)
+      if (ids.length === 0) delete next[fid]
+      else next[fid] = { ...f, serverIds: ids }
+    }
+    next[folderId] = { name: 'Nouveau dossier', color, serverIds: [draggedServerId, targetId] }
+    persistFolders(next)
+    setExpandedFolders(prev => new Set([...prev, folderId]))
+    setDraggedServerId(null)
+  }
+
+  const ServerIcon = ({ s, folderId }: { s: any; folderId?: string }) => (
+    <button
+      key={s.id}
+      onClick={() => nav(`/servers/${s.id}`)}
+      onContextMenu={e => handleContextMenu(e, s.id)}
+      draggable
+      onDragStart={() => handleDragStart(s.id)}
+      onDragOver={e => e.preventDefault()}
+      onDrop={() => handleDropOnServer(s.id)}
+      className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
+        ${serverId === s.id ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
+        ${draggedServerId === s.id ? 'opacity-50' : ''}`}
+      title={s.name}
+    >
+      {s.icon
+        ? <img src={s.icon} alt={s.name} className="w-full h-full rounded-full object-cover" />
+        : s.name.charAt(0).toUpperCase()}
+    </button>
+  )
+
   return (
-    <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto">
+    <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto relative">
       {/* DMs */}
       <button
         onClick={() => nav('/friends')}
@@ -48,20 +313,63 @@ export default function ServerSidebar() {
 
       <div className="w-8 h-px bg-fc-hover mx-auto" />
 
-      {/* Serveurs */}
-      {servers.map((s: any) => (
-        <button
-          key={s.id}
-          onClick={() => nav(`/servers/${s.id}`)}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white
-            ${serverId === s.id ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title={s.name}
-        >
-          {s.icon
-            ? <img src={s.icon} alt={s.name} className="w-full h-full rounded-full object-cover" />
-            : s.name.charAt(0).toUpperCase()}
-        </button>
+      {/* Serveurs libres (pas dans un dossier) */}
+      {freeServers.map((s: any) => (
+        <ServerIcon key={s.id} s={s} />
       ))}
+
+      {/* Dossiers */}
+      {Object.entries(folders).map(([folderId, folder]) => {
+        const folderServers = folder.serverIds
+          .map(id => (servers as any[]).find((s: any) => s.id === id))
+          .filter(Boolean)
+        if (folderServers.length === 0) return null
+        const isExpanded = expandedFolders.has(folderId)
+        const hasActiveServer = folderServers.some((s: any) => s.id === serverId)
+
+        return (
+          <div key={folderId} className="flex flex-col items-center gap-1">
+            {/* Icône dossier */}
+            <button
+              onClick={() => toggleFolder(folderId)}
+              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all gap-0.5
+                ${hasActiveServer ? 'ring-2 ring-fc-accent' : ''}
+                hover:brightness-110`}
+              style={{ backgroundColor: folder.color + '33', border: `2px solid ${folder.color}` }}
+              title={folder.name}
+            >
+              <FolderOpen size={14} style={{ color: folder.color }} />
+              <span className="text-[9px] font-bold" style={{ color: folder.color }}>
+                {folderServers.length}
+              </span>
+              <ChevronDown
+                size={10}
+                style={{ color: folder.color }}
+                className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {/* Serveurs du dossier (expand) */}
+            {isExpanded && (
+              <div className="flex flex-col items-center gap-1 pl-0">
+                {folderServers.map((s: any) => (
+                  <div key={s.id} className="relative group">
+                    <ServerIcon s={s} folderId={folderId} />
+                    {/* Bouton retirer du dossier (au hover) */}
+                    <button
+                      onClick={e => { e.stopPropagation(); removeFromFolder(s.id, folderId) }}
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-fc-red rounded-full items-center justify-center hidden group-hover:flex"
+                      title="Retirer du dossier"
+                    >
+                      <X size={8} className="text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {/* Explorer */}
       <button
@@ -81,41 +389,248 @@ export default function ServerSidebar() {
         <Plus size={24} />
       </button>
 
+      {/* Context menu clic droit serveur */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-[100] bg-fc-channel border border-fc-hover rounded-lg shadow-2xl py-1 min-w-[180px]"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <div className="px-3 py-1.5 text-xs text-fc-muted font-semibold uppercase tracking-wide border-b border-fc-hover mb-1">
+            Dossiers
+          </div>
+          <button
+            className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+            onClick={() => addToNewFolder(contextMenu.serverId)}
+          >
+            <Plus size={12} /> Nouveau dossier
+          </button>
+          {Object.entries(folders).map(([fid, f]) => (
+            <button
+              key={fid}
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={() => addToExistingFolder(contextMenu.serverId, fid)}
+            >
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: f.color }} />
+              Ajouter dans {f.name}
+            </button>
+          ))}
+          {getFolderOfServer(contextMenu.serverId) && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
+              onClick={() => {
+                const fid = getFolderOfServer(contextMenu.serverId)!
+                removeFromFolder(contextMenu.serverId, fid)
+                setContextMenu(null)
+              }}
+            >
+              <X size={12} /> Retirer du dossier
+            </button>
+          )}
+        </div>
+      )}
+
       {showCreate && (
         <CreateServerModal
           onClose={() => setShowCreate(false)}
-          onCreate={(name) => createServer.mutate(name)}
+          onCreate={(name, templateData) => createServer.mutate({ name, template_data: templateData })}
+          isPending={createServer.isPending}
         />
       )}
     </div>
   )
 }
 
-function CreateServerModal({ onClose, onCreate }: { onClose: () => void; onCreate: (name: string) => void }) {
+// ─── CreateServerModal avec templates ──────────────────────
+
+type Step = 'choice' | 'template-grid' | 'name'
+
+interface BuiltinTemplate {
+  id: string
+  name: string
+  description: string
+  template_data: any
+}
+
+function CreateServerModal({
+  onClose,
+  onCreate,
+  isPending,
+}: {
+  onClose: () => void
+  onCreate: (name: string, templateData?: any) => void
+  isPending: boolean
+}) {
+  const [step, setStep] = useState<Step>('choice')
   const [name, setName] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState<BuiltinTemplate | null>(null)
+
+  // Templates côté serveur (DB)
+  const { data: remoteTemplates } = useQuery<{ public: any[]; mine: any[] }>({
+    queryKey: ['server-templates'],
+    queryFn: () => api.get('/templates').then(r => r.data),
+    enabled: step === 'template-grid',
+  })
+
+  const allPublicTemplates = [
+    ...BUILTIN_TEMPLATES,
+    ...(remoteTemplates?.public ?? []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description ?? `Utilisé ${t.usage_count} fois`,
+      template_data: t.template_data,
+    })),
+  ]
+
+  const myRemoteTemplates = (remoteTemplates?.mine ?? []).map((t: any) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description ?? `Créé le ${new Date(t.created_at).toLocaleDateString('fr-FR')}`,
+    template_data: t.template_data,
+  }))
+
+  const handleCreate = () => {
+    if (!name.trim()) return
+    onCreate(name.trim(), selectedTemplate?.template_data)
+  }
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-lg p-6 w-96 shadow-xl" onClick={e => e.stopPropagation()}>
-        <h2 className="text-xl font-bold text-white mb-1">Créer un serveur</h2>
-        <p className="text-fc-muted text-sm mb-4">Donne un nom à ton serveur.</p>
-        <input
-          autoFocus
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder="Mon serveur"
-          className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent mb-4"
-          onKeyDown={e => e.key === 'Enter' && name.trim() && onCreate(name.trim())}
-        />
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition">Annuler</button>
-          <button
-            onClick={() => name.trim() && onCreate(name.trim())}
-            className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded transition"
-          >
-            Créer
-          </button>
-        </div>
+      <div
+        className="bg-fc-channel rounded-xl shadow-2xl overflow-hidden"
+        style={{ width: step === 'template-grid' ? '560px' : '400px' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Étape 1 : Choix ── */}
+        {step === 'choice' && (
+          <div className="p-6">
+            <h2 className="text-xl font-bold text-white mb-1 text-center">Créer un serveur</h2>
+            <p className="text-fc-muted text-sm mb-6 text-center">
+              Commence depuis zéro ou utilise un template.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => { setSelectedTemplate(null); setStep('name') }}
+                className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
+              >
+                <div className="font-semibold text-white group-hover:text-fc-accent transition">
+                  Créer depuis zéro
+                </div>
+                <div className="text-xs text-fc-muted mt-0.5">
+                  Serveur vide avec un canal général
+                </div>
+              </button>
+              <button
+                onClick={() => setStep('template-grid')}
+                className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
+              >
+                <div className="font-semibold text-white group-hover:text-fc-accent transition">
+                  Depuis un template
+                </div>
+                <div className="text-xs text-fc-muted mt-0.5">
+                  Gaming, Communauté, Étude, Team et plus...
+                </div>
+              </button>
+            </div>
+            <button onClick={onClose} className="mt-4 w-full py-2 text-fc-muted hover:text-white text-sm transition">
+              Annuler
+            </button>
+          </div>
+        )}
+
+        {/* ── Étape 2 : Grille templates ── */}
+        {step === 'template-grid' && (
+          <div className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <button onClick={() => setStep('choice')} className="text-fc-muted hover:text-white transition">
+                ←
+              </button>
+              <h2 className="text-lg font-bold text-white">Choisir un template</h2>
+            </div>
+
+            {/* Templates publics / built-in */}
+            <div className="mb-4">
+              <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Templates publics</div>
+              <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+                {allPublicTemplates.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => { setSelectedTemplate(t); setStep('name') }}
+                    className="p-3 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group border border-transparent hover:border-fc-accent/40"
+                  >
+                    <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{t.name}</div>
+                    <div className="text-xs text-fc-muted mt-0.5 leading-snug line-clamp-2">{t.description}</div>
+                    <div className="text-[10px] text-fc-muted/60 mt-1">
+                      {t.template_data.channels?.length ?? 0} canaux
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mes templates perso */}
+            {myRemoteTemplates.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Mes templates</div>
+                <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                  {myRemoteTemplates.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => { setSelectedTemplate(t); setStep('name') }}
+                      className="p-3 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group border border-transparent hover:border-fc-accent/40"
+                    >
+                      <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{t.name}</div>
+                      <div className="text-xs text-fc-muted mt-0.5 line-clamp-2">{t.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Étape 3 : Nom ── */}
+        {step === 'name' && (
+          <div className="p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <button onClick={() => setStep(selectedTemplate ? 'template-grid' : 'choice')} className="text-fc-muted hover:text-white transition">
+                ←
+              </button>
+              <h2 className="text-xl font-bold text-white">
+                {selectedTemplate ? `Template : ${selectedTemplate.name}` : 'Créer depuis zéro'}
+              </h2>
+            </div>
+            {selectedTemplate && (
+              <p className="text-xs text-fc-muted mb-3 ml-6">
+                {selectedTemplate.template_data.channels?.length ?? 0} canaux seront créés
+              </p>
+            )}
+            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 mt-3">
+              Nom du serveur
+            </label>
+            <input
+              autoFocus
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Mon serveur"
+              maxLength={100}
+              className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent mb-4"
+              onKeyDown={e => e.key === 'Enter' && name.trim() && handleCreate()}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition">
+                Annuler
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={!name.trim() || isPending}
+                className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 disabled:opacity-50 text-white rounded transition"
+              >
+                {isPending ? 'Création...' : 'Créer'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

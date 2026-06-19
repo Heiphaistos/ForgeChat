@@ -15,6 +15,10 @@ pub struct Config {
     pub smtp_user: Option<String>,
     pub smtp_pass: Option<String>,
     pub smtp_from: String,
+    // TURN (optionnel — si absent, STUN seulement)
+    pub turn_url: Option<String>,
+    pub turn_username: Option<String>,
+    pub turn_password: Option<String>,
 }
 
 impl Config {
@@ -42,6 +46,9 @@ impl Config {
             smtp_pass: env::var("SMTP_PASS").ok(),
             smtp_from: env::var("SMTP_FROM")
                 .unwrap_or_else(|_| "noreply@forgechat.heiphaistos.org".into()),
+            turn_url: env::var("TURN_URL").ok(),
+            turn_username: env::var("TURN_USERNAME").ok(),
+            turn_password: env::var("TURN_PASSWORD").ok(),
         })
     }
 }

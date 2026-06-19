@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
-import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock } from 'lucide-react'
+﻿import { useRef, useState, useEffect, useCallback } from 'react'
+import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
@@ -11,6 +11,61 @@ import StickerPicker, { formatStickerMessage } from './StickerPicker'
 import type { Sticker } from './StickerPicker'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+
+// ─── Slash Commands ───────────────────────────────────────────────────────────
+
+interface SlashCommand {
+  name: string
+  description: string
+  usage: string
+  isBot?: boolean
+  botName?: string
+}
+
+const BUILTIN_COMMANDS: SlashCommand[] = [
+  { name: 'me', description: 'Envoie une action en italique', usage: '/me [texte]' },
+  { name: 'shrug', description: 'Envoie ¯\\_(ツ)_/¯', usage: '/shrug' },
+  { name: 'tableflip', description: 'Table flip !', usage: '/tableflip' },
+  { name: 'unflip', description: 'Remet la table', usage: '/unflip' },
+  { name: 'lenny', description: 'Visage Lenny', usage: '/lenny' },
+  { name: 'clap', description: 'Applaudissements 👏 entre les mots', usage: '/clap [texte]' },
+  { name: 'spoiler', description: 'Cache le texte en spoiler', usage: '/spoiler [texte]' },
+  { name: 'giphy', description: 'Cherche un GIF avec Giphy', usage: '/giphy [query]' },
+]
+
+function executeSlashCommand(
+  name: string,
+  args: string,
+  setContent: (v: string) => void,
+  setShowGifPicker: (v: boolean) => void,
+  onSend: (content: string) => void,
+): boolean {
+  switch (name) {
+    case 'me':
+      if (args) { onSend(`*${args}*`); return true }
+      return false
+    case 'shrug':
+      onSend('¯\\_(ツ)_/¯'); return true
+    case 'tableflip':
+      onSend('(╯°□°）╯︵ ┻━┻'); return true
+    case 'unflip':
+      onSend('┬─┬ ノ( ゜-゜ノ)'); return true
+    case 'lenny':
+      onSend('( ͡° ͜ʖ ͡°)'); return true
+    case 'clap':
+      if (args) { onSend(args.split(' ').join(' 👏 ') + ' 👏'); return true }
+      return false
+    case 'spoiler':
+      if (args) { onSend(`||${args}||`); return true }
+      return false
+    case 'giphy':
+      setContent(args ? args : '')
+      setShowGifPicker(true)
+      return true
+    default:
+      return false
+  }
+}
 
 export interface ReplyTarget {
   id: string
@@ -69,6 +124,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showScheduled, setShowScheduled] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
+  // Slash commands
+  const [showSlash, setShowSlash] = useState(false)
+  const [slashQuery, setSlashQuery] = useState('')
+  const [slashIndex, setSlashIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
@@ -81,6 +140,29 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       api.get(`/users/search?q=${encodeURIComponent(mentionQuery)}`).then(r => r.data),
     enabled: showMentions && mentionQuery.length >= 1,
   })
+
+  const { data: botCommandsRaw = [] } = useQuery<{ name: string; description: string; bot_name: string }[]>({
+    queryKey: ['server_commands', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/commands`).then(r => r.data),
+    enabled: !!serverId,
+    staleTime: 60_000,
+  })
+
+  // Fusion builtin + bot commands
+  const allSlashCommands: SlashCommand[] = [
+    ...BUILTIN_COMMANDS,
+    ...botCommandsRaw.map(bc => ({
+      name: bc.name,
+      description: bc.description,
+      usage: `/${bc.name}`,
+      isBot: true,
+      botName: bc.bot_name,
+    })),
+  ]
+
+  const filteredSlashCommands = slashQuery
+    ? allSlashCommands.filter(c => c.name.startsWith(slashQuery.toLowerCase()))
+    : allSlashCommands
 
   const { data: scheduledMessages = [] } = useQuery<any[]>({
     queryKey: ['scheduled_messages', serverId, channelId],
@@ -173,6 +255,50 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }
 
+  const detectSlash = (value: string) => {
+    // Slash command : input commence par "/" en début de message
+    if (value.startsWith('/')) {
+      const withoutSlash = value.slice(1)
+      // Tant qu'il n'y a pas d'espace → on est encore dans le nom de la commande
+      if (!withoutSlash.includes(' ')) {
+        setSlashQuery(withoutSlash)
+        setSlashIndex(0)
+        setShowSlash(true)
+        return
+      }
+    }
+    setShowSlash(false)
+  }
+
+  const selectSlashCommand = (cmd: SlashCommand) => {
+    if (cmd.isBot) {
+      // Pour les bot commands : on envoie /cmdname args tel quel (bot reçoit via WS)
+      setContent(`/${cmd.name} `)
+      setShowSlash(false)
+      setTimeout(() => textareaRef.current?.focus(), 0)
+    } else {
+      // Pré-remplir avec le nom de la commande + espace pour que l'user tape les args
+      const needsArgs = ['me', 'clap', 'spoiler', 'giphy'].includes(cmd.name)
+      if (needsArgs) {
+        setContent(`/${cmd.name} `)
+        setShowSlash(false)
+        setTimeout(() => textareaRef.current?.focus(), 0)
+      } else {
+        // Exécuter directement
+        const executed = executeSlashCommand(cmd.name, '', setContent, setShowGifPicker, (msg) => {
+          onSend(msg, replyTo?.id)
+          onCancelReply?.()
+          setContent('')
+          setFiles([])
+        })
+        if (executed) {
+          setContent('')
+          setShowSlash(false)
+        }
+      }
+    }
+  }
+
   const insertMention = (user: MentionUser) => {
     const pos = cursorPos
     const before = content.slice(0, pos)
@@ -190,12 +316,43 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }, 0)
   }
 
+  // Wrapper le texte sélectionné avec des marqueurs markdown
+  const wrapSelection = (marker: string) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const selected = content.slice(start, end)
+    const newContent = content.slice(0, start) + marker + selected + marker + content.slice(end)
+    setContent(newContent)
+    setTimeout(() => {
+      ta.focus()
+      ta.setSelectionRange(start + marker.length, end + marker.length)
+    }, 0)
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showSlash && filteredSlashCommands.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => Math.min(i + 1, filteredSlashCommands.length - 1)); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIndex(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Tab' || (e.key === 'Enter' && showSlash)) {
+        e.preventDefault()
+        selectSlashCommand(filteredSlashCommands[slashIndex])
+        return
+      }
+      if (e.key === 'Escape') { setShowSlash(false); return }
+    }
     if (showMentions && mentionResults.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionResults.length - 1)); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return }
       if (e.key === 'Tab' || (e.key === 'Enter' && showMentions)) { e.preventDefault(); insertMention(mentionResults[mentionIndex]); return }
       if (e.key === 'Escape') { setShowMentions(false); return }
+    }
+    // Ctrl+B -> **gras**, Ctrl+I -> *italique*, Ctrl+U -> __souligné__
+    if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+      if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
+      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
+      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
@@ -206,6 +363,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setContent(val)
     setCursorPos(pos)
     detectMention(val, pos)
+    detectSlash(val)
     send({ type: 'TYPING_START', channel_id: channelId })
     clearTimeout(typingTimeout.current)
     typingTimeout.current = setTimeout(() => {}, 3000)
@@ -214,10 +372,35 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const submit = () => {
     const trimmed = content.trim()
     if (!trimmed && files.length === 0) return
+
+    // Essai d'exécution slash command built-in
+    if (trimmed.startsWith('/')) {
+      const parts = trimmed.slice(1).split(' ')
+      const cmdName = parts[0].toLowerCase()
+      const args = parts.slice(1).join(' ')
+      const isBuiltin = BUILTIN_COMMANDS.some(c => c.name === cmdName)
+      if (isBuiltin) {
+        const executed = executeSlashCommand(cmdName, args, setContent, setShowGifPicker, (msg) => {
+          onSend(msg, replyTo?.id)
+          onCancelReply?.()
+        })
+        if (executed) {
+          setContent('')
+          setFiles([])
+          setShowSlash(false)
+          setShowMentions(false)
+          textareaRef.current?.focus()
+          return
+        }
+      }
+      // Sinon : c'est peut-être une bot command, on envoie le message tel quel
+    }
+
     onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined)
     setContent('')
     setFiles([])
     setShowMentions(false)
+    setShowSlash(false)
     onCancelReply?.()
     textareaRef.current?.focus()
   }
@@ -268,6 +451,40 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler">
             <X size={12} />
           </button>
+        </div>
+      )}
+
+      {/* Dropdown slash commands */}
+      {showSlash && filteredSlashCommands.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-64 overflow-y-auto">
+          <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover flex items-center gap-1.5">
+            <Slash size={10} />
+            Commandes{slashQuery ? ` — /${slashQuery}` : ''}
+          </div>
+          {filteredSlashCommands.map((cmd, idx) => (
+            <button
+              key={cmd.name}
+              onClick={() => selectSlashCommand(cmd)}
+              className={`w-full flex items-center gap-3 px-3 py-2 text-left transition
+                ${idx === slashIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
+            >
+              <div className="w-7 h-7 rounded bg-fc-hover flex items-center justify-center flex-shrink-0">
+                <span className="text-fc-accent font-bold text-sm">/</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{cmd.name}</span>
+                  {cmd.isBot && (
+                    <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
+                      BOT{cmd.botName ? ` · ${cmd.botName}` : ''}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-fc-muted truncate">{cmd.description}</div>
+              </div>
+              <div className="text-xs text-fc-muted/60 flex-shrink-0 hidden sm:block">{cmd.usage}</div>
+            </button>
+          ))}
         </div>
       )}
 

@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+﻿import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, Headphones, VolumeX, Maximize2, X, Users, Radio,
-  ChevronDown,
+  ChevronDown, MessageSquare,
 } from 'lucide-react'
 import { useVoice, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useVoiceActivity } from '../hooks/useVoiceActivity'
 import VolumeSlider from '../components/voice/VolumeSlider'
+import { LiveBadge } from '../components/voice/GoLivePanel'
 
 interface Props {
   channel: { id: string; name: string; type: string }
@@ -124,18 +125,92 @@ const SCREEN_QUALITY_LABELS: Record<ScreenQuality, string> = {
   'source': 'Source',
 }
 
+// ── Panel de sélection Whisper ────────────────────────────────────────────────
+function WhisperPanel({ onClose }: { onClose: () => void }) {
+  const { peers, whisperTargets, setWhisperTargets } = useVoice()
+  const [selected, setSelected] = useState<Set<string>>(new Set(whisperTargets ?? []))
+
+  const toggle = (userId: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else if (next.size < 3) next.add(userId)
+      return next
+    })
+  }
+
+  const apply = () => {
+    setWhisperTargets(selected.size > 0 ? Array.from(selected) : null)
+    onClose()
+  }
+
+  const cancel = () => {
+    setWhisperTargets(null)
+    onClose()
+  }
+
+  return (
+    <div className="absolute bottom-full right-0 mb-2 w-64 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/5">
+        <p className="text-sm font-semibold text-white">Chuchoter à...</p>
+        <p className="text-xs text-fc-muted mt-0.5">Sélectionnez 1-3 membres</p>
+      </div>
+      <div className="max-h-48 overflow-y-auto">
+        {peers.length === 0 && (
+          <p className="text-xs text-fc-muted text-center py-4">Aucun pair connecté</p>
+        )}
+        {peers.map(peer => (
+          <button
+            key={peer.userId}
+            onClick={() => toggle(peer.userId)}
+            className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition
+              ${selected.has(peer.userId) ? 'bg-blue-500/20 text-blue-300' : 'hover:bg-fc-hover text-fc-text'}`}
+          >
+            <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
+              {peer.avatar
+                ? <img src={peer.avatar} alt="" className="w-full h-full object-cover" />
+                : peer.username.charAt(0).toUpperCase()}
+            </div>
+            <span className="truncate">{peer.username}</span>
+            {selected.has(peer.userId) && (
+              <span className="ml-auto text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded-full">Sélectionné</span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2 p-3 border-t border-white/5">
+        <button
+          onClick={apply}
+          disabled={selected.size === 0}
+          className="flex-1 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-semibold transition"
+        >
+          {selected.size > 0 ? `Chuchoter (${selected.size})` : 'Sélectionner'}
+        </button>
+        <button
+          onClick={cancel}
+          className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-fc-muted text-xs transition"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Contrôles ────────────────────────────────────────────────────────────────
 function Controls() {
   const {
     muted, deafened, videoEnabled, screenSharing,
-    pttMode, pttActive,
+    pttMode, pttActive, whisperTargets,
     toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare, leave,
-    setPttMode, activatePtt, deactivatePtt,
+    setPttMode, activatePtt, deactivatePtt, setWhisperTargets,
   } = useVoice()
 
   const [showQualityMenu, setShowQualityMenu] = useState(false)
   const [screenQuality, setScreenQuality] = useState<ScreenQuality>('1080p')
+  const [showWhisperPanel, setShowWhisperPanel] = useState(false)
   const qualityRef = useRef<HTMLDivElement>(null)
+  const whisperRef = useRef<HTMLDivElement>(null)
 
   // Fermer le menu qualité au clic extérieur
   useEffect(() => {
@@ -148,6 +223,18 @@ function Controls() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showQualityMenu])
+
+  // Fermer le panel whisper au clic extérieur
+  useEffect(() => {
+    if (!showWhisperPanel) return
+    const handler = (e: MouseEvent) => {
+      if (whisperRef.current && !whisperRef.current.contains(e.target as Node)) {
+        setShowWhisperPanel(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showWhisperPanel])
 
   // PTT : écouter keydown/keyup P et Espace
   useEffect(() => {
@@ -243,6 +330,29 @@ function Controls() {
         <Radio size={18} />
       </CtrlBtn>
 
+      {/* Whisper */}
+      <div ref={whisperRef} className="relative">
+        <CtrlBtn
+          active={whisperTargets !== null}
+          accent={whisperTargets !== null}
+          onClick={() => {
+            if (whisperTargets !== null) {
+              setWhisperTargets(null)
+            } else {
+              setShowWhisperPanel(v => !v)
+            }
+          }}
+          title={whisperTargets !== null
+            ? `Mode chuchotement actif (${whisperTargets.length} dest.) — clic pour désactiver`
+            : 'Chuchoter à des membres spécifiques'}
+        >
+          <MessageSquare size={18} />
+        </CtrlBtn>
+        {whisperTargets === null && showWhisperPanel && (
+          <WhisperPanel onClose={() => setShowWhisperPanel(false)} />
+        )}
+      </div>
+
       <div className="flex-1" />
       <button
         onClick={leave}
@@ -275,7 +385,7 @@ function CtrlBtn({ active, danger, accent, onClick, title, children }: {
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
-  const { joined, peers, localStream, muted, videoEnabled, screenSharing, error, join, leave } = useVoice()
+  const { joined, peers, localStream, muted, videoEnabled, screenSharing, error, join, leave, activePrioritySpeaker, whisperTargets } = useVoice()
   const [fullscreenPeer, setFullscreenPeer] = useState<{ stream: MediaStream; label: string } | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
   const location = useLocation()
@@ -346,6 +456,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const allParticipants: Array<{
     userId: string; username: string; avatar?: string; stream: MediaStream | null;
     audioEnabled: boolean; videoEnabled: boolean; screenSharing: boolean; isLocal: boolean;
+    prioritySpeaker?: boolean;
   }> = [
     {
       userId: user?.id ?? '',
@@ -366,15 +477,40 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       videoEnabled: p.videoEnabled,
       screenSharing: p.screenSharing,
       isLocal: false,
+      prioritySpeaker: p.prioritySpeaker,
     })),
   ]
 
   const n = allParticipants.length
   const gridCols = n <= 1 ? 'grid-cols-1 max-w-lg mx-auto' : n <= 2 ? 'grid-cols-2' : n <= 4 ? 'grid-cols-2' : 'grid-cols-3'
 
+  // En mode whisper : les tuiles hors cibles sont visuellement atténuées
+  // whispered=true → dans la liste ; whispered=false → hors liste ; whispered=undefined → mode normal
+  const getWhispered = (p: typeof allParticipants[0]) => {
+    if (p.isLocal) return undefined  // toujours visible pour soi
+    if (whisperTargets === null) return undefined
+    return whisperTargets.includes(p.userId)
+  }
+
   return (
     <div className="flex flex-col h-full bg-gray-950">
       <Header channel={channel} count={n} onToggleSidebar={() => setShowSidebar(v => !v)} showSidebar={showSidebar} />
+
+      {/* Indicateur whisper actif */}
+      {whisperTargets !== null && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-blue-900/40 border-b border-blue-500/20 text-xs text-blue-300">
+          <MessageSquare size={12} />
+          Mode chuchotement actif — vous parlez uniquement à {whisperTargets.length} membre(s)
+        </div>
+      )}
+
+      {/* Indicateur priority speaker actif */}
+      {activePrioritySpeaker !== null && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-900/40 border-b border-yellow-500/20 text-xs text-yellow-300">
+          <span>★</span>
+          Intervenant prioritaire actif — volume des autres réduit à 30%
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Grille */}
@@ -385,6 +521,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               {...p}
               isLocal={p.isLocal}
               speaking={p.isLocal ? localSpeaking : false}
+              prioritySpeaker={activePrioritySpeaker === p.userId}
+              whispered={getWhispered(p)}
+              spectatorCount={p.isLocal && screenSharing ? Math.max(0, peers.length) : undefined}
               onExpand={p.screenSharing && p.stream
                 ? () => setFullscreenPeer({ stream: p.stream!, label: p.username })
                 : undefined}
@@ -446,9 +585,10 @@ function Header({ channel, count, onToggleSidebar, showSidebar }: {
   )
 }
 
-function PeerTile({ userId, username, avatar, stream, audioEnabled, videoEnabled, screenSharing, isLocal, speaking, onExpand }: {
+function PeerTile({ userId, username, avatar, stream, audioEnabled, videoEnabled, screenSharing, isLocal, speaking, prioritySpeaker, whispered, spectatorCount, onExpand }: {
   userId: string; username: string; avatar?: string; stream: MediaStream | null;
   audioEnabled: boolean; videoEnabled: boolean; screenSharing: boolean; isLocal: boolean; speaking: boolean;
+  prioritySpeaker?: boolean; whispered?: boolean; spectatorCount?: number;
   onExpand?: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -473,8 +613,9 @@ function PeerTile({ userId, username, avatar, stream, audioEnabled, videoEnabled
     <div
       ref={tileRef}
       className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
-        ${speaking ? 'ring-2 ring-green-400 shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
-        ${isLocal ? 'ring-fc-accent/50' : ''}`}
+        ${prioritySpeaker ? 'ring-2 ring-yellow-400 shadow-[0_0_20px_rgba(251,191,36,0.35)]' : speaking ? 'ring-2 ring-green-400 shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
+        ${isLocal ? 'ring-fc-accent/50' : ''}
+        ${whispered ? 'opacity-50' : ''}`}
       onContextMenu={handleContextMenu}
     >
       {hasVideo ? (
@@ -505,6 +646,25 @@ function PeerTile({ userId, username, avatar, stream, audioEnabled, videoEnabled
 
       {isLocal && (
         <div className="absolute top-2 left-2 bg-fc-accent/90 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Vous</div>
+      )}
+
+      {/* Badge LIVE pour le streamer local */}
+      {isLocal && screenSharing && (
+        <LiveBadge spectatorCount={spectatorCount ?? 0} />
+      )}
+
+      {/* Badge priority speaker */}
+      {prioritySpeaker && (
+        <div className="absolute top-2 right-2 bg-yellow-500/90 text-black text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+          <span>★</span> Priorité
+        </div>
+      )}
+
+      {/* Badge whisper destinataire */}
+      {whispered === false && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-xl pointer-events-none">
+          <span className="text-2xl" title="Non inclus dans le chuchotement">🤫</span>
+        </div>
       )}
 
       {/* Menu volume (right-click) */}

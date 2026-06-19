@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -10,6 +10,7 @@ import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
 import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
+import ForwardModal from './ForwardModal'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -165,6 +166,7 @@ export default function MessageList({
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
+  const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -293,6 +295,16 @@ export default function MessageList({
                             : 'Message original supprimé'}
                         </span>
                       </button>
+                    )}
+
+                    {/* Indicateur de message forwardé */}
+                    {msg.forward_from_id && (
+                      <div className="mb-1 pl-3 border-l-2 border-indigo-400/40 bg-indigo-500/5 rounded-r py-1 pr-2">
+                        <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-0.5">
+                          <Forward size={10} className="flex-shrink-0" />
+                          <span>Transféré de <span className="font-semibold">@{msg.forward_from_username ?? 'inconnu'}</span></span>
+                        </div>
+                      </div>
                     )}
 
                     {msg.content && (() => {
@@ -450,6 +462,14 @@ export default function MessageList({
                     <Bookmark size={14} />
                   </button>
 
+                  <button
+                    onClick={() => setForwardingMsg({ id: msg.id })}
+                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                    title="Transférer"
+                  >
+                    <Forward size={14} />
+                  </button>
+
                   {onReply && (
                     <button
                       onClick={() => onReply(msg)}
@@ -557,6 +577,16 @@ export default function MessageList({
           serverId={serverId}
           channelId={channelId}
           onClose={() => setEditHistoryMsg(null)}
+        />
+      )}
+
+      {/* Modal transfert de message */}
+      {forwardingMsg && (
+        <ForwardModal
+          messageId={forwardingMsg.id}
+          sourceChannelId={channelId}
+          sourceServerId={serverId}
+          onClose={() => setForwardingMsg(null)}
         />
       )}
 

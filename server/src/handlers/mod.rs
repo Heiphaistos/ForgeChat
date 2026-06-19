@@ -20,3 +20,5 @@ pub mod saved;
 pub mod audit;
 pub mod feeds;
 pub mod scheduled;
+pub mod voice;
+pub mod templates;

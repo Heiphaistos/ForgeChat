@@ -27,7 +27,11 @@ export function renderMarkdown(text: string, customEmojis?: Record<string, strin
 
     // Citation >
     if (line.startsWith('> ')) {
-      elements.push(<blockquote key={i}>{inlineMarkdown(line.slice(2))}</blockquote>)
+      elements.push(
+        <blockquote key={i} className="border-l-4 border-fc-accent bg-fc-input/50 pl-3 py-0.5 rounded-r my-0.5 text-fc-muted italic">
+          {inlineMarkdown(line.slice(2))}
+        </blockquote>
+      )
       i++
       continue
     }
@@ -52,8 +56,30 @@ function inlineMarkdown(text: string, customEmojis?: Record<string, string>): Re
   return <>{parts}</>
 }
 
+// Timestamp Discord-style : <t:1234567890:R> → "il y a 2 heures"
+function formatRelativeTime(unix: number): string {
+  const now = Date.now()
+  const diff = now - unix * 1000
+  const abs = Math.abs(diff)
+  const future = diff < 0
+
+  const seconds = Math.floor(abs / 1000)
+  const minutes = Math.floor(abs / 60000)
+  const hours = Math.floor(abs / 3600000)
+  const days = Math.floor(abs / 86400000)
+
+  let label: string
+  if (seconds < 60) label = 'à l\'instant'
+  else if (minutes < 60) label = `${minutes} minute${minutes > 1 ? 's' : ''}`
+  else if (hours < 24) label = `${hours} heure${hours > 1 ? 's' : ''}`
+  else label = `${days} jour${days > 1 ? 's' : ''}`
+
+  if (seconds < 60) return label
+  return future ? `dans ${label}` : `il y a ${label}`
+}
+
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
-  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|_(.+?)_|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|@everyone|@here|https?:\/\/\S+|:[a-z0-9_]+:)/g
+  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|_(.+?)_|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
   const result: React.ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -88,6 +114,41 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       )
     } else if (full.startsWith('<@')) {
       result.push(<span key={match.index} className="mention">{full}</span>)
+    } else if (full.startsWith('<t:')) {
+      // Timestamp Discord-style <t:1234567890:R>
+      const tsMatch = full.match(/^<t:(\d+):([RrDdFftT])>$/)
+      if (tsMatch) {
+        const unix = parseInt(tsMatch[1], 10)
+        const fmt = tsMatch[2]
+        let display: string
+        if (fmt === 'R' || fmt === 'r') {
+          display = formatRelativeTime(unix)
+        } else {
+          display = new Date(unix * 1000).toLocaleString('fr-FR', {
+            dateStyle: fmt === 'd' || fmt === 'D' ? 'short' : undefined,
+            timeStyle: fmt === 't' || fmt === 'T' ? 'short' : undefined,
+          })
+        }
+        result.push(
+          <span key={match.index} className="bg-fc-hover/60 rounded px-1 text-fc-accent font-medium text-xs" title={new Date(unix * 1000).toLocaleString('fr-FR')}>
+            {display}
+          </span>
+        )
+      } else {
+        result.push(full)
+      }
+    } else if (full.startsWith('[')) {
+      // Lien Markdown [texte](url)
+      const linkMatch = full.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/)
+      if (linkMatch) {
+        result.push(
+          <a key={match.index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer">
+            {linkMatch[1]}
+          </a>
+        )
+      } else {
+        result.push(full)
+      }
     } else if (full.startsWith('http')) {
       result.push(
         <a key={match.index} href={full} target="_blank" rel="noopener noreferrer">

@@ -10,7 +10,7 @@ use crate::{
     error::{AppError, Result},
     handlers::servers::require_member,
     middleware::auth::Claims,
-    models::message::{EditMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
+    models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
     state::AppState,
 };
 
@@ -91,6 +91,8 @@ pub async fn get_messages(
             reply_to: row.get("reply_to"),
             reply_to_content: row.try_get("reply_to_content").ok().flatten(),
             reply_to_username: row.try_get("reply_to_username").ok().flatten(),
+            forward_from_id: row.try_get("forward_from_id").ok().flatten(),
+            forward_from_username: row.try_get("forward_from_username").ok().flatten(),
             pinned: row.get("pinned"),
             edited_at: row.get("edited_at"),
             created_at: row.get("created_at"),
@@ -204,6 +206,8 @@ pub async fn send_message(
         reply_to: reply_to_id,
         reply_to_content,
         reply_to_username,
+        forward_from_id: None,
+        forward_from_username: None,
         pinned: msg.get("pinned"),
         edited_at: msg.get("edited_at"),
         created_at: msg.get("created_at"),
@@ -469,6 +473,8 @@ pub async fn search_messages(
         reply_to: r.get("reply_to"),
         reply_to_content: r.try_get("reply_to_content").ok().flatten(),
         reply_to_username: r.try_get("reply_to_username").ok().flatten(),
+        forward_from_id: r.try_get("forward_from_id").ok().flatten(),
+        forward_from_username: r.try_get("forward_from_username").ok().flatten(),
         pinned: r.get("pinned"),
         edited_at: r.get("edited_at"),
         created_at: r.get("created_at"),
@@ -505,4 +511,102 @@ pub async fn get_message_edits(
     })).collect();
 
     Ok(Json(edits))
+}
+
+/// POST /servers/:server_id/channels/:channel_id/messages/:msg_id/forward
+/// Transfère un message vers un autre canal.
+pub async fn forward_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(body): Json<ForwardMessageRequest>,
+) -> Result<Json<MessageWithAuthor>> {
+    use sqlx::Row;
+    require_member(&state, claims.sub, server_id).await?;
+
+    // Vérifier que le message source existe dans le canal source
+    let src = sqlx::query(
+        "SELECT m.content, m.type, u.username as author_username
+         FROM messages m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.id=$1 AND m.channel_id=$2"
+    )
+    .bind(message_id)
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Message source introuvable".into()))?;
+
+    let src_content: Option<String> = src.try_get("content").ok().flatten();
+    let src_author: String = src.get("author_username");
+
+    // Vérifier que le canal de destination appartient bien à un serveur dont l'user est membre
+    let dest_server_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT server_id FROM channels WHERE id=$1"
+    )
+    .bind(body.channel_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let dest_server_id = dest_server_id
+        .ok_or_else(|| AppError::NotFound("Canal de destination introuvable".into()))?;
+
+    // L'user doit être membre du serveur de destination
+    require_member(&state, claims.sub, dest_server_id).await?;
+
+    // Insérer le message forwardé dans le canal cible
+    let new_msg = sqlx::query(
+        "INSERT INTO messages (channel_id, user_id, content, forward_from_id, forward_from_username)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *"
+    )
+    .bind(body.channel_id)
+    .bind(claims.sub)
+    .bind(&src_content)
+    .bind(message_id)
+    .bind(&src_author)
+    .fetch_one(&state.db)
+    .await?;
+
+    sqlx::query("UPDATE channels SET last_message_id=$1 WHERE id=$2")
+        .bind(new_msg.get::<Uuid, _>("id"))
+        .bind(body.channel_id)
+        .execute(&state.db)
+        .await?;
+
+    let user = sqlx::query(
+        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    let full_msg = MessageWithAuthor {
+        id: new_msg.get("id"),
+        channel_id: body.channel_id,
+        content: new_msg.get("content"),
+        r#type: new_msg.get("type"),
+        reply_to: None,
+        reply_to_content: None,
+        reply_to_username: None,
+        forward_from_id: Some(message_id),
+        forward_from_username: Some(src_author),
+        pinned: false,
+        edited_at: None,
+        created_at: new_msg.get("created_at"),
+        author_id: claims.sub,
+        author_username: user.get("username"),
+        author_discriminator: user.get("discriminator"),
+        author_avatar: user.get("avatar"),
+        author_is_bot: user.try_get("is_bot").unwrap_or(false),
+        attachments: vec![],
+        reactions: vec![],
+    };
+
+    let event = serde_json::json!({
+        "type": "MESSAGE_CREATE",
+        "message": full_msg
+    });
+    state.broadcast_to_channel(body.channel_id, event.to_string()).await;
+
+    Ok(Json(full_msg))
 }
