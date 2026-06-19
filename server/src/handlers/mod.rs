@@ -18,3 +18,4 @@ pub mod polls;
 pub mod webhooks;
 pub mod saved;
 pub mod audit;
+pub mod feeds;

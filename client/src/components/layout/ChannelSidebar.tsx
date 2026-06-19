@@ -25,10 +25,7 @@ function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   }
 }
 
-const CHANNEL_GROUPS = [
-  { label: 'Texte', types: ['text', 'announcement', 'forum'] },
-  { label: 'Vocal & Vidéo', types: ['voice', 'video', 'stage'] },
-]
+const UNCATEGORIZED_KEY = '__uncategorized__'
 
 export default function ChannelSidebar() {
   const { serverId, channelId } = useParams()
@@ -44,6 +41,12 @@ export default function ChannelSidebar() {
   const { data } = useQuery({
     queryKey: ['server', serverId],
     queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data),
+    enabled: !!serverId,
+  })
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/categories`).then(r => r.data),
     enabled: !!serverId,
   })
 
@@ -95,8 +98,89 @@ export default function ChannelSidebar() {
   const server = data?.server
   const channels: any[] = data?.channels ?? []
 
-  const toggleGroup = (label: string) => {
-    setCollapsed(prev => ({ ...prev, [label]: !prev[label] }))
+  const toggleGroup = (key: string) => {
+    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  // Construire les groupes dynamiques basés sur les catégories DB
+  // Chaque catégorie regroupe ses canaux ; les canaux sans category_id vont dans "sans catégorie"
+  const categoryGroups: Array<{ key: string; label: string; channels: any[] }> = []
+
+  // Canaux rattachés à une catégorie connue
+  for (const cat of categories) {
+    const catChannels = channels.filter((c: any) => c.category_id === cat.id)
+    if (catChannels.length > 0) {
+      categoryGroups.push({ key: cat.id, label: cat.name, channels: catChannels })
+    }
+  }
+
+  // Canaux sans catégorie (category_id null ou catégorie inconnue)
+  const knownCatIds = new Set(categories.map((c: any) => c.id))
+  const uncategorized = channels.filter(
+    (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
+  )
+
+  // Si pas de catégories du tout, on fallback sur l'ancien groupement par type
+  // pour que les serveurs sans catégories affichent quand même leurs canaux
+  if (categories.length === 0 && channels.length > 0) {
+    const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
+    const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
+    if (textChannels.length > 0) categoryGroups.push({ key: 'texte', label: 'Texte', channels: textChannels })
+    if (voiceChannels.length > 0) categoryGroups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
+  } else if (uncategorized.length > 0) {
+    categoryGroups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
+  }
+
+  const renderChannel = (ch: any) => {
+    const isVoice = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
+    const participants = isVoice ? (roomParticipants[ch.id] ?? []) : []
+    const isMeConnected = voiceChannelId === ch.id
+
+    return (
+      <div key={ch.id}>
+        <button
+          onClick={() => nav(`/servers/${serverId}/channels/${ch.id}`)}
+          className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
+            ${channelId === ch.id
+              ? 'bg-fc-hover text-white'
+              : unreadCounts[ch.id] > 0
+                ? 'text-white font-semibold hover:bg-fc-hover/50'
+                : 'text-fc-muted hover:bg-fc-hover/50 hover:text-fc-text'}`}
+        >
+          <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 ? 'text-white' : 'text-fc-muted'}>
+            <ChannelIcon type={ch.type} size={16} />
+          </span>
+          <span className="text-sm truncate flex-1">{ch.name}</span>
+          {isMeConnected && (
+            <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
+          )}
+          {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoice && (
+            <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+              {unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}
+            </span>
+          )}
+        </button>
+
+        {/* Participants vocaux */}
+        {isVoice && participants.length > 0 && (
+          <div className="ml-5 mb-0.5 space-y-0.5">
+            {participants.map(p => (
+              <div key={p.userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80">
+                <div className="w-5 h-5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white">
+                  {p.avatar
+                    ? <img src={p.avatar} alt="" className="w-full h-full object-cover" />
+                    : p.username.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-[11px] truncate flex-1">{p.username}</span>
+                {p.muted && <MicOff size={9} className="text-red-400 flex-shrink-0" />}
+                {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
+                {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -142,16 +226,14 @@ export default function ChannelSidebar() {
         </div>
 
         <div className="p-2 space-y-0.5 mt-2 flex-1">
-          {CHANNEL_GROUPS.map(({ label, types }) => {
-            const groupChannels = channels.filter((c: any) => types.includes(c.type))
-            if (groupChannels.length === 0) return null
-            const isCollapsed = collapsed[label]
+          {categoryGroups.map(({ key, label, channels: groupChannels }) => {
+            const isCollapsed = collapsed[key]
 
             return (
-              <div key={label} className="mb-2">
+              <div key={key} className="mb-2">
                 <div
                   className="flex items-center justify-between px-2 py-1 group cursor-pointer"
-                  onClick={() => toggleGroup(label)}
+                  onClick={() => toggleGroup(key)}
                 >
                   <div className="flex items-center gap-1">
                     <ChevronRight
@@ -163,63 +245,13 @@ export default function ChannelSidebar() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
                     className="text-fc-muted opacity-0 group-hover:opacity-100 hover:text-white transition"
-                    title={`Créer un canal ${label.toLowerCase()}`}
+                    title={`Créer un canal dans ${label}`}
                   >
                     <Plus size={14} />
                   </button>
                 </div>
 
-                {!isCollapsed && groupChannels.map((ch: any) => {
-                  const isVoice = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
-                  const participants = isVoice ? (roomParticipants[ch.id] ?? []) : []
-                  const isMeConnected = voiceChannelId === ch.id
-
-                  return (
-                    <div key={ch.id}>
-                      <button
-                        onClick={() => nav(`/servers/${serverId}/channels/${ch.id}`)}
-                        className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
-                          ${channelId === ch.id
-                            ? 'bg-fc-hover text-white'
-                            : unreadCounts[ch.id] > 0
-                              ? 'text-white font-semibold hover:bg-fc-hover/50'
-                              : 'text-fc-muted hover:bg-fc-hover/50 hover:text-fc-text'}`}
-                      >
-                        <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 ? 'text-white' : 'text-fc-muted'}>
-                          <ChannelIcon type={ch.type} size={16} />
-                        </span>
-                        <span className="text-sm truncate flex-1">{ch.name}</span>
-                        {isMeConnected && (
-                          <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
-                        )}
-                        {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoice && (
-                          <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                            {unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Participants vocaux */}
-                      {isVoice && participants.length > 0 && (
-                        <div className="ml-5 mb-0.5 space-y-0.5">
-                          {participants.map(p => (
-                            <div key={p.userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80">
-                              <div className="w-5 h-5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white">
-                                {p.avatar
-                                  ? <img src={p.avatar} alt="" className="w-full h-full object-cover" />
-                                  : p.username.charAt(0).toUpperCase()}
-                              </div>
-                              <span className="text-[11px] truncate flex-1">{p.username}</span>
-                              {p.muted && <MicOff size={9} className="text-red-400 flex-shrink-0" />}
-                              {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
-                              {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
+                {!isCollapsed && groupChannels.map(renderChannel)}
               </div>
             )
           })}

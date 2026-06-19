@@ -61,6 +61,16 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Tâche de polling RSS (toutes les 5 minutes)
+    let feed_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            handlers::feeds::poll_rss_feeds(&feed_state).await;
+        }
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
         .allow_methods([
@@ -189,7 +199,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Channels
         .route("/servers/:id/channels", get(handlers::channels::get_channels))
         .route("/servers/:id/channels", post(handlers::channels::create_channel))
-        .route("/servers/:server_id/categories", post(handlers::channels::create_category))
+        .route("/servers/:server_id/categories", get(handlers::channels::get_categories).post(handlers::channels::create_category))
         .route("/servers/:server_id/channels/:channel_id", patch(handlers::channels::update_channel))
         .route("/servers/:server_id/channels/:channel_id", delete(handlers::channels::delete_channel))
         .route("/servers/:server_id/channels/:channel_id/pins", get(handlers::channels::get_pinned))
@@ -296,6 +306,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // DM read receipts
         .route("/dms/:dm_id/read", post(handlers::audit::mark_dm_read))
         .route("/dms/:dm_id/read", get(handlers::audit::get_dm_read))
+        // Feeds RSS/YouTube par canal
+        .route("/servers/:server_id/channels/:channel_id/feeds", get(handlers::feeds::list_channel_feeds))
+        .route("/servers/:server_id/channels/:channel_id/feeds", post(handlers::feeds::create_channel_feed))
+        .route("/servers/:server_id/feeds/:feed_id", delete(handlers::feeds::delete_channel_feed))
+        .route("/servers/:server_id/feeds/:feed_id/toggle", patch(handlers::feeds::toggle_channel_feed))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

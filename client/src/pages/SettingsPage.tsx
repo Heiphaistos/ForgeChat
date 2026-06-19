@@ -25,9 +25,22 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; danger?: boolean
 ]
 
 const THEMES = [
-  { id: 'dark', label: 'Sombre', preview: '#1a1b1e' },
-  { id: 'darker', label: 'AMOLED', preview: '#0d0d0d' },
-  { id: 'light', label: 'Clair', preview: '#f2f3f5' },
+  { id: 'dark', label: 'Sombre', accent: '#5865f2', bg: '#1a1b1e', preview: ['#1a1b1e', '#232428', '#36393f'] },
+  { id: 'darker', label: 'AMOLED', accent: '#5865f2', bg: '#000', preview: ['#000', '#0a0a0a', '#0d0d0d'] },
+  { id: 'light', label: 'Clair', accent: '#5865f2', bg: '#f2f3f5', preview: ['#f2f3f5', '#ebedef', '#fff'] },
+  { id: 'dracula', label: 'Dracula', accent: '#bd93f9', bg: '#282a36', preview: ['#282a36', '#1e1f2b', '#353746'] },
+  { id: 'nord', label: 'Nord', accent: '#5e81ac', bg: '#2e3440', preview: ['#2e3440', '#3b4252', '#434c5e'] },
+  { id: 'catppuccin', label: 'Catppuccin', accent: '#cba6f7', bg: '#1e1e2e', preview: ['#1e1e2e', '#181825', '#313244'] },
+  { id: 'gruvbox', label: 'Gruvbox', accent: '#d65d0e', bg: '#1d2021', preview: ['#1d2021', '#282828', '#3c3836'] },
+  { id: 'tokyonight', label: 'Tokyo Night', accent: '#7aa2f7', bg: '#1a1b2e', preview: ['#1a1b2e', '#1f2040', '#24283b'] },
+  { id: 'onedark', label: 'One Dark', accent: '#61afef', bg: '#282c34', preview: ['#282c34', '#2c313c', '#3b4048'] },
+  { id: 'cyberpunk', label: 'Cyberpunk', accent: '#f0e14a', bg: '#0d0d0d', preview: ['#0d0d0d', '#111111', '#161616'] },
+  { id: 'monokai', label: 'Monokai', accent: '#a6e22e', bg: '#272822', preview: ['#272822', '#2d2e2a', '#383830'] },
+  { id: 'solarized', label: 'Solarized', accent: '#268bd2', bg: '#002b36', preview: ['#002b36', '#073642', '#0d4a5c'] },
+  { id: 'forest', label: 'Forêt', accent: '#6cb340', bg: '#1a2318', preview: ['#1a2318', '#1e2a1c', '#243222'] },
+  { id: 'ocean', label: 'Océan', accent: '#00d4ff', bg: '#0f2340', preview: ['#0f2340', '#0d2238', '#112a47'] },
+  { id: 'neon', label: 'Neon', accent: '#00ff88', bg: '#0a0a14', preview: ['#0a0a14', '#0d0d1a', '#111120'] },
+  { id: 'matrix', label: 'Matrix', accent: '#00ff00', bg: '#000000', preview: ['#000000', '#040804', '#060c06'] },
 ]
 
 const FONT_SIZES = [
@@ -351,15 +364,14 @@ function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
 // ─── APPARENCE ────────────────────────────────────────────────────────────────
 
 function AppearanceSection() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('fc_theme') ?? 'dark')
+  const [theme, setThemeState] = useState(() => localStorage.getItem('fc_theme') ?? 'dark')
   const [fontSize, setFontSize] = useState(() => localStorage.getItem('fc_font_size') ?? 'md')
   const [compact, setCompact] = useState(() => localStorage.getItem('fc_compact') === 'true')
 
-  const applyTheme = (t: string) => {
-    setTheme(t)
-    localStorage.setItem('fc_theme', t)
-    document.documentElement.setAttribute('data-theme', t)
-    toast.success('Thème appliqué')
+  const setTheme = (id: string) => {
+    setThemeState(id)
+    localStorage.setItem('fc_theme', id)
+    document.documentElement.setAttribute('data-theme', id)
   }
 
   const applyFontSize = (id: string, px: string) => {
@@ -379,22 +391,35 @@ function AppearanceSection() {
     <div className="space-y-8">
       <div>
         <label className="fc-label">Thème</label>
-        <div className="grid grid-cols-3 gap-3 mt-2">
+        <div className="grid grid-cols-4 gap-3 mt-3">
           {THEMES.map(t => (
             <button
               key={t.id}
-              onClick={() => applyTheme(t.id)}
-              className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition
-                ${theme === t.id ? 'border-fc-accent' : 'border-fc-hover hover:border-fc-accent/50'}`}
+              onClick={() => setTheme(t.id)}
+              className={`relative flex flex-col rounded-xl border-2 overflow-hidden transition
+                ${theme === t.id
+                  ? 'border-fc-accent ring-2 ring-fc-accent/30'
+                  : 'border-fc-hover hover:border-fc-accent/50'}`}
             >
-              <div
-                className="w-full h-12 rounded-lg border border-white/10 flex items-center justify-center"
-                style={{ background: t.preview }}
-              >
-                <div className="w-8 h-1.5 bg-white/30 rounded" />
+              {/* Mini-aperçu 3 bandes */}
+              <div className="flex h-10 w-full">
+                <div className="flex-1" style={{ background: t.preview[0] }} />
+                <div className="flex-1" style={{ background: t.preview[1] }} />
+                <div className="flex-1" style={{ background: t.preview[2] }} />
               </div>
-              <span className="text-xs font-medium text-fc-text">{t.label}</span>
-              {theme === t.id && <Check size={12} className="text-fc-accent" />}
+              {/* Infos thème */}
+              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-fc-channel">
+                <div
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ background: t.accent }}
+                />
+                <span className="text-xs font-medium text-fc-text truncate flex-1 text-left">{t.label}</span>
+                {theme === t.id && (
+                  <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                    <Check size={10} className="text-white" />
+                  </div>
+                )}
+              </div>
             </button>
           ))}
         </div>

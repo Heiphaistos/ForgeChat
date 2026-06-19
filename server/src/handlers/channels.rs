@@ -125,6 +125,21 @@ pub async fn create_category(
     Ok(Json(cat))
 }
 
+pub async fn get_categories(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<Vec<Category>>> {
+    require_member(&state, claims.sub, server_id).await?;
+    let cats = sqlx::query_as::<_, Category>(
+        "SELECT * FROM categories WHERE server_id=$1 ORDER BY position"
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(cats))
+}
+
 pub async fn get_pinned(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

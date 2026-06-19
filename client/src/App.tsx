@@ -46,6 +46,12 @@ function AppInner() {
 
   useEffect(() => { fetchMe() }, [])
 
+  // Appliquer le thème sauvegardé au démarrage
+  useEffect(() => {
+    const saved = localStorage.getItem('fc_theme') || 'dark'
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
   useEffect(() => {
     if (!user) return
     const token = localStorage.getItem('access_token')

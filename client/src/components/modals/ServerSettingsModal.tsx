@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -11,6 +11,7 @@ import TagsTab from './TagsTab'
 import WebhooksTab from './WebhooksTab'
 import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
+import FeedsTab from './FeedsTab'
 
 interface Server {
   id: string
@@ -26,7 +27,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod'
+type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds'
 
 export default function ServerSettingsModal({ server, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
@@ -166,6 +167,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
     { id: 'emojis' as Tab, label: 'Emojis', icon: SmilePlus },
     { id: 'bots' as Tab, label: 'Bots', icon: Bot },
     { id: 'webhooks' as Tab, label: 'Webhooks', icon: Link },
+    { id: 'feeds' as Tab, label: 'Flux RSS', icon: Rss },
     { id: 'audit' as Tab, label: 'Audit', icon: ScrollText },
     { id: 'automod' as Tab, label: 'AutoMod', icon: Shield },
   ]
@@ -447,6 +449,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
             {tab === 'bans' && <BansTab serverId={server.id} />}
             {tab === 'tags' && <TagsTab serverId={server.id} />}
             {tab === 'webhooks' && <WebhooksTab server={server} channels={channels} />}
+            {tab === 'feeds' && <FeedsTab serverId={server.id} channels={channels} />}
             {tab === 'audit' && <AuditLogTab server={server} />}
             {tab === 'automod' && <AutoModTab server={server} channels={channels} />}
           </div>
