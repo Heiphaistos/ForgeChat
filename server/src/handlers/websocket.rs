@@ -10,6 +10,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::{middleware::auth::verify_token, state::{AppState, VoiceStateData}};
+// bcrypt est importé via le crate root (Cargo.toml)
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
@@ -93,12 +94,35 @@ async fn handle_socket(socket: WebSocket, state: AppState, token: String, secret
 }
 
 async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
-    let event = serde_json::json!({
-        "type": "PRESENCE_UPDATE",
-        "user_id": user_id,
-        "status": status,
-    })
+    // Récupérer l'activité pour l'inclure dans le broadcast
+    let activity_row = sqlx::query(
+        "SELECT activity_type, activity_name, activity_detail FROM users WHERE id=$1"
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    let event = if let Some(row) = activity_row {
+        use sqlx::Row;
+        serde_json::json!({
+            "type": "PRESENCE_UPDATE",
+            "user_id": user_id,
+            "status": status,
+            "activity_type": row.get::<Option<String>, _>("activity_type"),
+            "activity_name": row.get::<Option<String>, _>("activity_name"),
+            "activity_detail": row.get::<Option<String>, _>("activity_detail"),
+        })
+    } else {
+        serde_json::json!({
+            "type": "PRESENCE_UPDATE",
+            "user_id": user_id,
+            "status": status,
+        })
+    }
     .to_string();
+
     let clients = state.clients.read().await;
     for (uid, tx) in clients.iter() {
         if *uid != user_id {
@@ -208,6 +232,57 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+
+            // Vérification user_limit et voice_password
+            let channel_row = sqlx::query(
+                "SELECT user_limit, voice_password_hash FROM channels WHERE id=$1"
+            )
+            .bind(channel_id)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+
+            if let Some(row) = channel_row {
+                use sqlx::Row;
+                let user_limit: Option<i32> = row.get("user_limit");
+                let password_hash: Option<String> = row.get("voice_password_hash");
+
+                // Vérification mot de passe vocal
+                if let Some(ref hash) = password_hash {
+                    let provided = msg["password"].as_str().unwrap_or("");
+                    let ok = bcrypt::verify(provided, hash).unwrap_or(false);
+                    if !ok {
+                        let err = serde_json::json!({
+                            "type": "VOICE_JOIN_ERROR",
+                            "channel_id": channel_id,
+                            "reason": "wrong_password",
+                        });
+                        state.broadcast_to_user(user_id, err.to_string()).await;
+                        return;
+                    }
+                }
+
+                // Vérification limite utilisateurs
+                if let Some(limit) = user_limit {
+                    if limit > 0 {
+                        let current_count = {
+                            let rooms = state.voice_rooms.read().await;
+                            rooms.get(&channel_id).map(|r| r.len()).unwrap_or(0)
+                        };
+                        if current_count >= limit as usize {
+                            let err = serde_json::json!({
+                                "type": "VOICE_JOIN_ERROR",
+                                "channel_id": channel_id,
+                                "reason": "channel_full",
+                                "limit": limit,
+                                "current": current_count,
+                            });
+                            state.broadcast_to_user(user_id, err.to_string()).await;
+                            return;
+                        }
+                    }
+                }
+            }
 
             let existing_ids = state.voice_join(user_id, channel_id).await;
 

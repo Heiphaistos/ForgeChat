@@ -259,14 +259,45 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
 
 // ─── PROFIL ───────────────────────────────────────────────────────────────────
 
+function getUserGradient(username: string): string {
+  let hash = 0
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const h1 = Math.abs(hash) % 360
+  const h2 = (h1 + 40) % 360
+  return `linear-gradient(135deg, hsl(${h1}, 65%, 45%) 0%, hsl(${h2}, 70%, 35%) 100%)`
+}
+
+const ACTIVITY_TYPE_OPTIONS = [
+  { value: '', label: 'Aucune activité' },
+  { value: 'playing', label: '🎮 Joue à' },
+  { value: 'listening', label: '🎵 Écoute' },
+  { value: 'watching', label: '📺 Regarde' },
+  { value: 'streaming', label: '📡 Stream' },
+  { value: 'competing', label: '🏆 Compétition' },
+]
+
 function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => void }) {
   const [bio, setBio] = useState(user.bio ?? '')
   const [customStatus, setCustomStatus] = useState(user.custom_status ?? '')
   const [status, setStatus] = useState(user.status ?? 'online')
+  const [bannerUrl, setBannerUrl] = useState(user.banner ?? '')
+  const [activityType, setActivityType] = useState(user.activity_type ?? '')
+  const [activityName, setActivityName] = useState(user.activity_name ?? '')
+  const [activityDetail, setActivityDetail] = useState(user.activity_detail ?? '')
   const avatarRef = useRef<HTMLInputElement>(null)
 
   const save = useMutation({
-    mutationFn: () => api.patch('/users/me', { bio, custom_status: customStatus, status }),
+    mutationFn: () => api.patch('/users/me', {
+      bio,
+      custom_status: customStatus,
+      status,
+      banner: bannerUrl || null,
+      activity_type: activityType,
+      activity_name: activityName || null,
+      activity_detail: activityDetail || null,
+    }),
     onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
@@ -283,24 +314,40 @@ function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
 
   return (
     <div className="space-y-6">
+      {/* Aperçu bannière + avatar */}
+      <div className="rounded-xl overflow-hidden border border-fc-hover">
+        {/* Bannière preview */}
+        <div className="h-[100px] relative">
+          {bannerUrl
+            ? <img src={bannerUrl} alt="bannière" className="w-full h-full object-cover" />
+            : <div className="w-full h-full" style={{ background: getUserGradient(user.username) }} />
+          }
+        </div>
+        {/* Avatar flottant */}
+        <div className="px-4 pb-4 bg-fc-channel relative">
+          <div className="relative -mt-8 mb-2 w-fit">
+            <div
+              className="w-16 h-16 rounded-full border-4 border-fc-channel bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden cursor-pointer group"
+              onClick={() => avatarRef.current?.click()}
+            >
+              {user.avatar
+                ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                : user.username.charAt(0).toUpperCase()}
+              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                <Camera size={16} className="text-white" />
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-fc-muted">Aperçu de ton profil</p>
+        </div>
+      </div>
+
       {/* Avatar upload */}
-      <div className="flex items-center gap-5">
-        <div className="relative group cursor-pointer" onClick={() => avatarRef.current?.click()}>
-          <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-3xl font-bold text-white overflow-hidden">
-            {user.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
-              : user.username.charAt(0).toUpperCase()}
-          </div>
-          <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-            <Camera size={20} className="text-white" />
-          </div>
-        </div>
-        <div>
-          <button onClick={() => avatarRef.current?.click()} className="btn-secondary text-sm">
-            Modifier l'avatar
-          </button>
-          <p className="text-xs text-fc-muted mt-1">JPG, PNG, GIF · Max 8 MB</p>
-        </div>
+      <div className="flex items-center gap-4">
+        <button onClick={() => avatarRef.current?.click()} className="btn-secondary text-sm">
+          Modifier l'avatar
+        </button>
+        <p className="text-xs text-fc-muted">JPG, PNG, GIF · Max 8 MB</p>
         <input
           ref={avatarRef}
           type="file"
@@ -312,6 +359,17 @@ function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
           }}
         />
       </div>
+
+      {/* Bannière profil */}
+      <Field label="Bannière de profil">
+        <input
+          value={bannerUrl}
+          onChange={e => setBannerUrl(e.target.value)}
+          placeholder="https://... (URL de l'image de bannière)"
+          className="fc-input"
+        />
+        <p className="text-xs text-fc-muted mt-1">URL d'image · Visible dans ton popup de profil</p>
+      </Field>
 
       <Field label="À propos de moi" hint={`${bio.length}/190`}>
         <textarea
@@ -351,6 +409,49 @@ function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
               {status === s.value && <Check size={14} className="ml-auto text-fc-accent" />}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Section Activité */}
+      <div className="border-t border-fc-hover pt-6">
+        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <span className="text-base">🎮</span> Activité
+        </h3>
+        <div className="space-y-3">
+          <Field label="Type d'activité">
+            <select
+              value={activityType}
+              onChange={e => { setActivityType(e.target.value); if (!e.target.value) { setActivityName(''); setActivityDetail('') } }}
+              className="fc-input"
+            >
+              {ACTIVITY_TYPE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
+
+          {activityType && (
+            <>
+              <Field label="Nom du jeu / app / titre">
+                <input
+                  value={activityName}
+                  onChange={e => setActivityName(e.target.value)}
+                  maxLength={100}
+                  placeholder="CS2, Spotify, Netflix..."
+                  className="fc-input"
+                />
+              </Field>
+              <Field label="Détail (optionnel)">
+                <input
+                  value={activityDetail}
+                  onChange={e => setActivityDetail(e.target.value)}
+                  maxLength={100}
+                  placeholder="Version, artiste, saison..."
+                  className="fc-input"
+                />
+              </Field>
+            </>
+          )}
         </div>
       </div>
 

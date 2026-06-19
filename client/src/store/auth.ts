@@ -8,9 +8,11 @@ interface User {
   discriminator: string
   avatar: string | null
   banner: string | null
+  banner_url?: string
   bio: string | null
   status: string
   custom_status: string | null
+  email?: string
 }
 
 interface AuthState {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, Headphones, VolumeX, Maximize2, X, Users, Radio,
@@ -277,6 +278,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { joined, peers, localStream, muted, videoEnabled, screenSharing, error, join, leave } = useVoice()
   const [fullscreenPeer, setFullscreenPeer] = useState<{ stream: MediaStream; label: string } | null>(null)
   const [showSidebar, setShowSidebar] = useState(false)
+  const location = useLocation()
+  // Récupérer le mot de passe passé depuis la sidebar si canal protégé
+  const voicePassword: string | undefined = (location.state as any)?.voicePassword
 
   const localSpeaking = useVoiceActivity(joined ? localStream : null, !muted)
   const isVideo = channel.type === 'video' || channel.type === 'voice'
@@ -319,14 +323,14 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
           <div className="flex flex-col gap-3 w-full max-w-xs">
             <button
-              onClick={() => join(channel.id, serverId, false)}
+              onClick={() => join(channel.id, serverId, false, voicePassword)}
               className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition"
             >
               <Mic size={18} />
               Rejoindre (audio seulement)
             </button>
             <button
-              onClick={() => join(channel.id, serverId, true)}
+              onClick={() => join(channel.id, serverId, true, voicePassword)}
               className="flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-semibold transition"
             >
               <Video size={18} />

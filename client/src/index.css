@@ -50,6 +50,16 @@ body {
 .fc-compact .msg-avatar { display: none; }
 .fc-compact .msg-row { padding-top: 1px; padding-bottom: 1px; }
 
+/* Super Reactions — animation pop */
+@keyframes reaction-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+.reaction-pop {
+  animation: reaction-pop 0.3s ease-out;
+}
+
 /* Thème clair */
 [data-theme="light"] body { background: #f2f3f5; color: #060607; }
 [data-theme="light"] .bg-fc-bg { background-color: #f2f3f5 !important; }

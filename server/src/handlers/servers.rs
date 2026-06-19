@@ -117,13 +117,17 @@ pub async fn update_server(
         "UPDATE servers SET
             name = COALESCE($2, name),
             description = COALESCE($3, description),
-            is_public = COALESCE($4, is_public)
+            is_public = COALESCE($4, is_public),
+            welcome_message = COALESCE($5, welcome_message),
+            banner = COALESCE($6, banner)
          WHERE id=$1 RETURNING *"
     )
     .bind(server_id)
     .bind(body.name)
     .bind(body.description)
     .bind(body.is_public)
+    .bind(body.welcome_message)
+    .bind(body.banner)
     .fetch_one(&state.db)
     .await?;
 
@@ -397,6 +401,53 @@ pub async fn upload_server_icon(
     }
 
     Err(AppError::BadRequest("Champ image manquant".into()))
+}
+
+pub async fn get_server_stats(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    require_owner(&state, claims.sub, server_id).await?;
+
+    let member_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_members WHERE server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let online_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_members sm
+         JOIN users u ON u.id=sm.user_id
+         WHERE sm.server_id=$1 AND u.last_seen > NOW() - INTERVAL '5 minutes'"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let message_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages m
+         JOIN channels c ON c.id=m.channel_id
+         WHERE c.server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let channel_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM channels WHERE server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "member_count": member_count,
+        "online_count": online_count,
+        "message_count": message_count,
+        "channel_count": channel_count,
+    })))
 }
 
 // --- Helpers ---

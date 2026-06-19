@@ -1,11 +1,16 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File } from 'lucide-react'
+import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
+import GifPicker from './GifPicker'
+import StickerPicker, { formatStickerMessage } from './StickerPicker'
+import type { Sticker } from './StickerPicker'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 export interface ReplyTarget {
   id: string
@@ -59,17 +64,51 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showMentions, setShowMentions] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showStickerPicker, setShowStickerPicker] = useState(false)
+  const [showScheduled, setShowScheduled] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
   const typingTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const queryClient = useQueryClient()
 
   const { data: mentionResults = [] } = useQuery<MentionUser[]>({
     queryKey: ['mention_search', mentionQuery],
     queryFn: () =>
       api.get(`/users/search?q=${encodeURIComponent(mentionQuery)}`).then(r => r.data),
     enabled: showMentions && mentionQuery.length >= 1,
+  })
+
+  const { data: scheduledMessages = [] } = useQuery<any[]>({
+    queryKey: ['scheduled_messages', serverId, channelId],
+    queryFn: () =>
+      api.get(`/servers/${serverId}/channels/${channelId}/scheduled`).then(r => r.data),
+    enabled: showScheduled,
+    staleTime: 15_000,
+  })
+
+  const createScheduled = useMutation({
+    mutationFn: ({ content, send_at }: { content: string; send_at: string }) =>
+      api.post(`/servers/${serverId}/channels/${channelId}/scheduled`, { content, send_at }),
+    onSuccess: () => {
+      toast.success('Message programmé')
+      setScheduledAt('')
+      setContent('')
+      queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
+
+  const deleteScheduled = useMutation({
+    mutationFn: (id: string) => api.delete(`/scheduled/${id}`),
+    onSuccess: () => {
+      toast.success('Message annulé')
+      queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
+    },
+    onError: () => toast.error('Impossible d\'annuler'),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -181,6 +220,27 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setShowMentions(false)
     onCancelReply?.()
     textareaRef.current?.focus()
+  }
+
+  const handleSendGif = (gifUrl: string) => {
+    onSend(gifUrl, replyTo?.id)
+    onCancelReply?.()
+    setShowGifPicker(false)
+    textareaRef.current?.focus()
+  }
+
+  const handleSendSticker = (sticker: Sticker) => {
+    onSend(formatStickerMessage(sticker), replyTo?.id)
+    onCancelReply?.()
+    setShowStickerPicker(false)
+    textareaRef.current?.focus()
+  }
+
+  const closeAllPickers = () => {
+    setShowEmojiPicker(false)
+    setShowGifPicker(false)
+    setShowStickerPicker(false)
+    setShowScheduled(false)
   }
 
   useEffect(() => {
@@ -321,9 +381,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         />
 
         <div className="flex items-center gap-1 flex-shrink-0 relative">
+          {/* Bouton Emoji */}
           <div className="relative">
             <button
-              onClick={() => setShowEmojiPicker(p => !p)}
+              onClick={() => { closeAllPickers(); setShowEmojiPicker(p => !p) }}
               className={`p-1.5 rounded transition ${showEmojiPicker ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Emoji"
             >
@@ -341,6 +402,127 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               />
             )}
           </div>
+
+          {/* Bouton GIF */}
+          <div className="relative">
+            <button
+              onClick={() => { closeAllPickers(); setShowGifPicker(p => !p) }}
+              className={`px-2 py-1 rounded transition text-xs font-bold tracking-wide
+                ${showGifPicker ? 'text-fc-accent bg-fc-accent/10' : 'text-fc-muted hover:text-white'}`}
+              title="GIF"
+            >
+              GIF
+            </button>
+            {showGifPicker && (
+              <GifPicker
+                onPick={handleSendGif}
+                onClose={() => setShowGifPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Bouton Sticker */}
+          <div className="relative">
+            <button
+              onClick={() => { closeAllPickers(); setShowStickerPicker(p => !p) }}
+              className={`p-1.5 rounded transition text-base leading-none
+                ${showStickerPicker ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
+              title="Stickers"
+            >
+              🎭
+            </button>
+            {showStickerPicker && (
+              <StickerPicker
+                onPick={handleSendSticker}
+                onClose={() => setShowStickerPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Bouton Messages programmés */}
+          <div className="relative">
+            <button
+              onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
+              className={`p-1.5 rounded transition ${showScheduled ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title="Programmer un message"
+            >
+              <CalendarClock size={20} />
+            </button>
+
+            {showScheduled && (
+              <div
+                className="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="px-4 py-3 border-b border-fc-hover">
+                  <div className="text-sm font-semibold text-white flex items-center gap-2">
+                    <CalendarClock size={14} className="text-fc-accent" />
+                    Programmer un message
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  {/* Aperçu du contenu */}
+                  {content.trim() && (
+                    <div className="bg-fc-input rounded-lg px-3 py-2 text-sm text-fc-muted truncate">
+                      {content.trim()}
+                    </div>
+                  )}
+                  {!content.trim() && (
+                    <p className="text-xs text-fc-muted">Écris un message dans l'input avant de programmer.</p>
+                  )}
+
+                  {/* Sélecteur date/heure */}
+                  <input
+                    type="datetime-local"
+                    value={scheduledAt}
+                    onChange={e => setScheduledAt(e.target.value)}
+                    min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                    className="w-full fc-input text-sm"
+                  />
+
+                  <button
+                    onClick={() => {
+                      if (!content.trim()) { toast.error('Message vide'); return }
+                      if (!scheduledAt) { toast.error('Choisir une date'); return }
+                      createScheduled.mutate({ content: content.trim(), send_at: new Date(scheduledAt).toISOString() })
+                    }}
+                    disabled={createScheduled.isPending || !content.trim() || !scheduledAt}
+                    className="w-full btn-primary text-sm disabled:opacity-40"
+                  >
+                    {createScheduled.isPending ? 'Programmation...' : 'Programmer'}
+                  </button>
+                </div>
+
+                {/* Liste des messages programmés */}
+                {scheduledMessages.length > 0 && (
+                  <div className="border-t border-fc-hover px-4 py-3 space-y-2 max-h-48 overflow-y-auto">
+                    <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
+                      En attente
+                    </div>
+                    {scheduledMessages.map((sm: any) => (
+                      <div key={sm.id} className="flex items-start gap-2 bg-fc-bg rounded-lg px-2 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-fc-muted mb-0.5">
+                            {format(new Date(sm.send_at), "dd/MM 'à' HH:mm", { locale: fr })}
+                          </div>
+                          <div className="text-sm text-fc-text truncate">{sm.content}</div>
+                        </div>
+                        <button
+                          onClick={() => deleteScheduled.mutate(sm.id)}
+                          className="p-1 text-fc-muted hover:text-fc-red rounded transition flex-shrink-0"
+                          title="Annuler"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={submit}
             disabled={!content.trim() && files.length === 0}

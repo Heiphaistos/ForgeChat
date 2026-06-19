@@ -3,6 +3,8 @@ use axum::{
     Extension, Json,
 };
 use uuid::Uuid;
+use chrono::Utc;
+use redis::AsyncCommands;
 
 use crate::{
     error::{AppError, Result},
@@ -120,6 +122,30 @@ pub async fn send_message(
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
+    // Enforcement du slowmode
+    let slowmode: i32 = sqlx::query_scalar(
+        "SELECT slowmode_delay FROM channels WHERE id=$1"
+    )
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or(0);
+
+    if slowmode > 0 {
+        let key = format!("slowmode:{}:{}", channel_id, claims.sub);
+        let mut redis = state.redis.lock().await;
+        let last: Option<i64> = redis.get(&key).await.unwrap_or(None);
+        let now = Utc::now().timestamp();
+        if let Some(ts) = last {
+            let remaining = slowmode as i64 - (now - ts);
+            if remaining > 0 {
+                return Err(AppError::TooManyRequests);
+            }
+        }
+        let _: () = redis.set_ex(&key, now, (slowmode as u64).saturating_add(5)).await.unwrap_or(());
+        drop(redis);
+    }
+
     let content_str = body.content.as_ref().map(|c| {
         if c.len() > 4000 { &c[..4000] } else { c }
     });
@@ -220,6 +246,15 @@ pub async fn edit_message(
     if !owner {
         return Err(AppError::Forbidden);
     }
+
+    // Sauvegarder l'ancienne version dans l'historique
+    sqlx::query(
+        "INSERT INTO message_edits (message_id, content)
+         SELECT $1, content FROM messages WHERE id=$1 AND content IS NOT NULL"
+    )
+    .bind(message_id)
+    .execute(&state.db)
+    .await?;
 
     sqlx::query(
         "UPDATE messages SET content=$2, edited_at=NOW() WHERE id=$1"
@@ -447,4 +482,27 @@ pub async fn search_messages(
     }).collect();
 
     Ok(Json(result))
+}
+
+pub async fn get_message_edits(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, _channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT content, edited_at FROM message_edits WHERE message_id=$1 ORDER BY edited_at DESC"
+    )
+    .bind(message_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let edits: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "content": r.get::<Option<String>, _>("content"),
+        "edited_at": r.get::<chrono::DateTime<Utc>, _>("edited_at"),
+    })).collect();
+
+    Ok(Json(edits))
 }

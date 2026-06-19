@@ -9,6 +9,8 @@ import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
 import LinkPreview from './LinkPreview'
+import EditHistoryModal from './EditHistoryModal'
+import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 
@@ -85,6 +87,7 @@ export default function MessageList({
   const [loadingMore, setLoadingMore] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupState | null>(null)
+  const [editHistoryMsg, setEditHistoryMsg] = useState<{ id: string } | null>(null)
   const editRef = useRef<HTMLTextAreaElement>(null)
   const isAtBottom = useRef(true)
 
@@ -161,6 +164,7 @@ export default function MessageList({
 
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -291,12 +295,30 @@ export default function MessageList({
                       </button>
                     )}
 
-                    {msg.content && (
-                      <div className="text-fc-text text-sm break-words leading-relaxed">
-                        {renderMarkdown(msg.content, customEmojiMap)}
-                        {msg.edited_at && <span className="text-xs text-fc-muted ml-1.5">(modifié)</span>}
-                      </div>
-                    )}
+                    {msg.content && (() => {
+                      const sticker = parseStickerMessage(msg.content)
+                      if (sticker) {
+                        return (
+                          <div className="mt-1 inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-fc-accent/10 to-indigo-500/10 border border-fc-accent/20 shadow-sm">
+                            <span style={{ fontSize: '4rem', lineHeight: 1 }}>{sticker.emoji}</span>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="text-fc-text text-sm break-words leading-relaxed">
+                          {renderMarkdown(msg.content, customEmojiMap)}
+                          {msg.edited_at && (
+                            <button
+                              onClick={() => setEditHistoryMsg({ id: msg.id })}
+                              className="text-xs text-fc-muted ml-1.5 hover:text-fc-accent hover:underline transition"
+                              title="Voir l'historique des modifications"
+                            >
+                              (modifié)
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Pièces jointes */}
                     {msg.attachments?.map((att: any) => (
@@ -355,22 +377,34 @@ export default function MessageList({
                       return url ? <LinkPreview url={url} /> : null
                     })()}
 
-                    {/* Réactions */}
+                    {/* Réactions — Super Reactions */}
                     {msg.reactions?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {msg.reactions.map((r: any) => (
-                          <button
-                            key={r.emoji}
-                            onClick={() => onAddReaction?.(msg.id, r.emoji)}
-                            onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
-                            onMouseLeave={() => setReactionPopup(null)}
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition
-                              ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}`}
-                          >
-                            <span>{r.emoji}</span>
-                            <span>{r.count}</span>
-                          </button>
-                        ))}
+                        {msg.reactions.map((r: any) => {
+                          const reactionKey = `${msg.id}:${r.emoji}`
+                          const isPopping = poppingReaction === reactionKey
+                          return (
+                            <button
+                              key={r.emoji}
+                              onClick={() => {
+                                onAddReaction?.(msg.id, r.emoji)
+                                // Animation pop
+                                setPoppingReaction(reactionKey)
+                                setTimeout(() => setPoppingReaction(null), 300)
+                              }}
+                              onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
+                              onMouseLeave={() => setReactionPopup(null)}
+                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all duration-150
+                                hover:scale-110 hover:shadow-md
+                                ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
+                                ${isPopping ? 'reaction-pop' : ''}`}
+                              title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
+                            >
+                              <span>{r.emoji}</span>
+                              <span>{r.count}</span>
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
                   </>
@@ -513,6 +547,16 @@ export default function MessageList({
           anchorX={popup.x}
           anchorY={popup.y}
           onClose={() => setPopup(null)}
+        />
+      )}
+
+      {/* Modal historique des modifications */}
+      {editHistoryMsg && (
+        <EditHistoryModal
+          messageId={editHistoryMsg.id}
+          serverId={serverId}
+          channelId={channelId}
+          onClose={() => setEditHistoryMsg(null)}
         />
       )}
 

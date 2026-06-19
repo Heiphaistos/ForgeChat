@@ -52,12 +52,24 @@ pub async fn update_me(
         }
     }
 
+    // Valider activity_type si fourni
+    if let Some(ref at) = body.activity_type {
+        let valid = ["playing", "listening", "watching", "streaming", "competing", ""];
+        if !valid.contains(&at.as_str()) {
+            return Err(AppError::BadRequest("activity_type invalide".into()));
+        }
+    }
+
     let user = sqlx::query_as::<_, crate::models::user::User>(
         "UPDATE users SET
             username = COALESCE($2, username),
             bio = COALESCE($3, bio),
             custom_status = COALESCE($4, custom_status),
             status = COALESCE($5, status),
+            banner = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE banner END,
+            activity_type = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($7, '') ELSE activity_type END,
+            activity_name = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($8, '') ELSE activity_name END,
+            activity_detail = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($9, '') ELSE activity_detail END,
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -66,6 +78,10 @@ pub async fn update_me(
     .bind(body.bio)
     .bind(body.custom_status)
     .bind(body.status)
+    .bind(body.banner.as_deref())
+    .bind(body.activity_type.as_deref())
+    .bind(body.activity_name.as_deref())
+    .bind(body.activity_detail.as_deref())
     .fetch_one(&state.db)
     .await?;
 

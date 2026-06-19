@@ -71,6 +71,16 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Tâche d'envoi des messages programmés (toutes les 60 secondes)
+    let scheduled_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            handlers::scheduled::dispatch_scheduled_messages(scheduled_state.clone()).await;
+        }
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
         .allow_methods([
@@ -196,6 +206,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
+        .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
         // Channels
         .route("/servers/:id/channels", get(handlers::channels::get_channels))
         .route("/servers/:id/channels", post(handlers::channels::create_channel))
@@ -311,6 +322,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/feeds", post(handlers::feeds::create_channel_feed))
         .route("/servers/:server_id/feeds/:feed_id", delete(handlers::feeds::delete_channel_feed))
         .route("/servers/:server_id/feeds/:feed_id/toggle", patch(handlers::feeds::toggle_channel_feed))
+        // Historique des éditions de messages
+        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/edits", get(handlers::messages::get_message_edits))
+        // Messages programmés
+        .route("/servers/:server_id/channels/:channel_id/scheduled", post(handlers::scheduled::create_scheduled))
+        .route("/servers/:server_id/channels/:channel_id/scheduled", get(handlers::scheduled::list_scheduled))
+        .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

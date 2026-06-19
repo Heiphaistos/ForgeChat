@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -12,12 +12,15 @@ import WebhooksTab from './WebhooksTab'
 import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
+import StatsTab from './StatsTab'
 
 interface Server {
   id: string
   name: string
   icon?: string | null
+  banner?: string | null
   description?: string
+  welcome_message?: string | null
   is_public: boolean
   member_count: number
 }
@@ -27,15 +30,18 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds'
+type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats'
 
 export default function ServerSettingsModal({ server, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
   const [name, setName] = useState(server.name)
   const [description, setDescription] = useState(server.description ?? '')
+  const [welcomeMessage, setWelcomeMessage] = useState(server.welcome_message ?? '')
+  const [bannerUrl, setBannerUrl] = useState(server.banner ?? '')
   const [isPublic, setIsPublic] = useState(server.is_public)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
+  const bannerInputRef = useRef<HTMLInputElement>(null)
   const [newBotName, setNewBotName] = useState('')
   const [createdToken, setCreatedToken] = useState<{ name: string; token: string } | null>(null)
   const [copiedToken, setCopiedToken] = useState(false)
@@ -45,8 +51,31 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
   const qc = useQueryClient()
   const nav = useNavigate()
 
+  const uploadBanner = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData()
+      form.append('icon', file)
+      const { data } = await api.post(`/servers/${server.id}/icon`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return data
+    },
+    onSuccess: (data) => {
+      setBannerUrl(data.icon)
+      qc.invalidateQueries({ queryKey: ['server', server.id] })
+      toast.success('Bannière mise à jour')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload bannière'),
+  })
+
   const update = useMutation({
-    mutationFn: () => api.patch(`/servers/${server.id}`, { name, description, is_public: isPublic }),
+    mutationFn: () => api.patch(`/servers/${server.id}`, {
+      name,
+      description,
+      is_public: isPublic,
+      welcome_message: welcomeMessage || null,
+      banner: bannerUrl || null,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
       qc.invalidateQueries({ queryKey: ['servers'] })
@@ -160,6 +189,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
 
   const tabs = [
     { id: 'general' as Tab, label: 'Général' },
+    { id: 'stats' as Tab, label: 'Statistiques', icon: BarChart2 },
     { id: 'roles' as Tab, label: 'Rôles', icon: Shield },
     { id: 'members' as Tab, label: 'Membres', icon: Users },
     { id: 'tags' as Tab, label: 'Tags clan', icon: Tag },
@@ -253,6 +283,54 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
                     placeholder="Décrivez votre serveur..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                    Message de bienvenue
+                    <span className="ml-1 normal-case font-normal text-fc-muted/60">({welcomeMessage.length}/500)</span>
+                  </label>
+                  <textarea value={welcomeMessage} onChange={e => setWelcomeMessage(e.target.value)} maxLength={500} rows={3}
+                    className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
+                    placeholder="Message affiché aux membres sur l'écran de bienvenue..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Bannière du serveur</label>
+                  {bannerUrl && (
+                    <div className="mb-3 rounded-lg overflow-hidden h-[120px] bg-fc-channel">
+                      <img src={bannerUrl} alt="bannière" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={bannerUrl}
+                      onChange={e => setBannerUrl(e.target.value)}
+                      placeholder="https://... (URL de l'image)"
+                      className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
+                    />
+                    <input ref={bannerInputRef} type="file" accept="image/*" className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        if (file.size > 2 * 1024 * 1024) {
+                          toast.error('Bannière max 2 MB')
+                          return
+                        }
+                        uploadBanner.mutate(file)
+                      }}
+                    />
+                    <button
+                      onClick={() => bannerInputRef.current?.click()}
+                      disabled={uploadBanner.isPending}
+                      className="flex items-center gap-2 px-3 py-2 bg-fc-channel hover:bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition disabled:opacity-50"
+                      title="Uploader une image"
+                    >
+                      <Image size={14} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-fc-muted mt-1">URL ou upload · PNG, JPG, GIF · max 2 MB</p>
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-fc-channel rounded-lg">
@@ -444,6 +522,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
               </div>
             )}
 
+            {tab === 'stats' && <StatsTab serverId={server.id} />}
             {tab === 'roles' && <RolesTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
             {tab === 'bans' && <BansTab serverId={server.id} />}

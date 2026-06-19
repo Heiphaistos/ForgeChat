@@ -9,6 +9,7 @@ pub struct Server {
     pub icon: Option<String>,
     pub banner: Option<String>,
     pub description: Option<String>,
+    pub welcome_message: Option<String>,
     pub owner_id: Uuid,
     pub invite_code: Option<String>,
     pub member_count: i32,
@@ -28,6 +29,8 @@ pub struct UpdateServerRequest {
     pub name: Option<String>,
     pub description: Option<String>,
     pub is_public: Option<bool>,
+    pub welcome_message: Option<String>,
+    pub banner: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

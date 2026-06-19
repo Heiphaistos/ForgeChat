@@ -66,23 +66,82 @@ pub async fn update_channel(
 ) -> Result<Json<Channel>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
 
-    let channel = sqlx::query_as::<_, Channel>(
-        "UPDATE channels SET
-            name = COALESCE($2, name),
-            topic = COALESCE($3, topic),
-            position = COALESCE($4, position),
-            slowmode_delay = COALESCE($5, slowmode_delay),
-            is_nsfw = COALESCE($6, is_nsfw)
-         WHERE id=$1 RETURNING *"
-    )
-    .bind(channel_id)
-    .bind(body.name)
-    .bind(body.topic)
-    .bind(body.position)
-    .bind(body.slowmode_delay)
-    .bind(body.is_nsfw)
-    .fetch_one(&state.db)
-    .await?;
+    // Calculer le hash du mot de passe vocal si fourni
+    let voice_password_hash: Option<Option<String>> = if body.remove_voice_password.unwrap_or(false) {
+        // Suppression explicite du mot de passe
+        Some(None)
+    } else if let Some(ref pw) = body.voice_password {
+        if pw.is_empty() {
+            Some(None)
+        } else {
+            let hash = bcrypt::hash(pw, bcrypt::DEFAULT_COST)
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("bcrypt: {e}")))?;
+            Some(Some(hash))
+        }
+    } else {
+        None // pas de changement
+    };
+
+    let channel = if let Some(new_hash) = voice_password_hash {
+        // Mise à jour avec changement de mot de passe vocal
+        sqlx::query_as::<_, Channel>(
+            "UPDATE channels SET
+                name = COALESCE($2, name),
+                topic = COALESCE($3, topic),
+                position = COALESCE($4, position),
+                slowmode_delay = COALESCE($5, slowmode_delay),
+                is_nsfw = COALESCE($6, is_nsfw),
+                user_limit = COALESCE($7, user_limit),
+                voice_password_hash = $8
+             WHERE id=$1 RETURNING *"
+        )
+        .bind(channel_id)
+        .bind(body.name)
+        .bind(body.topic)
+        .bind(body.position)
+        .bind(body.slowmode_delay)
+        .bind(body.is_nsfw)
+        .bind(body.user_limit)
+        .bind(new_hash)
+        .fetch_one(&state.db)
+        .await?
+    } else {
+        // Mise à jour sans toucher au mot de passe vocal
+        sqlx::query_as::<_, Channel>(
+            "UPDATE channels SET
+                name = COALESCE($2, name),
+                topic = COALESCE($3, topic),
+                position = COALESCE($4, position),
+                slowmode_delay = COALESCE($5, slowmode_delay),
+                is_nsfw = COALESCE($6, is_nsfw),
+                user_limit = COALESCE($7, user_limit)
+             WHERE id=$1 RETURNING *"
+        )
+        .bind(channel_id)
+        .bind(body.name)
+        .bind(body.topic)
+        .bind(body.position)
+        .bind(body.slowmode_delay)
+        .bind(body.is_nsfw)
+        .bind(body.user_limit)
+        .fetch_one(&state.db)
+        .await?
+    };
+
+    // Broadcaster la mise à jour du canal aux membres du serveur
+    let event = serde_json::json!({
+        "type": "CHANNEL_UPDATE",
+        "channel": {
+            "id": channel.id,
+            "name": channel.name,
+            "topic": channel.topic,
+            "slowmode_delay": channel.slowmode_delay,
+            "user_limit": channel.user_limit,
+            "is_nsfw": channel.is_nsfw,
+            "has_voice_password": channel.voice_password_hash.is_some(),
+        }
+    });
+    state.broadcast_to_channel(server_id, event.to_string()).await;
 
     Ok(Json(channel))
 }

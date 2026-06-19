@@ -51,9 +51,19 @@ export default function MemberList({ serverId }: Props) {
           {m.nickname ?? m.username}
           {m.is_owner && <span className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
-        {m.custom_status && (
+        {m.activity_type && m.activity_name ? (
+          <div className="text-xs text-fc-muted truncate flex items-center gap-1">
+            <span>
+              {m.activity_type === 'playing' ? '🎮' :
+               m.activity_type === 'listening' ? '🎵' :
+               m.activity_type === 'watching' ? '📺' :
+               m.activity_type === 'streaming' ? '📡' : '🏆'}
+            </span>
+            <span className="truncate">{m.activity_name}</span>
+          </div>
+        ) : m.custom_status ? (
           <div className="text-xs text-fc-muted truncate">{m.custom_status}</div>
-        )}
+        ) : null}
       </div>
     </div>
   )

@@ -1,11 +1,37 @@
 import { useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { Calendar, MessageCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+
+const ACTIVITY_ICONS: Record<string, string> = {
+  playing: '🎮',
+  listening: '🎵',
+  watching: '📺',
+  streaming: '📡',
+  competing: '🏆',
+}
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  playing: 'Joue à',
+  listening: 'Écoute',
+  watching: 'Regarde',
+  streaming: 'Stream',
+  competing: 'En compétition sur',
+}
+
+// Gradient déterministe basé sur le hash du username (style Discord)
+function getUserGradient(username: string): string {
+  let hash = 0
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const h1 = Math.abs(hash) % 360
+  const h2 = (h1 + 40) % 360
+  return `linear-gradient(135deg, hsl(${h1}, 65%, 45%) 0%, hsl(${h2}, 70%, 35%) 100%)`
+}
 
 const STATUS_COLOR: Record<string, string> = {
   online: 'bg-fc-green', idle: 'bg-fc-yellow',
@@ -60,7 +86,14 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
   return (
     <div ref={ref} style={style} className="w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden">
       {/* Banner */}
-      <div className="h-16 bg-gradient-to-br from-fc-accent/60 to-purple-600/40 relative">
+      <div className="h-16 relative overflow-hidden">
+        {user?.banner
+          ? <img src={user.banner} alt="" className="w-full h-full object-cover" />
+          : <div
+              className="w-full h-full"
+              style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
+            />
+        }
         {/* Avatar */}
         <div className="absolute -bottom-6 left-4">
           <div className="w-16 h-16 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-xl text-white overflow-hidden">
@@ -86,6 +119,21 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
             {user.custom_status && (
               <div className="text-sm text-fc-text bg-fc-channel rounded-lg px-3 py-2 mb-3 italic">
                 {user.custom_status}
+              </div>
+            )}
+
+            {user.activity_type && user.activity_name && (
+              <div className="flex items-start gap-2 bg-fc-channel rounded-lg px-3 py-2 mb-3">
+                <span className="text-base flex-shrink-0 mt-0.5">{ACTIVITY_ICONS[user.activity_type] ?? '🎯'}</span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
+                    {ACTIVITY_LABELS[user.activity_type] ?? user.activity_type}
+                  </div>
+                  <div className="text-sm text-white font-medium truncate">{user.activity_name}</div>
+                  {user.activity_detail && (
+                    <div className="text-xs text-fc-muted truncate">{user.activity_detail}</div>
+                  )}
+                </div>
               </div>
             )}
 

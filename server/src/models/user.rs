@@ -15,6 +15,9 @@ pub struct User {
     pub bio: Option<String>,
     pub status: String,
     pub custom_status: Option<String>,
+    pub activity_type: Option<String>,
+    pub activity_name: Option<String>,
+    pub activity_detail: Option<String>,
     pub is_bot: bool,
     pub is_verified: bool,
     pub created_at: DateTime<Utc>,
@@ -31,6 +34,9 @@ pub struct UserPublic {
     pub bio: Option<String>,
     pub status: String,
     pub custom_status: Option<String>,
+    pub activity_type: Option<String>,
+    pub activity_name: Option<String>,
+    pub activity_detail: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -45,6 +51,9 @@ impl From<User> for UserPublic {
             bio: u.bio,
             status: u.status,
             custom_status: u.custom_status,
+            activity_type: u.activity_type,
+            activity_name: u.activity_name,
+            activity_detail: u.activity_detail,
             created_at: u.created_at,
         }
     }
@@ -76,6 +85,10 @@ pub struct UpdateProfileRequest {
     pub bio: Option<String>,
     pub custom_status: Option<String>,
     pub status: Option<String>,
+    pub banner: Option<String>,
+    pub activity_type: Option<String>,
+    pub activity_name: Option<String>,
+    pub activity_detail: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]

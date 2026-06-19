@@ -36,6 +36,7 @@ function AppInner() {
   const { fetchMe, user } = useAuth()
   const { connect, disconnect, on } = useWs()
   const setStatus = usePresence(s => s.setStatus)
+  const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const nav = useNavigate()
@@ -68,7 +69,14 @@ function AppInner() {
   }, [user?.id])
 
   useEffect(() => {
-    const off = on('PRESENCE_UPDATE', (d: any) => setStatus(d.user_id, d.status))
+    const off = on('PRESENCE_UPDATE', (d: any) => {
+      if (d.user_id && d.status) setStatus(d.user_id, d.status)
+      if (d.user_id) setActivityGlobal(d.user_id, {
+        activity_type: d.activity_type,
+        activity_name: d.activity_name,
+        activity_detail: d.activity_detail,
+      })
+    })
     return off
   }, [])
 

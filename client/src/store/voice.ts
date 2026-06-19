@@ -41,7 +41,7 @@ interface VoiceStore {
   // Volume par utilisateur (0-200, 100 = normal)
   userVolumes: Record<string, number>
 
-  join(channelId: string, serverId: string, withVideo?: boolean): Promise<void>
+  join(channelId: string, serverId: string, withVideo?: boolean, password?: string): Promise<void>
   leave(): void
   toggleMute(): void
   toggleDeafen(): void
@@ -243,7 +243,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   },
 
   // ── Join ──────────────────────────────────────────────────────────────────
-  join: async (channelId, serverId, withVideo = false) => {
+  join: async (channelId, serverId, withVideo = false, password) => {
     const cur = get()
     if (cur.joined && cur.channelId === channelId) return
     if (cur.joined) get().leave()
@@ -364,7 +364,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     _offFns = [offExisting, offJoined, offLeft, offSignal]
 
-    ws.send({ type: 'VOICE_JOIN', channel_id: channelId })
+    ws.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
 
     // Broadcast état initial
     setTimeout(() => {

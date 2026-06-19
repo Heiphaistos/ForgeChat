@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useParams, Navigate } from 'react-router-dom'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2 } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -15,6 +15,7 @@ import SearchPanel from '../components/chat/SearchPanel'
 import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
+import WelcomeScreen from '../components/chat/WelcomeScreen'
 import toast from 'react-hot-toast'
 
 function channelIcon(type: string, size = 18) {
@@ -40,6 +41,8 @@ export default function ChannelPage() {
   const [showSearch, setShowSearch] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
+  const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
 
   // All hooks first — no conditional hooks
   const { data: serverData, isLoading: serverLoading } = useQuery({
@@ -98,10 +101,31 @@ export default function ChannelPage() {
     return () => offs.forEach(off => off())
   }, [channelId])
 
+  useEffect(() => () => clearInterval(slowmodeTimer.current), [])
+
+  const startSlowmodeCooldown = (delay: number) => {
+    setSlowmodeCooldown(delay)
+    clearInterval(slowmodeTimer.current)
+    slowmodeTimer.current = setInterval(() => {
+      setSlowmodeCooldown(prev => {
+        if (prev <= 1) { clearInterval(slowmodeTimer.current); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+  }
+
   const sendMsg = useMutation({
     mutationFn: ({ content, reply_to }: { content: string | null; reply_to?: string }) =>
       api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to }),
-    onError: () => toast.error("Échec de l'envoi"),
+    onError: (e: any) => {
+      if (e?.response?.status === 429) {
+        const delay = currentChannel?.slowmode_delay ?? 30
+        startSlowmodeCooldown(delay)
+        toast.error(`Mode lent — attendez ${delay}s avant d'envoyer`)
+      } else {
+        toast.error("Échec de l'envoi")
+      }
+    },
   })
 
   const deleteMsg = useMutation({
@@ -146,19 +170,13 @@ export default function ChannelPage() {
   }
 
   const channels: any[] = serverData?.channels ?? []
-  const firstTextChannel = channels.find((c: any) => c.type === 'text' || c.type === 'announcement')
 
-  if (!channelId && firstTextChannel) {
-    return <Navigate to={`/servers/${serverId}/channels/${firstTextChannel.id}`} replace />
-  }
-
-  if (!channelId && serverData && !firstTextChannel) {
+  if (!channelId && serverData) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-fc-muted">
-        <Hash size={48} className="mb-3 opacity-30" />
-        <p className="text-lg font-semibold text-white mb-1">Aucun canal texte</p>
-        <p className="text-sm">Créez-en un via le menu du serveur.</p>
-      </div>
+      <WelcomeScreen
+        server={serverData.server ?? serverData}
+        channels={channels}
+      />
     )
   }
 
@@ -192,6 +210,16 @@ export default function ChannelPage() {
           <span className="font-semibold text-white">{currentChannel?.name ?? '...'}</span>
           {currentChannel?.type === 'announcement' && (
             <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">Annonces</span>
+          )}
+          {(currentChannel?.slowmode_delay ?? 0) > 0 && (
+            <span className="flex items-center gap-1 text-xs bg-fc-hover text-fc-muted px-2 py-0.5 rounded-full" title={`Mode lent: ${currentChannel.slowmode_delay}s`}>
+              <Timer size={11} />
+              {currentChannel.slowmode_delay >= 3600
+                ? `${currentChannel.slowmode_delay / 3600}h`
+                : currentChannel.slowmode_delay >= 60
+                ? `${currentChannel.slowmode_delay / 60}m`
+                : `${currentChannel.slowmode_delay}s`}
+            </span>
           )}
           {currentChannel?.topic && (
             <>
@@ -246,11 +274,19 @@ export default function ChannelPage() {
           onLoadMore={loadMore}
         />
 
+        {/* Countdown slowmode */}
+        {slowmodeCooldown > 0 && (
+          <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
+            <Timer size={12} />
+            <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+          </div>
+        )}
+
         {/* Input */}
         <MessageInput
           channelId={channelId}
           serverId={serverId}
-          placeholder={`Message dans #${currentChannel?.name ?? '...'}`}
+          placeholder={slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
           onSend={async (content, replyToId, files) => {
             try {
               const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId })

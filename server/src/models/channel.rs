@@ -17,6 +17,7 @@ pub struct Channel {
     pub user_limit: Option<i32>,
     pub last_message_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    pub voice_password_hash: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,6 +36,11 @@ pub struct UpdateChannelRequest {
     pub position: Option<i32>,
     pub slowmode_delay: Option<i32>,
     pub is_nsfw: Option<bool>,
+    pub user_limit: Option<i32>,
+    /// Mot de passe en clair — sera hashé côté serveur
+    pub voice_password: Option<String>,
+    /// Passer `true` pour supprimer le mot de passe
+    pub remove_voice_password: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

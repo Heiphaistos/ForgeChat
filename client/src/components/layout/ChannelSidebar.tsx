@@ -3,16 +3,20 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
-  Mic, MicOff, Monitor,
+  Mic, MicOff, Monitor, Clock, Lock,
 } from 'lucide-react'
 import { useState } from 'react'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
 import { useVoice } from '../../store/voice'
+import { useWs } from '../../store/ws'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
+import ChannelSettingsModal from '../modals/ChannelSettingsModal'
+import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
+import toast from 'react-hot-toast'
 
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
@@ -35,6 +39,8 @@ export default function ChannelSidebar() {
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [channelSettings, setChannelSettings] = useState<any | null>(null)
+  const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
 
@@ -52,6 +58,20 @@ export default function ChannelSidebar() {
 
   const roomParticipants = useVoice(s => s.roomParticipants)
   const voiceChannelId = useVoice(s => s.channelId)
+  const voiceJoin = useVoice(s => s.join)
+  const { on: wsOn } = useWs()
+
+  // Écouter les erreurs de join vocal
+  useState(() => {
+    const off = wsOn('VOICE_JOIN_ERROR', (d: any) => {
+      if (d.reason === 'channel_full') {
+        toast.error(`Canal plein (${d.current}/${d.limit} places)`)
+      } else if (d.reason === 'wrong_password') {
+        toast.error('Mot de passe incorrect')
+      }
+    })
+    return off
+  })
 
   const { data: dms = [] } = useQuery({
     queryKey: ['dms'],
@@ -131,15 +151,27 @@ export default function ChannelSidebar() {
     categoryGroups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
   }
 
+  const handleVoiceChannelClick = (ch: any) => {
+    if (ch.voice_password_hash) {
+      // Canal protégé — afficher le prompt password
+      setPasswordPrompt({ channel: ch })
+    } else {
+      nav(`/servers/${serverId}/channels/${ch.id}`)
+    }
+  }
+
   const renderChannel = (ch: any) => {
-    const isVoice = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
-    const participants = isVoice ? (roomParticipants[ch.id] ?? []) : []
+    const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
+    const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
+    const hasPassword = !!ch.voice_password_hash
+    const userLimit = ch.user_limit ?? 0
+    const slowmodeDelay = ch.slowmode_delay ?? 0
 
     return (
       <div key={ch.id}>
         <button
-          onClick={() => nav(`/servers/${serverId}/channels/${ch.id}`)}
+          onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
             ${channelId === ch.id
               ? 'bg-fc-hover text-white'
@@ -147,22 +179,53 @@ export default function ChannelSidebar() {
                 ? 'text-white font-semibold hover:bg-fc-hover/50'
                 : 'text-fc-muted hover:bg-fc-hover/50 hover:text-fc-text'}`}
         >
+          {/* Icône verrou pour canal vocal protégé */}
+          {hasPassword && isVoiceCh && (
+            <Lock size={10} className="text-yellow-400 flex-shrink-0 -mr-0.5" />
+          )}
           <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 ? 'text-white' : 'text-fc-muted'}>
             <ChannelIcon type={ch.type} size={16} />
           </span>
           <span className="text-sm truncate flex-1">{ch.name}</span>
+
+          {/* Badge slowmode */}
+          {slowmodeDelay > 0 && !isVoiceCh && (
+            <span className="flex items-center gap-0.5 text-[10px] text-fc-muted flex-shrink-0" title={`Mode lent: ${slowmodeDelay}s`}>
+              <Clock size={9} />
+              {slowmodeDelay >= 3600 ? `${slowmodeDelay / 3600}h`
+                : slowmodeDelay >= 60 ? `${slowmodeDelay / 60}m`
+                : `${slowmodeDelay}s`}
+            </span>
+          )}
+
+          {/* User limit sur canaux vocaux */}
+          {isVoiceCh && userLimit > 0 && (
+            <span className="text-[10px] text-fc-muted flex-shrink-0" title={`Limite: ${userLimit} utilisateurs`}>
+              {participants.length}/{userLimit}
+            </span>
+          )}
+
           {isMeConnected && (
             <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
           )}
-          {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoice && (
+          {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && (
             <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
               {unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}
             </span>
           )}
+
+          {/* Bouton paramètres canal (visible au hover) */}
+          <button
+            onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
+            title="Paramètres du canal"
+          >
+            <Settings size={12} />
+          </button>
         </button>
 
         {/* Participants vocaux */}
-        {isVoice && participants.length > 0 && (
+        {isVoiceCh && participants.length > 0 && (
           <div className="ml-5 mb-0.5 space-y-0.5">
             {participants.map(p => (
               <div key={p.userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80">
@@ -272,6 +335,26 @@ export default function ChannelSidebar() {
       )}
       {showSettings && server && (
         <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} />
+      )}
+      {channelSettings && serverId && (
+        <ChannelSettingsModal
+          channel={channelSettings}
+          serverId={serverId}
+          onClose={() => setChannelSettings(null)}
+        />
+      )}
+      {passwordPrompt && serverId && (
+        <VoicePasswordPrompt
+          channelName={passwordPrompt.channel.name}
+          onConfirm={(pw) => {
+            setPasswordPrompt(null)
+            // Navigation vers le canal vocal avec password dans le state
+            nav(`/servers/${serverId}/channels/${passwordPrompt.channel.id}`, {
+              state: { voicePassword: pw }
+            })
+          }}
+          onClose={() => setPasswordPrompt(null)}
+        />
       )}
     </>
   )
