@@ -81,6 +81,13 @@ pub async fn upload_file(
 
         let ext = raw_ext;
 
+        // Nettoyer le nom de fichier original (path traversal protection)
+        let safe_name = std::path::Path::new(&original_name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("fichier")
+            .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
+
         let file_id = Uuid::new_v4();
         let filename = format!("{}.{}", file_id, ext);
         let file_path = upload_dir.join(&filename);
@@ -98,7 +105,7 @@ pub async fn upload_file(
              RETURNING id, url, filename, content_type, size, expires_at"
         )
         .bind(message_id)
-        .bind(&original_name)
+        .bind(&safe_name)
         .bind(&content_type)
         .bind(size)
         .bind(&url)

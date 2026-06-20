@@ -377,7 +377,9 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
+    use crate::handlers::servers::require_permission;
+    use crate::models::role::Permissions;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query(
         "INSERT INTO pinned_messages (channel_id, message_id, pinned_by) VALUES ($1, $2, $3)
@@ -411,7 +413,9 @@ pub async fn unpin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
+    use crate::handlers::servers::require_permission;
+    use crate::models::role::Permissions;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query("DELETE FROM pinned_messages WHERE channel_id=$1 AND message_id=$2")
         .bind(channel_id)

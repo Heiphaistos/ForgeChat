@@ -155,7 +155,24 @@ pub async fn upload_avatar(
 pub async fn delete_account(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
+    // Exiger la confirmation du mot de passe pour éviter la suppression accidentelle/CSRF
+    let password = body["password"]
+        .as_str()
+        .ok_or_else(|| AppError::BadRequest("Mot de passe requis pour confirmer la suppression".into()))?;
+
+    let pw_hash = sqlx::query_scalar::<_, String>(
+        "SELECT password_hash FROM users WHERE id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !bcrypt::verify(password, &pw_hash).unwrap_or(false) {
+        return Err(AppError::BadRequest("Mot de passe incorrect".into()));
+    }
+
     sqlx::query("DELETE FROM users WHERE id=$1")
         .bind(claims.sub)
         .execute(&state.db)

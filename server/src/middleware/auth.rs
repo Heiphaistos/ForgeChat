@@ -20,7 +20,7 @@ pub fn create_token(user_id: Uuid, secret: &str) -> anyhow::Result<String> {
     use jsonwebtoken::{encode, EncodingKey, Header};
     let exp = chrono::Utc::now()
         .checked_add_signed(chrono::Duration::hours(24))
-        .unwrap()
+        .ok_or_else(|| anyhow::anyhow!("Erreur calcul expiration token"))?
         .timestamp();
     let claims = Claims { sub: user_id, exp };
     Ok(encode(

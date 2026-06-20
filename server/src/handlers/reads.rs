@@ -1,13 +1,30 @@
 use axum::{extract::{Path, State}, Extension, Json};
 use uuid::Uuid;
 
-use crate::{error::Result, middleware::auth::Claims, state::AppState};
+use crate::{error::{AppError, Result}, middleware::auth::Claims, state::AppState};
 
 pub async fn mark_channel_read(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(channel_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
+    // Vérifier que l'utilisateur est membre du serveur propriétaire du canal
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+            SELECT 1 FROM channels c
+            JOIN server_members sm ON sm.server_id = c.server_id
+            WHERE c.id = $1 AND sm.user_id = $2
+        )"
+    )
+    .bind(channel_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !is_member {
+        return Err(AppError::Forbidden);
+    }
+
     sqlx::query(
         "INSERT INTO last_read (user_id, channel_id, read_at)
          VALUES ($1, $2, NOW())

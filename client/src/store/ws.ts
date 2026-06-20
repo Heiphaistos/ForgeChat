@@ -18,10 +18,14 @@ export const useWs = create<WsState>((set, get) => ({
 
   connect: (token: string) => {
     const isTauri = '__TAURI_INTERNALS__' in window
+    // SÉCURITÉ: Le token passé en query param est visible dans les logs nginx.
+    // Utiliser /api/auth/ws-ticket pour obtenir un ticket éphémère (30s TTL).
     const wsUrl = isTauri
-      ? `wss://forgechat.heiphaistos.org/ws?token=${token}`
-      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?token=${token}`
+      ? `wss://forgechat.heiphaistos.org/ws?token=${encodeURIComponent(token)}`
+      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(wsUrl)
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
     ws.onmessage = (e) => {
       try {
@@ -32,16 +36,17 @@ export const useWs = create<WsState>((set, get) => ({
     }
 
     ws.onclose = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval)
       set({ socket: null })
       // Reconnexion automatique après 3s
-      setTimeout(() => {
+      reconnectTimeout = setTimeout(() => {
         const t = localStorage.getItem('access_token')
         if (t) get().connect(t)
       }, 3000)
     }
 
     // Heartbeat toutes les 30s
-    const heartbeat = setInterval(() => {
+    heartbeatInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
       }

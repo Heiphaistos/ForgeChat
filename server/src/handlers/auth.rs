@@ -295,6 +295,12 @@ pub async fn change_password(
     let new_hash =
         hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
 
+    // Invalide TOUS les refresh tokens existants de cet utilisateur
+    sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
+
     sqlx::query("UPDATE users SET password_hash=$2, updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .bind(&new_hash)
@@ -302,6 +308,25 @@ pub async fn change_password(
         .await?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn ws_ticket(
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+) -> Result<Json<serde_json::Value>> {
+    use redis::AsyncCommands;
+    let ticket: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(32)
+        .map(char::from)
+        .collect();
+    let key = format!("ws_ticket:{}", ticket);
+    let user_id_str = claims.sub.to_string();
+    let mut redis = state.redis.lock().await;
+    redis.set_ex::<_, _, ()>(&key, &user_id_str, 30)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis error: {e}")))?;
+    Ok(Json(serde_json::json!({ "ticket": ticket })))
 }
 
 pub async fn logout(
@@ -325,11 +350,11 @@ pub async fn logout(
 }
 
 fn generate_refresh_token() -> String {
-    let bytes: Vec<u8> = rand::thread_rng()
+    rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(64)
-        .collect();
-    String::from_utf8(bytes).unwrap()
+        .map(char::from)
+        .collect()
 }
 
 /// Comparaison constant-time pour éviter les timing attacks

@@ -202,6 +202,19 @@ pub async fn join_server(
         }
     }
 
+    // Vérifier que l'utilisateur n'est pas banni du serveur
+    let is_banned = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM bans WHERE user_id=$1 AND server_id=$2)"
+    )
+    .bind(claims.sub)
+    .bind(invite.server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    if is_banned {
+        return Err(AppError::Forbidden);
+    }
+
     let already = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)"
     )
