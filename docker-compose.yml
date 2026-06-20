@@ -46,7 +46,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8080/api/auth/login > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "curl -s http://localhost:8080/health > /dev/null 2>&1"]
       interval: 10s
       retries: 5
       start_period: 30s
