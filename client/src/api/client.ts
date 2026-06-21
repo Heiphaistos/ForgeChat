@@ -22,7 +22,11 @@ api.interceptors.request.use(cfg => {
 api.interceptors.response.use(
   r => r,
   async err => {
-    if (err.response?.status === 401) {
+    const url: string = err.config?.url ?? ''
+    const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
+    const onLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login'
+
+    if (err.response?.status === 401 && !isAuthEndpoint && !onLoginPage) {
       try {
         const body = isTauri
           ? { refresh_token: localStorage.getItem('refresh_token') }
@@ -35,7 +39,8 @@ api.interceptors.response.use(
         return api(err.config)
       } catch {
         if (isTauri) localStorage.clear()
-        window.location.href = '/login'
+        // Ne rediriger que si pas déjà sur /login
+        if (!onLoginPage) window.location.href = '/login'
       }
     }
     return Promise.reject(err)
