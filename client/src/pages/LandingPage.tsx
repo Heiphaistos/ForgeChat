@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import { Shield, Palette, Video, Server, Download, MessageSquare, ChevronRight, Lock } from 'lucide-react'
 
-const RELEASE = 'v3.1.0'
+const RELEASE = 'v3.2.0'
 const GH_BASE = `https://github.com/Heiphaistos/ForgeChat/releases/download/${RELEASE}`
-const INSTALLER_URL = `${GH_BASE}/ForgeChat_3.1.0_x64-setup.exe`
+const INSTALLER_URL = `${GH_BASE}/ForgeChat_3.2.0_x64-setup.exe`
 const PORTABLE_URL  = `${GH_BASE}/forgechat-desktop.exe`
 
 const FEATURES = [
