@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title ForgeChat Desktop — Build v3.1.0
+title ForgeChat Desktop — Build v3.2.0
 
 echo.
 echo ====================================
-echo   ForgeChat Desktop Builder v3.1.0
+echo   ForgeChat Desktop Builder v3.2.0
 echo ====================================
 echo.
 
@@ -52,7 +52,7 @@ if %errorlevel% neq 0 (
 echo.
 echo ====================================
 echo   Build termine avec succes !
-echo   Installeur : src-tauri\target\release\bundle\nsis\ForgeChat_3.1.0_x64-setup.exe
+echo   Installeur : src-tauri\target\release\bundle\nsis\ForgeChat_3.2.0_x64-setup.exe
 echo   Portable   : src-tauri\target\release\forgechat-desktop.exe
 echo ====================================
 pause
