@@ -330,7 +330,7 @@ pub async fn get_user_profile(
         } else {
             // Amitié
             let friendship = sqlx::query(
-                "SELECT status, user_id FROM friendships
+                "SELECT id, status, user_id FROM friendships
                  WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
             )
             .bind(me)
@@ -339,6 +339,8 @@ pub async fn get_user_profile(
             .await?;
 
             if let Some(f) = friendship {
+                let friendship_id: Uuid = f.get("id");
+                profile["friendship_id"] = serde_json::json!(friendship_id);
                 let status: &str = match f.get::<String, _>("status").as_str() {
                     "accepted" => "friend",
                     "pending" => {

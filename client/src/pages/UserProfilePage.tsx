@@ -52,7 +52,7 @@ export default function UserProfilePage() {
 
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
-    onSuccess: (dm: any) => nav(`/dms/${dm.id}`),
+    onSuccess: (dm: any) => nav(`/dms/${dm.dm_id}`),
   })
 
   const sendFriend = useMutation({
@@ -88,7 +88,7 @@ export default function UserProfilePage() {
   })
 
   const acceptFriend = useMutation({
-    mutationFn: () => api.post(`/friends/${userId}/accept`),
+    mutationFn: () => api.post(`/friends/${profile?.friendship_id}/accept`),
     onSuccess: () => { toast.success('Demande acceptée'); invalidate() },
   })
 
