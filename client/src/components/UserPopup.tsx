@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Calendar, MessageCircle } from 'lucide-react'
+import { Calendar, MessageCircle, ExternalLink } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
@@ -149,7 +149,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
               Membre depuis {format(new Date(user.created_at), 'MMM yyyy', { locale: fr })}
             </div>
 
-            <div className="border-t border-fc-hover pt-3">
+            <div className="border-t border-fc-hover pt-3 flex flex-col gap-2">
               <button
                 onClick={() => openDm.mutate()}
                 disabled={openDm.isPending}
@@ -157,6 +157,13 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
               >
                 <MessageCircle size={14} />
                 Envoyer un message
+              </button>
+              <button
+                onClick={() => { nav(`/users/${userId}`); onClose() }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover hover:bg-fc-input text-fc-muted hover:text-white rounded-lg text-sm font-medium transition"
+              >
+                <ExternalLink size={14} />
+                Voir le profil
               </button>
             </div>
           </>

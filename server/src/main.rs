@@ -196,6 +196,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
         .route("/users/me/banner", post(handlers::users::upload_banner))
         .route("/users/:id", get(handlers::users::get_user))
+        .route("/users/:id/profile", get(handlers::users::get_user_profile))
+        .route("/users/:id/block", post(handlers::users::block_user))
+        .route("/users/:id/block", delete(handlers::users::unblock_user))
+        .route("/users/:id/favorite", post(handlers::users::add_favorite))
+        .route("/users/:id/favorite", delete(handlers::users::remove_favorite))
         .route("/users/search", get(handlers::users::search_users))
         // Servers
         .route("/servers", get(handlers::servers::get_my_servers))

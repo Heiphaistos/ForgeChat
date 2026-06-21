@@ -15,6 +15,7 @@ import MainLayout from './components/layout/MainLayout'
 import ChannelPage from './pages/ChannelPage'
 import DMPage from './pages/DMPage'
 import FriendsPage from './pages/FriendsPage'
+import UserProfilePage from './pages/UserProfilePage'
 import QuickSwitcher from './components/QuickSwitcher'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
@@ -33,16 +34,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-function HomeRoute() {
-  const { user, loading } = useAuth()
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-fc-bg">
-      <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
-  if (!user) return <LandingPage />
-  return <Navigate to="/friends" replace />
-}
 
 function AppInner() {
   const { fetchMe, user } = useAuth()
@@ -159,9 +150,10 @@ function AppInner() {
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
         <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
-        <Route path="/" element={<HomeRoute />} />
+        <Route path="/" element={<LandingPage />} />
         <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
           <Route path="friends" element={<FriendsPage />} />
+          <Route path="users/:userId" element={<UserProfilePage />} />
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
           <Route path="dms/:dmId" element={<DMPage />} />

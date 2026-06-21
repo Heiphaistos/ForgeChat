@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, State, Multipart},
+    http::StatusCode,
     Extension, Json,
 };
 use uuid::Uuid;
@@ -285,6 +286,188 @@ pub async fn set_pubkey(
     .await?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /users/:id/profile — profil public + statut relation (optionnel auth via header)
+pub async fn get_user_profile(
+    State(state): State<AppState>,
+    claims: Option<Extension<Claims>>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let user = sqlx::query(
+        "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
+                activity_type, activity_name, activity_detail, created_at
+         FROM users WHERE id=$1"
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
+
+    let mut profile = serde_json::json!({
+        "id":               user.get::<Uuid, _>("id"),
+        "username":         user.get::<String, _>("username"),
+        "discriminator":    user.get::<String, _>("discriminator"),
+        "avatar":           user.get::<Option<String>, _>("avatar"),
+        "banner":           user.get::<Option<String>, _>("banner"),
+        "bio":              user.get::<Option<String>, _>("bio"),
+        "status":           user.get::<String, _>("status"),
+        "custom_status":    user.get::<Option<String>, _>("custom_status"),
+        "activity_type":    user.get::<Option<String>, _>("activity_type"),
+        "activity_name":    user.get::<Option<String>, _>("activity_name"),
+        "activity_detail":  user.get::<Option<String>, _>("activity_detail"),
+        "created_at":       user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "relationship":     "none",
+        "is_favorite":      false,
+    });
+
+    if let Some(Extension(claims)) = claims {
+        let me = claims.sub;
+        if me == user_id {
+            profile["relationship"] = serde_json::json!("self");
+        } else {
+            // Amitié
+            let friendship = sqlx::query(
+                "SELECT status, user_id FROM friendships
+                 WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
+            )
+            .bind(me)
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await?;
+
+            if let Some(f) = friendship {
+                let status: &str = match f.get::<String, _>("status").as_str() {
+                    "accepted" => "friend",
+                    "pending" => {
+                        let initiator: Uuid = f.get("user_id");
+                        if initiator == me { "pending_sent" } else { "pending_received" }
+                    }
+                    _ => "none",
+                };
+                profile["relationship"] = serde_json::json!(status);
+            }
+
+            // Bloqué
+            let blocked = sqlx::query(
+                "SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2"
+            )
+            .bind(me)
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await?;
+            if blocked.is_some() {
+                profile["relationship"] = serde_json::json!("blocked");
+            }
+
+            // Favori
+            let fav = sqlx::query(
+                "SELECT 1 FROM user_favorites WHERE user_id=$1 AND target_id=$2"
+            )
+            .bind(me)
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await?;
+            profile["is_favorite"] = serde_json::json!(fav.is_some());
+
+            // Serveurs en commun
+            let mutual = sqlx::query(
+                "SELECT s.id, s.name, s.icon FROM server_members sm1
+                 JOIN server_members sm2 ON sm1.server_id = sm2.server_id AND sm2.user_id=$2
+                 JOIN servers s ON s.id = sm1.server_id
+                 WHERE sm1.user_id=$1 LIMIT 5"
+            )
+            .bind(me)
+            .bind(user_id)
+            .fetch_all(&state.db)
+            .await?;
+
+            let mutual_servers: Vec<serde_json::Value> = mutual.iter().map(|r| serde_json::json!({
+                "id":   r.get::<Uuid, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "icon": r.get::<Option<String>, _>("icon"),
+            })).collect();
+            profile["mutual_servers"] = serde_json::json!(mutual_servers);
+        }
+    }
+
+    Ok(Json(profile))
+}
+
+/// POST /users/:id/block
+pub async fn block_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    if claims.sub == user_id {
+        return Err(AppError::BadRequest("Impossible de se bloquer soi-même".into()));
+    }
+    sqlx::query(
+        "INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+    // Retirer l'amitié si existante
+    sqlx::query(
+        "DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// DELETE /users/:id/block
+pub async fn unblock_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    sqlx::query("DELETE FROM blocks WHERE blocker_id=$1 AND blocked_id=$2")
+        .bind(claims.sub)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /users/:id/favorite
+pub async fn add_favorite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    if claims.sub == user_id {
+        return Err(AppError::BadRequest("Impossible de se mettre en favori".into()));
+    }
+    sqlx::query(
+        "INSERT INTO user_favorites (user_id, target_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// DELETE /users/:id/favorite
+pub async fn remove_favorite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    sqlx::query("DELETE FROM user_favorites WHERE user_id=$1 AND target_id=$2")
+        .bind(claims.sub)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_pubkey(

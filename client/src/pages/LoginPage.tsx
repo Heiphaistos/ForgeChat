@@ -15,7 +15,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
-      nav('/')
+      nav('/friends')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? 'Erreur de connexion')
     } finally {

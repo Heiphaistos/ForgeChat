@@ -16,7 +16,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(username, email, password)
-      nav('/')
+      nav('/friends')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? 'Erreur lors de l\'inscription')
     } finally {
