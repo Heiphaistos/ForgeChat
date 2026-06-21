@@ -344,6 +344,40 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Verification Gate
         .route("/servers/:id/verify", post(handlers::servers::verify_member))
         .route("/servers/:id/verification", patch(handlers::servers::update_server_verification))
+        // User Settings
+        .route("/user/settings", get(handlers::user_settings::get_user_settings))
+        .route("/user/settings", put(handlers::user_settings::update_user_settings))
+        .route("/user/connected-accounts", get(handlers::user_settings::list_connected_accounts))
+        .route("/user/connected-accounts", post(handlers::user_settings::add_connected_account))
+        .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account))
+        .route("/user/notification-overrides", get(handlers::user_settings::get_notification_overrides))
+        .route("/user/notification-overrides", post(handlers::user_settings::set_notification_override))
+        .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
+        .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
+        .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))
+        // Soundboard
+        .route("/servers/:id/soundboard", get(handlers::soundboard::list_sounds))
+        .route("/servers/:id/soundboard", post(handlers::soundboard::upload_sound))
+        .route("/servers/:server_id/soundboard/:sound_id", delete(handlers::soundboard::delete_sound))
+        // Events
+        .route("/servers/:id/events", get(handlers::events::list_events))
+        .route("/servers/:id/events", post(handlers::events::create_event))
+        .route("/servers/:server_id/events/:event_id", get(handlers::events::get_event))
+        .route("/servers/:server_id/events/:event_id", put(handlers::events::update_event))
+        .route("/servers/:server_id/events/:event_id", delete(handlers::events::delete_event))
+        .route("/events/:event_id/attend", post(handlers::events::attend_event))
+        // Moderation — Notes
+        .route("/servers/:server_id/members/:user_id/notes", get(handlers::moderation::get_mod_notes))
+        .route("/servers/:server_id/members/:user_id/notes", post(handlers::moderation::create_mod_note))
+        .route("/servers/:server_id/notes/:note_id", delete(handlers::moderation::delete_mod_note))
+        // Moderation — Timeouts
+        .route("/servers/:server_id/members/:user_id/timeout", post(handlers::moderation::create_timeout))
+        .route("/servers/:server_id/members/:user_id/timeout", delete(handlers::moderation::remove_timeout))
+        // Tasks
+        .route("/channels/:channel_id/tasks", get(handlers::moderation::list_channel_tasks))
+        .route("/channels/:channel_id/tasks", post(handlers::moderation::create_task))
+        .route("/channels/:channel_id/tasks/:task_id", put(handlers::moderation::update_task))
+        .route("/channels/:channel_id/tasks/:task_id", delete(handlers::moderation::delete_task))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

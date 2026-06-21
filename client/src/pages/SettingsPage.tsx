@@ -1,114 +1,166 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
-  Camera, ChevronRight, Check, Volume2, Monitor, Smartphone,
-  Trash2, Copy, Eye, EyeOff, KeyRound,
+  Camera, Volume2, Globe, Accessibility, Eye, EyeOff,
+  Link, Keyboard, Zap, ChevronRight, Check, KeyRound,
+  Trash2, Copy, Monitor, Clock, Film, Moon,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
-import { useVoice } from '../store/voice'
-import api, { SERVER_URL } from '../api/client'
+import api from '../api/client'
 import toast from 'react-hot-toast'
+import AppearanceSection from '../components/settings/AppearanceSection'
+import ConnectedAccountsSection from '../components/settings/ConnectedAccountsSection'
+import KeybindingsSection from '../components/settings/KeybindingsSection'
 
 type Section =
-  | 'account' | 'profile' | 'appearance' | 'notifications'
-  | 'audio' | 'privacy' | 'advanced'
+  | 'account' | 'profile' | 'appearance' | 'text_display'
+  | 'notifications' | 'audio' | 'privacy' | 'language'
+  | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced'
 
-const NAV: { id: Section; label: string; icon: React.ReactNode; danger?: boolean }[] = [
-  { id: 'account', label: 'Mon compte', icon: <User size={16} /> },
+const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }[] = [
+  { id: 'account', label: 'Mon compte', icon: <User size={16} />, group: 'Compte' },
   { id: 'profile', label: 'Profil utilisateur', icon: <Camera size={16} /> },
-  { id: 'appearance', label: 'Apparence', icon: <Palette size={16} /> },
+  { id: 'connected', label: 'Comptes connectés', icon: <Link size={16} /> },
+  { id: 'appearance', label: 'Apparence', icon: <Palette size={16} />, group: 'Application' },
+  { id: 'text_display', label: 'Texte & Affichage', icon: <Monitor size={16} /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell size={16} /> },
-  { id: 'audio', label: 'Audio & Vidéo', icon: <Mic size={16} /> },
-  { id: 'privacy', label: 'Vie privée', icon: <Shield size={16} /> },
-  { id: 'advanced', label: 'Avancé', icon: <Cpu size={16} /> },
+  { id: 'keybindings', label: 'Raccourcis clavier', icon: <Keyboard size={16} /> },
+  { id: 'language', label: 'Langue & Région', icon: <Globe size={16} /> },
+  { id: 'audio', label: 'Audio & Vidéo', icon: <Mic size={16} />, group: 'Voix & Vidéo' },
+  { id: 'privacy', label: 'Vie privée', icon: <Shield size={16} />, group: 'Confidentialité' },
+  { id: 'accessibility', label: 'Accessibilité', icon: <Accessibility size={16} /> },
+  { id: 'streamer', label: 'Mode Streamer', icon: <Film size={16} /> },
+  { id: 'advanced', label: 'Avancé', icon: <Cpu size={16} />, group: 'Avancé' },
 ]
 
-const THEMES = [
-  { id: 'dark', label: 'Sombre', accent: '#5865f2', bg: '#1a1b1e', preview: ['#1a1b1e', '#232428', '#36393f'] },
-  { id: 'darker', label: 'AMOLED', accent: '#5865f2', bg: '#000', preview: ['#000', '#0a0a0a', '#0d0d0d'] },
-  { id: 'light', label: 'Clair', accent: '#5865f2', bg: '#f2f3f5', preview: ['#f2f3f5', '#ebedef', '#fff'] },
-  { id: 'dracula', label: 'Dracula', accent: '#bd93f9', bg: '#282a36', preview: ['#282a36', '#1e1f2b', '#353746'] },
-  { id: 'nord', label: 'Nord', accent: '#5e81ac', bg: '#2e3440', preview: ['#2e3440', '#3b4252', '#434c5e'] },
-  { id: 'catppuccin', label: 'Catppuccin', accent: '#cba6f7', bg: '#1e1e2e', preview: ['#1e1e2e', '#181825', '#313244'] },
-  { id: 'gruvbox', label: 'Gruvbox', accent: '#d65d0e', bg: '#1d2021', preview: ['#1d2021', '#282828', '#3c3836'] },
-  { id: 'tokyonight', label: 'Tokyo Night', accent: '#7aa2f7', bg: '#1a1b2e', preview: ['#1a1b2e', '#1f2040', '#24283b'] },
-  { id: 'onedark', label: 'One Dark', accent: '#61afef', bg: '#282c34', preview: ['#282c34', '#2c313c', '#3b4048'] },
-  { id: 'cyberpunk', label: 'Cyberpunk', accent: '#f0e14a', bg: '#0d0d0d', preview: ['#0d0d0d', '#111111', '#161616'] },
-  { id: 'monokai', label: 'Monokai', accent: '#a6e22e', bg: '#272822', preview: ['#272822', '#2d2e2a', '#383830'] },
-  { id: 'solarized', label: 'Solarized', accent: '#268bd2', bg: '#002b36', preview: ['#002b36', '#073642', '#0d4a5c'] },
-  { id: 'forest', label: 'Forêt', accent: '#6cb340', bg: '#1a2318', preview: ['#1a2318', '#1e2a1c', '#243222'] },
-  { id: 'ocean', label: 'Océan', accent: '#00d4ff', bg: '#0f2340', preview: ['#0f2340', '#0d2238', '#112a47'] },
-  { id: 'neon', label: 'Neon', accent: '#00ff88', bg: '#0a0a14', preview: ['#0a0a14', '#0d0d1a', '#111120'] },
-  { id: 'matrix', label: 'Matrix', accent: '#00ff00', bg: '#000000', preview: ['#000000', '#040804', '#060c06'] },
-]
+// ─── Shared primitives ────────────────────────────────────────────────────────
 
-const FONT_SIZES = [
-  { id: 'sm', label: 'Petit', px: '13px' },
-  { id: 'md', label: 'Normal', px: '14px' },
-  { id: 'lg', label: 'Grand', px: '16px' },
-  { id: 'xl', label: 'Très grand', px: '18px' },
-]
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{label}</label>
+      {children}
+      {hint && <p className="text-xs text-fc-muted">{hint}</p>}
+    </div>
+  )
+}
 
-const STATUSES = [
-  { value: 'online', label: 'En ligne', color: 'bg-fc-green' },
-  { value: 'idle', label: 'Absent', color: 'bg-fc-yellow' },
-  { value: 'dnd', label: 'Ne pas déranger', color: 'bg-fc-red' },
-  { value: 'invisible', label: 'Invisible', color: 'bg-fc-muted' },
-]
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
+    >
+      <span className={`inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+    </button>
+  )
+}
+
+function Select({ value, onChange, options, className = '' }: {
+  value: string; onChange: (v: string) => void
+  options: { value: string; label: string }[]; className?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className={`bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none ${className}`}
+    >
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const { user, updateMe, logout } = useAuth()
   const nav = useNavigate()
   const [section, setSection] = useState<Section>('account')
 
-  const close = () => nav(-1)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') nav(-1) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [nav])
 
   if (!user) return null
 
+  const groups: string[] = []
+  NAV.forEach(item => { if (item.group && !groups.includes(item.group)) groups.push(item.group) })
+
   return (
     <div className="fixed inset-0 bg-fc-bg z-50 flex">
-      {/* Sidebar nav */}
+      {/* Sidebar */}
       <div className="w-64 bg-fc-channel flex flex-col flex-shrink-0 border-r border-fc-hover">
         <div className="p-4 border-b border-fc-hover">
           <h1 className="text-sm font-semibold text-fc-muted uppercase tracking-wide">Paramètres</h1>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {NAV.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setSection(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition
-                ${section === item.id
-                  ? 'bg-fc-hover text-white'
-                  : item.danger
-                  ? 'text-fc-red hover:bg-fc-red/10'
-                  : 'text-fc-muted hover:bg-fc-hover hover:text-white'}`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
+        <nav className="flex-1 overflow-y-auto p-2">
+          {groups.map((group, gi) => {
+            const items = NAV.filter(item => {
+              const idx = NAV.indexOf(item)
+              const prevGroup = NAV.slice(0, idx).reverse().find(i => i.group)?.group
+              if (item.group === group) return true
+              if (!item.group && prevGroup === group) {
+                const nextGroupItem = NAV.slice(idx).find(i => i.group)
+                return nextGroupItem?.group !== group
+              }
+              return false
+            })
+            const groupItems = NAV.filter((item, idx) => {
+              if (item.group === group) return true
+              const before = NAV.slice(0, idx).reverse()
+              const ownerGroup = before.find(i => i.group)?.group
+              if (ownerGroup !== group) return false
+              const afterGroups = NAV.slice(idx + 1).find(i => i.group)
+              return true
+            })
+
+            // Simpler: just find consecutive items after each group header
+            return null
+          })}
+
+          {/* Render flat with visual separators */}
+          {NAV.map((item, idx) => {
+            const showSep = idx > 0 && item.group && NAV[idx - 1].group !== item.group
+            return (
+              <div key={item.id}>
+                {(idx === 0 || item.group) && (
+                  <div className={`px-3 pt-3 pb-1 text-xs font-semibold text-fc-muted uppercase tracking-wide ${idx > 0 ? 'mt-1 border-t border-fc-hover' : ''}`}>
+                    {item.group}
+                  </div>
+                )}
+                <button
+                  onClick={() => setSection(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition mb-0.5
+                    ${section === item.id
+                      ? 'bg-fc-hover text-white'
+                      : 'text-fc-muted hover:bg-fc-hover hover:text-white'}`}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              </div>
+            )
+          })}
 
           <div className="border-t border-fc-hover my-2" />
-
           <button
             onClick={async () => { await logout(); nav('/login') }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-fc-red hover:bg-fc-red/10 transition"
           >
-            <LogOut size={16} />
-            Déconnexion
+            <LogOut size={16} /> Déconnexion
           </button>
         </nav>
 
-        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">
-          ForgeChat v1.3.0
-        </div>
+        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.1.0</div>
       </div>
 
-      {/* Contenu */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-8 py-8 pb-20">
           <div className="flex items-center justify-between mb-8">
@@ -116,9 +168,8 @@ export default function SettingsPage() {
               {NAV.find(n => n.id === section)?.label}
             </h2>
             <button
-              onClick={close}
+              onClick={() => nav(-1)}
               className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
-              title="Fermer (Échap)"
             >
               <X size={20} />
             </button>
@@ -127,9 +178,15 @@ export default function SettingsPage() {
           {section === 'account' && <AccountSection user={user} updateMe={updateMe} />}
           {section === 'profile' && <ProfileSection user={user} updateMe={updateMe} />}
           {section === 'appearance' && <AppearanceSection />}
+          {section === 'text_display' && <TextDisplaySection />}
           {section === 'notifications' && <NotificationsSection />}
           {section === 'audio' && <AudioSection />}
           {section === 'privacy' && <PrivacySection />}
+          {section === 'language' && <LanguageSection />}
+          {section === 'accessibility' && <AccessibilitySection />}
+          {section === 'streamer' && <StreamerSection />}
+          {section === 'connected' && <ConnectedAccountsSection />}
+          {section === 'keybindings' && <KeybindingsSection />}
           {section === 'advanced' && <AdvancedSection user={user} />}
         </div>
       </div>
@@ -137,7 +194,7 @@ export default function SettingsPage() {
   )
 }
 
-// ─── COMPTE ──────────────────────────────────────────────────────────────────
+// ─── ACCOUNT ──────────────────────────────────────────────────────────────────
 
 function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => void }) {
   const [username, setUsername] = useState(user.username)
@@ -161,7 +218,6 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
 
   return (
     <div className="space-y-6">
-      {/* Avatar preview */}
       <div className="flex items-center gap-4 p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden flex-shrink-0">
           {user.avatar
@@ -170,7 +226,7 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
         </div>
         <div>
           <div className="font-semibold text-white">{user.username}</div>
-          <div className="text-sm text-fc-muted">#{user.discriminator}</div>
+          <div className="text-sm text-fc-muted">#{user.discriminator ?? '0000'}</div>
           <div className="text-xs text-fc-muted mt-0.5">{user.email}</div>
         </div>
       </div>
@@ -179,76 +235,681 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
-          maxLength={32}
-          className="fc-input"
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none"
         />
-      </Field>
-
-      <Field label="Email">
-        <input value={user.email ?? ''} disabled className="fc-input opacity-50 cursor-not-allowed" />
       </Field>
 
       <button
         onClick={() => saveProfile.mutate()}
         disabled={saveProfile.isPending || username === user.username}
-        className="btn-primary"
+        className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
       >
         {saveProfile.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
       </button>
 
       <div className="border-t border-fc-hover pt-6">
-        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-          <KeyRound size={14} className="text-fc-muted" /> Mot de passe
-        </h3>
-        {!showPwForm ? (
-          <button onClick={() => setShowPwForm(true)} className="btn-secondary">
-            Changer le mot de passe
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Mot de passe</h3>
+            <p className="text-xs text-fc-muted">Modifier votre mot de passe de connexion</p>
+          </div>
+          <button
+            onClick={() => setShowPwForm(!showPwForm)}
+            className="px-3 py-1.5 text-xs bg-fc-hover text-white rounded-lg hover:bg-fc-hover/80 transition"
+          >
+            {showPwForm ? 'Annuler' : 'Modifier'}
+          </button>
+        </div>
+
+        {showPwForm && (
+          <div className="space-y-3">
+            {[
+              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld) },
+              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew) },
+            ].map(field => (
+              <Field key={field.label} label={field.label}>
+                <div className="relative">
+                  <input
+                    type={field.show ? 'text' : 'password'}
+                    value={field.value}
+                    onChange={e => field.setValue(e.target.value)}
+                    className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-fc-accent outline-none"
+                  />
+                  <button
+                    onClick={field.toggle}
+                    className="absolute right-3 top-2.5 text-fc-muted hover:text-white transition"
+                  >
+                    {field.show ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </Field>
+            ))}
+            <button
+              onClick={() => changePw.mutate()}
+              disabled={changePw.isPending || !oldPw || !newPw}
+              className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
+            >
+              {changePw.isPending ? 'Modification...' : 'Changer le mot de passe'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── PROFILE ──────────────────────────────────────────────────────────────────
+
+function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => void }) {
+  const [bio, setBio] = useState(user.bio ?? '')
+  const [pronouns, setPronouns] = useState(user.pronouns ?? '')
+  const fileRef = React.useRef<HTMLInputElement>(null)
+
+  const saveBio = useMutation({
+    mutationFn: () => api.patch('/users/me', { bio, pronouns }),
+    onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
+
+  const uploadAvatar = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData()
+      fd.append('avatar', file)
+      return api.post('/users/me/avatar', fd)
+    },
+    onSuccess: r => { updateMe(r.data); toast.success('Avatar mis à jour') },
+    onError: () => toast.error('Erreur upload avatar'),
+  })
+
+  return (
+    <div className="space-y-6">
+      {/* Avatar */}
+      <div className="flex items-center gap-4">
+        <div className="relative">
+          <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-3xl font-bold text-white overflow-hidden">
+            {user.avatar
+              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+              : user.username.charAt(0).toUpperCase()}
+          </div>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="absolute -bottom-1 -right-1 p-1.5 bg-fc-accent rounded-full text-white hover:bg-fc-accent/80 transition"
+          >
+            <Camera size={12} />
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) uploadAvatar.mutate(file)
+            }}
+          />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-white">{user.username}</p>
+          <p className="text-xs text-fc-muted">Cliquez sur l'avatar pour le changer</p>
+        </div>
+      </div>
+
+      <Field label="Bio" hint={`${bio.length}/190 caractères`}>
+        <textarea
+          value={bio}
+          onChange={e => setBio(e.target.value)}
+          maxLength={190}
+          rows={3}
+          placeholder="Décrivez-vous en quelques mots..."
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted"
+        />
+      </Field>
+
+      <Field label="Pronoms" hint="Ex : il/lui, elle/elle, iel/iel">
+        <input
+          value={pronouns}
+          onChange={e => setPronouns(e.target.value)}
+          maxLength={30}
+          placeholder="il/lui"
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted"
+        />
+      </Field>
+
+      <button
+        onClick={() => saveBio.mutate()}
+        disabled={saveBio.isPending}
+        className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
+      >
+        {saveBio.isPending ? 'Sauvegarde...' : 'Sauvegarder le profil'}
+      </button>
+    </div>
+  )
+}
+
+// ─── TEXT & DISPLAY ───────────────────────────────────────────────────────────
+
+function TextDisplaySection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+
+  const [emojiStyle, setEmojiStyle] = useState('native')
+  const [timeFormat, setTimeFormat] = useState('24h')
+  const [dateFormat, setDateFormat] = useState('DD/MM/YYYY')
+  const [timestamps, setTimestamps] = useState('hover')
+  const [gifAutoplay, setGifAutoplay] = useState('always')
+  const [linkPreview, setLinkPreview] = useState(true)
+  const [messageGrouping, setMessageGrouping] = useState(5)
+
+  useEffect(() => {
+    if (settings) {
+      setEmojiStyle(settings.emoji_style ?? 'native')
+      setTimeFormat(settings.time_format ?? '24h')
+      setDateFormat(settings.date_format ?? 'DD/MM/YYYY')
+      setTimestamps(settings.show_timestamps ?? 'hover')
+      setGifAutoplay(settings.gif_autoplay ?? 'always')
+      setLinkPreview(settings.link_preview ?? true)
+      setMessageGrouping(settings.message_grouping_minutes ?? 5)
+    }
+  }, [settings])
+
+  return (
+    <div className="space-y-6">
+      <Field label="Style d'emojis">
+        <Select value={emojiStyle} onChange={setEmojiStyle} className="w-full"
+          options={[{ value: 'native', label: 'Emojis natifs du système' }, { value: 'twemoji', label: 'Twemoji (Twitter)' }]} />
+      </Field>
+
+      <Field label="Format de l'heure">
+        <Select value={timeFormat} onChange={setTimeFormat} className="w-full"
+          options={[{ value: '24h', label: '24 heures (14:30)' }, { value: '12h', label: '12 heures (2:30 PM)' }]} />
+      </Field>
+
+      <Field label="Format de date">
+        <Select value={dateFormat} onChange={setDateFormat} className="w-full"
+          options={[
+            { value: 'DD/MM/YYYY', label: 'JJ/MM/AAAA (31/12/2025)' },
+            { value: 'MM/DD/YYYY', label: 'MM/JJ/AAAA (12/31/2025)' },
+            { value: 'YYYY-MM-DD', label: 'ISO (2025-12-31)' },
+          ]} />
+      </Field>
+
+      <Field label="Affichage des horodatages">
+        <Select value={timestamps} onChange={setTimestamps} className="w-full"
+          options={[
+            { value: 'always', label: 'Toujours visible' },
+            { value: 'hover', label: 'Au survol' },
+            { value: 'never', label: 'Jamais' },
+          ]} />
+      </Field>
+
+      <Field label="Lecture automatique des GIFs">
+        <Select value={gifAutoplay} onChange={setGifAutoplay} className="w-full"
+          options={[
+            { value: 'always', label: 'Toujours' },
+            { value: 'hover', label: 'Au survol' },
+            { value: 'never', label: 'Jamais' },
+          ]} />
+      </Field>
+
+      <Field label={`Délai de regroupement des messages — ${messageGrouping} min`}>
+        <input type="range" min={1} max={30} value={messageGrouping}
+          onChange={e => setMessageGrouping(Number(e.target.value))}
+          className="w-full accent-fc-accent" />
+      </Field>
+
+      <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div>
+          <div className="text-sm font-medium text-white">Prévisualisations de liens</div>
+          <div className="text-xs text-fc-muted">Affiche un aperçu des URLs partagées</div>
+        </div>
+        <Toggle value={linkPreview} onChange={setLinkPreview} />
+      </div>
+
+      <button
+        onClick={() => save.mutate({ emoji_style: emojiStyle, time_format: timeFormat, date_format: dateFormat, show_timestamps: timestamps, gif_autoplay: gifAutoplay, link_preview: linkPreview, message_grouping_minutes: messageGrouping })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+function NotificationsSection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+
+  const [quietEnabled, setQuietEnabled] = useState(false)
+  const [quietStart, setQuietStart] = useState('22:00')
+  const [quietEnd, setQuietEnd] = useState('08:00')
+
+  useEffect(() => {
+    if (settings) {
+      setQuietEnabled(settings.quiet_hours_enabled ?? false)
+      setQuietStart(settings.quiet_hours_start ?? '22:00')
+      setQuietEnd(settings.quiet_hours_end ?? '08:00')
+    }
+  }, [settings])
+
+  return (
+    <div className="space-y-6">
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-white flex items-center gap-2"><Moon size={14} /> Heures silencieuses</div>
+            <div className="text-xs text-fc-muted">Aucune notification pendant cette plage</div>
+          </div>
+          <Toggle value={quietEnabled} onChange={setQuietEnabled} />
+        </div>
+
+        {quietEnabled && (
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-fc-hover">
+            <div>
+              <label className="text-xs text-fc-muted mb-1 block">Début</label>
+              <input type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)}
+                className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
+            </div>
+            <div>
+              <label className="text-xs text-fc-muted mb-1 block">Fin</label>
+              <input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)}
+                className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={() => save.mutate({ quiet_hours_enabled: quietEnabled, quiet_hours_start: quietStart, quiet_hours_end: quietEnd })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── AUDIO ────────────────────────────────────────────────────────────────────
+
+function AudioSection() {
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedInput, setSelectedInput] = useState('')
+  const [selectedOutput, setSelectedOutput] = useState('')
+
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices().then(list => {
+      setDevices(list)
+      const saved_in = localStorage.getItem('fc_audio_input') ?? ''
+      const saved_out = localStorage.getItem('fc_audio_output') ?? ''
+      setSelectedInput(saved_in)
+      setSelectedOutput(saved_out)
+    })
+  }, [])
+
+  const inputDevices = devices.filter(d => d.kind === 'audioinput')
+  const outputDevices = devices.filter(d => d.kind === 'audiooutput')
+
+  const handleInputChange = (id: string) => {
+    setSelectedInput(id)
+    localStorage.setItem('fc_audio_input', id)
+  }
+
+  const handleOutputChange = (id: string) => {
+    setSelectedOutput(id)
+    localStorage.setItem('fc_audio_output', id)
+  }
+
+  return (
+    <div className="space-y-6">
+      <Field label="Périphérique d'entrée (Microphone)">
+        <select
+          value={selectedInput}
+          onChange={e => handleInputChange(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
+        >
+          <option value="">Défaut du système</option>
+          {inputDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Micro ${d.deviceId.slice(0, 6)}`}</option>)}
+        </select>
+      </Field>
+
+      <Field label="Périphérique de sortie (Haut-parleurs)">
+        <select
+          value={selectedOutput}
+          onChange={e => handleOutputChange(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
+        >
+          <option value="">Défaut du système</option>
+          {outputDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Sortie ${d.deviceId.slice(0, 6)}`}</option>)}
+        </select>
+      </Field>
+
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-1 text-sm text-fc-muted">
+        <p className="text-white font-medium text-xs uppercase tracking-wide mb-2">Test micro</p>
+        <p>Rejoignez un canal vocal pour tester votre microphone en temps réel.</p>
+        {devices.length === 0 && <p className="text-xs text-fc-yellow">Autorisez l'accès au micro pour voir vos périphériques.</p>}
+      </div>
+    </div>
+  )
+}
+
+// ─── PRIVACY ──────────────────────────────────────────────────────────────────
+
+function PrivacySection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+
+  const [showOnline, setShowOnline] = useState(true)
+  const [activityVisibility, setActivityVisibility] = useState('everyone')
+  const [friendRequestFrom, setFriendRequestFrom] = useState('everyone')
+  const [dmFromAll, setDmFromAll] = useState(true)
+  const [explicitFilter, setExplicitFilter] = useState('none')
+
+  useEffect(() => {
+    if (settings) {
+      setShowOnline(settings.show_online ?? true)
+      setActivityVisibility(settings.activity_visibility ?? 'everyone')
+      setFriendRequestFrom(settings.friend_request_from ?? 'everyone')
+      setDmFromAll(settings.dm_from_all ?? true)
+      setExplicitFilter(settings.explicit_content_filter ?? 'none')
+    }
+  }, [settings])
+
+  return (
+    <div className="space-y-4">
+      {[
+        { label: 'Afficher mon statut en ligne', desc: 'Les autres peuvent voir si vous êtes connecté', value: showOnline, onChange: setShowOnline },
+        { label: 'Autoriser les DMs de tout le monde', desc: 'Messages directs de personnes non-amies', value: dmFromAll, onChange: setDmFromAll },
+      ].map(item => (
+        <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+          <div>
+            <div className="text-sm font-medium text-white">{item.label}</div>
+            <div className="text-xs text-fc-muted">{item.desc}</div>
+          </div>
+          <Toggle value={item.value} onChange={item.onChange} />
+        </div>
+      ))}
+
+      <Field label="Qui peut voir votre activité">
+        <Select value={activityVisibility} onChange={setActivityVisibility} className="w-full"
+          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends', label: 'Amis uniquement' }, { value: 'nobody', label: 'Personne' }]} />
+      </Field>
+
+      <Field label="Qui peut vous envoyer des demandes d'amis">
+        <Select value={friendRequestFrom} onChange={setFriendRequestFrom} className="w-full"
+          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends_of_friends', label: 'Amis d\'amis' }, { value: 'nobody', label: 'Personne' }]} />
+      </Field>
+
+      <Field label="Filtre de contenu explicite">
+        <Select value={explicitFilter} onChange={setExplicitFilter} className="w-full"
+          options={[
+            { value: 'none', label: 'Désactivé' },
+            { value: 'members_without_roles', label: 'Membres sans rôles' },
+            { value: 'all', label: 'Tous les messages' },
+          ]} />
+      </Field>
+
+      <button
+        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, explicit_content_filter: explicitFilter })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── LANGUAGE ─────────────────────────────────────────────────────────────────
+
+function LanguageSection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+  const [language, setLanguage] = useState('fr')
+
+  useEffect(() => { if (settings) setLanguage(settings.language ?? 'fr') }, [settings])
+
+  const LANGS = [
+    { value: 'fr', label: '🇫🇷 Français' }, { value: 'en', label: '🇬🇧 English' },
+    { value: 'es', label: '🇪🇸 Español' }, { value: 'de', label: '🇩🇪 Deutsch' },
+    { value: 'pt', label: '🇧🇷 Português' }, { value: 'ja', label: '🇯🇵 日本語' },
+    { value: 'ko', label: '🇰🇷 한국어' }, { value: 'zh', label: '🇨🇳 中文' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <Field label="Langue de l'interface">
+        <Select value={language} onChange={setLanguage} className="w-full" options={LANGS} />
+      </Field>
+      <button
+        onClick={() => save.mutate({ language })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── ACCESSIBILITY ────────────────────────────────────────────────────────────
+
+function AccessibilitySection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+  const [reduceMotion, setReduceMotion] = useState(false)
+  const [highContrast, setHighContrast] = useState(false)
+  const [colorblindMode, setColorblindMode] = useState('none')
+
+  useEffect(() => {
+    if (settings) {
+      setReduceMotion(settings.reduce_motion ?? false)
+      setHighContrast(settings.high_contrast ?? false)
+      setColorblindMode(settings.colorblind_mode ?? 'none')
+    }
+  }, [settings])
+
+  return (
+    <div className="space-y-4">
+      {[
+        { label: 'Réduire les animations', desc: 'Moins d\'effets visuels et de transitions', value: reduceMotion, onChange: setReduceMotion },
+        { label: 'Contraste élevé', desc: 'Améliore la lisibilité des textes', value: highContrast, onChange: setHighContrast },
+      ].map(item => (
+        <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+          <div>
+            <div className="text-sm font-medium text-white">{item.label}</div>
+            <div className="text-xs text-fc-muted">{item.desc}</div>
+          </div>
+          <Toggle value={item.value} onChange={item.onChange} />
+        </div>
+      ))}
+
+      <Field label="Mode daltonisme">
+        <Select value={colorblindMode} onChange={setColorblindMode} className="w-full"
+          options={[
+            { value: 'none', label: 'Aucun' },
+            { value: 'deuteranopia', label: 'Deutéranopie (rouge-vert)' },
+            { value: 'protanopia', label: 'Protanopie (rouge)' },
+            { value: 'tritanopia', label: 'Tritanopie (bleu-jaune)' },
+          ]} />
+      </Field>
+
+      <button
+        onClick={() => save.mutate({ reduce_motion: reduceMotion, high_contrast: highContrast, colorblind_mode: colorblindMode })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── STREAMER MODE ────────────────────────────────────────────────────────────
+
+function StreamerSection() {
+  const { data: settings, refetch } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const save = useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+  })
+  const [streamerMode, setStreamerMode] = useState(false)
+
+  useEffect(() => { if (settings) setStreamerMode(settings.streamer_mode ?? false) }, [settings])
+
+  const HIDDEN_ITEMS = [
+    'Adresse e-mail', 'Tag utilisateur', 'Invitations de serveur',
+    'URLs de streaming', 'Informations personnelles du profil',
+    'Notifications d\'appel entrant',
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div>
+          <div className="text-sm font-medium text-white flex items-center gap-2"><Film size={14} /> Mode Streamer</div>
+          <div className="text-xs text-fc-muted">Masque les informations sensibles à l'écran</div>
+        </div>
+        <Toggle value={streamerMode} onChange={setStreamerMode} />
+      </div>
+
+      {streamerMode && (
+        <div className="space-y-2">
+          <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold">Éléments masqués</p>
+          {HIDDEN_ITEMS.map(item => (
+            <div key={item} className="flex items-center gap-2 text-sm text-fc-muted">
+              <Check size={12} className="text-fc-green" /> {item}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => save.mutate({ streamer_mode: streamerMode })}
+        disabled={save.isPending}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
+      >
+        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+      </button>
+    </div>
+  )
+}
+
+// ─── ADVANCED ─────────────────────────────────────────────────────────────────
+
+function AdvancedSection({ user }: { user: any }) {
+  const nav = useNavigate()
+  const { logout } = useAuth()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
+
+  const deleteAccount = useMutation({
+    mutationFn: () => api.delete('/users/me'),
+    onSuccess: async () => { await logout(); nav('/login') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
+  })
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-2">Cache local</h3>
+        <button
+          onClick={() => { localStorage.clear(); toast.success('Cache vidé — rechargement...'); setTimeout(() => location.reload(), 800) }}
+          className="px-4 py-2 bg-fc-hover text-white rounded-lg text-sm hover:bg-fc-hover/80 transition"
+        >
+          Vider le cache
+        </button>
+      </div>
+
+      <div className="border-t border-fc-hover pt-6">
+        <h3 className="text-sm font-semibold text-white mb-1">Informations de débogage</h3>
+        <div className="bg-fc-channel rounded-lg p-3 text-xs font-mono text-fc-muted space-y-1">
+          <div>UserID: {user.id}</div>
+          <div>Version: 3.1.0</div>
+          <div>UA: {navigator.userAgent.slice(0, 60)}...</div>
+        </div>
+        <button
+          onClick={() => { navigator.clipboard.writeText(user.id); toast.success('ID copié') }}
+          className="mt-2 flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition"
+        >
+          <Copy size={12} /> Copier l'ID utilisateur
+        </button>
+      </div>
+
+      <div className="border-t border-fc-hover pt-6">
+        <h3 className="text-sm font-semibold text-fc-red mb-1">Zone dangereuse</h3>
+        <p className="text-xs text-fc-muted mb-3">La suppression du compte est irréversible.</p>
+
+        {!confirmDelete ? (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-fc-red/10 text-fc-red rounded-lg text-sm hover:bg-fc-red/20 transition"
+          >
+            <Trash2 size={14} /> Supprimer mon compte
           </button>
         ) : (
-          <div className="space-y-3">
-            <Field label="Mot de passe actuel">
-              <div className="relative">
-                <input
-                  type={showOld ? 'text' : 'password'}
-                  value={oldPw}
-                  onChange={e => setOldPw(e.target.value)}
-                  className="fc-input pr-10"
-                />
-                <button
-                  onClick={() => setShowOld(!showOld)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white"
-                >
-                  {showOld ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </Field>
-            <Field label="Nouveau mot de passe">
-              <div className="relative">
-                <input
-                  type={showNew ? 'text' : 'password'}
-                  value={newPw}
-                  onChange={e => setNewPw(e.target.value)}
-                  minLength={8}
-                  className="fc-input pr-10"
-                />
-                <button
-                  onClick={() => setShowNew(!showNew)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white"
-                >
-                  {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </Field>
+          <div className="space-y-3 p-4 border border-fc-red/40 rounded-xl">
+            <p className="text-sm text-white">Tapez <strong>{user.username}</strong> pour confirmer</p>
+            <input
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              className="w-full bg-fc-channel border border-fc-red/40 rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
+            />
             <div className="flex gap-2">
-              <button
-                onClick={() => changePw.mutate()}
-                disabled={changePw.isPending || !oldPw || newPw.length < 8}
-                className="btn-primary"
-              >
-                {changePw.isPending ? 'Modification...' : 'Confirmer'}
-              </button>
-              <button onClick={() => setShowPwForm(false)} className="btn-secondary">
+              <button onClick={() => { setConfirmDelete(false); setDeleteInput('') }}
+                className="flex-1 py-2 border border-fc-hover text-fc-muted rounded-lg text-sm hover:text-white transition">
                 Annuler
+              </button>
+              <button
+                onClick={() => deleteAccount.mutate()}
+                disabled={deleteInput !== user.username || deleteAccount.isPending}
+                className="flex-1 py-2 bg-fc-red text-white rounded-lg text-sm disabled:opacity-50 transition hover:bg-fc-red/80"
+              >
+                {deleteAccount.isPending ? 'Suppression...' : 'Supprimer définitivement'}
               </button>
             </div>
           </div>
@@ -258,600 +919,5 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
   )
 }
 
-// ─── PROFIL ───────────────────────────────────────────────────────────────────
-
-function getUserGradient(username: string): string {
-  let hash = 0
-  for (let i = 0; i < username.length; i++) {
-    hash = username.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const h1 = Math.abs(hash) % 360
-  const h2 = (h1 + 40) % 360
-  return `linear-gradient(135deg, hsl(${h1}, 65%, 45%) 0%, hsl(${h2}, 70%, 35%) 100%)`
-}
-
-const ACTIVITY_TYPE_OPTIONS = [
-  { value: '', label: 'Aucune activité' },
-  { value: 'playing', label: '🎮 Joue à' },
-  { value: 'listening', label: '🎵 Écoute' },
-  { value: 'watching', label: '📺 Regarde' },
-  { value: 'streaming', label: '📡 Stream' },
-  { value: 'competing', label: '🏆 Compétition' },
-]
-
-function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => void }) {
-  const [bio, setBio] = useState(user.bio ?? '')
-  const [customStatus, setCustomStatus] = useState(user.custom_status ?? '')
-  const [status, setStatus] = useState(user.status ?? 'online')
-  const [bannerUrl, setBannerUrl] = useState(user.banner ?? '')
-  const [activityType, setActivityType] = useState(user.activity_type ?? '')
-  const [activityName, setActivityName] = useState(user.activity_name ?? '')
-  const [activityDetail, setActivityDetail] = useState(user.activity_detail ?? '')
-  const avatarRef = useRef<HTMLInputElement>(null)
-
-  const save = useMutation({
-    mutationFn: () => api.patch('/users/me', {
-      bio,
-      custom_status: customStatus,
-      status,
-      banner: bannerUrl || null,
-      activity_type: activityType,
-      activity_name: activityName || null,
-      activity_detail: activityDetail || null,
-    }),
-    onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
-  })
-
-  const uploadAvatar = useMutation({
-    mutationFn: (file: File) => {
-      const fd = new FormData()
-      fd.append('avatar', file)
-      return api.post('/users/me/avatar', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-    },
-    onSuccess: r => { updateMe(r.data); toast.success('Avatar mis à jour') },
-    onError: () => toast.error("Impossible d'uploader l'avatar"),
-  })
-
-  return (
-    <div className="space-y-6">
-      {/* Aperçu bannière + avatar */}
-      <div className="rounded-xl overflow-hidden border border-fc-hover">
-        {/* Bannière preview */}
-        <div className="h-[100px] relative">
-          {bannerUrl
-            ? <img src={bannerUrl} alt="bannière" className="w-full h-full object-cover" />
-            : <div className="w-full h-full" style={{ background: getUserGradient(user.username) }} />
-          }
-        </div>
-        {/* Avatar flottant */}
-        <div className="px-4 pb-4 bg-fc-channel relative">
-          <div className="relative -mt-8 mb-2 w-fit">
-            <div
-              className="w-16 h-16 rounded-full border-4 border-fc-channel bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden cursor-pointer group"
-              onClick={() => avatarRef.current?.click()}
-            >
-              {user.avatar
-                ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
-                : user.username.charAt(0).toUpperCase()}
-              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                <Camera size={16} className="text-white" />
-              </div>
-            </div>
-          </div>
-          <p className="text-xs text-fc-muted">Aperçu de ton profil</p>
-        </div>
-      </div>
-
-      {/* Avatar upload */}
-      <div className="flex items-center gap-4">
-        <button onClick={() => avatarRef.current?.click()} className="btn-secondary text-sm">
-          Modifier l'avatar
-        </button>
-        <p className="text-xs text-fc-muted">JPG, PNG, GIF · Max 8 MB</p>
-        <input
-          ref={avatarRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          className="hidden"
-          onChange={e => {
-            const file = e.target.files?.[0]
-            if (file) uploadAvatar.mutate(file)
-          }}
-        />
-      </div>
-
-      {/* Bannière profil */}
-      <Field label="Bannière de profil">
-        <input
-          value={bannerUrl}
-          onChange={e => setBannerUrl(e.target.value)}
-          placeholder="https://... (URL de l'image de bannière)"
-          className="fc-input"
-        />
-        <p className="text-xs text-fc-muted mt-1">URL d'image · Visible dans ton popup de profil</p>
-      </Field>
-
-      <Field label="À propos de moi" hint={`${bio.length}/190`}>
-        <textarea
-          value={bio}
-          onChange={e => setBio(e.target.value)}
-          maxLength={190}
-          rows={3}
-          placeholder="Parle un peu de toi..."
-          className="fc-input resize-none"
-        />
-      </Field>
-
-      <Field label="Statut personnalisé">
-        <input
-          value={customStatus}
-          onChange={e => setCustomStatus(e.target.value)}
-          maxLength={128}
-          placeholder="Ce que tu fais en ce moment..."
-          className="fc-input"
-        />
-      </Field>
-
-      <div>
-        <label className="fc-label">Statut de présence</label>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          {STATUSES.map(s => (
-            <button
-              key={s.value}
-              onClick={() => setStatus(s.value)}
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border transition text-sm
-                ${status === s.value
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white hover:border-fc-hover/80'}`}
-            >
-              <div className={`w-3 h-3 rounded-full ${s.color}`} />
-              {s.label}
-              {status === s.value && <Check size={14} className="ml-auto text-fc-accent" />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Section Activité */}
-      <div className="border-t border-fc-hover pt-6">
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-          <span className="text-base">🎮</span> Activité
-        </h3>
-        <div className="space-y-3">
-          <Field label="Type d'activité">
-            <select
-              value={activityType}
-              onChange={e => { setActivityType(e.target.value); if (!e.target.value) { setActivityName(''); setActivityDetail('') } }}
-              className="fc-input"
-            >
-              {ACTIVITY_TYPE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </Field>
-
-          {activityType && (
-            <>
-              <Field label="Nom du jeu / app / titre">
-                <input
-                  value={activityName}
-                  onChange={e => setActivityName(e.target.value)}
-                  maxLength={100}
-                  placeholder="CS2, Spotify, Netflix..."
-                  className="fc-input"
-                />
-              </Field>
-              <Field label="Détail (optionnel)">
-                <input
-                  value={activityDetail}
-                  onChange={e => setActivityDetail(e.target.value)}
-                  maxLength={100}
-                  placeholder="Version, artiste, saison..."
-                  className="fc-input"
-                />
-              </Field>
-            </>
-          )}
-        </div>
-      </div>
-
-      <button onClick={() => save.mutate()} disabled={save.isPending} className="btn-primary">
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
-      </button>
-    </div>
-  )
-}
-
-// ─── APPARENCE ────────────────────────────────────────────────────────────────
-
-function AppearanceSection() {
-  const [theme, setThemeState] = useState(() => localStorage.getItem('fc_theme') ?? 'dark')
-  const [fontSize, setFontSize] = useState(() => localStorage.getItem('fc_font_size') ?? 'md')
-  const [compact, setCompact] = useState(() => localStorage.getItem('fc_compact') === 'true')
-
-  const setTheme = (id: string) => {
-    setThemeState(id)
-    localStorage.setItem('fc_theme', id)
-    document.documentElement.setAttribute('data-theme', id)
-  }
-
-  const applyFontSize = (id: string, px: string) => {
-    setFontSize(id)
-    localStorage.setItem('fc_font_size', id)
-    document.documentElement.style.setProperty('--fc-font-size', px)
-  }
-
-  const toggleCompact = () => {
-    const next = !compact
-    setCompact(next)
-    localStorage.setItem('fc_compact', String(next))
-    document.documentElement.classList.toggle('fc-compact', next)
-  }
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <label className="fc-label">Thème</label>
-        <div className="grid grid-cols-4 gap-3 mt-3">
-          {THEMES.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTheme(t.id)}
-              className={`relative flex flex-col rounded-xl border-2 overflow-hidden transition
-                ${theme === t.id
-                  ? 'border-fc-accent ring-2 ring-fc-accent/30'
-                  : 'border-fc-hover hover:border-fc-accent/50'}`}
-            >
-              {/* Mini-aperçu 3 bandes */}
-              <div className="flex h-10 w-full">
-                <div className="flex-1" style={{ background: t.preview[0] }} />
-                <div className="flex-1" style={{ background: t.preview[1] }} />
-                <div className="flex-1" style={{ background: t.preview[2] }} />
-              </div>
-              {/* Infos thème */}
-              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-fc-channel">
-                <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ background: t.accent }}
-                />
-                <span className="text-xs font-medium text-fc-text truncate flex-1 text-left">{t.label}</span>
-                {theme === t.id && (
-                  <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                    <Check size={10} className="text-white" />
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="fc-label">Taille de police</label>
-        <div className="flex gap-2 mt-2 flex-wrap">
-          {FONT_SIZES.map(f => (
-            <button
-              key={f.id}
-              onClick={() => applyFontSize(f.id, f.px)}
-              className={`px-4 py-2 rounded-lg border text-sm transition
-                ${fontSize === f.id
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white'}`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-fc-muted mt-2">
-          Aperçu : <span style={{ fontSize: FONT_SIZES.find(f => f.id === fontSize)?.px }}>
-            Ceci est un exemple de message.
-          </span>
-        </p>
-      </div>
-
-      <Toggle
-        label="Mode compact"
-        description="Réduit l'espace entre les messages et masque les avatars groupés"
-        value={compact}
-        onChange={toggleCompact}
-      />
-    </div>
-  )
-}
-
-// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-
-function NotificationsSection() {
-  const [desktopNotif, setDesktopNotif] = useState(
-    () => localStorage.getItem('fc_notif_desktop') !== 'false'
-  )
-  const [sounds, setSounds] = useState(
-    () => localStorage.getItem('fc_notif_sounds') !== 'false'
-  )
-  const [onlyMentions, setOnlyMentions] = useState(
-    () => localStorage.getItem('fc_notif_mentions_only') === 'true'
-  )
-
-  const save = (key: string, val: boolean) => localStorage.setItem(key, String(val))
-
-  const requestPermission = async () => {
-    if ('Notification' in window) {
-      const perm = await Notification.requestPermission()
-      if (perm === 'granted') {
-        toast.success('Notifications activées')
-        setDesktopNotif(true)
-        save('fc_notif_desktop', true)
-      } else {
-        toast.error('Permission refusée par le navigateur')
-      }
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-white">Notifications bureau</div>
-            <div className="text-xs text-fc-muted mt-0.5">
-              {Notification.permission === 'granted'
-                ? 'Autorisées'
-                : Notification.permission === 'denied'
-                ? 'Bloquées par le navigateur'
-                : 'Non demandées'}
-            </div>
-          </div>
-          {Notification.permission !== 'granted' && (
-            <button onClick={requestPermission} className="btn-secondary text-sm">
-              Autoriser
-            </button>
-          )}
-          {Notification.permission === 'granted' && (
-            <div className="flex items-center gap-1 text-fc-green text-sm">
-              <Check size={14} /> Actif
-            </div>
-          )}
-        </div>
-      </div>
-
-      <Toggle
-        label="Sons de notification"
-        description="Jouer un son lors des nouveaux messages"
-        value={sounds}
-        onChange={v => { setSounds(v); save('fc_notif_sounds', v) }}
-      />
-
-      <Toggle
-        label="Mentions uniquement"
-        description="Ne notifier que pour les @mentions et DMs"
-        value={onlyMentions}
-        onChange={v => { setOnlyMentions(v); save('fc_notif_mentions_only', v) }}
-      />
-    </div>
-  )
-}
-
-// ─── AUDIO & VIDÉO ────────────────────────────────────────────────────────────
-
-function AudioSection() {
-  const { setNoiseSuppressionEnabled } = useVoice()
-  const [inputDevice, setInputDevice] = useState('')
-  const [outputDevice, setOutputDevice] = useState('')
-  const [inputVol, setInputVol] = useState(100)
-  const [outputVol, setOutputVol] = useState(100)
-  const [echoCancellation, setEchoCancellation] = useState(true)
-  const [noiseSuppression, setNoiseSuppression] = useState(
-    () => localStorage.getItem('fc_noise_suppression') !== 'false'
-  )
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
-
-  const loadDevices = async () => {
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true })
-      const list = await navigator.mediaDevices.enumerateDevices()
-      setDevices(list)
-    } catch {
-      toast.error('Impossible d\'accéder aux périphériques audio')
-    }
-  }
-
-  const inputs = devices.filter(d => d.kind === 'audioinput')
-  const outputs = devices.filter(d => d.kind === 'audiooutput')
-
-  return (
-    <div className="space-y-6">
-      <button onClick={loadDevices} className="btn-secondary text-sm flex items-center gap-2">
-        <Mic size={14} /> Détecter les périphériques
-      </button>
-
-      {inputs.length > 0 && (
-        <Field label="Microphone">
-          <select
-            value={inputDevice}
-            onChange={e => setInputDevice(e.target.value)}
-            className="fc-input"
-          >
-            <option value="">Par défaut</option>
-            {inputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || 'Micro'}</option>)}
-          </select>
-        </Field>
-      )}
-
-      {outputs.length > 0 && (
-        <Field label="Sortie audio">
-          <select
-            value={outputDevice}
-            onChange={e => setOutputDevice(e.target.value)}
-            className="fc-input"
-          >
-            <option value="">Par défaut</option>
-            {outputs.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || 'Sortie'}</option>)}
-          </select>
-        </Field>
-      )}
-
-      <Field label={`Volume micro — ${inputVol}%`}>
-        <input
-          type="range" min={0} max={100} value={inputVol}
-          onChange={e => setInputVol(Number(e.target.value))}
-          className="w-full accent-fc-accent"
-        />
-      </Field>
-
-      <Field label={`Volume sortie — ${outputVol}%`}>
-        <input
-          type="range" min={0} max={100} value={outputVol}
-          onChange={e => setOutputVol(Number(e.target.value))}
-          className="w-full accent-fc-accent"
-        />
-      </Field>
-
-      <Toggle
-        label="Annulation d'écho"
-        description="Supprime l'écho lors des appels vocaux"
-        value={echoCancellation}
-        onChange={setEchoCancellation}
-      />
-
-      <Toggle
-        label="Suppression de bruit (Web Audio)"
-        description="Filtre haute-passe 80Hz + compresseur dynamique — s'applique au prochain appel vocal"
-        value={noiseSuppression}
-        onChange={(v) => { setNoiseSuppression(v); setNoiseSuppressionEnabled(v) }}
-      />
-    </div>
-  )
-}
-
-// ─── VIE PRIVÉE ───────────────────────────────────────────────────────────────
-
-function PrivacySection() {
-  const [dmFromAll, setDmFromAll] = useState(
-    () => localStorage.getItem('fc_dm_from_all') !== 'false'
-  )
-  const [showOnline, setShowOnline] = useState(
-    () => localStorage.getItem('fc_show_online') !== 'false'
-  )
-  const [readReceipts, setReadReceipts] = useState(
-    () => localStorage.getItem('fc_read_receipts') !== 'false'
-  )
-
-  const save = (key: string, val: boolean) => localStorage.setItem(key, String(val))
-
-  return (
-    <div className="space-y-6">
-      <Toggle
-        label="Autoriser les DMs de tout le monde"
-        description="Permettre à n'importe quel membre de t'envoyer des messages directs"
-        value={dmFromAll}
-        onChange={v => { setDmFromAll(v); save('fc_dm_from_all', v) }}
-      />
-
-      <Toggle
-        label="Afficher mon statut en ligne"
-        description="Montrer aux autres que tu es connecté"
-        value={showOnline}
-        onChange={v => { setShowOnline(v); save('fc_show_online', v) }}
-      />
-
-      <Toggle
-        label="Accusés de lecture"
-        description="Envoyer des confirmations de lecture dans les DMs"
-        value={readReceipts}
-        onChange={v => { setReadReceipts(v); save('fc_read_receipts', v) }}
-      />
-    </div>
-  )
-}
-
-// ─── AVANCÉ ───────────────────────────────────────────────────────────────────
-
-function AdvancedSection({ user }: { user: any }) {
-  const nav = useNavigate()
-
-  const copyId = () => {
-    navigator.clipboard.writeText(user.id)
-    toast.success('ID copié')
-  }
-
-  const deleteAccount = async () => {
-    if (!confirm('Supprimer définitivement ton compte ? Cette action est irréversible.')) return
-    try {
-      await api.delete('/users/me')
-      localStorage.clear()
-      nav('/login')
-      toast.success('Compte supprimé')
-    } catch {
-      toast.error('Impossible de supprimer le compte')
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-        <div className="text-xs text-fc-muted mb-1 font-semibold uppercase tracking-wide">ID Utilisateur</div>
-        <div className="flex items-center justify-between">
-          <code className="text-sm text-fc-text font-mono">{user.id}</code>
-          <button onClick={copyId} className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
-            <Copy size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-        <div className="text-xs text-fc-muted mb-1 font-semibold uppercase tracking-wide">Plate-forme</div>
-        <div className="flex items-center gap-2 text-sm text-fc-text">
-          {'__TAURI_INTERNALS__' in window ? <Monitor size={14} /> : <Smartphone size={14} />}
-          {'__TAURI_INTERNALS__' in window ? 'Application desktop (Tauri)' : 'Navigateur web'}
-        </div>
-      </div>
-
-      <div className="border-t border-fc-hover pt-6">
-        <h3 className="text-sm font-semibold text-fc-red mb-3">Zone de danger</h3>
-        <button
-          onClick={deleteAccount}
-          className="flex items-center gap-2 px-4 py-2.5 bg-fc-red/10 hover:bg-fc-red/20 border border-fc-red/30 text-fc-red rounded-lg text-sm transition"
-        >
-          <Trash2 size={14} />
-          Supprimer mon compte
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Composants réutilisables ─────────────────────────────────────────────────
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <label className="fc-label">{label}</label>
-        {hint && <span className="text-xs text-fc-muted">{hint}</span>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Toggle({
-  label, description, value, onChange,
-}: { label: string; description?: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <div className="text-sm font-medium text-white">{label}</div>
-        {description && <div className="text-xs text-fc-muted mt-0.5">{description}</div>}
-      </div>
-      <button
-        onClick={() => onChange(!value)}
-        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors
-          ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
-      >
-        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
-          ${value ? 'translate-x-4' : 'translate-x-0'}`} />
-      </button>
-    </div>
-  )
-}
+// Fix React import for fileRef
+import React from 'react'

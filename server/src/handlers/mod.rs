@@ -22,3 +22,7 @@ pub mod feeds;
 pub mod scheduled;
 pub mod voice;
 pub mod templates;
+pub mod user_settings;
+pub mod soundboard;
+pub mod events;
+pub mod moderation;
