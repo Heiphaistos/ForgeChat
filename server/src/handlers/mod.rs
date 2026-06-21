@@ -26,3 +26,4 @@ pub mod user_settings;
 pub mod soundboard;
 pub mod events;
 pub mod moderation;
+pub mod dm_extras;

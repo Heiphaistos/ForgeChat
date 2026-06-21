@@ -181,7 +181,9 @@ export default function ChannelSidebar() {
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
-            ${channelId === ch.id
+            ${isMeConnected
+              ? 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
+              : channelId === ch.id
               ? 'bg-fc-hover text-white'
               : unreadCounts[ch.id] > 0
                 ? 'text-white font-semibold hover:bg-fc-hover/50'
