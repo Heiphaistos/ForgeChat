@@ -9,7 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::{middleware::auth::verify_token, models::role::Permissions, state::{AppState, VoiceStateData}};
+use crate::{models::role::Permissions, state::{AppState, VoiceStateData}};
 // bcrypt est importé via le crate root (Cargo.toml)
 
 pub async fn ws_handler(
@@ -17,21 +17,52 @@ pub async fn ws_handler(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
+    let ticket = params.get("ticket").cloned();
     let token = params.get("token").cloned().unwrap_or_default();
     let config_secret = state.config.jwt_secret.clone();
-    ws.on_upgrade(move |socket| handle_socket(socket, state, token, config_secret))
+    let config_issuer = state.config.jwt_issuer.clone();
+    ws.on_upgrade(move |socket| handle_socket(socket, state, ticket, token, config_secret, config_issuer))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, token: String, secret: String) {
-    let claims = match verify_token(&token, &secret) {
-        Some(c) => c,
-        None => {
-            tracing::warn!("WebSocket: token invalide");
-            return;
+async fn handle_socket(
+    socket: WebSocket,
+    state: AppState,
+    ticket: Option<String>,
+    token: String,
+    secret: String,
+    issuer: String,
+) {
+    // Priorité 1 : ticket éphémère Redis (web — ne logue pas le JWT)
+    // Priorité 2 : JWT direct (Tauri)
+    let user_id: Uuid = if let Some(t) = ticket {
+        let key = format!("ws_ticket:{}", t);
+        let uid_str: Option<String> = {
+            let mut redis = state.redis.lock().await;
+            use redis::AsyncCommands;
+            // Single-use : supprimer le ticket immédiatement après validation
+            let val: Option<String> = redis.get(&key).await.unwrap_or(None);
+            if val.is_some() {
+                let _: () = redis.del(&key).await.unwrap_or(());
+            }
+            val
+        };
+        match uid_str.and_then(|s| Uuid::parse_str(&s).ok()) {
+            Some(id) => id,
+            None => {
+                tracing::warn!("WebSocket: ticket invalide ou expiré");
+                return;
+            }
+        }
+    } else {
+        match crate::middleware::auth::verify_token(&token, &secret, &issuer) {
+            Some(c) => c.sub,
+            None => {
+                tracing::warn!("WebSocket: token invalide");
+                return;
+            }
         }
     };
 
-    let user_id = claims.sub;
     tracing::info!("WS connecté: {}", user_id);
 
     let (tx, _rx) = broadcast::channel::<String>(512);

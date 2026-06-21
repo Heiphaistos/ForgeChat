@@ -5,6 +5,7 @@ pub struct Config {
     pub database_url: String,
     pub redis_url: String,
     pub jwt_secret: String,
+    pub jwt_issuer: String,
     pub port: u16,
     pub upload_dir: String,
     pub max_upload_size: u64,
@@ -28,6 +29,7 @@ impl Config {
             database_url: env::var("DATABASE_URL")?,
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
             jwt_secret: env::var("JWT_SECRET")?,
+            jwt_issuer: env::var("JWT_ISSUER").unwrap_or_else(|_| "forgechat".into()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".into())
                 .parse()?,

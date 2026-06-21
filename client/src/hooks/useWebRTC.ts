@@ -1,12 +1,26 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { useWs } from '../store/ws'
+import api from '../api/client'
 
-const ICE_CONFIG: RTCConfiguration = {
+const FALLBACK_ICE_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
   ],
+}
+
+let cachedIceConfig: RTCConfiguration | null = null
+
+async function fetchIceConfig(): Promise<RTCConfiguration> {
+  if (cachedIceConfig) return cachedIceConfig
+  try {
+    const { data } = await api.get('/voice/ice-config')
+    cachedIceConfig = { iceServers: data.ice_servers }
+    return cachedIceConfig
+  } catch {
+    return FALLBACK_ICE_CONFIG
+  }
 }
 
 export interface VoicePeer {
@@ -51,7 +65,8 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
     (peerId: string, info: { username: string; avatar?: string; discriminator?: string }) => {
       if (pcsRef.current.has(peerId)) return pcsRef.current.get(peerId)!
 
-      const pc = new RTCPeerConnection(ICE_CONFIG)
+      const iceConfig = cachedIceConfig ?? FALLBACK_ICE_CONFIG
+      const pc = new RTCPeerConnection(iceConfig)
       pcsRef.current.set(peerId, pc)
 
       // Ajouter les pistes locales au peer
@@ -331,6 +346,9 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
       offSignal()
     }
   }, [joined, channelId, createPC, on, send])
+
+  // Pré-charger la config ICE (TURN inclus si configuré) au montage
+  useEffect(() => { fetchIceConfig() }, [])
 
   // Nettoyage au démontage du composant
   useEffect(() => {

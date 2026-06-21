@@ -55,8 +55,7 @@ function AppInner() {
 
   useEffect(() => {
     if (!user) return
-    const token = localStorage.getItem('access_token')
-    if (token) connect(token)
+    connect()
     fetchUnread()
     return () => disconnect()
   }, [user?.id])
