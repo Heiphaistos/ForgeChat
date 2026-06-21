@@ -58,6 +58,9 @@ export default function LoginPage() {
           Pas de compte ?{' '}
           <Link to="/register" className="text-fc-accent hover:underline">S'inscrire</Link>
         </p>
+        <p className="text-center mt-3">
+          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
+        </p>
       </div>
     </div>
   )

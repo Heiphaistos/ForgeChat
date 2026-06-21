@@ -67,6 +67,9 @@ export default function RegisterPage() {
           Déjà un compte ?{' '}
           <Link to="/login" className="text-fc-accent hover:underline">Se connecter</Link>
         </p>
+        <p className="text-center mt-3">
+          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
+        </p>
       </div>
     </div>
   )

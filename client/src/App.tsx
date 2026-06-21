@@ -21,6 +21,7 @@ import ExplorePage from './pages/ExplorePage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
+import LandingPage from './pages/LandingPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -30,6 +31,17 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     </div>
   )
   return user ? <>{children}</> : <Navigate to="/login" replace />
+}
+
+function HomeRoute() {
+  const { user, loading } = useAuth()
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-fc-bg">
+      <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  if (!user) return <LandingPage />
+  return <Navigate to="/friends" replace />
 }
 
 function AppInner() {
@@ -147,8 +159,8 @@ function AppInner() {
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
         <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
-        <Route path="/" element={<AuthGuard><MainLayout /></AuthGuard>}>
-          <Route index element={<FriendsPage />} />
+        <Route path="/" element={<HomeRoute />} />
+        <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
           <Route path="friends" element={<FriendsPage />} />
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
