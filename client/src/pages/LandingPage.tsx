@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Shield, Palette, Video, Server, Download, MessageSquare, ChevronRight, Lock } from 'lucide-react'
 
@@ -52,13 +53,19 @@ const FEATURES = [
 ]
 
 export default function LandingPage() {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'auto'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#0e1117] text-white overflow-x-hidden">
 
       {/* ── Navigation ──────────────────────────────────────────────── */}
       <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0e1117]/80 backdrop-blur-md border-b border-white/5">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-sm">FC</div>
+          <img src="/icon.svg" alt="ForgeChat" className="w-8 h-8 rounded-lg" />
           <span className="font-bold text-white text-lg">ForgeChat</span>
           <span className="text-xs text-white/30 ml-1">{RELEASE}</span>
         </div>
@@ -186,7 +193,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-bold">FC</div>
+            <img src="/icon.svg" alt="" className="w-6 h-6 rounded" />
             <span className="text-white/40 text-sm">ForgeChat {RELEASE} · Heiphaistos</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-white/30">
