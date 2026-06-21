@@ -18,3 +18,4 @@ server/uploads/
 # IDE
 .vscode/
 .idea/
+.gstack/

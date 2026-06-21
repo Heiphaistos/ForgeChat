@@ -289,10 +289,23 @@ export default function ChannelSidebar() {
         <div className="relative">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="w-full px-4 py-3 shadow-sm border-b border-fc-bg/50 flex items-center justify-between hover:bg-fc-hover transition"
+            className="w-full shadow-sm border-b border-fc-bg/50 hover:brightness-110 transition overflow-hidden"
           >
-            <span className="font-semibold text-white truncate">{server?.name ?? '...'}</span>
-            <ChevronDown size={16} className="text-fc-muted flex-shrink-0" />
+            {server?.banner ? (
+              <div className="relative h-16">
+                <img src={server.banner} alt="" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/50" />
+                <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
+                  <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
+                  <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="font-semibold text-white truncate">{server?.name ?? '...'}</span>
+                <ChevronDown size={16} className="text-fc-muted flex-shrink-0" />
+              </div>
+            )}
           </button>
 
           {menuOpen && (

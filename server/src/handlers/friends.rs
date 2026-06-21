@@ -418,3 +418,132 @@ pub async fn send_dm(
         "created_at": msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
     })))
 }
+
+// ─── E2E Encrypted DM Messages ───────────────────────────────────────────────
+
+pub async fn get_e2e_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(dm_id): Path<Uuid>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { return Err(AppError::Forbidden); }
+
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+
+    let messages = sqlx::query(
+        "SELECT m.id, m.sender_id, m.ciphertext, m.created_at, u.username, u.avatar
+         FROM dm_e2e_messages m JOIN users u ON u.id = m.sender_id
+         WHERE m.dm_channel_id = $1
+         ORDER BY m.created_at DESC LIMIT $2"
+    )
+    .bind(dm_id)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await?;
+
+    use sqlx::Row;
+    let mut result: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "sender_id": r.get::<Uuid, _>("sender_id"),
+        "sender_username": r.get::<String, _>("username"),
+        "sender_avatar": r.get::<Option<String>, _>("avatar"),
+        "ciphertext": r.get::<String, _>("ciphertext"),
+        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "encrypted": true,
+    })).collect();
+
+    result.reverse();
+    Ok(Json(result))
+}
+
+pub async fn send_e2e_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(dm_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { return Err(AppError::Forbidden); }
+
+    let ciphertext = body["ciphertext"]
+        .as_str()
+        .filter(|c| !c.trim().is_empty())
+        .ok_or_else(|| AppError::BadRequest("ciphertext vide".into()))?;
+
+    if ciphertext.len() > 64 * 1024 {
+        return Err(AppError::BadRequest("Message trop volumineux (max 64KB ciphertext)".into()));
+    }
+
+    let msg = sqlx::query(
+        "INSERT INTO dm_e2e_messages (dm_channel_id, sender_id, ciphertext) VALUES ($1, $2, $3) RETURNING id, created_at"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .bind(ciphertext)
+    .fetch_one(&state.db)
+    .await?;
+
+    use sqlx::Row;
+    let msg_id: Uuid = msg.get("id");
+    let created_at = msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
+
+    // Récupérer les infos de l'expéditeur pour le broadcast
+    let sender = sqlx::query("SELECT username, avatar FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+    let sender_username: String = sender.get("username");
+    let sender_avatar: Option<String> = sender.get("avatar");
+
+    // Notifier l'autre utilisateur
+    let other = sqlx::query(
+        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END as other
+         FROM dm_channels WHERE id=$1"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    let other_id: Uuid = other.get("other");
+    let event = serde_json::json!({
+        "type": "DM_E2E_MESSAGE",
+        "dm_id": dm_id,
+        "message": {
+            "id": msg_id,
+            "sender_id": claims.sub,
+            "sender_username": sender_username,
+            "sender_avatar": sender_avatar,
+            "ciphertext": ciphertext,
+            "created_at": created_at,
+            "encrypted": true,
+        }
+    });
+    state.broadcast_to_user(other_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({
+        "id": msg_id,
+        "sender_id": claims.sub,
+        "sender_username": sender_username,
+        "sender_avatar": sender_avatar,
+        "ciphertext": ciphertext,
+        "created_at": created_at,
+        "encrypted": true,
+    })))
+}

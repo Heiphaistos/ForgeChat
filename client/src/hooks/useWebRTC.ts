@@ -31,6 +31,7 @@ export interface VoicePeer {
   stream: MediaStream | null
   audioEnabled: boolean
   videoEnabled: boolean
+  screenSharing: boolean
 }
 
 interface UseWebRTCReturn {
@@ -39,6 +40,7 @@ interface UseWebRTCReturn {
   localStream: MediaStream | null
   audioEnabled: boolean
   videoEnabled: boolean
+  screenSharing: boolean
   error: string | null
   join: (withVideo?: boolean) => Promise<void>
   leave: () => void
@@ -55,11 +57,31 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [audioEnabled, setAudioEnabled] = useState(true)
   const [videoEnabled, setVideoEnabled] = useState(false)
+  const [screenSharing, setScreenSharing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
   const localStreamRef = useRef<MediaStream | null>(null)
   const joinedRef = useRef(false)
+  const channelIdRef = useRef<string | null>(channelId)
+  // Buffer ICE candidates until setRemoteDescription completes
+  const iceCandidateQueues = useRef<Map<string, RTCIceCandidate[]>>(new Map())
+  // Refs for state values used inside WS callbacks (avoid stale closures)
+  const audioEnabledRef = useRef(true)
+  const videoEnabledRef = useRef(false)
+  const screenSharingRef = useRef(false)
+
+  useEffect(() => { channelIdRef.current = channelId }, [channelId])
+
+  const flushIceCandidates = useCallback(async (peerId: string, pc: RTCPeerConnection) => {
+    const queue = iceCandidateQueues.current.get(peerId) ?? []
+    iceCandidateQueues.current.delete(peerId)
+    for (const candidate of queue) {
+      await pc.addIceCandidate(candidate).catch((e) => {
+        console.warn('ICE candidate flush error:', e)
+      })
+    }
+  }, [])
 
   const createPC = useCallback(
     (peerId: string, info: { username: string; avatar?: string; discriminator?: string }) => {
@@ -69,14 +91,14 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
       const pc = new RTCPeerConnection(iceConfig)
       pcsRef.current.set(peerId, pc)
 
-      // Ajouter les pistes locales au peer
+      // Add all local tracks immediately
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach(track => {
           pc.addTrack(track, localStreamRef.current!)
         })
       }
 
-      // Envoyer les candidats ICE
+      // Relay local ICE candidates to the remote peer
       pc.onicecandidate = (event) => {
         if (event.candidate) {
           send({
@@ -87,7 +109,7 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
         }
       }
 
-      // Recevoir le flux distant
+      // Apply incoming remote tracks to the peer entry
       pc.ontrack = (event) => {
         const stream = event.streams[0]
         if (!stream) return
@@ -96,21 +118,22 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
         )
       }
 
-      // Nettoyage si connexion fermée
+      // Remove peer on connection failure/disconnect
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           setPeers(prev => prev.filter(p => p.userId !== peerId))
           pcsRef.current.delete(peerId)
+          iceCandidateQueues.current.delete(peerId)
           pc.close()
         }
       }
 
-      // Ajouter le pair à la liste
+      // Add peer to state list
       setPeers(prev => {
         if (prev.some(p => p.userId === peerId)) return prev
         return [...prev, {
           userId: peerId, ...info,
-          stream: null, audioEnabled: true, videoEnabled: false,
+          stream: null, audioEnabled: true, videoEnabled: false, screenSharing: false,
         }]
       })
 
@@ -123,14 +146,16 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
     if (joinedRef.current) return
     setError(null)
 
+    // Ensure TURN config is loaded before peer connections are created
+    await fetchIceConfig()
+
     let stream: MediaStream
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: withVideo ? { width: 1280, height: 720 } : false,
       })
-    } catch (err: any) {
-      // Retry audio-only if video fails
+    } catch {
       if (withVideo) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -146,7 +171,9 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
 
     localStreamRef.current = stream
     setLocalStream(stream)
-    setVideoEnabled(withVideo && stream.getVideoTracks().length > 0)
+    const hasVideo = withVideo && stream.getVideoTracks().length > 0
+    setVideoEnabled(hasVideo)
+    videoEnabledRef.current = hasVideo
     setJoined(true)
     joinedRef.current = true
 
@@ -156,10 +183,11 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
   const leave = useCallback(() => {
     if (!joinedRef.current) return
 
-    send({ type: 'VOICE_LEAVE', channel_id: channelId })
+    send({ type: 'VOICE_LEAVE', channel_id: channelIdRef.current })
 
     pcsRef.current.forEach(pc => pc.close())
     pcsRef.current.clear()
+    iceCandidateQueues.current.clear()
 
     localStreamRef.current?.getTracks().forEach(t => t.stop())
     localStreamRef.current = null
@@ -167,75 +195,123 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
     setPeers([])
     setJoined(false)
     joinedRef.current = false
-  }, [channelId, send])
+    setScreenSharing(false)
+    screenSharingRef.current = false
+  }, [send])
 
   const toggleAudio = useCallback(() => {
     if (!localStreamRef.current) return
-    const next = !audioEnabled
+    const next = !audioEnabledRef.current
     localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = next })
     setAudioEnabled(next)
-  }, [audioEnabled])
+    audioEnabledRef.current = next
+    // Broadcast mute state so remote peers can update their UI
+    send({
+      type: 'VOICE_STATE',
+      channel_id: channelIdRef.current,
+      muted: !next,
+      video: videoEnabledRef.current,
+      screen: screenSharingRef.current,
+    })
+  }, [send])
 
   const toggleVideo = useCallback(async () => {
     if (!localStreamRef.current) return
 
-    if (!videoEnabled) {
-      // Activer la caméra
+    if (!videoEnabledRef.current) {
       try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1280, height: 720 },
         })
         const videoTrack = videoStream.getVideoTracks()[0]
         localStreamRef.current.addTrack(videoTrack)
+        setLocalStream(new MediaStream(localStreamRef.current.getTracks()))
 
-        // Ajouter la piste à tous les PC existants
-        pcsRef.current.forEach(pc => {
-          pc.addTrack(videoTrack, localStreamRef.current!)
-          const offer = pc.createOffer()
-          offer.then(async sdp => {
-            await pc.setLocalDescription(sdp)
-            // Renegociation
-          })
-        })
+        // Add track to each existing peer connection and send renegotiation offer
+        for (const [peerId, pc] of pcsRef.current) {
+          pc.addTrack(videoTrack, localStreamRef.current)
+          try {
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            send({
+              type: 'VOICE_SIGNAL',
+              to: peerId,
+              payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } },
+            })
+          } catch (e) {
+            console.error('Renegotiation error (toggleVideo on):', e)
+          }
+        }
 
         setVideoEnabled(true)
+        videoEnabledRef.current = true
+        send({
+          type: 'VOICE_STATE',
+          channel_id: channelIdRef.current,
+          muted: !audioEnabledRef.current,
+          video: true,
+          screen: screenSharingRef.current,
+        })
       } catch {
         setError('Impossible d\'accéder à la caméra.')
       }
     } else {
-      // Désactiver la caméra
+      // Stop camera tracks and null out video senders
       localStreamRef.current.getVideoTracks().forEach(t => {
         t.stop()
         localStreamRef.current!.removeTrack(t)
       })
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()))
+      pcsRef.current.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        sender?.replaceTrack(null)
+      })
       setVideoEnabled(false)
+      videoEnabledRef.current = false
+      setScreenSharing(false)
+      screenSharingRef.current = false
+      send({
+        type: 'VOICE_STATE',
+        channel_id: channelIdRef.current,
+        muted: !audioEnabledRef.current,
+        video: false,
+        screen: false,
+      })
     }
-  }, [videoEnabled])
+  }, [send])
 
   const shareScreen = useCallback(async () => {
     try {
       const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { cursor: 'never', displaySurface: 'monitor' },
+        video: { cursor: 'always', displaySurface: 'monitor' },
         audio: false,
       })
       const screenTrack = screenStream.getVideoTracks()[0]
 
-      // Remplacer/ajouter la piste vidéo dans tous les PC + renegociation si nécessaire
+      // Replace or add video track in each peer connection
       for (const [peerId, pc] of pcsRef.current) {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video')
         if (sender) {
+          // replaceTrack is transparent for same kind — no SDP renegotiation needed
           await sender.replaceTrack(screenTrack)
         } else {
-          pc.addTrack(screenTrack, localStreamRef.current ?? screenStream)
+          // No video sender yet — add track and renegotiate
+          if (localStreamRef.current) {
+            pc.addTrack(screenTrack, localStreamRef.current)
+          }
           try {
             const offer = await pc.createOffer()
             await pc.setLocalDescription(offer)
-            send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
+            send({
+              type: 'VOICE_SIGNAL',
+              to: peerId,
+              payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } },
+            })
           } catch {}
         }
       }
 
-      // Mettre à jour le stream local pour la preview
+      // Update local stream preview
       if (localStreamRef.current) {
         localStreamRef.current.getVideoTracks().forEach(t => {
           t.stop()
@@ -245,9 +321,23 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
         setLocalStream(new MediaStream(localStreamRef.current.getTracks()))
       }
       setVideoEnabled(true)
+      videoEnabledRef.current = true
+      setScreenSharing(true)
+      screenSharingRef.current = true
+
+      send({
+        type: 'VOICE_STATE',
+        channel_id: channelIdRef.current,
+        muted: !audioEnabledRef.current,
+        video: true,
+        screen: true,
+      })
 
       screenTrack.onended = () => {
         setVideoEnabled(false)
+        videoEnabledRef.current = false
+        setScreenSharing(false)
+        screenSharingRef.current = false
         if (localStreamRef.current) {
           localStreamRef.current.getVideoTracks().forEach(t => {
             t.stop()
@@ -255,18 +345,24 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
           })
           setLocalStream(new MediaStream(localStreamRef.current.getTracks()))
         }
-        // Restaurer la caméra dans les PC si besoin
         pcsRef.current.forEach(pc => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'video')
           sender?.replaceTrack(null)
         })
+        send({
+          type: 'VOICE_STATE',
+          channel_id: channelIdRef.current,
+          muted: !audioEnabledRef.current,
+          video: false,
+          screen: false,
+        })
       }
     } catch {
-      // L'utilisateur a annulé le partage d'écran
+      // User cancelled screen share picker
     }
   }, [send])
 
-  // ─── Gestionnaires d'événements WebSocket ───────────────────────────────
+  // ─── WebSocket event handlers ────────────────────────────────────────────────
   useEffect(() => {
     if (!joined || !channelId) return
 
@@ -278,6 +374,12 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
           avatar: peer.avatar,
           discriminator: peer.discriminator,
         })
+        // Apply initial voice state from server
+        setPeers(prev => prev.map(p =>
+          p.userId === peer.user_id
+            ? { ...p, audioEnabled: !peer.muted, videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false }
+            : p
+        ))
         try {
           const offer = await pc.createOffer()
           await pc.setLocalDescription(offer)
@@ -294,7 +396,7 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
 
     const offUserJoined = on('VOICE_USER_JOINED', (d: any) => {
       if (d.channel_id !== channelId) return
-      // Le nouvel arrivant va nous envoyer une offer — on prépare le PC
+      // New joiner will send us an offer — prepare the PC so it's ready
       createPC(d.user_id, {
         username: d.username,
         avatar: d.avatar,
@@ -307,6 +409,7 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
       const pc = pcsRef.current.get(d.user_id)
       pc?.close()
       pcsRef.current.delete(d.user_id)
+      iceCandidateQueues.current.delete(d.user_id)
       setPeers(prev => prev.filter(p => p.userId !== d.user_id))
     })
 
@@ -318,6 +421,8 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
       try {
         if (payload.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
+          // Drain any ICE candidates that arrived before remoteDescription was ready
+          await flushIceCandidates(from, pc)
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
           send({
@@ -328,10 +433,19 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
         } else if (payload.type === 'answer') {
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
+            await flushIceCandidates(from, pc)
           }
         } else if (payload.type === 'ice') {
-          if (payload.data && pc.remoteDescription) {
-            await pc.addIceCandidate(new RTCIceCandidate(payload.data))
+          if (payload.data) {
+            const candidate = new RTCIceCandidate(payload.data)
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(candidate)
+            } else {
+              // Queue the candidate — will be flushed after setRemoteDescription
+              const queue = iceCandidateQueues.current.get(from) ?? []
+              queue.push(candidate)
+              iceCandidateQueues.current.set(from, queue)
+            }
           }
         }
       } catch (e) {
@@ -339,23 +453,35 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
       }
     })
 
+    // Update remote peer UI when they toggle mute/video/screen
+    const offVoiceStateUpdate = on('VOICE_STATE_UPDATE', (d: any) => {
+      if (d.channel_id !== channelId) return
+      setPeers(prev => prev.map(p =>
+        p.userId === d.user_id
+          ? { ...p, audioEnabled: !d.muted, videoEnabled: d.video ?? false, screenSharing: d.screen ?? false }
+          : p
+      ))
+    })
+
     return () => {
       offExistingPeers()
       offUserJoined()
       offUserLeft()
       offSignal()
+      offVoiceStateUpdate()
     }
-  }, [joined, channelId, createPC, on, send])
+  }, [joined, channelId, createPC, flushIceCandidates, on, send])
 
-  // Pré-charger la config ICE (TURN inclus si configuré) au montage
+  // Pre-load ICE/TURN config on mount
   useEffect(() => { fetchIceConfig() }, [])
 
-  // Nettoyage au démontage du composant
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (joinedRef.current) {
         pcsRef.current.forEach(pc => pc.close())
         pcsRef.current.clear()
+        iceCandidateQueues.current.clear()
         localStreamRef.current?.getTracks().forEach(t => t.stop())
         localStreamRef.current = null
       }
@@ -363,7 +489,7 @@ export function useWebRTC(channelId: string | null): UseWebRTCReturn {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    joined, peers, localStream, audioEnabled, videoEnabled, error,
+    joined, peers, localStream, audioEnabled, videoEnabled, screenSharing, error,
     join, leave, toggleAudio, toggleVideo, shareScreen,
   }
 }

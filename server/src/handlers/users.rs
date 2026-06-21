@@ -152,6 +152,60 @@ pub async fn upload_avatar(
     Err(AppError::BadRequest("Champ 'avatar' manquant".into()))
 }
 
+pub async fn upload_banner(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    mut multipart: Multipart,
+) -> Result<Json<serde_json::Value>> {
+    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+        let name = field.name().unwrap_or("").to_string();
+        if name != "banner" { continue; }
+
+        let content_type = field.content_type()
+            .unwrap_or("image/jpeg")
+            .to_string();
+
+        let ext = match content_type.as_str() {
+            "image/png" => "png",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            "image/jpeg" | "image/jpg" => "jpg",
+            _ => return Err(AppError::BadRequest(
+                "Type de fichier non supporté. Acceptés: PNG, GIF, WEBP, JPEG".into()
+            )),
+        };
+
+        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+        if data.len() > 10 * 1024 * 1024 {
+            return Err(AppError::BadRequest("Fichier trop grand (max 10 MB)".into()));
+        }
+
+        let filename = format!("banners/{}.{}", Uuid::new_v4(), ext);
+        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
+
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await
+                .map_err(|e| AppError::Internal(e.into()))?;
+        }
+
+        tokio::fs::write(&path, &data).await
+            .map_err(|e| AppError::Internal(e.into()))?;
+
+        let banner_url = format!("/uploads/{}", filename);
+
+        sqlx::query("UPDATE users SET banner=$2, updated_at=NOW() WHERE id=$1")
+            .bind(claims.sub)
+            .bind(&banner_url)
+            .execute(&state.db)
+            .await?;
+
+        return Ok(Json(serde_json::json!({ "banner": banner_url })));
+    }
+
+    Err(AppError::BadRequest("Champ 'banner' manquant".into()))
+}
+
 pub async fn delete_account(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -203,4 +257,51 @@ pub async fn search_users(
     .collect();
 
     Ok(Json(users))
+}
+
+// ─── E2E Encryption — Public Key Management ──────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct SetPubKeyRequest {
+    pub pub_key: String,
+}
+
+pub async fn set_pubkey(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<SetPubKeyRequest>,
+) -> Result<Json<serde_json::Value>> {
+    if body.pub_key.len() > 4096 {
+        return Err(AppError::BadRequest("Clé publique trop longue".into()));
+    }
+
+    sqlx::query(
+        "INSERT INTO user_pubkeys (user_id, pub_key) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET pub_key = EXCLUDED.pub_key, updated_at = NOW()"
+    )
+    .bind(claims.sub)
+    .bind(&body.pub_key)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn get_pubkey(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let row = sqlx::query("SELECT pub_key FROM user_pubkeys WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+    match row {
+        Some(r) => {
+            use sqlx::Row;
+            Ok(Json(serde_json::json!({ "pub_key": r.get::<String, _>("pub_key") })))
+        }
+        None => Err(AppError::NotFound("Clé publique introuvable (E2E non activé pour cet utilisateur)".into())),
+    }
 }
