@@ -1,5 +1,6 @@
 use axum::{
     extract::{ConnectInfo, State},
+    http::{HeaderMap, HeaderValue, header::SET_COOKIE},
     Json,
 };
 use bcrypt::{hash, verify, DEFAULT_COST};
@@ -17,40 +18,57 @@ use crate::{
 };
 
 /// Vérifie et incrémente le compteur de tentatives de login par IP.
-/// Retourne Err(AppError::TooManyRequests) si la limite est atteinte.
 async fn check_login_rate_limit(state: &AppState, ip: &str) -> Result<()> {
     let key = format!("login_attempts:{}", ip);
     let mut redis = state.redis.lock().await;
-
-    // Récupérer le compteur actuel
     let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
     let count = count.unwrap_or(0);
-
     if count >= 10 {
         return Err(AppError::TooManyRequests);
     }
-
-    // Incrémenter et définir TTL de 15 minutes
     let _: () = redis.incr(&key, 1).await.unwrap_or(());
-    // Définir TTL seulement si c'est la première tentative
     if count == 0 {
         let _: () = redis.expire(&key, 900).await.unwrap_or(());
     }
-
     Ok(())
 }
 
-/// Réinitialise le compteur après un login réussi
 async fn reset_login_rate_limit(state: &AppState, ip: &str) {
     let key = format!("login_attempts:{}", ip);
     let mut redis = state.redis.lock().await;
     let _: () = redis.del(&key).await.unwrap_or(());
 }
 
+/// Construit les headers Set-Cookie pour access_token et refresh_token.
+/// Les tokens sont aussi retournés dans le corps JSON pour la compatibilité Tauri.
+fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
+    let flag = if secure { "; Secure" } else { "" };
+    let access = format!(
+        "access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400",
+        auth.access_token, flag
+    );
+    let refresh = format!(
+        "refresh_token={}; HttpOnly{}; SameSite=Strict; Path=/api/auth; Max-Age={}",
+        auth.refresh_token, flag, 30 * 86400
+    );
+    let mut headers = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(&access) {
+        headers.insert(SET_COOKIE, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&refresh) {
+        headers.append(SET_COOKIE, v);
+    }
+    headers
+}
+
+fn is_secure(state: &AppState) -> bool {
+    state.config.frontend_url.starts_with("https")
+}
+
 pub async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
-) -> Result<Json<AuthResponse>> {
+) -> Result<(HeaderMap, Json<AuthResponse>)> {
     if body.username.len() < 2 || body.username.len() > 32 {
         return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
     }
@@ -86,22 +104,20 @@ pub async fn register(
     .fetch_one(&state.db)
     .await?;
 
-    let access_token = create_token(user.id, &state.config.jwt_secret)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
+        .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
-        refresh_token,
-        user: user.into(),
-    }))
+    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let headers = auth_cookie_headers(&auth, is_secure(&state));
+    Ok((headers, Json(auth)))
 }
 
 pub async fn verify_email(
     State(state): State<AppState>,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<AuthResponse>> {
+) -> Result<(HeaderMap, Json<AuthResponse>)> {
     let email = body["email"]
         .as_str()
         .map(|s| s.to_lowercase())
@@ -111,7 +127,6 @@ pub async fn verify_email(
         .as_str()
         .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
 
-    // Rate limit : 5 tentatives max par email pour éviter le brute-force sur code 4 chiffres
     {
         let key = format!("verify_attempts:{}", email);
         let mut redis = state.redis.lock().await;
@@ -139,12 +154,9 @@ pub async fn verify_email(
             .bind(&email)
             .execute(&state.db)
             .await?;
-        return Err(AppError::BadRequest(
-            "Code expiré, recommence l'inscription".into(),
-        ));
+        return Err(AppError::BadRequest("Code expiré, recommence l'inscription".into()));
     }
 
-    // Comparaison constant-time pour éviter les timing attacks
     if !constant_time_eq(pending.code.as_bytes(), code.as_bytes()) {
         return Err(AppError::BadRequest("Code incorrect".into()));
     }
@@ -165,23 +177,20 @@ pub async fn verify_email(
         .execute(&state.db)
         .await?;
 
-    // Nettoyer le rate limit de vérification après succès
     {
         let key = format!("verify_attempts:{}", email);
         let mut redis = state.redis.lock().await;
         let _: () = redis.del(&key).await.unwrap_or(());
     }
 
-    let access_token = create_token(user.id, &state.config.jwt_secret)
+    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
-        refresh_token,
-        user: user.into(),
-    }))
+    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let headers = auth_cookie_headers(&auth, is_secure(&state));
+    Ok((headers, Json(auth)))
 }
 
 pub async fn login(
@@ -189,9 +198,7 @@ pub async fn login(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
     Json(body): Json<LoginRequest>,
-) -> Result<Json<AuthResponse>> {
-    // Extraire l'IP réelle (derrière reverse proxy nginx)
-    // X-Forwarded-For est injecté par nginx avec proxy_set_header
+) -> Result<(HeaderMap, Json<AuthResponse>)> {
     let client_ip = headers
         .get("x-real-ip")
         .or_else(|| headers.get("x-forwarded-for"))
@@ -199,7 +206,6 @@ pub async fn login(
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
         .unwrap_or_else(|| addr.ip().to_string());
 
-    // Rate limiting : 10 tentatives max / 15 min par IP
     check_login_rate_limit(&state, &client_ip).await?;
 
     let user = sqlx::query_as::<_, crate::models::user::User>(
@@ -216,7 +222,6 @@ pub async fn login(
         return Err(AppError::Unauthorized);
     }
 
-    // Login réussi — réinitialiser le compteur
     reset_login_rate_limit(&state, &client_ip).await;
 
     sqlx::query("UPDATE users SET status='online', updated_at=NOW() WHERE id=$1")
@@ -224,27 +229,34 @@ pub async fn login(
         .execute(&state.db)
         .await?;
 
-    let access_token = create_token(user.id, &state.config.jwt_secret)
+    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
-        refresh_token,
-        user: user.into(),
-    }))
+    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
+    Ok((resp_headers, Json(auth)))
 }
 
 pub async fn refresh(
     State(state): State<AppState>,
+    req_headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>> {
-    let token = body["refresh_token"]
-        .as_str()
+) -> Result<(HeaderMap, Json<serde_json::Value>)> {
+    // Accepter le refresh_token depuis le cookie OU le corps JSON (compatibilité Tauri)
+    let token = req_headers
+        .get("cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| {
+            s.split(';').find_map(|p| {
+                p.trim().strip_prefix("refresh_token=").map(|t| t.to_string())
+            })
+        })
+        .or_else(|| body["refresh_token"].as_str().map(|s| s.to_string()))
         .ok_or_else(|| AppError::BadRequest("refresh_token requis".into()))?;
 
-    let token_hash = hash_token(token);
+    let token_hash = hash_token(&token);
     let row = sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
         "SELECT user_id, expires_at FROM refresh_tokens WHERE token_hash=$1",
     )
@@ -257,10 +269,21 @@ pub async fn refresh(
         return Err(AppError::Unauthorized);
     }
 
-    let access_token = create_token(row.0, &state.config.jwt_secret)
+    let access_token = create_token(row.0, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
 
-    Ok(Json(serde_json::json!({ "access_token": access_token })))
+    let secure = is_secure(&state);
+    let flag = if secure { "; Secure" } else { "" };
+    let access_cookie = format!(
+        "access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400",
+        access_token, flag
+    );
+    let mut resp_headers = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(&access_cookie) {
+        resp_headers.insert(SET_COOKIE, v);
+    }
+
+    Ok((resp_headers, Json(serde_json::json!({ "access_token": access_token }))))
 }
 
 pub async fn change_password(
@@ -279,23 +302,17 @@ pub async fn change_password(
         return Err(AppError::BadRequest("Mot de passe min 8 chars".into()));
     }
 
-    let pw_hash = sqlx::query_scalar::<_, String>(
-        "SELECT password_hash FROM users WHERE id=$1",
-    )
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let pw_hash = sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE id=$1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
 
     if !verify(old_pw, &pw_hash).unwrap_or(false) {
-        return Err(AppError::BadRequest(
-            "Mot de passe actuel incorrect".into(),
-        ));
+        return Err(AppError::BadRequest("Mot de passe actuel incorrect".into()));
     }
 
-    let new_hash =
-        hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
+    let new_hash = hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
 
-    // Invalide TOUS les refresh tokens existants de cet utilisateur
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
         .bind(claims.sub)
         .execute(&state.db)
@@ -333,7 +350,7 @@ pub async fn logout(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     Json(body): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>> {
+) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     if let Some(token) = body["refresh_token"].as_str() {
         let token_hash = hash_token(token);
         sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
@@ -346,7 +363,18 @@ pub async fn logout(
         .execute(&state.db)
         .await?;
 
-    Ok(Json(serde_json::json!({ "ok": true })))
+    // Effacer les cookies côté client
+    let clear = "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
+    let clear_refresh = "refresh_token=; HttpOnly; SameSite=Strict; Path=/api/auth; Max-Age=0";
+    let mut resp_headers = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(clear) {
+        resp_headers.insert(SET_COOKIE, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(clear_refresh) {
+        resp_headers.append(SET_COOKIE, v);
+    }
+
+    Ok((resp_headers, Json(serde_json::json!({ "ok": true }))))
 }
 
 fn generate_refresh_token() -> String {
@@ -357,7 +385,6 @@ fn generate_refresh_token() -> String {
         .collect()
 }
 
-/// Comparaison constant-time pour éviter les timing attacks
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;

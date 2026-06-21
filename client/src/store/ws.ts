@@ -1,28 +1,43 @@
 import { create } from 'zustand'
+import api, { SERVER_URL } from '../api/client'
 
 type WsHandler = (data: unknown) => void
 
 interface WsState {
   socket: WebSocket | null
   handlers: Map<string, WsHandler[]>
-  connect: (token: string) => void
+  connect: () => Promise<void>
   disconnect: () => void
   send: (msg: object) => void
   on: (type: string, handler: WsHandler) => () => void
   subscribeChannel: (channelId: string) => void
 }
 
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+async function fetchWsTicket(): Promise<string | null> {
+  try {
+    const { data } = await api.post('/auth/ws-ticket', {})
+    return data.ticket as string
+  } catch {
+    return null
+  }
+}
+
 export const useWs = create<WsState>((set, get) => ({
   socket: null,
   handlers: new Map(),
 
-  connect: (token: string) => {
-    const isTauri = '__TAURI_INTERNALS__' in window
-    // SÉCURITÉ: Le token passé en query param est visible dans les logs nginx.
-    // Utiliser /api/auth/ws-ticket pour obtenir un ticket éphémère (30s TTL).
-    const wsUrl = isTauri
-      ? `wss://forgechat.heiphaistos.org/ws?token=${encodeURIComponent(token)}`
-      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?token=${encodeURIComponent(token)}`
+  connect: async () => {
+    // Obtenir un ticket éphémère (30s TTL) pour ne pas exposer le JWT dans les logs nginx
+    const ticket = await fetchWsTicket()
+    if (!ticket) return
+
+    const base = isTauri
+      ? `wss://forgechat.heiphaistos.org`
+      : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
+    const wsUrl = `${base}/ws?ticket=${encodeURIComponent(ticket)}`
+
     const ws = new WebSocket(wsUrl)
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
@@ -38,14 +53,10 @@ export const useWs = create<WsState>((set, get) => ({
     ws.onclose = () => {
       if (heartbeatInterval) clearInterval(heartbeatInterval)
       set({ socket: null })
-      // Reconnexion automatique après 3s
-      reconnectTimeout = setTimeout(() => {
-        const t = localStorage.getItem('access_token')
-        if (t) get().connect(t)
-      }, 3000)
+      // Reconnexion automatique après 3s avec un nouveau ticket
+      reconnectTimeout = setTimeout(() => get().connect(), 3000)
     }
 
-    // Heartbeat toutes les 30s
     heartbeatInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
@@ -53,7 +64,6 @@ export const useWs = create<WsState>((set, get) => ({
     }, 30_000)
 
     ws.onopen = () => set({ socket: ws })
-
     set({ socket: ws })
   },
 

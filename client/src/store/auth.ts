@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
 
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 interface User {
   id: string
   username: string
@@ -32,32 +34,41 @@ export const useAuth = create<AuthState>()(
 
     login: async (email, password) => {
       const { data } = await api.post('/auth/login', { email, password })
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
+      // Web : tokens dans les cookies httpOnly (automatiques via withCredentials)
+      // Tauri : tokens dans localStorage (les cookies cross-origin ne sont pas garantis)
+      if (isTauri) {
+        localStorage.setItem('access_token', data.access_token)
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
       set(s => { s.user = data.user })
     },
 
     register: async (username, email, password) => {
       const { data } = await api.post('/auth/register', { username, email, password })
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
+      if (isTauri) {
+        localStorage.setItem('access_token', data.access_token)
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
       set(s => { s.user = data.user })
     },
 
     logout: async () => {
-      const refresh_token = localStorage.getItem('refresh_token')
-      await api.post('/auth/logout', { refresh_token }).catch(() => {})
-      localStorage.clear()
+      const body = isTauri ? { refresh_token: localStorage.getItem('refresh_token') } : {}
+      await api.post('/auth/logout', body).catch(() => {})
+      if (isTauri) localStorage.clear()
       set(s => { s.user = null })
     },
 
     fetchMe: async () => {
-      const token = localStorage.getItem('access_token')
-      if (!token) { set(s => { s.loading = false }); return }
+      // Web : le cookie httpOnly est envoyé automatiquement
+      // Tauri : le Bearer token est injecté par l'interceptor axios
+      const hasSession = isTauri ? !!localStorage.getItem('access_token') : true
+      if (!hasSession) { set(s => { s.loading = false }); return }
       try {
         const { data } = await api.get('/users/me')
         set(s => { s.user = data; s.loading = false })
       } catch {
+        if (isTauri) localStorage.clear()
         set(s => { s.loading = false })
       }
     },
