@@ -24,9 +24,10 @@ api.interceptors.response.use(
   async err => {
     const url: string = err.config?.url ?? ''
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
-    const onLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login'
+    const publicPaths = ['/', '/login', '/register', '/verify-email']
+    const onPublicPage = typeof window !== 'undefined' && publicPaths.includes(window.location.pathname)
 
-    if (err.response?.status === 401 && !isAuthEndpoint && !onLoginPage) {
+    if (err.response?.status === 401 && !isAuthEndpoint && !onPublicPage) {
       try {
         const body = isTauri
           ? { refresh_token: localStorage.getItem('refresh_token') }
@@ -39,8 +40,7 @@ api.interceptors.response.use(
         return api(err.config)
       } catch {
         if (isTauri) localStorage.clear()
-        // Ne rediriger que si pas déjà sur /login
-        if (!onLoginPage) window.location.href = '/login'
+        if (!onPublicPage) window.location.href = '/login'
       }
     }
     return Promise.reject(err)
