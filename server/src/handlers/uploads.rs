@@ -10,6 +10,7 @@ use crate::{
     error::{AppError, Result},
     handlers::servers::require_member,
     middleware::auth::Claims,
+    models::role::Permissions,
     state::AppState,
 };
 
@@ -20,6 +21,26 @@ pub async fn upload_file(
     mut multipart: Multipart,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+
+    // Admins/modérateurs/propriétaires peuvent uploader n'importe quel type de fichier
+    let is_privileged = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+            SELECT 1 FROM server_members sm
+            LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+            LEFT JOIN roles r ON r.id = mr.role_id
+            WHERE sm.server_id = $1 AND sm.user_id = $2
+            AND (sm.user_id = (SELECT owner_id FROM servers WHERE id = $1)
+                 OR (r.permissions & $3 <> 0)
+                 OR (r.permissions & $4 <> 0))
+        )"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .bind(Permissions::ADMINISTRATOR)
+    .bind(Permissions::MANAGE_MESSAGES)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(false);
 
     let upload_dir = PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await
@@ -73,9 +94,9 @@ pub async fn upload_file(
             "bin",
         ];
 
-        if !ALLOWED_EXTENSIONS.contains(&raw_ext.as_str()) {
+        if !is_privileged && !ALLOWED_EXTENSIONS.contains(&raw_ext.as_str()) {
             return Err(AppError::BadRequest(
-                format!("Extension .{} non autorisée", raw_ext)
+                format!("Extension .{} non autorisée (admin/modérateur requis pour ce type)", raw_ext)
             ));
         }
 

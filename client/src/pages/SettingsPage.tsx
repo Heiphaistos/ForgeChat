@@ -303,7 +303,9 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
 function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => void }) {
   const [bio, setBio] = useState(user.bio ?? '')
   const [pronouns, setPronouns] = useState(user.pronouns ?? '')
+  const [bannerPreview, setBannerPreview] = useState<string | null>(user.banner ?? null)
   const fileRef = React.useRef<HTMLInputElement>(null)
+  const bannerRef = React.useRef<HTMLInputElement>(null)
 
   const saveBio = useMutation({
     mutationFn: () => api.patch('/users/me', { bio, pronouns }),
@@ -321,8 +323,62 @@ function ProfileSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
     onError: () => toast.error('Erreur upload avatar'),
   })
 
+  const uploadBanner = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData()
+      fd.append('banner', file)
+      return api.post('/users/me/banner', fd)
+    },
+    onSuccess: r => {
+      setBannerPreview(r.data.banner)
+      updateMe({ ...user, banner: r.data.banner })
+      toast.success('Bannière mise à jour')
+    },
+    onError: () => toast.error('Erreur upload bannière'),
+  })
+
   return (
     <div className="space-y-6">
+      {/* Bannière */}
+      <div>
+        <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Bannière de profil</label>
+        <div
+          className="relative h-24 rounded-lg overflow-hidden cursor-pointer group border border-fc-hover hover:border-fc-accent transition"
+          onClick={() => bannerRef.current?.click()}
+        >
+          {bannerPreview
+            ? <img src={bannerPreview} alt="" className="w-full h-full object-cover" />
+            : <div className="w-full h-full bg-fc-channel flex items-center justify-center">
+                <div className="text-center">
+                  <Camera size={20} className="text-fc-muted mx-auto mb-1" />
+                  <p className="text-xs text-fc-muted">Cliquer pour ajouter une bannière</p>
+                </div>
+              </div>}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
+            <Camera size={20} className="text-white opacity-0 group-hover:opacity-100 transition" />
+          </div>
+          {bannerPreview && (
+            <button
+              onClick={e => { e.stopPropagation(); setBannerPreview(null); updateMe({ ...user, banner: null }); api.patch('/users/me', { banner: null }) }}
+              className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition hover:bg-red-600"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
+        <input
+          ref={bannerRef}
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (file) uploadBanner.mutate(file)
+          }}
+        />
+        <p className="text-xs text-fc-muted mt-1">PNG, JPG, GIF ou WEBP · max 10 MB</p>
+      </div>
+
       {/* Avatar */}
       <div className="flex items-center gap-4">
         <div className="relative">

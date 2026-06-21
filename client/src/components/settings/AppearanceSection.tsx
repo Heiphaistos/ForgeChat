@@ -21,6 +21,19 @@ const THEMES = [
   { id: 'ocean', label: 'Océan', accent: '#00d4ff', preview: ['#0f2340', '#0d2238', '#112a47'] },
   { id: 'neon', label: 'Neon', accent: '#00ff88', preview: ['#0a0a14', '#0d0d1a', '#111120'] },
   { id: 'matrix', label: 'Matrix', accent: '#00ff00', preview: ['#000000', '#040804', '#060c06'] },
+  // Nouveaux thèmes
+  { id: 'rosepine', label: 'Rosé Pine', accent: '#eb6f92', preview: ['#191724', '#26233a', '#403d52'] },
+  { id: 'everforest', label: 'Everforest', accent: '#a7c080', preview: ['#2d353b', '#343f44', '#374145'] },
+  { id: 'kanagawa', label: 'Kanagawa', accent: '#7e9cd8', preview: ['#1f1f28', '#2a2a37', '#2d2d3f'] },
+  { id: 'midnight', label: 'Minuit', accent: '#6272a4', preview: ['#0c0e1a', '#101220', '#151828'] },
+  { id: 'sunset', label: 'Coucher de soleil', accent: '#f07050', preview: ['#1a1014', '#22141a', '#27151c'] },
+  { id: 'coffee', label: 'Café', accent: '#c87941', preview: ['#1e1510', '#271a12', '#2c1c14'] },
+  { id: 'winter', label: 'Hiver', accent: '#3498db', preview: ['#f0f4f8', '#e8f0f8', '#d0e4f0'] },
+  { id: 'emerald', label: 'Émeraude', accent: '#2ecc71', preview: ['#0d1f18', '#122820', '#162e22'] },
+  { id: 'bloodmoon', label: 'Lune de sang', accent: '#cc2222', preview: ['#120a0a', '#1a0e0e', '#221010'] },
+  { id: 'violet', label: 'Violet', accent: '#9b59b6', preview: ['#160d24', '#1e1130', '#221238'] },
+  { id: 'slate', label: 'Ardoise', accent: '#5d8aa8', preview: ['#1c2230', '#222c3c', '#263042'] },
+  { id: 'retro', label: 'Rétro', accent: '#d4883a', preview: ['#2b2017', '#352a1e', '#3c2e22'] },
 ]
 
 const FONTS = [

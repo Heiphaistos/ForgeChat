@@ -194,6 +194,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me", patch(handlers::users::update_me))
         .route("/users/me", delete(handlers::users::delete_account))
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
+        .route("/users/me/banner", post(handlers::users::upload_banner))
         .route("/users/:id", get(handlers::users::get_user))
         .route("/users/search", get(handlers::users::search_users))
         // Servers
@@ -249,6 +250,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/:user_id", post(handlers::friends::open_dm))
         .route("/dms/:dm_id/messages", get(handlers::friends::get_dm_messages))
         .route("/dms/:dm_id/messages", post(handlers::friends::send_dm))
+        // E2E encrypted DMs
+        .route("/dms/:dm_id/e2e", get(handlers::friends::get_e2e_messages))
+        .route("/dms/:dm_id/e2e", post(handlers::friends::send_e2e_message))
+        // E2E Public Key Management
+        .route("/users/me/pubkey", post(handlers::users::set_pubkey))
+        .route("/users/:id/pubkey", get(handlers::users::get_pubkey))
         // Unread
         .route("/unread", get(handlers::reads::get_unread_counts))
         .route("/channels/:channel_id/read", post(handlers::reads::mark_channel_read))
