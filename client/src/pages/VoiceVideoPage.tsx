@@ -8,6 +8,7 @@ import {
 import { useVoice, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
+import { useLocation } from 'react-router-dom'
 import { useVoiceActivity } from '../hooks/useVoiceActivity'
 import { useCaptions } from '../hooks/useCaptions'
 import SpeakerStats from '../components/voice/SpeakerStats'
@@ -160,19 +161,81 @@ function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; lab
   )
 }
 
+// ─── Lobby (écran avant de rejoindre) ─────────────────────────────────────────
+function VoiceLobby({
+  channel, serverId, participantCount, voicePassword,
+}: { channel: { id: string; name: string; type: string }; serverId: string; participantCount: number; voicePassword?: string }) {
+  const { join, error } = useVoice()
+  const [joining, setJoining] = useState(false)
+  const [withVideo, setWithVideo] = useState(channel.type === 'video')
+
+  const handleJoin = async () => {
+    setJoining(true)
+    try {
+      await join(channel.id, serverId, withVideo, voicePassword, channel.name)
+    } finally {
+      setJoining(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-6 bg-fc-bg">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-20 h-20 rounded-full bg-fc-accent/20 flex items-center justify-center">
+          <Volume2 size={36} className="text-fc-accent" />
+        </div>
+        <h2 className="text-xl font-bold text-white">{channel.name}</h2>
+        <p className="text-fc-muted text-sm">
+          {participantCount > 0
+            ? `${participantCount} participant${participantCount > 1 ? 's' : ''} dans ce canal`
+            : 'Aucun participant pour le moment'}
+        </p>
+      </div>
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-red-400 text-sm max-w-xs text-center">
+          {error}
+        </div>
+      )}
+      {channel.type === 'video' && (
+        <label className="flex items-center gap-2 text-sm text-fc-text cursor-pointer select-none">
+          <input type="checkbox" checked={withVideo} onChange={e => setWithVideo(e.target.checked)}
+            className="w-4 h-4 rounded accent-fc-accent" />
+          Activer la caméra à la connexion
+        </label>
+      )}
+      <div className="flex gap-3">
+        <button onClick={handleJoin} disabled={joining}
+          className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-semibold transition disabled:opacity-50 text-sm">
+          <Mic size={16} />
+          {joining ? 'Connexion...' : 'Rejoindre le vocal'}
+        </button>
+      </div>
+      <p className="text-xs text-fc-muted">
+        Votre navigateur peut demander l'accès au microphone
+      </p>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
   const { send, on } = useWs()
+  const location = useLocation()
+  const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
     peers, localStream, muted, deafened, videoEnabled, screenSharing,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
-    userVolumes, setUserVolume,
+    userVolumes, setUserVolume, joined, channelId: activeChannelId,
+    roomParticipants,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const { isActive: captionsOn, isSupported: captionsSupported, captions, toggle: toggleCaptions } = useCaptions()
   // Map userId → speaking (local only — peers tracked via WS SPEAKING events)
   const speakingMap: Record<string, number> = user ? { [user.id]: isLocalSpeaking ? 1 : 0 } : {}
+
+  const isInThisChannel = joined && activeChannelId === channel.id
+  const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [spotlightUser, setSpotlightUser] = useState<string | null>(null)
@@ -236,6 +299,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   useEffect(() => () => { recorderRef.current?.stop() }, [])
 
   if (!user) return null
+
+  // Afficher le lobby si pas encore dans ce canal
+  if (!isInThisChannel) {
+    return <VoiceLobby channel={channel} serverId={serverId} participantCount={participantsInChannel} voicePassword={voicePassword} />
+  }
 
   const allPeers = [
     { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },

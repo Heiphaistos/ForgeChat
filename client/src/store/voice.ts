@@ -26,6 +26,7 @@ export interface VoiceRoomParticipant {
 
 interface VoiceStore {
   channelId: string | null
+  channelName: string | null
   serverId: string | null
   joined: boolean
   peers: VoicePeer[]
@@ -49,7 +50,7 @@ interface VoiceStore {
   // Streams actifs Go Live : userId → {userId, username, channelId}
   activeStreams: Record<string, { userId: string; username: string; channelId: string }>
 
-  join(channelId: string, serverId: string, withVideo?: boolean, password?: string): Promise<void>
+  join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string): Promise<void>
   leave(): void
   toggleMute(): void
   toggleDeafen(): void
@@ -255,6 +256,7 @@ function _refreshLocalStream(set: (fn: (s: VoiceStore) => Partial<VoiceStore>) =
 // â”€â”€ Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export const useVoice = create<VoiceStore>((set, get) => ({
   channelId: null,
+  channelName: null,
   serverId: null,
   joined: false,
   peers: [],
@@ -378,7 +380,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   },
 
   // â”€â”€ Join â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  join: async (channelId, serverId, withVideo = false, password) => {
+  join: async (channelId, serverId, withVideo = false, password, channelName) => {
     const cur = get()
     if (cur.joined && cur.channelId === channelId) return
     if (cur.joined) get().leave()
@@ -422,8 +424,9 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     set({
       joined: true,
       channelId,
+      channelName: channelName ?? null,
       serverId,
-      localStream: stream,  // preview locale : stream brut (sans traitement)
+      localStream: stream,
       videoEnabled: hasVideo,
       muted: false,
       deafened: false,
@@ -542,7 +545,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _offFns.forEach(off => off())
     _offFns = []
 
-    set({ joined: false, channelId: null, serverId: null, localStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
+    set({ joined: false, channelId: null, channelName: null, serverId: null, localStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
   },
 
   // â”€â”€ Toggle mute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
