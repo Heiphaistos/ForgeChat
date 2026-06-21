@@ -106,6 +106,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
         // Invitation amis (lecture publique — affiche le profil de l'invitant)
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))
+        // Profil public (auth optionnelle pour les infos de relation)
+        .route("/api/users/:id/profile", get(handlers::users::get_user_profile_public))
         // WebSocket
         .route("/ws", get(handlers::websocket::ws_handler))
         // Routes bot (sans JWT — auth via Bearer token)
@@ -196,7 +198,6 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
         .route("/users/me/banner", post(handlers::users::upload_banner))
         .route("/users/:id", get(handlers::users::get_user))
-        .route("/users/:id/profile", get(handlers::users::get_user_profile))
         .route("/users/:id/block", post(handlers::users::block_user))
         .route("/users/:id/block", delete(handlers::users::unblock_user))
         .route("/users/:id/favorite", post(handlers::users::add_favorite))

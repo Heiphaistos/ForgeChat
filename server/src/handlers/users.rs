@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, State, Multipart},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Extension, Json,
 };
 use uuid::Uuid;
@@ -396,6 +396,25 @@ pub async fn get_user_profile(
     }
 
     Ok(Json(profile))
+}
+
+/// GET /api/users/:id/profile (route publique — JWT optionnel lu depuis header)
+pub async fn get_user_profile_public(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let claims = headers
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .and_then(|token| crate::middleware::auth::verify_token(
+            token,
+            &state.config.jwt_secret,
+            &state.config.jwt_issuer,
+        ))
+        .map(Extension);
+    get_user_profile(State(state), claims, Path(user_id)).await
 }
 
 /// POST /users/:id/block
