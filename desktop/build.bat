@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title ForgeChat Desktop — Build
+title ForgeChat Desktop — Build v3.1.0
 
 echo.
 echo ====================================
-echo   ForgeChat Desktop Builder v1.3.0
+echo   ForgeChat Desktop Builder v3.1.0
 echo ====================================
 echo.
 
@@ -24,7 +24,7 @@ if %errorlevel% neq 0 (
 
 echo [1/4] Build du client React...
 cd ..\client
-call npm install
+call npm ci
 call npm run build
 if %errorlevel% neq 0 (
     echo [ERREUR] Build client echoue.
@@ -35,10 +35,9 @@ echo [2/4] Installation des deps Tauri...
 cd ..\desktop
 call npm install
 
-echo [3/4] Génération des icônes Tauri...
+echo [3/4] Verification des icones...
 if not exist "src-tauri\icons\icon.ico" (
-    echo [INFO] Icones manquantes - copier manuellement dans src-tauri\icons\
-    echo        ou installer @tauri-apps/cli globalement et lancer : npm run tauri icon
+    echo [WARN] Icones manquantes - copier dans src-tauri\icons\ ou lancer : npx tauri icon
 )
 
 echo [4/4] Compilation Tauri...
@@ -53,7 +52,7 @@ if %errorlevel% neq 0 (
 echo.
 echo ====================================
 echo   Build termine avec succes !
-echo   Installer : src-tauri\target\release\bundle\nsis\ForgeChat_1.3.0_x64-setup.exe
-echo   Portable  : src-tauri\target\release\forgechat-desktop.exe
+echo   Installeur : src-tauri\target\release\bundle\nsis\ForgeChat_3.1.0_x64-setup.exe
+echo   Portable   : src-tauri\target\release\forgechat-desktop.exe
 echo ====================================
 pause
