@@ -62,7 +62,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
 
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
-    onSuccess: (dm: any) => { nav(`/dms/${dm.id}`); onClose() },
+    onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
   })
 
   useEffect(() => {
