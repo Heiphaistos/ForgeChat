@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
+import AchievementBadges from './AchievementBadges'
 
 // Gradient déterministe (même logique que UserPopup)
 function getUserGradient(username: string): string {
@@ -210,6 +211,8 @@ export default function UserProfileCard({
                 </div>
               </div>
             )}
+
+            <AchievementBadges userId={userId} />
 
             {/* Actions */}
             <div className="border-t border-fc-hover pt-3 mt-3 flex gap-2">

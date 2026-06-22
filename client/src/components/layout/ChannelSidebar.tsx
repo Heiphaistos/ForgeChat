@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ServerBoostBanner from '../server/ServerBoostBanner'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
 import { useVoice } from '../../store/voice'
@@ -581,6 +582,14 @@ export default function ChannelSidebar() {
               </div>
             )}
           </button>
+
+          {(data?.boost_level ?? 0) > 0 && (
+            <ServerBoostBanner
+              boostLevel={data?.boost_level ?? 0}
+              boostCount={data?.boost_count ?? 0}
+              memberCount={data?.member_count ?? 0}
+            />
+          )}
 
           {menuOpen && (
             <div
