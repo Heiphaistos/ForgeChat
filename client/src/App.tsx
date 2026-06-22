@@ -16,6 +16,7 @@ import ChannelPage from './pages/ChannelPage'
 import DMPage from './pages/DMPage'
 import FriendsPage from './pages/FriendsPage'
 import QuickSwitcher from './components/QuickSwitcher'
+import CommandPalette from './components/CommandPalette'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
@@ -41,6 +42,7 @@ function AppInner() {
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
+  const [showCommandPalette, setShowCommandPalette] = React.useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
@@ -53,11 +55,28 @@ function AppInner() {
     document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
+  // Appliquer le zoom sauvegardé au démarrage
+  useEffect(() => {
+    const zoom = localStorage.getItem('fc_zoom')
+    if (zoom) document.documentElement.style.fontSize = `${zoom}%`
+  }, [])
+
   useEffect(() => {
     if (!user) return
     connect()
     fetchUnread()
     return () => disconnect()
+  }, [user?.id])
+
+  // Appliquer reduce_motion depuis les settings au démarrage
+  useEffect(() => {
+    if (!user) return
+    import('./api/client').then(({ default: api }) => {
+      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean } }) => {
+        const val = r.data?.reduce_motion ?? false
+        document.documentElement.setAttribute('data-reduce-motion', String(val))
+      }).catch(() => {})
+    })
   }, [user?.id])
 
   // Listeners globaux voix (joins/leaves pour la sidebar)
@@ -125,7 +144,11 @@ function AppInner() {
         e.preventDefault()
         setShowQuickSwitcher(q => !q)
       }
-      if (e.key === 'Escape') { setShowQuickSwitcher(false); setShowKeyboardShortcuts(false) }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault()
+        setShowCommandPalette(q => !q)
+      }
+      if (e.key === 'Escape') { setShowQuickSwitcher(false); setShowCommandPalette(false); setShowKeyboardShortcuts(false) }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         nav('/settings')
@@ -158,6 +181,7 @@ function AppInner() {
         </Route>
       </Routes>
       {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
+      <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
     </>
   )
