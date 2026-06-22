@@ -30,6 +30,7 @@ interface Message {
   author_is_bot: boolean
   attachments: Attachment[]
   reactions: ReactionCount[]
+  poll_id?: string | null
 }
 
 interface ReactionCount {
