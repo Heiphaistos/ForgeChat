@@ -84,7 +84,7 @@ function ServerCard({
         <div className="flex items-center gap-1.5 mb-1">
           <h3 className="text-white font-semibold text-sm truncate">{server.name}</h3>
           {server.is_verified && (
-            <CheckCircle size={13} className="text-fc-accent flex-shrink-0" title="Serveur vérifié" />
+            <CheckCircle size={13} className="text-fc-accent flex-shrink-0" aria-label="Serveur vérifié" />
           )}
         </div>
 
