@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight } from 'lucide-react'
 import api from '../api/client'
+import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
 interface Props {
   onClose: () => void
@@ -30,7 +31,6 @@ function ChannelIcon({ type }: { type: string }) {
 
 export default function QuickSwitcher({ onClose }: Props) {
   const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState(0)
   const nav = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -82,19 +82,19 @@ export default function QuickSwitcher({ onClose }: Props) {
     onClose()
   }
 
+  const { activeIndex: selected, setActiveIndex: setSelected, handleKey: navKey } = useKeyboardNav(
+    filtered,
+    go,
+    true,
+  )
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  useEffect(() => {
-    setSelected(0)
-  }, [query])
-
   const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, filtered.length - 1)) }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, 0)) }
-    if (e.key === 'Enter' && filtered[selected]) go(filtered[selected])
-    if (e.key === 'Escape') onClose()
+    if (e.key === 'Escape') { onClose(); return }
+    navKey(e.nativeEvent)
   }
 
   return (

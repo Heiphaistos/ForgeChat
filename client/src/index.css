@@ -599,6 +599,15 @@ body {
 [data-theme="slate"] .fc-markdown code { background: #222c3c !important; border-color: #263042 !important; }
 [data-theme="slate"] ::-webkit-scrollbar-thumb { background: #263042 !important; }
 
+/* RÉDUCTION DU MOUVEMENT */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
 /* RETRO */
 [data-theme="retro"] body { background: #2b2017; color: #e8d5b0; }
 [data-theme="retro"] .bg-fc-bg { background-color: #2b2017 !important; }

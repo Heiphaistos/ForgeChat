@@ -63,11 +63,28 @@ function AppInner() {
     document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
+  // Appliquer le zoom sauvegardé au démarrage
+  useEffect(() => {
+    const zoom = localStorage.getItem('fc_zoom')
+    if (zoom) document.documentElement.style.fontSize = `${zoom}%`
+  }, [])
+
   useEffect(() => {
     if (!user) return
     connect()
     fetchUnread()
     return () => disconnect()
+  }, [user?.id])
+
+  // Appliquer reduce_motion depuis les settings au démarrage
+  useEffect(() => {
+    if (!user) return
+    import('./api/client').then(({ default: api }) => {
+      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean } }) => {
+        const val = r.data?.reduce_motion ?? false
+        document.documentElement.setAttribute('data-reduce-motion', String(val))
+      }).catch(() => {})
+    })
   }, [user?.id])
 
   // Listeners globaux voix (joins/leaves pour la sidebar)
