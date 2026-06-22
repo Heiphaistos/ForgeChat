@@ -41,6 +41,50 @@ interface Props {
 
 type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
 
+function BoostSection({ server }: { server: any }) {
+  const LEVELS = [
+    { level: 1, threshold: 2, label: 'Niveau 1', color: 'from-indigo-500 to-purple-500' },
+    { level: 2, threshold: 7, label: 'Niveau 2', color: 'from-purple-500 to-fuchsia-500' },
+    { level: 3, threshold: 14, label: 'Niveau 3', color: 'from-amber-500 to-yellow-400' },
+  ]
+  const currentLevel = server?.boost_level ?? 0
+  const count = server?.boost_count ?? 0
+  const next = LEVELS.find(l => l.level === currentLevel + 1)
+  const progress = next ? Math.min(100, (count / next.threshold) * 100) : 100
+
+  return (
+    <div className="mt-4 p-4 bg-fc-channel rounded-xl">
+      <h3 className="text-sm font-semibold text-white mb-3">⚡ Boosts du serveur</h3>
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-2xl font-bold text-white">{count}</span>
+        <span className="text-fc-muted text-sm">boost{count !== 1 ? 's' : ''} actif{count !== 1 ? 's' : ''}</span>
+        {currentLevel > 0 && (
+          <span className="ml-auto px-2 py-0.5 bg-fc-accent/20 text-fc-accent text-xs rounded-full">
+            Niveau {currentLevel}
+          </span>
+        )}
+      </div>
+      {next && (
+        <>
+          <div className="w-full bg-fc-bg rounded-full h-2 mb-1">
+            <div
+              className={`h-2 rounded-full bg-gradient-to-r ${next.color} transition-all`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-xs text-fc-muted">{count}/{next.threshold} pour {next.label}</p>
+        </>
+      )}
+      <button
+        className="mt-3 w-full py-2 bg-fc-accent/10 hover:bg-fc-accent/20 text-fc-accent text-sm rounded-lg transition"
+        onClick={() => toast('Fonctionnalité bientôt disponible !')}
+      >
+        ⚡ Booster ce serveur
+      </button>
+    </div>
+  )
+}
+
 export default function ServerSettingsModal({ server, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
   const [name, setName] = useState(server.name)
@@ -482,6 +526,8 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                   </div>
                   <p className="text-xs text-fc-muted mt-1">Uniquement des lettres minuscules, chiffres et tirets</p>
                 </div>
+
+                <BoostSection server={server} />
 
                 <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-hover">
                   <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Zone de danger</div>

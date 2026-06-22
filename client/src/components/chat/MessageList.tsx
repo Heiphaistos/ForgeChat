@@ -30,6 +30,7 @@ interface Props {
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
 const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
+const DBLCLICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥']
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -170,6 +171,8 @@ export default function MessageList({
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const compact = localStorage.getItem('fc_compact_mode') === 'true'
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -215,7 +218,7 @@ export default function MessageList({
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5"
-        onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null) }}
+        onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
       >
         {/* Loader "plus de messages" */}
@@ -240,14 +243,19 @@ export default function MessageList({
             <div
               key={msg.id}
               ref={el => { if (el) msgRefs.current[msg.id] = el }}
-              className={`group flex items-start gap-3 px-2 py-0.5 rounded relative transition-colors duration-300
+              className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
+                ${compact ? 'py-0.5' : 'py-1'}
                 ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : 'hover:bg-fc-hover/30'}`}
+              onDoubleClick={e => {
+                e.stopPropagation()
+                setDblClickPopover({ msgId: msg.id, x: e.clientX, y: e.clientY })
+              }}
             >
               {/* Avatar */}
-              <div className="w-10 flex-shrink-0 mt-0.5">
+              <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
                 {!isGrouped && (
                   <button
-                    className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition"
+                    className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
                     onClick={e => openUserPopup(e, msg.author_id)}
                     title={`Profil de ${msg.author_username}`}
                   >
@@ -274,7 +282,7 @@ export default function MessageList({
                         BOT
                       </span>
                     )}
-                    <span className="text-xs text-fc-muted">{formatDate(msg.created_at)}</span>
+                    <span className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'}`}>{formatDate(msg.created_at)}</span>
                   </div>
                 )}
 
@@ -641,6 +649,30 @@ export default function MessageList({
           sourceServerId={serverId}
           onClose={() => setForwardingMsg(null)}
         />
+      )}
+
+      {/* Double-click quick emoji popover */}
+      {dblClickPopover && (
+        <div
+          className="fixed z-50"
+          style={{ left: dblClickPopover.x - 80, top: dblClickPopover.y - 48 }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1 bg-fc-bg border border-fc-hover rounded-full shadow-xl px-2 py-1.5">
+            {DBLCLICK_EMOJIS.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  onAddReaction?.(dblClickPopover.msgId, emoji)
+                  setDblClickPopover(null)
+                }}
+                className="text-xl hover:scale-125 transition-transform p-1 rounded-full hover:bg-fc-hover"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Lightbox image plein écran */}
