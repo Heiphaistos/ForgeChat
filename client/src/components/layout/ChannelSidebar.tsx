@@ -4,9 +4,9 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X,
+  Users, X, GripVertical,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
@@ -160,6 +160,9 @@ export default function ChannelSidebar() {
   })
   const [channelSettings, setChannelSettings] = useState<any | null>(null)
   const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
+  const [draggedChannelId, setDraggedChannelId] = useState<string | null>(null)
+  const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
+  const qc = useQueryClient()
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
 
@@ -313,6 +316,58 @@ export default function ChannelSidebar() {
   const server = data?.server
   const channels: any[] = data?.channels ?? []
 
+  // Déterminer si l'utilisateur courant est owner ou admin
+  const isOwnerOrAdmin = !!server && (
+    server.owner_id === data?.current_user_id ||
+    (data?.member_roles ?? []).some((r: any) => r.permissions?.includes('MANAGE_CHANNELS') || r.is_admin)
+  )
+
+  // ── Drag & Drop channels ──────────────────────────────────
+  const reorderChannels = useMutation({
+    mutationFn: (channel_ids: string[]) =>
+      api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement'),
+  })
+
+  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
+    setDraggedChannelId(channelId)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleChannelDragOver = useCallback((e: React.DragEvent, channelId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverChannelId(channelId)
+  }, [])
+
+  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[]) => {
+    e.preventDefault()
+    if (!draggedChannelId || draggedChannelId === targetChannelId) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const draggedIdx = groupChannels.findIndex((c: any) => c.id === draggedChannelId)
+    const targetIdx = groupChannels.findIndex((c: any) => c.id === targetChannelId)
+    if (draggedIdx === -1 || targetIdx === -1) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const reordered = [...groupChannels]
+    const [removed] = reordered.splice(draggedIdx, 1)
+    reordered.splice(targetIdx, 0, removed)
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+    reorderChannels.mutate(reordered.map((c: any) => c.id))
+  }, [draggedChannelId, reorderChannels])
+
+  const handleChannelDragEnd = useCallback(() => {
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+  }, [])
+
   const toggleGroup = (key: string) => {
     setCollapsed(prev => {
       const next = { ...prev, [key]: !prev[key] }
@@ -359,7 +414,7 @@ export default function ChannelSidebar() {
     }
   }
 
-  const renderChannel = (ch: any) => {
+  const renderChannel = (ch: any, groupChannels: any[]) => {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
@@ -373,9 +428,19 @@ export default function ChannelSidebar() {
       ? Object.values(activeStreams).filter(s => s.channelId === ch.id)
       : []
     const hasLiveStream = channelStreams.length > 0
+    const isDragOver = dragOverChannelId === ch.id
+    const isDragging = draggedChannelId === ch.id
 
     return (
-      <div key={ch.id}>
+      <div
+        key={ch.id}
+        draggable={isOwnerOrAdmin}
+        onDragStart={isOwnerOrAdmin ? e => handleChannelDragStart(e, ch.id) : undefined}
+        onDragOver={isOwnerOrAdmin ? e => handleChannelDragOver(e, ch.id) : undefined}
+        onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels) : undefined}
+        onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
+        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''}`}
+      >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
@@ -438,6 +503,15 @@ export default function ChannelSidebar() {
             </span>
           )}
 
+          {/* Poignée drag (visible au hover si owner/admin) */}
+          {isOwnerOrAdmin && (
+            <span
+              className="opacity-0 group-hover:opacity-100 p-0.5 text-fc-muted cursor-grab active:cursor-grabbing flex-shrink-0"
+              title="Réordonner"
+            >
+              <GripVertical size={12} />
+            </span>
+          )}
           {/* Bouton paramètres canal (visible au hover) */}
           <button
             onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
