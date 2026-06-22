@@ -17,6 +17,7 @@ import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
+import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 
 function channelIcon(type: string, size = 18) {
@@ -43,6 +44,7 @@ export default function ChannelPage() {
   const [showSearch, setShowSearch] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
 
@@ -277,32 +279,58 @@ export default function ChannelPage() {
           </div>
         </div>
 
-        {/* Messages */}
-        <MessageList
-          channelId={channelId}
-          serverId={serverId}
-          onDeleteMessage={(id) => deleteMsg.mutate(id)}
-          onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
-          onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
-          onAddReaction={(msgId, emoji) =>
-            api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
-          }
-          onPinMessage={(msgId) =>
-            api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
-              .then(() => toast.success('Message épinglé'))
-              .catch(() => toast.error('Épinglage impossible'))
-          }
-          onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
-          onLoadMore={loadMore}
-        />
+        {/* Onglets Messages / Tâches */}
+        <div className="flex border-b border-fc-hover px-4 flex-shrink-0">
+          {(['Messages', 'Tâches'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm transition ${
+                activeTab === tab
+                  ? 'border-b-2 border-fc-accent text-white'
+                  : 'text-fc-muted hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-        {/* Countdown slowmode */}
-        {slowmodeCooldown > 0 && (
-          <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
-            <Timer size={12} />
-            <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+        {/* Vue Tâches */}
+        {activeTab === 'Tâches' && serverId && channelId && (
+          <div className="flex-1 overflow-hidden p-3">
+            <KanbanBoard serverId={serverId} channelId={channelId} />
           </div>
         )}
+
+        {/* Messages + Input (masqués en vue Tâches) */}
+        {activeTab === 'Messages' && (
+          <>
+            <MessageList
+              channelId={channelId}
+              serverId={serverId}
+              onDeleteMessage={(id) => deleteMsg.mutate(id)}
+              onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
+              onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
+              onAddReaction={(msgId, emoji) =>
+                api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+              }
+              onPinMessage={(msgId) =>
+                api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
+                  .then(() => toast.success('Message épinglé'))
+                  .catch(() => toast.error('Épinglage impossible'))
+              }
+              onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
+              onLoadMore={loadMore}
+            />
+
+            {/* Countdown slowmode */}
+            {slowmodeCooldown > 0 && (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
+                <Timer size={12} />
+                <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+              </div>
+            )}
 
         {/* Input */}
         <MessageInput
@@ -332,6 +360,8 @@ export default function ChannelPage() {
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
         />
+          </>
+        )}
       </div>
 
       {/* Thread panel */}
