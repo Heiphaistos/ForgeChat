@@ -18,6 +18,7 @@ import FriendsPage from './pages/FriendsPage'
 import QuickSwitcher from './components/QuickSwitcher'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
+import ActivityFeedPage from './pages/ActivityFeedPage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
@@ -152,6 +153,7 @@ function AppInner() {
           <Route path="friends" element={<FriendsPage />} />
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
+          <Route path="activity" element={<ActivityFeedPage />} />
           <Route path="dms/:dmId" element={<DMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
