@@ -3,8 +3,11 @@ import ServerSidebar from './ServerSidebar'
 import ChannelSidebar from './ChannelSidebar'
 import UserPanel from './UserPanel'
 import VoiceBar from '../voice/VoiceBar'
+import RightSidebar, { useRightSidebar } from './RightSidebar'
 
 export default function MainLayout() {
+  const { open: activityOpen, toggle: toggleActivity, close: closeActivity } = useRightSidebar()
+
   return (
     <div className="flex h-screen overflow-hidden bg-fc-bg">
       {/* Barre des serveurs (gauche, étroite) */}
@@ -17,13 +20,16 @@ export default function MainLayout() {
         </div>
         {/* VoiceBar s'affiche seulement si connecté à un canal vocal */}
         <VoiceBar />
-        <UserPanel />
+        <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
       </div>
 
       {/* Zone principale */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <Outlet />
       </div>
+
+      {/* Sidebar droite — Activité récente */}
+      <RightSidebar visible={activityOpen} onClose={closeActivity} />
     </div>
   )
 }

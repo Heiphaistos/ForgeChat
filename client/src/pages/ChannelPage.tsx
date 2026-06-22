@@ -16,6 +16,7 @@ import SearchPanel from '../components/chat/SearchPanel'
 import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
+import ThreadSidebar from '../components/chat/ThreadSidebar'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
@@ -41,6 +42,8 @@ export default function ChannelPage() {
   const qc = useQueryClient()
   const [showMembers, setShowMembers] = useState(true)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
+  const [showThreadSidebar, setShowThreadSidebar] = useState(false)
   const [showPinned, setShowPinned] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
@@ -260,6 +263,13 @@ export default function ChannelPage() {
               />
             )}
             <button
+              onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              title="Fils de discussion"
+            >
+              <MessagesSquare size={18} />
+            </button>
+            <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Rechercher"
@@ -371,13 +381,36 @@ export default function ChannelPage() {
         )}
       </div>
 
-      {/* Thread panel */}
+      {/* Thread panel (depuis message) */}
       {activeThreadId && (
         <ThreadPanel
           serverId={serverId}
           channelId={channelId}
           parentMessageId={activeThreadId}
           onClose={() => setActiveThreadId(null)}
+        />
+      )}
+
+      {/* Thread panel (depuis sidebar fils) */}
+      {activeDirectThreadId && !activeThreadId && (
+        <ThreadPanel
+          serverId={serverId}
+          channelId={channelId}
+          parentMessageId={activeDirectThreadId}
+          onClose={() => setActiveDirectThreadId(null)}
+        />
+      )}
+
+      {/* Sidebar fils de discussion */}
+      {showThreadSidebar && !activeThreadId && !activeDirectThreadId && (
+        <ThreadSidebar
+          serverId={serverId}
+          channelId={channelId}
+          onSelectThread={(threadId) => {
+            setActiveDirectThreadId(threadId)
+            setShowThreadSidebar(false)
+          }}
+          onClose={() => setShowThreadSidebar(false)}
         />
       )}
 
@@ -402,7 +435,7 @@ export default function ChannelPage() {
       )}
 
       {/* Liste membres */}
-      {showMembers && !activeThreadId && !showPinned && !showSearch && <MemberList serverId={serverId} />}
+      {showMembers && !activeThreadId && !activeDirectThreadId && !showPinned && !showSearch && !showThreadSidebar && <MemberList serverId={serverId} />}
     </div>
   )
 }

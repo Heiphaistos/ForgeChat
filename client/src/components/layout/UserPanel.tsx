@@ -1,4 +1,5 @@
-import { Mic, MicOff, Headphones, VolumeX, Settings, X } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity } from 'lucide-react'
+import NotificationBell from '../notifications/NotificationBell'
 import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../store/auth'
@@ -123,7 +124,12 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function UserPanel() {
+interface UserPanelProps {
+  onToggleActivity?: () => void
+  activityOpen?: boolean
+}
+
+export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
   const { user } = useAuth()
   const nav = useNavigate()
   const { joined, muted, deafened, toggleMute, toggleDeafen } = useVoice()
@@ -160,6 +166,7 @@ export default function UserPanel() {
       </button>
 
       <div className="flex items-center gap-0.5 flex-shrink-0">
+        <NotificationBell />
         <button
           onClick={joined ? toggleMute : undefined}
           className={`p-1.5 rounded hover:bg-fc-hover transition ${
@@ -178,6 +185,15 @@ export default function UserPanel() {
         >
           {joined && deafened ? <VolumeX size={16} /> : <Headphones size={16} />}
         </button>
+        {onToggleActivity && (
+          <button
+            onClick={onToggleActivity}
+            className={`p-1.5 rounded hover:bg-fc-hover transition ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+            title="Activité récente (Ctrl+Shift+A)"
+          >
+            <Activity size={16} />
+          </button>
+        )}
         <button
           onClick={() => nav('/settings')}
           className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
