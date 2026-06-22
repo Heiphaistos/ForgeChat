@@ -3,7 +3,7 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  LayoutTemplate, Layout, Wifi, WifiOff,
+  LayoutTemplate, Layout, Wifi, WifiOff, Music2,
 } from 'lucide-react'
 import { useVoice, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
@@ -13,6 +13,8 @@ import { useVoiceActivity } from '../hooks/useVoiceActivity'
 import { useCaptions } from '../hooks/useCaptions'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
+import Soundboard from '../components/voice/Soundboard'
+import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import toast from 'react-hot-toast'
 
 type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
@@ -246,6 +248,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [blurBackground, setBlurBackground] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [showCaptions, setShowCaptions] = useState(false)
+  const [showSoundboard, setShowSoundboard] = useState(false)
   const [joinTime] = useState(Date.now())
   // RTCPeerConnections ref pour CallQualityIndicator
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
@@ -529,6 +532,12 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             label={isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer'}
           />
           <CtrlBtn
+            active={showSoundboard} onClick={() => setShowSoundboard(v => !v)}
+            activeIcon={<Music2 size={16} />} inactiveIcon={<Music2 size={16} />}
+            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+            label="Soundboard"
+          />
+          <CtrlBtn
             active={showStats} onClick={() => setShowStats(v => !v)}
             activeIcon={<BarChart2 size={16} />} inactiveIcon={<BarChart2 size={16} />}
             activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
@@ -536,6 +545,26 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           />
         </div>
       </div>
+
+      {/* Soundboard panel */}
+      {showSoundboard && (
+        <div className="absolute bottom-20 right-4 z-40">
+          <Soundboard
+            serverId={serverId}
+            channelId={channel.id}
+            onClose={() => setShowSoundboard(false)}
+          />
+        </div>
+      )}
+
+      {/* Voice activity bar */}
+      <VoiceActivityBar
+        participants={allPeers.map(p => ({
+          user_id: p.userId,
+          username: p.username,
+          stream: p.stream ?? undefined,
+        }))}
+      />
 
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />
