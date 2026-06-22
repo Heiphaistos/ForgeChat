@@ -16,8 +16,10 @@ import ChannelPage from './pages/ChannelPage'
 import DMPage from './pages/DMPage'
 import FriendsPage from './pages/FriendsPage'
 import QuickSwitcher from './components/QuickSwitcher'
+import CommandPalette from './components/CommandPalette'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
+import ServerDiscoveryPage from './pages/ServerDiscoveryPage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
@@ -41,6 +43,7 @@ function AppInner() {
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
+  const [showCommandPalette, setShowCommandPalette] = React.useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
@@ -123,9 +126,17 @@ function AppInner() {
       const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
+        setShowCommandPalette(q => !q)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault()
         setShowQuickSwitcher(q => !q)
       }
-      if (e.key === 'Escape') { setShowQuickSwitcher(false); setShowKeyboardShortcuts(false) }
+      if (e.key === 'Escape') {
+        setShowQuickSwitcher(false)
+        setShowCommandPalette(false)
+        setShowKeyboardShortcuts(false)
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         nav('/settings')
@@ -152,12 +163,14 @@ function AppInner() {
           <Route path="friends" element={<FriendsPage />} />
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
+          <Route path="discovery" element={<ServerDiscoveryPage />} />
           <Route path="dms/:dmId" element={<DMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
         </Route>
       </Routes>
       {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
+      <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
     </>
   )
