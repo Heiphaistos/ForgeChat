@@ -12,11 +12,11 @@
 - [x] 🔴 Backend — `GET/POST /api/servers/:s/channels/:c/polls/:id` — polls handler existant
 - [x] 🔴 Backend — `PATCH /api/user/status` — update statut + broadcast PRESENCE_UPDATE
 
-## CYCLE 2
+## CYCLE 2 (2026-06-22 ✅)
 
-- [ ] 🟠 Frontend — Thread UI — créer `ThreadPanel.tsx`, afficher les réponses en fil dans un drawer latéral
-- [ ] 🟠 Frontend — Reactions sur messages — picker emoji inline, compter les réactions, toggle own reaction
-- [ ] 🟠 Backend — `POST /api/channels/:id/messages/:id/reactions`, `DELETE .../reactions/:emoji`
+- [x] 🟠 Frontend — ThreadPanel WS realtime, scroll auto, label vide
+- [x] 🟠 Frontend — Reactions: picker 20 emojis, toggle add/remove, WS REACTION_ADD/REMOVE
+- [x] 🟠 Frontend — Channel mention # autocomplete, keyboard nav
 
 ## CYCLE 3
 

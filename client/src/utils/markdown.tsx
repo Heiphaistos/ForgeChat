@@ -17,9 +17,16 @@ export function renderMarkdown(text: string, customEmojis?: Record<string, strin
         i++
       }
       elements.push(
-        <pre key={i}>
-          <code>{codeLines.join('\n')}</code>
-        </pre>
+        <div key={i} className="bg-[#1e1f29] rounded-lg mt-1 mb-1 overflow-hidden border border-white/5">
+          {lang && (
+            <div className="flex items-center justify-between px-3 py-1 bg-black/30 border-b border-white/5">
+              <span className="text-xs text-fc-muted font-mono">{lang}</span>
+            </div>
+          )}
+          <pre className="p-3 overflow-x-auto text-sm font-mono text-green-300 whitespace-pre leading-relaxed">
+            <code>{codeLines.join('\n')}</code>
+          </pre>
+        </div>
       )
       i++
       continue
