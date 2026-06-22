@@ -31,7 +31,16 @@ interface Server {
   afk_timeout_minutes?: number | null
   rules_channel_id?: string | null
   vanity_url?: string | null
-  content_filter?: number
+  content_filter?: string
+  default_notification_level?: string
+  banner_url?: string | null
+  server_category?: string | null
+  boost_level?: number
+  boost_count?: number
+  raid_protection?: boolean
+  require_2fa_for_moderation?: boolean
+  server_locale?: string
+  max_video_channel_users?: number
 }
 
 interface Props {
@@ -100,7 +109,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
   const [afkTimeout, setAfkTimeout] = useState(server.afk_timeout_minutes ?? 300)
   const [rulesChannelId, setRulesChannelId] = useState<string>(server.rules_channel_id ?? '')
   const [vanityUrl, setVanityUrl] = useState(server.vanity_url ?? '')
-  const [explicitFilter, setExplicitFilter] = useState(server.content_filter ?? 0)
+  const [explicitFilter, setExplicitFilter] = useState<string>(server.content_filter ?? 'none')
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const [newBotName, setNewBotName] = useState('')
@@ -504,11 +513,11 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                   <h3 className="text-sm font-semibold text-white">Modération</h3>
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Filtre de contenu explicite</label>
-                    <select value={explicitFilter} onChange={e => setExplicitFilter(Number(e.target.value))}
+                    <select value={explicitFilter} onChange={e => setExplicitFilter(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                      <option value={0}>Désactivé</option>
-                      <option value={1}>Membres sans rôles</option>
-                      <option value={2}>Tous les membres</option>
+                      <option value="none">Désactivé</option>
+                      <option value="no_role">Membres sans rôles</option>
+                      <option value="all">Tous les membres</option>
                     </select>
                   </div>
                 </div>

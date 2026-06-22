@@ -154,7 +154,7 @@ pub async fn upload_file(
             "channel_id": channel_id,
             "attachments": uploaded,
         });
-        state.broadcast_to_channel(channel_id, event.to_string()).await;
+        state.broadcast_to_channel_members(channel_id, event.to_string()).await;
     }
 
     Ok(Json(uploaded))

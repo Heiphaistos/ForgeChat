@@ -106,7 +106,7 @@ pub async fn create_poll(
         "channel_id": channel_id,
         "poll": &poll,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(poll))
 }
@@ -229,7 +229,7 @@ pub async fn vote_poll(
         "channel_id": channel_id,
         "user_id": claims.sub,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

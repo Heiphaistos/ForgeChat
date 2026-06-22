@@ -224,7 +224,7 @@ pub async fn send_message(
         "type": "MESSAGE_CREATE",
         "message": full_msg
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(full_msg))
 }
@@ -274,7 +274,7 @@ pub async fn edit_message(
         "content": body.content,
         "edited_at": chrono::Utc::now(),
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -312,7 +312,7 @@ pub async fn delete_message(
         "message_id": message_id,
         "channel_id": channel_id,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -340,7 +340,7 @@ pub async fn add_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -367,7 +367,7 @@ pub async fn remove_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -403,7 +403,7 @@ pub async fn pin_message(
         "pinned": true,
         "pinned_by": claims.sub,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -434,7 +434,7 @@ pub async fn unpin_message(
         "message_id": message_id,
         "pinned": false,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -610,7 +610,18 @@ pub async fn forward_message(
         "type": "MESSAGE_CREATE",
         "message": full_msg
     });
-    state.broadcast_to_channel(body.channel_id, event.to_string()).await;
+    // Broadcast to destination channel's server members
+    let dest_server_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT server_id FROM channels WHERE id=$1"
+    )
+    .bind(body.channel_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(dst_server) = dest_server_id {
+        state.broadcast_to_server_members(dst_server, event.to_string()).await;
+    }
 
     Ok(Json(full_msg))
 }

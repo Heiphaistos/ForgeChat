@@ -154,7 +154,7 @@ pub async fn execute_webhook(
             "created_at": Utc::now(),
         }
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "id": msg_id })))
 }

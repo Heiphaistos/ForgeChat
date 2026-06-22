@@ -78,6 +78,40 @@ impl AppState {
         }
     }
 
+    /// Broadcast to all connected members of a server (used for channel messages)
+    pub async fn broadcast_to_server_members(&self, server_id: Uuid, event: String) {
+        let member_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT user_id FROM server_members WHERE server_id=$1"
+        )
+        .bind(server_id)
+        .fetch_all(&self.db)
+        .await
+        .unwrap_or_default();
+
+        let clients = self.clients.read().await;
+        for uid in member_ids {
+            if let Some(tx) = clients.get(&uid) {
+                let _ = tx.send(event.clone());
+            }
+        }
+    }
+
+    /// Broadcast to all connected members of a channel's server (resolves channel→server)
+    pub async fn broadcast_to_channel_members(&self, channel_id: Uuid, event: String) {
+        let server_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT server_id FROM channels WHERE id=$1"
+        )
+        .bind(channel_id)
+        .fetch_optional(&self.db)
+        .await
+        .ok()
+        .flatten();
+
+        if let Some(sid) = server_id {
+            self.broadcast_to_server_members(sid, event).await;
+        }
+    }
+
     // Rejoindre un salon vocal — retourne les user_ids déjà présents
     pub async fn voice_join(&self, user_id: Uuid, channel_id: Uuid) -> Vec<Uuid> {
         // Auto-leave de l'ancien salon si nécessaire
