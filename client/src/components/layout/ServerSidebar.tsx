@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import ServerTemplateModal from '../modals/ServerTemplateModal'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export default function ServerSidebar() {
   const nav = useNavigate()
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{
@@ -389,6 +391,15 @@ export default function ServerSidebar() {
         <Plus size={24} />
       </button>
 
+      {/* Utiliser un template */}
+      <button
+        onClick={() => setShowTemplateModal(true)}
+        className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
+        title="Utiliser un template"
+      >
+        <LayoutTemplate size={20} />
+      </button>
+
       {/* Context menu clic droit serveur */}
       {contextMenu && (
         <div
@@ -436,6 +447,10 @@ export default function ServerSidebar() {
           onCreate={(name, templateData) => createServer.mutate({ name, template_data: templateData })}
           isPending={createServer.isPending}
         />
+      )}
+
+      {showTemplateModal && (
+        <ServerTemplateModal onClose={() => setShowTemplateModal(false)} />
       )}
     </div>
   )
