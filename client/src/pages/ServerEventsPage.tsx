@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Calendar, Plus, MapPin, Users, Edit2, Trash2, Check, Clock, X } from 'lucide-react'
+﻿import { useState } from 'react'
+import { Calendar, Plus, MapPin, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
+import CalendarView from '../components/events/CalendarView'
 
 interface Props {
   serverId: string
@@ -23,6 +24,7 @@ interface ServerEvent {
 }
 
 type FilterType = 'upcoming' | 'live' | 'ended' | 'all'
+type ViewMode = 'list' | 'calendar'
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   upcoming: { label: 'À venir',  cls: 'bg-blue-500/20 text-blue-300' },
@@ -194,9 +196,11 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 export default function ServerEventsPage({ serverId }: Props) {
   const qc = useQueryClient()
   const [filter, setFilter] = useState<FilterType>('upcoming')
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<ServerEvent | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [createDate, setCreateDate] = useState<Date | null>(null)
 
   const { data: events = [], isLoading } = useQuery<ServerEvent[]>({
     queryKey: ['server_events', serverId],
@@ -214,6 +218,7 @@ export default function ServerEventsPage({ serverId }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
       setShowCreate(false)
+      setCreateDate(null)
       toast.success('Événement créé')
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création'),
@@ -259,6 +264,15 @@ export default function ServerEventsPage({ serverId }: Props) {
     { id: 'all',      label: 'Tous' },
   ]
 
+  const handleCalendarCreate = (date: Date) => {
+    setCreateDate(date)
+    setShowCreate(true)
+  }
+
+  const createInitial = createDate ? {
+    start_time: toDatetimeLocal(createDate.toISOString()),
+  } : undefined
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -270,150 +284,187 @@ export default function ServerEventsPage({ serverId }: Props) {
           </h3>
           <p className="text-sm text-fc-muted mt-0.5">Planifiez et gérez les événements du serveur.</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
-        >
-          <Plus size={14} />
-          Créer
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          {/* Toggle vue liste / calendrier */}
+          <div className="flex items-center bg-fc-hover rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition ${
+                viewMode === 'list' ? 'bg-fc-channel text-white' : 'text-fc-muted hover:text-white'
+              }`}
+            >
+              <List size={13} />
+              Liste
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition ${
+                viewMode === 'calendar' ? 'bg-fc-channel text-white' : 'text-fc-muted hover:text-white'
+              }`}
+            >
+              <Calendar size={13} />
+              Calendrier
+            </button>
+          </div>
 
-      {/* Filtres */}
-      <div className="flex gap-1 flex-wrap">
-        {FILTERS.map(f => (
           <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
-            className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-              filter === f.id
-                ? 'bg-fc-accent text-white'
-                : 'text-fc-muted hover:text-white hover:bg-fc-hover'
-            }`}
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
           >
-            {f.label}
+            <Plus size={14} />
+            Créer
           </button>
-        ))}
+        </div>
       </div>
 
-      {/* Liste */}
-      {isLoading ? (
-        <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-12">
-          <Calendar size={40} className="mx-auto text-fc-muted/30 mb-3" />
-          <p className="text-fc-muted text-sm">Aucun événement dans cette catégorie.</p>
+      {/* Vue Calendrier */}
+      {viewMode === 'calendar' && (
+        <div className="h-[520px]">
+          <CalendarView serverId={serverId} onCreateEvent={handleCalendarCreate} />
         </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(event => {
-            const badge = STATUS_BADGE[event.status] ?? STATUS_BADGE.upcoming
-            return (
-              <div key={event.id} className="bg-fc-channel rounded-lg p-4 hover:bg-fc-hover/20 transition">
-                <div className="flex items-start gap-3">
-                  {/* Icône date */}
-                  <div className="flex-shrink-0 w-12 h-12 bg-fc-accent/20 rounded-lg flex flex-col items-center justify-center text-fc-accent">
-                    <span className="text-xs font-medium leading-none uppercase">
-                      {new Date(event.start_time).toLocaleDateString('fr-FR', { month: 'short' })}
-                    </span>
-                    <span className="text-lg font-bold leading-none">
-                      {new Date(event.start_time).getDate()}
-                    </span>
-                  </div>
+      )}
 
-                  {/* Contenu */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-white font-semibold text-sm truncate">{event.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                    </div>
+      {/* Vue Liste */}
+      {viewMode === 'list' && (
+        <>
+          {/* Filtres */}
+          <div className="flex gap-1 flex-wrap">
+            {FILTERS.map(f => (
+              <button
+                key={f.id}
+                onClick={() => setFilter(f.id)}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                  filter === f.id
+                    ? 'bg-fc-accent text-white'
+                    : 'text-fc-muted hover:text-white hover:bg-fc-hover'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
-                    {event.description && (
-                      <p className="text-xs text-fc-muted mb-2 line-clamp-2">{event.description}</p>
-                    )}
-
-                    <div className="flex items-center gap-3 flex-wrap text-xs text-fc-muted">
-                      <span className="flex items-center gap-1">
-                        <Clock size={11} />
-                        {formatDateFR(event.start_time)}
-                        {event.end_time && ` → ${formatDateFR(event.end_time)}`}
-                      </span>
-                      {event.location && (
-                        <span className="flex items-center gap-1">
-                          <MapPin size={11} />
-                          {event.location}
+          {/* Liste */}
+          {isLoading ? (
+            <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <Calendar size={40} className="mx-auto text-fc-muted/30 mb-3" />
+              <p className="text-fc-muted text-sm">Aucun événement dans cette catégorie.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map(event => {
+                const badge = STATUS_BADGE[event.status] ?? STATUS_BADGE.upcoming
+                return (
+                  <div key={event.id} className="bg-fc-channel rounded-lg p-4 hover:bg-fc-hover/20 transition">
+                    <div className="flex items-start gap-3">
+                      {/* Icône date */}
+                      <div className="flex-shrink-0 w-12 h-12 bg-fc-accent/20 rounded-lg flex flex-col items-center justify-center text-fc-accent">
+                        <span className="text-xs font-medium leading-none uppercase">
+                          {new Date(event.start_time).toLocaleDateString('fr-FR', { month: 'short' })}
                         </span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <Users size={11} />
-                        {event.attendee_count} participant{event.attendee_count !== 1 ? 's' : ''}
-                      </span>
+                        <span className="text-lg font-bold leading-none">
+                          {new Date(event.start_time).getDate()}
+                        </span>
+                      </div>
+
+                      {/* Contenu */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="text-white font-semibold text-sm truncate">{event.title}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+
+                        {event.description && (
+                          <p className="text-xs text-fc-muted mb-2 line-clamp-2">{event.description}</p>
+                        )}
+
+                        <div className="flex items-center gap-3 flex-wrap text-xs text-fc-muted">
+                          <span className="flex items-center gap-1">
+                            <Clock size={11} />
+                            {formatDateFR(event.start_time)}
+                            {event.end_time && ` → ${formatDateFR(event.end_time)}`}
+                          </span>
+                          {event.location && (
+                            <span className="flex items-center gap-1">
+                              <MapPin size={11} />
+                              {event.location}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Users size={11} />
+                            {event.attendee_count} participant{event.attendee_count !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => toggleAttend.mutate(event.id)}
+                          disabled={toggleAttend.isPending}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition ${
+                            event.is_attending
+                              ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                              : 'bg-fc-hover text-fc-muted hover:text-white'
+                          }`}
+                        >
+                          {event.is_attending ? <><Check size={12} /> Inscrit</> : 'Participer'}
+                        </button>
+
+                        <button
+                          onClick={() => setEditing(event)}
+                          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                          title="Modifier"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+
+                        {deletingId === event.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => deleteEvent.mutate(event.id)}
+                              disabled={deleteEvent.isPending}
+                              className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
+                              title="Confirmer"
+                            >
+                              <Check size={13} />
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(null)}
+                              className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeletingId(event.id)}
+                            className="p-1.5 text-fc-muted hover:text-fc-red hover:bg-fc-hover rounded transition"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => toggleAttend.mutate(event.id)}
-                      disabled={toggleAttend.isPending}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition ${
-                        event.is_attending
-                          ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                          : 'bg-fc-hover text-fc-muted hover:text-white'
-                      }`}
-                    >
-                      {event.is_attending ? <><Check size={12} /> Inscrit</> : 'Participer'}
-                    </button>
-
-                    <button
-                      onClick={() => setEditing(event)}
-                      className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                      title="Modifier"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-
-                    {deletingId === event.id ? (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => deleteEvent.mutate(event.id)}
-                          disabled={deleteEvent.isPending}
-                          className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
-                          title="Confirmer"
-                        >
-                          <Check size={13} />
-                        </button>
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setDeletingId(event.id)}
-                        className="p-1.5 text-fc-muted hover:text-fc-red hover:bg-fc-hover rounded transition"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal création */}
       {showCreate && (
         <EventModal
           mode="create"
-          onClose={() => setShowCreate(false)}
+          initial={createInitial}
+          onClose={() => { setShowCreate(false); setCreateDate(null) }}
           onSubmit={data => createEvent.mutate(data)}
           loading={createEvent.isPending}
         />
