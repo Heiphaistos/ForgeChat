@@ -53,7 +53,7 @@ pub async fn create_channel(
     .await?;
 
     let event = serde_json::json!({ "type": "CHANNEL_CREATE", "channel": channel });
-    state.broadcast_to_channel(server_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(channel))
 }
@@ -149,7 +149,7 @@ pub async fn update_channel(
             "has_voice_password": channel.voice_password_hash.is_some(),
         }
     });
-    state.broadcast_to_channel(server_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(channel))
 }
@@ -168,7 +168,7 @@ pub async fn delete_channel(
         .await?;
 
     let event = serde_json::json!({ "type": "CHANNEL_DELETE", "channel_id": channel_id });
-    state.broadcast_to_channel(server_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -271,7 +271,7 @@ pub async fn reorder_channels(
         "server_id": server_id,
         "channel_ids": req.channel_ids,
     });
-    state.broadcast_to_channel(server_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

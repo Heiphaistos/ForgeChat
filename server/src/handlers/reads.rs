@@ -110,6 +110,10 @@ pub async fn get_user_mentions(
          WHERE m.created_at > NOW() - INTERVAL '7 days'
            AND m.user_id != $1
            AND m.content ILIKE $2
+           AND m.created_at > COALESCE(
+               (SELECT read_at FROM last_read WHERE user_id=$1 AND channel_id=m.channel_id),
+               NOW() - INTERVAL '7 days'
+           )
          ORDER BY m.created_at DESC
          LIMIT 50"
     )

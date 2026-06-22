@@ -178,7 +178,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     "type": "MESSAGE_CREATE",
                     "message": full_msg
                 });
-                state.broadcast_to_channel(channel_id, event.to_string()).await;
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
                 tracing::info!("Message programmé {} envoyé dans canal {}", sched_id, channel_id);
             }

@@ -204,7 +204,7 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
                         "type": "CHANNEL_DELETE",
                         "channel_id": channel_id,
                     });
-                    state.broadcast_to_channel(server_id, del_event.to_string()).await;
+                    state.broadcast_to_server_members(server_id, del_event.to_string()).await;
                 }
             }
         }
@@ -284,7 +284,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                     "channel_id": channel_id,
                     "user_id": user_id,
                 });
-                state.broadcast_to_channel(channel_id, event.to_string()).await;
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
             }
         }
 
@@ -392,7 +392,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                                 "channel": new_ch,
                             });
                             // Broadcast au channel du serveur (abonnés)
-                            state.broadcast_to_channel(server_id, create_event.to_string()).await;
+                            state.broadcast_to_server_members(server_id, create_event.to_string()).await;
                         }
                     }
                 }
