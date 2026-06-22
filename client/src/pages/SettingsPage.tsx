@@ -796,6 +796,7 @@ function AccessibilitySection() {
   const [reduceMotion, setReduceMotion] = useState(false)
   const [highContrast, setHighContrast] = useState(false)
   const [colorblindMode, setColorblindMode] = useState('none')
+  const [zoom, setZoom] = useState(() => Number(localStorage.getItem('fc_zoom') ?? '100'))
 
   useEffect(() => {
     if (settings) {
@@ -805,11 +806,39 @@ function AccessibilitySection() {
     }
   }, [settings])
 
+  const applyZoom = (val: number) => {
+    setZoom(val)
+    localStorage.setItem('fc_zoom', String(val))
+    document.documentElement.style.fontSize = `${val}%`
+  }
+
+  const applyReduceMotion = (val: boolean) => {
+    setReduceMotion(val)
+    document.documentElement.setAttribute('data-reduce-motion', String(val))
+  }
+
+  const applyHighContrast = (val: boolean) => {
+    setHighContrast(val)
+    document.documentElement.classList.toggle('high-contrast', val)
+  }
+
   return (
     <div className="space-y-4">
+      {/* Zoom de l'interface */}
+      <Field label={`Zoom de l'interface — ${zoom}%`} hint="Ajuste la taille générale de l'interface (80% à 130%)">
+        <input
+          type="range" min={80} max={130} step={5} value={zoom}
+          onChange={e => applyZoom(Number(e.target.value))}
+          className="w-full accent-fc-accent"
+        />
+        <div className="flex justify-between text-xs text-fc-muted mt-1">
+          <span>80%</span><span>100%</span><span>130%</span>
+        </div>
+      </Field>
+
       {[
-        { label: 'Réduire les animations', desc: 'Moins d\'effets visuels et de transitions', value: reduceMotion, onChange: setReduceMotion },
-        { label: 'Contraste élevé', desc: 'Améliore la lisibilité des textes', value: highContrast, onChange: setHighContrast },
+        { label: 'Réduire les animations', desc: 'Moins d\'effets visuels et de transitions', value: reduceMotion, onChange: applyReduceMotion },
+        { label: 'Contraste élevé', desc: 'Améliore la lisibilité des textes', value: highContrast, onChange: applyHighContrast },
       ].map(item => (
         <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div>
