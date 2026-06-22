@@ -1,317 +1,331 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
-import {
-  MessageCircle, UserPlus, UserCheck, UserX, Shield, Star, StarOff,
-  Calendar, ArrowLeft, Clock, Ban, Check, Loader2,
-} from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
 import api from '../api/client'
 import { useAuth } from '../store/auth'
-import toast from 'react-hot-toast'
 
-const STATUS_COLOR: Record<string, string> = {
-  online: 'bg-green-500', idle: 'bg-yellow-500',
-  dnd: 'bg-red-500', invisible: 'bg-gray-500', offline: 'bg-gray-500',
-}
-const STATUS_LABEL: Record<string, string> = {
-  online: 'En ligne', idle: 'Absent', dnd: 'Ne pas d��ranger',
-  invisible: 'Invisible', offline: 'Hors ligne',
-}
-const ACTIVITY_ICONS: Record<string, string> = {
-  playing: '🎮', listening: '🎵', watching: '📺', streaming: '📡', competing: '🏆',
-}
-const ACTIVITY_LABELS: Record<string, string> = {
-  playing: 'Joue à', listening: 'Écoute', watching: 'Regarde',
-  streaming: 'Stream', competing: 'En compétition sur',
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface UserPublic {
+  id: string
+  username: string
+  discriminator: string
+  avatar: string | null
+  banner: string | null
+  bio: string | null
+  status: string
+  custom_status: string | null
+  activity_type: string | null
+  activity_name: string | null
+  activity_detail: string | null
+  created_at: string
 }
 
-function getUserGradient(username: string): string {
-  let hash = 0
-  for (let i = 0; i < username.length; i++)
-    hash = username.charCodeAt(i) + ((hash << 5) - hash)
-  const h1 = Math.abs(hash) % 360
-  const h2 = (h1 + 40) % 360
-  return `linear-gradient(135deg, hsl(${h1},65%,45%) 0%, hsl(${h2},70%,35%) 100%)`
+interface MutualServer {
+  id: string
+  name: string
+  icon: string | null
+  member_role_names: string[] | null
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'online': return 'bg-fc-green'
+    case 'idle': return 'bg-yellow-400'
+    case 'dnd': return 'bg-fc-red'
+    default: return 'bg-fc-muted'
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'online': return 'En ligne'
+    case 'idle': return 'Absent'
+    case 'dnd': return 'Ne pas déranger'
+    default: return 'Hors ligne'
+  }
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
+
+// ─── Bio avec expand ──────────────────────────────────────────────────────────
+
+const BIO_MAX = 190
+
+function BioSection({ bio }: { bio: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const truncated = bio.length > BIO_MAX && !expanded
+  const displayed = truncated ? bio.slice(0, BIO_MAX) + '…' : bio
+
+  return (
+    <div>
+      <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{displayed}</p>
+      {bio.length > BIO_MAX && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-xs text-fc-accent hover:underline flex items-center gap-0.5"
+        >
+          {expanded ? (
+            <>Réduire <ChevronUp size={12} /></>
+          ) : (
+            <>Lire la suite <ChevronDown size={12} /></>
+          )}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function ProfileSkeleton() {
+  return (
+    <div className="animate-pulse">
+      <div className="h-48 bg-fc-hover/50 rounded-t-xl" />
+      <div className="px-6 pb-6 bg-fc-channel rounded-b-xl">
+        <div className="flex items-end gap-4 -mt-12 mb-6">
+          <div className="w-24 h-24 rounded-full bg-fc-hover border-4 border-fc-channel" />
+          <div className="flex-1 pb-2">
+            <div className="h-5 w-36 bg-fc-hover rounded mb-2" />
+            <div className="h-3 w-24 bg-fc-hover/60 rounded" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 w-full bg-fc-hover/40 rounded" />
+          <div className="h-4 w-4/5 bg-fc-hover/40 rounded" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Serveurs en commun ───────────────────────────────────────────────────────
+
+function MutualServersSection({ userId }: { userId: string }) {
+  const { data: mutual = [], isLoading } = useQuery<MutualServer[]>({
+    queryKey: ['mutual-servers', userId],
+    queryFn: () => api.get(`/users/${userId}/mutual-servers`).then((r) => r.data),
+  })
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-10 bg-fc-hover/30 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (mutual.length === 0) {
+    return (
+      <p className="text-fc-muted text-sm">Aucun serveur en commun.</p>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      {mutual.map((srv) => (
+        <div key={srv.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-fc-hover/20 transition">
+          <div className="w-8 h-8 rounded-lg bg-fc-bg flex items-center justify-center font-bold text-sm text-white overflow-hidden flex-shrink-0">
+            {srv.icon ? (
+              <img src={srv.icon} alt={srv.name} className="w-full h-full object-cover" />
+            ) : (
+              srv.name.charAt(0).toUpperCase()
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium truncate">{srv.name}</p>
+            {srv.member_role_names && srv.member_role_names.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {srv.member_role_names.slice(0, 3).map((role) => (
+                  <span
+                    key={role}
+                    className="px-1.5 py-0.5 rounded text-[10px] bg-fc-accent/15 text-fc-accent font-medium"
+                  >
+                    {role}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>()
   const nav = useNavigate()
   const { user: me } = useAuth()
-  const qc = useQueryClient()
 
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['profile', userId],
-    queryFn: () => api.get(`/users/${userId}/profile`).then(r => r.data),
+  const { data: user, isLoading, isError } = useQuery<UserPublic>({
+    queryKey: ['user', userId],
+    queryFn: () => api.get(`/users/${userId}`).then((r) => r.data),
     enabled: !!userId,
-    staleTime: 30_000,
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['profile', userId] })
+  const handleOpenDm = async () => {
+    if (!userId) return
+    try {
+      const { data } = await api.post(`/dms/${userId}`)
+      nav(`/dms/${data.dm_id}`)
+    } catch {
+      // silencieux — l'erreur sera visible dans le toast de la nav
+    }
+  }
 
-  const openDm = useMutation({
-    mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
-    onSuccess: (dm: any) => nav(`/dms/${dm.dm_id}`),
-  })
+  if (isLoading) {
+    return (
+      <div className="flex-1 bg-fc-chat overflow-y-auto p-6 max-w-2xl mx-auto w-full">
+        <ProfileSkeleton />
+      </div>
+    )
+  }
 
-  const sendFriend = useMutation({
-    mutationFn: () => api.post('/friends', { user_id: userId }),
-    onSuccess: () => { toast.success('Demande d\'ami envoyée'); invalidate() },
-    onError: () => toast.error('Erreur lors de la demande'),
-  })
+  if (isError || !user) {
+    return (
+      <div className="flex-1 bg-fc-chat flex items-center justify-center">
+        <div className="text-center text-fc-muted">
+          <Users size={48} className="mx-auto mb-4 opacity-30" />
+          <p>Profil introuvable.</p>
+          <button
+            onClick={() => nav(-1)}
+            className="mt-4 text-fc-accent hover:underline text-sm"
+          >
+            Retour
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-  const removeFriend = useMutation({
-    mutationFn: () => api.delete(`/friends/${userId}`),
-    onSuccess: () => { toast.success('Ami retiré'); invalidate() },
-  })
-
-  const blockMutation = useMutation({
-    mutationFn: () => profile?.relationship === 'blocked'
-      ? api.delete(`/users/${userId}/block`)
-      : api.post(`/users/${userId}/block`),
-    onSuccess: () => {
-      const msg = profile?.relationship === 'blocked' ? 'Utilisateur débloqué' : 'Utilisateur bloqué'
-      toast.success(msg)
-      invalidate()
-    },
-  })
-
-  const favMutation = useMutation({
-    mutationFn: () => profile?.is_favorite
-      ? api.delete(`/users/${userId}/favorite`)
-      : api.post(`/users/${userId}/favorite`),
-    onSuccess: () => {
-      toast.success(profile?.is_favorite ? 'Retiré des favoris' : 'Ajouté aux favoris')
-      invalidate()
-    },
-  })
-
-  const acceptFriend = useMutation({
-    mutationFn: () => api.post(`/friends/${profile?.friendship_id}/accept`),
-    onSuccess: () => { toast.success('Demande acceptée'); invalidate() },
-  })
-
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-screen bg-fc-bg">
-      <Loader2 size={32} className="animate-spin text-fc-accent" />
-    </div>
-  )
-
-  if (!profile) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-fc-bg gap-4">
-      <Shield size={48} className="text-fc-muted" />
-      <p className="text-fc-muted">Profil introuvable</p>
-      <button onClick={() => nav(-1)} className="text-fc-accent hover:underline text-sm">← Retour</button>
-    </div>
-  )
-
-  const isSelf = profile.relationship === 'self'
-  const rel = profile.relationship as string
+  const isSelf = me?.id === user.id
 
   return (
-    <div className="min-h-screen bg-fc-bg overflow-y-auto">
-      {/* Back button */}
-      <button
-        onClick={() => nav(-1)}
-        className="fixed top-4 left-4 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-fc-channel/80 backdrop-blur-sm rounded-lg text-fc-muted hover:text-white text-sm transition"
-      >
-        <ArrowLeft size={16} /> Retour
-      </button>
+    <div className="flex-1 bg-fc-chat overflow-y-auto">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        {/* Bouton retour */}
+        <button
+          onClick={() => nav(-1)}
+          className="flex items-center gap-1.5 text-fc-muted hover:text-white text-sm mb-4 transition"
+        >
+          <ArrowLeft size={16} />
+          Retour
+        </button>
 
-      <div className="max-w-2xl mx-auto px-4 pt-8 pb-16">
-
-        {/* Banner + Avatar */}
-        <div className="relative rounded-2xl overflow-hidden mb-16">
-          <div className="h-40">
-            {profile.banner
-              ? <img src={profile.banner} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full" style={{ background: getUserGradient(profile.username) }} />
-            }
-          </div>
-          <div className="absolute -bottom-10 left-6">
-            <div className="w-20 h-20 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-2xl text-white overflow-hidden">
-              {profile.avatar
-                ? <img src={profile.avatar} alt="" className="w-full h-full object-cover" />
-                : profile.username.charAt(0).toUpperCase()
-              }
-            </div>
-            <div className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-fc-bg ${STATUS_COLOR[profile.status] ?? 'bg-gray-500'}`} />
-          </div>
-        </div>
-
-        {/* Infos + actions */}
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white">{profile.username}</h1>
-            <span className="text-sm text-fc-muted">#{profile.discriminator}</span>
-            <div className="flex items-center gap-1.5 mt-1">
-              <div className={`w-2.5 h-2.5 rounded-full ${STATUS_COLOR[profile.status] ?? 'bg-gray-500'}`} />
-              <span className="text-sm text-fc-muted">{STATUS_LABEL[profile.status] ?? 'Hors ligne'}</span>
-            </div>
-
-            {/* Badge relation */}
-            {rel === 'friend' && (
-              <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-green-500/15 border border-green-500/30 text-green-400 text-xs rounded-full">
-                <UserCheck size={11} /> Ami
-              </span>
+        {/* Carte profil */}
+        <div className="bg-fc-channel rounded-xl overflow-hidden mb-4">
+          {/* Banner */}
+          <div className="relative h-48">
+            {user.banner ? (
+              <img
+                src={user.banner}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30" />
             )}
-            {rel === 'pending_sent' && (
-              <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-xs rounded-full">
-                <Clock size={11} /> Demande envoyée
-              </span>
-            )}
-            {rel === 'pending_received' && (
-              <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs rounded-full">
-                <UserPlus size={11} /> Veut être ton ami
-              </span>
-            )}
-            {rel === 'blocked' && (
-              <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-red-500/15 border border-red-500/30 text-red-400 text-xs rounded-full">
-                <Ban size={11} /> Bloqué
-              </span>
-            )}
+            {/* Gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
           </div>
 
-          {/* Actions */}
-          {!isSelf && me && (
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-
-              {/* Message */}
-              <button
-                onClick={() => openDm.mutate()}
-                disabled={openDm.isPending || rel === 'blocked'}
-                className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-40"
-              >
-                <MessageCircle size={15} />
-                Message
-              </button>
-
-              {/* Ami / accepter / retirer */}
-              {rel === 'none' && (
-                <button
-                  onClick={() => sendFriend.mutate()}
-                  disabled={sendFriend.isPending}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-40"
-                >
-                  <UserPlus size={15} />
-                  Ajouter ami
-                </button>
-              )}
-              {rel === 'pending_received' && (
-                <button
-                  onClick={() => acceptFriend.mutate()}
-                  disabled={acceptFriend.isPending}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-40"
-                >
-                  <Check size={15} />
-                  Accepter
-                </button>
-              )}
-              {(rel === 'friend' || rel === 'pending_sent') && (
-                <button
-                  onClick={() => removeFriend.mutate()}
-                  disabled={removeFriend.isPending}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-fc-hover hover:bg-red-600/30 text-fc-muted hover:text-red-400 rounded-lg text-sm font-medium transition disabled:opacity-40"
-                >
-                  <UserX size={15} />
-                  {rel === 'friend' ? 'Retirer ami' : 'Annuler demande'}
-                </button>
-              )}
-
-              {/* Favoris */}
-              <button
-                onClick={() => favMutation.mutate()}
-                disabled={favMutation.isPending}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40 ${
-                  profile.is_favorite
-                    ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
-                    : 'bg-fc-hover text-fc-muted hover:text-yellow-400'
-                }`}
-              >
-                {profile.is_favorite ? <StarOff size={15} /> : <Star size={15} />}
-                {profile.is_favorite ? 'Retirer favori' : 'Favoris'}
-              </button>
-
-              {/* Bloquer */}
-              <button
-                onClick={() => blockMutation.mutate()}
-                disabled={blockMutation.isPending}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition disabled:opacity-40 ${
-                  rel === 'blocked'
-                    ? 'bg-red-600/20 text-red-400 hover:bg-red-600/30'
-                    : 'bg-fc-hover text-fc-muted hover:text-red-400'
-                }`}
-              >
-                <Ban size={15} />
-                {rel === 'blocked' ? 'Débloquer' : 'Bloquer'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
-          {/* Statut custom + activité */}
-          {(profile.custom_status || profile.activity_type) && (
-            <div className="bg-fc-channel rounded-xl p-4 space-y-3">
-              {profile.custom_status && (
-                <div className="text-sm text-fc-text italic">"{profile.custom_status}"</div>
-              )}
-              {profile.activity_type && profile.activity_name && (
-                <div className="flex items-start gap-3">
-                  <span className="text-xl">{ACTIVITY_ICONS[profile.activity_type] ?? '��'}</span>
-                  <div>
-                    <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-                      {ACTIVITY_LABELS[profile.activity_type] ?? profile.activity_type}
-                    </div>
-                    <div className="text-sm text-white font-medium">{profile.activity_name}</div>
-                    {profile.activity_detail && (
-                      <div className="text-xs text-fc-muted">{profile.activity_detail}</div>
-                    )}
-                  </div>
+          {/* Avatar + infos */}
+          <div className="px-6 pb-6">
+            <div className="flex items-end gap-4 -mt-12 mb-4">
+              {/* Avatar */}
+              <div className="relative flex-shrink-0">
+                <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
+                  {user.avatar ? (
+                    <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                  ) : (
+                    user.username.charAt(0).toUpperCase()
+                  )}
                 </div>
+                {/* Indicateur statut */}
+                <span
+                  className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-fc-channel ${statusColor(user.status)}`}
+                  title={statusLabel(user.status)}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex-1 pb-1 flex justify-end">
+                {!isSelf && (
+                  <button
+                    onClick={handleOpenDm}
+                    className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition"
+                  >
+                    <MessageCircle size={15} />
+                    Message
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Nom + statut */}
+            <div className="mb-3">
+              <h1 className="text-xl font-bold text-white leading-tight">
+                {user.username}
+                <span className="text-fc-muted font-normal text-base">#{user.discriminator}</span>
+              </h1>
+              {user.custom_status && (
+                <p className="text-sm text-fc-muted mt-0.5">{user.custom_status}</p>
+              )}
+              {user.activity_type && user.activity_name && (
+                <p className="text-xs text-fc-muted mt-0.5 capitalize">
+                  {user.activity_type} {user.activity_name}
+                  {user.activity_detail ? ` — ${user.activity_detail}` : ''}
+                </p>
               )}
             </div>
-          )}
 
-          {/* Bio */}
-          {profile.bio && (
-            <div className="bg-fc-channel rounded-xl p-4">
-              <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">À propos</div>
-              <p className="text-sm text-fc-text whitespace-pre-wrap">{profile.bio}</p>
-            </div>
-          )}
+            {/* Divider */}
+            <div className="border-t border-fc-hover my-4" />
 
-          {/* Serveurs en commun */}
-          {profile.mutual_servers?.length > 0 && (
-            <div className="bg-fc-channel rounded-xl p-4">
-              <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-                Serveurs en commun · {profile.mutual_servers.length}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {profile.mutual_servers.map((s: any) => (
-                  <button
-                    key={s.id}
-                    onClick={() => nav(`/servers/${s.id}`)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-fc-hover hover:bg-fc-input rounded-lg text-sm text-white transition"
-                  >
-                    {s.icon
-                      ? <img src={s.icon} alt="" className="w-5 h-5 rounded-full object-cover" />
-                      : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-[10px] font-bold">{s.name.charAt(0)}</div>
-                    }
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            {/* À propos */}
+            {user.bio && (
+              <section className="mb-4">
+                <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                  À propos
+                </h2>
+                <BioSection bio={user.bio} />
+              </section>
+            )}
 
-          {/* Membre depuis */}
-          <div className="flex items-center gap-2 text-sm text-fc-muted">
-            <Calendar size={14} />
-            Membre depuis {format(new Date(profile.created_at), 'MMMM yyyy', { locale: fr })}
+            {/* Membre depuis */}
+            <section className="mb-4">
+              <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
+                Membre depuis
+              </h2>
+              <p className="text-sm text-white/80">{formatDate(user.created_at)}</p>
+            </section>
           </div>
         </div>
+
+        {/* Serveurs en commun */}
+        {!isSelf && userId && (
+          <div className="bg-fc-channel rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Users size={13} />
+              Serveurs en commun
+            </h2>
+            <MutualServersSection userId={userId} />
+          </div>
+        )}
       </div>
     </div>
   )

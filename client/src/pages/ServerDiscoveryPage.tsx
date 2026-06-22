@@ -1,62 +1,87 @@
-import { useState } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Users, Compass, CheckCircle, ChevronDown, Loader2 } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Search, Users, Compass, Tag } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
-import { useIntersection } from '../hooks/useIntersection'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DiscoverServer {
   id: string
   name: string
-  description?: string
-  icon?: string
-  banner?: string
+  icon: string | null
+  banner: string | null
+  description: string | null
   member_count: number
-  online_count: number
-  is_verified: boolean
-  tags: string[]
-  invite_code?: string
+  invite_code: string | null
+  tags: string[] | null
+  category: string | null
 }
 
-interface Page {
-  servers: DiscoverServer[]
-  next_page?: number
+type Category =
+  | 'all'
+  | 'gaming'
+  | 'community'
+  | 'tech'
+  | 'music'
+  | 'education'
+  | 'arts'
+  | '18plus'
+
+type SortMode = 'popular' | 'recent' | 'alpha'
+
+const CATEGORIES: { key: Category; label: string }[] = [
+  { key: 'all', label: 'Tous' },
+  { key: 'gaming', label: 'Gaming' },
+  { key: 'community', label: 'Communauté' },
+  { key: 'tech', label: 'Tech' },
+  { key: 'music', label: 'Musique' },
+  { key: 'education', label: 'Éducation' },
+  { key: 'arts', label: 'Arts' },
+  { key: '18plus', label: '18+' },
+]
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatMemberCount(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.0', '')}k membres`
+  return `${n} membre${n > 1 ? 's' : ''}`
 }
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
-  'Tout', 'Gaming', 'Musique', 'Art', 'Tech',
-  'Éducation', 'Social', 'Anime', 'Sport', 'Autre',
-] as const
+function SkeletonCard() {
+  return (
+    <div className="bg-fc-channel rounded-xl overflow-hidden animate-pulse flex flex-col">
+      <div className="h-28 bg-fc-hover/50" />
+      <div className="p-4 flex flex-col gap-2">
+        <div className="h-4 w-2/3 bg-fc-hover rounded" />
+        <div className="h-3 w-full bg-fc-hover/60 rounded" />
+        <div className="h-3 w-4/5 bg-fc-hover/60 rounded" />
+        <div className="flex justify-between mt-3">
+          <div className="h-3 w-20 bg-fc-hover/40 rounded" />
+          <div className="h-7 w-20 bg-fc-hover/40 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-type Category = typeof CATEGORIES[number]
+// ─── Server Card ──────────────────────────────────────────────────────────────
 
-const SORT_OPTIONS = [
-  { value: 'popular', label: 'Populaire' },
-  { value: 'recent', label: 'Récent' },
-  { value: 'active', label: 'Membres actifs' },
-] as const
-
-type SortOption = typeof SORT_OPTIONS[number]['value']
-
-// ─── ServerCard ───────────────────────────────────────────────────────────────
-
-function ServerCard({
-  server,
-  onJoin,
-  isJoining,
-}: {
+interface ServerCardProps {
   server: DiscoverServer
   onJoin: () => void
   isJoining: boolean
-}) {
+}
+
+function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
+  const initial = server.name.charAt(0).toUpperCase()
+
   return (
-    <div className="group bg-fc-channel rounded-xl overflow-hidden hover:bg-fc-hover/30 transition-colors flex flex-col">
-      {/* Banner */}
+    <div className="group bg-fc-channel rounded-xl overflow-hidden hover:bg-fc-hover/20 transition-colors flex flex-col border border-transparent hover:border-fc-hover/40">
+      {/* Bannière */}
       <div className="relative h-28 overflow-hidden flex-shrink-0">
         {server.banner ? (
           <img
@@ -65,63 +90,54 @@ function ServerCard({
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-indigo-600/40 via-purple-600/30 to-fc-accent/20" />
+          <div className="w-full h-full bg-gradient-to-br from-fc-bg to-fc-channel" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-
-        {/* Avatar flottant */}
-        <div className="absolute bottom-0 left-4 translate-y-1/2">
-          <div className="w-14 h-14 rounded-2xl bg-fc-bg border-2 border-fc-channel flex items-center justify-center font-bold text-xl text-white overflow-hidden shadow-lg">
-            {server.icon
-              ? <img src={server.icon} alt={server.name} className="w-full h-full object-cover" />
-              : server.name.charAt(0).toUpperCase()}
+        {/* Gradient overlay bas */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        {/* Icône flottante */}
+        <div className="absolute -bottom-5 left-4">
+          <div className="w-12 h-12 rounded-xl bg-fc-bg border-2 border-fc-channel flex items-center justify-center font-bold text-lg text-white shadow-lg overflow-hidden">
+            {server.icon ? (
+              <img src={server.icon} alt={server.name} className="w-full h-full object-cover" />
+            ) : (
+              initial
+            )}
           </div>
         </div>
       </div>
 
       {/* Contenu */}
-      <div className="pt-10 px-4 pb-4 flex flex-col flex-1">
-        <div className="flex items-center gap-1.5 mb-1">
-          <h3 className="text-white font-semibold text-sm truncate">{server.name}</h3>
-          {server.is_verified && (
-            <CheckCircle size={13} className="text-fc-accent flex-shrink-0" aria-label="Serveur vérifié" />
-          )}
-        </div>
-
-        <p className="text-fc-muted text-xs line-clamp-2 flex-1 mb-3 leading-relaxed">
-          {server.description ?? 'Aucune description.'}
-        </p>
+      <div className="p-4 pt-8 flex flex-col flex-1">
+        <h3 className="text-white font-semibold text-sm mb-1 truncate">{server.name}</h3>
 
         {/* Tags */}
-        {server.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {server.tags.slice(0, 3).map(tag => (
+        {server.tags && server.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {server.tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 bg-fc-bg text-fc-muted text-[10px] rounded font-medium"
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-fc-accent/15 text-fc-accent font-medium"
               >
+                <Tag size={9} />
                 {tag}
               </span>
             ))}
           </div>
         )}
 
-        {/* Footer */}
+        <p className="text-fc-muted text-xs line-clamp-2 flex-1 mb-3 leading-relaxed">
+          {server.description ?? 'Aucune description.'}
+        </p>
+
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs">
-            <span className="flex items-center gap-1 text-fc-green">
-              <span className="w-1.5 h-1.5 rounded-full bg-fc-green inline-block" />
-              {server.online_count.toLocaleString()}
-            </span>
-            <span className="flex items-center gap-1 text-fc-muted">
-              <Users size={11} />
-              {server.member_count.toLocaleString()}
-            </span>
+          <div className="flex items-center gap-1.5 text-fc-muted text-xs">
+            <Users size={12} />
+            <span>{formatMemberCount(server.member_count)}</span>
           </div>
           <button
             onClick={onJoin}
             disabled={isJoining || !server.invite_code}
-            className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50"
+            className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isJoining ? 'Rejoindre...' : 'Rejoindre'}
           </button>
@@ -131,153 +147,137 @@ function ServerCard({
   )
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function CardSkeleton() {
-  return (
-    <div className="bg-fc-channel rounded-xl overflow-hidden animate-pulse">
-      <div className="h-28 bg-fc-hover" />
-      <div className="pt-10 px-4 pb-4 space-y-2">
-        <div className="h-3 bg-fc-hover rounded w-1/2" />
-        <div className="h-2 bg-fc-hover rounded w-full" />
-        <div className="h-2 bg-fc-hover rounded w-3/4" />
-        <div className="h-6 bg-fc-hover rounded w-20 ml-auto mt-4" />
-      </div>
-    </div>
-  )
-}
-
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function ServerDiscoveryPage() {
   const [query, setQuery] = useState('')
-  const [category, setCategory] = useState<Category>('Tout')
-  const [sort, setSort] = useState<SortOption>('popular')
+  const [category, setCategory] = useState<Category>('all')
+  const [sort, setSort] = useState<SortMode>('popular')
   const nav = useNavigate()
   const qc = useQueryClient()
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-  } = useInfiniteQuery<Page>({
-    queryKey: ['discovery', query, category, sort],
-    queryFn: ({ pageParam = 1 }) => {
-      const params = new URLSearchParams()
-      if (query) params.set('q', query)
-      if (category !== 'Tout') params.set('category', category)
-      params.set('sort', sort)
-      params.set('page', String(pageParam))
-      return api.get(`/servers/discover?${params}`).then(r => r.data)
+  const { data: servers = [], isLoading } = useQuery<DiscoverServer[]>({
+    queryKey: ['servers', 'discover', category],
+    queryFn: () => {
+      const params = category !== 'all' ? `?category=${category}` : ''
+      return api.get(`/explore${params}`).then((r) => r.data)
     },
-    initialPageParam: 1,
-    getNextPageParam: (last) => last.next_page ?? undefined,
-  })
-
-  // Infinite scroll — sentinel
-  const sentinelRef = useIntersection<HTMLDivElement>(() => {
-    if (hasNextPage && !isFetchingNextPage) fetchNextPage()
   })
 
   const join = useMutation({
-    mutationFn: (inviteCode: string) =>
-      api.post(`/servers/join/${inviteCode}`).then(r => r.data),
-    onSuccess: (data) => {
+    mutationFn: (server: DiscoverServer) =>
+      api.post(`/servers/join/${server.invite_code}`).then((r) => r.data),
+    onSuccess: (data, variables) => {
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success(`Vous avez rejoint ${data.name ?? 'le serveur'} !`)
+      toast.success(`Vous avez rejoint ${variables.name} !`)
       if (data.id) nav(`/servers/${data.id}`)
     },
-    onError: (e: any) =>
-      toast.error(e.response?.data?.error ?? 'Impossible de rejoindre'),
+    onError: (e: unknown) => {
+      const err = e as { response?: { data?: { error?: string } } }
+      toast.error(err.response?.data?.error ?? 'Impossible de rejoindre')
+    },
   })
 
-  const servers = data?.pages.flatMap(p => p.servers) ?? []
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase()
+    let list = servers.filter((s) => {
+      if (!q) return true
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.description ?? '').toLowerCase().includes(q)
+      )
+    })
+
+    if (sort === 'popular') {
+      list = [...list].sort((a, b) => b.member_count - a.member_count)
+    } else if (sort === 'alpha') {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name))
+    }
+    // 'recent' — on conserve l'ordre du serveur (ORDER BY created_at DESC)
+
+    return list
+  }, [servers, query, sort])
 
   return (
     <div className="flex-1 bg-fc-chat overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-6 py-10">
-
+      <div className="max-w-5xl mx-auto px-6 py-10">
         {/* En-tête */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-fc-accent/20 mb-4">
             <Compass size={32} className="text-fc-accent" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Découvrir des serveurs</h1>
-          <p className="text-fc-muted text-base">
-            Trouvez des communautés publiques qui vous correspondent.
-          </p>
+          <p className="text-fc-muted text-base">Rejoignez des communautés publiques en un clic.</p>
         </div>
 
-        {/* Barre de filtres */}
-        <div className="flex flex-wrap gap-3 mb-8 items-center">
-          {/* Recherche */}
-          <div className="relative flex-1 min-w-48">
+        {/* Filtres par catégorie */}
+        <div className="flex flex-wrap gap-2 justify-center mb-6">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => setCategory(cat.key)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition
+                ${category === cat.key
+                  ? 'bg-fc-accent text-white'
+                  : 'bg-fc-channel text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Barre de recherche + tri */}
+        <div className="flex gap-3 mb-8 max-w-2xl mx-auto">
+          <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
             <input
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher un serveur..."
               className="w-full pl-9 pr-4 py-2.5 bg-fc-channel rounded-xl text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             />
           </div>
-
-          {/* Catégorie */}
-          <div className="relative">
-            <select
-              value={category}
-              onChange={e => setCategory(e.target.value as Category)}
-              className="appearance-none pl-3 pr-8 py-2.5 bg-fc-channel rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent cursor-pointer"
-            >
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
-          </div>
-
-          {/* Tri */}
-          <div className="relative">
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as SortOption)}
-              className="appearance-none pl-3 pr-8 py-2.5 bg-fc-channel rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent cursor-pointer"
-            >
-              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
-          </div>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortMode)}
+            className="px-3 py-2.5 bg-fc-channel rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent cursor-pointer"
+          >
+            <option value="popular">Plus populaires</option>
+            <option value="recent">Plus récents</option>
+            <option value="alpha">Alphabétique</option>
+          </select>
         </div>
 
-        {/* Grille */}
+        {/* Contenu */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
-        ) : servers.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="text-center text-fc-muted py-20">
             <Compass size={48} className="mx-auto mb-4 opacity-30" />
             <p className="text-base">
-              {query ? `Aucun résultat pour "${query}"` : 'Aucun serveur public disponible.'}
+              {query
+                ? `Aucun résultat pour "${query}"`
+                : 'Aucun serveur public dans cette catégorie.'}
             </p>
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {servers.map(s => (
+            <p className="text-xs text-fc-muted mb-4">
+              {filtered.length} serveur{filtered.length > 1 ? 's' : ''}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((s) => (
                 <ServerCard
                   key={s.id}
                   server={s}
-                  onJoin={() => s.invite_code && join.mutate(s.invite_code)}
-                  isJoining={join.isPending && join.variables === s.invite_code}
+                  onJoin={() => join.mutate(s)}
+                  isJoining={join.isPending && (join.variables as DiscoverServer)?.id === s.id}
                 />
               ))}
-            </div>
-
-            {/* Sentinel infinite scroll */}
-            <div ref={sentinelRef} className="flex justify-center py-8">
-              {isFetchingNextPage && (
-                <Loader2 size={20} className="animate-spin text-fc-muted" />
-              )}
             </div>
           </>
         )}

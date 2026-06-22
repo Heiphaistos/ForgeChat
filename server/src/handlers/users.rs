@@ -622,3 +622,42 @@ pub async fn get_activity_feed(
 
     Ok(Json(items))
 }
+
+pub async fn get_mutual_servers(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT s.id, s.name, s.icon,
+                COALESCE(
+                    (SELECT array_agg(r.name)
+                     FROM roles r
+                     INNER JOIN server_member_roles smr ON smr.role_id = r.id
+                     WHERE smr.server_id = s.id AND smr.user_id = $2
+                       AND r.is_everyone = false),
+                    ARRAY[]::text[]
+                ) AS member_role_names
+         FROM servers s
+         INNER JOIN server_members sm1 ON sm1.server_id = s.id AND sm1.user_id = $1
+         INNER JOIN server_members sm2 ON sm2.server_id = s.id AND sm2.user_id = $2
+         LIMIT 10"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let servers: Vec<serde_json::Value> = rows.iter().map(|r| {
+        let member_role_names: Vec<String> = r.try_get("member_role_names").unwrap_or_default();
+        serde_json::json!({
+            "id":   r.get::<Uuid, _>("id"),
+            "name": r.get::<String, _>("name"),
+            "icon": r.get::<Option<String>, _>("icon"),
+            "member_role_names": member_role_names,
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!(servers)))
+}
