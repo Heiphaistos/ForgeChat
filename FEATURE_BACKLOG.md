@@ -6,11 +6,11 @@
 
 ---
 
-## CYCLE 1 (prochain wake-up)
+## CYCLE 1 (2026-06-22 ✅)
 
-- [ ] 🔴 Backend — `GET /api/servers/discover` + `GET /api/activity-feed` — handlers manquants pour les nouvelles pages frontend
-- [ ] 🔴 Backend — `GET /api/channels/:id/polls/:id`, `POST .../vote` — PollDisplay n'a pas de backend
-- [ ] 🔴 Backend — `PATCH /api/user/status` — statut custom utilisateur (endpoint manquant)
+- [x] 🔴 Backend — `GET /api/servers/discover` + `GET /api/activity-feed` — déployé VPS 09:30
+- [x] 🔴 Backend — `GET/POST /api/servers/:s/channels/:c/polls/:id` — polls handler existant
+- [x] 🔴 Backend — `PATCH /api/user/status` — update statut + broadcast PRESENCE_UPDATE
 
 ## CYCLE 2
 
