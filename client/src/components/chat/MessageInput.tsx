@@ -1,5 +1,8 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react'
-import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash } from 'lucide-react'
+import {
+  Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link,
+} from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
@@ -316,19 +319,40 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }, 0)
   }
 
-  // Wrapper le texte sélectionné avec des marqueurs markdown
+  // Wrapper le texte sélectionné avec des marqueurs markdown (préfixe = suffixe)
   const wrapSelection = (marker: string) => {
+    applyFormat(marker, marker)
+  }
+
+  // Appliquer un format markdown avec préfixe et suffixe distincts
+  const applyFormat = (prefix: string, suffix: string = prefix) => {
     const ta = textareaRef.current
     if (!ta) return
     const start = ta.selectionStart
     const end = ta.selectionEnd
     const selected = content.slice(start, end)
-    const newContent = content.slice(0, start) + marker + selected + marker + content.slice(end)
+    const replacement = prefix + (selected || 'texte') + suffix
+    const newContent = content.slice(0, start) + replacement + content.slice(end)
     setContent(newContent)
     setTimeout(() => {
       ta.focus()
-      ta.setSelectionRange(start + marker.length, end + marker.length)
+      const newStart = start + prefix.length
+      const newEnd = newStart + (selected || 'texte').length
+      ta.setSelectionRange(newStart, newEnd)
     }, 0)
+  }
+
+  const insertLink = () => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const selected = content.slice(ta.selectionStart, ta.selectionEnd) || 'texte'
+    const url = window.prompt('URL du lien :', 'https://')
+    if (!url) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const newContent = content.slice(0, start) + `[${selected}](${url})` + content.slice(end)
+    setContent(newContent)
+    setTimeout(() => ta.focus(), 0)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -353,6 +377,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
       if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
       if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
+      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); insertLink(); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
@@ -570,7 +595,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         </div>
       )}
 
-      <div className="flex items-end gap-2 bg-fc-input rounded-lg px-2 py-2">
+      <div className="bg-fc-input rounded-lg">
+        {/* Barre Rich Text */}
+        <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
+          <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
+          <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
+          <button onClick={() => applyFormat('~~')} title="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
+          <div className="w-px h-4 bg-fc-hover mx-0.5" />
+          <button onClick={() => applyFormat('`')} title="Code inline" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
+          <button onClick={() => applyFormat('```\n', '\n```')} title="Bloc de code" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
+          <button onClick={() => applyFormat('> ', '')} title="Citation" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
+          <div className="w-px h-4 bg-fc-hover mx-0.5" />
+          <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
+        </div>
+
+        <div className="flex items-end gap-2 px-2 py-2">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
@@ -748,6 +787,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           >
             <Send size={20} />
           </button>
+        </div>
         </div>
       </div>
     </div>

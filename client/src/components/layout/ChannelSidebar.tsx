@@ -5,7 +5,7 @@ import {
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
@@ -38,7 +38,14 @@ export default function ChannelSidebar() {
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('fc_collapsed_cats')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
   const [channelSettings, setChannelSettings] = useState<any | null>(null)
   const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
   const getStatus = usePresence(s => s.getStatus)
@@ -120,7 +127,11 @@ export default function ChannelSidebar() {
   const channels: any[] = data?.channels ?? []
 
   const toggleGroup = (key: string) => {
-    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
+    setCollapsed(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem('fc_collapsed_cats', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   // Construire les groupes dynamiques basés sur les catégories DB
@@ -363,7 +374,12 @@ export default function ChannelSidebar() {
                   </button>
                 </div>
 
-                {!isCollapsed && groupChannels.map(renderChannel)}
+                {!isCollapsed
+                  ? groupChannels.map(renderChannel)
+                  : groupChannels
+                      .filter(c => (unreadCounts[c.id] ?? 0) > 0)
+                      .map(renderChannel)
+                }
               </div>
             )
           })}
