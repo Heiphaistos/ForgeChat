@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -13,6 +13,7 @@ import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
 import StatsTab from './StatsTab'
+import ServerEventsPage from '../../pages/ServerEventsPage'
 
 interface Server {
   id: string
@@ -38,7 +39,7 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats'
+type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
 
 export default function ServerSettingsModal({ server, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
@@ -221,41 +222,66 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
     queryFn: () => api.get(`/servers/${server.id}/channels`).then(r => r.data),
   })
 
-  const tabs = [
-    { id: 'general' as Tab, label: 'Général' },
-    { id: 'stats' as Tab, label: 'Statistiques', icon: BarChart2 },
-    { id: 'roles' as Tab, label: 'Rôles', icon: Shield },
-    { id: 'members' as Tab, label: 'Membres', icon: Users },
-    { id: 'tags' as Tab, label: 'Tags clan', icon: Tag },
-    { id: 'bans' as Tab, label: 'Bans', icon: Ban },
-    { id: 'emojis' as Tab, label: 'Emojis', icon: SmilePlus },
-    { id: 'bots' as Tab, label: 'Bots', icon: Bot },
-    { id: 'webhooks' as Tab, label: 'Webhooks', icon: Link },
-    { id: 'feeds' as Tab, label: 'Flux RSS', icon: Rss },
-    { id: 'audit' as Tab, label: 'Audit', icon: ScrollText },
-    { id: 'automod' as Tab, label: 'AutoMod', icon: Shield },
+  const tabGroups = [
+    {
+      label: null,
+      tabs: [
+        { id: 'general' as Tab, label: 'Général' },
+      ],
+    },
+    {
+      label: 'Communauté',
+      tabs: [
+        { id: 'roles'    as Tab, label: 'Rôles',     icon: Shield },
+        { id: 'members'  as Tab, label: 'Membres',   icon: Users },
+        { id: 'tags'     as Tab, label: 'Tags clan',  icon: Tag },
+        { id: 'bans'     as Tab, label: 'Bans',      icon: Ban },
+        { id: 'emojis'   as Tab, label: 'Emojis',    icon: SmilePlus },
+        { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
+        { id: 'webhooks' as Tab, label: 'Webhooks',  icon: Link },
+        { id: 'feeds'    as Tab, label: 'Flux RSS',  icon: Rss },
+      ],
+    },
+    {
+      label: 'Modération',
+      tabs: [
+        { id: 'events'  as Tab, label: 'Événements', icon: Calendar },
+        { id: 'audit'   as Tab, label: 'Audit Log',  icon: ScrollText },
+        { id: 'automod' as Tab, label: 'AutoMod',    icon: Shield },
+        { id: 'stats'   as Tab, label: 'Statistiques', icon: BarChart2 },
+      ],
+    },
   ]
 
   return (
     <div className="fixed inset-0 bg-black/80 flex z-50">
       <div className="flex w-full h-full">
         {/* Sidebar */}
-        <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4">
+        <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4 overflow-y-auto">
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate">
             {server.name}
           </div>
-          {tabs.map(t => {
-            const Icon = (t as any).icon
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
-                  ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
-              >
-                {Icon && <Icon size={13} />}
-                {t.label}
-              </button>
-            )
-          })}
+          {tabGroups.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
+              {group.label && (
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 px-2">
+                  {group.label}
+                </div>
+              )}
+              {group.tabs.map(t => {
+                const Icon = (t as any).icon
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
+                      ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
+                  >
+                    {Icon && <Icon size={13} />}
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
           <div className="mt-4 border-t border-fc-hover pt-4">
             <button onClick={() => deleteServer.mutate()} disabled={deleteConfirm !== server.name}
               className="w-full text-left px-2 py-1.5 rounded text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2 disabled:opacity-40"
@@ -679,14 +705,15 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
               </div>
             )}
 
-            {tab === 'stats' && <StatsTab serverId={server.id} />}
-            {tab === 'roles' && <RolesTab serverId={server.id} />}
+            {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
+            {tab === 'stats'   && <StatsTab serverId={server.id} />}
+            {tab === 'roles'   && <RolesTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
-            {tab === 'bans' && <BansTab serverId={server.id} />}
-            {tab === 'tags' && <TagsTab serverId={server.id} />}
+            {tab === 'bans'    && <BansTab serverId={server.id} />}
+            {tab === 'tags'    && <TagsTab serverId={server.id} />}
             {tab === 'webhooks' && <WebhooksTab server={server} channels={channels} />}
-            {tab === 'feeds' && <FeedsTab serverId={server.id} channels={channels} />}
-            {tab === 'audit' && <AuditLogTab server={server} />}
+            {tab === 'feeds'   && <FeedsTab serverId={server.id} channels={channels} />}
+            {tab === 'audit'   && <AuditLogTab server={server} />}
             {tab === 'automod' && <AutoModTab server={server} channels={channels} />}
           </div>
         </div>
