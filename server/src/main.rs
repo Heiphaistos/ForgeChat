@@ -416,6 +416,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/tasks/:task_id", delete(handlers::moderation::delete_task))
         // User mentions
         .route("/user/mentions", get(handlers::reads::get_user_mentions))
+        .route("/users/:id/mutual-servers", get(handlers::users::get_mutual_servers))
         // User status + activity feed
         .route("/user/status", patch(handlers::users::update_status))
         .route("/activity-feed", get(handlers::users::get_activity_feed))
