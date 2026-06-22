@@ -67,7 +67,8 @@ export default function StageChannel({
 
   // WS listeners
   useEffect(() => {
-    const unSpeakerAdd = on('STAGE_SPEAKER_ADD', (data: StageUser & { channel_id?: string }) => {
+    const unSpeakerAdd = on('STAGE_SPEAKER_ADD', (raw: unknown) => {
+      const data = raw as StageUser & { channel_id?: string }
       if (data.channel_id && data.channel_id !== channelId) return
       setSpeakers(prev => {
         if (prev.some(s => s.user_id === data.user_id)) return prev
@@ -76,12 +77,14 @@ export default function StageChannel({
       setAudience(prev => prev.filter(a => a.user_id !== data.user_id))
     })
 
-    const unSpeakerRemove = on('STAGE_SPEAKER_REMOVE', (data: { user_id: string; channel_id?: string }) => {
+    const unSpeakerRemove = on('STAGE_SPEAKER_REMOVE', (raw: unknown) => {
+      const data = raw as { user_id: string; channel_id?: string }
       if (data.channel_id && data.channel_id !== channelId) return
       setSpeakers(prev => prev.filter(s => s.user_id !== data.user_id))
     })
 
-    const unHandRaise = on('STAGE_HAND_RAISE', (data: HandRaise & { channel_id?: string }) => {
+    const unHandRaise = on('STAGE_HAND_RAISE', (raw: unknown) => {
+      const data = raw as HandRaise & { channel_id?: string }
       if (data.channel_id && data.channel_id !== channelId) return
       setHandRaises(prev => {
         const without = prev.filter(h => h.user_id !== data.user_id)
