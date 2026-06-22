@@ -463,6 +463,13 @@ function TextDisplaySection() {
   const [gifAutoplay, setGifAutoplay] = useState('always')
   const [linkPreview, setLinkPreview] = useState(true)
   const [messageGrouping, setMessageGrouping] = useState(5)
+  const [compact, setCompact] = useState(() => localStorage.getItem('fc_compact_mode') === 'true')
+
+  const toggleCompact = () => {
+    const newVal = !compact
+    setCompact(newVal)
+    localStorage.setItem('fc_compact_mode', String(newVal))
+  }
 
   useEffect(() => {
     if (settings) {
@@ -527,6 +534,16 @@ function TextDisplaySection() {
           <div className="text-xs text-fc-muted">Affiche un aperçu des URLs partagées</div>
         </div>
         <Toggle value={linkPreview} onChange={setLinkPreview} />
+      </div>
+
+      <div className="flex items-center justify-between py-3 border-b border-fc-hover">
+        <div>
+          <p className="text-sm text-white font-medium">Mode compact</p>
+          <p className="text-xs text-fc-muted">Réduit l'espacement entre les messages</p>
+        </div>
+        <button onClick={toggleCompact} className={`w-11 h-6 rounded-full transition-colors ${compact ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
+          <span className={`block w-4 h-4 bg-white rounded-full m-1 transition-transform ${compact ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
       </div>
 
       <button
