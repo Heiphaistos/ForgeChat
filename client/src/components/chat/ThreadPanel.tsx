@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Hash, Send, MessagesSquare } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
+import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -16,10 +17,12 @@ interface Props {
 
 export default function ThreadPanel({ serverId, channelId, parentMessageId, onClose }: Props) {
   const { user } = useAuth()
+  const { on } = useWs()
   const [input, setInput] = useState('')
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const bottomRef = useRef<HTMLDivElement>(null)
   const qc = useQueryClient()
 
   const { data: threads = [], isLoading } = useQuery<any[]>({
@@ -37,8 +40,23 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
     queryKey: ['thread-messages', threadId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`).then(r => r.data),
     enabled: !!threadId,
-    refetchInterval: 3000,
   })
+
+  // Temps réel — écouter les nouveaux messages du thread via WS
+  useEffect(() => {
+    if (!threadId) return
+    const off = on('THREAD_MESSAGE', (d: any) => {
+      if (d.thread_id === threadId || d.parent_id === parentMessageId) {
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
+    })
+    return off
+  }, [threadId, parentMessageId, on, qc])
+
+  // Scroll to bottom quand les messages changent
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length])
 
   const createThread = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/threads`, {
@@ -83,8 +101,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-3 border-b border-fc-bg flex-shrink-0">
         <MessagesSquare size={16} className="text-fc-muted" />
-        <span className="font-semibold text-white text-sm flex-1">Thread</span>
-        <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover">
+        <span className="font-semibold text-white text-sm flex-1">Fil de discussion</span>
+        <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover" title="Fermer">
           <X size={16} />
         </button>
       </div>
@@ -141,15 +159,24 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           </div>
         )}
 
+        {threadId && !isLoading && messages.length === 0 && (
+          <div className="text-center text-fc-muted text-sm py-8">
+            <MessagesSquare size={32} className="mx-auto mb-2 opacity-30" />
+            <p>Aucune réponse — soyez le premier !</p>
+          </div>
+        )}
+
         {messages.map((msg: any) => (
           <div key={msg.id} className="flex gap-2">
-            <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5">
-              {msg.author?.username?.charAt(0).toUpperCase()}
+            <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
+              {msg.author?.avatar
+                ? <img src={msg.author.avatar} alt="" className="w-full h-full object-cover" />
+                : msg.author?.username?.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-1.5 mb-0.5">
-                <span className={`text-xs font-semibold ${msg.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
-                  {msg.author?.username}
+                <span className={`text-xs font-semibold ${msg.author_id === user?.id || msg.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
+                  {msg.author?.username ?? msg.author_username}
                 </span>
                 <span className="text-xs text-fc-muted">
                   {format(new Date(msg.created_at), 'HH:mm', { locale: fr })}
@@ -159,6 +186,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             </div>
           </div>
         ))}
+
+        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
@@ -173,7 +202,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 handleSend()
               }
             }}
-            placeholder={threadId ? 'Répondre dans le thread...' : 'Premier message du thread...'}
+            placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
             rows={2}
             className="flex-1 px-2.5 py-2 bg-fc-input rounded-lg text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
           />
@@ -181,6 +210,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             onClick={handleSend}
             disabled={!input.trim() || createThread.isPending || sendMessage.isPending}
             className="p-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg transition disabled:opacity-50 flex-shrink-0"
+            title="Envoyer"
           >
             <Send size={16} />
           </button>
