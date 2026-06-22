@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X } from 'lucide-react'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 
@@ -118,6 +118,15 @@ export default function ServerSidebar() {
     x: number; y: number; serverId: string
   } | null>(null)
   const [draggedServerId, setDraggedServerId] = useState<string | null>(null)
+  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
+  const [serverOrder, setServerOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('fc_server_order')
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const { data: servers = [] } = useQuery({
@@ -196,6 +205,47 @@ export default function ServerSidebar() {
 
   // Séquence : serveurs libres + dossiers (en ordre d'insertion)
   const freeServers = (servers as any[]).filter(s => !serverIdsInFolders.has(s.id))
+
+  // Serveurs libres ordonnés selon serverOrder (localStorage)
+  const orderedFreeServers = useMemo(() => {
+    if (!serverOrder.length) return freeServers
+    return [...freeServers].sort((a: any, b: any) => {
+      const ai = serverOrder.indexOf(a.id)
+      const bi = serverOrder.indexOf(b.id)
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+  }, [freeServers, serverOrder])
+
+  const saveServerOrder = useCallback((newOrder: string[]) => {
+    setServerOrder(newOrder)
+    try { localStorage.setItem('fc_server_order', JSON.stringify(newOrder)) } catch {}
+  }, [])
+
+  // Drop sur un slot (séparateur entre serveurs) = réordonnement
+  const handleSlotDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverSlot(slotIndex)
+  }, [])
+
+  const handleSlotDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggedServerId) { setDragOverSlot(null); return }
+    const current = orderedFreeServers.filter((s: any) => s.id !== draggedServerId)
+    const insertIdx = Math.min(slotIndex, current.length)
+    current.splice(insertIdx, 0, orderedFreeServers.find((s: any) => s.id === draggedServerId)!)
+    saveServerOrder(current.filter(Boolean).map((s: any) => s.id))
+    setDraggedServerId(null)
+    setDragOverSlot(null)
+  }, [draggedServerId, orderedFreeServers, saveServerOrder])
+
+  const handleSlotDragLeave = useCallback(() => {
+    setDragOverSlot(null)
+  }, [])
 
   // Context menu actions
   const handleContextMenu = (e: React.MouseEvent, sId: string) => {
@@ -313,9 +363,27 @@ export default function ServerSidebar() {
 
       <div className="w-8 h-px bg-fc-hover mx-auto" />
 
-      {/* Serveurs libres (pas dans un dossier) */}
-      {freeServers.map((s: any) => (
-        <ServerIcon key={s.id} s={s} />
+      {/* Serveurs libres (ordonnés, avec slots de réordonnement) */}
+      {/* Slot avant le premier serveur */}
+      {orderedFreeServers.length > 0 && (
+        <div
+          className={`w-8 h-1 rounded-full mx-auto transition-all ${dragOverSlot === 0 ? 'bg-fc-accent h-1.5' : 'bg-transparent'}`}
+          onDragOver={e => handleSlotDragOver(e, 0)}
+          onDrop={e => handleSlotDrop(e, 0)}
+          onDragLeave={handleSlotDragLeave}
+        />
+      )}
+      {orderedFreeServers.map((s: any, idx: number) => (
+        <div key={s.id} className="flex flex-col items-center gap-0">
+          <ServerIcon s={s} />
+          {/* Slot après chaque serveur */}
+          <div
+            className={`w-8 h-1 rounded-full mx-auto mt-0.5 transition-all ${dragOverSlot === idx + 1 ? 'bg-fc-accent h-1.5' : 'bg-transparent'}`}
+            onDragOver={e => handleSlotDragOver(e, idx + 1)}
+            onDrop={e => handleSlotDrop(e, idx + 1)}
+            onDragLeave={handleSlotDragLeave}
+          />
+        </div>
       ))}
 
       {/* Dossiers */}
