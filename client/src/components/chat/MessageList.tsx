@@ -11,6 +11,7 @@ import ReactionPopup from './ReactionPopup'
 import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
+import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -383,8 +384,17 @@ export default function MessageList({
                       </div>
                     ))}
 
-                    {/* Link preview (1 seule, pas si attachments) */}
-                    {msg.content && !msg.attachments?.length && (() => {
+                    {/* Sondage attaché au message */}
+                    {msg.poll_id && (
+                      <PollDisplay
+                        pollId={msg.poll_id}
+                        serverId={serverId}
+                        channelId={channelId}
+                      />
+                    )}
+
+                    {/* Link preview (1 seule, pas si attachments, pas si sondage) */}
+                    {msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
                     })()}
