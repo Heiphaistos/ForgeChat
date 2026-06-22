@@ -650,6 +650,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             </button>
             {showStickerPicker && (
               <StickerPicker
+                serverId={serverId || undefined}
                 onPick={handleSendSticker}
                 onClose={() => setShowStickerPicker(false)}
               />

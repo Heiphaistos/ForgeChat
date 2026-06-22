@@ -385,6 +385,20 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/tasks", post(handlers::moderation::create_task))
         .route("/channels/:channel_id/tasks/:task_id", put(handlers::moderation::update_task))
         .route("/channels/:channel_id/tasks/:task_id", delete(handlers::moderation::delete_task))
+        // DM extras (mute, archive, pins)
+        .route("/dms/:id/mute", post(handlers::dm_extras::mute_dm))
+        .route("/dms/:id/mute", delete(handlers::dm_extras::unmute_dm))
+        .route("/dms/:id/archive", post(handlers::dm_extras::archive_dm))
+        .route("/dms/:id/archive", delete(handlers::dm_extras::unarchive_dm))
+        .route("/dms/:id/pins", get(handlers::dm_extras::get_dm_pins))
+        .route("/dms/:id/pins/:msg_id", post(handlers::dm_extras::pin_dm_message))
+        .route("/dms/:id/pins/:msg_id", delete(handlers::dm_extras::unpin_dm_message))
+        // Custom Stickers
+        .route("/servers/:server_id/stickers", get(handlers::stickers::list_stickers))
+        .route("/servers/:server_id/stickers", post(handlers::stickers::create_sticker))
+        .route("/servers/:server_id/stickers/:sticker_id", delete(handlers::stickers::delete_sticker))
+        // Bulk friend invitations via CSV
+        .route("/friends/invite-bulk", post(handlers::friends::invite_bulk))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

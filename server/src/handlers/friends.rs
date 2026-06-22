@@ -1,6 +1,7 @@
 use axum::{extract::{Path, State}, Extension, Json};
 use chrono::Utc;
 use rand::Rng;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -545,5 +546,123 @@ pub async fn send_e2e_message(
         "ciphertext": ciphertext,
         "created_at": created_at,
         "encrypted": true,
+    })))
+}
+
+// ─── Invite Bulk (import contacts CSV) ──────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct InviteBulkBody {
+    pub emails: Vec<String>,
+    pub usernames: Vec<String>,
+}
+
+/// POST /api/friends/invite-bulk
+/// Pour chaque username trouvé → envoi d'une demande d'ami.
+/// Les emails ne font pas l'objet d'envoi (pas de système email).
+/// Limite 50 contacts max par appel.
+pub async fn invite_bulk(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<InviteBulkBody>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let total = body.emails.len() + body.usernames.len();
+    if total > 50 {
+        return Err(AppError::BadRequest(
+            "Maximum 50 contacts par appel".into()
+        ));
+    }
+
+    let mut sent: u32 = 0;
+    let mut already_friends: u32 = 0;
+    let mut not_found: Vec<String> = Vec::new();
+
+    // Emails : aucune action (pas de système email), retour dans not_found
+    for email in &body.emails {
+        not_found.push(email.clone());
+    }
+
+    // Usernames : chercher en DB et envoyer une demande d'ami
+    for raw in &body.usernames {
+        let name = raw.trim().to_lowercase();
+        if name.is_empty() {
+            continue;
+        }
+
+        // Supporter le format user#discriminator
+        let (username, discriminator) = if name.contains('#') {
+            let mut parts = name.splitn(2, '#');
+            (
+                parts.next().unwrap_or("").to_string(),
+                Some(parts.next().unwrap_or("").to_string()),
+            )
+        } else {
+            (name.clone(), None)
+        };
+
+        let target_row = if let Some(ref disc) = discriminator {
+            sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 AND discriminator=$2")
+                .bind(&username)
+                .bind(disc)
+                .fetch_optional(&state.db)
+                .await?
+        } else {
+            sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 LIMIT 1")
+                .bind(&username)
+                .fetch_optional(&state.db)
+                .await?
+        };
+
+        let Some(row) = target_row else {
+            not_found.push(raw.clone());
+            continue;
+        };
+
+        let target_id: Uuid = row.get("id");
+
+        if target_id == claims.sub {
+            not_found.push(raw.clone());
+            continue;
+        }
+
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM friendships WHERE
+             (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
+        )
+        .bind(claims.sub)
+        .bind(target_id)
+        .fetch_one(&state.db)
+        .await?;
+
+        if exists {
+            already_friends += 1;
+            continue;
+        }
+
+        sqlx::query(
+            "INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')
+             ON CONFLICT DO NOTHING"
+        )
+        .bind(claims.sub)
+        .bind(target_id)
+        .execute(&state.db)
+        .await?;
+
+        // Notifier l'utilisateur cible
+        let event = serde_json::json!({
+            "type": "FRIEND_REQUEST",
+            "from_id": claims.sub,
+        });
+        state.broadcast_to_user(target_id, event.to_string()).await;
+
+        sent += 1;
+    }
+
+    Ok(Json(serde_json::json!({
+        "sent": sent,
+        "already_friends": already_friends,
+        "not_found": not_found,
     })))
 }
