@@ -638,10 +638,10 @@ export default function ChannelSidebar() {
                 </div>
 
                 {!isCollapsed
-                  ? groupChannels.map(renderChannel)
+                  ? groupChannels.map(ch => renderChannel(ch, groupChannels))
                   : groupChannels
                       .filter(c => (unreadCounts[c.id] ?? 0) > 0)
-                      .map(renderChannel)
+                      .map(ch => renderChannel(ch, groupChannels))
                 }
               </div>
             )
