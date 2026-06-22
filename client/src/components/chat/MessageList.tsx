@@ -29,6 +29,7 @@ interface Props {
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
+const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -168,8 +169,29 @@ export default function MessageList({
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
+
+  const removeReactionMut = useMutation({
+    mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
+      api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
+    onError: () => toast.error('Impossible de retirer la réaction'),
+  })
+
+  const toggleReaction = (msgId: string, emoji: string) => {
+    const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+    const msg = msgs.find(m => m.id === msgId)
+    const reaction = msg?.reactions.find(r => r.emoji === emoji)
+    if (reaction?.me) {
+      removeReactionMut.mutate({ msgId, emoji })
+    } else {
+      onAddReaction?.(msgId, emoji)
+    }
+    const reactionKey = `${msgId}:${emoji}`
+    setPoppingReaction(reactionKey)
+    setTimeout(() => setPoppingReaction(null), 300)
+  }
 
   const saveMessage = useMutation({
     mutationFn: ({ message_id, channel_id, server_id }: { message_id: string; channel_id: string; server_id: string }) =>
@@ -193,7 +215,7 @@ export default function MessageList({
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5"
-        onClick={() => { setEmojiPickerFor(null); setPopup(null) }}
+        onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null) }}
         onScroll={handleScroll}
       >
         {/* Loader "plus de messages" */}
@@ -408,12 +430,7 @@ export default function MessageList({
                           return (
                             <button
                               key={r.emoji}
-                              onClick={() => {
-                                onAddReaction?.(msg.id, r.emoji)
-                                // Animation pop
-                                setPoppingReaction(reactionKey)
-                                setTimeout(() => setPoppingReaction(null), 300)
-                              }}
+                              onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, r.emoji) }}
                               onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
                               onMouseLeave={() => setReactionPopup(null)}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all duration-150
@@ -427,6 +444,32 @@ export default function MessageList({
                             </button>
                           )
                         })}
+                        {/* Bouton "+" pour ajouter une réaction */}
+                        <div className="relative">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); setEmojiPickerFor(null) }}
+                            className="flex items-center justify-center w-7 h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
+                            title="Ajouter une réaction"
+                          >
+                            +
+                          </button>
+                          {reactionPickerFor === msg.id && (
+                            <div
+                              className="absolute bottom-full left-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex flex-wrap gap-1 z-50 w-52"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {REACTION_PICKER_EMOJIS.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => { toggleReaction(msg.id, emoji); setReactionPickerFor(null) }}
+                                  className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </>

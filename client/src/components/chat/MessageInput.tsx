@@ -95,6 +95,12 @@ interface MentionUser {
   discriminator: string
 }
 
+interface ChannelItem {
+  id: string
+  name: string
+  type: string
+}
+
 const TTL_OPTIONS = [
   { label: 'Ne pas expirer', value: null },
   { label: '1 heure', value: 1 },
@@ -118,6 +124,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showMentions, setShowMentions] = useState(false)
+  const [channelQuery, setChannelQuery] = useState('')
+  const [channelIndex, setChannelIndex] = useState(0)
+  const [showChannels, setShowChannels] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
@@ -140,6 +149,17 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       api.get(`/users/search?q=${encodeURIComponent(mentionQuery)}`).then(r => r.data),
     enabled: showMentions && mentionQuery.length >= 1,
   })
+
+  const { data: allServerChannels = [] } = useQuery<ChannelItem[]>({
+    queryKey: ['server_channels_list', serverId],
+    queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data.channels ?? []),
+    enabled: !!serverId,
+    staleTime: 30_000,
+  })
+
+  const channelResults = channelQuery
+    ? allServerChannels.filter(c => c.name.toLowerCase().includes(channelQuery.toLowerCase())).slice(0, 5)
+    : allServerChannels.slice(0, 5)
 
   const { data: botCommandsRaw = [] } = useQuery<{ name: string; description: string; bot_name: string }[]>({
     queryKey: ['server_commands', serverId],
@@ -245,14 +265,41 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
   const detectMention = (value: string, pos: number) => {
     const before = value.slice(0, pos)
-    const match = before.match(/@(\w*)$/)
-    if (match) {
-      setMentionQuery(match[1])
+    const mentionMatch = before.match(/@(\w*)$/)
+    if (mentionMatch) {
+      setMentionQuery(mentionMatch[1])
       setMentionIndex(0)
       setShowMentions(true)
-    } else {
-      setShowMentions(false)
+      setShowChannels(false)
+      return
     }
+    setShowMentions(false)
+
+    const channelMatch = before.match(/#([\w-]*)$/)
+    if (channelMatch) {
+      setChannelQuery(channelMatch[1])
+      setChannelIndex(0)
+      setShowChannels(true)
+    } else {
+      setShowChannels(false)
+    }
+  }
+
+  const insertChannel = (channel: ChannelItem) => {
+    const pos = cursorPos
+    const before = content.slice(0, pos)
+    const after = content.slice(pos)
+    const hashIdx = before.lastIndexOf('#')
+    const newContent = before.slice(0, hashIdx) + `#${channel.name} ` + after
+    setContent(newContent)
+    setShowChannels(false)
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = hashIdx + channel.name.length + 2
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newPos, newPos)
+      }
+    }, 0)
   }
 
   const detectSlash = (value: string) => {
@@ -348,6 +395,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       if (e.key === 'Tab' || (e.key === 'Enter' && showMentions)) { e.preventDefault(); insertMention(mentionResults[mentionIndex]); return }
       if (e.key === 'Escape') { setShowMentions(false); return }
     }
+    if (showChannels && channelResults.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setChannelIndex(i => Math.min(i + 1, channelResults.length - 1)); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setChannelIndex(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Tab' || (e.key === 'Enter' && showChannels)) { e.preventDefault(); insertChannel(channelResults[channelIndex]); return }
+      if (e.key === 'Escape') { setShowChannels(false); return }
+    }
     // Ctrl+B -> **gras**, Ctrl+I -> *italique*, Ctrl+U -> __souligné__
     if (e.ctrlKey && !e.shiftKey && !e.altKey) {
       if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
@@ -401,6 +454,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setFiles([])
     setShowMentions(false)
     setShowSlash(false)
+    setShowChannels(false)
     onCancelReply?.()
     textareaRef.current?.focus()
   }
@@ -508,6 +562,28 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 <div className="text-sm font-medium">{user.username}</div>
                 <div className="text-xs text-fc-muted">#{user.discriminator}</div>
               </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Dropdown channels # */}
+      {showChannels && channelResults.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
+          <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
+            Canaux — #{channelQuery}
+          </div>
+          {channelResults.map((ch, idx) => (
+            <button
+              key={ch.id}
+              onClick={() => insertChannel(ch)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition
+                ${idx === channelIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
+            >
+              <div className="w-7 h-7 rounded bg-fc-hover flex items-center justify-center text-xs font-bold text-fc-accent flex-shrink-0">
+                #
+              </div>
+              <div className="text-sm font-medium">{ch.name}</div>
             </button>
           ))}
         </div>
