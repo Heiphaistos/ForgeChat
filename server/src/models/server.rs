@@ -17,6 +17,12 @@ pub struct Server {
     pub verification_enabled: bool,
     pub verification_rules: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub system_channel_id: Option<Uuid>,
+    pub afk_channel_id: Option<Uuid>,
+    pub afk_timeout_minutes: i32,
+    pub rules_channel_id: Option<Uuid>,
+    pub vanity_url: Option<String>,
+    pub content_filter: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,6 +39,12 @@ pub struct UpdateServerRequest {
     pub is_public: Option<bool>,
     pub welcome_message: Option<String>,
     pub banner: Option<String>,
+    pub system_channel_id: Option<Uuid>,
+    pub afk_channel_id: Option<Uuid>,
+    pub afk_timeout: Option<i32>,
+    pub rules_channel_id: Option<Uuid>,
+    pub vanity_url: Option<String>,
+    pub content_filter: Option<i32>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

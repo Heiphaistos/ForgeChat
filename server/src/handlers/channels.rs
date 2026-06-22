@@ -238,3 +238,73 @@ pub async fn get_pinned(
 
     Ok(Json(result))
 }
+
+// ─── Channel Permission Overrides ──────────────────────────────────────────────
+
+pub async fn get_channel_permissions(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    require_member(&state, claims.sub, server_id).await?;
+    let rows = sqlx::query(
+        "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
+    )
+    .bind(channel_id)
+    .fetch_all(&state.db)
+    .await?;
+    let result: Vec<serde_json::Value> = rows.iter().map(|r| {
+        use sqlx::Row;
+        serde_json::json!({
+            "target_id": r.get::<Uuid, _>("target_id"),
+            "target_type": r.get::<String, _>("target_type"),
+            "allow": r.get::<i64, _>("allow"),
+            "deny": r.get::<i64, _>("deny"),
+        })
+    }).collect();
+    Ok(Json(result))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ChannelPermOverride {
+    pub target_type: String,
+    pub allow: i64,
+    pub deny: i64,
+}
+
+pub async fn put_channel_permission(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, target_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(body): Json<ChannelPermOverride>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
+    sqlx::query(
+        "INSERT INTO channel_permissions (channel_id, target_id, target_type, allow, deny)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (channel_id, target_id) DO UPDATE
+         SET allow=EXCLUDED.allow, deny=EXCLUDED.deny, target_type=EXCLUDED.target_type"
+    )
+    .bind(channel_id)
+    .bind(target_id)
+    .bind(&body.target_type)
+    .bind(body.allow)
+    .bind(body.deny)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_channel_permission(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, target_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
+    sqlx::query("DELETE FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
+        .bind(channel_id)
+        .bind(target_id)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

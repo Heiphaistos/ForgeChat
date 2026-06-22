@@ -22,6 +22,8 @@ import ExplorePage from './pages/ExplorePage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
+import { useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import LandingPage from './pages/LandingPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -47,6 +49,7 @@ function AppInner() {
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
+  const qcHook = useQueryClient()
 
   useEffect(() => { fetchMe() }, [])
 
@@ -117,6 +120,23 @@ function AppInner() {
   // Demander permission notifications au login
   useEffect(() => {
     if (user) requestPermission()
+  }, [user?.id])
+
+  // Notifications temps réel pour les demandes d'ami
+  useEffect(() => {
+    if (!user) return
+    const offReq = on('FRIEND_REQUEST', (d: any) => {
+      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      toast(`👋 Nouvelle demande d'ami de ${d.from_username ?? 'quelqu\'un'}`, {
+        duration: 5000,
+        icon: '🤝',
+      })
+    })
+    const offAcc = on('FRIEND_ACCEPTED', (d: any) => {
+      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      toast.success(`${d.from_username ?? 'Quelqu\'un'} a accepté ta demande d'ami !`)
+    })
+    return () => { offReq(); offAcc() }
   }, [user?.id])
 
   // Raccourcis clavier globaux

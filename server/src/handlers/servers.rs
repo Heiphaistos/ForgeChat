@@ -133,7 +133,13 @@ pub async fn update_server(
             description = COALESCE($3, description),
             is_public = COALESCE($4, is_public),
             welcome_message = COALESCE($5, welcome_message),
-            banner = COALESCE($6, banner)
+            banner = COALESCE($6, banner),
+            system_channel_id = COALESCE($7, system_channel_id),
+            afk_channel_id = COALESCE($8, afk_channel_id),
+            afk_timeout_minutes = COALESCE($9, afk_timeout_minutes),
+            rules_channel_id = COALESCE($10, rules_channel_id),
+            vanity_url = COALESCE($11, vanity_url),
+            content_filter = COALESCE($12, content_filter)
          WHERE id=$1 RETURNING *"
     )
     .bind(server_id)
@@ -142,6 +148,12 @@ pub async fn update_server(
     .bind(body.is_public)
     .bind(body.welcome_message)
     .bind(body.banner)
+    .bind(body.system_channel_id)
+    .bind(body.afk_channel_id)
+    .bind(body.afk_timeout)
+    .bind(body.rules_channel_id)
+    .bind(body.vanity_url)
+    .bind(body.content_filter)
     .fetch_one(&state.db)
     .await?;
 

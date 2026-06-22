@@ -77,10 +77,17 @@ pub async fn send_friend_request(
     .execute(&state.db)
     .await?;
 
-    // Notifier le destinataire
+    // Récupérer le username de l'expéditeur pour la notif
+    let sender_row = sqlx::query("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_optional(&state.db).await?;
+    let from_username: String = sender_row.as_ref()
+        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
+        .unwrap_or_default();
+
     let event = serde_json::json!({
         "type": "FRIEND_REQUEST",
         "from_id": claims.sub,
+        "from_username": from_username,
     });
     state.broadcast_to_user(target_id, event.to_string()).await;
 
@@ -92,13 +99,31 @@ pub async fn accept_friend(
     Extension(claims): Extension<Claims>,
     Path(friendship_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    sqlx::query(
-        "UPDATE friendships SET status='accepted' WHERE id=$1 AND friend_id=$2"
+    use sqlx::Row;
+    // Récupère l'expéditeur original (user_id) pour le notifier
+    let row = sqlx::query(
+        "UPDATE friendships SET status='accepted', friend_since=NOW() WHERE id=$1 AND friend_id=$2 RETURNING user_id"
     )
     .bind(friendship_id)
     .bind(claims.sub)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await?;
+
+    if let Some(row) = row {
+        let requester_id: Uuid = row.get("user_id");
+        // Récupérer username de l'accepteur
+        let accepter = sqlx::query("SELECT username FROM users WHERE id=$1")
+            .bind(claims.sub).fetch_optional(&state.db).await?;
+        let accepter_name: String = accepter.as_ref()
+            .and_then(|r| r.try_get("username").ok())
+            .unwrap_or_default();
+        let event = serde_json::json!({
+            "type": "FRIEND_ACCEPTED",
+            "from_id": claims.sub,
+            "from_username": accepter_name,
+        });
+        state.broadcast_to_user(requester_id, event.to_string()).await;
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -572,7 +597,7 @@ pub async fn get_friends_v2(
          FROM friendships f
          JOIN users u ON u.id = CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END
          LEFT JOIN friend_nicknames fn2 ON fn2.user_id=$1 AND fn2.target_id=u.id
-         WHERE f.user_id=$1 OR (f.friend_id=$1 AND f.status='accepted')
+         WHERE f.user_id=$1 OR f.friend_id=$1
          ORDER BY u.username"
     )
     .bind(claims.sub)
@@ -715,7 +740,12 @@ pub async fn send_friend_by_name(
     ).bind(claims.sub).bind(target_id).bind(if msg.is_empty() { None } else { Some(msg) })
      .execute(&state.db).await?;
 
-    let event = serde_json::json!({ "type": "FRIEND_REQUEST", "from_id": claims.sub });
+    let sender = sqlx::query("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_optional(&state.db).await?;
+    let from_username: String = sender.as_ref()
+        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
+        .unwrap_or_default();
+    let event = serde_json::json!({ "type": "FRIEND_REQUEST", "from_id": claims.sub, "from_username": from_username });
     state.broadcast_to_user(target_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true, "user_id": target_id })))

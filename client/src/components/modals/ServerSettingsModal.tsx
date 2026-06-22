@@ -25,6 +25,12 @@ interface Server {
   member_count: number
   verification_enabled?: boolean
   verification_rules?: string | null
+  system_channel_id?: string | null
+  afk_channel_id?: string | null
+  afk_timeout_minutes?: number | null
+  rules_channel_id?: string | null
+  vanity_url?: string | null
+  content_filter?: number
 }
 
 interface Props {
@@ -44,6 +50,12 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
   const [verificationEnabled, setVerificationEnabled] = useState(server.verification_enabled ?? false)
   const [verificationRules, setVerificationRules] = useState(server.verification_rules ?? '')
   const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [systemChannelId, setSystemChannelId] = useState<string>(server.system_channel_id ?? '')
+  const [afkChannelId, setAfkChannelId] = useState<string>(server.afk_channel_id ?? '')
+  const [afkTimeout, setAfkTimeout] = useState(server.afk_timeout_minutes ?? 300)
+  const [rulesChannelId, setRulesChannelId] = useState<string>(server.rules_channel_id ?? '')
+  const [vanityUrl, setVanityUrl] = useState(server.vanity_url ?? '')
+  const [explicitFilter, setExplicitFilter] = useState(server.content_filter ?? 0)
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const [newBotName, setNewBotName] = useState('')
@@ -91,6 +103,12 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
       is_public: isPublic,
       welcome_message: welcomeMessage || null,
       banner: bannerUrl || null,
+      system_channel_id: systemChannelId || null,
+      afk_channel_id: afkChannelId || null,
+      afk_timeout: afkTimeout,
+      rules_channel_id: rulesChannelId || null,
+      vanity_url: vanityUrl.trim() || null,
+      content_filter: explicitFilter,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
@@ -359,6 +377,84 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                   >
                     <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isPublic ? 'left-6' : 'left-1'}`} />
                   </button>
+                </div>
+
+                {/* Canaux système */}
+                <div className="border-t border-fc-hover pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-white">Canaux système</h3>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal système</label>
+                    <p className="text-xs text-fc-muted mb-2">Messages de bienvenue et de boost de serveur</p>
+                    <select value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'text').map((c: any) => (
+                        <option key={c.id} value={c.id}>#{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal des règles</label>
+                    <p className="text-xs text-fc-muted mb-2">Affiché sur l'écran de vérification des membres</p>
+                    <select value={rulesChannelId} onChange={e => setRulesChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'text').map((c: any) => (
+                        <option key={c.id} value={c.id}>#{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal AFK (inactif)</label>
+                    <select value={afkChannelId} onChange={e => setAfkChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'voice').map((c: any) => (
+                        <option key={c.id} value={c.id}>🔊 {c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {afkChannelId && (
+                    <div>
+                      <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                        Délai AFK — {afkTimeout >= 3600 ? `${afkTimeout/3600}h` : `${afkTimeout/60} min`}
+                      </label>
+                      <select value={afkTimeout} onChange={e => setAfkTimeout(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                        {[60, 120, 300, 600, 900, 1800, 3600].map(t => (
+                          <option key={t} value={t}>{t >= 3600 ? `${t/3600}h` : `${t/60} min`}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modération */}
+                <div className="border-t border-fc-hover pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-white">Modération</h3>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Filtre de contenu explicite</label>
+                    <select value={explicitFilter} onChange={e => setExplicitFilter(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value={0}>Désactivé</option>
+                      <option value={1}>Membres sans rôles</option>
+                      <option value={2}>Tous les membres</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Vanity URL */}
+                <div className="border-t border-fc-hover pt-4">
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Lien d'invitation personnalisé</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs text-fc-muted">forgechat/</span>
+                    <input value={vanityUrl} onChange={e => setVanityUrl(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      maxLength={30}
+                      placeholder="mon-serveur"
+                      className="w-full pl-24 pr-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-accent"
+                    />
+                  </div>
+                  <p className="text-xs text-fc-muted mt-1">Uniquement des lettres minuscules, chiffres et tirets</p>
                 </div>
 
                 <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-hover">

@@ -223,6 +223,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id", patch(handlers::channels::update_channel))
         .route("/servers/:server_id/channels/:channel_id", delete(handlers::channels::delete_channel))
         .route("/servers/:server_id/channels/:channel_id/pins", get(handlers::channels::get_pinned))
+        // Channel permission overrides
+        .route("/channels/:channel_id/permissions", get(handlers::channels::get_channel_permissions))
+        .route("/channels/:channel_id/permissions/:target_id",
+            put(handlers::channels::put_channel_permission)
+            .delete(handlers::channels::delete_channel_permission))
         // Messages
         .route("/servers/:server_id/channels/:channel_id/messages", get(handlers::messages::get_messages))
         .route("/servers/:server_id/channels/:channel_id/messages", post(handlers::messages::send_message))

@@ -247,6 +247,23 @@ function AccountSection({ user, updateMe }: { user: any; updateMe: (d: any) => v
         {saveProfile.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
       </button>
 
+      {/* 2FA stub */}
+      <div className="border-t border-fc-hover pt-6">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Authentification à deux facteurs</h3>
+            <p className="text-xs text-fc-muted">Protège ton compte avec un code temporaire</p>
+          </div>
+          <button onClick={() => toast('2FA bientôt disponible !', { icon: '🔐' })}
+            className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition">
+            Activer la 2FA
+          </button>
+        </div>
+        <div className="p-3 bg-fc-channel rounded-lg text-xs text-fc-muted">
+          <span className="text-yellow-400">Bientôt disponible</span> — l'authentification TOTP (Google Authenticator, Authy) sera intégrée dans la prochaine mise à jour.
+        </div>
+      </div>
+
       <div className="border-t border-fc-hover pt-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -557,17 +574,73 @@ function NotificationsSection() {
   const [quietEnabled, setQuietEnabled] = useState(false)
   const [quietStart, setQuietStart] = useState('22:00')
   const [quietEnd, setQuietEnd] = useState('08:00')
+  const [soundMessage, setSoundMessage] = useState(true)
+  const [soundMention, setSoundMention] = useState(true)
+  const [soundReaction, setSoundReaction] = useState(true)
+  const [soundDm, setSoundDm] = useState(true)
+  const [soundCall, setSoundCall] = useState(true)
+  const [soundVoiceJoin, setSoundVoiceJoin] = useState(true)
+  const [desktopNotif, setDesktopNotif] = useState(true)
+  const [notifLevel, setNotifLevel] = useState('mentions')
 
   useEffect(() => {
     if (settings) {
       setQuietEnabled(settings.quiet_hours_enabled ?? false)
       setQuietStart(settings.quiet_hours_start ?? '22:00')
       setQuietEnd(settings.quiet_hours_end ?? '08:00')
+      setSoundMessage(settings.sound_message ?? true)
+      setSoundMention(settings.sound_mention ?? true)
+      setSoundReaction(settings.sound_reaction ?? true)
+      setSoundDm(settings.sound_dm ?? true)
+      setSoundCall(settings.sound_call ?? true)
+      setSoundVoiceJoin(settings.sound_voice_join ?? true)
+      setDesktopNotif(settings.desktop_notifications ?? true)
+      setNotifLevel(settings.notification_level ?? 'mentions')
     }
   }, [settings])
 
   return (
     <div className="space-y-6">
+      {/* Niveau global */}
+      <Field label="Niveau de notification par défaut">
+        <Select value={notifLevel} onChange={setNotifLevel} className="w-full"
+          options={[
+            { value: 'all', label: 'Tous les messages' },
+            { value: 'mentions', label: 'Mentions uniquement' },
+            { value: 'none', label: 'Aucune notification' },
+          ]} />
+      </Field>
+
+      {/* Notifications bureau */}
+      <div className="flex items-center justify-between p-3.5 bg-fc-channel rounded-xl border border-fc-hover">
+        <div>
+          <div className="text-sm font-medium text-white">Notifications bureau</div>
+          <div className="text-xs text-fc-muted">Afficher des alertes quand l'onglet n'est pas actif</div>
+        </div>
+        <Toggle value={desktopNotif} onChange={setDesktopNotif} />
+      </div>
+
+      {/* Sons par type */}
+      <div>
+        <p className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Sons de notification</p>
+        <div className="space-y-0.5">
+          {[
+            { label: 'Messages dans les salons', value: soundMessage, set: setSoundMessage },
+            { label: 'Mentions & pings', value: soundMention, set: setSoundMention },
+            { label: 'Réactions à mes messages', value: soundReaction, set: setSoundReaction },
+            { label: 'Messages directs (DM)', value: soundDm, set: setSoundDm },
+            { label: 'Appels entrants', value: soundCall, set: setSoundCall },
+            { label: 'Join/leave vocal', value: soundVoiceJoin, set: setSoundVoiceJoin },
+          ].map(item => (
+            <div key={item.label} className="flex items-center justify-between px-4 py-2.5 bg-fc-channel rounded-xl hover:bg-fc-hover/30 transition">
+              <span className="text-sm text-white">{item.label}</span>
+              <Toggle value={item.value} onChange={item.set} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Heures silencieuses */}
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -576,7 +649,6 @@ function NotificationsSection() {
           </div>
           <Toggle value={quietEnabled} onChange={setQuietEnabled} />
         </div>
-
         {quietEnabled && (
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-fc-hover">
             <div>
@@ -594,7 +666,12 @@ function NotificationsSection() {
       </div>
 
       <button
-        onClick={() => save.mutate({ quiet_hours_enabled: quietEnabled, quiet_hours_start: quietStart, quiet_hours_end: quietEnd })}
+        onClick={() => save.mutate({
+          quiet_hours_enabled: quietEnabled, quiet_hours_start: quietStart, quiet_hours_end: quietEnd,
+          sound_message: soundMessage, sound_mention: soundMention, sound_reaction: soundReaction,
+          sound_dm: soundDm, sound_call: soundCall, sound_voice_join: soundVoiceJoin,
+          desktop_notifications: desktopNotif, notification_level: notifLevel,
+        })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
@@ -610,59 +687,191 @@ function AudioSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedInput, setSelectedInput] = useState('')
   const [selectedOutput, setSelectedOutput] = useState('')
+  const [selectedCamera, setSelectedCamera] = useState('')
+  const [inputVolume, setInputVolume] = useState(100)
+  const [outputVolume, setOutputVolume] = useState(100)
+  const [noiseSuppression, setNoiseSuppression] = useState(true)
+  const [echoCancellation, setEchoCancellation] = useState(true)
+  const [automaticGainControl, setAutomaticGainControl] = useState(true)
+  const [pttMode, setPttMode] = useState(false)
+  const [pttKey, setPttKey] = useState('Space')
+  const [capturingKey, setCapturingKey] = useState(false)
+  const [videoResolution, setVideoResolution] = useState('720p')
+  const [videoFps, setVideoFps] = useState('30')
+  const [backgroundBlur, setBackgroundBlur] = useState(false)
+  const [spatialAudio, setSpatialAudio] = useState(false)
 
   useEffect(() => {
     navigator.mediaDevices.enumerateDevices().then(list => {
       setDevices(list)
-      const saved_in = localStorage.getItem('fc_audio_input') ?? ''
-      const saved_out = localStorage.getItem('fc_audio_output') ?? ''
-      setSelectedInput(saved_in)
-      setSelectedOutput(saved_out)
+      setSelectedInput(localStorage.getItem('fc_audio_input') ?? '')
+      setSelectedOutput(localStorage.getItem('fc_audio_output') ?? '')
+      setSelectedCamera(localStorage.getItem('fc_camera') ?? '')
     })
+    const saved = localStorage.getItem('fc_audio_settings')
+    if (saved) {
+      try {
+        const s = JSON.parse(saved)
+        setInputVolume(s.inputVolume ?? 100)
+        setOutputVolume(s.outputVolume ?? 100)
+        setNoiseSuppression(s.noiseSuppression ?? true)
+        setEchoCancellation(s.echoCancellation ?? true)
+        setAutomaticGainControl(s.automaticGainControl ?? true)
+        setPttMode(s.pttMode ?? false)
+        setPttKey(s.pttKey ?? 'Space')
+        setVideoResolution(s.videoResolution ?? '720p')
+        setVideoFps(s.videoFps ?? '30')
+        setBackgroundBlur(s.backgroundBlur ?? false)
+        setSpatialAudio(s.spatialAudio ?? false)
+      } catch {}
+    }
   }, [])
+
+  const saveAudio = () => {
+    localStorage.setItem('fc_audio_input', selectedInput)
+    localStorage.setItem('fc_audio_output', selectedOutput)
+    localStorage.setItem('fc_camera', selectedCamera)
+    localStorage.setItem('fc_audio_settings', JSON.stringify({
+      inputVolume, outputVolume, noiseSuppression, echoCancellation, automaticGainControl,
+      pttMode, pttKey, videoResolution, videoFps, backgroundBlur, spatialAudio,
+    }))
+    toast.success('Paramètres audio/vidéo sauvegardés')
+  }
+
+  const captureKey = () => {
+    setCapturingKey(true)
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault()
+      const key = e.code === 'Space' ? 'Space' : e.key
+      setPttKey(key)
+      setCapturingKey(false)
+      window.removeEventListener('keydown', handler)
+    }
+    window.addEventListener('keydown', handler)
+  }
 
   const inputDevices = devices.filter(d => d.kind === 'audioinput')
   const outputDevices = devices.filter(d => d.kind === 'audiooutput')
-
-  const handleInputChange = (id: string) => {
-    setSelectedInput(id)
-    localStorage.setItem('fc_audio_input', id)
-  }
-
-  const handleOutputChange = (id: string) => {
-    setSelectedOutput(id)
-    localStorage.setItem('fc_audio_output', id)
-  }
+  const cameraDevices = devices.filter(d => d.kind === 'videoinput')
 
   return (
     <div className="space-y-6">
-      <Field label="Périphérique d'entrée (Microphone)">
-        <select
-          value={selectedInput}
-          onChange={e => handleInputChange(e.target.value)}
-          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-        >
+      <h3 className="text-base font-semibold text-white border-b border-fc-hover pb-2">Périphériques</h3>
+
+      <Field label="Microphone (entrée)">
+        <select value={selectedInput} onChange={e => setSelectedInput(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
           <option value="">Défaut du système</option>
           {inputDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Micro ${d.deviceId.slice(0, 6)}`}</option>)}
         </select>
       </Field>
 
-      <Field label="Périphérique de sortie (Haut-parleurs)">
-        <select
-          value={selectedOutput}
-          onChange={e => handleOutputChange(e.target.value)}
-          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-        >
+      <Field label={`Volume d'entrée — ${inputVolume}%`}>
+        <input type="range" min={0} max={200} value={inputVolume}
+          onChange={e => setInputVolume(Number(e.target.value))}
+          className="w-full accent-fc-accent" />
+      </Field>
+
+      <Field label="Haut-parleurs (sortie)">
+        <select value={selectedOutput} onChange={e => setSelectedOutput(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
           <option value="">Défaut du système</option>
           {outputDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Sortie ${d.deviceId.slice(0, 6)}`}</option>)}
         </select>
       </Field>
 
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-1 text-sm text-fc-muted">
-        <p className="text-white font-medium text-xs uppercase tracking-wide mb-2">Test micro</p>
-        <p>Rejoignez un canal vocal pour tester votre microphone en temps réel.</p>
-        {devices.length === 0 && <p className="text-xs text-fc-yellow">Autorisez l'accès au micro pour voir vos périphériques.</p>}
+      <Field label={`Volume de sortie — ${outputVolume}%`}>
+        <input type="range" min={0} max={200} value={outputVolume}
+          onChange={e => setOutputVolume(Number(e.target.value))}
+          className="w-full accent-fc-accent" />
+      </Field>
+
+      <h3 className="text-base font-semibold text-white border-b border-fc-hover pb-2 pt-2">Traitement audio</h3>
+
+      {[
+        { label: 'Suppression de bruit', desc: 'Filtre le bruit ambiant (ventilateur, clavier...)', value: noiseSuppression, set: setNoiseSuppression },
+        { label: 'Annulation d\'écho', desc: 'Supprime l\'écho et les retours audio', value: echoCancellation, set: setEchoCancellation },
+        { label: 'Contrôle automatique du gain', desc: 'Ajuste automatiquement le volume du micro', value: automaticGainControl, set: setAutomaticGainControl },
+        { label: 'Audio spatial', desc: 'Son 3D positionnel (si casque compatible)', value: spatialAudio, set: setSpatialAudio },
+      ].map(item => (
+        <div key={item.label} className="flex items-center justify-between p-3.5 bg-fc-channel rounded-xl border border-fc-hover">
+          <div>
+            <div className="text-sm font-medium text-white">{item.label}</div>
+            <div className="text-xs text-fc-muted">{item.desc}</div>
+          </div>
+          <Toggle value={item.value} onChange={item.set} />
+        </div>
+      ))}
+
+      <h3 className="text-base font-semibold text-white border-b border-fc-hover pb-2 pt-2">Mode de parole</h3>
+
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-white">Push-to-Talk (PTT)</div>
+            <div className="text-xs text-fc-muted">Maintenez une touche pour parler</div>
+          </div>
+          <Toggle value={pttMode} onChange={setPttMode} />
+        </div>
+        {pttMode && (
+          <div className="pt-2 border-t border-fc-hover">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-fc-muted">Touche PTT</span>
+              <button onClick={captureKey}
+                className={`px-3 py-1.5 rounded-lg text-sm font-mono font-medium border transition
+                  ${capturingKey
+                    ? 'border-fc-accent text-fc-accent bg-fc-accent/10 animate-pulse'
+                    : 'border-fc-hover text-white hover:border-fc-accent'}`}>
+                {capturingKey ? 'Appuyez sur une touche...' : pttKey}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <h3 className="text-base font-semibold text-white border-b border-fc-hover pb-2 pt-2">Caméra & Vidéo</h3>
+
+      <Field label="Webcam">
+        <select value={selectedCamera} onChange={e => setSelectedCamera(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+          <option value="">Défaut du système</option>
+          {cameraDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Caméra ${d.deviceId.slice(0, 6)}`}</option>)}
+        </select>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Résolution">
+          <select value={videoResolution} onChange={e => setVideoResolution(e.target.value)}
+            className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            {['480p', '720p', '1080p', '1440p', '4K'].map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </Field>
+        <Field label="Images par seconde">
+          <select value={videoFps} onChange={e => setVideoFps(e.target.value)}
+            className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            {['15', '24', '30', '60'].map(f => <option key={f} value={f}>{f} fps</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <div className="flex items-center justify-between p-3.5 bg-fc-channel rounded-xl border border-fc-hover">
+        <div>
+          <div className="text-sm font-medium text-white">Flou d'arrière-plan</div>
+          <div className="text-xs text-fc-muted">Floute le fond derrière vous en vidéo</div>
+        </div>
+        <Toggle value={backgroundBlur} onChange={setBackgroundBlur} />
+      </div>
+
+      {devices.length === 0 && (
+        <div className="p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+          <p className="text-xs text-yellow-400">Autorisez l'accès au micro/caméra pour voir vos périphériques.</p>
+        </div>
+      )}
+
+      <button onClick={saveAudio}
+        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition">
+        Sauvegarder
+      </button>
     </div>
   )
 }
@@ -902,6 +1111,7 @@ function AdvancedSection({ user }: { user: any }) {
   const { logout } = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
+  const [devMode, setDevMode] = useState(() => localStorage.getItem('fc_dev_mode') === 'true')
 
   const deleteAccount = useMutation({
     mutationFn: () => api.delete('/users/me'),
@@ -909,50 +1119,114 @@ function AdvancedSection({ user }: { user: any }) {
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
   })
 
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['user-sessions'],
+    queryFn: () => api.get('/user/sessions').then(r => r.data).catch(() => []),
+  })
+
+  const revokeSession = useMutation({
+    mutationFn: (sessionId: string) => api.delete(`/user/sessions/${sessionId}`),
+    onSuccess: () => toast.success('Session révoquée'),
+  })
+
+  const exportData = () => {
+    api.get('/user/export').then(r => {
+      const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `forgechat-export-${user.username}-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    }).catch(() => toast.error('Export non disponible'))
+  }
+
+  const toggleDevMode = (v: boolean) => {
+    setDevMode(v)
+    localStorage.setItem('fc_dev_mode', String(v))
+    toast.success(v ? 'Mode développeur activé' : 'Mode développeur désactivé')
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-semibold text-white mb-2">Cache local</h3>
-        <button
-          onClick={() => { localStorage.clear(); toast.success('Cache vidé — rechargement...'); setTimeout(() => location.reload(), 800) }}
-          className="px-4 py-2 bg-fc-hover text-white rounded-lg text-sm hover:bg-fc-hover/80 transition"
-        >
-          Vider le cache
-        </button>
-      </div>
-
-      <div className="border-t border-fc-hover pt-6">
-        <h3 className="text-sm font-semibold text-white mb-1">Informations de débogage</h3>
-        <div className="bg-fc-channel rounded-lg p-3 text-xs font-mono text-fc-muted space-y-1">
-          <div>UserID: {user.id}</div>
-          <div>Version: 3.1.0</div>
-          <div>UA: {navigator.userAgent.slice(0, 60)}...</div>
+      {/* Mode développeur */}
+      <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div>
+          <div className="text-sm font-medium text-white flex items-center gap-2"><Zap size={14} className="text-yellow-400" /> Mode développeur</div>
+          <div className="text-xs text-fc-muted">Affiche les IDs, logs de debug, infos WebSocket</div>
         </div>
-        <button
-          onClick={() => { navigator.clipboard.writeText(user.id); toast.success('ID copié') }}
-          className="mt-2 flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition"
-        >
-          <Copy size={12} /> Copier l'ID utilisateur
-        </button>
+        <Toggle value={devMode} onChange={toggleDevMode} />
       </div>
 
-      <div className="border-t border-fc-hover pt-6">
+      {devMode && (
+        <div className="bg-fc-channel rounded-xl p-4 border border-yellow-500/20">
+          <p className="text-xs text-yellow-400 font-semibold mb-2">Infos développeur</p>
+          <div className="space-y-1 text-xs font-mono text-fc-muted">
+            <div>UserID: <span className="text-white select-all">{user.id}</span></div>
+            <div>Version: <span className="text-white">v3.1.0</span></div>
+            <div>UA: <span className="text-white">{navigator.userAgent.slice(0, 50)}...</span></div>
+            <div>WS: <span className="text-green-400">Connected</span></div>
+          </div>
+          <button onClick={() => { navigator.clipboard.writeText(user.id); toast.success('ID copié') }}
+            className="mt-2 flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition">
+            <Copy size={12} /> Copier l'ID utilisateur
+          </button>
+        </div>
+      )}
+
+      {/* Cache */}
+      <div className="border-t border-fc-hover pt-4">
+        <h3 className="text-sm font-semibold text-white mb-3">Cache local</h3>
+        <div className="flex gap-2">
+          <button onClick={() => { localStorage.clear(); toast.success('Cache vidé'); setTimeout(() => location.reload(), 800) }}
+            className="px-4 py-2 bg-fc-hover text-white rounded-lg text-sm hover:bg-fc-hover/80 transition">
+            Vider le cache
+          </button>
+          <button onClick={exportData}
+            className="px-4 py-2 bg-fc-hover text-white rounded-lg text-sm hover:bg-fc-hover/80 transition flex items-center gap-1.5">
+            <Zap size={13} /> Exporter mes données
+          </button>
+        </div>
+      </div>
+
+      {/* Sessions actives */}
+      <div className="border-t border-fc-hover pt-4">
+        <h3 className="text-sm font-semibold text-white mb-3">Sessions actives</h3>
+        {(sessions as any[]).length === 0 ? (
+          <div className="p-3 bg-fc-channel rounded-xl text-xs text-fc-muted">
+            <p>Aucune session active supplémentaire.</p>
+            <p className="mt-1 opacity-60">Fonctionnalité de sessions cross-device à venir.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {(sessions as any[]).map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-fc-channel rounded-xl border border-fc-hover">
+                <div>
+                  <div className="text-sm text-white">{s.device ?? 'Appareil inconnu'}</div>
+                  <div className="text-xs text-fc-muted">{s.ip} · {s.last_seen}</div>
+                </div>
+                <button onClick={() => revokeSession.mutate(s.id)}
+                  className="text-xs text-red-400 hover:text-red-300 transition">Révoquer</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Zone dangereuse */}
+      <div className="border-t border-fc-hover pt-4">
         <h3 className="text-sm font-semibold text-fc-red mb-1">Zone dangereuse</h3>
         <p className="text-xs text-fc-muted mb-3">La suppression du compte est irréversible.</p>
 
         {!confirmDelete ? (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-fc-red/10 text-fc-red rounded-lg text-sm hover:bg-fc-red/20 transition"
-          >
+          <button onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-fc-red/10 text-fc-red rounded-lg text-sm hover:bg-fc-red/20 transition">
             <Trash2 size={14} /> Supprimer mon compte
           </button>
         ) : (
           <div className="space-y-3 p-4 border border-fc-red/40 rounded-xl">
             <p className="text-sm text-white">Tapez <strong>{user.username}</strong> pour confirmer</p>
-            <input
-              value={deleteInput}
-              onChange={e => setDeleteInput(e.target.value)}
+            <input value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
               className="w-full bg-fc-channel border border-fc-red/40 rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
             />
             <div className="flex gap-2">
@@ -960,11 +1234,9 @@ function AdvancedSection({ user }: { user: any }) {
                 className="flex-1 py-2 border border-fc-hover text-fc-muted rounded-lg text-sm hover:text-white transition">
                 Annuler
               </button>
-              <button
-                onClick={() => deleteAccount.mutate()}
+              <button onClick={() => deleteAccount.mutate()}
                 disabled={deleteInput !== user.username || deleteAccount.isPending}
-                className="flex-1 py-2 bg-fc-red text-white rounded-lg text-sm disabled:opacity-50 transition hover:bg-fc-red/80"
-              >
+                className="flex-1 py-2 bg-fc-red text-white rounded-lg text-sm disabled:opacity-50 transition hover:bg-fc-red/80">
                 {deleteAccount.isPending ? 'Suppression...' : 'Supprimer définitivement'}
               </button>
             </div>
