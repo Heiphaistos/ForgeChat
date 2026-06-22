@@ -438,13 +438,20 @@ export default function MessageList({
                           return (
                             <button
                               key={r.emoji}
-                              onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, r.emoji) }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleReaction(msg.id, r.emoji)
+                                if (!r.me) {
+                                  setPoppingReaction(reactionKey)
+                                  setTimeout(() => setPoppingReaction(null), 500)
+                                }
+                              }}
                               onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
                               onMouseLeave={() => setReactionPopup(null)}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all duration-150
                                 hover:scale-110 hover:shadow-md
                                 ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
-                                ${isPopping ? 'reaction-pop' : ''}`}
+                                ${isPopping ? 'animate-bounce' : ''}`}
                               title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                             >
                               <span>{r.emoji}</span>

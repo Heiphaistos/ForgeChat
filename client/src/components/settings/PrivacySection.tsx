@@ -1,42 +1,8 @@
-import { useState, useEffect } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+﻿import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Toggle, Select, Field } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!value)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
-    >
-      <span className={`inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-    </button>
-  )
-}
-
-function Select({ value, onChange, options, className = '' }: {
-  value: string; onChange: (v: string) => void
-  options: { value: string; label: string }[]; className?: string
-}) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className={`bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none ${className}`}
-    >
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{label}</label>
-      {children}
-    </div>
-  )
-}
 
 export default function PrivacySection() {
   const { data: settings, refetch } = useQuery({
@@ -83,20 +49,12 @@ export default function PrivacySection() {
 
       <Field label="Qui peut voir votre activité">
         <Select value={activityVisibility} onChange={setActivityVisibility} className="w-full"
-          options={[
-            { value: 'everyone', label: 'Tout le monde' },
-            { value: 'friends', label: 'Amis uniquement' },
-            { value: 'nobody', label: 'Personne' },
-          ]} />
+          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends', label: 'Amis uniquement' }, { value: 'nobody', label: 'Personne' }]} />
       </Field>
 
       <Field label="Qui peut vous envoyer des demandes d'amis">
         <Select value={friendRequestFrom} onChange={setFriendRequestFrom} className="w-full"
-          options={[
-            { value: 'everyone', label: 'Tout le monde' },
-            { value: 'friends_of_friends', label: "Amis d'amis" },
-            { value: 'nobody', label: 'Personne' },
-          ]} />
+          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends_of_friends', label: "Amis d'amis" }, { value: 'nobody', label: 'Personne' }]} />
       </Field>
 
       <Field label="Filtre de contenu explicite">
@@ -109,13 +67,7 @@ export default function PrivacySection() {
       </Field>
 
       <button
-        onClick={() => save.mutate({
-          show_online: showOnline,
-          activity_visibility: activityVisibility,
-          friend_request_from: friendRequestFrom,
-          dm_from_all: dmFromAll,
-          explicit_content_filter: explicitFilter,
-        })}
+        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, explicit_content_filter: explicitFilter })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >

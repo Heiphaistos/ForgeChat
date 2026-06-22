@@ -1,42 +1,8 @@
-import { useState, useEffect } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+﻿import { useState, useEffect } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { Field, Toggle, Select } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!value)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
-    >
-      <span className={`inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-    </button>
-  )
-}
-
-function Select({ value, onChange, options, className = '' }: {
-  value: string; onChange: (v: string) => void
-  options: { value: string; label: string }[]; className?: string
-}) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className={`bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none ${className}`}
-    >
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{label}</label>
-      {children}
-    </div>
-  )
-}
 
 export default function TextDisplaySection() {
   const { data: settings, refetch } = useQuery({
@@ -74,18 +40,12 @@ export default function TextDisplaySection() {
     <div className="space-y-6">
       <Field label="Style d'emojis">
         <Select value={emojiStyle} onChange={setEmojiStyle} className="w-full"
-          options={[
-            { value: 'native', label: 'Emojis natifs du système' },
-            { value: 'twemoji', label: 'Twemoji (Twitter)' },
-          ]} />
+          options={[{ value: 'native', label: 'Emojis natifs du système' }, { value: 'twemoji', label: 'Twemoji (Twitter)' }]} />
       </Field>
 
       <Field label="Format de l'heure">
         <Select value={timeFormat} onChange={setTimeFormat} className="w-full"
-          options={[
-            { value: '24h', label: '24 heures (14:30)' },
-            { value: '12h', label: '12 heures (2:30 PM)' },
-          ]} />
+          options={[{ value: '24h', label: '24 heures (14:30)' }, { value: '12h', label: '12 heures (2:30 PM)' }]} />
       </Field>
 
       <Field label="Format de date">
@@ -130,15 +90,7 @@ export default function TextDisplaySection() {
       </div>
 
       <button
-        onClick={() => save.mutate({
-          emoji_style: emojiStyle,
-          time_format: timeFormat,
-          date_format: dateFormat,
-          show_timestamps: timestamps,
-          gif_autoplay: gifAutoplay,
-          link_preview: linkPreview,
-          message_grouping_minutes: messageGrouping,
-        })}
+        onClick={() => save.mutate({ emoji_style: emojiStyle, time_format: timeFormat, date_format: dateFormat, show_timestamps: timestamps, gif_autoplay: gifAutoplay, link_preview: linkPreview, message_grouping_minutes: messageGrouping })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
