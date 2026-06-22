@@ -21,6 +21,7 @@ import CommandPalette from './components/CommandPalette'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
 import ServerDiscoveryPage from './pages/ServerDiscoveryPage'
+import ActivityFeedPage from './pages/ActivityFeedPage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
@@ -188,6 +189,7 @@ function AppInner() {
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
           <Route path="discovery" element={<ServerDiscoveryPage />} />
+          <Route path="activity" element={<ActivityFeedPage />} />
           <Route path="dms/:dmId" element={<DMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />

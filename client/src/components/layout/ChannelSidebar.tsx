@@ -1,9 +1,10 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
+  Users, X,
 } from 'lucide-react'
 import { useState } from 'react'
 import api from '../../api/client'
@@ -17,6 +18,116 @@ import ServerSettingsModal from '../modals/ServerSettingsModal'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
+
+// Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
+const PRESENCE_COLOR: Record<string, string> = {
+  online: 'bg-fc-green',
+  idle: 'bg-fc-yellow',
+  dnd: 'bg-fc-red',
+  invisible: 'bg-fc-muted',
+  offline: 'bg-fc-muted',
+}
+
+// Modal léger pour créer un groupe DM
+function CreateGroupModal({ onClose }: { onClose: () => void }) {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<{ id: string; username: string }[]>([])
+  const qc = useQueryClient()
+  const nav = useNavigate()
+
+  const { data: friends = [] } = useQuery({
+    queryKey: ['friends-dm-search', search],
+    queryFn: () => api.get('/friends', { params: { q: search } }).then(r => r.data),
+    staleTime: 10_000,
+  })
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post('/dms/group', { user_ids: selected.map(u => u.id) }).then(r => r.data),
+    onSuccess: (dm: any) => {
+      qc.invalidateQueries({ queryKey: ['dms'] })
+      nav(`/dms/${dm.dm_id ?? dm.id}`)
+      onClose()
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création groupe'),
+  })
+
+  const toggle = (u: { id: string; username: string }) => {
+    setSelected(prev =>
+      prev.find(x => x.id === u.id)
+        ? prev.filter(x => x.id !== u.id)
+        : prev.length < 10 ? [...prev, u] : prev
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
+          <button onClick={onClose} className="text-fc-muted hover:text-white"><X size={16} /></button>
+        </div>
+
+        <input
+          className="w-full bg-fc-input text-sm text-white rounded-lg px-3 py-2 mb-3 outline-none placeholder:text-fc-muted"
+          placeholder="Chercher des amis..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          autoFocus
+        />
+
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {selected.map(u => (
+              <span
+                key={u.id}
+                className="flex items-center gap-1 bg-fc-accent/20 text-fc-accent text-xs px-2 py-0.5 rounded-full"
+              >
+                {u.username}
+                <button onClick={() => toggle(u)}><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="max-h-40 overflow-y-auto space-y-0.5 mb-3">
+          {(friends as any[]).map((f: any) => {
+            const uid: string = f.id ?? f.user_id
+            const uname: string = f.username
+            const isSelected = !!selected.find(x => x.id === uid)
+            return (
+              <button
+                key={uid}
+                onClick={() => toggle({ id: uid, username: uname })}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded transition text-left ${
+                  isSelected
+                    ? 'bg-fc-accent/20 text-white'
+                    : 'hover:bg-fc-hover text-fc-muted hover:text-white'
+                }`}
+              >
+                <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                  {uname.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm">{uname}</span>
+              </button>
+            )
+          })}
+          {(friends as any[]).length === 0 && (
+            <p className="text-xs text-fc-muted text-center py-2">Aucun ami trouvé</p>
+          )}
+        </div>
+
+        <button
+          onClick={() => create.mutate()}
+          disabled={selected.length < 2 || create.isPending}
+          className="w-full py-2 bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {create.isPending ? 'Création...' : `Créer (${selected.length} membres)`}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
@@ -38,6 +149,7 @@ export default function ChannelSidebar() {
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [channelSettings, setChannelSettings] = useState<any | null>(null)
   const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
@@ -81,14 +193,72 @@ export default function ChannelSidebar() {
   })
 
   if (!serverId) {
+    // Séparer groupes et DMs individuels
+    const groupDms = (dms as any[]).filter(d => d.is_group)
+    const individualDms = (dms as any[]).filter(d => !d.is_group)
+
     return (
       <div className="flex-1 overflow-y-auto p-2">
-        <div className="px-2 py-2 text-xs font-semibold text-fc-muted uppercase tracking-wide">
-          Messages directs
+        {/* En-tête + bouton créer groupe */}
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
+            Messages directs
+          </span>
+          <button
+            onClick={() => setShowCreateGroup(true)}
+            className="text-fc-muted hover:text-white transition"
+            title="Nouveau groupe"
+          >
+            <Plus size={15} />
+          </button>
         </div>
-        {dms.map((dm: any) => {
-          const liveStatus = getStatus(dm.other_user_id) || dm.status
-          const isOnline = liveStatus === 'online'
+
+        {/* Groupes DM */}
+        {groupDms.length > 0 && (
+          <>
+            <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide">
+              Groupes
+            </div>
+            {groupDms.map((dm: any) => {
+              const unread = unreadCounts[dm.id] ?? 0
+              return (
+                <button
+                  key={dm.id}
+                  onClick={() => nav(`/dms/${dm.id}`)}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                >
+                  <div className="relative flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-fc-hover flex items-center justify-center text-fc-muted">
+                      <Users size={16} />
+                    </div>
+                  </div>
+                  <div className="min-w-0 text-left flex-1">
+                    <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                      {dm.name ?? dm.username ?? 'Groupe'}
+                    </div>
+                    <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
+                  </div>
+                  {unread > 0 && (
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </>
+        )}
+
+        {/* DMs individuels */}
+        {groupDms.length > 0 && individualDms.length > 0 && (
+          <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide mt-1">
+            Directs
+          </div>
+        )}
+        {individualDms.map((dm: any) => {
+          const liveStatus = getStatus(dm.other_user_id) || dm.status || 'offline'
+          const statusKey = liveStatus in PRESENCE_COLOR ? liveStatus : 'offline'
+          const unread = unreadCounts[dm.id] ?? 0
           return (
             <button
               key={dm.id}
@@ -101,17 +271,34 @@ export default function ChannelSidebar() {
                     ? <img src={dm.avatar} alt="" className="w-full h-full object-cover" />
                     : dm.username.charAt(0).toUpperCase()}
                 </div>
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${isOnline ? 'bg-fc-green' : 'bg-fc-muted'}`} />
+                {/* Indicateur de présence coloré (vert/jaune/rouge/gris) */}
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${PRESENCE_COLOR[statusKey]}`} />
               </div>
-              <div className="min-w-0 text-left">
-                <div className="text-sm font-medium text-fc-text truncate">{dm.username}</div>
-                <div className={`text-xs ${isOnline ? 'text-fc-green' : 'text-fc-muted'}`}>
-                  {isOnline ? 'En ligne' : 'Hors ligne'}
+              <div className="min-w-0 text-left flex-1">
+                <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                  {dm.username}
+                </div>
+                <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
+                  {statusKey === 'online' ? 'En ligne'
+                    : statusKey === 'idle' ? 'Absent'
+                    : statusKey === 'dnd' ? 'Ne pas déranger'
+                    : 'Hors ligne'}
                 </div>
               </div>
+              {/* Badge non-lus */}
+              {unread > 0 && (
+                <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </button>
           )
         })}
+
+        {/* Modal créer groupe */}
+        {showCreateGroup && (
+          <CreateGroupModal onClose={() => setShowCreateGroup(false)} />
+        )}
       </div>
     )
   }
