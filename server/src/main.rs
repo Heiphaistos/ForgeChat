@@ -385,6 +385,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/tasks", post(handlers::moderation::create_task))
         .route("/channels/:channel_id/tasks/:task_id", put(handlers::moderation::update_task))
         .route("/channels/:channel_id/tasks/:task_id", delete(handlers::moderation::delete_task))
+        // User status + activity feed
+        .route("/user/status", patch(handlers::users::update_status))
+        .route("/activity-feed", get(handlers::users::get_activity_feed))
+        // Server discovery (also accessible via public route, but here for auth users)
+        .route("/servers/discover", get(handlers::servers::discover_servers))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,

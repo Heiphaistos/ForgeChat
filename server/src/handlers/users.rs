@@ -305,3 +305,101 @@ pub async fn get_pubkey(
         None => Err(AppError::NotFound("Clé publique introuvable (E2E non activé pour cet utilisateur)".into())),
     }
 }
+
+// ─── Status rapide ────────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct UpdateStatusRequest {
+    pub status: Option<String>,
+    pub custom_status: Option<String>,
+}
+
+/// PATCH /api/user/status
+pub async fn update_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(req): Json<UpdateStatusRequest>,
+) -> Result<Json<serde_json::Value>> {
+    if let Some(ref s) = req.status {
+        if !["online", "away", "dnd", "invisible"].contains(&s.as_str()) {
+            return Err(AppError::BadRequest("Statut invalide (online|away|dnd|invisible)".into()));
+        }
+    }
+
+    sqlx::query(
+        "UPDATE users SET
+            status = COALESCE($1, status),
+            custom_status = COALESCE($2, custom_status),
+            updated_at = NOW()
+         WHERE id = $3"
+    )
+    .bind(&req.status)
+    .bind(&req.custom_status)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+
+    let event = serde_json::json!({
+        "type": "PRESENCE_UPDATE",
+        "user_id": claims.sub,
+        "status": req.status,
+        "custom_status": req.custom_status,
+    });
+    state.broadcast_to_user(claims.sub, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ─── Activity Feed ────────────────────────────────────────────────────────────
+
+/// GET /api/activity-feed — 20 derniers messages des serveurs communs
+pub async fn get_activity_feed(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        "SELECT
+            m.id, m.content, m.created_at,
+            u.id as user_id, u.username, u.avatar,
+            c.id as channel_id, c.name as channel_name,
+            s.id as server_id, s.name as server_name
+         FROM messages m
+         JOIN users u ON u.id = m.user_id
+         JOIN channels c ON c.id = m.channel_id
+         JOIN servers s ON s.id = c.server_id
+         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
+         WHERE m.created_at > NOW() - INTERVAL '24 hours'
+           AND m.user_id != $1
+         ORDER BY m.created_at DESC
+         LIMIT 20"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    let items: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id":        r.get::<Uuid, _>("id"),
+        "type":      "message",
+        "actor": {
+            "id":       r.get::<Uuid, _>("user_id"),
+            "username": r.get::<String, _>("username"),
+            "avatar":   r.get::<Option<String>, _>("avatar"),
+        },
+        "server": {
+            "id":   r.get::<Uuid, _>("server_id"),
+            "name": r.get::<String, _>("server_name"),
+        },
+        "channel": {
+            "id":   r.get::<Uuid, _>("channel_id"),
+            "name": r.get::<String, _>("channel_name"),
+        },
+        "timestamp": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "metadata": {
+            "content": r.get::<Option<String>, _>("content"),
+        }
+    })).collect();
+
+    Ok(Json(items))
+}
