@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use rand::Rng;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -606,4 +607,68 @@ fn generate_invite_code() -> String {
         .take(8)
         .map(char::from)
         .collect()
+}
+
+// ─── Server Discovery ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct DiscoverQuery {
+    pub q: Option<String>,
+    pub category: Option<String>,
+    pub sort: Option<String>, // "popular" | "recent" | "active"
+    pub page: Option<i64>,
+}
+
+/// GET /api/servers/discover — liste publique, pas d'auth requise
+pub async fn discover_servers(
+    State(state): State<AppState>,
+    Query(params): Query<DiscoverQuery>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
+    let page = params.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * 20;
+    let q = params.q.unwrap_or_default();
+    let search = format!("%{}%", q);
+    let sort = params.sort.as_deref().unwrap_or("popular");
+
+    let order_clause = if sort == "recent" {
+        "EXTRACT(EPOCH FROM created_at) DESC"
+    } else {
+        "member_count DESC"
+    };
+
+    let sql = format!(
+        "SELECT id, name, description, icon, banner, member_count, is_public,
+                invite_code, created_at
+         FROM servers
+         WHERE is_public = true
+           AND ($1 = '' OR name ILIKE $2 OR description ILIKE $2)
+         ORDER BY {order_clause}
+         LIMIT 20 OFFSET $3"
+    );
+
+    let rows = sqlx::query(&sql)
+        .bind(&q)
+        .bind(&search)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Database(e))?;
+
+    let result: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id":           r.get::<uuid::Uuid, _>("id"),
+        "name":         r.get::<String, _>("name"),
+        "description":  r.get::<Option<String>, _>("description"),
+        "icon":         r.get::<Option<String>, _>("icon"),
+        "banner":       r.get::<Option<String>, _>("banner"),
+        "member_count": r.get::<i32, _>("member_count"),
+        "is_public":    r.get::<bool, _>("is_public"),
+        "invite_code":  r.get::<Option<String>, _>("invite_code"),
+        "online_count": 0,
+        "tags":         [],
+        "is_verified":  false,
+    })).collect();
+
+    Ok(Json(result))
 }
