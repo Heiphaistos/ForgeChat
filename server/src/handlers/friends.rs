@@ -1077,6 +1077,109 @@ pub async fn get_call_history(
 }
 
 
+pub async fn patch_dm_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(dm_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { return Err(AppError::Forbidden); }
+
+    let muted = body["muted"].as_bool();
+    let archived = body["archived"].as_bool();
+
+    sqlx::query(
+        "INSERT INTO dm_user_settings (user_id, dm_channel_id, muted, archived)
+         VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE))
+         ON CONFLICT (user_id, dm_channel_id) DO UPDATE SET
+           muted    = COALESCE($3, dm_user_settings.muted),
+           archived = COALESCE($4, dm_user_settings.archived),
+           updated_at = NOW()"
+    )
+    .bind(claims.sub)
+    .bind(dm_id)
+    .bind(muted)
+    .bind(archived)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn block_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    if user_id == claims.sub {
+        return Err(AppError::BadRequest("Impossible de se bloquer soi-même".into()));
+    }
+    sqlx::query(
+        "INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn unblock_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM blocks WHERE blocker_id=$1 AND blocked_id=$2")
+        .bind(claims.sub)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn get_blocked(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT b.blocked_id, u.username, u.discriminator, u.avatar
+         FROM blocks b JOIN users u ON u.id = b.blocked_id
+         WHERE b.blocker_id=$1
+         ORDER BY u.username"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    let result = rows.iter().map(|r| serde_json::json!({
+        "id":            r.get::<Uuid, _>("blocked_id"),
+        "username":      r.get::<String, _>("username"),
+        "discriminator": r.get::<String, _>("discriminator"),
+        "avatar":        r.get::<Option<String>, _>("avatar"),
+    })).collect();
+
+    Ok(Json(result))
+}
+
 #[derive(serde::Deserialize)]
 pub struct InviteBulkBody {
     pub emails: Vec<String>,
