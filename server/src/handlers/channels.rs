@@ -239,6 +239,43 @@ pub async fn get_pinned(
     Ok(Json(result))
 }
 
+// ─── Channel Reorder ───────────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ReorderChannelsRequest {
+    pub channel_ids: Vec<Uuid>,
+}
+
+pub async fn reorder_channels(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(req): Json<ReorderChannelsRequest>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    for (idx, channel_id) in req.channel_ids.iter().enumerate() {
+        sqlx::query(
+            "UPDATE channels SET position=$1 WHERE id=$2 AND server_id=$3"
+        )
+        .bind(idx as i32)
+        .bind(channel_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
+    }
+
+    let event = serde_json::json!({
+        "type": "CHANNELS_REORDER",
+        "server_id": server_id,
+        "channel_ids": req.channel_ids,
+    });
+    state.broadcast_to_channel(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 // ─── Channel Permission Overrides ──────────────────────────────────────────────
 
 pub async fn get_channel_permissions(
