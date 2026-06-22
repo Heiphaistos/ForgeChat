@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
+import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -250,6 +251,12 @@ export default function ChannelPage() {
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
+            {currentChannel && (
+              <ExportConversationButton
+                channelId={channelId}
+                channelName={currentChannel.name ?? channelId}
+              />
+            )}
             <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
