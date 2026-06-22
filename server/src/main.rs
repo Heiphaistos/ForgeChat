@@ -435,6 +435,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/stickers/:sticker_id", delete(handlers::stickers::delete_sticker))
         // Bulk friend invitations via CSV
         .route("/friends/invite-bulk", post(handlers::friends::invite_bulk))
+        // DM settings (mute/archive) + block
+        .route("/dms/:dm_id/settings", patch(handlers::friends::patch_dm_settings))
+        .route("/friends/blocked", get(handlers::friends::get_blocked))
+        .route("/friends/block/:user_id", post(handlers::friends::block_user))
+        .route("/friends/block/:user_id", delete(handlers::friends::unblock_user))
         .route_layer(axum_middleware::from_fn_with_state(
             state,
             middleware::require_auth,
