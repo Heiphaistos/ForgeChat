@@ -18,11 +18,11 @@
 - [x] 🟠 Frontend — Reactions: picker 20 emojis, toggle add/remove, WS REACTION_ADD/REMOVE
 - [x] 🟠 Frontend — Channel mention # autocomplete, keyboard nav
 
-## CYCLE 3
+## CYCLE 3 (2026-06-22 ✅)
 
-- [ ] 🟠 Frontend — Channel categories collapse/expand dans ChannelSidebar
-- [ ] 🟠 Frontend — User mention autocomplete dans MessageInput (@username → liste filtrée)
-- [ ] 🟠 Frontend — Channel mention autocomplete (#channel-name)
+- [x] 🟠 Frontend — Channel categories collapse/expand persisté localStorage
+- [x] 🟠 Frontend — Rich text toolbar (B/I/~~/code/block/quote/lien + Ctrl+B/I/K)
+- [x] 🟠 Frontend — Code blocks stylisés bg-[#1e1f29] + header langue
 
 ## CYCLE 4
 
