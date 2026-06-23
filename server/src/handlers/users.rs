@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Path, State, Multipart},
+    extract::{Path, Query, State, Multipart},
     http::{HeaderMap, StatusCode},
     Extension, Json,
 };
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -571,56 +572,153 @@ pub async fn update_status(
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────
 
-/// GET /api/activity-feed — 20 derniers messages des serveurs communs
+/// GET /api/activity-feed — événements typés des serveurs communs (48h)
 pub async fn get_activity_feed(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
 
-    let rows = sqlx::query(
-        "SELECT
-            m.id, m.content, m.created_at,
-            u.id as user_id, u.username, u.avatar,
-            c.id as channel_id, c.name as channel_name,
-            s.id as server_id, s.name as server_name
-         FROM messages m
-         JOIN users u ON u.id = m.user_id
-         JOIN channels c ON c.id = m.channel_id
-         JOIN servers s ON s.id = c.server_id
-         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
-         WHERE m.created_at > NOW() - INTERVAL '24 hours'
-           AND m.user_id != $1
-         ORDER BY m.created_at DESC
-         LIMIT 20"
+    let limit: i64 = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let offset: i64 = params.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
+
+    // Nouvelles arrivées dans les serveurs communs
+    let join_rows = sqlx::query(
+        "SELECT sm.joined_at as ts, u.id as user_id, u.username, u.avatar,
+                s.id as server_id, s.name as server_name
+         FROM server_members sm
+         JOIN users u ON u.id = sm.user_id
+         JOIN servers s ON s.id = sm.server_id
+         JOIN server_members my_sm ON my_sm.server_id = s.id AND my_sm.user_id = $1
+         WHERE sm.user_id != $1
+           AND sm.joined_at > NOW() - INTERVAL '48 hours'
+         ORDER BY sm.joined_at DESC
+         LIMIT 30"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
     .await?;
 
-    let items: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
-        "id":        r.get::<Uuid, _>("id"),
-        "type":      "message",
-        "actor": {
-            "id":       r.get::<Uuid, _>("user_id"),
-            "username": r.get::<String, _>("username"),
-            "avatar":   r.get::<Option<String>, _>("avatar"),
-        },
-        "server": {
-            "id":   r.get::<Uuid, _>("server_id"),
-            "name": r.get::<String, _>("server_name"),
-        },
-        "channel": {
-            "id":   r.get::<Uuid, _>("channel_id"),
-            "name": r.get::<String, _>("channel_name"),
-        },
-        "timestamp": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "metadata": {
-            "content": r.get::<Option<String>, _>("content"),
-        }
-    })).collect();
+    // Messages épinglés dans les serveurs communs
+    let pin_rows = sqlx::query(
+        "SELECT pm.pinned_at as ts, u.id as user_id, u.username, u.avatar,
+                s.id as server_id, s.name as server_name,
+                c.id as channel_id, c.name as channel_name
+         FROM pinned_messages pm
+         JOIN users u ON u.id = pm.pinned_by
+         JOIN channels c ON c.id = pm.channel_id
+         JOIN servers s ON s.id = c.server_id
+         JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1
+         WHERE pm.pinned_at > NOW() - INTERVAL '48 hours'
+         ORDER BY pm.pinned_at DESC
+         LIMIT 30"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
 
-    Ok(Json(items))
+    let mut items: Vec<serde_json::Value> = Vec::new();
+
+    for r in &join_rows {
+        items.push(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "type": "server_join",
+            "actor": {
+                "id":       r.get::<Uuid, _>("user_id"),
+                "username": r.get::<String, _>("username"),
+                "avatar":   r.get::<Option<String>, _>("avatar"),
+            },
+            "server": {
+                "id":   r.get::<Uuid, _>("server_id"),
+                "name": r.get::<String, _>("server_name"),
+            },
+            "timestamp": r.get::<chrono::DateTime<chrono::Utc>, _>("ts"),
+        }));
+    }
+
+    for r in &pin_rows {
+        items.push(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "type": "message_pin",
+            "actor": {
+                "id":       r.get::<Uuid, _>("user_id"),
+                "username": r.get::<String, _>("username"),
+                "avatar":   r.get::<Option<String>, _>("avatar"),
+            },
+            "server": {
+                "id":   r.get::<Uuid, _>("server_id"),
+                "name": r.get::<String, _>("server_name"),
+            },
+            "channel": {
+                "id":   r.get::<Uuid, _>("channel_id"),
+                "name": r.get::<String, _>("channel_name"),
+            },
+            "timestamp": r.get::<chrono::DateTime<chrono::Utc>, _>("ts"),
+        }));
+    }
+
+    // Tri chronologique décroissant
+    items.sort_by(|a, b| {
+        let ta = a["timestamp"].as_str().unwrap_or("");
+        let tb = b["timestamp"].as_str().unwrap_or("");
+        tb.cmp(ta)
+    });
+
+    let off = offset as usize;
+    let end = (off + limit as usize).min(items.len());
+    let page = if off < items.len() { items[off..end].to_vec() } else { vec![] };
+
+    Ok(Json(page))
+}
+
+/// GET /api/users/:id/achievements — badges calculés
+pub async fn get_user_achievements(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
+    let row = sqlx::query(
+        "SELECT u.created_at,
+                (SELECT COUNT(*) FROM messages WHERE user_id = $1) as msg_count,
+                (SELECT COUNT(*) FROM server_members WHERE user_id = $1) as server_count,
+                (SELECT COUNT(*) FROM servers WHERE owner_id = $1) as owned_count
+         FROM users u WHERE u.id = $1"
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
+
+    let created_at = row.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
+    let msg_count: i64 = row.get("msg_count");
+    let server_count: i64 = row.get("server_count");
+    let owned_count: i64 = row.get("owned_count");
+    let age_days = (chrono::Utc::now() - created_at).num_days();
+
+    let mut badges: Vec<serde_json::Value> = Vec::new();
+
+    if age_days <= 30 {
+        badges.push(serde_json::json!({ "id": "early_adopter", "name": "Early Adopter", "icon": "🌟", "description": "A rejoint dans les 30 premiers jours" }));
+    }
+    if msg_count >= 1 {
+        badges.push(serde_json::json!({ "id": "first_message", "name": "Premier message", "icon": "💬", "description": "A envoyé son premier message" }));
+    }
+    if msg_count >= 100 {
+        badges.push(serde_json::json!({ "id": "chatterbox", "name": "Bavard", "icon": "🗣️", "description": "100 messages envoyés" }));
+    }
+    if msg_count >= 1000 {
+        badges.push(serde_json::json!({ "id": "veteran", "name": "Vétéran", "icon": "⚔️", "description": "1000 messages envoyés" }));
+    }
+    if server_count >= 3 {
+        badges.push(serde_json::json!({ "id": "social", "name": "Sociable", "icon": "🤝", "description": "Membre de 3+ serveurs" }));
+    }
+    if owned_count >= 1 {
+        badges.push(serde_json::json!({ "id": "founder", "name": "Fondateur", "icon": "👑", "description": "A créé un serveur" }));
+    }
+
+    Ok(Json(badges))
 }
 
 pub async fn get_mutual_servers(

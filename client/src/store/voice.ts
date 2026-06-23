@@ -74,6 +74,7 @@ interface VoiceStore {
 
 // â”€â”€ Singletons non-rÃ©actifs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const _pcs = new Map<string, RTCPeerConnection>()
+export const getPeerConnections = () => _pcs
 const _iceQueues = new Map<string, RTCIceCandidateInit[]>()
 const _gainNodes = new Map<string, GainNode>()
 let _audioCtx: AudioContext | null = null
@@ -387,17 +388,25 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     set({ error: null })
 
+    const savedMicId = localStorage.getItem('fc_audio_input') || undefined
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
+    }
+
     let stream: MediaStream
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: audioConstraints,
         video: withVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false,
       })
     } catch {
       if (withVideo) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            audio: audioConstraints,
           })
         } catch {
           set({ error: 'Impossible d\'accÃ©der au microphone. VÃ©rifiez les permissions du navigateur.' })

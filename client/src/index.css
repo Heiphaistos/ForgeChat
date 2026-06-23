@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import 'highlight.js/styles/github-dark.css';
 
 * { box-sizing: border-box; }
 
@@ -607,6 +608,32 @@ body {
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
 }
+
+/* CONTRASTE ÉLEVÉ */
+[data-high-contrast="true"] {
+  --fc-bg: #000000;
+  --fc-sidebar: #0a0a0a;
+  --fc-channel: #111111;
+  --fc-text: #ffffff;
+  --fc-muted: #cccccc;
+  --fc-hover: #222222;
+  --fc-accent: #ffdd00;
+  --fc-green: #00ff00;
+  --fc-red: #ff4444;
+}
+[data-high-contrast="true"] .bg-fc-bg { background-color: #000 !important; }
+[data-high-contrast="true"] .bg-fc-sidebar { background-color: #0a0a0a !important; }
+[data-high-contrast="true"] .bg-fc-channel { background-color: #111 !important; }
+[data-high-contrast="true"] .text-fc-text { color: #fff !important; }
+[data-high-contrast="true"] .text-fc-muted { color: #ccc !important; }
+[data-high-contrast="true"] .bg-fc-accent,
+[data-high-contrast="true"] .hover\:bg-fc-accent:hover { background-color: #ffdd00 !important; }
+[data-high-contrast="true"] .text-fc-accent { color: #ffdd00 !important; }
+[data-high-contrast="true"] .border-fc-hover { border-color: #444 !important; }
+
+/* MODE STREAMER — masque les infos identifiables */
+[data-streamer-mode="true"] .streamer-hidden { visibility: hidden !important; }
+[data-streamer-mode="true"] .streamer-blur { filter: blur(8px) !important; }
 
 /* RETRO */
 [data-theme="retro"] body { background: #2b2017; color: #e8d5b0; }

@@ -26,11 +26,21 @@ export default function AccessibilitySection() {
     }
   }, [settings])
 
+  const handleReduceMotion = (val: boolean) => {
+    setReduceMotion(val)
+    document.documentElement.setAttribute('data-reduce-motion', String(val))
+  }
+
+  const handleHighContrast = (val: boolean) => {
+    setHighContrast(val)
+    document.documentElement.setAttribute('data-high-contrast', String(val))
+  }
+
   return (
     <div className="space-y-4">
       {[
-        { label: 'Réduire les animations', desc: "Moins d'effets visuels et de transitions", value: reduceMotion, onChange: setReduceMotion },
-        { label: 'Contraste élevé', desc: 'Améliore la lisibilité des textes', value: highContrast, onChange: setHighContrast },
+        { label: 'Réduire les animations', desc: "Moins d'effets visuels et de transitions", value: reduceMotion, onChange: handleReduceMotion },
+        { label: 'Contraste élevé', desc: 'Améliore la lisibilité des textes', value: highContrast, onChange: handleHighContrast },
       ].map(item => (
         <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div>

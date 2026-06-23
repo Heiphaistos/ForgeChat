@@ -417,6 +417,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // User mentions
         .route("/user/mentions", get(handlers::reads::get_user_mentions))
         .route("/users/:id/mutual-servers", get(handlers::users::get_mutual_servers))
+        .route("/users/:id/achievements", get(handlers::users::get_user_achievements))
         // User status + activity feed
         .route("/user/status", patch(handlers::users::update_status))
         .route("/activity-feed", get(handlers::users::get_activity_feed))

@@ -76,13 +76,15 @@ function AppInner() {
     return () => disconnect()
   }, [user?.id])
 
-  // Appliquer reduce_motion depuis les settings au démarrage
+  // Appliquer les préférences d'accessibilité et streamer mode au démarrage
   useEffect(() => {
     if (!user) return
     import('./api/client').then(({ default: api }) => {
-      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean } }) => {
-        const val = r.data?.reduce_motion ?? false
-        document.documentElement.setAttribute('data-reduce-motion', String(val))
+      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean; high_contrast?: boolean; streamer_mode?: boolean } }) => {
+        const d = r.data ?? {}
+        document.documentElement.setAttribute('data-reduce-motion', String(d.reduce_motion ?? false))
+        document.documentElement.setAttribute('data-high-contrast', String(d.high_contrast ?? false))
+        document.documentElement.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
       }).catch(() => {})
     })
   }, [user?.id])
