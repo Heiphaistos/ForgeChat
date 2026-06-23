@@ -632,6 +632,54 @@ pub struct DiscoverQuery {
 }
 
 /// GET /api/servers/discover — liste publique, pas d'auth requise
+/// POST /api/servers/:id/boost — boost cosmétique par membre (une fois par serveur)
+pub async fn boost_server(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    // INSERT ON CONFLICT DO NOTHING — un boost par user×serveur
+    sqlx::query(
+        "INSERT INTO server_boosts (user_id, server_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    let boost_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_boosts WHERE server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let boost_level: i32 = match boost_count {
+        0..=1  => 0,
+        2..=6  => 1,
+        7..=13 => 2,
+        _      => 3,
+    };
+
+    sqlx::query(
+        "UPDATE servers SET boost_count=$1, boost_level=$2 WHERE id=$3"
+    )
+    .bind(boost_count as i32)
+    .bind(boost_level)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "boost_count": boost_count,
+        "boost_level": boost_level,
+    })))
+}
+
 pub async fn discover_servers(
     State(state): State<AppState>,
     Query(params): Query<DiscoverQuery>,

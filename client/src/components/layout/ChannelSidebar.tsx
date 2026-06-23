@@ -130,6 +130,29 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+function BoostButton({ serverId }: { serverId: string }) {
+  const qc = useQueryClient()
+  const boost = useMutation({
+    mutationFn: () => api.post(`/servers/${serverId}/boost`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['server', serverId] })
+      qc.invalidateQueries({ queryKey: ['channels', serverId] })
+    },
+    onError: () => toast.error('Impossible de booster'),
+  })
+  return (
+    <button
+      onClick={() => boost.mutate()}
+      disabled={boost.isPending}
+      className="mx-2 mb-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg
+        text-xs font-semibold text-purple-300 border border-purple-500/30 bg-purple-500/10
+        hover:bg-purple-500/20 hover:border-purple-500/60 transition disabled:opacity-50"
+    >
+      ⚡ Booster le serveur
+    </button>
+  )
+}
+
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
     case 'voice': return <Volume2 size={size} className="flex-shrink-0" />
@@ -582,6 +605,8 @@ export default function ChannelSidebar() {
               </div>
             )}
           </button>
+
+          <BoostButton serverId={serverId} />
 
           {(data?.boost_level ?? 0) > 0 && (
             <ServerBoostBanner

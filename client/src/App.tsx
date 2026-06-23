@@ -69,6 +69,32 @@ function AppInner() {
     if (zoom) document.documentElement.style.fontSize = `${zoom}%`
   }, [])
 
+  // Ctrl+/- pour zoomer, Ctrl+0 pour reset
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.ctrlKey) return
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        const cur = parseFloat(document.documentElement.style.fontSize || '100')
+        const next = Math.min(cur + 10, 150)
+        document.documentElement.style.fontSize = `${next}%`
+        localStorage.setItem('fc_zoom', String(next))
+      } else if (e.key === '-') {
+        e.preventDefault()
+        const cur = parseFloat(document.documentElement.style.fontSize || '100')
+        const next = Math.max(cur - 10, 70)
+        document.documentElement.style.fontSize = `${next}%`
+        localStorage.setItem('fc_zoom', String(next))
+      } else if (e.key === '0') {
+        e.preventDefault()
+        document.documentElement.style.fontSize = '100%'
+        localStorage.setItem('fc_zoom', '100')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   useEffect(() => {
     if (!user) return
     connect()
@@ -80,11 +106,14 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     import('./api/client').then(({ default: api }) => {
-      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean; high_contrast?: boolean; streamer_mode?: boolean } }) => {
+      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean; high_contrast?: boolean; streamer_mode?: boolean; interface_density?: string } }) => {
         const d = r.data ?? {}
         document.documentElement.setAttribute('data-reduce-motion', String(d.reduce_motion ?? false))
         document.documentElement.setAttribute('data-high-contrast', String(d.high_contrast ?? false))
         document.documentElement.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
+        const density = d.interface_density ?? 'normal'
+        document.documentElement.setAttribute('data-density', density)
+        localStorage.setItem('fc_density', density)
       }).catch(() => {})
     })
   }, [user?.id])

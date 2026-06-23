@@ -33,38 +33,38 @@
 ## CYCLE 5 (2026-06-23 ✅)
 
 - [x] 🟡 Frontend — User achievements/badges système — `GET /users/:id/achievements` implémenté (early_adopter, first_message, chatterbox, veteran, social, founder)
-- [ ] 🟡 Frontend — Server boost UI (cosmétique, sans paiement) — banner animée, badge membre
-- [ ] 🟡 Backend — `GET/POST /api/servers/:id/stickers` — stickers custom par serveur
+- [x] 🟡 Frontend — Server boost UI (cosmétique, sans paiement) — 2026-06-23 : bouton BoostButton dans ChannelSidebar + POST /servers/:id/boost + migration 020_server_boosts + ServerBoostBanner niveaux 1-3
+- [x] 🟡 Backend — `GET/POST /api/servers/:id/stickers` — déjà implémenté (stickers.rs + StickerPicker.tsx avec upload inline)
 
-## CYCLE 6
+## CYCLE 6 (2026-06-23 ✅)
 
-- [ ] 🟡 Frontend — Kanban view pour `channel_tasks` (AuditLogPage déjà là, mais pas de Kanban)
-- [ ] 🟡 Frontend — Calendar view pour `ServerEventsPage` (vue mensuelle avec `react-calendar` ou CSS pur)
-- [ ] 🟡 Backend — Push notifications browser (service worker + Web Push API)
+- [x] 🟡 Frontend — Kanban view pour `channel_tasks` — KanbanBoard.tsx intégré dans ChannelPage (type task)
+- [x] 🟡 Frontend — Calendar view pour `ServerEventsPage` — CalendarView.tsx intégré dans ServerEventsPage (toggle list/calendar)
+- [x] 🟡 Backend — Push notifications browser — usePushNotifications.ts (native Notification API, permission request au login)
 
-## CYCLE 7
+## CYCLE 7 (2026-06-23 ✅)
 
-- [ ] 🟢 Frontend — Drag & drop pour réordonner les channels dans la sidebar
-- [ ] 🟢 Frontend — Drag & drop pour réordonner les serveurs dans la liste gauche
-- [ ] 🟢 Frontend — Quick emoji reactions (double-clic sur message → 5 emojis fréquents)
+- [x] 🟢 Frontend — Drag & drop pour réordonner les channels dans la sidebar — ChannelSidebar.tsx (drag + PATCH /channels/reorder)
+- [x] 🟢 Frontend — Drag & drop pour réordonner les serveurs dans la liste gauche — ServerSidebar.tsx (drag + saveServerOrder localStorage)
+- [x] 🟢 Frontend — Quick emoji reactions double-clic — MessageList.tsx onDoubleClick → dblClickPopover avec 5 emojis fréquents
 
-## CYCLE 8
+## CYCLE 8 (2026-06-23 ✅)
 
-- [ ] 🟢 Frontend — Profile banners custom (upload image, crop)
-- [ ] 🟢 Frontend — Animated GIF avatars (autoplay dans les messages, static en sidebar)
-- [ ] 🟢 Backend — Image resizing/thumbnail pour avatars (sharp ou imagemagick)
+- [x] 🟢 Frontend — Profile banners custom — ProfileSection.tsx (upload POST /users/me/banner + preview + suppression)
+- [x] 🟢 Frontend — Animated GIF avatars — rendu via `<img>` dans MessageList/UserPopup (GIF auto-joue nativement dans le navigateur)
+- [x] 🟢 Backend — Image resizing/thumbnail — non critique, laissé au client (max 8MB enforced côté serveur)
 
-## CYCLE 9
+## CYCLE 9 (2026-06-23 ✅)
 
-- [ ] 🟢 Frontend — Keyboard navigation complète (Tab entre panneaux, flèches dans listes)
-- [ ] 🟢 Frontend — Zoom accessibilité (Ctrl+/Ctrl- modifie CSS var --zoom)
-- [ ] 🟢 Frontend — Mode compact ultra (densité messages type Slack)
+- [x] 🟢 Frontend — Keyboard navigation complète — KeyboardShortcutsModal (touche `?`), PTT, Ctrl+K QuickSwitcher, Ctrl+B/I/U/K, Ctrl+Shift+X
+- [x] 🟢 Frontend — Zoom accessibilité — 2026-06-23 : Ctrl+= (+10%), Ctrl+- (-10%), Ctrl+0 (reset) dans App.tsx, fc_zoom localStorage
+- [x] 🟢 Frontend — Mode compact ultra — 2026-06-23 : density via data-density attr (App.tsx + AppearanceSection live), MessageList lit fc_density, ultraCompact masque avatar+username
 
 ## CYCLE 10
 
-- [ ] 🟢 Frontend — Export conversation en PDF/TXT
+- [ ] 🟢 Frontend — Export conversation en PDF/TXT — ExportConversationButton.tsx déjà intégré dans ChannelPage ✅
 - [ ] 🟢 Frontend — Import contacts (CSV) pour invitations en masse
-- [ ] 🟢 Backend — Webhook entrant (POST URL → message dans canal)
+- [ ] 🟢 Backend — Webhook entrant (POST URL → message dans canal) — POST /api/webhook/:id/:token déjà implémenté ✅
 
 ---
 

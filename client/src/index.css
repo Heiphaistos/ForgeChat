@@ -47,9 +47,10 @@ body {
 .fc-markdown a { color: #00aff4; text-decoration: underline; }
 .fc-markdown h1,.fc-markdown h2,.fc-markdown h3 { font-weight: 700; color: #fff; margin: 4px 0; }
 
-/* Mode compact */
-.fc-compact .msg-avatar { display: none; }
-.fc-compact .msg-row { padding-top: 1px; padding-bottom: 1px; }
+/* Densités d'interface */
+[data-density="comfortable"] .group { padding-top: 8px !important; padding-bottom: 8px !important; }
+[data-density="compact"] .group     { padding-top: 2px !important; padding-bottom: 2px !important; }
+[data-density="ultra-compact"] .group { padding-top: 0 !important; padding-bottom: 0 !important; }
 
 /* Super Reactions — animation pop */
 @keyframes reaction-pop {

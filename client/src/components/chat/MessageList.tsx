@@ -180,7 +180,9 @@ export default function MessageList({
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
-  const compact = localStorage.getItem('fc_compact_mode') === 'true'
+  const density = localStorage.getItem('fc_density') ?? 'normal'
+  const compact = density === 'compact' || density === 'ultra-compact'
+  const ultraCompact = density === 'ultra-compact'
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -260,23 +262,25 @@ export default function MessageList({
               }}
             >
               {/* Avatar */}
-              <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
-                {!isGrouped && (
-                  <button
-                    className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
-                    onClick={e => openUserPopup(e, msg.author_id)}
-                    title={`Profil de ${msg.author_username}`}
-                  >
-                    {msg.author_avatar
-                      ? <img src={msg.author_avatar} alt="" className="w-full h-full object-cover" />
-                      : msg.author_username.charAt(0).toUpperCase()}
-                  </button>
-                )}
-              </div>
+              {!ultraCompact && (
+                <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
+                  {!isGrouped && (
+                    <button
+                      className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
+                      onClick={e => openUserPopup(e, msg.author_id)}
+                      title={`Profil de ${msg.author_username}`}
+                    >
+                      {msg.author_avatar
+                        ? <img src={msg.author_avatar} alt="" className="w-full h-full object-cover" />
+                        : msg.author_username.charAt(0).toUpperCase()}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Contenu */}
               <div className="flex-1 min-w-0">
-                {!isGrouped && (
+                {!isGrouped && !ultraCompact && (
                   <div className="flex items-baseline gap-2 mb-0.5">
                     <button
                       className="font-semibold text-white text-sm hover:underline cursor-pointer"
