@@ -5,7 +5,7 @@ import {
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
   LayoutTemplate, Layout, Wifi, WifiOff, Music2,
 } from 'lucide-react'
-import { useVoice, type VoicePeer } from '../store/voice'
+import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useLocation } from 'react-router-dom'
@@ -250,8 +250,6 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [showCaptions, setShowCaptions] = useState(false)
   const [showSoundboard, setShowSoundboard] = useState(false)
   const [joinTime] = useState(Date.now())
-  // RTCPeerConnections ref pour CallQualityIndicator
-  const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
 
   // WS: hand raise
   useEffect(() => {
@@ -333,7 +331,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <Volume2 size={16} className="text-fc-accent" />
           <span className="text-sm font-semibold text-white">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
-          <CallQualityIndicator pcs={pcsRef.current} />
+          <CallQualityIndicator pcs={getPeerConnections()} />
         </div>
 
         {/* View mode switcher */}

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
@@ -36,6 +36,8 @@ function channelIcon(type: string, size = 18) {
 
 export default function ChannelPage() {
   const { serverId, channelId } = useParams()
+  const [searchParams] = useSearchParams()
+  const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
   const markRead = useUnread(s => s.markRead)
@@ -339,6 +341,7 @@ export default function ChannelPage() {
               }
               onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}
+              initialHighlightId={highlightMessageId}
             />
 
             {/* Countdown slowmode */}

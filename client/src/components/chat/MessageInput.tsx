@@ -425,12 +425,15 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       if (e.key === 'Tab' || (e.key === 'Enter' && showChannels)) { e.preventDefault(); insertChannel(channelResults[channelIndex]); return }
       if (e.key === 'Escape') { setShowChannels(false); return }
     }
-    // Ctrl+B -> **gras**, Ctrl+I -> *italique*, Ctrl+U -> __souligné__
-    if (e.ctrlKey && !e.shiftKey && !e.altKey) {
-      if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
-      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
-      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
-      if (e.key === 'k' || e.key === 'K') { e.preventDefault(); insertLink(); return }
+    // Ctrl+B/I/U/K → markdown shortcuts; Ctrl+Shift+X → ~~barré~~
+    if (e.ctrlKey && !e.altKey) {
+      if (!e.shiftKey) {
+        if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
+        if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
+        if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
+        if (e.key === 'k' || e.key === 'K') { e.preventDefault(); insertLink(); return }
+      }
+      if (e.shiftKey && (e.key === 'x' || e.key === 'X')) { e.preventDefault(); wrapSelection('~~'); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }

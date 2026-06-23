@@ -138,8 +138,29 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 
 function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
   const [reply, setReply] = useState('')
+  const [localPost, setLocalPost] = useState(post)
   const qc = useQueryClient()
   const { user } = useAuth()
+
+  const togglePin = useMutation({
+    mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { pinned: !localPost.pinned }),
+    onSuccess: () => {
+      setLocalPost(p => ({ ...p, pinned: !p.pinned }))
+      qc.invalidateQueries({ queryKey: ['forum', channelId] })
+      toast.success(localPost.pinned ? 'Post désépinglé' : 'Post épinglé')
+    },
+    onError: () => toast.error('Permission refusée'),
+  })
+
+  const toggleLock = useMutation({
+    mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { locked: !localPost.locked }),
+    onSuccess: () => {
+      setLocalPost(p => ({ ...p, locked: !p.locked }))
+      qc.invalidateQueries({ queryKey: ['forum', channelId] })
+      toast.success(localPost.locked ? 'Post déverrouillé' : 'Post verrouillé')
+    },
+    onError: () => toast.error('Permission refusée'),
+  })
 
   const { data } = useQuery({
     queryKey: ['forum-post', post.id],
@@ -166,14 +187,32 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         <button onClick={onBack} className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
           <ArrowLeft size={18} />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            {post.pinned && <Pin size={14} className="text-yellow-400 flex-shrink-0" />}
-            {post.locked && <Lock size={14} className="text-red-400 flex-shrink-0" />}
-            <h2 className="font-bold text-white truncate">{post.title}</h2>
+            {localPost.pinned && <Pin size={14} className="text-yellow-400 flex-shrink-0" />}
+            {localPost.locked && <Lock size={14} className="text-red-400 flex-shrink-0" />}
+            <h2 className="font-bold text-white truncate">{localPost.title}</h2>
           </div>
-          <p className="text-xs text-fc-muted">par {post.creator_username} · {format(new Date(post.created_at), 'dd MMM yyyy', { locale: fr })}</p>
+          <p className="text-xs text-fc-muted">par {localPost.creator_username} · {format(new Date(localPost.created_at), 'dd MMM yyyy', { locale: fr })}</p>
         </div>
+        {(user?.id === post.creator_id) && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => togglePin.mutate()}
+              title={localPost.pinned ? 'Désépingler' : 'Épingler'}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
+            >
+              <Pin size={15} />
+            </button>
+            <button
+              onClick={() => toggleLock.mutate()}
+              title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
+            >
+              <Lock size={15} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -215,7 +254,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
       </div>
 
       {/* Input réponse */}
-      {!post.locked && (
+      {!localPost.locked && (
         <div className="p-4 border-t border-fc-bg flex-shrink-0">
           <div className="flex gap-2">
             <textarea
@@ -241,7 +280,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           </div>
         </div>
       )}
-      {post.locked && (
+      {localPost.locked && (
         <div className="p-3 bg-red-500/10 border-t border-red-500/20 text-center text-xs text-red-400 flex items-center justify-center gap-1 flex-shrink-0">
           <Lock size={12} /> Ce post est verrouillé
         </div>

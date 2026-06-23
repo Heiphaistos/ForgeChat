@@ -26,6 +26,7 @@ interface Props {
   onPinMessage?: (msgId: string) => void
   onReply?: (msg: any) => void
   onLoadMore?: () => Promise<boolean>
+  initialHighlightId?: string | null
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
@@ -65,6 +66,7 @@ export default function MessageList({
   onPinMessage,
   onReply,
   onLoadMore,
+  initialHighlightId,
 }: Props) {
   const { user } = useAuth()
 
@@ -98,6 +100,12 @@ export default function MessageList({
   useEffect(() => {
     if (isAtBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  useEffect(() => {
+    if (!initialHighlightId || messages.length === 0) return
+    const timer = setTimeout(() => jumpToMessage(initialHighlightId), 300)
+    return () => clearTimeout(timer)
+  }, [initialHighlightId, messages.length])
 
   useEffect(() => {
     if (editingId && editRef.current) {

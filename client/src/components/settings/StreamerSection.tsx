@@ -25,6 +25,11 @@ export default function StreamerSection() {
 
   useEffect(() => { if (settings) setStreamerMode(settings.streamer_mode ?? false) }, [settings])
 
+  const handleToggle = (val: boolean) => {
+    setStreamerMode(val)
+    document.documentElement.setAttribute('data-streamer-mode', String(val))
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
@@ -32,7 +37,7 @@ export default function StreamerSection() {
           <div className="text-sm font-medium text-white flex items-center gap-2"><Film size={14} /> Mode Streamer</div>
           <div className="text-xs text-fc-muted">Masque les informations sensibles à l'écran</div>
         </div>
-        <Toggle value={streamerMode} onChange={setStreamerMode} />
+        <Toggle value={streamerMode} onChange={handleToggle} />
       </div>
 
       {streamerMode && (
