@@ -2,7 +2,7 @@ use axum::{extract::Path, response::IntoResponse, Json};
 use serde_json::json;
 
 pub async fn check_update(
-    Path((target, arch, version)): Path<(String, String, String)>,
+    Path((_target, _arch, version)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
     let latest_version = "3.2.0";
 
