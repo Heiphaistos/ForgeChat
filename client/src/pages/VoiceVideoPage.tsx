@@ -263,6 +263,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     return unsub
   }, [channel.id, on, user?.id])
 
+  // Apply audio output device to video elements
+  useEffect(() => {
+    const savedOut = localStorage.getItem('fc_audio_output')
+    if (!savedOut) return
+    document.querySelectorAll('video').forEach(el => {
+      if ('setSinkId' in el) (el as any).setSinkId(savedOut).catch(() => {})
+    })
+  }, [peers])
+
   const toggleHandRaise = () => {
     const newVal = !handRaised
     setHandRaised(newVal)
@@ -276,19 +285,29 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   const startRecording = useCallback(() => {
     if (!localStream) return
-    const recorder = new MediaRecorder(localStream, { mimeType: 'audio/webm;codecs=opus' })
-    recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
-    recorder.onstop = () => {
-      const blob = new Blob(recChunksRef.current, { type: 'audio/webm' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `forgechat-recording-${Date.now()}.webm`; a.click()
-      URL.revokeObjectURL(url)
-      recChunksRef.current = []
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
+    try {
+      const recorder = new MediaRecorder(localStream, mimeType ? { mimeType } : undefined)
+      recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(recChunksRef.current, { type: mimeType || 'audio/webm' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm'
+        a.download = `forgechat-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${ext}`
+        a.click()
+        URL.revokeObjectURL(url)
+        recChunksRef.current = []
+      }
+      recorder.start(1000)
+      recorderRef.current = recorder
+      setIsRecording(true)
+      toast.success('Enregistrement démarré')
+    } catch {
+      toast.error("Impossible de démarrer l'enregistrement")
     }
-    recorder.start(500)
-    recorderRef.current = recorder
-    setIsRecording(true)
   }, [localStream])
 
   const stopRecording = useCallback(() => {
