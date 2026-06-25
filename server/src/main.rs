@@ -81,6 +81,34 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Tâche de rappels messages (toutes les 30 secondes)
+    let reminder_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let due = sqlx::query!(
+                "SELECT r.id, r.user_id, r.message_id, m.content \
+                 FROM message_reminders r \
+                 JOIN messages m ON m.id = r.message_id \
+                 WHERE r.remind_at <= NOW() AND r.sent = FALSE \
+                 LIMIT 50"
+            ).fetch_all(&reminder_state.db).await.unwrap_or_default();
+
+            for r in due {
+                let event = serde_json::json!({
+                    "type": "REMINDER",
+                    "message_id": r.message_id,
+                    "content": r.content,
+                });
+                reminder_state.broadcast_to_user(r.user_id, event.to_string()).await;
+                let _ = sqlx::query!(
+                    "UPDATE message_reminders SET sent = TRUE WHERE id = $1", r.id
+                ).execute(&reminder_state.db).await;
+            }
+        }
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
         .allow_methods([
@@ -247,6 +275,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", post(handlers::messages::pin_message))
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", delete(handlers::messages::unpin_message))
         .route("/servers/:server_id/channels/:channel_id/messages/search", get(handlers::messages::search_messages))
+        .route("/messages/:id/remind", post(handlers::messages::set_reminder))
         // Uploads
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file))
         // Roles

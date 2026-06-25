@@ -625,3 +625,30 @@ pub async fn forward_message(
 
     Ok(Json(full_msg))
 }
+
+#[derive(serde::Deserialize)]
+pub struct ReminderInput {
+    pub remind_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn set_reminder(
+    axum::extract::Path(message_id): axum::extract::Path<uuid::Uuid>,
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+    Json(input): Json<ReminderInput>,
+) -> Result<Json<serde_json::Value>> {
+    // Vérifier que le message existe
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)"
+    ).bind(message_id).fetch_one(&state.db).await?;
+    if !exists {
+        return Err(AppError::NotFound("Message introuvable".into()));
+    }
+
+    sqlx::query!(
+        "INSERT INTO message_reminders (user_id, message_id, remind_at) VALUES ($1, $2, $3)",
+        claims.sub, message_id, input.remind_at
+    ).execute(&state.db).await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

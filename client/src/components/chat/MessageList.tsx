@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -11,6 +11,7 @@ import ReactionPopup from './ReactionPopup'
 import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
+import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
@@ -180,6 +181,7 @@ export default function MessageList({
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const [reminderFor, setReminderFor] = useState<string | null>(null)
   const density = localStorage.getItem('fc_density') ?? 'normal'
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
@@ -589,6 +591,22 @@ export default function MessageList({
                       <Pencil size={14} />
                     </button>
                   )}
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setReminderFor(reminderFor === msg.id ? null : msg.id)}
+                      className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
+                      title="Me rappeler"
+                    >
+                      <Bell size={14} />
+                    </button>
+                    {reminderFor === msg.id && (
+                      <ReminderModal
+                        messageId={msg.id}
+                        onClose={() => setReminderFor(null)}
+                      />
+                    )}
+                  </div>
 
                   <button
                     onClick={() => onDeleteMessage(msg.id)}
