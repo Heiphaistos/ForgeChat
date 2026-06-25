@@ -15,6 +15,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // Focaliser la fenêtre existante si une 2e instance est lancée
             if let Some(window) = app.get_webview_window("main") {
