@@ -234,6 +234,31 @@ pub async fn login(
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
+    // Enregistrer la session
+    {
+        use sha2::{Sha256, Digest};
+        let token_hash: String = Sha256::digest(refresh_token.as_bytes())
+            .iter().map(|b| format!("{:02x}", b)).collect();
+        let device = headers.get("user-agent")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("Unknown")
+            .chars().take(200).collect::<String>();
+        let ip = headers.get("x-real-ip")
+            .or_else(|| headers.get("x-forwarded-for"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+            .unwrap_or_else(|| addr.ip().to_string());
+        let _ = sqlx::query(
+            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info, ip_address) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(user.id)
+        .bind(&token_hash)
+        .bind(&device)
+        .bind(&ip)
+        .execute(&state.db)
+        .await;
+    }
+
     let auth = AuthResponse { access_token, refresh_token, user: user.into() };
     let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
     Ok((resp_headers, Json(auth)))
@@ -403,6 +428,46 @@ fn hash_token(token: &str) -> String {
     hasher.update(token.as_bytes());
     let digest = hasher.finalize();
     base64::engine::general_purpose::STANDARD.encode(digest)
+}
+
+pub async fn list_sessions(
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let sessions = sqlx::query(
+        "SELECT id, device_info, ip_address, last_seen, created_at FROM user_sessions WHERE user_id = $1 ORDER BY last_seen DESC LIMIT 20",
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    let result: Vec<serde_json::Value> = sessions.iter().map(|s| {
+        use sqlx::Row;
+        serde_json::json!({
+            "id": s.get::<uuid::Uuid, _>("id").to_string(),
+            "device": s.get::<Option<String>, _>("device_info"),
+            "ip": s.get::<Option<String>, _>("ip_address"),
+            "last_seen": s.get::<chrono::DateTime<chrono::Utc>, _>("last_seen").to_rfc3339(),
+            "created_at": s.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
+        })
+    }).collect();
+
+    Ok(axum::Json(serde_json::json!(result)))
+}
+
+pub async fn revoke_session(
+    axum::extract::Path(session_id): axum::extract::Path<Uuid>,
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+) -> Result<axum::http::StatusCode> {
+    sqlx::query(
+        "DELETE FROM user_sessions WHERE id = $1 AND user_id = $2",
+    )
+    .bind(session_id)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Result<()> {

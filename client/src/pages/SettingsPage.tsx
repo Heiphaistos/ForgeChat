@@ -20,11 +20,12 @@ import AccessibilitySection from '../components/settings/AccessibilitySection'
 import StreamerSection from '../components/settings/StreamerSection'
 import AdvancedSection from '../components/settings/AdvancedSection'
 import SecuritySection from '../components/settings/SecuritySection'
+import SessionsSection from '../components/settings/SessionsSection'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
   | 'notifications' | 'audio' | 'video' | 'privacy' | 'language'
-  | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security'
+  | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
 
 const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }[] = [
   { id: 'account', label: 'Mon compte', icon: <User size={16} />, group: 'Compte' },
@@ -39,6 +40,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
   { id: 'video', label: 'Vidéo', icon: <Video size={16} /> },
   { id: 'privacy', label: 'Vie privée', icon: <Shield size={16} />, group: 'Confidentialité' },
   { id: 'security', label: 'Sécurité', icon: <Shield size={16} /> },
+  { id: 'sessions', label: 'Sessions', icon: <Monitor size={16} /> },
   { id: 'accessibility', label: 'Accessibilité', icon: <Accessibility size={16} /> },
   { id: 'streamer', label: 'Mode Streamer', icon: <Film size={16} /> },
   { id: 'advanced', label: 'Avancé', icon: <Cpu size={16} />, group: 'Avancé' },
@@ -130,6 +132,7 @@ export default function SettingsPage() {
           {section === 'keybindings' && <KeybindingsSection />}
           {section === 'advanced' && <AdvancedSection user={user} />}
           {section === 'security' && <SecuritySection />}
+          {section === 'sessions' && <SessionsSection />}
         </div>
       </div>
     </div>

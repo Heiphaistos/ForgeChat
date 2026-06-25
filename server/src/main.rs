@@ -198,6 +198,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/auth/ws-ticket", post(handlers::auth::ws_ticket))
         // Users
         .route("/users/me", get(handlers::users::get_me))
+        .route("/users/me/sessions", get(handlers::auth::list_sessions))
+        .route("/users/me/sessions/:id", delete(handlers::auth::revoke_session))
         .route("/users/me", patch(handlers::users::update_me))
         .route("/users/me", delete(handlers::users::delete_account))
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
