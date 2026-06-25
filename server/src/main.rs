@@ -276,6 +276,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", delete(handlers::messages::unpin_message))
         .route("/servers/:server_id/channels/:channel_id/messages/search", get(handlers::messages::search_messages))
         .route("/messages/:id/remind", post(handlers::messages::set_reminder))
+        .route("/messages/:id/translate", post(handlers::messages::translate_message))
         // Uploads
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file))
         // Roles

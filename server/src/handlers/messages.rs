@@ -652,3 +652,57 @@ pub async fn set_reminder(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+#[derive(serde::Deserialize)]
+pub struct TranslateInput {
+    pub target_lang: String,
+}
+
+pub async fn translate_message(
+    axum::extract::Path(message_id): axum::extract::Path<uuid::Uuid>,
+    State(state): State<AppState>,
+    axum::Extension(_claims): axum::Extension<crate::middleware::auth::Claims>,
+    Json(input): Json<TranslateInput>,
+) -> Result<Json<serde_json::Value>> {
+    // Valider la langue cible (ISO 639-1, 2-3 chars)
+    if input.target_lang.len() > 5 || input.target_lang.is_empty() {
+        return Err(AppError::BadRequest("Langue invalide".into()));
+    }
+
+    let msg = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT content FROM messages WHERE id = $1"
+    ).bind(message_id).fetch_one(&state.db).await?;
+
+    let content = msg.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+
+    if content.trim().is_empty() {
+        return Ok(Json(serde_json::json!({ "translated": content })));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+    let url = format!(
+        "https://api.mymemory.translated.net/get?q={}&langpair=autodetect|{}",
+        urlencoding::encode(&content),
+        urlencoding::encode(&input.target_lang)
+    );
+
+    let resp = client.get(&url).send().await
+        .map_err(|_| AppError::BadRequest("Service de traduction indisponible".into()))?;
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("Réponse traduction invalide")))?;
+
+    let translated = json["responseData"]["translatedText"]
+        .as_str()
+        .unwrap_or(&content)
+        .to_string();
+
+    Ok(Json(serde_json::json!({
+        "translated": translated,
+        "lang": input.target_lang,
+    })))
+}

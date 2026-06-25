@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -182,6 +182,8 @@ export default function MessageList({
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
   const [reminderFor, setReminderFor] = useState<string | null>(null)
+  const [translations, setTranslations] = useState<Record<string, string>>({})
+  const [translatingId, setTranslatingId] = useState<string | null>(null)
   const density = localStorage.getItem('fc_density') ?? 'normal'
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
@@ -224,6 +226,19 @@ export default function MessageList({
       // silencieux si l'API échoue
     }
   }
+
+  const translateMessage = useCallback(async (messageId: string) => {
+    if (translatingId === messageId) return
+    setTranslatingId(messageId)
+    try {
+      const { data } = await api.post(`/messages/${messageId}/translate`, { target_lang: 'fr' })
+      setTranslations(prev => ({ ...prev, [messageId]: data.translated }))
+    } catch {
+      toast.error('Traduction indisponible')
+    } finally {
+      setTranslatingId(null)
+    }
+  }, [translatingId])
 
   return (
     <div className="flex-1 relative flex flex-col overflow-hidden">
@@ -372,6 +387,18 @@ export default function MessageList({
                             >
                               (modifié)
                             </button>
+                          )}
+                          {translations[msg.id] && (
+                            <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
+                              <span className="text-xs text-fc-accent font-medium mr-1.5">Traduction :</span>
+                              {translations[msg.id]}
+                              <button
+                                onClick={() => setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })}
+                                className="ml-2 text-fc-muted hover:text-white text-xs"
+                              >
+                                ✕
+                              </button>
+                            </div>
                           )}
                         </div>
                       )
@@ -591,6 +618,21 @@ export default function MessageList({
                       <Pencil size={14} />
                     </button>
                   )}
+
+                  <button
+                    onClick={() => {
+                      if (translations[msg.id]) {
+                        setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })
+                      } else {
+                        translateMessage(msg.id)
+                      }
+                    }}
+                    className={`p-1.5 rounded hover:bg-fc-hover transition ${translations[msg.id] ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                    title={translations[msg.id] ? 'Masquer la traduction' : 'Traduire en français'}
+                    disabled={translatingId === msg.id}
+                  >
+                    {translatingId === msg.id ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+                  </button>
 
                   <div className="relative">
                     <button
