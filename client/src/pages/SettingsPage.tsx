@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
-  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor,
+  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -13,6 +13,7 @@ import ProfileSection from '../components/settings/ProfileSection'
 import TextDisplaySection from '../components/settings/TextDisplaySection'
 import NotificationsSection from '../components/settings/NotificationsSection'
 import AudioSection from '../components/settings/AudioSection'
+import VideoSection from '../components/settings/VideoSection'
 import PrivacySection from '../components/settings/PrivacySection'
 import LanguageSection from '../components/settings/LanguageSection'
 import AccessibilitySection from '../components/settings/AccessibilitySection'
@@ -21,7 +22,7 @@ import AdvancedSection from '../components/settings/AdvancedSection'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
-  | 'notifications' | 'audio' | 'privacy' | 'language'
+  | 'notifications' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced'
 
 const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }[] = [
@@ -33,7 +34,8 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
   { id: 'notifications', label: 'Notifications', icon: <Bell size={16} /> },
   { id: 'keybindings', label: 'Raccourcis clavier', icon: <Keyboard size={16} /> },
   { id: 'language', label: 'Langue & Région', icon: <Globe size={16} /> },
-  { id: 'audio', label: 'Audio & Vidéo', icon: <Mic size={16} />, group: 'Voix & Vidéo' },
+  { id: 'audio', label: 'Audio', icon: <Mic size={16} />, group: 'Voix & Vidéo' },
+  { id: 'video', label: 'Vidéo', icon: <Video size={16} /> },
   { id: 'privacy', label: 'Vie privée', icon: <Shield size={16} />, group: 'Confidentialité' },
   { id: 'accessibility', label: 'Accessibilité', icon: <Accessibility size={16} /> },
   { id: 'streamer', label: 'Mode Streamer', icon: <Film size={16} /> },
@@ -117,6 +119,7 @@ export default function SettingsPage() {
           {section === 'text_display' && <TextDisplaySection />}
           {section === 'notifications' && <NotificationsSection />}
           {section === 'audio' && <AudioSection />}
+          {section === 'video' && <VideoSection />}
           {section === 'privacy' && <PrivacySection />}
           {section === 'language' && <LanguageSection />}
           {section === 'accessibility' && <AccessibilitySection />}
