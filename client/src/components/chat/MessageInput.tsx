@@ -17,6 +17,8 @@ import { fr } from 'date-fns/locale'
 
 // ─── Slash Commands ───────────────────────────────────────────────────────────
 
+const MAX_CHARS = 4000
+
 interface SlashCommand {
   name: string
   description: string
@@ -715,6 +717,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
         />
 
+        {content.length > MAX_CHARS * 0.8 && (
+          <div className={`flex justify-end px-1 py-0.5 text-xs ${
+            content.length > MAX_CHARS
+              ? 'text-fc-red'
+              : content.length > MAX_CHARS * 0.9
+              ? 'text-fc-yellow'
+              : 'text-fc-muted'
+          }`}>
+            {content.length > MAX_CHARS
+              ? <span className="font-medium">{content.length - MAX_CHARS} caractère{content.length - MAX_CHARS > 1 ? 's' : ''} en trop</span>
+              : <span>{MAX_CHARS - content.length} restant{MAX_CHARS - content.length > 1 ? 's' : ''}</span>
+            }
+          </div>
+        )}
+
         <div className="flex items-center gap-1 flex-shrink-0 relative">
           {/* Bouton Emoji */}
           <div className="relative">
@@ -861,7 +878,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
           <button
             onClick={submit}
-            disabled={!content.trim() && files.length === 0}
+            disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS}
             className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
             title="Envoyer"
           >
