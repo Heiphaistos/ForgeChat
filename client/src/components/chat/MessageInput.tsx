@@ -1,7 +1,7 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +14,7 @@ import StickerPicker, { formatStickerMessage } from './StickerPicker'
 import type { Sticker } from './StickerPicker'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import VoiceMessageRecorder from './VoiceMessageRecorder'
 
 // ─── Slash Commands ───────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showScheduled, setShowScheduled] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   // Slash commands
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -502,6 +504,27 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setShowStickerPicker(false)
     textareaRef.current?.focus()
   }
+
+  const handleVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
+    try {
+      const mins = Math.floor(duration / 60)
+      const secs = duration % 60
+      const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
+      const res = await api.post(`/channels/${channelId}/messages`, {
+        content: `🎤 Message vocal (${durationStr})`,
+      })
+      const formData = new FormData()
+      const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
+      formData.append('file', blob, `voice-${Date.now()}.${ext}`)
+      await api.post(`/messages/${res.data.id}/attachments`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setShowVoiceRecorder(false)
+    } catch {
+      toast.error("Erreur lors de l'envoi du message vocal")
+      setShowVoiceRecorder(false)
+    }
+  }, [channelId])
 
   const closeAllPickers = () => {
     setShowEmojiPicker(false)
@@ -875,6 +898,24 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               </div>
             )}
           </div>
+
+          {/* Voice message */}
+          {showVoiceRecorder ? (
+            <div className="absolute bottom-full left-0 right-0 mb-2 px-2">
+              <VoiceMessageRecorder
+                onSend={handleVoiceMessage}
+                onCancel={() => setShowVoiceRecorder(false)}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowVoiceRecorder(true)}
+              className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition"
+              title="Message vocal"
+            >
+              <Mic size={18} />
+            </button>
+          )}
 
           <button
             onClick={submit}
