@@ -56,7 +56,7 @@ interface VoiceStore {
   toggleDeafen(): void
   toggleVideo(): Promise<void>
   shareScreen(): Promise<void>
-  stopScreenShare(): void
+  stopScreenShare(): Promise<void>
   clearError(): void
   // AppelÃ© par App pour Ã©couter les events globaux (joins/leaves)
   initGlobalListeners(): () => void
@@ -82,6 +82,7 @@ let _localStream: MediaStream | null = null
 let _processedStream: MediaStream | null = null     // stream aprÃ¨s traitement noise suppression
 let _noiseAudioCtx: AudioContext | null = null       // AudioContext dÃ©diÃ© noise suppression
 let _screenTrack: MediaStreamTrack | null = null
+let _cameraTrackBeforeShare: MediaStreamTrack | null = null
 let _offFns: Array<() => void> = []
 let _pttMuted = false // Ã©tat mute "rÃ©el" avant PTT
 
@@ -540,11 +541,11 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _iceQueues.clear()
     _gainNodes.clear()
 
-    // Stopper le stream brut original (pas _localStream qui peut pointer vers processedStream)
-    const rawStream = _processedStream
-      ? (get().localStream ?? _localStream)
-      : _localStream
-    rawStream?.getTracks().forEach(t => t.stop())
+    // Stopper toutes les pistes des deux streams (raw + processed)
+    const allTracks = new Set<MediaStreamTrack>()
+    _localStream?.getTracks().forEach(t => allTracks.add(t))
+    _processedStream?.getTracks().forEach(t => allTracks.add(t))
+    allTracks.forEach(t => t.stop())
 
     _cleanupNoiseSuppression()
     _localStream = null
@@ -595,8 +596,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     } else {
       // Activer la camÃ©ra + renegociation
       try {
+        const savedCamId = localStorage.getItem('fc_video_input') || undefined
         const vs = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          video: {
+            width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+            ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
+          },
         })
         const vt = vs.getVideoTracks()[0]
         _localStream.addTrack(vt)
@@ -652,6 +657,10 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       }
 
       // Mettre Ã  jour le stream local (preview)
+      // Mémoriser la piste caméra active (non-screen) pour restaurer après share
+      const existingVideoTrack = _localStream?.getVideoTracks()[0] ?? null
+      _cameraTrackBeforeShare = existingVideoTrack
+
       _localStream.getVideoTracks().forEach(t => { t.stop(); _localStream!.removeTrack(t) })
       _localStream.addTrack(svt)
 
@@ -676,7 +685,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   },
 
   // â”€â”€ Stop screen share â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  stopScreenShare: () => {
+  stopScreenShare: async () => {
     if (!_localStream) return
     _screenTrack?.stop()
     _screenTrack = null
@@ -687,7 +696,22 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       if (sender) sender.replaceTrack(null).catch(() => {})
     }
 
-    set({ screenSharing: false, videoEnabled: false })
+    // Restaurer la caméra si elle était active avant le screen share
+    if (_cameraTrackBeforeShare && _cameraTrackBeforeShare.readyState !== 'ended') {
+      _localStream?.addTrack(_cameraTrackBeforeShare)
+      for (const [peerId, pc] of _pcs) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+        if (sender) {
+          try { await sender.replaceTrack(_cameraTrackBeforeShare) } catch {}
+        }
+      }
+      _cameraTrackBeforeShare = null
+      set({ screenSharing: false, videoEnabled: true })
+    } else {
+      _cameraTrackBeforeShare = null
+      set({ screenSharing: false, videoEnabled: false })
+    }
+
     _refreshLocalStream(set)
     _broadcastState(get)
   },
