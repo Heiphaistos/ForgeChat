@@ -604,6 +604,21 @@ pub async fn require_member(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
+/// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
+pub async fn require_channel_in_server(
+    state: &AppState, channel_id: Uuid, server_id: Uuid,
+) -> Result<()> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
+    )
+    .bind(channel_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { Err(AppError::Forbidden) } else { Ok(()) }
+}
+
 pub async fn require_owner(
     state: &AppState, user_id: Uuid, server_id: Uuid,
 ) -> Result<()> {

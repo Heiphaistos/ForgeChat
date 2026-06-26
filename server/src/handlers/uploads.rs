@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::require_member,
+    handlers::servers::{require_member, require_channel_in_server},
     middleware::auth::Claims,
     models::role::Permissions,
     state::AppState,
@@ -21,6 +21,7 @@ pub async fn upload_file(
     mut multipart: Multipart,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Admins/modérateurs/propriétaires peuvent uploader n'importe quel type de fichier
     let is_privileged = sqlx::query_scalar::<_, bool>(
