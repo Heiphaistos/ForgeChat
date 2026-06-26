@@ -55,6 +55,7 @@ function AppInner() {
   const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
   const [showCommandPalette, setShowCommandPalette] = React.useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
+  const [showOnboarding, setShowOnboarding] = React.useState(() => !localStorage.getItem('fc_onboarding_done'))
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
@@ -269,11 +270,13 @@ function AppInner() {
       {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
       <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
+      {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
     </>
   )
 }
 
 import React from 'react'
+import Onboarding from './components/Onboarding'
 
 export default function App() {
 
