@@ -186,6 +186,13 @@ function AppInner() {
     if (user) requestPermission()
   }, [user?.id])
 
+  // Badge non-lus dans le titre de la page
+  const allUnread = useUnread(s => s.counts)
+  useEffect(() => {
+    const total = Object.values(allUnread).reduce((sum: number, n) => sum + (n as number), 0)
+    document.title = total > 0 ? `(${total}) ForgeChat` : 'ForgeChat'
+  }, [allUnread])
+
   // Notifications temps réel pour les demandes d'ami
   useEffect(() => {
     if (!user) return

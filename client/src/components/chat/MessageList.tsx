@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -504,7 +504,7 @@ export default function MessageList({
                               title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                             >
                               <span>{r.emoji}</span>
-                              <span>{r.count}</span>
+                              <span className={`transition-transform duration-150 inline-block ${isPopping ? 'scale-110' : ''}`}>{r.count}</span>
                             </button>
                           )
                         })}
@@ -577,6 +577,18 @@ export default function MessageList({
                     title="Sauvegarder"
                   >
                     <Bookmark size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const md = msg.content ?? ''
+                      navigator.clipboard.writeText(md)
+                      toast.success('Copié en Markdown !')
+                    }}
+                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                    title="Copier en Markdown"
+                  >
+                    <Copy size={14} />
                   </button>
 
                   <button
