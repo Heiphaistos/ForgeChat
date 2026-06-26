@@ -212,7 +212,7 @@ function AppInner() {
     return () => { offReq(); offAcc() }
   }, [user?.id])
 
-  // Mise à jour temps réel des canaux
+  // Mise à jour temps réel des canaux et serveur
   useEffect(() => {
     if (!user) return
     const offUpdate = on('CHANNEL_UPDATE', (d: any) => {
@@ -224,7 +224,19 @@ function AppInner() {
     const offDelete = on('CHANNEL_DELETE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
-    return () => { offUpdate(); offCreate(); offDelete() }
+    const offServerUpdate = on('SERVER_UPDATE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['servers'] })
+      }
+    })
+    const offEmojiCreate = on('EMOJI_CREATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
+    })
+    const offEmojiDelete = on('EMOJI_DELETE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
+    })
+    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete() }
   }, [user?.id])
 
   // Timeout utilisateur reçu en temps réel

@@ -56,6 +56,14 @@ pub async fn create_group_dm(
             .bind(group_id).bind(uid).execute(&state.db).await;
     }
 
+    // Notifier tous les membres de la création du groupe
+    let all_members: Vec<Uuid> = std::iter::once(claims.sub).chain(members.iter().copied()).collect();
+    let event = serde_json::json!({ "type": "GROUP_DM_CREATE", "group": { "id": group_id, "name": name } });
+    let event_str = event.to_string();
+    for uid in &all_members {
+        state.broadcast_to_user(*uid, event_str.clone()).await;
+    }
+
     Ok(Json(serde_json::json!({ "id": group_id, "name": name })))
 }
 
