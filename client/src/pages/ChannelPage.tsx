@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useContext } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X } from 'lucide-react'
+import { SplitContext } from '../contexts/SplitContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
@@ -34,8 +35,17 @@ function channelIcon(type: string, size = 18) {
   }
 }
 
-export default function ChannelPage() {
-  const { serverId, channelId } = useParams()
+interface Props {
+  forcedChannelId?: string
+  isSplit?: boolean
+  onClose?: () => void
+}
+
+export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props) {
+  const params = useParams<{ serverId?: string; channelId?: string }>()
+  const serverId = params.serverId
+  const channelId = forcedChannelId ?? params.channelId
+  const { setSplitChannelId } = useContext(SplitContext)
   const [searchParams] = useSearchParams()
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
@@ -295,6 +305,25 @@ export default function ChannelPage() {
             >
               <Users size={18} />
             </button>
+
+            {/* Bouton split / fermer split */}
+            {!isSplit ? (
+              <button
+                onClick={() => setSplitChannelId(channelId ?? null)}
+                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                title="Ouvrir en split (Ctrl+Shift+S pour fermer)"
+              >
+                <Columns2 size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                title="Fermer le split (Ctrl+Shift+S)"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
         </div>
 
