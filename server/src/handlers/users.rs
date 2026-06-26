@@ -784,6 +784,66 @@ pub async fn get_mutual_servers(
     Ok(Json(serde_json::json!(servers)))
 }
 
+pub async fn get_my_stats(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let uid = claims.sub;
+
+    let msg_row = sqlx::query(
+        "SELECT COUNT(*)::bigint as total FROM messages WHERE user_id=$1"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let messages_sent: i64 = msg_row.get("total");
+
+    let server_row = sqlx::query(
+        "SELECT COUNT(*)::bigint as total FROM server_members WHERE user_id=$1"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let servers_joined: i64 = server_row.get("total");
+
+    let friend_row = sqlx::query(
+        "SELECT COUNT(*)::bigint as total FROM friendships WHERE (user_id=$1 OR friend_id=$1) AND status='accepted'"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let friends_count: i64 = friend_row.get("total");
+
+    let react_given_row = sqlx::query(
+        "SELECT COUNT(*)::bigint as total FROM reactions WHERE user_id=$1"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let reactions_given: i64 = react_given_row.get("total");
+
+    let react_recv_row = sqlx::query(
+        "SELECT COUNT(*)::bigint as total FROM reactions r
+         JOIN messages m ON m.id = r.message_id WHERE m.user_id=$1"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let reactions_received: i64 = react_recv_row.get("total");
+
+    let user_row = sqlx::query(
+        "SELECT created_at FROM users WHERE id=$1"
+    )
+    .bind(uid).fetch_one(&state.db).await
+    .map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
+    let created_at: chrono::DateTime<chrono::Utc> = user_row.get("created_at");
+
+    Ok(Json(serde_json::json!({
+        "messages_sent": messages_sent,
+        "servers_joined": servers_joined,
+        "friends_count": friends_count,
+        "reactions_given": reactions_given,
+        "reactions_received": reactions_received,
+        "member_since": created_at.to_rfc3339(),
+    })))
+}
+
 pub async fn toggle_focus_mode(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

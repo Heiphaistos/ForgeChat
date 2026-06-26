@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
-  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video,
+  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -21,11 +21,13 @@ import StreamerSection from '../components/settings/StreamerSection'
 import AdvancedSection from '../components/settings/AdvancedSection'
 import SecuritySection from '../components/settings/SecuritySection'
 import SessionsSection from '../components/settings/SessionsSection'
+import StatsSection from '../components/settings/StatsSection'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
   | 'notifications' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
+  | 'stats'
 
 const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }[] = [
   { id: 'account', label: 'Mon compte', icon: <User size={16} />, group: 'Compte' },
@@ -44,6 +46,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
   { id: 'accessibility', label: 'Accessibilité', icon: <Accessibility size={16} /> },
   { id: 'streamer', label: 'Mode Streamer', icon: <Film size={16} /> },
   { id: 'advanced', label: 'Avancé', icon: <Cpu size={16} />, group: 'Avancé' },
+  { id: 'stats', label: 'Statistiques', icon: <BarChart3 size={16} /> },
 ]
 
 import React from 'react'
@@ -133,6 +136,7 @@ export default function SettingsPage() {
           {section === 'advanced' && <AdvancedSection user={user} />}
           {section === 'security' && <SecuritySection />}
           {section === 'sessions' && <SessionsSection />}
+          {section === 'stats' && <StatsSection />}
         </div>
       </div>
     </div>
