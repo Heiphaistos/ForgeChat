@@ -204,6 +204,15 @@ pub async fn send_message(
 
     let mention_everyone = content_str.map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 
+    // Vérifier permission MENTION_EVERYONE si @everyone ou @here
+    if mention_everyone {
+        use crate::handlers::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE)
+            .await
+            .map_err(|_| AppError::Forbidden)?;
+    }
+
     let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s));
 
     let msg = sqlx::query(

@@ -289,6 +289,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/categories", get(handlers::channels::get_categories).post(handlers::channels::create_category))
         .route("/servers/:server_id/channels/:channel_id", patch(handlers::channels::update_channel))
         .route("/servers/:server_id/channels/:channel_id", delete(handlers::channels::delete_channel))
+        .route("/servers/:server_id/channels/:channel_id/archive", patch(handlers::channels::archive_channel))
         .route("/servers/:server_id/channels/:channel_id/pins", get(handlers::channels::get_pinned))
         .route("/servers/:server_id/channels/reorder", patch(handlers::channels::reorder_channels))
         .route("/servers/:server_id/boost", post(handlers::servers::boost_server))

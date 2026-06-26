@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield,
+  Users, X, GripVertical, Shield, Archive,
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
@@ -338,7 +338,9 @@ export default function ChannelSidebar() {
   }
 
   const server = data?.server
-  const channels: any[] = data?.channels ?? []
+  const allChannels: any[] = data?.channels ?? []
+  const channels: any[] = allChannels.filter((c: any) => !c.archived)
+  const archivedChannels: any[] = allChannels.filter((c: any) => c.archived)
 
   // Déterminer si l'utilisateur courant est owner ou admin
   const isOwnerOrAdmin = !!server && (
@@ -352,6 +354,11 @@ export default function ChannelSidebar() {
       api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
     onError: () => toast.error('Erreur lors du déplacement'),
+  })
+
+  const archiveChannel = useMutation({
+    mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
   })
 
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
@@ -544,6 +551,15 @@ export default function ChannelSidebar() {
           >
             <Settings size={12} />
           </button>
+          {isOwnerOrAdmin && (
+            <button
+              onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
+              title="Archiver ce canal"
+            >
+              <Archive size={12} />
+            </button>
+          )}
         </button>
 
         {/* Participants vocaux */}
@@ -695,6 +711,37 @@ export default function ChannelSidebar() {
           {channels.length === 0 && (
             <div className="text-center text-fc-muted text-xs py-4">
               Aucun canal — crée-en un !
+            </div>
+          )}
+
+          {/* Canaux archivés */}
+          {isOwnerOrAdmin && archivedChannels.length > 0 && (
+            <div className="mt-3 mb-2">
+              <div
+                className="flex items-center gap-1 px-2 py-1 cursor-pointer"
+                onClick={() => toggleGroup('__archived__')}
+              >
+                <ChevronRight
+                  size={10}
+                  className={`text-fc-muted transition-transform ${!collapsed['__archived__'] ? 'rotate-90' : ''}`}
+                />
+                <span className="text-[10px] font-semibold text-fc-muted/60 uppercase tracking-wide">
+                  Archivés ({archivedChannels.length})
+                </span>
+              </div>
+              {!collapsed['__archived__'] && archivedChannels.map((ch: any) => (
+                <div key={ch.id} className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition">
+                  <ChannelIcon type={ch.type} size={14} />
+                  <span className="text-xs truncate flex-1 opacity-60">{ch.name}</span>
+                  <button
+                    onClick={() => archiveChannel.mutate(ch.id)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
+                    title="Restaurer le canal"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

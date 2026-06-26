@@ -345,3 +345,24 @@ pub async fn delete_channel_permission(
         .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+pub async fn archive_channel(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    use sqlx::Row;
+    let row = sqlx::query(
+        "UPDATE channels SET archived = NOT archived WHERE id=$1 AND server_id=$2 RETURNING archived"
+    )
+    .bind(channel_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
+
+    let archived: bool = row.get("archived");
+    Ok(Json(serde_json::json!({ "archived": archived })))
+}
