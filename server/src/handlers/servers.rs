@@ -356,6 +356,12 @@ pub async fn leave_server(
         .execute(&state.db)
         .await?;
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_LEAVE",
+        "server_id": server_id,
+        "user_id": claims.sub,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -495,6 +501,11 @@ pub async fn ban_member(
     .bind(server_id)
     .execute(&state.db)
     .await?;
+
+    sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
 
     log_event(
         &state, server_id, "MEMBER_BAN",
