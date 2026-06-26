@@ -299,7 +299,8 @@ pub async fn get_user_profile(
 
     let user = sqlx::query(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
-                custom_status_emoji, activity_type, activity_name, activity_detail, created_at
+                custom_status_emoji, activity_type, activity_name, activity_detail,
+                is_verified, created_at
          FROM users WHERE id=$1"
     )
     .bind(user_id)
@@ -320,6 +321,7 @@ pub async fn get_user_profile(
         "activity_type":        user.get::<Option<String>, _>("activity_type"),
         "activity_name":        user.get::<Option<String>, _>("activity_name"),
         "activity_detail":      user.get::<Option<String>, _>("activity_detail"),
+        "verified":             user.get::<bool, _>("is_verified"),
         "created_at":           user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "relationship":         "none",
         "is_favorite":          false,

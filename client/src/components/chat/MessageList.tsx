@@ -307,6 +307,12 @@ export default function MessageList({
                     >
                       {msg.author_username}
                     </button>
+                    {msg.author_verified && (
+                      <span
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-fc-accent text-white text-[10px] font-bold ml-0.5 flex-shrink-0"
+                        title="Utilisateur vérifié"
+                      >✓</span>
+                    )}
                     {msg.author_is_bot && (
                       <span className="inline-flex items-center gap-0.5 bg-indigo-500/20 text-indigo-300 text-xs px-1.5 py-0.5 rounded font-medium">
                         <Bot size={10} />

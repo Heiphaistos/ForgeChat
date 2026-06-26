@@ -17,6 +17,7 @@ interface User {
   custom_status_emoji?: string | null
   email?: string
   focus_mode?: boolean
+  verified?: boolean
 }
 
 interface AuthState {

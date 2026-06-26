@@ -260,6 +260,7 @@ pub async fn bot_send_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: true,
+        author_verified: false,
         attachments: vec![],
         reactions: vec![],
         expires_at: None,
