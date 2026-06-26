@@ -100,13 +100,18 @@ pub async fn create_thread(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
-    if body.first_message.trim().is_empty() {
+    let first_msg = if body.first_message.len() > 4000 {
+        body.first_message.chars().take(4000).collect::<String>()
+    } else {
+        body.first_message.clone()
+    };
+    if first_msg.trim().is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
 
     let title = body.title
         .filter(|t| !t.trim().is_empty())
-        .unwrap_or_else(|| body.first_message.chars().take(50).collect::<String>());
+        .unwrap_or_else(|| first_msg.chars().take(50).collect::<String>());
 
     let thread = sqlx::query_as::<_, Thread>(
         "INSERT INTO threads (channel_id, parent_message_id, title, creator_id, last_reply_at)
@@ -124,7 +129,7 @@ pub async fn create_thread(
     )
     .bind(thread.id)
     .bind(claims.sub)
-    .bind(body.first_message.trim())
+    .bind(first_msg.trim())
     .execute(&state.db)
     .await?;
 
@@ -185,9 +190,15 @@ pub async fn send_thread_message(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
 
-    if body.content.trim().is_empty() {
+    let content_trimmed = body.content.trim().to_string();
+    if content_trimmed.is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
+    let content_trimmed: String = if content_trimmed.len() > 4000 {
+        content_trimmed.chars().take(4000).collect()
+    } else {
+        content_trimmed
+    };
 
     let thread_locked = sqlx::query_scalar::<_, bool>(
         "SELECT locked FROM threads WHERE id = $1"
@@ -206,7 +217,7 @@ pub async fn send_thread_message(
     )
     .bind(thread_id)
     .bind(claims.sub)
-    .bind(body.content.trim())
+    .bind(&content_trimmed)
     .fetch_one(&state.db)
     .await?;
 
