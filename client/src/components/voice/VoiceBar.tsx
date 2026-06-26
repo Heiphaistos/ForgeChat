@@ -6,7 +6,7 @@ import { useVoiceActivity } from '../../hooks/useVoiceActivity'
 export default function VoiceBar() {
   const nav = useNavigate()
   const {
-    joined, channelId, serverId,
+    joined, channelId, channelName, serverId,
     muted, deafened, videoEnabled, screenSharing, localStream,
     toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare, leave,
   } = useVoice()
@@ -31,7 +31,7 @@ export default function VoiceBar() {
             className="text-[11px] text-fc-muted hover:text-white transition truncate block max-w-full text-left"
           >
             <Volume2 size={10} className="inline mr-0.5 -mt-0.5" />
-            retour au canal
+            {channelName ?? 'retour au canal'}
           </button>
         </div>
         {/* Quitter */}

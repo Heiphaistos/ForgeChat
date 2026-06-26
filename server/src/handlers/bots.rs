@@ -260,12 +260,14 @@ pub async fn bot_send_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: true,
+        author_verified: false,
         attachments: vec![],
         reactions: vec![],
+        expires_at: None,
     };
 
     let event = serde_json::json!({ "type": "MESSAGE_CREATE", "message": full_msg });
-    state.broadcast_to_channel(body.channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(body.channel_id, event.to_string()).await;
 
     Ok(Json(full_msg))
 }
@@ -401,6 +403,6 @@ pub async fn dispatch_slash_command(
             "server_id": server_id,
             "user_id": user_id,
         });
-        state.broadcast_to_channel(channel_id, event.to_string()).await;
+        state.broadcast_to_server_members(server_id, event.to_string()).await;
     }
 }

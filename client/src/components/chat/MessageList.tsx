@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
+import { useCountdown } from '../../hooks/useCountdown'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -11,6 +13,10 @@ import ReactionPopup from './ReactionPopup'
 import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
+import ReminderModal from './ReminderModal'
+import ReportModal from './ReportModal'
+import LightboxModal from './LightboxModal'
+import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -25,9 +31,12 @@ interface Props {
   onPinMessage?: (msgId: string) => void
   onReply?: (msg: any) => void
   onLoadMore?: () => Promise<boolean>
+  initialHighlightId?: string | null
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
+const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
+const DBLCLICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥']
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr)
@@ -43,6 +52,15 @@ function formatBytes(bytes: number) {
 }
 
 const URL_REGEX = /https?:\/\/[^\s<>"]+/g
+
+function EphemeralBadge({ expiresAt }: { expiresAt: string }) {
+  const remaining = useCountdown(expiresAt)
+  return (
+    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fc-red/20 text-fc-red font-medium">
+      ⏱ {remaining}
+    </span>
+  )
+}
 
 function extractFirstUrl(content: string): string | null {
   const matches = content.match(URL_REGEX)
@@ -62,8 +80,11 @@ export default function MessageList({
   onPinMessage,
   onReply,
   onLoadMore,
+  initialHighlightId,
 }: Props) {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const targetMsgId = searchParams.get('msg')
 
   const { data: customEmojisList = [] } = useQuery<{ name: string; url: string }[]>({
     queryKey: ['custom_emojis', serverId],
@@ -95,6 +116,57 @@ export default function MessageList({
   useEffect(() => {
     if (isAtBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  // Purge des messages éphémères expirés côté client toutes les 5s
+  useEffect(() => {
+    const deleteMessage = useChat.getState().deleteMessage
+    const id = setInterval(() => {
+      const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+      msgs.forEach(m => {
+        if (m.expires_at && new Date(m.expires_at) <= new Date()) {
+          deleteMessage(channelId, m.id)
+        }
+      })
+    }, 5000)
+    return () => clearInterval(id)
+  }, [channelId])
+
+  // Animation du compteur de réactions quand le compte change (mise à jour WebSocket)
+  useEffect(() => {
+    const newBumped: Record<string, boolean> = {}
+    messages.forEach(msg => {
+      (msg.reactions ?? []).forEach((r: any) => {
+        const key = `${msg.id}:${r.emoji}`
+        const prev = prevCountsRef.current[key] ?? r.count
+        if (r.count !== prev) newBumped[key] = true
+      })
+    })
+    // Mettre à jour la map de référence
+    const nextCounts: Record<string, number> = {}
+    messages.forEach(msg => {
+      (msg.reactions ?? []).forEach((r: any) => {
+        nextCounts[`${msg.id}:${r.emoji}`] = r.count
+      })
+    })
+    prevCountsRef.current = nextCounts
+    if (Object.keys(newBumped).length > 0) {
+      setBumped(newBumped)
+      const t = setTimeout(() => setBumped({}), 200)
+      return () => clearTimeout(t)
+    }
+  }, [messages])
+
+  useEffect(() => {
+    if (!initialHighlightId || messages.length === 0) return
+    const timer = setTimeout(() => jumpToMessage(initialHighlightId), 300)
+    return () => clearTimeout(timer)
+  }, [initialHighlightId, messages.length])
+
+  useEffect(() => {
+    if (!targetMsgId || messages.length === 0) return
+    const timer = setTimeout(() => jumpToMessage(targetMsgId), 300)
+    return () => clearTimeout(timer)
+  }, [targetMsgId, messages.length])
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -164,11 +236,42 @@ export default function MessageList({
   }
 
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
+  const [bumped, setBumped] = useState<Record<string, boolean>>({})
+  const prevCountsRef = useRef<Record<string, number>>({})
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const [reminderFor, setReminderFor] = useState<string | null>(null)
+  const [reportingMsg, setReportingMsg] = useState<string | null>(null)
+  const [translations, setTranslations] = useState<Record<string, string>>({})
+  const [translatingId, setTranslatingId] = useState<string | null>(null)
+  const density = localStorage.getItem('fc_density') ?? 'normal'
+  const compact = density === 'compact' || density === 'ultra-compact'
+  const ultraCompact = density === 'ultra-compact'
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
+
+  const removeReactionMut = useMutation({
+    mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
+      api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
+    onError: () => toast.error('Impossible de retirer la réaction'),
+  })
+
+  const toggleReaction = (msgId: string, emoji: string) => {
+    const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+    const msg = msgs.find(m => m.id === msgId)
+    const reaction = msg?.reactions.find(r => r.emoji === emoji)
+    if (reaction?.me) {
+      removeReactionMut.mutate({ msgId, emoji })
+    } else {
+      onAddReaction?.(msgId, emoji)
+    }
+    const reactionKey = `${msgId}:${emoji}`
+    setPoppingReaction(reactionKey)
+    setTimeout(() => setPoppingReaction(null), 300)
+  }
 
   const saveMessage = useMutation({
     mutationFn: ({ message_id, channel_id, server_id }: { message_id: string; channel_id: string; server_id: string }) =>
@@ -187,12 +290,25 @@ export default function MessageList({
     }
   }
 
+  const translateMessage = useCallback(async (messageId: string) => {
+    if (translatingId === messageId) return
+    setTranslatingId(messageId)
+    try {
+      const { data } = await api.post(`/messages/${messageId}/translate`, { target_lang: 'fr' })
+      setTranslations(prev => ({ ...prev, [messageId]: data.translated }))
+    } catch {
+      toast.error('Traduction indisponible')
+    } finally {
+      setTranslatingId(null)
+    }
+  }, [translatingId])
+
   return (
     <div className="flex-1 relative flex flex-col overflow-hidden">
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5"
-        onClick={() => { setEmojiPickerFor(null); setPopup(null) }}
+        onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
       >
         {/* Loader "plus de messages" */}
@@ -216,28 +332,36 @@ export default function MessageList({
           return (
             <div
               key={msg.id}
+              id={`msg-${msg.id}`}
               ref={el => { if (el) msgRefs.current[msg.id] = el }}
-              className={`group flex items-start gap-3 px-2 py-0.5 rounded relative transition-colors duration-300
-                ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : 'hover:bg-fc-hover/30'}`}
+              className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
+                ${compact ? 'py-0.5' : 'py-1'}
+                ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : msg.expires_at ? 'bg-red-500/5 border-l-2 border-red-500/30 hover:bg-red-500/8' : 'hover:bg-fc-hover/30'}`}
+              onDoubleClick={e => {
+                e.stopPropagation()
+                setDblClickPopover({ msgId: msg.id, x: e.clientX, y: e.clientY })
+              }}
             >
               {/* Avatar */}
-              <div className="w-10 flex-shrink-0 mt-0.5">
-                {!isGrouped && (
-                  <button
-                    className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition"
-                    onClick={e => openUserPopup(e, msg.author_id)}
-                    title={`Profil de ${msg.author_username}`}
-                  >
-                    {msg.author_avatar
-                      ? <img src={msg.author_avatar} alt="" className="w-full h-full object-cover" />
-                      : msg.author_username.charAt(0).toUpperCase()}
-                  </button>
-                )}
-              </div>
+              {!ultraCompact && (
+                <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
+                  {!isGrouped && (
+                    <button
+                      className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
+                      onClick={e => openUserPopup(e, msg.author_id)}
+                      title={`Profil de ${msg.author_username}`}
+                    >
+                      {msg.author_avatar
+                        ? <img src={msg.author_avatar} alt="" className="w-full h-full object-cover" />
+                        : msg.author_username.charAt(0).toUpperCase()}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Contenu */}
               <div className="flex-1 min-w-0">
-                {!isGrouped && (
+                {!isGrouped && !ultraCompact && (
                   <div className="flex items-baseline gap-2 mb-0.5">
                     <button
                       className="font-semibold text-white text-sm hover:underline cursor-pointer"
@@ -245,13 +369,20 @@ export default function MessageList({
                     >
                       {msg.author_username}
                     </button>
+                    {msg.author_verified && (
+                      <span
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-fc-accent text-white text-[10px] font-bold ml-0.5 flex-shrink-0"
+                        title="Utilisateur vérifié"
+                      >✓</span>
+                    )}
                     {msg.author_is_bot && (
                       <span className="inline-flex items-center gap-0.5 bg-indigo-500/20 text-indigo-300 text-xs px-1.5 py-0.5 rounded font-medium">
                         <Bot size={10} />
                         BOT
                       </span>
                     )}
-                    <span className="text-xs text-fc-muted">{formatDate(msg.created_at)}</span>
+                    <span className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'}`}>{formatDate(msg.created_at)}</span>
+                    {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
                   </div>
                 )}
 
@@ -328,6 +459,23 @@ export default function MessageList({
                               (modifié)
                             </button>
                           )}
+                          {msg.expires_at && (
+                            <span className="ml-2">
+                              <EphemeralBadge expiresAt={msg.expires_at} />
+                            </span>
+                          )}
+                          {translations[msg.id] && (
+                            <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
+                              <span className="text-xs text-fc-accent font-medium mr-1.5">Traduction :</span>
+                              {translations[msg.id]}
+                              <button
+                                onClick={() => setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })}
+                                className="ml-2 text-fc-muted hover:text-white text-xs"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )
                     })()}
@@ -341,7 +489,10 @@ export default function MessageList({
                               src={att.url}
                               alt={att.filename}
                               className="max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
-                              onClick={() => setLightbox(att.url)}
+                              onClick={() => {
+                                const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
+                                if (imgs.length > 0) setLightbox({ images: imgs, index: imgs.indexOf(att.url) })
+                              }}
                             />
                             {att.expires_at && (
                               <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -383,8 +534,17 @@ export default function MessageList({
                       </div>
                     ))}
 
-                    {/* Link preview (1 seule, pas si attachments) */}
-                    {msg.content && !msg.attachments?.length && (() => {
+                    {/* Sondage attaché au message */}
+                    {msg.poll_id && (
+                      <PollDisplay
+                        pollId={msg.poll_id}
+                        serverId={serverId}
+                        channelId={channelId}
+                      />
+                    )}
+
+                    {/* Link preview (1 seule, pas si attachments, pas si sondage) */}
+                    {msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
                     })()}
@@ -398,25 +558,53 @@ export default function MessageList({
                           return (
                             <button
                               key={r.emoji}
-                              onClick={() => {
-                                onAddReaction?.(msg.id, r.emoji)
-                                // Animation pop
-                                setPoppingReaction(reactionKey)
-                                setTimeout(() => setPoppingReaction(null), 300)
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleReaction(msg.id, r.emoji)
+                                if (!r.me) {
+                                  setPoppingReaction(reactionKey)
+                                  setTimeout(() => setPoppingReaction(null), 500)
+                                }
                               }}
                               onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
                               onMouseLeave={() => setReactionPopup(null)}
                               className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all duration-150
                                 hover:scale-110 hover:shadow-md
                                 ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
-                                ${isPopping ? 'reaction-pop' : ''}`}
+                                ${isPopping ? 'animate-bounce' : ''}`}
                               title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                             >
                               <span>{r.emoji}</span>
-                              <span>{r.count}</span>
+                              <span className={`transition-transform duration-150 inline-block ${isPopping || bumped[`${msg.id}:${r.emoji}`] ? 'scale-110' : 'scale-100'}`}>{r.count}</span>
                             </button>
                           )
                         })}
+                        {/* Bouton "+" pour ajouter une réaction */}
+                        <div className="relative">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); setEmojiPickerFor(null) }}
+                            className="flex items-center justify-center w-7 h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
+                            title="Ajouter une réaction"
+                          >
+                            +
+                          </button>
+                          {reactionPickerFor === msg.id && (
+                            <div
+                              className="absolute bottom-full left-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex flex-wrap gap-1 z-50 w-52"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {REACTION_PICKER_EMOJIS.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => { toggleReaction(msg.id, emoji); setReactionPickerFor(null) }}
+                                  className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </>
@@ -460,6 +648,30 @@ export default function MessageList({
                     title="Sauvegarder"
                   >
                     <Bookmark size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const md = msg.content ?? ''
+                      navigator.clipboard.writeText(md)
+                      toast.success('Copié en Markdown !')
+                    }}
+                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                    title="Copier en Markdown"
+                  >
+                    <Copy size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?msg=${msg.id}`
+                      navigator.clipboard.writeText(url)
+                      toast.success('Lien copié !')
+                    }}
+                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                    title="Copier le lien"
+                  >
+                    <Link size={14} />
                   </button>
 
                   <button
@@ -507,6 +719,47 @@ export default function MessageList({
                       title="Modifier"
                     >
                       <Pencil size={14} />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (translations[msg.id]) {
+                        setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })
+                      } else {
+                        translateMessage(msg.id)
+                      }
+                    }}
+                    className={`p-1.5 rounded hover:bg-fc-hover transition ${translations[msg.id] ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                    title={translations[msg.id] ? 'Masquer la traduction' : 'Traduire en français'}
+                    disabled={translatingId === msg.id}
+                  >
+                    {translatingId === msg.id ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      onClick={() => setReminderFor(reminderFor === msg.id ? null : msg.id)}
+                      className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
+                      title="Me rappeler"
+                    >
+                      <Bell size={14} />
+                    </button>
+                    {reminderFor === msg.id && (
+                      <ReminderModal
+                        messageId={msg.id}
+                        onClose={() => setReminderFor(null)}
+                      />
+                    )}
+                  </div>
+
+                  {!isOwn && (
+                    <button
+                      onClick={() => setReportingMsg(msg.id)}
+                      className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
+                      title="Signaler ce message"
+                    >
+                      <Flag size={14} />
                     </button>
                   )}
 
@@ -590,25 +843,44 @@ export default function MessageList({
         />
       )}
 
-      {/* Lightbox image plein écran */}
-      {lightbox && (
+      {/* Double-click quick emoji popover */}
+      {dblClickPopover && (
         <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] cursor-zoom-out"
-          onClick={() => setLightbox(null)}
+          className="fixed z-50"
+          style={{ left: dblClickPopover.x - 80, top: dblClickPopover.y - 48 }}
+          onClick={e => e.stopPropagation()}
         >
-          <img
-            src={lightbox}
-            alt=""
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            className="absolute top-4 right-4 text-white bg-black/50 p-2 rounded-full hover:bg-black/80 transition"
-            onClick={() => setLightbox(null)}
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1 bg-fc-bg border border-fc-hover rounded-full shadow-xl px-2 py-1.5">
+            {DBLCLICK_EMOJIS.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  onAddReaction?.(dblClickPopover.msgId, emoji)
+                  setDblClickPopover(null)
+                }}
+                className="text-xl hover:scale-125 transition-transform p-1 rounded-full hover:bg-fc-hover"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Modal signalement message */}
+      {reportingMsg && (
+        <ReportModal
+          messageId={reportingMsg}
+          onClose={() => setReportingMsg(null)}
+        />
+      )}
+
+      {lightbox && (
+        <LightboxModal
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   )

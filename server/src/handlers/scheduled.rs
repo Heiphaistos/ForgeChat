@@ -170,15 +170,17 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     author_discriminator: row.get("discriminator"),
                     author_avatar: row.get("avatar"),
                     author_is_bot: row.try_get("is_bot").unwrap_or(false),
+                    author_verified: row.try_get("is_verified").unwrap_or(false),
                     attachments: vec![],
                     reactions: vec![],
+                    expires_at: None,
                 };
 
                 let event = serde_json::json!({
                     "type": "MESSAGE_CREATE",
                     "message": full_msg
                 });
-                state.broadcast_to_channel(channel_id, event.to_string()).await;
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
                 tracing::info!("Message programmé {} envoyé dans canal {}", sched_id, channel_id);
             }

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ForgeChat",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "identifier": "org.heiphaistos.forgechat",
   "build": {
     "frontendDist": "../../client/dist",
@@ -23,16 +23,23 @@
         "decorations": true,
         "transparent": false,
         "center": true,
-        "userAgent": "ForgeChat/3.1.0 (Desktop)"
+        "userAgent": "ForgeChat/3.2.0 (Desktop; Windows)"
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org; img-src 'self' https://forgechat.heiphaistos.org data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+      "csp": "default-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org; img-src 'self' https://forgechat.heiphaistos.org data: blob: https:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline' https://forgechat.heiphaistos.org; script-src 'self' 'unsafe-inline' https://forgechat.heiphaistos.org; connect-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org https://api.tenor.com; worker-src 'self' blob:; frame-src 'none'"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["forgechat"]
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -43,10 +50,12 @@
     "windows": {
       "nsis": {
         "languages": ["French"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installMode": "both"
       },
       "wix": null
     },
-    "resources": []
+    "resources": [],
+    "createUpdaterArtifacts": false
   }
 }

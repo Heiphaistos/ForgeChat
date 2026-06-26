@@ -1,12 +1,14 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
+  Users, X, GripVertical, Shield, Archive, EyeOff,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import ServerBoostBanner from '../server/ServerBoostBanner'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
 import { useVoice } from '../../store/voice'
@@ -17,6 +19,139 @@ import ServerSettingsModal from '../modals/ServerSettingsModal'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
+
+// Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
+const PRESENCE_COLOR: Record<string, string> = {
+  online: 'bg-fc-green',
+  idle: 'bg-fc-yellow',
+  dnd: 'bg-fc-red',
+  invisible: 'bg-fc-muted',
+  offline: 'bg-fc-muted',
+}
+
+// Modal léger pour créer un groupe DM
+function CreateGroupModal({ onClose }: { onClose: () => void }) {
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<{ id: string; username: string }[]>([])
+  const qc = useQueryClient()
+  const nav = useNavigate()
+
+  const { data: friends = [] } = useQuery({
+    queryKey: ['friends-dm-search', search],
+    queryFn: () => api.get('/friends', { params: { q: search } }).then(r => r.data),
+    staleTime: 10_000,
+  })
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post('/dms/group', { user_ids: selected.map(u => u.id) }).then(r => r.data),
+    onSuccess: (dm: any) => {
+      qc.invalidateQueries({ queryKey: ['dms'] })
+      nav(`/dms/groups/${dm.dm_id ?? dm.id}`)
+      onClose()
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création groupe'),
+  })
+
+  const toggle = (u: { id: string; username: string }) => {
+    setSelected(prev =>
+      prev.find(x => x.id === u.id)
+        ? prev.filter(x => x.id !== u.id)
+        : prev.length < 10 ? [...prev, u] : prev
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
+          <button onClick={onClose} className="text-fc-muted hover:text-white"><X size={16} /></button>
+        </div>
+
+        <input
+          className="w-full bg-fc-input text-sm text-white rounded-lg px-3 py-2 mb-3 outline-none placeholder:text-fc-muted"
+          placeholder="Chercher des amis..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          autoFocus
+        />
+
+        {selected.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {selected.map(u => (
+              <span
+                key={u.id}
+                className="flex items-center gap-1 bg-fc-accent/20 text-fc-accent text-xs px-2 py-0.5 rounded-full"
+              >
+                {u.username}
+                <button onClick={() => toggle(u)}><X size={10} /></button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="max-h-40 overflow-y-auto space-y-0.5 mb-3">
+          {(friends as any[]).map((f: any) => {
+            const uid: string = f.id ?? f.user_id
+            const uname: string = f.username
+            const isSelected = !!selected.find(x => x.id === uid)
+            return (
+              <button
+                key={uid}
+                onClick={() => toggle({ id: uid, username: uname })}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded transition text-left ${
+                  isSelected
+                    ? 'bg-fc-accent/20 text-white'
+                    : 'hover:bg-fc-hover text-fc-muted hover:text-white'
+                }`}
+              >
+                <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                  {uname.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm">{uname}</span>
+              </button>
+            )
+          })}
+          {(friends as any[]).length === 0 && (
+            <p className="text-xs text-fc-muted text-center py-2">Aucun ami trouvé</p>
+          )}
+        </div>
+
+        <button
+          onClick={() => create.mutate()}
+          disabled={selected.length < 2 || create.isPending}
+          className="w-full py-2 bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {create.isPending ? 'Création...' : `Créer (${selected.length} membres)`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function BoostButton({ serverId }: { serverId: string }) {
+  const qc = useQueryClient()
+  const boost = useMutation({
+    mutationFn: () => api.post(`/servers/${serverId}/boost`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['server', serverId] })
+      qc.invalidateQueries({ queryKey: ['channels', serverId] })
+    },
+    onError: () => toast.error('Impossible de booster'),
+  })
+  return (
+    <button
+      onClick={() => boost.mutate()}
+      disabled={boost.isPending}
+      className="mx-2 mb-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg
+        text-xs font-semibold text-purple-300 border border-purple-500/30 bg-purple-500/10
+        hover:bg-purple-500/20 hover:border-purple-500/60 transition disabled:opacity-50"
+    >
+      ⚡ Booster le serveur
+    </button>
+  )
+}
 
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
@@ -38,9 +173,21 @@ export default function ChannelSidebar() {
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('fc_collapsed_cats')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
   const [channelSettings, setChannelSettings] = useState<any | null>(null)
   const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
+  const [draggedChannelId, setDraggedChannelId] = useState<string | null>(null)
+  const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false)
+  const qc = useQueryClient()
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
 
@@ -81,14 +228,72 @@ export default function ChannelSidebar() {
   })
 
   if (!serverId) {
+    // Séparer groupes et DMs individuels
+    const groupDms = (dms as any[]).filter(d => d.is_group)
+    const individualDms = (dms as any[]).filter(d => !d.is_group)
+
     return (
       <div className="flex-1 overflow-y-auto p-2">
-        <div className="px-2 py-2 text-xs font-semibold text-fc-muted uppercase tracking-wide">
-          Messages directs
+        {/* En-tête + bouton créer groupe */}
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
+            Messages directs
+          </span>
+          <button
+            onClick={() => setShowCreateGroup(true)}
+            className="text-fc-muted hover:text-white transition"
+            title="Nouveau groupe"
+          >
+            <Plus size={15} />
+          </button>
         </div>
-        {dms.map((dm: any) => {
-          const liveStatus = getStatus(dm.other_user_id) || dm.status
-          const isOnline = liveStatus === 'online'
+
+        {/* Groupes DM */}
+        {groupDms.length > 0 && (
+          <>
+            <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide">
+              Groupes
+            </div>
+            {groupDms.map((dm: any) => {
+              const unread = unreadCounts[dm.id] ?? 0
+              return (
+                <button
+                  key={dm.id}
+                  onClick={() => nav(`/dms/groups/${dm.id}`)}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                >
+                  <div className="relative flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-fc-hover flex items-center justify-center text-fc-muted">
+                      <Users size={16} />
+                    </div>
+                  </div>
+                  <div className="min-w-0 text-left flex-1">
+                    <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                      {dm.name ?? dm.username ?? 'Groupe'}
+                    </div>
+                    <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
+                  </div>
+                  {unread > 0 && (
+                    <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </>
+        )}
+
+        {/* DMs individuels */}
+        {groupDms.length > 0 && individualDms.length > 0 && (
+          <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide mt-1">
+            Directs
+          </div>
+        )}
+        {individualDms.map((dm: any) => {
+          const liveStatus = getStatus(dm.other_user_id) || dm.status || 'offline'
+          const statusKey = liveStatus in PRESENCE_COLOR ? liveStatus : 'offline'
+          const unread = unreadCounts[dm.id] ?? 0
           return (
             <button
               key={dm.id}
@@ -101,26 +306,131 @@ export default function ChannelSidebar() {
                     ? <img src={dm.avatar} alt="" className="w-full h-full object-cover" />
                     : dm.username.charAt(0).toUpperCase()}
                 </div>
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${isOnline ? 'bg-fc-green' : 'bg-fc-muted'}`} />
+                {/* Indicateur de présence coloré (vert/jaune/rouge/gris) */}
+                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${PRESENCE_COLOR[statusKey]}`} />
               </div>
-              <div className="min-w-0 text-left">
-                <div className="text-sm font-medium text-fc-text truncate">{dm.username}</div>
-                <div className={`text-xs ${isOnline ? 'text-fc-green' : 'text-fc-muted'}`}>
-                  {isOnline ? 'En ligne' : 'Hors ligne'}
+              <div className="min-w-0 text-left flex-1">
+                <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                  {dm.username}
+                </div>
+                <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
+                  {statusKey === 'online' ? 'En ligne'
+                    : statusKey === 'idle' ? 'Absent'
+                    : statusKey === 'dnd' ? 'Ne pas déranger'
+                    : 'Hors ligne'}
                 </div>
               </div>
+              {/* Badge non-lus */}
+              {unread > 0 && (
+                <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </button>
           )
         })}
+
+        {/* Modal créer groupe */}
+        {showCreateGroup && (
+          <CreateGroupModal onClose={() => setShowCreateGroup(false)} />
+        )}
       </div>
     )
   }
 
   const server = data?.server
-  const channels: any[] = data?.channels ?? []
+  const allChannels: any[] = data?.channels ?? []
+  const channels: any[] = allChannels.filter((c: any) => !c.archived && !c.hidden)
+  const hiddenChannels: any[] = allChannels.filter((c: any) => c.hidden && !c.archived)
+  const archivedChannels: any[] = allChannels.filter((c: any) => c.archived)
+
+  // Déterminer si l'utilisateur courant est owner ou admin
+  const isOwnerOrAdmin = !!server && (
+    server.owner_id === data?.current_user_id ||
+    (data?.member_roles ?? []).some((r: any) => r.permissions?.includes('MANAGE_CHANNELS') || r.is_admin)
+  )
+
+  // ── Drag & Drop channels ──────────────────────────────────
+  const reorderChannels = useMutation({
+    mutationFn: (channel_ids: string[]) =>
+      api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement'),
+  })
+
+  const archiveChannel = useMutation({
+    mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const hideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const unhideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const moveChannel = useMutation({
+    mutationFn: ({ channelId, categoryId }: { channelId: string; categoryId: string | null }) =>
+      api.patch(`/channels/${channelId}/move`, { category_id: categoryId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement du canal'),
+  })
+
+  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
+    setDraggedChannelId(channelId)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleChannelDragOver = useCallback((e: React.DragEvent, channelId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverChannelId(channelId)
+  }, [])
+
+  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[], categoryKey = '') => {
+    e.preventDefault()
+    if (!draggedChannelId || draggedChannelId === targetChannelId) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const draggedIdx = groupChannels.findIndex((c: any) => c.id === draggedChannelId)
+    const targetIdx = groupChannels.findIndex((c: any) => c.id === targetChannelId)
+    if (draggedIdx === -1 && categoryKey) {
+      const newCategoryId = categoryKey === UNCATEGORIZED_KEY ? null : categoryKey
+      moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    if (draggedIdx === -1 || targetIdx === -1) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const reordered = [...groupChannels]
+    const [removed] = reordered.splice(draggedIdx, 1)
+    reordered.splice(targetIdx, 0, removed)
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+    reorderChannels.mutate(reordered.map((c: any) => c.id))
+  }, [draggedChannelId, reorderChannels, moveChannel])
+
+  const handleChannelDragEnd = useCallback(() => {
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+  }, [])
 
   const toggleGroup = (key: string) => {
-    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
+    setCollapsed(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem('fc_collapsed_cats', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   // Construire les groupes dynamiques basés sur les catégories DB
@@ -161,7 +471,7 @@ export default function ChannelSidebar() {
     }
   }
 
-  const renderChannel = (ch: any) => {
+  const renderChannel = (ch: any, groupChannels: any[], extraClass = '', categoryKey = '') => {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
@@ -175,13 +485,25 @@ export default function ChannelSidebar() {
       ? Object.values(activeStreams).filter(s => s.channelId === ch.id)
       : []
     const hasLiveStream = channelStreams.length > 0
+    const isDragOver = dragOverChannelId === ch.id
+    const isDragging = draggedChannelId === ch.id
 
     return (
-      <div key={ch.id}>
+      <div
+        key={ch.id}
+        draggable={isOwnerOrAdmin}
+        onDragStart={isOwnerOrAdmin ? e => handleChannelDragStart(e, ch.id) : undefined}
+        onDragOver={isOwnerOrAdmin ? e => handleChannelDragOver(e, ch.id) : undefined}
+        onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels, categoryKey) : undefined}
+        onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
+        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
+      >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
-            ${channelId === ch.id
+            ${isMeConnected
+              ? 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
+              : channelId === ch.id
               ? 'bg-fc-hover text-white'
               : unreadCounts[ch.id] > 0
                 ? 'text-white font-semibold hover:bg-fc-hover/50'
@@ -238,6 +560,15 @@ export default function ChannelSidebar() {
             </span>
           )}
 
+          {/* Poignée drag (visible au hover si owner/admin) */}
+          {isOwnerOrAdmin && (
+            <span
+              className="opacity-0 group-hover:opacity-100 p-0.5 text-fc-muted cursor-grab active:cursor-grabbing flex-shrink-0"
+              title="Réordonner"
+            >
+              <GripVertical size={12} />
+            </span>
+          )}
           {/* Bouton paramètres canal (visible au hover) */}
           <button
             onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
@@ -245,6 +576,22 @@ export default function ChannelSidebar() {
             title="Paramètres du canal"
           >
             <Settings size={12} />
+          </button>
+          {isOwnerOrAdmin && (
+            <button
+              onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
+              title="Archiver ce canal"
+            >
+              <Archive size={12} />
+            </button>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) }}
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
+            title={ch.hidden ? "Afficher ce canal" : "Masquer ce canal"}
+          >
+            <EyeOff size={12} />
           </button>
         </button>
 
@@ -308,6 +655,16 @@ export default function ChannelSidebar() {
             )}
           </button>
 
+          <BoostButton serverId={serverId} />
+
+          {(data?.boost_level ?? 0) > 0 && (
+            <ServerBoostBanner
+              boostLevel={data?.boost_level ?? 0}
+              boostCount={data?.boost_count ?? 0}
+              memberCount={data?.member_count ?? 0}
+            />
+          )}
+
           {menuOpen && (
             <div
               className="absolute top-full left-0 right-0 bg-fc-bg border border-fc-hover rounded-lg shadow-2xl z-40 m-1 p-1"
@@ -333,6 +690,17 @@ export default function ChannelSidebar() {
               >
                 <Settings size={16} /> Paramètres du serveur
               </button>
+              {isOwnerOrAdmin && (
+                <>
+                  <div className="border-t border-fc-hover my-1" />
+                  <button
+                    onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
+                  >
+                    <Shield size={16} /> Panel Admin
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -346,6 +714,14 @@ export default function ChannelSidebar() {
                 <div
                   className="flex items-center justify-between px-2 py-1 group cursor-pointer"
                   onClick={() => toggleGroup(key)}
+                  onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                  onDrop={isOwnerOrAdmin && draggedChannelId ? e => {
+                    e.preventDefault()
+                    const newCategoryId = key === UNCATEGORIZED_KEY ? null : key
+                    moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
+                    setDraggedChannelId(null)
+                    setDragOverChannelId(null)
+                  } : undefined}
                 >
                   <div className="flex items-center gap-1">
                     <ChevronRight
@@ -363,7 +739,12 @@ export default function ChannelSidebar() {
                   </button>
                 </div>
 
-                {!isCollapsed && groupChannels.map(renderChannel)}
+                {!isCollapsed
+                  ? groupChannels.map(ch => renderChannel(ch, groupChannels, '', key))
+                  : groupChannels
+                      .filter(c => (unreadCounts[c.id] ?? 0) > 0)
+                      .map(ch => renderChannel(ch, groupChannels, '', key))
+                }
               </div>
             )
           })}
@@ -371,6 +752,51 @@ export default function ChannelSidebar() {
           {channels.length === 0 && (
             <div className="text-center text-fc-muted text-xs py-4">
               Aucun canal — crée-en un !
+            </div>
+          )}
+
+          {/* Canaux masqués */}
+          {hiddenChannels.length > 0 && (
+            <div className="mt-2 mb-1">
+              <button
+                onClick={() => setShowHidden(p => !p)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-fc-muted hover:text-white transition"
+              >
+                <EyeOff size={12} />
+                {showHidden ? 'Masquer' : `Masqués (${hiddenChannels.length})`}
+              </button>
+              {showHidden && hiddenChannels.map((c: any) => renderChannel(c, hiddenChannels, 'opacity-50'))}
+            </div>
+          )}
+
+          {/* Canaux archivés */}
+          {isOwnerOrAdmin && archivedChannels.length > 0 && (
+            <div className="mt-3 mb-2">
+              <div
+                className="flex items-center gap-1 px-2 py-1 cursor-pointer"
+                onClick={() => toggleGroup('__archived__')}
+              >
+                <ChevronRight
+                  size={10}
+                  className={`text-fc-muted transition-transform ${!collapsed['__archived__'] ? 'rotate-90' : ''}`}
+                />
+                <span className="text-[10px] font-semibold text-fc-muted/60 uppercase tracking-wide">
+                  Archivés ({archivedChannels.length})
+                </span>
+              </div>
+              {!collapsed['__archived__'] && archivedChannels.map((ch: any) => (
+                <div key={ch.id} className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition">
+                  <ChannelIcon type={ch.type} size={14} />
+                  <span className="text-xs truncate flex-1 opacity-60">{ch.name}</span>
+                  <button
+                    onClick={() => archiveChannel.mutate(ch.id)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
+                    title="Restaurer le canal"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

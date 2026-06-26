@@ -204,7 +204,7 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
                         "type": "CHANNEL_DELETE",
                         "channel_id": channel_id,
                     });
-                    state.broadcast_to_channel(server_id, del_event.to_string()).await;
+                    state.broadcast_to_server_members(server_id, del_event.to_string()).await;
                 }
             }
         }
@@ -284,7 +284,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                     "channel_id": channel_id,
                     "user_id": user_id,
                 });
-                state.broadcast_to_channel(channel_id, event.to_string()).await;
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
             }
         }
 
@@ -392,7 +392,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                                 "channel": new_ch,
                             });
                             // Broadcast au channel du serveur (abonnés)
-                            state.broadcast_to_channel(server_id, create_event.to_string()).await;
+                            state.broadcast_to_server_members(server_id, create_event.to_string()).await;
                         }
                     }
                 }
@@ -565,6 +565,40 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 "payload": msg["payload"],
             });
             state.broadcast_to_user(to, signal.to_string()).await;
+        }
+
+        Some("WHITEBOARD_DRAW") | Some("WHITEBOARD_CLEAR") => {
+            if let Some(channel_id) = msg["channel_id"].as_str()
+                .and_then(|s| s.parse::<Uuid>().ok())
+            {
+                let event = serde_json::json!({
+                    "type": msg["type"].as_str().unwrap_or("WHITEBOARD_DRAW"),
+                    "channel_id": msg["channel_id"],
+                    "tool": msg["tool"],
+                    "color": msg["color"],
+                    "size": msg["size"],
+                    "points": msg["points"],
+                    "user_id": user_id,
+                });
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+            }
+        }
+
+        Some("VOICE_REACTION") => {
+            if let (Some(channel_id_val), Some(emoji_val)) = (
+                msg["channel_id"].as_str(),
+                msg["emoji"].as_str(),
+            ) {
+                if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    let event = serde_json::json!({
+                        "type": "VOICE_REACTION",
+                        "channel_id": channel_id_val,
+                        "emoji": emoji_val,
+                        "user_id": user_id.to_string(),
+                    });
+                    state.broadcast_to_channel_members(cid, event.to_string()).await;
+                }
+            }
         }
 
         _ => {}

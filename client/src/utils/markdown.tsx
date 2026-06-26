@@ -1,3 +1,13 @@
+import hljs from 'highlight.js'
+
+function highlightCode(code: string, lang: string): string {
+  if (lang && hljs.getLanguage(lang)) {
+    try { return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value } catch {}
+  }
+  try { return hljs.highlightAuto(code).value } catch {}
+  return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // Parser Markdown minimaliste compatible Discord
 export function renderMarkdown(text: string, customEmojis?: Record<string, string>): React.ReactNode {
   const lines = text.split('\n')
@@ -17,9 +27,16 @@ export function renderMarkdown(text: string, customEmojis?: Record<string, strin
         i++
       }
       elements.push(
-        <pre key={i}>
-          <code>{codeLines.join('\n')}</code>
-        </pre>
+        <div key={i} className="bg-[#1e1f29] rounded-lg mt-1 mb-1 overflow-hidden border border-white/5">
+          {lang && (
+            <div className="flex items-center justify-between px-3 py-1 bg-black/30 border-b border-white/5">
+              <span className="text-xs text-fc-muted font-mono">{lang}</span>
+            </div>
+          )}
+          <pre className="p-3 overflow-x-auto text-sm font-mono whitespace-pre leading-relaxed hljs">
+            <code dangerouslySetInnerHTML={{ __html: highlightCode(codeLines.join('\n'), lang) }} />
+          </pre>
+        </div>
       )
       i++
       continue

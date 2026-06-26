@@ -6,7 +6,16 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Enable WebRTC, camera and microphone access in WebView2
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--use-fake-ui-for-media-stream=false \
+         --enable-features=WebRTC-H264WithOpenH264FFmpeg",
+    );
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // Focaliser la fenêtre existante si une 2e instance est lancée
             if let Some(window) = app.get_webview_window("main") {

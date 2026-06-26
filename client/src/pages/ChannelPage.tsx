@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState, useCallback, useRef, useContext } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X } from 'lucide-react'
+import { SplitContext } from '../contexts/SplitContext'
+import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -15,8 +17,10 @@ import SearchPanel from '../components/chat/SearchPanel'
 import VoiceVideoPage from './VoiceVideoPage'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
+import ThreadSidebar from '../components/chat/ThreadSidebar'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
+import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 
 function channelIcon(type: string, size = 18) {
@@ -31,18 +35,32 @@ function channelIcon(type: string, size = 18) {
   }
 }
 
-export default function ChannelPage() {
-  const { serverId, channelId } = useParams()
+interface Props {
+  forcedChannelId?: string
+  isSplit?: boolean
+  onClose?: () => void
+}
+
+export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props) {
+  const params = useParams<{ serverId?: string; channelId?: string }>()
+  const serverId = params.serverId
+  const channelId = forcedChannelId ?? params.channelId
+  const { setSplitChannelId } = useContext(SplitContext)
+  const [searchParams] = useSearchParams()
+  const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
   const markRead = useUnread(s => s.markRead)
   const qc = useQueryClient()
   const [showMembers, setShowMembers] = useState(true)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
+  const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
+  const [showThreadSidebar, setShowThreadSidebar] = useState(false)
   const [showPinned, setShowPinned] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
 
@@ -117,8 +135,8 @@ export default function ChannelPage() {
   }
 
   const sendMsg = useMutation({
-    mutationFn: ({ content, reply_to }: { content: string | null; reply_to?: string }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to }),
+    mutationFn: ({ content, reply_to, expires_at_seconds }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null }) =>
+      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds }),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
         const delay = currentChannel?.slowmode_delay ?? 30
@@ -250,6 +268,19 @@ export default function ChannelPage() {
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
+            {currentChannel && (
+              <ExportConversationButton
+                channelId={channelId}
+                channelName={currentChannel.name ?? channelId}
+              />
+            )}
+            <button
+              onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
+              className={`p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              title="Fils de discussion"
+            >
+              <MessagesSquare size={18} />
+            </button>
             <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
@@ -274,44 +305,90 @@ export default function ChannelPage() {
             >
               <Users size={18} />
             </button>
+
+            {/* Bouton split / fermer split */}
+            {!isSplit ? (
+              <button
+                onClick={() => setSplitChannelId(channelId ?? null)}
+                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                title="Ouvrir en split (Ctrl+Shift+S pour fermer)"
+              >
+                <Columns2 size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                title="Fermer le split (Ctrl+Shift+S)"
+              >
+                <X size={18} />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Messages */}
-        <MessageList
-          channelId={channelId}
-          serverId={serverId}
-          onDeleteMessage={(id) => deleteMsg.mutate(id)}
-          onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
-          onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
-          onAddReaction={(msgId, emoji) =>
-            api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
-          }
-          onPinMessage={(msgId) =>
-            api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
-              .then(() => toast.success('Message épinglé'))
-              .catch(() => toast.error('Épinglage impossible'))
-          }
-          onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
-          onLoadMore={loadMore}
-        />
+        {/* Onglets Messages / Tâches */}
+        <div className="flex border-b border-fc-hover px-4 flex-shrink-0">
+          {(['Messages', 'Tâches'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm transition ${
+                activeTab === tab
+                  ? 'border-b-2 border-fc-accent text-white'
+                  : 'text-fc-muted hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
-        {/* Countdown slowmode */}
-        {slowmodeCooldown > 0 && (
-          <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
-            <Timer size={12} />
-            <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+        {/* Vue Tâches */}
+        {activeTab === 'Tâches' && serverId && channelId && (
+          <div className="flex-1 overflow-hidden p-3">
+            <KanbanBoard serverId={serverId} channelId={channelId} />
           </div>
         )}
+
+        {/* Messages + Input (masqués en vue Tâches) */}
+        {activeTab === 'Messages' && (
+          <>
+            <MessageList
+              channelId={channelId}
+              serverId={serverId}
+              onDeleteMessage={(id) => deleteMsg.mutate(id)}
+              onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
+              onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
+              onAddReaction={(msgId, emoji) =>
+                api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+              }
+              onPinMessage={(msgId) =>
+                api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
+                  .then(() => toast.success('Message épinglé'))
+                  .catch(() => toast.error('Épinglage impossible'))
+              }
+              onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
+              onLoadMore={loadMore}
+              initialHighlightId={highlightMessageId}
+            />
+
+            {/* Countdown slowmode */}
+            {slowmodeCooldown > 0 && (
+              <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
+                <Timer size={12} />
+                <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+              </div>
+            )}
 
         {/* Input */}
         <MessageInput
           channelId={channelId}
           serverId={serverId}
           placeholder={slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
-          onSend={async (content, replyToId, files) => {
+          onSend={async (content, replyToId, files, ttlSeconds) => {
             try {
-              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId })
+              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds })
               const msgId = res.data?.id
               if (files && files.length > 0 && msgId) {
                 const fd = new FormData()
@@ -332,15 +409,40 @@ export default function ChannelPage() {
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
         />
+          </>
+        )}
       </div>
 
-      {/* Thread panel */}
+      {/* Thread panel (depuis message) */}
       {activeThreadId && (
         <ThreadPanel
           serverId={serverId}
           channelId={channelId}
           parentMessageId={activeThreadId}
           onClose={() => setActiveThreadId(null)}
+        />
+      )}
+
+      {/* Thread panel (depuis sidebar fils) */}
+      {activeDirectThreadId && !activeThreadId && (
+        <ThreadPanel
+          serverId={serverId}
+          channelId={channelId}
+          parentMessageId={activeDirectThreadId}
+          onClose={() => setActiveDirectThreadId(null)}
+        />
+      )}
+
+      {/* Sidebar fils de discussion */}
+      {showThreadSidebar && !activeThreadId && !activeDirectThreadId && (
+        <ThreadSidebar
+          serverId={serverId}
+          channelId={channelId}
+          onSelectThread={(threadId) => {
+            setActiveDirectThreadId(threadId)
+            setShowThreadSidebar(false)
+          }}
+          onClose={() => setShowThreadSidebar(false)}
         />
       )}
 
@@ -365,7 +467,7 @@ export default function ChannelPage() {
       )}
 
       {/* Liste membres */}
-      {showMembers && !activeThreadId && !showPinned && !showSearch && <MemberList serverId={serverId} />}
+      {showMembers && !activeThreadId && !activeDirectThreadId && !showPinned && !showSearch && !showThreadSidebar && <MemberList serverId={serverId} />}
     </div>
   )
 }

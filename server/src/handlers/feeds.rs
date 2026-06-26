@@ -390,5 +390,5 @@ async fn post_feed_message(state: &AppState, feed: &FeedRow, content: &str) {
             "created_at": now,
         }
     });
-    state.broadcast_to_channel(feed.channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(feed.channel_id, event.to_string()).await;
 }

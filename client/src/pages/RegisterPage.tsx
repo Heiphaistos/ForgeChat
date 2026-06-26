@@ -16,7 +16,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(username, email, password)
-      nav('/')
+      nav('/friends')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? 'Erreur lors de l\'inscription')
     } finally {
@@ -66,6 +66,9 @@ export default function RegisterPage() {
         <p className="text-fc-muted text-sm text-center mt-4">
           Déjà un compte ?{' '}
           <Link to="/login" className="text-fc-accent hover:underline">Se connecter</Link>
+        </p>
+        <p className="text-center mt-3">
+          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
         </p>
       </div>
     </div>

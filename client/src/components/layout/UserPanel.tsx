@@ -1,4 +1,5 @@
-import { Mic, MicOff, Headphones, VolumeX, Settings, X } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff, LayoutDashboard } from 'lucide-react'
+import NotificationBell from '../notifications/NotificationBell'
 import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../store/auth'
@@ -27,6 +28,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   const { user, updateMe } = useAuth()
   const nav = useNavigate()
   const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
+  const [customEmoji, setCustomEmoji] = useState(user?.custom_status_emoji ?? '')
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -51,8 +53,14 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   const saveCustomStatus = async () => {
     setSaving(true)
     try {
-      await api.patch('/users/me', { custom_status: customStatus.trim() || null })
-      updateMe({ custom_status: customStatus.trim() || null })
+      await api.patch('/user/status', {
+        custom_status: customStatus.trim() || null,
+        custom_status_emoji: customEmoji.trim() || null,
+      })
+      updateMe({
+        custom_status: customStatus.trim() || null,
+        custom_status_emoji: customEmoji.trim() || null,
+      })
       toast.success('Statut mis à jour')
       onClose()
     } catch {
@@ -93,15 +101,26 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
       {/* Statut personnalisé */}
       <div className="px-3 pb-3 space-y-2 border-t border-white/5 pt-2">
         <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide">Statut personnalisé</p>
-        <input
-          type="text"
-          value={customStatus}
-          onChange={e => setCustomStatus(e.target.value)}
-          placeholder="Ex : En réunion 🎯"
-          maxLength={128}
-          className="w-full fc-input text-sm py-1.5"
-          onKeyDown={e => { if (e.key === 'Enter') saveCustomStatus() }}
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={customEmoji}
+            onChange={e => setCustomEmoji(e.target.value)}
+            placeholder="😊"
+            maxLength={2}
+            className="w-12 fc-input text-center text-lg py-1.5 flex-shrink-0"
+            title="Emoji du statut"
+          />
+          <input
+            type="text"
+            value={customStatus}
+            onChange={e => setCustomStatus(e.target.value)}
+            placeholder="Ex : En réunion"
+            maxLength={128}
+            className="flex-1 fc-input text-sm py-1.5"
+            onKeyDown={e => { if (e.key === 'Enter') saveCustomStatus() }}
+          />
+        </div>
         <div className="flex gap-2">
           <button
             onClick={saveCustomStatus}
@@ -123,11 +142,28 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function UserPanel() {
-  const { user } = useAuth()
+interface UserPanelProps {
+  onToggleActivity?: () => void
+  activityOpen?: boolean
+}
+
+export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
+  const { user, updateMe } = useAuth()
   const nav = useNavigate()
   const { joined, muted, deafened, toggleMute, toggleDeafen } = useVoice()
   const [showStatusPopup, setShowStatusPopup] = useState(false)
+
+  const toggleFocus = async () => {
+    if (!user) return
+    const newVal = !user.focus_mode
+    try {
+      await api.patch('/user/focus-mode', { enabled: newVal })
+      updateMe({ focus_mode: newVal })
+      toast.success(newVal ? 'Mode focus activé 🔕' : 'Mode focus désactivé 🔔')
+    } catch {
+      toast.error('Erreur')
+    }
+  }
 
   if (!user) return null
 
@@ -154,12 +190,23 @@ export default function UserPanel() {
         <div className="min-w-0">
           <div className="text-sm font-semibold text-white truncate">{user.username}</div>
           <div className="text-xs text-fc-muted truncate">
+            {user.custom_status_emoji && <span className="mr-0.5">{user.custom_status_emoji}</span>}
             {user.custom_status || STATUS_LABELS[user.status] || `#${user.discriminator}`}
           </div>
         </div>
       </button>
 
       <div className="flex items-center gap-0.5 flex-shrink-0">
+        <button
+          onClick={toggleFocus}
+          className={`p-1.5 rounded hover:bg-fc-hover transition ${
+            user.focus_mode ? 'text-fc-accent' : 'text-fc-muted hover:text-white'
+          }`}
+          title={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer mode focus (muet notifications)'}
+        >
+          <BellOff size={16} />
+        </button>
+        <NotificationBell />
         <button
           onClick={joined ? toggleMute : undefined}
           className={`p-1.5 rounded hover:bg-fc-hover transition ${
@@ -177,6 +224,22 @@ export default function UserPanel() {
           title={joined ? (deafened ? 'Réactiver le son (Ctrl+Shift+D)' : 'Couper le son (Ctrl+Shift+D)') : 'Pas dans un canal vocal'}
         >
           {joined && deafened ? <VolumeX size={16} /> : <Headphones size={16} />}
+        </button>
+        {onToggleActivity && (
+          <button
+            onClick={onToggleActivity}
+            className={`p-1.5 rounded hover:bg-fc-hover transition ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+            title="Activité récente (Ctrl+Shift+A)"
+          >
+            <Activity size={16} />
+          </button>
+        )}
+        <button
+          onClick={() => nav('/admin')}
+          className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+          title="Dashboard Admin"
+        >
+          <LayoutDashboard size={16} />
         </button>
         <button
           onClick={() => nav('/settings')}

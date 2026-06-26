@@ -14,13 +14,25 @@ import SettingsPage from './pages/SettingsPage'
 import MainLayout from './components/layout/MainLayout'
 import ChannelPage from './pages/ChannelPage'
 import DMPage from './pages/DMPage'
+import GroupDMPage from './pages/GroupDMPage'
 import FriendsPage from './pages/FriendsPage'
+import UserProfilePage from './pages/UserProfilePage'
 import QuickSwitcher from './components/QuickSwitcher'
+import CommandPalette from './components/CommandPalette'
 import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
+import ServerDiscoveryPage from './pages/ServerDiscoveryPage'
+import ActivityFeedPage from './pages/ActivityFeedPage'
+import LeaderboardPage from './pages/LeaderboardPage'
+import TicketsPage from './pages/TicketsPage'
+import ServerAdminPage from './pages/ServerAdminPage'
+import AdminPage from './pages/AdminPage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
+import { useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import LandingPage from './pages/LandingPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -32,8 +44,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+
 function AppInner() {
-  const { fetchMe, user } = useAuth()
+  const { fetchMe, user, updateMe } = useAuth()
   const { connect, disconnect, on } = useWs()
   const setStatus = usePresence(s => s.setStatus)
   const setActivityGlobal = usePresence(s => s.setActivity)
@@ -41,9 +54,12 @@ function AppInner() {
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
+  const [showCommandPalette, setShowCommandPalette] = React.useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
+  const [showOnboarding, setShowOnboarding] = React.useState(() => !localStorage.getItem('fc_onboarding_done'))
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
+  const qcHook = useQueryClient()
 
   useEffect(() => { fetchMe() }, [])
 
@@ -53,11 +69,59 @@ function AppInner() {
     document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
+  // Appliquer le zoom sauvegardé au démarrage
+  useEffect(() => {
+    const zoom = localStorage.getItem('fc_zoom')
+    if (zoom) document.documentElement.style.fontSize = `${zoom}%`
+  }, [])
+
+  // Ctrl+/- pour zoomer, Ctrl+0 pour reset
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.ctrlKey) return
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        const cur = parseFloat(document.documentElement.style.fontSize || '100')
+        const next = Math.min(cur + 10, 150)
+        document.documentElement.style.fontSize = `${next}%`
+        localStorage.setItem('fc_zoom', String(next))
+      } else if (e.key === '-') {
+        e.preventDefault()
+        const cur = parseFloat(document.documentElement.style.fontSize || '100')
+        const next = Math.max(cur - 10, 70)
+        document.documentElement.style.fontSize = `${next}%`
+        localStorage.setItem('fc_zoom', String(next))
+      } else if (e.key === '0') {
+        e.preventDefault()
+        document.documentElement.style.fontSize = '100%'
+        localStorage.setItem('fc_zoom', '100')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   useEffect(() => {
     if (!user) return
     connect()
     fetchUnread()
     return () => disconnect()
+  }, [user?.id])
+
+  // Appliquer les préférences d'accessibilité et streamer mode au démarrage
+  useEffect(() => {
+    if (!user) return
+    import('./api/client').then(({ default: api }) => {
+      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean; high_contrast?: boolean; streamer_mode?: boolean; interface_density?: string } }) => {
+        const d = r.data ?? {}
+        document.documentElement.setAttribute('data-reduce-motion', String(d.reduce_motion ?? false))
+        document.documentElement.setAttribute('data-high-contrast', String(d.high_contrast ?? false))
+        document.documentElement.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
+        const density = d.interface_density ?? 'normal'
+        document.documentElement.setAttribute('data-density', density)
+        localStorage.setItem('fc_density', density)
+      }).catch(() => {})
+    })
   }, [user?.id])
 
   // Listeners globaux voix (joins/leaves pour la sidebar)
@@ -75,9 +139,16 @@ function AppInner() {
         activity_name: d.activity_name,
         activity_detail: d.activity_detail,
       })
+      // Mettre à jour le statut personnalisé de l'utilisateur courant
+      if (d.user_id === user?.id) {
+        const patch: Record<string, unknown> = {}
+        if (d.custom_status !== undefined) patch.custom_status = d.custom_status
+        if (d.custom_status_emoji !== undefined) patch.custom_status_emoji = d.custom_status_emoji
+        if (Object.keys(patch).length > 0) updateMe(patch)
+      }
     })
     return off
-  }, [])
+  }, [user?.id])
 
   // Incrémenter non-lus pour les messages reçus sur des canaux non actifs
   useEffect(() => {
@@ -95,11 +166,12 @@ function AppInner() {
   // Sons sur events vocaux et mentions
   useEffect(() => {
     if (!user) return
-    const offJoin = on('VOICE_USER_JOINED', () => playJoin())
-    const offLeave = on('VOICE_USER_LEFT', () => playLeave())
+    const offJoin = on('VOICE_USER_JOINED', () => { if (!user.focus_mode) playJoin() })
+    const offLeave = on('VOICE_USER_LEFT', () => { if (!user.focus_mode) playLeave() })
     const offMsg = on('MESSAGE_CREATE', (d: any) => {
       const msg = d.message
       if (!msg || msg.author_id === user.id) return
+      if (user.focus_mode) return
       const content: string = msg.content ?? ''
       if (content.includes(`@${user.username}`) || content.includes('@everyone') || content.includes('@here')) {
         playMention()
@@ -109,11 +181,35 @@ function AppInner() {
       }
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, playJoin, playLeave, playMessage, playMention])
 
   // Demander permission notifications au login
   useEffect(() => {
     if (user) requestPermission()
+  }, [user?.id])
+
+  // Badge non-lus dans le titre de la page
+  const allUnread = useUnread(s => s.counts)
+  useEffect(() => {
+    const total = Object.values(allUnread).reduce((sum: number, n) => sum + (n as number), 0)
+    document.title = total > 0 ? `(${total}) ForgeChat` : 'ForgeChat'
+  }, [allUnread])
+
+  // Notifications temps réel pour les demandes d'ami
+  useEffect(() => {
+    if (!user) return
+    const offReq = on('FRIEND_REQUEST', (d: any) => {
+      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      toast(`👋 Nouvelle demande d'ami de ${d.from_username ?? 'quelqu\'un'}`, {
+        duration: 5000,
+        icon: '🤝',
+      })
+    })
+    const offAcc = on('FRIEND_ACCEPTED', (d: any) => {
+      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      toast.success(`${d.from_username ?? 'Quelqu\'un'} a accepté ta demande d'ami !`)
+    })
+    return () => { offReq(); offAcc() }
   }, [user?.id])
 
   // Raccourcis clavier globaux
@@ -123,9 +219,17 @@ function AppInner() {
       const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
+        setShowCommandPalette(q => !q)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
+        e.preventDefault()
         setShowQuickSwitcher(q => !q)
       }
-      if (e.key === 'Escape') { setShowQuickSwitcher(false); setShowKeyboardShortcuts(false) }
+      if (e.key === 'Escape') {
+        setShowQuickSwitcher(false)
+        setShowCommandPalette(false)
+        setShowKeyboardShortcuts(false)
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         nav('/settings')
@@ -147,23 +251,34 @@ function AppInner() {
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
         <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
-        <Route path="/" element={<AuthGuard><MainLayout /></AuthGuard>}>
-          <Route index element={<FriendsPage />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
           <Route path="friends" element={<FriendsPage />} />
+          <Route path="users/:userId" element={<UserProfilePage />} />
           <Route path="saved" element={<SavedPage />} />
           <Route path="explore" element={<ExplorePage />} />
+          <Route path="discovery" element={<ServerDiscoveryPage />} />
+          <Route path="activity" element={<ActivityFeedPage />} />
           <Route path="dms/:dmId" element={<DMPage />} />
+          <Route path="dms/groups/:groupId" element={<GroupDMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
+          <Route path="servers/:serverId/leaderboard" element={<LeaderboardPage />} />
+          <Route path="servers/:serverId/tickets" element={<TicketsPage />} />
+          <Route path="servers/:serverId/admin" element={<ServerAdminPage />} />
+          <Route path="admin" element={<AdminPage />} />
         </Route>
       </Routes>
       {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
+      <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
+      {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
     </>
   )
 }
 
 import React from 'react'
+import Onboarding from './components/Onboarding'
 
 export default function App() {
 

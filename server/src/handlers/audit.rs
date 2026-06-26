@@ -400,6 +400,19 @@ pub async fn og_preview(
         return Err(AppError::BadRequest("URL invalide ou non autorisée".into()));
     }
 
+    // Whitelist de domaines autorisés
+    const ALLOWED_DOMAINS: &[&str] = &[
+        "github.com", "youtube.com", "youtu.be", "twitter.com", "x.com",
+        "reddit.com", "stackoverflow.com", "wikipedia.org", "medium.com",
+        "heiphaistos.org", "forgechat.heiphaistos.org",
+    ];
+    let parsed_url = q.url.parse::<reqwest::Url>()
+        .map_err(|_| AppError::BadRequest("URL invalide".into()))?;
+    let host = parsed_url.host_str().unwrap_or("");
+    if !ALLOWED_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d))) {
+        return Err(AppError::BadRequest("Domaine non autorisé pour l'aperçu".into()));
+    }
+
     // Fetch via reqwest (timeout strict, pas de redirections vers IPs privées)
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

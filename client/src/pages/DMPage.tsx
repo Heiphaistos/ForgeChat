@@ -8,9 +8,7 @@ import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
 import { useE2E } from '../hooks/useE2E'
-import MessageList from '../components/chat/MessageList'
-import MessageInput from '../components/chat/MessageInput'
-import type { FileWithTtl } from '../components/chat/MessageInput'
+import DMConversation from '../components/chat/DMConversation'
 import toast from 'react-hot-toast'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -371,22 +369,11 @@ export default function DMPage() {
           </div>
         </>
       ) : (
-        <>
-          <MessageList
-            channelId={dmId}
-            serverId=""
-            onDeleteMessage={() => {}}
-            onEditMessage={() => {}}
-          />
-          <MessageInput
-            channelId={dmId}
-            serverId=""
-            placeholder={`Message @${partnerName}`}
-            onSend={(content: string, _replyTo?: string, _files?: FileWithTtl[]) =>
-              sendDm.mutate(content || null)
-            }
-          />
-        </>
+        <DMConversation
+          dmId={dmId}
+          partnerName={partnerName}
+          onSend={(content, _replyTo, _files) => sendDm.mutate(content || null)}
+        />
       )}
     </div>
   )

@@ -22,7 +22,7 @@ jobs:
             set -e
             cd /opt/forgechat
             git fetch origin
-            git reset --hard origin/main
+            git reset --hard FETCH_HEAD
             cd client && npm ci && npm run build && cd ..
             docker compose up -d --build --remove-orphans
             echo "Deployed $(date)"

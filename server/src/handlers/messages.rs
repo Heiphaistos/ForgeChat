@@ -26,26 +26,27 @@ pub async fn get_messages(
 
     let messages = if let Some(before) = params.before {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, ru.username as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at < (SELECT created_at FROM messages WHERE id=$2)
+             AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $3"
         )
         .bind(channel_id).bind(before).bind(limit)
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, ru.username as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1
+             WHERE m.channel_id=$1 AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $2"
         )
         .bind(channel_id).bind(limit)
@@ -101,8 +102,10 @@ pub async fn get_messages(
             author_discriminator: row.get("discriminator"),
             author_avatar: row.get("avatar"),
             author_is_bot: row.get("is_bot"),
+            author_verified: row.try_get("is_verified").unwrap_or(false),
             attachments,
             reactions,
+            expires_at: row.try_get("expires_at").ok().flatten(),
         });
     }
 
@@ -148,21 +151,81 @@ pub async fn send_message(
         drop(redis);
     }
 
+    // Anti-spam : max 5 messages par 3 secondes
+    {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT count, window_start FROM message_spam_track WHERE user_id=$1 AND channel_id=$2"
+        )
+        .bind(claims.sub)
+        .bind(channel_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+        let now = chrono::Utc::now();
+        let window_secs = chrono::Duration::seconds(3);
+
+        if let Some(r) = &row {
+            let window_start: chrono::DateTime<chrono::Utc> = r.get("window_start");
+            let count: i32 = r.get("count");
+            if now - window_start < window_secs {
+                if count >= 5 {
+                    return Err(AppError::TooManyRequests);
+                }
+                sqlx::query(
+                    "UPDATE message_spam_track SET count = count + 1 WHERE user_id=$1 AND channel_id=$2"
+                )
+                .bind(claims.sub)
+                .bind(channel_id)
+                .execute(&state.db)
+                .await?;
+            } else {
+                sqlx::query(
+                    "UPDATE message_spam_track SET count=1, window_start=NOW() WHERE user_id=$1 AND channel_id=$2"
+                )
+                .bind(claims.sub)
+                .bind(channel_id)
+                .execute(&state.db)
+                .await?;
+            }
+        } else {
+            sqlx::query(
+                "INSERT INTO message_spam_track (user_id, channel_id, count, window_start) VALUES ($1, $2, 1, NOW())"
+            )
+            .bind(claims.sub)
+            .bind(channel_id)
+            .execute(&state.db)
+            .await?;
+        }
+    }
+
     let content_str = body.content.as_ref().map(|c| {
         if c.len() > 4000 { &c[..4000] } else { c }
     });
 
     let mention_everyone = content_str.map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 
+    // Vérifier permission MENTION_EVERYONE si @everyone ou @here
+    if mention_everyone {
+        use crate::handlers::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE)
+            .await
+            .map_err(|_| AppError::Forbidden)?;
+    }
+
+    let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s));
+
     let msg = sqlx::query(
-        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(channel_id)
     .bind(claims.sub)
     .bind(content_str)
     .bind(body.reply_to)
     .bind(mention_everyone)
+    .bind(expires_at)
     .fetch_one(&state.db)
     .await?;
 
@@ -173,7 +236,7 @@ pub async fn send_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_one(&state.db)
@@ -216,15 +279,17 @@ pub async fn send_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
+        author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: msg.try_get("expires_at").ok().flatten(),
     };
 
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "message": full_msg
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(full_msg))
 }
@@ -274,7 +339,7 @@ pub async fn edit_message(
         "content": body.content,
         "edited_at": chrono::Utc::now(),
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -312,7 +377,7 @@ pub async fn delete_message(
         "message_id": message_id,
         "channel_id": channel_id,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -340,7 +405,7 @@ pub async fn add_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -367,7 +432,7 @@ pub async fn remove_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -403,7 +468,7 @@ pub async fn pin_message(
         "pinned": true,
         "pinned_by": claims.sub,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -434,7 +499,7 @@ pub async fn unpin_message(
         "message_id": message_id,
         "pinned": false,
     });
-    state.broadcast_to_channel(channel_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -454,7 +519,7 @@ pub async fn search_messages(
 
     let pattern = format!("%{}%", q.to_lowercase());
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+        "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                 rm.content as reply_to_content, ru.username as reply_to_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
@@ -487,8 +552,10 @@ pub async fn search_messages(
         author_discriminator: r.get("discriminator"),
         author_avatar: r.get("avatar"),
         author_is_bot: r.try_get("is_bot").unwrap_or(false),
+        author_verified: r.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: r.try_get("expires_at").ok().flatten(),
     }).collect();
 
     Ok(Json(result))
@@ -578,7 +645,7 @@ pub async fn forward_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_one(&state.db)
@@ -602,15 +669,109 @@ pub async fn forward_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
+        author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: None,
     };
 
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "message": full_msg
     });
-    state.broadcast_to_channel(body.channel_id, event.to_string()).await;
+    // Broadcast to destination channel's server members
+    let dest_server_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT server_id FROM channels WHERE id=$1"
+    )
+    .bind(body.channel_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(dst_server) = dest_server_id {
+        state.broadcast_to_server_members(dst_server, event.to_string()).await;
+    }
 
     Ok(Json(full_msg))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ReminderInput {
+    pub remind_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn set_reminder(
+    axum::extract::Path(message_id): axum::extract::Path<uuid::Uuid>,
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+    Json(input): Json<ReminderInput>,
+) -> Result<Json<serde_json::Value>> {
+    // Vérifier que le message existe
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)"
+    ).bind(message_id).fetch_one(&state.db).await?;
+    if !exists {
+        return Err(AppError::NotFound("Message introuvable".into()));
+    }
+
+    sqlx::query!(
+        "INSERT INTO message_reminders (user_id, message_id, remind_at) VALUES ($1, $2, $3)",
+        claims.sub, message_id, input.remind_at
+    ).execute(&state.db).await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct TranslateInput {
+    pub target_lang: String,
+}
+
+pub async fn translate_message(
+    axum::extract::Path(message_id): axum::extract::Path<uuid::Uuid>,
+    State(state): State<AppState>,
+    axum::Extension(_claims): axum::Extension<crate::middleware::auth::Claims>,
+    Json(input): Json<TranslateInput>,
+) -> Result<Json<serde_json::Value>> {
+    // Valider la langue cible (ISO 639-1, 2-3 chars)
+    if input.target_lang.len() > 5 || input.target_lang.is_empty() {
+        return Err(AppError::BadRequest("Langue invalide".into()));
+    }
+
+    let msg = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT content FROM messages WHERE id = $1"
+    ).bind(message_id).fetch_one(&state.db).await?;
+
+    let content = msg.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+
+    if content.trim().is_empty() {
+        return Ok(Json(serde_json::json!({ "translated": content })));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+    let url = format!(
+        "https://api.mymemory.translated.net/get?q={}&langpair=autodetect|{}",
+        urlencoding::encode(&content),
+        urlencoding::encode(&input.target_lang)
+    );
+
+    let resp = client.get(&url).send().await
+        .map_err(|_| AppError::BadRequest("Service de traduction indisponible".into()))?;
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("Réponse traduction invalide")))?;
+
+    let translated = json["responseData"]["translatedText"]
+        .as_str()
+        .unwrap_or(&content)
+        .to_string();
+
+    Ok(Json(serde_json::json!({
+        "translated": translated,
+        "lang": input.target_lang,
+    })))
 }

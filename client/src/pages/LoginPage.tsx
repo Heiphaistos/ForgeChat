@@ -15,7 +15,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
-      nav('/')
+      nav('/friends')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? 'Erreur de connexion')
     } finally {
@@ -57,6 +57,9 @@ export default function LoginPage() {
         <p className="text-fc-muted text-sm text-center mt-4">
           Pas de compte ?{' '}
           <Link to="/register" className="text-fc-accent hover:underline">S'inscrire</Link>
+        </p>
+        <p className="text-center mt-3">
+          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
         </p>
       </div>
     </div>

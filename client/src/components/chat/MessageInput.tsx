@@ -1,5 +1,8 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react'
-import { Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash } from 'lucide-react'
+import {
+  Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap,
+} from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
@@ -11,8 +14,20 @@ import StickerPicker, { formatStickerMessage } from './StickerPicker'
 import type { Sticker } from './StickerPicker'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import VoiceMessageRecorder from './VoiceMessageRecorder'
+import QuickReplies from './QuickReplies'
 
 // ─── Slash Commands ───────────────────────────────────────────────────────────
+
+const MAX_CHARS = 4000
+
+const MSG_TTL_OPTIONS = [
+  { label: 'Aucune expiration', value: null },
+  { label: '5 minutes', value: 300 },
+  { label: '1 heure', value: 3600 },
+  { label: '24 heures', value: 86400 },
+  { label: '7 jours', value: 604800 },
+]
 
 interface SlashCommand {
   name: string
@@ -83,7 +98,7 @@ interface Props {
   channelId: string
   serverId: string
   placeholder?: string
-  onSend: (content: string, replyTo?: string, files?: FileWithTtl[]) => void
+  onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
   replyTo?: ReplyTarget | null
   onCancelReply?: () => void
 }
@@ -93,6 +108,12 @@ interface MentionUser {
   username: string
   avatar?: string | null
   discriminator: string
+}
+
+interface ChannelItem {
+  id: string
+  name: string
+  type: string
 }
 
 const TTL_OPTIONS = [
@@ -118,12 +139,19 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showMentions, setShowMentions] = useState(false)
+  const [channelQuery, setChannelQuery] = useState('')
+  const [channelIndex, setChannelIndex] = useState(0)
+  const [showChannels, setShowChannels] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [showScheduled, setShowScheduled] = useState(false)
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
+  const [msgTtl, setMsgTtl] = useState<number | null>(null)
+  const [showTtlPicker, setShowTtlPicker] = useState(false)
   // Slash commands
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -140,6 +168,17 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       api.get(`/users/search?q=${encodeURIComponent(mentionQuery)}`).then(r => r.data),
     enabled: showMentions && mentionQuery.length >= 1,
   })
+
+  const { data: allServerChannels = [] } = useQuery<ChannelItem[]>({
+    queryKey: ['server_channels_list', serverId],
+    queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data.channels ?? []),
+    enabled: !!serverId,
+    staleTime: 30_000,
+  })
+
+  const channelResults = channelQuery
+    ? allServerChannels.filter(c => c.name.toLowerCase().includes(channelQuery.toLowerCase())).slice(0, 5)
+    : allServerChannels.slice(0, 5)
 
   const { data: botCommandsRaw = [] } = useQuery<{ name: string; description: string; bot_name: string }[]>({
     queryKey: ['server_commands', serverId],
@@ -245,14 +284,41 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
   const detectMention = (value: string, pos: number) => {
     const before = value.slice(0, pos)
-    const match = before.match(/@(\w*)$/)
-    if (match) {
-      setMentionQuery(match[1])
+    const mentionMatch = before.match(/@(\w*)$/)
+    if (mentionMatch) {
+      setMentionQuery(mentionMatch[1])
       setMentionIndex(0)
       setShowMentions(true)
-    } else {
-      setShowMentions(false)
+      setShowChannels(false)
+      return
     }
+    setShowMentions(false)
+
+    const channelMatch = before.match(/#([\w-]*)$/)
+    if (channelMatch) {
+      setChannelQuery(channelMatch[1])
+      setChannelIndex(0)
+      setShowChannels(true)
+    } else {
+      setShowChannels(false)
+    }
+  }
+
+  const insertChannel = (channel: ChannelItem) => {
+    const pos = cursorPos
+    const before = content.slice(0, pos)
+    const after = content.slice(pos)
+    const hashIdx = before.lastIndexOf('#')
+    const newContent = before.slice(0, hashIdx) + `#${channel.name} ` + after
+    setContent(newContent)
+    setShowChannels(false)
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newPos = hashIdx + channel.name.length + 2
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newPos, newPos)
+      }
+    }, 0)
   }
 
   const detectSlash = (value: string) => {
@@ -316,19 +382,40 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }, 0)
   }
 
-  // Wrapper le texte sélectionné avec des marqueurs markdown
+  // Wrapper le texte sélectionné avec des marqueurs markdown (préfixe = suffixe)
   const wrapSelection = (marker: string) => {
+    applyFormat(marker, marker)
+  }
+
+  // Appliquer un format markdown avec préfixe et suffixe distincts
+  const applyFormat = (prefix: string, suffix: string = prefix) => {
     const ta = textareaRef.current
     if (!ta) return
     const start = ta.selectionStart
     const end = ta.selectionEnd
     const selected = content.slice(start, end)
-    const newContent = content.slice(0, start) + marker + selected + marker + content.slice(end)
+    const replacement = prefix + (selected || 'texte') + suffix
+    const newContent = content.slice(0, start) + replacement + content.slice(end)
     setContent(newContent)
     setTimeout(() => {
       ta.focus()
-      ta.setSelectionRange(start + marker.length, end + marker.length)
+      const newStart = start + prefix.length
+      const newEnd = newStart + (selected || 'texte').length
+      ta.setSelectionRange(newStart, newEnd)
     }, 0)
+  }
+
+  const insertLink = () => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const selected = content.slice(ta.selectionStart, ta.selectionEnd) || 'texte'
+    const url = window.prompt('URL du lien :', 'https://')
+    if (!url) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const newContent = content.slice(0, start) + `[${selected}](${url})` + content.slice(end)
+    setContent(newContent)
+    setTimeout(() => ta.focus(), 0)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -348,11 +435,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       if (e.key === 'Tab' || (e.key === 'Enter' && showMentions)) { e.preventDefault(); insertMention(mentionResults[mentionIndex]); return }
       if (e.key === 'Escape') { setShowMentions(false); return }
     }
-    // Ctrl+B -> **gras**, Ctrl+I -> *italique*, Ctrl+U -> __souligné__
-    if (e.ctrlKey && !e.shiftKey && !e.altKey) {
-      if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
-      if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
-      if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
+    if (showChannels && channelResults.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setChannelIndex(i => Math.min(i + 1, channelResults.length - 1)); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setChannelIndex(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Tab' || (e.key === 'Enter' && showChannels)) { e.preventDefault(); insertChannel(channelResults[channelIndex]); return }
+      if (e.key === 'Escape') { setShowChannels(false); return }
+    }
+    // Ctrl+B/I/U/K → markdown shortcuts; Ctrl+Shift+X → ~~barré~~
+    if (e.ctrlKey && !e.altKey) {
+      if (!e.shiftKey) {
+        if (e.key === 'b' || e.key === 'B') { e.preventDefault(); wrapSelection('**'); return }
+        if (e.key === 'i' || e.key === 'I') { e.preventDefault(); wrapSelection('*'); return }
+        if (e.key === 'u' || e.key === 'U') { e.preventDefault(); wrapSelection('__'); return }
+        if (e.key === 'k' || e.key === 'K') { e.preventDefault(); insertLink(); return }
+      }
+      if (e.shiftKey && (e.key === 'x' || e.key === 'X')) { e.preventDefault(); wrapSelection('~~'); return }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
@@ -396,11 +493,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       // Sinon : c'est peut-être une bot command, on envoie le message tel quel
     }
 
-    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined)
+    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl)
     setContent('')
     setFiles([])
     setShowMentions(false)
     setShowSlash(false)
+    setShowChannels(false)
     onCancelReply?.()
     textareaRef.current?.focus()
   }
@@ -419,11 +517,33 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     textareaRef.current?.focus()
   }
 
+  const handleVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
+    try {
+      const mins = Math.floor(duration / 60)
+      const secs = duration % 60
+      const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
+      const res = await api.post(`/channels/${channelId}/messages`, {
+        content: `🎤 Message vocal (${durationStr})`,
+      })
+      const formData = new FormData()
+      const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
+      formData.append('file', blob, `voice-${Date.now()}.${ext}`)
+      await api.post(`/messages/${res.data.id}/attachments`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setShowVoiceRecorder(false)
+    } catch {
+      toast.error("Erreur lors de l'envoi du message vocal")
+      setShowVoiceRecorder(false)
+    }
+  }, [channelId])
+
   const closeAllPickers = () => {
     setShowEmojiPicker(false)
     setShowGifPicker(false)
     setShowStickerPicker(false)
     setShowScheduled(false)
+    setShowQuickReplies(false)
   }
 
   useEffect(() => {
@@ -513,6 +633,28 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         </div>
       )}
 
+      {/* Dropdown channels # */}
+      {showChannels && channelResults.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
+          <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
+            Canaux — #{channelQuery}
+          </div>
+          {channelResults.map((ch, idx) => (
+            <button
+              key={ch.id}
+              onClick={() => insertChannel(ch)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition
+                ${idx === channelIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
+            >
+              <div className="w-7 h-7 rounded bg-fc-hover flex items-center justify-center text-xs font-bold text-fc-accent flex-shrink-0">
+                #
+              </div>
+              <div className="text-sm font-medium">{ch.name}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Aperçu fichiers */}
       {files.length > 0 && (
         <div className="flex gap-2 mb-2 flex-wrap p-2 bg-fc-input/40 rounded-lg border border-fc-hover">
@@ -570,7 +712,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         </div>
       )}
 
-      <div className="flex items-end gap-2 bg-fc-input rounded-lg px-2 py-2">
+      <div className="bg-fc-input rounded-lg">
+        {/* Barre Rich Text */}
+        <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
+          <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
+          <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
+          <button onClick={() => applyFormat('~~')} title="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
+          <div className="w-px h-4 bg-fc-hover mx-0.5" />
+          <button onClick={() => applyFormat('`')} title="Code inline" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
+          <button onClick={() => applyFormat('```\n', '\n```')} title="Bloc de code" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
+          <button onClick={() => applyFormat('> ', '')} title="Citation" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
+          <div className="w-px h-4 bg-fc-hover mx-0.5" />
+          <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
+        </div>
+
+        <div className="flex items-end gap-2 px-2 py-2">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
@@ -596,6 +752,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           className="flex-1 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
         />
+
+        {content.length > MAX_CHARS * 0.8 && (
+          <div className={`flex justify-end px-1 py-0.5 text-xs ${
+            content.length > MAX_CHARS
+              ? 'text-fc-red'
+              : content.length > MAX_CHARS * 0.9
+              ? 'text-fc-yellow'
+              : 'text-fc-muted'
+          }`}>
+            {content.length > MAX_CHARS
+              ? <span className="font-medium">{content.length - MAX_CHARS} caractère{content.length - MAX_CHARS > 1 ? 's' : ''} en trop</span>
+              : <span>{MAX_CHARS - content.length} restant{MAX_CHARS - content.length > 1 ? 's' : ''}</span>
+            }
+          </div>
+        )}
 
         <div className="flex items-center gap-1 flex-shrink-0 relative">
           {/* Bouton Emoji */}
@@ -650,8 +821,30 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             </button>
             {showStickerPicker && (
               <StickerPicker
+                serverId={serverId || undefined}
                 onPick={handleSendSticker}
                 onClose={() => setShowStickerPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Bouton Quick Replies */}
+          <div className="relative">
+            <button
+              onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
+              className={`p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title="Réponses rapides"
+            >
+              <Zap size={16} />
+            </button>
+            {showQuickReplies && (
+              <QuickReplies
+                onPick={(text) => {
+                  const pos = textareaRef.current?.selectionStart ?? content.length
+                  setContent(c => c.slice(0, pos) + text + c.slice(pos))
+                  setTimeout(() => textareaRef.current?.focus(), 0)
+                }}
+                onClose={() => setShowQuickReplies(false)}
               />
             )}
           </div>
@@ -740,14 +933,63 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
+          {/* TTL message éphémère */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowTtlPicker(v => !v) }}
+              className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title={msgTtl ? `Message éphémère : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
+            >
+              <Clock size={18} />
+            </button>
+            {showTtlPicker && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-fc-hover text-xs font-semibold text-fc-muted uppercase">
+                  Expiration du message
+                </div>
+                {MSG_TTL_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    onClick={() => { setMsgTtl(opt.value); setShowTtlPicker(false) }}
+                    className={`w-full text-left px-3 py-2 text-sm transition hover:bg-fc-hover ${
+                      msgTtl === opt.value ? 'text-fc-accent' : 'text-fc-text'
+                    }`}
+                  >
+                    {opt.label}
+                    {msgTtl === opt.value && ' ✓'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Voice message */}
+          {showVoiceRecorder ? (
+            <div className="absolute bottom-full left-0 right-0 mb-2 px-2">
+              <VoiceMessageRecorder
+                onSend={handleVoiceMessage}
+                onCancel={() => setShowVoiceRecorder(false)}
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowVoiceRecorder(true)}
+              className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition"
+              title="Message vocal"
+            >
+              <Mic size={18} />
+            </button>
+          )}
+
           <button
             onClick={submit}
-            disabled={!content.trim() && files.length === 0}
+            disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS}
             className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
             title="Envoyer"
           >
             <Send size={20} />
           </button>
+        </div>
         </div>
       </div>
     </div>

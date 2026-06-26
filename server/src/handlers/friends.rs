@@ -1,6 +1,7 @@
-use axum::{extract::{Path, State}, Extension, Json};
+﻿use axum::{extract::{Path, Query, State}, Extension, Json};
 use chrono::Utc;
 use rand::Rng;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -76,10 +77,17 @@ pub async fn send_friend_request(
     .execute(&state.db)
     .await?;
 
-    // Notifier le destinataire
+    // Récupérer le username de l'expéditeur pour la notif
+    let sender_row = sqlx::query("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_optional(&state.db).await?;
+    let from_username: String = sender_row.as_ref()
+        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
+        .unwrap_or_default();
+
     let event = serde_json::json!({
         "type": "FRIEND_REQUEST",
         "from_id": claims.sub,
+        "from_username": from_username,
     });
     state.broadcast_to_user(target_id, event.to_string()).await;
 
@@ -91,13 +99,31 @@ pub async fn accept_friend(
     Extension(claims): Extension<Claims>,
     Path(friendship_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    sqlx::query(
-        "UPDATE friendships SET status='accepted' WHERE id=$1 AND friend_id=$2"
+    use sqlx::Row;
+    // Récupère l'expéditeur original (user_id) pour le notifier
+    let row = sqlx::query(
+        "UPDATE friendships SET status='accepted', friend_since=NOW() WHERE id=$1 AND friend_id=$2 RETURNING user_id"
     )
     .bind(friendship_id)
     .bind(claims.sub)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await?;
+
+    if let Some(row) = row {
+        let requester_id: Uuid = row.get("user_id");
+        // Récupérer username de l'accepteur
+        let accepter = sqlx::query("SELECT username FROM users WHERE id=$1")
+            .bind(claims.sub).fetch_optional(&state.db).await?;
+        let accepter_name: String = accepter.as_ref()
+            .and_then(|r| r.try_get("username").ok())
+            .unwrap_or_default();
+        let event = serde_json::json!({
+            "type": "FRIEND_ACCEPTED",
+            "from_id": claims.sub,
+            "from_username": accepter_name,
+        });
+        state.broadcast_to_user(requester_id, event.to_string()).await;
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -545,5 +571,726 @@ pub async fn send_e2e_message(
         "ciphertext": ciphertext,
         "created_at": created_at,
         "encrypted": true,
+    })))
+}
+
+// ─── Friends Ultra ─────────────────────────────────────────────────────────────
+
+/// GET /friends/v2?filter=all|online|pending|blocked&q=search
+pub async fn get_friends_v2(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let filter = params.get("filter").map(|s| s.as_str()).unwrap_or("all");
+    let q = params.get("q").cloned().unwrap_or_default().to_lowercase();
+
+    let friends = sqlx::query(
+        "SELECT f.id, f.friend_id, f.user_id as initiator_id, f.status,
+                f.message, f.created_at as requested_at, f.friend_since,
+                u.username, u.discriminator, u.avatar, u.status as user_status,
+                u.custom_status, u.activity_type, u.activity_name,
+                fn2.nickname as custom_nickname,
+                EXISTS(SELECT 1 FROM friend_online_notifs fon WHERE fon.user_id=$1 AND fon.target_id=u.id) as notify_online
+         FROM friendships f
+         JOIN users u ON u.id = CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END
+         LEFT JOIN friend_nicknames fn2 ON fn2.user_id=$1 AND fn2.target_id=u.id
+         WHERE f.user_id=$1 OR f.friend_id=$1
+         ORDER BY u.username"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    let all_accepted = friends.iter().filter(|r| r.get::<String, _>("status") == "accepted").count() as i64;
+    let all_online = friends.iter().filter(|r| {
+        r.get::<String, _>("status") == "accepted" && r.get::<String, _>("user_status") == "online"
+    }).count() as i64;
+    let pending_total = friends.iter().filter(|r| r.get::<String, _>("status") == "pending").count() as i64;
+    let pending_received = friends.iter().filter(|r| {
+        r.get::<String, _>("status") == "pending" && r.get::<Uuid, _>("initiator_id") != claims.sub
+    }).count() as i64;
+
+    let mut result: Vec<serde_json::Value> = friends.iter()
+        .filter(|r| {
+            let status: String = r.get("status");
+            let username: String = r.get("username");
+            let initiator_id: Uuid = r.get("initiator_id");
+            let user_status: String = r.get("user_status");
+
+            let pass_filter = match filter {
+                "online" => status == "accepted" && user_status == "online",
+                "pending" => status == "pending",
+                "pending_sent" => status == "pending" && initiator_id == claims.sub,
+                "pending_received" => status == "pending" && initiator_id != claims.sub,
+                _ => status == "accepted",
+            };
+            let pass_search = q.is_empty() || username.to_lowercase().contains(&q);
+            pass_filter && pass_search
+        })
+        .map(|r| {
+            let initiator_id: Uuid = r.get("initiator_id");
+            let status: String = r.get("status");
+            let direction = if status == "pending" {
+                if initiator_id == claims.sub { "sent" } else { "received" }
+            } else { "accepted" };
+            serde_json::json!({
+                "id": r.get::<Uuid, _>("id"),
+                "friend_id": r.get::<Uuid, _>("friend_id"),
+                "status": status,
+                "direction": direction,
+                "message": r.get::<Option<String>, _>("message"),
+                "friend_since": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("friend_since"),
+                "requested_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("requested_at"),
+                "username": r.get::<String, _>("username"),
+                "discriminator": r.get::<String, _>("discriminator"),
+                "avatar": r.get::<Option<String>, _>("avatar"),
+                "user_status": r.get::<String, _>("user_status"),
+                "custom_status": r.get::<Option<String>, _>("custom_status"),
+                "activity_type": r.get::<Option<String>, _>("activity_type"),
+                "activity_name": r.get::<Option<String>, _>("activity_name"),
+                "custom_nickname": r.get::<Option<String>, _>("custom_nickname"),
+                "notify_online": r.get::<bool, _>("notify_online"),
+            })
+        })
+        .collect();
+
+    // Bloqués gérés séparément
+    if filter == "blocked" {
+        let blocked = sqlx::query(
+            "SELECT b.blocked_id, u.username, u.discriminator, u.avatar
+             FROM blocks b JOIN users u ON u.id = b.blocked_id
+             WHERE b.blocker_id=$1 ORDER BY u.username"
+        )
+        .bind(claims.sub).fetch_all(&state.db).await?;
+
+        result = blocked.iter().map(|r| serde_json::json!({
+            "id": r.get::<Uuid, _>("blocked_id"),
+            "friend_id": r.get::<Uuid, _>("blocked_id"),
+            "status": "blocked",
+            "direction": "blocked",
+            "username": r.get::<String, _>("username"),
+            "discriminator": r.get::<String, _>("discriminator"),
+            "avatar": r.get::<Option<String>, _>("avatar"),
+            "user_status": "offline",
+        })).collect();
+    }
+
+    Ok(Json(serde_json::json!({
+        "friends": result,
+        "counts": {
+            "all": all_accepted,
+            "online": all_online,
+            "pending": pending_total,
+            "pending_received": pending_received,
+        }
+    })))
+}
+
+/// POST /friends/by-name { name: "user#1234", message? }
+#[derive(serde::Deserialize)]
+pub struct AddByNameBody {
+    pub name: String,
+    pub message: Option<String>,
+}
+
+pub async fn send_friend_by_name(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<AddByNameBody>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let name = body.name.trim().to_string();
+    let (username, discriminator) = if name.contains('#') {
+        let parts: Vec<&str> = name.splitn(2, '#').collect();
+        (parts[0].to_lowercase(), Some(parts[1].to_string()))
+    } else {
+        (name.to_lowercase(), None)
+    };
+
+    let target = if let Some(disc) = discriminator {
+        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 AND discriminator=$2")
+            .bind(&username).bind(&disc).fetch_optional(&state.db).await?
+    } else {
+        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 LIMIT 1")
+            .bind(&username).fetch_optional(&state.db).await?
+    };
+
+    let target = target.ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
+    let target_id: Uuid = target.get("id");
+
+    if target_id == claims.sub {
+        return Err(AppError::BadRequest("Impossible de s'ajouter soi-même".into()));
+    }
+
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
+    ).bind(claims.sub).bind(target_id).fetch_one(&state.db).await?;
+
+    if exists {
+        return Err(AppError::Conflict("Relation déjà existante".into()));
+    }
+
+    let msg = body.message.as_deref().unwrap_or("").chars().take(256).collect::<String>();
+    sqlx::query(
+        "INSERT INTO friendships (user_id, friend_id, status, message) VALUES ($1, $2, 'pending', $3)"
+    ).bind(claims.sub).bind(target_id).bind(if msg.is_empty() { None } else { Some(msg) })
+     .execute(&state.db).await?;
+
+    let sender = sqlx::query("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_optional(&state.db).await?;
+    let from_username: String = sender.as_ref()
+        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
+        .unwrap_or_default();
+    let event = serde_json::json!({ "type": "FRIEND_REQUEST", "from_id": claims.sub, "from_username": from_username });
+    state.broadcast_to_user(target_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true, "user_id": target_id })))
+}
+
+/// DELETE /friends/:id/cancel — annuler une demande envoyée
+pub async fn cancel_friend_request(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(friendship_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM friendships WHERE id=$1 AND user_id=$2 AND status='pending'")
+        .bind(friendship_id).bind(claims.sub).execute(&state.db).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /friends/:id/note
+pub async fn get_friend_note(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT note, updated_at FROM friend_notes WHERE user_id=$1 AND target_id=$2"
+    ).bind(claims.sub).bind(target_id).fetch_optional(&state.db).await?;
+
+    let (note, updated_at) = row.map(|r| (
+        r.get::<String, _>("note"),
+        Some(r.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"))
+    )).unwrap_or_else(|| (String::new(), None));
+
+    Ok(Json(serde_json::json!({ "note": note, "updated_at": updated_at })))
+}
+
+/// PUT /friends/:id/note { note }
+#[derive(serde::Deserialize)]
+pub struct NoteBody { pub note: String }
+
+pub async fn set_friend_note(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_id): Path<Uuid>,
+    Json(body): Json<NoteBody>,
+) -> Result<Json<serde_json::Value>> {
+    let note = body.note.chars().take(2000).collect::<String>();
+    sqlx::query(
+        "INSERT INTO friend_notes (user_id, target_id, note, updated_at) VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (user_id, target_id) DO UPDATE SET note=EXCLUDED.note, updated_at=NOW()"
+    ).bind(claims.sub).bind(target_id).bind(&note).execute(&state.db).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /friends/:id/nickname
+pub async fn get_friend_nickname(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT nickname FROM friend_nicknames WHERE user_id=$1 AND target_id=$2"
+    ).bind(claims.sub).bind(target_id).fetch_optional(&state.db).await?;
+    let nickname = row.map(|r| r.get::<String, _>("nickname")).unwrap_or_default();
+    Ok(Json(serde_json::json!({ "nickname": nickname })))
+}
+
+/// PUT /friends/:id/nickname { nickname }
+#[derive(serde::Deserialize)]
+pub struct NicknameBody { pub nickname: String }
+
+pub async fn set_friend_nickname(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_id): Path<Uuid>,
+    Json(body): Json<NicknameBody>,
+) -> Result<Json<serde_json::Value>> {
+    let nickname = body.nickname.trim().chars().take(64).collect::<String>();
+    if nickname.is_empty() {
+        sqlx::query("DELETE FROM friend_nicknames WHERE user_id=$1 AND target_id=$2")
+            .bind(claims.sub).bind(target_id).execute(&state.db).await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO friend_nicknames (user_id, target_id, nickname, updated_at) VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (user_id, target_id) DO UPDATE SET nickname=EXCLUDED.nickname, updated_at=NOW()"
+        ).bind(claims.sub).bind(target_id).bind(&nickname).execute(&state.db).await?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /friends/groups
+pub async fn list_friend_groups(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let groups = sqlx::query(
+        "SELECT fg.id, fg.name, fg.color, fg.position,
+                COALESCE(ARRAY_AGG(fgm.user_id::text) FILTER (WHERE fgm.user_id IS NOT NULL), '{}') as member_ids
+         FROM friend_groups fg
+         LEFT JOIN friend_group_members fgm ON fgm.group_id = fg.id
+         WHERE fg.user_id=$1
+         GROUP BY fg.id ORDER BY fg.position, fg.name"
+    ).bind(claims.sub).fetch_all(&state.db).await?;
+
+    let result = groups.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "color": r.get::<Option<String>, _>("color"),
+        "position": r.get::<i32, _>("position"),
+        "member_ids": r.get::<Vec<String>, _>("member_ids"),
+    })).collect();
+    Ok(Json(result))
+}
+
+/// POST /friends/groups { name, color? }
+#[derive(serde::Deserialize)]
+pub struct GroupBody { pub name: String, pub color: Option<String> }
+
+pub async fn create_friend_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<GroupBody>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let name = body.name.trim().chars().take(64).collect::<String>();
+    if name.is_empty() { return Err(AppError::BadRequest("Nom requis".into())); }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM friend_groups WHERE user_id=$1")
+        .bind(claims.sub).fetch_one(&state.db).await?;
+    if count >= 20 { return Err(AppError::BadRequest("Maximum 20 groupes".into())); }
+
+    let row = sqlx::query(
+        "INSERT INTO friend_groups (user_id, name, color, position) VALUES ($1, $2, $3, $4) RETURNING id"
+    ).bind(claims.sub).bind(&name).bind(&body.color).bind(count as i32)
+     .fetch_one(&state.db).await?;
+
+    Ok(Json(serde_json::json!({ "id": row.get::<Uuid, _>("id"), "name": name })))
+}
+
+/// PUT /friends/groups/:id { name?, color?, position? }
+#[derive(serde::Deserialize)]
+pub struct GroupUpdateBody { pub name: Option<String>, pub color: Option<String>, pub position: Option<i32> }
+
+pub async fn update_friend_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<GroupUpdateBody>,
+) -> Result<Json<serde_json::Value>> {
+    if let Some(ref name) = body.name {
+        sqlx::query("UPDATE friend_groups SET name=$1 WHERE id=$2 AND user_id=$3")
+            .bind(name.trim().chars().take(64).collect::<String>())
+            .bind(group_id).bind(claims.sub).execute(&state.db).await?;
+    }
+    if let Some(ref color) = body.color {
+        sqlx::query("UPDATE friend_groups SET color=$1 WHERE id=$2 AND user_id=$3")
+            .bind(color).bind(group_id).bind(claims.sub).execute(&state.db).await?;
+    }
+    if let Some(pos) = body.position {
+        sqlx::query("UPDATE friend_groups SET position=$1 WHERE id=$2 AND user_id=$3")
+            .bind(pos).bind(group_id).bind(claims.sub).execute(&state.db).await?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// DELETE /friends/groups/:id
+pub async fn delete_friend_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM friend_groups WHERE id=$1 AND user_id=$2")
+        .bind(group_id).bind(claims.sub).execute(&state.db).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /friends/groups/:id/members { user_id }
+#[derive(serde::Deserialize)]
+pub struct GroupMemberBody { pub user_id: Uuid }
+
+pub async fn add_to_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<GroupMemberBody>,
+) -> Result<Json<serde_json::Value>> {
+    let owns = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM friend_groups WHERE id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !owns { return Err(AppError::Forbidden); }
+
+    sqlx::query(
+        "INSERT INTO friend_group_members (group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    ).bind(group_id).bind(body.user_id).execute(&state.db).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// DELETE /friends/groups/:id/members/:user_id
+pub async fn remove_from_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((group_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    let owns = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM friend_groups WHERE id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !owns { return Err(AppError::Forbidden); }
+
+    sqlx::query("DELETE FROM friend_group_members WHERE group_id=$1 AND user_id=$2")
+        .bind(group_id).bind(user_id).execute(&state.db).await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// PUT /friends/:id/notify { enabled: bool }
+#[derive(serde::Deserialize)]
+pub struct NotifyBody { pub enabled: bool }
+
+pub async fn set_online_notify(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(target_id): Path<Uuid>,
+    Json(body): Json<NotifyBody>,
+) -> Result<Json<serde_json::Value>> {
+    if body.enabled {
+        sqlx::query(
+            "INSERT INTO friend_online_notifs (user_id, target_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+        ).bind(claims.sub).bind(target_id).execute(&state.db).await?;
+    } else {
+        sqlx::query("DELETE FROM friend_online_notifs WHERE user_id=$1 AND target_id=$2")
+            .bind(claims.sub).bind(target_id).execute(&state.db).await?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET /friends/suggestions
+pub async fn get_friend_suggestions(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let suggestions = sqlx::query(
+        "WITH my_friends AS (
+            SELECT CASE WHEN user_id=$1 THEN friend_id ELSE user_id END as fid
+            FROM friendships WHERE (user_id=$1 OR friend_id=$1) AND status='accepted'
+         ),
+         mutual_friends AS (
+            SELECT CASE WHEN f.user_id IN (SELECT fid FROM my_friends) THEN f.friend_id ELSE f.user_id END as candidate,
+                   COUNT(*) as mutual_count
+            FROM friendships f
+            WHERE (f.user_id IN (SELECT fid FROM my_friends) OR f.friend_id IN (SELECT fid FROM my_friends))
+              AND f.status='accepted'
+              AND f.user_id != $1 AND f.friend_id != $1
+            GROUP BY candidate
+         ),
+         mutual_servers AS (
+            SELECT sm2.user_id as candidate, COUNT(*) as server_count
+            FROM server_members sm1
+            JOIN server_members sm2 ON sm1.server_id = sm2.server_id AND sm2.user_id != $1
+            WHERE sm1.user_id = $1
+            GROUP BY sm2.user_id
+         ),
+         existing AS (
+            SELECT CASE WHEN user_id=$1 THEN friend_id ELSE user_id END as uid
+            FROM friendships WHERE user_id=$1 OR friend_id=$1
+         )
+         SELECT u.id, u.username, u.discriminator, u.avatar, u.status,
+                COALESCE(mf.mutual_count, 0) as mutual_friends,
+                COALESCE(ms.server_count, 0) as mutual_servers
+         FROM users u
+         LEFT JOIN mutual_friends mf ON mf.candidate = u.id
+         LEFT JOIN mutual_servers ms ON ms.candidate = u.id
+         WHERE u.id != $1
+           AND u.id NOT IN (SELECT uid FROM existing)
+           AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id=$1)
+           AND (mf.mutual_count > 0 OR ms.server_count > 0)
+         ORDER BY COALESCE(mf.mutual_count, 0) * 3 + COALESCE(ms.server_count, 0) DESC
+         LIMIT 20"
+    ).bind(claims.sub).fetch_all(&state.db).await?;
+
+    let result = suggestions.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "username": r.get::<String, _>("username"),
+        "discriminator": r.get::<String, _>("discriminator"),
+        "avatar": r.get::<Option<String>, _>("avatar"),
+        "status": r.get::<String, _>("status"),
+        "mutual_friends": r.get::<i64, _>("mutual_friends"),
+        "mutual_servers": r.get::<i64, _>("mutual_servers"),
+    })).collect();
+    Ok(Json(result))
+}
+
+/// GET /friends/calls — historique d'appels
+pub async fn get_call_history(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let calls = sqlx::query(
+        "SELECT ch.id, ch.caller_id, ch.callee_id, ch.call_type, ch.status,
+                ch.started_at, ch.ended_at, ch.duration_s, ch.dm_id,
+                uc.username as caller_name, uc.avatar as caller_avatar,
+                ue.username as callee_name, ue.avatar as callee_avatar
+         FROM call_history ch
+         JOIN users uc ON uc.id = ch.caller_id
+         JOIN users ue ON ue.id = ch.callee_id
+         WHERE ch.caller_id=$1 OR ch.callee_id=$1
+         ORDER BY ch.started_at DESC LIMIT 50"
+    ).bind(claims.sub).fetch_all(&state.db).await?;
+
+    let result = calls.iter().map(|r| {
+        let is_outgoing = r.get::<Uuid, _>("caller_id") == claims.sub;
+        serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "call_type": r.get::<String, _>("call_type"),
+            "status": r.get::<String, _>("status"),
+            "direction": if is_outgoing { "outgoing" } else { "incoming" },
+            "started_at": r.get::<chrono::DateTime<chrono::Utc>, _>("started_at"),
+            "ended_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("ended_at"),
+            "duration_s": r.get::<Option<i32>, _>("duration_s"),
+            "dm_id": r.get::<Option<Uuid>, _>("dm_id"),
+            "other_user": {
+                "id": if is_outgoing { r.get::<Uuid, _>("callee_id") } else { r.get::<Uuid, _>("caller_id") },
+                "username": if is_outgoing { r.get::<String, _>("callee_name") } else { r.get::<String, _>("caller_name") },
+                "avatar": if is_outgoing { r.get::<Option<String>, _>("callee_avatar") } else { r.get::<Option<String>, _>("caller_avatar") },
+            },
+        })
+    }).collect();
+    Ok(Json(result))
+}
+
+
+pub async fn patch_dm_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(dm_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { return Err(AppError::Forbidden); }
+
+    let muted = body["muted"].as_bool();
+    let archived = body["archived"].as_bool();
+
+    sqlx::query(
+        "INSERT INTO dm_user_settings (user_id, dm_channel_id, muted, archived)
+         VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE))
+         ON CONFLICT (user_id, dm_channel_id) DO UPDATE SET
+           muted    = COALESCE($3, dm_user_settings.muted),
+           archived = COALESCE($4, dm_user_settings.archived),
+           updated_at = NOW()"
+    )
+    .bind(claims.sub)
+    .bind(dm_id)
+    .bind(muted)
+    .bind(archived)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn block_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    if user_id == claims.sub {
+        return Err(AppError::BadRequest("Impossible de se bloquer soi-même".into()));
+    }
+    sqlx::query(
+        "INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        "DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn unblock_user(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM blocks WHERE blocker_id=$1 AND blocked_id=$2")
+        .bind(claims.sub)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn get_blocked(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT b.blocked_id, u.username, u.discriminator, u.avatar
+         FROM blocks b JOIN users u ON u.id = b.blocked_id
+         WHERE b.blocker_id=$1
+         ORDER BY u.username"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    let result = rows.iter().map(|r| serde_json::json!({
+        "id":            r.get::<Uuid, _>("blocked_id"),
+        "username":      r.get::<String, _>("username"),
+        "discriminator": r.get::<String, _>("discriminator"),
+        "avatar":        r.get::<Option<String>, _>("avatar"),
+    })).collect();
+
+    Ok(Json(result))
+}
+
+#[derive(serde::Deserialize)]
+pub struct InviteBulkBody {
+    pub emails: Vec<String>,
+    pub usernames: Vec<String>,
+}
+
+/// Pour chaque username trouvé → envoi d'une demande d'ami.
+/// Les emails ne font pas l'objet d'envoi (pas de système email).
+/// Limite 50 contacts max par appel.
+pub async fn invite_bulk(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<InviteBulkBody>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let total = body.emails.len() + body.usernames.len();
+    if total > 50 {
+        return Err(AppError::BadRequest(
+            "Maximum 50 contacts par appel".into()
+        ));
+    }
+
+    let mut sent: u32 = 0;
+    let mut already_friends: u32 = 0;
+    let mut not_found: Vec<String> = Vec::new();
+
+    // Emails : aucune action (pas de système email), retour dans not_found
+    for email in &body.emails {
+        not_found.push(email.clone());
+    }
+
+    // Usernames : chercher en DB et envoyer une demande d'ami
+    for raw in &body.usernames {
+        let name = raw.trim().to_lowercase();
+        if name.is_empty() {
+            continue;
+        }
+
+        // Supporter le format user#discriminator
+        let (username, discriminator) = if name.contains('#') {
+            let mut parts = name.splitn(2, '#');
+            (
+                parts.next().unwrap_or("").to_string(),
+                Some(parts.next().unwrap_or("").to_string()),
+            )
+        } else {
+            (name.clone(), None)
+        };
+
+        let target_row = if let Some(ref disc) = discriminator {
+            sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 AND discriminator=$2")
+                .bind(&username)
+                .bind(disc)
+                .fetch_optional(&state.db)
+                .await?
+        } else {
+            sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 LIMIT 1")
+                .bind(&username)
+                .fetch_optional(&state.db)
+                .await?
+        };
+
+        let Some(row) = target_row else {
+            not_found.push(raw.clone());
+            continue;
+        };
+
+        let target_id: Uuid = row.get("id");
+
+        if target_id == claims.sub {
+            not_found.push(raw.clone());
+            continue;
+        }
+
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM friendships WHERE
+             (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
+        )
+        .bind(claims.sub)
+        .bind(target_id)
+        .fetch_one(&state.db)
+        .await?;
+
+        if exists {
+            already_friends += 1;
+            continue;
+        }
+
+        sqlx::query(
+            "INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')
+             ON CONFLICT DO NOTHING"
+        )
+        .bind(claims.sub)
+        .bind(target_id)
+        .execute(&state.db)
+        .await?;
+
+        // Notifier l'utilisateur cible
+        let event = serde_json::json!({
+            "type": "FRIEND_REQUEST",
+            "from_id": claims.sub,
+        });
+        state.broadcast_to_user(target_id, event.to_string()).await;
+
+        sent += 1;
+    }
+
+    Ok(Json(serde_json::json!({
+        "sent": sent,
+        "already_friends": already_friends,
+        "not_found": not_found,
     })))
 }

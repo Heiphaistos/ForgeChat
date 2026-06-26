@@ -19,3 +19,6 @@ server/uploads/
 .vscode/
 .idea/
 .gstack/
+
+# Claude Code internals
+.claude/

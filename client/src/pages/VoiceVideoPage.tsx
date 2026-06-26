@@ -3,15 +3,20 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  LayoutTemplate, Layout, Wifi, WifiOff,
+  LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine,
 } from 'lucide-react'
-import { useVoice, type VoicePeer } from '../store/voice'
+import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
+import { useLocation } from 'react-router-dom'
 import { useVoiceActivity } from '../hooks/useVoiceActivity'
 import { useCaptions } from '../hooks/useCaptions'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
+import Soundboard from '../components/voice/Soundboard'
+import VoiceActivityBar from '../components/voice/VoiceActivityBar'
+import Whiteboard from '../components/voice/Whiteboard'
+import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 
 type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
@@ -160,19 +165,81 @@ function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; lab
   )
 }
 
+// ─── Lobby (écran avant de rejoindre) ─────────────────────────────────────────
+function VoiceLobby({
+  channel, serverId, participantCount, voicePassword,
+}: { channel: { id: string; name: string; type: string }; serverId: string; participantCount: number; voicePassword?: string }) {
+  const { join, error } = useVoice()
+  const [joining, setJoining] = useState(false)
+  const [withVideo, setWithVideo] = useState(channel.type === 'video')
+
+  const handleJoin = async () => {
+    setJoining(true)
+    try {
+      await join(channel.id, serverId, withVideo, voicePassword, channel.name)
+    } finally {
+      setJoining(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-6 bg-fc-bg">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-20 h-20 rounded-full bg-fc-accent/20 flex items-center justify-center">
+          <Volume2 size={36} className="text-fc-accent" />
+        </div>
+        <h2 className="text-xl font-bold text-white">{channel.name}</h2>
+        <p className="text-fc-muted text-sm">
+          {participantCount > 0
+            ? `${participantCount} participant${participantCount > 1 ? 's' : ''} dans ce canal`
+            : 'Aucun participant pour le moment'}
+        </p>
+      </div>
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-red-400 text-sm max-w-xs text-center">
+          {error}
+        </div>
+      )}
+      {channel.type === 'video' && (
+        <label className="flex items-center gap-2 text-sm text-fc-text cursor-pointer select-none">
+          <input type="checkbox" checked={withVideo} onChange={e => setWithVideo(e.target.checked)}
+            className="w-4 h-4 rounded accent-fc-accent" />
+          Activer la caméra à la connexion
+        </label>
+      )}
+      <div className="flex gap-3">
+        <button onClick={handleJoin} disabled={joining}
+          className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-semibold transition disabled:opacity-50 text-sm">
+          <Mic size={16} />
+          {joining ? 'Connexion...' : 'Rejoindre le vocal'}
+        </button>
+      </div>
+      <p className="text-xs text-fc-muted">
+        Votre navigateur peut demander l'accès au microphone
+      </p>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
   const { send, on } = useWs()
+  const location = useLocation()
+  const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
     peers, localStream, muted, deafened, videoEnabled, screenSharing,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
-    userVolumes, setUserVolume,
+    userVolumes, setUserVolume, joined, channelId: activeChannelId,
+    roomParticipants,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const { isActive: captionsOn, isSupported: captionsSupported, captions, toggle: toggleCaptions } = useCaptions()
   // Map userId → speaking (local only — peers tracked via WS SPEAKING events)
   const speakingMap: Record<string, number> = user ? { [user.id]: isLocalSpeaking ? 1 : 0 } : {}
+
+  const isInThisChannel = joined && activeChannelId === channel.id
+  const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [spotlightUser, setSpotlightUser] = useState<string | null>(null)
@@ -183,9 +250,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [blurBackground, setBlurBackground] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [showCaptions, setShowCaptions] = useState(false)
+  const [showSoundboard, setShowSoundboard] = useState(false)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
+  const [showEmojiBar, setShowEmojiBar] = useState(false)
   const [joinTime] = useState(Date.now())
-  // RTCPeerConnections ref pour CallQualityIndicator
-  const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map())
 
   // WS: hand raise
   useEffect(() => {
@@ -199,11 +267,24 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     return unsub
   }, [channel.id, on, user?.id])
 
+  // Apply audio output device to video elements
+  useEffect(() => {
+    const savedOut = localStorage.getItem('fc_audio_output')
+    if (!savedOut) return
+    document.querySelectorAll('video').forEach(el => {
+      if ('setSinkId' in el) (el as any).setSinkId(savedOut).catch(() => {})
+    })
+  }, [peers])
+
   const toggleHandRaise = () => {
     const newVal = !handRaised
     setHandRaised(newVal)
     setRaisedHands(prev => ({ ...prev, [user!.id]: newVal }))
     send({ type: 'HAND_RAISE', channel_id: channel.id, user_id: user!.id, username: user!.username, raised: newVal })
+  }
+
+  const sendReaction = (emoji: string) => {
+    send({ type: 'VOICE_REACTION', channel_id: channel.id, emoji })
   }
 
   // Recording
@@ -212,19 +293,29 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   const startRecording = useCallback(() => {
     if (!localStream) return
-    const recorder = new MediaRecorder(localStream, { mimeType: 'audio/webm;codecs=opus' })
-    recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
-    recorder.onstop = () => {
-      const blob = new Blob(recChunksRef.current, { type: 'audio/webm' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `forgechat-recording-${Date.now()}.webm`; a.click()
-      URL.revokeObjectURL(url)
-      recChunksRef.current = []
+    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
+    try {
+      const recorder = new MediaRecorder(localStream, mimeType ? { mimeType } : undefined)
+      recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(recChunksRef.current, { type: mimeType || 'audio/webm' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm'
+        a.download = `forgechat-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${ext}`
+        a.click()
+        URL.revokeObjectURL(url)
+        recChunksRef.current = []
+      }
+      recorder.start(1000)
+      recorderRef.current = recorder
+      setIsRecording(true)
+      toast.success('Enregistrement démarré')
+    } catch {
+      toast.error("Impossible de démarrer l'enregistrement")
     }
-    recorder.start(500)
-    recorderRef.current = recorder
-    setIsRecording(true)
   }, [localStream])
 
   const stopRecording = useCallback(() => {
@@ -236,6 +327,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   useEffect(() => () => { recorderRef.current?.stop() }, [])
 
   if (!user) return null
+
+  // Afficher le lobby si pas encore dans ce canal
+  if (!isInThisChannel) {
+    return <VoiceLobby channel={channel} serverId={serverId} participantCount={participantsInChannel} voicePassword={voicePassword} />
+  }
 
   const allPeers = [
     { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
@@ -262,7 +358,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <Volume2 size={16} className="text-fc-accent" />
           <span className="text-sm font-semibold text-white">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
-          <CallQualityIndicator pcs={pcsRef.current} />
+          <CallQualityIndicator pcs={getPeerConnections()} />
         </div>
 
         {/* View mode switcher */}
@@ -386,6 +482,26 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         )}
       </div>
 
+      {/* Emoji bar */}
+      {showEmojiBar && (
+        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-fc-sidebar border-t border-fc-hover flex-shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2 bg-fc-channel/80 backdrop-blur rounded-full shadow-lg">
+            {(['👍', '❤️', '😂', '🔥', '👏', '😮', '🎉', '💯'] as const).map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  sendReaction(emoji)
+                  setShowEmojiBar(false)
+                }}
+                className="text-2xl hover:scale-125 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Controls bar — Google Meet style */}
       <div className="flex items-center justify-between px-6 py-3 bg-fc-sidebar border-t border-fc-hover flex-shrink-0">
         {/* Group 1: Info */}
@@ -461,13 +577,62 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             label={isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer'}
           />
           <CtrlBtn
+            active={showSoundboard} onClick={() => setShowSoundboard(v => !v)}
+            activeIcon={<Music2 size={16} />} inactiveIcon={<Music2 size={16} />}
+            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+            label="Soundboard"
+          />
+          <CtrlBtn
             active={showStats} onClick={() => setShowStats(v => !v)}
             activeIcon={<BarChart2 size={16} />} inactiveIcon={<BarChart2 size={16} />}
             activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
             label="Statistiques orateurs"
           />
+          <CtrlBtn
+            active={showWhiteboard} onClick={() => setShowWhiteboard(v => !v)}
+            activeIcon={<PenLine size={16} />} inactiveIcon={<PenLine size={16} />}
+            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+            label="Tableau blanc"
+          />
+          <button
+            onClick={() => setShowEmojiBar(p => !p)}
+            className={`p-2.5 rounded-xl transition ${showEmojiBar ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
+            title="Envoyer une réaction"
+          >
+            😄
+          </button>
         </div>
       </div>
+
+      {/* Whiteboard */}
+      {showWhiteboard && (
+        <Whiteboard
+          channelId={channel.id}
+          onClose={() => setShowWhiteboard(false)}
+        />
+      )}
+
+      {/* Soundboard panel */}
+      {showSoundboard && (
+        <div className="absolute bottom-20 right-4 z-40">
+          <Soundboard
+            serverId={serverId}
+            channelId={channel.id}
+            onClose={() => setShowSoundboard(false)}
+          />
+        </div>
+      )}
+
+      {/* Voice activity bar */}
+      <VoiceActivityBar
+        participants={allPeers.map(p => ({
+          user_id: p.userId,
+          username: p.username,
+          stream: p.stream ?? undefined,
+        }))}
+      />
+
+      <FloatingReactions channelId={channel.id} />
 
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />

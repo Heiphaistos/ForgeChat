@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     Extension, Json,
 };
 use rand::Rng;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -91,6 +92,29 @@ pub async fn get_server(
     .fetch_all(&state.db)
     .await?;
 
+    let hidden_ids: std::collections::HashSet<Uuid> = {
+        use sqlx::Row;
+        sqlx::query(
+            "SELECT channel_id FROM hidden_channels WHERE user_id=$1 \
+             AND channel_id IN (SELECT id FROM channels WHERE server_id=$2)"
+        )
+        .bind(claims.sub)
+        .bind(server_id)
+        .fetch_all(&state.db)
+        .await?
+        .iter()
+        .map(|r| r.get::<Uuid, _>("channel_id"))
+        .collect()
+    };
+
+    let channels_json: Vec<serde_json::Value> = channels.iter().map(|c| {
+        let mut v = serde_json::to_value(c).unwrap_or_default();
+        if let serde_json::Value::Object(ref mut m) = v {
+            m.insert("hidden".to_string(), serde_json::json!(hidden_ids.contains(&c.id)));
+        }
+        v
+    }).collect();
+
     let roles = sqlx::query_as::<_, crate::models::role::Role>(
         "SELECT * FROM roles WHERE server_id=$1 ORDER BY position DESC"
     )
@@ -113,7 +137,7 @@ pub async fn get_server(
 
     Ok(Json(serde_json::json!({
         "server": server,
-        "channels": channels,
+        "channels": channels_json,
         "roles": roles,
         "member": member,
     })))
@@ -133,7 +157,13 @@ pub async fn update_server(
             description = COALESCE($3, description),
             is_public = COALESCE($4, is_public),
             welcome_message = COALESCE($5, welcome_message),
-            banner = COALESCE($6, banner)
+            banner = COALESCE($6, banner),
+            system_channel_id = COALESCE($7, system_channel_id),
+            afk_channel_id = COALESCE($8, afk_channel_id),
+            afk_timeout_minutes = COALESCE($9, afk_timeout_minutes),
+            rules_channel_id = COALESCE($10, rules_channel_id),
+            vanity_url = COALESCE($11, vanity_url),
+            content_filter = COALESCE($12, content_filter)
          WHERE id=$1 RETURNING *"
     )
     .bind(server_id)
@@ -142,6 +172,12 @@ pub async fn update_server(
     .bind(body.is_public)
     .bind(body.welcome_message)
     .bind(body.banner)
+    .bind(body.system_channel_id)
+    .bind(body.afk_channel_id)
+    .bind(body.afk_timeout)
+    .bind(body.rules_channel_id)
+    .bind(body.vanity_url)
+    .bind(body.content_filter)
     .fetch_one(&state.db)
     .await?;
 
@@ -370,14 +406,18 @@ pub async fn ban_member(
     ).await?;
 
     let reason = body["reason"].as_str().map(String::from);
+    let expires_at = body["duration_hours"].as_i64().map(|h| {
+        chrono::Utc::now() + chrono::Duration::hours(h)
+    });
 
     sqlx::query(
-        "INSERT INTO bans (user_id, server_id, reason) VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING"
+        "INSERT INTO bans (user_id, server_id, reason, expires_at) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, server_id) DO UPDATE SET reason=EXCLUDED.reason, expires_at=EXCLUDED.expires_at"
     )
     .bind(user_id)
     .bind(server_id)
     .bind(reason)
+    .bind(expires_at)
     .execute(&state.db)
     .await?;
 
@@ -475,6 +515,47 @@ pub async fn get_server_stats(
         "message_count": message_count,
         "channel_count": channel_count,
     })))
+}
+
+pub async fn get_leaderboard(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    let period = params.get("period").map(|s| s.as_str()).unwrap_or("month");
+    let since = match period {
+        "week" => "NOW() - INTERVAL '7 days'",
+        "month" => "NOW() - INTERVAL '30 days'",
+        _ => "'1970-01-01'",
+    };
+
+    let rows = sqlx::query(&format!(
+        "SELECT u.id, u.username, u.avatar_url, \
+         COUNT(m.id) as message_count, \
+         COUNT(DISTINCT DATE(m.created_at)) as active_days \
+         FROM messages m \
+         JOIN users u ON u.id = m.author_id \
+         JOIN channels c ON c.id = m.channel_id \
+         WHERE c.server_id = $1 AND m.created_at > {} \
+         GROUP BY u.id, u.username, u.avatar_url \
+         ORDER BY message_count DESC LIMIT 20",
+        since
+    ))
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    use sqlx::Row;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "user_id": r.get::<Uuid, _>("id"),
+        "username": r.get::<String, _>("username"),
+        "avatar": r.get::<Option<String>, _>("avatar_url"),
+        "messages": r.get::<i64, _>("message_count"),
+        "active_days": r.get::<i64, _>("active_days"),
+    })).collect::<Vec<_>>()))
 }
 
 // --- Helpers ---
@@ -600,10 +681,200 @@ pub async fn update_server_verification(
     Ok(Json(server))
 }
 
+pub async fn get_admin_stats(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    // Seuls les owners d'au moins un serveur ont accès
+    let is_owner = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !is_owner {
+        return Err(AppError::Forbidden);
+    }
+
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&state.db)
+        .await?;
+
+    let total_messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+        .fetch_one(&state.db)
+        .await?;
+
+    let messages_today: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages WHERE created_at > CURRENT_DATE"
+    )
+    .fetch_one(&state.db)
+    .await?;
+
+    let total_servers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM servers")
+        .fetch_one(&state.db)
+        .await?;
+
+    let total_channels: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels")
+        .fetch_one(&state.db)
+        .await?;
+
+    let top_servers = sqlx::query(
+        "SELECT s.name, COUNT(m.id) as msg_count
+         FROM servers s
+         JOIN channels c ON c.server_id = s.id
+         JOIN messages m ON m.channel_id = c.id
+         WHERE m.created_at > NOW() - INTERVAL '7 days'
+         GROUP BY s.id, s.name ORDER BY msg_count DESC LIMIT 10"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let messages_per_day = sqlx::query(
+        "SELECT DATE(created_at) as day, COUNT(*) as count
+         FROM messages WHERE created_at > NOW() - INTERVAL '7 days'
+         GROUP BY DATE(created_at) ORDER BY day ASC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Ok(Json(serde_json::json!({
+        "total_users": total_users,
+        "total_messages": total_messages,
+        "messages_today": messages_today,
+        "total_servers": total_servers,
+        "total_channels": total_channels,
+        "top_servers": top_servers.iter().map(|r| serde_json::json!({
+            "name": r.get::<String, _>("name"),
+            "messages": r.get::<i64, _>("msg_count"),
+        })).collect::<Vec<_>>(),
+        "messages_per_day": messages_per_day.iter().map(|r| serde_json::json!({
+            "day": r.get::<chrono::NaiveDate, _>("day").to_string(),
+            "count": r.get::<i64, _>("count"),
+        })).collect::<Vec<_>>(),
+    })))
+}
+
 fn generate_invite_code() -> String {
     rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(8)
         .map(char::from)
         .collect()
+}
+
+// ─── Server Discovery ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct DiscoverQuery {
+    pub q: Option<String>,
+    pub category: Option<String>,
+    pub sort: Option<String>, // "popular" | "recent" | "active"
+    pub page: Option<i64>,
+}
+
+/// GET /api/servers/discover — liste publique, pas d'auth requise
+/// POST /api/servers/:id/boost — boost cosmétique par membre (une fois par serveur)
+pub async fn boost_server(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    // INSERT ON CONFLICT DO NOTHING — un boost par user×serveur
+    sqlx::query(
+        "INSERT INTO server_boosts (user_id, server_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    let boost_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_boosts WHERE server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let boost_level: i32 = match boost_count {
+        0..=1  => 0,
+        2..=6  => 1,
+        7..=13 => 2,
+        _      => 3,
+    };
+
+    sqlx::query(
+        "UPDATE servers SET boost_count=$1, boost_level=$2 WHERE id=$3"
+    )
+    .bind(boost_count as i32)
+    .bind(boost_level)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "boost_count": boost_count,
+        "boost_level": boost_level,
+    })))
+}
+
+pub async fn discover_servers(
+    State(state): State<AppState>,
+    Query(params): Query<DiscoverQuery>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
+    let page = params.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * 20;
+    let q = params.q.unwrap_or_default();
+    let search = format!("%{}%", q);
+    let sort = params.sort.as_deref().unwrap_or("popular");
+
+    let order_clause = if sort == "recent" {
+        "EXTRACT(EPOCH FROM created_at) DESC"
+    } else {
+        "member_count DESC"
+    };
+
+    let sql = format!(
+        "SELECT id, name, description, icon, banner, member_count, is_public,
+                invite_code, created_at
+         FROM servers
+         WHERE is_public = true
+           AND ($1 = '' OR name ILIKE $2 OR description ILIKE $2)
+         ORDER BY {order_clause}
+         LIMIT 20 OFFSET $3"
+    );
+
+    let rows = sqlx::query(&sql)
+        .bind(&q)
+        .bind(&search)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| AppError::Database(e))?;
+
+    let result: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id":           r.get::<uuid::Uuid, _>("id"),
+        "name":         r.get::<String, _>("name"),
+        "description":  r.get::<Option<String>, _>("description"),
+        "icon":         r.get::<Option<String>, _>("icon"),
+        "banner":       r.get::<Option<String>, _>("banner"),
+        "member_count": r.get::<i32, _>("member_count"),
+        "is_public":    r.get::<bool, _>("is_public"),
+        "invite_code":  r.get::<Option<String>, _>("invite_code"),
+        "online_count": 0,
+        "tags":         [],
+        "is_verified":  false,
+    })).collect();
+
+    Ok(Json(result))
 }

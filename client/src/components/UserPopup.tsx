@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { Calendar, MessageCircle } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
@@ -52,6 +53,7 @@ interface Props {
 export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
+  const qc = useQueryClient()
 
   const { data: user } = useQuery({
     queryKey: ['user', userId],
@@ -60,9 +62,22 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
     staleTime: 60_000,
   })
 
+  const { data: profile } = useQuery({
+    queryKey: ['profile', userId],
+    queryFn: () => api.get(`/users/${userId}/profile`).then(r => r.data),
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
-    onSuccess: (dm: any) => { nav(`/dms/${dm.id}`); onClose() },
+    onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
+  })
+
+  const sendFriend = useMutation({
+    mutationFn: () => api.post('/friends', { user_id: userId }),
+    onSuccess: () => { toast.success('Demande envoyée !'); qc.invalidateQueries({ queryKey: ['profile', userId] }) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
   useEffect(() => {
@@ -149,7 +164,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
               Membre depuis {format(new Date(user.created_at), 'MMM yyyy', { locale: fr })}
             </div>
 
-            <div className="border-t border-fc-hover pt-3">
+            <div className="border-t border-fc-hover pt-3 flex flex-col gap-2">
               <button
                 onClick={() => openDm.mutate()}
                 disabled={openDm.isPending}
@@ -157,6 +172,29 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
               >
                 <MessageCircle size={14} />
                 Envoyer un message
+              </button>
+              {profile?.relationship === 'none' && (
+                <button
+                  onClick={() => sendFriend.mutate()}
+                  disabled={sendFriend.isPending}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                >
+                  <UserPlus size={14} />
+                  Ajouter en ami
+                </button>
+              )}
+              {(profile?.relationship === 'pending_sent' || profile?.relationship === 'friend') && (
+                <div className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover text-fc-muted rounded-lg text-sm">
+                  <UserCheck size={14} />
+                  {profile.relationship === 'friend' ? 'Déjà amis' : 'Demande envoyée'}
+                </div>
+              )}
+              <button
+                onClick={() => { nav(`/users/${userId}`); onClose() }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover hover:bg-fc-input text-fc-muted hover:text-white rounded-lg text-sm font-medium transition"
+              >
+                <ExternalLink size={14} />
+                Voir le profil
               </button>
             </div>
           </>

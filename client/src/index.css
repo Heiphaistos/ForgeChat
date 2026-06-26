@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import 'highlight.js/styles/github-dark.css';
 
 * { box-sizing: border-box; }
 
@@ -46,9 +47,10 @@ body {
 .fc-markdown a { color: #00aff4; text-decoration: underline; }
 .fc-markdown h1,.fc-markdown h2,.fc-markdown h3 { font-weight: 700; color: #fff; margin: 4px 0; }
 
-/* Mode compact */
-.fc-compact .msg-avatar { display: none; }
-.fc-compact .msg-row { padding-top: 1px; padding-bottom: 1px; }
+/* Densités d'interface */
+[data-density="comfortable"] .group { padding-top: 8px !important; padding-bottom: 8px !important; }
+[data-density="compact"] .group     { padding-top: 2px !important; padding-bottom: 2px !important; }
+[data-density="ultra-compact"] .group { padding-top: 0 !important; padding-bottom: 0 !important; }
 
 /* Super Reactions — animation pop */
 @keyframes reaction-pop {
@@ -598,6 +600,41 @@ body {
 [data-theme="slate"] .fc-markdown pre,
 [data-theme="slate"] .fc-markdown code { background: #222c3c !important; border-color: #263042 !important; }
 [data-theme="slate"] ::-webkit-scrollbar-thumb { background: #263042 !important; }
+
+/* RÉDUCTION DU MOUVEMENT */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* CONTRASTE ÉLEVÉ */
+[data-high-contrast="true"] {
+  --fc-bg: #000000;
+  --fc-sidebar: #0a0a0a;
+  --fc-channel: #111111;
+  --fc-text: #ffffff;
+  --fc-muted: #cccccc;
+  --fc-hover: #222222;
+  --fc-accent: #ffdd00;
+  --fc-green: #00ff00;
+  --fc-red: #ff4444;
+}
+[data-high-contrast="true"] .bg-fc-bg { background-color: #000 !important; }
+[data-high-contrast="true"] .bg-fc-sidebar { background-color: #0a0a0a !important; }
+[data-high-contrast="true"] .bg-fc-channel { background-color: #111 !important; }
+[data-high-contrast="true"] .text-fc-text { color: #fff !important; }
+[data-high-contrast="true"] .text-fc-muted { color: #ccc !important; }
+[data-high-contrast="true"] .bg-fc-accent,
+[data-high-contrast="true"] .hover\:bg-fc-accent:hover { background-color: #ffdd00 !important; }
+[data-high-contrast="true"] .text-fc-accent { color: #ffdd00 !important; }
+[data-high-contrast="true"] .border-fc-hover { border-color: #444 !important; }
+
+/* MODE STREAMER — masque les infos identifiables */
+[data-streamer-mode="true"] .streamer-hidden { visibility: hidden !important; }
+[data-streamer-mode="true"] .streamer-blur { filter: blur(8px) !important; }
 
 /* RETRO */
 [data-theme="retro"] body { background: #2b2017; color: #e8d5b0; }

@@ -15,11 +15,14 @@ pub struct User {
     pub bio: Option<String>,
     pub status: String,
     pub custom_status: Option<String>,
+    pub custom_status_emoji: Option<String>,
     pub activity_type: Option<String>,
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
     pub is_bot: bool,
+    pub focus_mode: bool,
     pub is_verified: bool,
+    pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -34,9 +37,13 @@ pub struct UserPublic {
     pub bio: Option<String>,
     pub status: String,
     pub custom_status: Option<String>,
+    pub custom_status_emoji: Option<String>,
     pub activity_type: Option<String>,
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
+    pub focus_mode: bool,
+    pub verified: bool,
+    pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -51,9 +58,13 @@ impl From<User> for UserPublic {
             bio: u.bio,
             status: u.status,
             custom_status: u.custom_status,
+            custom_status_emoji: u.custom_status_emoji,
             activity_type: u.activity_type,
             activity_name: u.activity_name,
             activity_detail: u.activity_detail,
+            focus_mode: u.focus_mode,
+            verified: u.is_verified,
+            birthday: u.birthday,
             created_at: u.created_at,
         }
     }
@@ -89,6 +100,7 @@ pub struct UpdateProfileRequest {
     pub activity_type: Option<String>,
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
+    pub birthday: Option<serde_json::Value>,
 }
 
 #[derive(Debug, sqlx::FromRow)]

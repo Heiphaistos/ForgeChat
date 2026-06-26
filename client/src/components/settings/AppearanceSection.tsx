@@ -266,7 +266,11 @@ export default function AppearanceSection() {
           {DENSITIES.map(d => (
             <button
               key={d.id}
-              onClick={() => setDensity(d.id)}
+              onClick={() => {
+                setDensity(d.id)
+                document.documentElement.setAttribute('data-density', d.id)
+                localStorage.setItem('fc_density', d.id)
+              }}
               className={`px-3 py-2 rounded-lg text-sm border transition ${
                 density === d.id
                   ? 'border-fc-accent bg-fc-accent/10 text-white'

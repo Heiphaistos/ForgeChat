@@ -477,3 +477,40 @@ pub async fn reset_keybinding(
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+// ─── Email Preferences ────────────────────────────────────────────────────────
+
+pub async fn get_email_prefs(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT dm_unread_notify FROM email_preferences WHERE user_id = $1"
+    )
+    .bind(claims.sub)
+    .fetch_optional(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "dm_unread_notify": row.map(|r| r.get::<bool, _>("dm_unread_notify")).unwrap_or(false),
+    })))
+}
+
+pub async fn update_email_prefs(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    let notify = body.get("dm_unread_notify").and_then(|v| v.as_bool()).unwrap_or(false);
+    sqlx::query(
+        "INSERT INTO email_preferences (user_id, dm_unread_notify)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET dm_unread_notify = EXCLUDED.dm_unread_notify"
+    )
+    .bind(claims.sub)
+    .bind(notify)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "dm_unread_notify": notify })))
+}

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -13,6 +13,7 @@ import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
 import StatsTab from './StatsTab'
+import ServerEventsPage from '../../pages/ServerEventsPage'
 
 interface Server {
   id: string
@@ -25,6 +26,21 @@ interface Server {
   member_count: number
   verification_enabled?: boolean
   verification_rules?: string | null
+  system_channel_id?: string | null
+  afk_channel_id?: string | null
+  afk_timeout_minutes?: number | null
+  rules_channel_id?: string | null
+  vanity_url?: string | null
+  content_filter?: string
+  default_notification_level?: string
+  banner_url?: string | null
+  server_category?: string | null
+  boost_level?: number
+  boost_count?: number
+  raid_protection?: boolean
+  require_2fa_for_moderation?: boolean
+  server_locale?: string
+  max_video_channel_users?: number
 }
 
 interface Props {
@@ -32,7 +48,51 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats'
+type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
+
+function BoostSection({ server }: { server: any }) {
+  const LEVELS = [
+    { level: 1, threshold: 2, label: 'Niveau 1', color: 'from-indigo-500 to-purple-500' },
+    { level: 2, threshold: 7, label: 'Niveau 2', color: 'from-purple-500 to-fuchsia-500' },
+    { level: 3, threshold: 14, label: 'Niveau 3', color: 'from-amber-500 to-yellow-400' },
+  ]
+  const currentLevel = server?.boost_level ?? 0
+  const count = server?.boost_count ?? 0
+  const next = LEVELS.find(l => l.level === currentLevel + 1)
+  const progress = next ? Math.min(100, (count / next.threshold) * 100) : 100
+
+  return (
+    <div className="mt-4 p-4 bg-fc-channel rounded-xl">
+      <h3 className="text-sm font-semibold text-white mb-3">⚡ Boosts du serveur</h3>
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-2xl font-bold text-white">{count}</span>
+        <span className="text-fc-muted text-sm">boost{count !== 1 ? 's' : ''} actif{count !== 1 ? 's' : ''}</span>
+        {currentLevel > 0 && (
+          <span className="ml-auto px-2 py-0.5 bg-fc-accent/20 text-fc-accent text-xs rounded-full">
+            Niveau {currentLevel}
+          </span>
+        )}
+      </div>
+      {next && (
+        <>
+          <div className="w-full bg-fc-bg rounded-full h-2 mb-1">
+            <div
+              className={`h-2 rounded-full bg-gradient-to-r ${next.color} transition-all`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-xs text-fc-muted">{count}/{next.threshold} pour {next.label}</p>
+        </>
+      )}
+      <button
+        className="mt-3 w-full py-2 bg-fc-accent/10 hover:bg-fc-accent/20 text-fc-accent text-sm rounded-lg transition"
+        onClick={() => toast('Fonctionnalité bientôt disponible !')}
+      >
+        ⚡ Booster ce serveur
+      </button>
+    </div>
+  )
+}
 
 export default function ServerSettingsModal({ server, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('general')
@@ -44,6 +104,12 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
   const [verificationEnabled, setVerificationEnabled] = useState(server.verification_enabled ?? false)
   const [verificationRules, setVerificationRules] = useState(server.verification_rules ?? '')
   const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [systemChannelId, setSystemChannelId] = useState<string>(server.system_channel_id ?? '')
+  const [afkChannelId, setAfkChannelId] = useState<string>(server.afk_channel_id ?? '')
+  const [afkTimeout, setAfkTimeout] = useState(server.afk_timeout_minutes ?? 300)
+  const [rulesChannelId, setRulesChannelId] = useState<string>(server.rules_channel_id ?? '')
+  const [vanityUrl, setVanityUrl] = useState(server.vanity_url ?? '')
+  const [explicitFilter, setExplicitFilter] = useState<string>(server.content_filter ?? 'none')
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const [newBotName, setNewBotName] = useState('')
@@ -91,6 +157,12 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
       is_public: isPublic,
       welcome_message: welcomeMessage || null,
       banner: bannerUrl || null,
+      system_channel_id: systemChannelId || null,
+      afk_channel_id: afkChannelId || null,
+      afk_timeout: afkTimeout,
+      rules_channel_id: rulesChannelId || null,
+      vanity_url: vanityUrl.trim() || null,
+      content_filter: explicitFilter,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
@@ -203,41 +275,66 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
     queryFn: () => api.get(`/servers/${server.id}/channels`).then(r => r.data),
   })
 
-  const tabs = [
-    { id: 'general' as Tab, label: 'Général' },
-    { id: 'stats' as Tab, label: 'Statistiques', icon: BarChart2 },
-    { id: 'roles' as Tab, label: 'Rôles', icon: Shield },
-    { id: 'members' as Tab, label: 'Membres', icon: Users },
-    { id: 'tags' as Tab, label: 'Tags clan', icon: Tag },
-    { id: 'bans' as Tab, label: 'Bans', icon: Ban },
-    { id: 'emojis' as Tab, label: 'Emojis', icon: SmilePlus },
-    { id: 'bots' as Tab, label: 'Bots', icon: Bot },
-    { id: 'webhooks' as Tab, label: 'Webhooks', icon: Link },
-    { id: 'feeds' as Tab, label: 'Flux RSS', icon: Rss },
-    { id: 'audit' as Tab, label: 'Audit', icon: ScrollText },
-    { id: 'automod' as Tab, label: 'AutoMod', icon: Shield },
+  const tabGroups = [
+    {
+      label: null,
+      tabs: [
+        { id: 'general' as Tab, label: 'Général' },
+      ],
+    },
+    {
+      label: 'Communauté',
+      tabs: [
+        { id: 'roles'    as Tab, label: 'Rôles',     icon: Shield },
+        { id: 'members'  as Tab, label: 'Membres',   icon: Users },
+        { id: 'tags'     as Tab, label: 'Tags clan',  icon: Tag },
+        { id: 'bans'     as Tab, label: 'Bans',      icon: Ban },
+        { id: 'emojis'   as Tab, label: 'Emojis',    icon: SmilePlus },
+        { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
+        { id: 'webhooks' as Tab, label: 'Webhooks',  icon: Link },
+        { id: 'feeds'    as Tab, label: 'Flux RSS',  icon: Rss },
+      ],
+    },
+    {
+      label: 'Modération',
+      tabs: [
+        { id: 'events'  as Tab, label: 'Événements', icon: Calendar },
+        { id: 'audit'   as Tab, label: 'Audit Log',  icon: ScrollText },
+        { id: 'automod' as Tab, label: 'AutoMod',    icon: Shield },
+        { id: 'stats'   as Tab, label: 'Statistiques', icon: BarChart2 },
+      ],
+    },
   ]
 
   return (
     <div className="fixed inset-0 bg-black/80 flex z-50">
       <div className="flex w-full h-full">
         {/* Sidebar */}
-        <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4">
+        <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4 overflow-y-auto">
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate">
             {server.name}
           </div>
-          {tabs.map(t => {
-            const Icon = (t as any).icon
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)}
-                className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
-                  ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
-              >
-                {Icon && <Icon size={13} />}
-                {t.label}
-              </button>
-            )
-          })}
+          {tabGroups.map((group, gi) => (
+            <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
+              {group.label && (
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 px-2">
+                  {group.label}
+                </div>
+              )}
+              {group.tabs.map(t => {
+                const Icon = (t as any).icon
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)}
+                    className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
+                      ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
+                  >
+                    {Icon && <Icon size={13} />}
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
           <div className="mt-4 border-t border-fc-hover pt-4">
             <button onClick={() => deleteServer.mutate()} disabled={deleteConfirm !== server.name}
               className="w-full text-left px-2 py-1.5 rounded text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2 disabled:opacity-40"
@@ -360,6 +457,86 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
                     <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isPublic ? 'left-6' : 'left-1'}`} />
                   </button>
                 </div>
+
+                {/* Canaux système */}
+                <div className="border-t border-fc-hover pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-white">Canaux système</h3>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal système</label>
+                    <p className="text-xs text-fc-muted mb-2">Messages de bienvenue et de boost de serveur</p>
+                    <select value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'text').map((c: any) => (
+                        <option key={c.id} value={c.id}>#{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal des règles</label>
+                    <p className="text-xs text-fc-muted mb-2">Affiché sur l'écran de vérification des membres</p>
+                    <select value={rulesChannelId} onChange={e => setRulesChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'text').map((c: any) => (
+                        <option key={c.id} value={c.id}>#{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal AFK (inactif)</label>
+                    <select value={afkChannelId} onChange={e => setAfkChannelId(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="">Aucun</option>
+                      {channels.filter((c: any) => c.type === 'voice').map((c: any) => (
+                        <option key={c.id} value={c.id}>🔊 {c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {afkChannelId && (
+                    <div>
+                      <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                        Délai AFK — {afkTimeout >= 3600 ? `${afkTimeout/3600}h` : `${afkTimeout/60} min`}
+                      </label>
+                      <select value={afkTimeout} onChange={e => setAfkTimeout(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                        {[60, 120, 300, 600, 900, 1800, 3600].map(t => (
+                          <option key={t} value={t}>{t >= 3600 ? `${t/3600}h` : `${t/60} min`}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modération */}
+                <div className="border-t border-fc-hover pt-4 space-y-4">
+                  <h3 className="text-sm font-semibold text-white">Modération</h3>
+                  <div>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Filtre de contenu explicite</label>
+                    <select value={explicitFilter} onChange={e => setExplicitFilter(e.target.value)}
+                      className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                      <option value="none">Désactivé</option>
+                      <option value="no_role">Membres sans rôles</option>
+                      <option value="all">Tous les membres</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Vanity URL */}
+                <div className="border-t border-fc-hover pt-4">
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Lien d'invitation personnalisé</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-xs text-fc-muted">forgechat/</span>
+                    <input value={vanityUrl} onChange={e => setVanityUrl(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      maxLength={30}
+                      placeholder="mon-serveur"
+                      className="w-full pl-24 pr-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-accent"
+                    />
+                  </div>
+                  <p className="text-xs text-fc-muted mt-1">Uniquement des lettres minuscules, chiffres et tirets</p>
+                </div>
+
+                <BoostSection server={server} />
 
                 <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-hover">
                   <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Zone de danger</div>
@@ -583,14 +760,15 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
               </div>
             )}
 
-            {tab === 'stats' && <StatsTab serverId={server.id} />}
-            {tab === 'roles' && <RolesTab serverId={server.id} />}
+            {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
+            {tab === 'stats'   && <StatsTab serverId={server.id} />}
+            {tab === 'roles'   && <RolesTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
-            {tab === 'bans' && <BansTab serverId={server.id} />}
-            {tab === 'tags' && <TagsTab serverId={server.id} />}
+            {tab === 'bans'    && <BansTab serverId={server.id} />}
+            {tab === 'tags'    && <TagsTab serverId={server.id} />}
             {tab === 'webhooks' && <WebhooksTab server={server} channels={channels} />}
-            {tab === 'feeds' && <FeedsTab serverId={server.id} channels={channels} />}
-            {tab === 'audit' && <AuditLogTab server={server} />}
+            {tab === 'feeds'   && <FeedsTab serverId={server.id} channels={channels} />}
+            {tab === 'audit'   && <AuditLogTab server={server} />}
             {tab === 'automod' && <AutoModTab server={server} channels={channels} />}
           </div>
         </div>

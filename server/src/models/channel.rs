@@ -26,6 +26,8 @@ pub struct Channel {
     pub is_temporary: bool,
     #[sqlx(default)]
     pub created_by_auto: Option<Uuid>,
+    #[sqlx(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Deserialize)]
