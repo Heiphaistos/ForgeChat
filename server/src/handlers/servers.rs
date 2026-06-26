@@ -194,6 +194,11 @@ pub async fn delete_server(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
     require_owner(&state, claims.sub, server_id).await?;
+    // Notifier tous les membres avant suppression
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "SERVER_DELETE",
+        "server_id": server_id,
+    }).to_string()).await;
     sqlx::query("DELETE FROM servers WHERE id=$1")
         .bind(server_id)
         .execute(&state.db)
@@ -426,7 +431,7 @@ pub async fn kick_member(
         return Err(AppError::Forbidden);
     }
 
-    sqlx::query(
+    let kick_result = sqlx::query(
         "DELETE FROM server_members WHERE user_id=$1 AND server_id=$2"
     )
     .bind(user_id)
@@ -434,10 +439,12 @@ pub async fn kick_member(
     .execute(&state.db)
     .await?;
 
-    sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
-        .bind(server_id)
-        .execute(&state.db)
-        .await?;
+    if kick_result.rows_affected() > 0 {
+        sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
+            .bind(server_id)
+            .execute(&state.db)
+            .await?;
+    }
 
     log_event(
         &state, server_id, "MEMBER_KICK",
@@ -470,6 +477,10 @@ pub async fn ban_member(
         crate::models::role::Permissions::BAN_MEMBERS,
     ).await?;
 
+    if user_id == claims.sub {
+        return Err(AppError::BadRequest("Impossible de se bannir soi-même".into()));
+    }
+
     let owner_id: Uuid = sqlx::query_scalar("SELECT owner_id FROM servers WHERE id=$1")
         .bind(server_id)
         .fetch_one(&state.db)
@@ -494,7 +505,7 @@ pub async fn ban_member(
     .execute(&state.db)
     .await?;
 
-    sqlx::query(
+    let ban_del = sqlx::query(
         "DELETE FROM server_members WHERE user_id=$1 AND server_id=$2"
     )
     .bind(user_id)
@@ -502,10 +513,12 @@ pub async fn ban_member(
     .execute(&state.db)
     .await?;
 
-    sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
-        .bind(server_id)
-        .execute(&state.db)
-        .await?;
+    if ban_del.rows_affected() > 0 {
+        sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
+            .bind(server_id)
+            .execute(&state.db)
+            .await?;
+    }
 
     log_event(
         &state, server_id, "MEMBER_BAN",
@@ -809,51 +822,61 @@ pub async fn get_admin_stats(
         return Err(AppError::Forbidden);
     }
 
-    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&state.db)
-        .await?;
+    // Stats restreintes aux serveurs du propriétaire
+    let total_members: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(member_count), 0) FROM servers WHERE owner_id=$1"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
 
-    let total_messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
-        .fetch_one(&state.db)
-        .await?;
+    let total_messages: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages m
+         JOIN channels c ON c.id = m.channel_id
+         JOIN servers s ON s.id = c.server_id
+         WHERE s.owner_id=$1"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
 
     let messages_today: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM messages WHERE created_at > CURRENT_DATE"
-    )
-    .fetch_one(&state.db)
-    .await?;
+        "SELECT COUNT(*) FROM messages m
+         JOIN channels c ON c.id = m.channel_id
+         JOIN servers s ON s.id = c.server_id
+         WHERE s.owner_id=$1 AND m.created_at > CURRENT_DATE"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
 
-    let total_servers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM servers")
-        .fetch_one(&state.db)
-        .await?;
+    let total_servers: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM servers WHERE owner_id=$1"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
 
-    let total_channels: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels")
-        .fetch_one(&state.db)
-        .await?;
+    let total_channels: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM channels c JOIN servers s ON s.id = c.server_id WHERE s.owner_id=$1"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
 
     let top_servers = sqlx::query(
         "SELECT s.name, COUNT(m.id) as msg_count
          FROM servers s
          JOIN channels c ON c.server_id = s.id
          JOIN messages m ON m.channel_id = c.id
-         WHERE m.created_at > NOW() - INTERVAL '7 days'
+         WHERE s.owner_id=$1 AND m.created_at > NOW() - INTERVAL '7 days'
          GROUP BY s.id, s.name ORDER BY msg_count DESC LIMIT 10"
     )
+    .bind(claims.sub)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
     let messages_per_day = sqlx::query(
-        "SELECT DATE(created_at) as day, COUNT(*) as count
-         FROM messages WHERE created_at > NOW() - INTERVAL '7 days'
-         GROUP BY DATE(created_at) ORDER BY day ASC"
+        "SELECT DATE(m.created_at) as day, COUNT(*) as count
+         FROM messages m
+         JOIN channels c ON c.id = m.channel_id
+         JOIN servers s ON s.id = c.server_id
+         WHERE s.owner_id=$1 AND m.created_at > NOW() - INTERVAL '7 days'
+         GROUP BY DATE(m.created_at) ORDER BY day ASC"
     )
+    .bind(claims.sub)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
     Ok(Json(serde_json::json!({
-        "total_users": total_users,
+        "total_members": total_members,
         "total_messages": total_messages,
         "messages_today": messages_today,
         "total_servers": total_servers,
@@ -907,34 +930,32 @@ pub async fn boost_server(
     .execute(&state.db)
     .await?;
 
-    let boost_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM server_boosts WHERE server_id=$1"
+    // Mise à jour atomique boost_count pour éviter la race condition COUNT → UPDATE
+    use sqlx::Row as _;
+    let boost_row = sqlx::query(
+        "UPDATE servers
+         SET boost_count = (SELECT COUNT(*) FROM server_boosts WHERE server_id=$1),
+             boost_level = CASE
+               WHEN (SELECT COUNT(*) FROM server_boosts WHERE server_id=$1) <= 1 THEN 0
+               WHEN (SELECT COUNT(*) FROM server_boosts WHERE server_id=$1) <= 6 THEN 1
+               WHEN (SELECT COUNT(*) FROM server_boosts WHERE server_id=$1) <= 13 THEN 2
+               ELSE 3
+             END
+         WHERE id=$1
+         RETURNING boost_count, boost_level"
     )
     .bind(server_id)
     .fetch_one(&state.db)
     .await?;
 
-    let boost_level: i32 = match boost_count {
-        0..=1  => 0,
-        2..=6  => 1,
-        7..=13 => 2,
-        _      => 3,
-    };
-
-    sqlx::query(
-        "UPDATE servers SET boost_count=$1, boost_level=$2 WHERE id=$3"
-    )
-    .bind(boost_count as i32)
-    .bind(boost_level)
-    .bind(server_id)
-    .execute(&state.db)
-    .await?;
+    let boost_count: i32 = boost_row.get("boost_count");
+    let boost_level: i32 = boost_row.get("boost_level");
 
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "SERVER_BOOST",
         "server_id": server_id,
         "user_id": claims.sub,
-        "boost_count": boost_count,
+        "boost_count": boost_count as i64,
         "boost_level": boost_level,
     }).to_string()).await;
 
@@ -964,7 +985,7 @@ pub async fn discover_servers(
 
     let sql = format!(
         "SELECT id, name, description, icon, banner, member_count, is_public,
-                invite_code, created_at
+                created_at
          FROM servers
          WHERE is_public = true
            AND ($1 = '' OR name ILIKE $2 OR description ILIKE $2)
@@ -988,7 +1009,6 @@ pub async fn discover_servers(
         "banner":       r.get::<Option<String>, _>("banner"),
         "member_count": r.get::<i32, _>("member_count"),
         "is_public":    r.get::<bool, _>("is_public"),
-        "invite_code":  r.get::<Option<String>, _>("invite_code"),
         "online_count": 0,
         "tags":         [],
         "is_verified":  false,

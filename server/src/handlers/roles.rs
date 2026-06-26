@@ -34,14 +34,20 @@ pub async fn create_role(
 ) -> Result<Json<Role>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
 
+    let name = body.name.trim().chars().take(100).collect::<String>();
+    if name.is_empty() { return Err(AppError::BadRequest("Nom de rôle requis".into())); }
+
+    const VALID_PERMS: i64 = 0x3FFFF; // bits 0-17 définis
+    let perms = body.permissions.unwrap_or(0) & VALID_PERMS;
+
     let role = sqlx::query_as::<_, Role>(
         "INSERT INTO roles (server_id, name, color, permissions, mentionable, hoisted)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(server_id)
-    .bind(&body.name)
+    .bind(&name)
     .bind(body.color.unwrap_or(0))
-    .bind(body.permissions.unwrap_or(0))
+    .bind(perms)
     .bind(body.mentionable.unwrap_or(false))
     .bind(body.hoisted.unwrap_or(false))
     .fetch_one(&state.db)
@@ -70,6 +76,14 @@ pub async fn update_role(
 ) -> Result<Json<Role>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
 
+    let name = body.name.as_deref().map(|n| n.trim().chars().take(100).collect::<String>());
+    if let Some(ref n) = name {
+        if n.is_empty() { return Err(AppError::BadRequest("Nom de rôle invalide".into())); }
+    }
+
+    const VALID_PERMS: i64 = 0x3FFFF;
+    let perms = body.permissions.map(|p| p & VALID_PERMS);
+
     let role = sqlx::query_as::<_, Role>(
         "UPDATE roles SET
             name = COALESCE($2, name),
@@ -81,15 +95,21 @@ pub async fn update_role(
          WHERE id=$1 AND server_id=$8 RETURNING *"
     )
     .bind(role_id)
-    .bind(body.name)
+    .bind(name)
     .bind(body.color)
-    .bind(body.permissions)
+    .bind(perms)
     .bind(body.mentionable)
     .bind(body.hoisted)
     .bind(body.position)
     .bind(server_id)
     .fetch_one(&state.db)
     .await?;
+
+    log_event(
+        &state, server_id, "ROLE_UPDATE",
+        Some(claims.sub), None,
+        Some(role.id), Some(role.name.as_str()), None,
+    ).await;
 
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "ROLE_UPDATE",
@@ -146,6 +166,12 @@ pub async fn assign_role(
     if !is_member {
         return Err(AppError::NotFound("Membre introuvable".into()));
     }
+
+    // Vérifier que le rôle appartient bien à ce serveur
+    let role_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM roles WHERE id=$1 AND server_id=$2)"
+    ).bind(role_id).bind(server_id).fetch_one(&state.db).await?;
+    if !role_ok { return Err(AppError::NotFound("Rôle introuvable".into())); }
 
     // Limiter à 20 rôles par membre
     let role_count: i64 = sqlx::query_scalar(

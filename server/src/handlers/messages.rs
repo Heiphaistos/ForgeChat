@@ -147,6 +147,13 @@ pub async fn send_message(
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
+    // Valider la longueur avant les vérifications coûteuses (spam/slowmode)
+    if let Some(c) = &body.content {
+        if c.chars().count() > 4000 {
+            return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+        }
+    }
+
     // Vérifier si l'utilisateur est en timeout dans ce serveur
     let server_id_opt: Option<Uuid> = sqlx::query_scalar(
         "SELECT server_id FROM channels WHERE id=$1"
@@ -240,11 +247,6 @@ pub async fn send_message(
         }
     }
 
-    if let Some(c) = &body.content {
-        if c.chars().count() > 4000 {
-            return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
-        }
-    }
     let content_str: Option<String> = body.content.clone();
 
     let mention_everyone = content_str.as_deref().map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
@@ -382,6 +384,7 @@ pub async fn edit_message(
     let event = serde_json::json!({
         "type": "MESSAGE_UPDATE",
         "message_id": message_id,
+        "channel_id": channel_id,
         "content": body.content,
         "edited_at": chrono::Utc::now(),
     });
@@ -446,6 +449,12 @@ pub async fn add_reaction(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    // Vérifier que le message appartient bien au canal
+    let msg_in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
+
     sqlx::query(
         "INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING"
@@ -476,6 +485,12 @@ pub async fn remove_reaction(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    // Vérifier que le message appartient bien au canal
+    let msg_in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
+
     sqlx::query(
         "DELETE FROM reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3"
     )
@@ -502,8 +517,9 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    use crate::handlers::servers::require_permission;
+    use crate::handlers::servers::{require_permission, require_channel_in_server};
     use crate::models::role::Permissions;
+    require_channel_in_server(&state, channel_id, server_id).await?;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query(
@@ -540,8 +556,9 @@ pub async fn unpin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    use crate::handlers::servers::require_permission;
+    use crate::handlers::servers::{require_permission, require_channel_in_server};
     use crate::models::role::Permissions;
+    require_channel_in_server(&state, channel_id, server_id).await?;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query("DELETE FROM pinned_messages WHERE channel_id=$1 AND message_id=$2")
@@ -633,6 +650,12 @@ pub async fn get_message_edits(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
+
+    // Vérifier que le message appartient au canal
+    let msg_in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
 
     use sqlx::Row;
     let rows = sqlx::query(
@@ -774,10 +797,15 @@ pub async fn set_reminder(
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     Json(input): Json<ReminderInput>,
 ) -> Result<Json<serde_json::Value>> {
-    // Vérifier que le message existe
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)"
-    ).bind(message_id).fetch_one(&state.db).await?;
+    // Vérifier que le message existe ET que l'user est membre du serveur contenant ce canal
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM messages m
+            JOIN channels c ON c.id = m.channel_id
+            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+            WHERE m.id = $1
+         )"
+    ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !exists {
         return Err(AppError::NotFound("Message introuvable".into()));
     }
@@ -809,6 +837,17 @@ pub async fn translate_message(
     if input.target_lang.len() > 5 || input.target_lang.is_empty() {
         return Err(AppError::BadRequest("Langue invalide".into()));
     }
+
+    // Vérifier membership via messages→channels→server_members
+    let has_access: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM messages m
+            JOIN channels c ON c.id = m.channel_id
+            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+            WHERE m.id = $1
+         )"
+    ).bind(message_id).bind(_claims.sub).fetch_one(&state.db).await?;
+    if !has_access { return Err(AppError::Forbidden); }
 
     let msg = sqlx::query_scalar::<_, Option<String>>(
         "SELECT content FROM messages WHERE id = $1"
