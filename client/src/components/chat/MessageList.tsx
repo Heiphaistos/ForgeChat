@@ -112,6 +112,7 @@ export default function MessageList({
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [newMsgCount, setNewMsgCount] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupState | null>(null)
@@ -120,7 +121,12 @@ export default function MessageList({
   const isAtBottom = useRef(true)
 
   useEffect(() => {
-    if (isAtBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (isAtBottom.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setNewMsgCount(0)
+    } else {
+      setNewMsgCount(c => c + 1)
+    }
   }, [messages.length])
 
   // Purge des messages éphémères expirés côté client toutes les 5s
@@ -187,6 +193,7 @@ export default function MessageList({
     const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     isAtBottom.current = fromBottom < 60
     setShowScrollBtn(fromBottom > 200)
+    if (fromBottom < 60) setNewMsgCount(0)
 
     // Load more quand on touche le haut
     if (el.scrollTop < 80 && !loadingMore && onLoadMore) {
@@ -456,6 +463,12 @@ export default function MessageList({
                   </div>
                 ) : (
                   <>
+                    {msg.pinned && (
+                      <div className="flex items-center gap-1 mb-1 text-xs text-amber-400/80">
+                        <Pin size={10} />
+                        <span>Épinglé</span>
+                      </div>
+                    )}
                     {/* Indicateur de réponse */}
                     {msg.reply_to && (
                       <button
@@ -847,9 +860,14 @@ export default function MessageList({
       {/* Bouton scroll to bottom */}
       {showScrollBtn && (
         <button
-          onClick={scrollToBottom}
+          onClick={() => { scrollToBottom(); setNewMsgCount(0) }}
           className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white text-xs font-medium rounded-full shadow-lg transition"
         >
+          {newMsgCount > 0 && (
+            <span className="bg-white text-fc-accent font-bold rounded-full px-1.5 text-[10px] leading-4 min-w-[18px] text-center">
+              {newMsgCount > 99 ? '99+' : newMsgCount}
+            </span>
+          )}
           <ChevronDown size={14} />
           Aller en bas
         </button>
