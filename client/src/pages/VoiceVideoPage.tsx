@@ -16,6 +16,7 @@ import VolumeSlider from '../components/voice/VolumeSlider'
 import Soundboard from '../components/voice/Soundboard'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
+import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 
 type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
@@ -251,6 +252,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [showCaptions, setShowCaptions] = useState(false)
   const [showSoundboard, setShowSoundboard] = useState(false)
   const [showWhiteboard, setShowWhiteboard] = useState(false)
+  const [showEmojiBar, setShowEmojiBar] = useState(false)
   const [joinTime] = useState(Date.now())
 
   // WS: hand raise
@@ -279,6 +281,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     setHandRaised(newVal)
     setRaisedHands(prev => ({ ...prev, [user!.id]: newVal }))
     send({ type: 'HAND_RAISE', channel_id: channel.id, user_id: user!.id, username: user!.username, raised: newVal })
+  }
+
+  const sendReaction = (emoji: string) => {
+    send({ type: 'VOICE_REACTION', channel_id: channel.id, emoji })
   }
 
   // Recording
@@ -476,6 +482,26 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         )}
       </div>
 
+      {/* Emoji bar */}
+      {showEmojiBar && (
+        <div className="flex items-center justify-center gap-2 px-4 py-2 bg-fc-sidebar border-t border-fc-hover flex-shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2 bg-fc-channel/80 backdrop-blur rounded-full shadow-lg">
+            {(['👍', '❤️', '😂', '🔥', '👏', '😮', '🎉', '💯'] as const).map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  sendReaction(emoji)
+                  setShowEmojiBar(false)
+                }}
+                className="text-2xl hover:scale-125 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Controls bar — Google Meet style */}
       <div className="flex items-center justify-between px-6 py-3 bg-fc-sidebar border-t border-fc-hover flex-shrink-0">
         {/* Group 1: Info */}
@@ -568,6 +594,13 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
             label="Tableau blanc"
           />
+          <button
+            onClick={() => setShowEmojiBar(p => !p)}
+            className={`p-2.5 rounded-xl transition ${showEmojiBar ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
+            title="Envoyer une réaction"
+          >
+            😄
+          </button>
         </div>
       </div>
 
@@ -598,6 +631,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           stream: p.stream ?? undefined,
         }))}
       />
+
+      <FloatingReactions channelId={channel.id} />
 
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />

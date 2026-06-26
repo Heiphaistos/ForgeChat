@@ -584,6 +584,23 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             }
         }
 
+        Some("VOICE_REACTION") => {
+            if let (Some(channel_id_val), Some(emoji_val)) = (
+                msg["channel_id"].as_str(),
+                msg["emoji"].as_str(),
+            ) {
+                if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    let event = serde_json::json!({
+                        "type": "VOICE_REACTION",
+                        "channel_id": channel_id_val,
+                        "emoji": emoji_val,
+                        "user_id": user_id.to_string(),
+                    });
+                    state.broadcast_to_channel_members(cid, event.to_string()).await;
+                }
+            }
+        }
+
         _ => {}
     }
 }
