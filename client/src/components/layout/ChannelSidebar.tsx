@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical,
+  Users, X, GripVertical, Shield,
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
@@ -641,6 +641,17 @@ export default function ChannelSidebar() {
               >
                 <Settings size={16} /> Paramètres du serveur
               </button>
+              {isOwnerOrAdmin && (
+                <>
+                  <div className="border-t border-fc-hover my-1" />
+                  <button
+                    onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false) }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
+                  >
+                    <Shield size={16} /> Panel Admin
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
