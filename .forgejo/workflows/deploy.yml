@@ -1,0 +1,37 @@
+name: Deploy ForgeChat
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" | base64 --decode > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          echo "${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/id_deploy \
+            -o BatchMode=yes \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+          set -e
+          cd /opt/forgechat
+          git fetch origin main
+          git reset --hard origin/main
+          cd client && npm ci --prefer-offline && npm run build && cd ..
+          docker compose up -d --build --remove-orphans
+          docker image prune -f
+          echo "Deployed $(git rev-parse --short HEAD) at $(date -u)"
+          ENDSSH
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/id_deploy

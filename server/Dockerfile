@@ -9,9 +9,11 @@ COPY migrations ./migrations
 RUN find /app/src -name "*.rs" -exec touch {} + && cargo build --release
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r forgechat && useradd -r -g forgechat -d /app -s /sbin/nologin forgechat
 WORKDIR /app
 COPY --from=builder /app/target/release/forgechat .
 COPY --from=builder /app/migrations ./migrations
-RUN mkdir -p uploads
+RUN mkdir -p uploads && chown -R forgechat:forgechat /app
+USER forgechat
 CMD ["./forgechat"]
