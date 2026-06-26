@@ -1,7 +1,7 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -15,6 +15,7 @@ import type { Sticker } from './StickerPicker'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
+import QuickReplies from './QuickReplies'
 
 // ─── Slash Commands ───────────────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [showScheduled, setShowScheduled] = useState(false)
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
@@ -541,6 +543,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setShowGifPicker(false)
     setShowStickerPicker(false)
     setShowScheduled(false)
+    setShowQuickReplies(false)
   }
 
   useEffect(() => {
@@ -821,6 +824,27 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 serverId={serverId || undefined}
                 onPick={handleSendSticker}
                 onClose={() => setShowStickerPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Bouton Quick Replies */}
+          <div className="relative">
+            <button
+              onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
+              className={`p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title="Réponses rapides"
+            >
+              <Zap size={16} />
+            </button>
+            {showQuickReplies && (
+              <QuickReplies
+                onPick={(text) => {
+                  const pos = textareaRef.current?.selectionStart ?? content.length
+                  setContent(c => c.slice(0, pos) + text + c.slice(pos))
+                  setTimeout(() => textareaRef.current?.focus(), 0)
+                }}
+                onClose={() => setShowQuickReplies(false)}
               />
             )}
           </div>
