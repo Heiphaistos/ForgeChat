@@ -14,7 +14,7 @@ use axum::{
 use sqlx::postgres::PgPoolOptions;
 use std::{path::PathBuf, time::Duration};
 use tower_http::{
-    cors::CorsLayer,
+    cors::{AllowOrigin, CorsLayer},
     services::ServeDir,
     set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
@@ -158,8 +158,16 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    let mut allowed_origins = vec![
+        config.frontend_url.parse::<HeaderValue>()?,
+    ];
+    for origin in &["tauri://localhost", "https://tauri.localhost"] {
+        if let Ok(v) = origin.parse::<HeaderValue>() {
+            allowed_origins.push(v);
+        }
+    }
     let cors = CorsLayer::new()
-        .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
+        .allow_origin(AllowOrigin::list(allowed_origins))
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
@@ -172,7 +180,7 @@ async fn main() -> anyhow::Result<()> {
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
         ])
-        .allow_credentials(false);
+        .allow_credentials(true);
 
     let app = Router::new()
         // Auth publique

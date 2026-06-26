@@ -3,9 +3,10 @@ import { useCountdown } from '../../hooks/useCountdown'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
+import { useContextMenu } from '../ui/ContextMenu'
 import { useChat } from '../../store/chat'
 import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
@@ -83,6 +84,8 @@ export default function MessageList({
   initialHighlightId,
 }: Props) {
   const { user } = useAuth()
+  const nav = useNavigate()
+  const avatarCtxMenu = useContextMenu()
   const [searchParams] = useSearchParams()
   const targetMsgId = searchParams.get('msg')
 
@@ -363,6 +366,20 @@ export default function MessageList({
                     <button
                       className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
                       onClick={e => openUserPopup(e, msg.author_id)}
+                      onContextMenu={e => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        avatarCtxMenu.open(e, [
+                          { label: 'Voir le profil', onClick: () => nav(`/profile/${msg.author_id}`) },
+                          { label: 'Envoyer un message', onClick: () => nav(`/dm/${msg.author_id}`), disabled: msg.author_id === user?.id },
+                          { label: `Mentionner @${msg.author_username}`, onClick: () => {
+                            const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
+                            if (el) { el.value += `@${msg.author_username} `; el.focus() }
+                          }},
+                          { separator: true },
+                          { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(msg.author_id) },
+                        ])
+                      }}
                       title={`Profil de ${msg.author_username}`}
                     >
                       {msg.author_avatar
@@ -998,6 +1015,7 @@ export default function MessageList({
           )}
         </div>
       )}
+      {avatarCtxMenu.node}
     </div>
   )
 }

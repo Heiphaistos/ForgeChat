@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
+import { useContextMenu } from '../ui/ContextMenu'
+import { useAuth } from '../../store/auth'
 
 interface Props {
   serverId: string
@@ -22,6 +25,9 @@ export default function MemberList({ serverId }: Props) {
   })
 
   const getStatus = usePresence(s => s.getStatus)
+  const ctxMenu = useContextMenu()
+  const nav = useNavigate()
+  const me = useAuth(s => s.user)
 
   // Statut live via presence store (WS), fallback sur le statut DB
   const membersWithLiveStatus = members.map((m: any) => ({
@@ -37,7 +43,25 @@ export default function MemberList({ serverId }: Props) {
   )
 
   const MemberRow = ({ m }: { m: any }) => (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition">
+    <div
+      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
+      onContextMenu={e => ctxMenu.open(e, [
+        { label: 'Voir le profil', onClick: () => nav(`/profile/${m.user_id}`) },
+        { label: 'Envoyer un message', onClick: () => nav(`/dm/${m.user_id}`) },
+        { label: 'Mentionner', onClick: () => {
+          const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
+          if (el) { el.value += `@${m.nickname ?? m.username} `; el.focus() }
+        }},
+        { separator: true },
+        { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
+        ...(me?.id !== m.user_id ? [
+          { separator: true as const },
+          { label: 'Expulser', danger: true, onClick: () => {
+            if (confirm(`Expulser ${m.nickname ?? m.username} ?`)) api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
+          }},
+        ] : []),
+      ])}
+    >
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
@@ -86,6 +110,7 @@ export default function MemberList({ serverId }: Props) {
           {offline.map((m: any) => <MemberRow key={m.user_id} m={m} />)}
         </>
       )}
+      {ctxMenu.node}
     </div>
   )
 }

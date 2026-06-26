@@ -222,6 +222,26 @@ pub async fn login(
         return Err(AppError::Unauthorized);
     }
 
+    // Vérification 2FA si activée
+    if user.totp_enabled {
+        let totp_secret: Option<String> = sqlx::query_scalar(
+            "SELECT totp_secret FROM users WHERE id=$1",
+        )
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+
+        match (body.totp_code.as_deref(), totp_secret.as_deref()) {
+            (None, _) => return Err(AppError::TotpRequired),
+            (Some(code), Some(secret)) => {
+                if !crate::handlers::totp::verify_totp(secret, code) {
+                    return Err(AppError::Unauthorized);
+                }
+            }
+            (Some(_), None) => return Err(AppError::TotpRequired),
+        }
+    }
+
     reset_login_rate_limit(&state, &client_ip).await;
 
     sqlx::query("UPDATE users SET status='online', updated_at=NOW() WHERE id=$1")

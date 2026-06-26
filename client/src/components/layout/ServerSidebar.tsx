@@ -1,10 +1,11 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
+import { useAuth } from '../../store/auth'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -130,6 +131,8 @@ export default function ServerSidebar() {
     }
   })
   const contextMenuRef = useRef<HTMLDivElement>(null)
+
+  const me = useAuth(s => s.user)
 
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
@@ -469,45 +472,85 @@ export default function ServerSidebar() {
       </button>
 
       {/* Context menu clic droit serveur */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed z-[100] bg-fc-channel border border-fc-hover rounded-lg shadow-2xl py-1 min-w-[180px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <div className="px-3 py-1.5 text-xs text-fc-muted font-semibold uppercase tracking-wide border-b border-fc-hover mb-1">
-            Dossiers
-          </div>
-          <button
-            className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
-            onClick={() => addToNewFolder(contextMenu.serverId)}
+      {contextMenu && (() => {
+        const ctxServer = (servers as any[]).find((s: any) => s.id === contextMenu.serverId)
+        const isOwner = ctxServer?.owner_id === me?.id
+        return (
+          <div
+            ref={contextMenuRef}
+            className="fixed z-[100] bg-fc-channel border border-fc-hover rounded-lg shadow-2xl py-1 min-w-[200px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
           >
-            <Plus size={12} /> Nouveau dossier
-          </button>
-          {Object.entries(folders).map(([fid, f]) => (
+            {/* Actions serveur */}
             <button
-              key={fid}
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
-              onClick={() => addToExistingFolder(contextMenu.serverId, fid)}
+              onClick={() => { nav(`/servers/${contextMenu.serverId}/settings`); setContextMenu(null) }}
             >
-              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: f.color }} />
-              Ajouter dans {f.name}
+              <Settings size={12} /> Paramètres du serveur
             </button>
-          ))}
-          {getFolderOfServer(contextMenu.serverId) && (
             <button
-              className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
-              onClick={() => {
-                const fid = getFolderOfServer(contextMenu.serverId)!
-                removeFromFolder(contextMenu.serverId, fid)
-                setContextMenu(null)
-              }}
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={() => { navigator.clipboard.writeText(contextMenu.serverId); toast.success('ID copié'); setContextMenu(null) }}
             >
-              <X size={12} /> Retirer du dossier
+              <Copy size={12} /> Copier l'ID
             </button>
-          )}
-        </div>
-      )}
+
+            {/* Dossiers */}
+            <div className="my-1 border-t border-fc-hover" />
+            <div className="px-3 py-1 text-xs text-fc-muted font-semibold uppercase tracking-wide">
+              Dossiers
+            </div>
+            <button
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={() => addToNewFolder(contextMenu.serverId)}
+            >
+              <Plus size={12} /> Nouveau dossier
+            </button>
+            {Object.entries(folders).map(([fid, f]) => (
+              <button
+                key={fid}
+                className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+                onClick={() => addToExistingFolder(contextMenu.serverId, fid)}
+              >
+                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: f.color }} />
+                Ajouter dans {f.name}
+              </button>
+            ))}
+            {getFolderOfServer(contextMenu.serverId) && (
+              <button
+                className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
+                onClick={() => {
+                  const fid = getFolderOfServer(contextMenu.serverId)!
+                  removeFromFolder(contextMenu.serverId, fid)
+                  setContextMenu(null)
+                }}
+              >
+                <X size={12} /> Retirer du dossier
+              </button>
+            )}
+
+            {/* Quitter */}
+            {!isOwner && (
+              <>
+                <div className="my-1 border-t border-fc-hover" />
+                <button
+                  className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
+                  onClick={async () => {
+                    if (confirm(`Quitter le serveur "${ctxServer?.name}" ?`)) {
+                      await api.delete(`/servers/${contextMenu.serverId}/members/me`).catch(() => {})
+                      qc.invalidateQueries({ queryKey: ['servers'] })
+                      nav('/friends')
+                    }
+                    setContextMenu(null)
+                  }}
+                >
+                  <LogOut size={12} /> Quitter le serveur
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
 
       {showCreate && (
         <CreateServerModal

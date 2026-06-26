@@ -23,7 +23,7 @@ interface User {
 interface AuthState {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, totpCode?: string) => Promise<void>
   register: (username: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   fetchMe: () => Promise<void>
@@ -35,8 +35,10 @@ export const useAuth = create<AuthState>()(
     user: null,
     loading: true,
 
-    login: async (email, password) => {
-      const { data } = await api.post('/auth/login', { email, password })
+    login: async (email, password, totpCode) => {
+      const body: any = { email, password }
+      if (totpCode) body.totp_code = totpCode
+      const { data } = await api.post('/auth/login', body)
       // Web : tokens dans les cookies httpOnly (automatiques via withCredentials)
       // Tauri : tokens dans localStorage (les cookies cross-origin ne sont pas garantis)
       if (isTauri) {

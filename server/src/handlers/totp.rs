@@ -105,7 +105,7 @@ pub async fn disable_totp(
     Ok(Json(serde_json::json!({ "enabled": false })))
 }
 
-fn verify_totp(secret: &str, code: &str) -> bool {
+pub fn verify_totp(secret: &str, code: &str) -> bool {
     let secret_bytes = match BASE32.decode(secret.as_bytes()) {
         Ok(b) => b,
         Err(_) => return false,

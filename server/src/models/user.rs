@@ -85,6 +85,7 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    pub totp_code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

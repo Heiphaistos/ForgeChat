@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
+import { useContextMenu } from '../ui/ContextMenu'
 import ServerBoostBanner from '../server/ServerBoostBanner'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
@@ -202,6 +203,8 @@ export default function ChannelSidebar() {
     queryFn: () => api.get(`/servers/${serverId}/categories`).then(r => r.data),
     enabled: !!serverId,
   })
+
+  const ctxMenu = useContextMenu()
 
   const roomParticipants = useVoice(s => s.roomParticipants)
   const activeStreams = useVoice(s => s.activeStreams)
@@ -497,6 +500,18 @@ export default function ChannelSidebar() {
         onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels, categoryKey) : undefined}
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
+        onContextMenu={e => ctxMenu.open(e, [
+          { label: 'Marquer comme lu', onClick: () => {} },
+          { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+          { separator: true },
+          { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
+          ...(isOwnerOrAdmin ? [
+            { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+            { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+            { separator: true as const },
+            { label: 'Supprimer le canal', danger: true, onClick: () => { if (confirm(`Supprimer #${ch.name} ?`)) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
+          ] : []),
+        ])}
       >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
@@ -714,6 +729,13 @@ export default function ChannelSidebar() {
                 <div
                   className="flex items-center justify-between px-2 py-1 group cursor-pointer"
                   onClick={() => toggleGroup(key)}
+                  onContextMenu={e => ctxMenu.open(e, [
+                    { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
+                    ...(isOwnerOrAdmin && key !== UNCATEGORIZED_KEY ? [
+                      { separator: true as const },
+                      { label: 'Supprimer la catégorie', danger: true, onClick: () => { if (confirm(`Supprimer la catégorie "${label}" ?`)) api.delete(`/servers/${serverId}/categories/${key}`) } },
+                    ] : []),
+                  ])}
                   onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
                   onDrop={isOwnerOrAdmin && draggedChannelId ? e => {
                     e.preventDefault()
@@ -823,7 +845,6 @@ export default function ChannelSidebar() {
           channelName={passwordPrompt.channel.name}
           onConfirm={(pw) => {
             setPasswordPrompt(null)
-            // Navigation vers le canal vocal avec password dans le state
             nav(`/servers/${serverId}/channels/${passwordPrompt.channel.id}`, {
               state: { voicePassword: pw }
             })
@@ -831,6 +852,7 @@ export default function ChannelSidebar() {
           onClose={() => setPasswordPrompt(null)}
         />
       )}
+      {ctxMenu.node}
     </>
   )
 }
