@@ -1,5 +1,31 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+// ─── Draft Store (localStorage) ───────────────────────────────────────────────
+
+interface DraftState {
+  drafts: Record<string, string>
+  setDraft: (channelId: string, content: string) => void
+  clearDraft: (channelId: string) => void
+}
+
+export const useDraft = create<DraftState>()(
+  persist(
+    (set, get) => ({
+      drafts: {},
+      setDraft: (channelId, content) => set({
+        drafts: content.trim()
+          ? { ...get().drafts, [channelId]: content }
+          : Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
+      }),
+      clearDraft: (channelId) => set({
+        drafts: Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
+      }),
+    }),
+    { name: 'fc-drafts', storage: createJSONStorage(() => localStorage) }
+  )
+)
 
 export interface Attachment {
   id: string

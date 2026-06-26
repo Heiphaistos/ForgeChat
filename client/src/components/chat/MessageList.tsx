@@ -104,6 +104,9 @@ export default function MessageList({
   const typing = useChat(s => s.typing[channelId])
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Timestamp d'entrée dans le canal = base pour le divider "Nouveaux messages"
+  const channelOpenTime = useRef<number>(Date.now())
+  useEffect(() => { channelOpenTime.current = Date.now() }, [channelId])
   const msgRefs = useRef<Record<string, HTMLDivElement>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -340,10 +343,20 @@ export default function MessageList({
           const isOwn = msg.author_id === user?.id
           const isEditing = editingId === msg.id
           const isHighlighted = highlightId === msg.id
+          const msgTs = new Date(msg.created_at).getTime()
+          const prevTs = prev ? new Date(prev.created_at).getTime() : 0
+          const isFirstUnread = msgTs >= channelOpenTime.current && prevTs < channelOpenTime.current
 
           return (
+            <div key={msg.id}>
+            {isFirstUnread && (
+              <div className="flex items-center gap-2 my-2 px-2 select-none">
+                <div className="flex-1 h-px bg-red-400/60" />
+                <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">Nouveaux messages</span>
+                <div className="flex-1 h-px bg-red-400/60" />
+              </div>
+            )}
             <div
-              key={msg.id}
               id={`msg-${msg.id}`}
               ref={el => { if (el) msgRefs.current[msg.id] = el }}
               className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
@@ -805,6 +818,7 @@ export default function MessageList({
                   </button>
                 </div>
               )}
+            </div>
             </div>
           )
         })}
