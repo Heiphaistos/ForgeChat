@@ -55,36 +55,45 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     };
 
+    use sqlx::Row;
+    let msg_ids: Vec<Uuid> = messages.iter().map(|r| r.get("id")).collect();
+
+    // Batch attachments — 1 requête pour tous les messages
+    let all_attachments = sqlx::query_as::<_, crate::models::message::Attachment>(
+        "SELECT * FROM attachments WHERE message_id = ANY($1) AND (expires_at IS NULL OR expires_at > NOW())"
+    )
+    .bind(&msg_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Batch reactions — 1 requête pour tous les messages
+    let all_reactions = sqlx::query(
+        "SELECT r.message_id, r.emoji, COUNT(*) as count,
+         bool_or(r.user_id = $2) as me
+         FROM reactions r WHERE r.message_id = ANY($1) GROUP BY r.message_id, r.emoji"
+    )
+    .bind(&msg_ids)
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
     let mut result = Vec::new();
     for row in &messages {
-        use sqlx::Row;
         let msg_id: Uuid = row.get("id");
-
-        let attachments = sqlx::query_as::<_, crate::models::message::Attachment>(
-            "SELECT * FROM attachments WHERE message_id=$1 AND (expires_at IS NULL OR expires_at > NOW())"
-        )
-        .bind(msg_id)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-
-        let reactions: Vec<crate::models::message::ReactionCount> = sqlx::query(
-            "SELECT emoji, COUNT(*) as count,
-             EXISTS(SELECT 1 FROM reactions WHERE message_id=$1 AND user_id=$2 AND emoji=r.emoji) as me
-             FROM reactions r WHERE message_id=$1 GROUP BY emoji"
-        )
-        .bind(msg_id)
-        .bind(claims.sub)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
-        .iter()
-        .map(|r| crate::models::message::ReactionCount {
-            emoji: r.get("emoji"),
-            count: r.get("count"),
-            me: r.get("me"),
-        })
-        .collect();
+        let attachments: Vec<_> = all_attachments.iter()
+            .filter(|a| a.message_id == msg_id)
+            .cloned()
+            .collect();
+        let reactions: Vec<crate::models::message::ReactionCount> = all_reactions.iter()
+            .filter(|r| r.get::<Uuid, _>("message_id") == msg_id)
+            .map(|r| crate::models::message::ReactionCount {
+                emoji: r.get("emoji"),
+                count: r.get("count"),
+                me: r.get("me"),
+            })
+            .collect();
 
         result.push(MessageWithAuthor {
             id: msg_id,
@@ -111,7 +120,6 @@ pub async fn get_messages(
         });
     }
 
-    // Retourner dans l'ordre chronologique
     result.reverse();
     Ok(Json(result))
 }
