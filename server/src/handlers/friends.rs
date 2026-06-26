@@ -109,21 +109,19 @@ pub async fn accept_friend(
     .fetch_optional(&state.db)
     .await?;
 
-    if let Some(row) = row {
-        let requester_id: Uuid = row.get("user_id");
-        // Récupérer username de l'accepteur
-        let accepter = sqlx::query("SELECT username FROM users WHERE id=$1")
-            .bind(claims.sub).fetch_optional(&state.db).await?;
-        let accepter_name: String = accepter.as_ref()
-            .and_then(|r| r.try_get("username").ok())
-            .unwrap_or_default();
-        let event = serde_json::json!({
-            "type": "FRIEND_ACCEPTED",
-            "from_id": claims.sub,
-            "from_username": accepter_name,
-        });
-        state.broadcast_to_user(requester_id, event.to_string()).await;
-    }
+    let row = row.ok_or_else(|| AppError::NotFound("Demande d'ami introuvable".into()))?;
+    let requester_id: Uuid = row.get("user_id");
+    let accepter = sqlx::query("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_optional(&state.db).await?;
+    let accepter_name: String = accepter.as_ref()
+        .and_then(|r| r.try_get("username").ok())
+        .unwrap_or_default();
+    let event = serde_json::json!({
+        "type": "FRIEND_ACCEPTED",
+        "from_id": claims.sub,
+        "from_username": accepter_name,
+    });
+    state.broadcast_to_user(requester_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -247,7 +245,7 @@ pub async fn get_dm_messages(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
-               AND dm.created_at < (SELECT created_at FROM dm_messages WHERE id=$3)
+               AND dm.created_at < (SELECT created_at FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
              ORDER BY dm.created_at DESC LIMIT $2"
         )
         .bind(dm_id)
@@ -757,7 +755,7 @@ pub async fn get_friends_v2(
     let q = params.get("q").cloned().unwrap_or_default().to_lowercase();
 
     let friends = sqlx::query(
-        "SELECT f.id, f.friend_id, f.user_id as initiator_id, f.status,
+        "SELECT f.id, CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END as friend_id, f.user_id as initiator_id, f.status,
                 f.message, f.created_at as requested_at, f.friend_since,
                 u.username, u.discriminator, u.avatar, u.status as user_status,
                 u.custom_status, u.activity_type, u.activity_name,
@@ -1106,6 +1104,11 @@ pub async fn add_to_group(
     ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !owns { return Err(AppError::Forbidden); }
 
+    let is_friend: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted')"
+    ).bind(claims.sub).bind(body.user_id).fetch_one(&state.db).await?;
+    if !is_friend { return Err(AppError::Forbidden); }
+
     sqlx::query(
         "INSERT INTO friend_group_members (group_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
     ).bind(group_id).bind(body.user_id).execute(&state.db).await?;
@@ -1138,6 +1141,11 @@ pub async fn set_online_notify(
     Path(target_id): Path<Uuid>,
     Json(body): Json<NotifyBody>,
 ) -> Result<Json<serde_json::Value>> {
+    let is_friend: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted')"
+    ).bind(claims.sub).bind(target_id).fetch_one(&state.db).await?;
+    if !is_friend { return Err(AppError::Forbidden); }
+
     if body.enabled {
         sqlx::query(
             "INSERT INTO friend_online_notifs (user_id, target_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"

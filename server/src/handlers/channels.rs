@@ -239,6 +239,12 @@ pub async fn create_category(
     .fetch_one(&state.db)
     .await?;
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "CATEGORY_CREATE",
+        "server_id": server_id,
+        "category": { "id": cat.id, "name": cat.name, "position": cat.position },
+    }).to_string()).await;
+
     Ok(Json(cat))
 }
 
@@ -269,9 +275,11 @@ pub async fn get_pinned(
          JOIN pinned_messages pm ON pm.message_id = m.id
          JOIN users u ON u.id = m.user_id
          WHERE pm.channel_id=$1
+           AND EXISTS (SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)
          ORDER BY pm.pinned_at DESC"
     )
     .bind(channel_id)
+    .bind(server_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -304,6 +312,7 @@ pub async fn reorder_channels(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
 
+    let mut tx = state.db.begin().await?;
     for (idx, channel_id) in req.channel_ids.iter().enumerate() {
         sqlx::query(
             "UPDATE channels SET position=$1 WHERE id=$2 AND server_id=$3"
@@ -311,10 +320,11 @@ pub async fn reorder_channels(
         .bind(idx as i32)
         .bind(channel_id)
         .bind(server_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
     }
+    tx.commit().await?;
 
     let event = serde_json::json!({
         "type": "CHANNELS_REORDER",
@@ -334,6 +344,10 @@ pub async fn get_channel_permissions(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    // Vérifier que le canal appartient bien à ce serveur
+    let channel_ok: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)")
+        .bind(channel_id).bind(server_id).fetch_one(&state.db).await?;
+    if !channel_ok { return Err(AppError::NotFound("Canal introuvable".into())); }
     let rows = sqlx::query(
         "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
     )
@@ -366,6 +380,9 @@ pub async fn put_channel_permission(
     Json(body): Json<ChannelPermOverride>,
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
+    if !["role", "member"].contains(&body.target_type.as_str()) {
+        return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
+    }
     sqlx::query(
         "INSERT INTO channel_permissions (channel_id, target_id, target_type, allow, deny)
          VALUES ($1, $2, $3, $4, $5)
@@ -438,6 +455,13 @@ pub async fn hide_channel(
     Extension(claims): Extension<Claims>,
     Path(channel_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let row = sqlx::query("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id).fetch_optional(&state.db).await?
+        .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
+    let server_id: Uuid = row.get("server_id");
+    require_member(&state, claims.sub, server_id).await?;
+
     sqlx::query(
         "INSERT INTO hidden_channels (user_id, channel_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
     )
@@ -455,6 +479,13 @@ pub async fn unhide_channel(
     Extension(claims): Extension<Claims>,
     Path(channel_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let row = sqlx::query("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id).fetch_optional(&state.db).await?
+        .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
+    let server_id: Uuid = row.get("server_id");
+    require_member(&state, claims.sub, server_id).await?;
+
     sqlx::query(
         "DELETE FROM hidden_channels WHERE user_id=$1 AND channel_id=$2"
     )
@@ -495,6 +526,13 @@ pub async fn move_channel(
         .execute(&state.db)
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "CHANNEL_UPDATE",
+        "channel_id": channel_id,
+        "server_id": server_id,
+        "category_id": new_category_id,
+    }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "moved": true, "category_id": new_category_id })))
 }

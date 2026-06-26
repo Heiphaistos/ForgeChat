@@ -26,6 +26,7 @@ pub async fn create_group_dm(
     }
     // Déduplique et retire le créateur s'il est dans la liste
     let mut members: Vec<Uuid> = body.user_ids.clone();
+    members.sort();
     members.dedup();
     members.retain(|id| *id != claims.sub);
     if members.len() < 1 {
@@ -163,7 +164,7 @@ pub async fn get_group_messages(
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
              WHERE m.dm_id = $1
-               AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3)
+               AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
              ORDER BY m.created_at DESC LIMIT $2"
         )
         .bind(group_id).bind(limit).bind(before_id)
@@ -275,11 +276,12 @@ pub async fn delete_group_message(
     if !is_member { return Err(AppError::Forbidden); }
 
     let deleted = sqlx::query_scalar::<_, i64>(
-        "WITH del AS (DELETE FROM group_dm_messages WHERE id=$1 AND sender_id=$2 RETURNING 1)
+        "WITH del AS (DELETE FROM group_dm_messages WHERE id=$1 AND sender_id=$2 AND dm_id=$3 RETURNING 1)
          SELECT COUNT(*) FROM del"
     )
     .bind(msg_id)
     .bind(claims.sub)
+    .bind(group_id)
     .fetch_one(&state.db)
     .await?;
 
