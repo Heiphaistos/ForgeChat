@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage'
 import MainLayout from './components/layout/MainLayout'
 import ChannelPage from './pages/ChannelPage'
 import DMPage from './pages/DMPage'
+import GroupDMPage from './pages/GroupDMPage'
 import FriendsPage from './pages/FriendsPage'
 import UserProfilePage from './pages/UserProfilePage'
 import QuickSwitcher from './components/QuickSwitcher'
@@ -249,6 +250,7 @@ function AppInner() {
           <Route path="discovery" element={<ServerDiscoveryPage />} />
           <Route path="activity" element={<ActivityFeedPage />} />
           <Route path="dms/:dmId" element={<DMPage />} />
+          <Route path="dms/groups/:groupId" element={<GroupDMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
           <Route path="servers/:serverId/leaderboard" element={<LeaderboardPage />} />
