@@ -414,23 +414,28 @@ pub async fn send_dm(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    let content_raw = body["content"]
-        .as_str()
-        .filter(|c| !c.trim().is_empty())
-        .ok_or_else(|| AppError::BadRequest("Contenu vide".into()))?;
+    let content_raw = body["content"].as_str().unwrap_or("").trim().to_string();
+    let reply_to: Option<Uuid> = body["reply_to"].as_str().and_then(|s| s.parse().ok());
+    let has_attachments = body["has_attachments"].as_bool().unwrap_or(false);
+
+    if content_raw.is_empty() && !has_attachments {
+        return Err(AppError::BadRequest("Contenu vide".into()));
+    }
+
     let content: String = if content_raw.len() > 4000 {
         content_raw.chars().take(4000).collect()
     } else {
-        content_raw.to_string()
+        content_raw.clone()
     };
-    let content = content.as_str();
 
+    let content_opt: Option<&str> = if content.is_empty() { None } else { Some(content.as_str()) };
     let msg = sqlx::query(
-        "INSERT INTO dm_messages (dm_channel_id, sender_id, content) VALUES ($1, $2, $3) RETURNING *"
+        "INSERT INTO dm_messages (dm_channel_id, sender_id, content, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING *"
     )
     .bind(dm_id)
     .bind(claims.sub)
-    .bind(content)
+    .bind(content_opt)
+    .bind(reply_to)
     .fetch_one(&state.db)
     .await?;
 
@@ -448,23 +453,127 @@ pub async fn send_dm(
     .await?;
 
     let other_id: Uuid = other.get("other");
+    let created_at = msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
     let event = serde_json::json!({
         "type": "DM_MESSAGE",
         "dm_id": dm_id,
         "message": {
             "id": msg_id,
-            "content": content,
+            "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content.clone()) },
             "sender_id": claims.sub,
-            "created_at": msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "reply_to_id": reply_to,
+            "created_at": created_at,
         }
     });
     state.broadcast_to_user(other_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({
         "id": msg_id,
-        "content": content,
-        "created_at": msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content) },
+        "reply_to_id": reply_to,
+        "created_at": created_at,
     })))
+}
+
+pub async fn upload_dm_attachment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((dm_id, message_id)): Path<(Uuid, Uuid)>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(AppError::Forbidden); }
+
+    let msg_ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2 AND sender_id=$3)"
+    )
+    .bind(message_id).bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !msg_ok { return Err(AppError::Forbidden); }
+
+    let upload_dir = std::path::PathBuf::from(&state.config.upload_dir);
+    tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
+
+    let mut uploaded = Vec::new();
+    let mut ttl_hours: Option<i64> = None;
+
+    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+        let field_name = field.name().unwrap_or("").to_string();
+        if field_name == "ttl_hours" {
+            let val = field.text().await.unwrap_or_default();
+            ttl_hours = val.parse::<i64>().ok();
+            continue;
+        }
+
+        let original_name = field.file_name().unwrap_or("fichier").to_string();
+        let content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+        if data.len() as u64 > state.config.max_upload_size {
+            return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
+        }
+
+        let ext = std::path::Path::new(&original_name)
+            .extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
+
+        const ALLOWED: &[&str] = &[
+            "jpg","jpeg","png","gif","webp","svg","mp4","webm","mov","mkv",
+            "mp3","ogg","wav","flac","pdf","txt","md","zip","tar","gz","7z",
+            "rar","doc","docx","xls","xlsx","ppt","pptx","bin",
+        ];
+        if !ALLOWED.contains(&ext.as_str()) {
+            return Err(AppError::BadRequest(format!("Extension .{} non autorisée", ext)));
+        }
+
+        let safe_name = std::path::Path::new(&original_name)
+            .file_name().and_then(|n| n.to_str()).unwrap_or("fichier")
+            .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
+
+        let file_id = Uuid::new_v4();
+        let filename = format!("{}.{}", file_id, ext);
+        tokio::fs::write(upload_dir.join(&filename), &data).await.map_err(|e| AppError::Internal(e.into()))?;
+
+        let url = format!("/uploads/{}", filename);
+        let size = data.len() as i64;
+        let expires_at = ttl_hours.map(|h| Utc::now() + chrono::Duration::hours(h));
+
+        let att = sqlx::query(
+            "INSERT INTO attachments (dm_message_id, filename, content_type, size, url, expires_at)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             RETURNING id, url, filename, content_type, size, expires_at"
+        )
+        .bind(message_id).bind(&safe_name).bind(&content_type).bind(size).bind(&url).bind(expires_at)
+        .fetch_one(&state.db).await?;
+
+        use sqlx::Row;
+        uploaded.push(serde_json::json!({
+            "id": att.get::<Uuid, _>("id"),
+            "url": att.get::<String, _>("url"),
+            "filename": att.get::<String, _>("filename"),
+            "content_type": att.get::<String, _>("content_type"),
+            "size": att.get::<i64, _>("size"),
+            "expires_at": att.get::<Option<chrono::DateTime<Utc>>, _>("expires_at"),
+        }));
+    }
+
+    // Notifier l'autre utilisateur
+    if !uploaded.is_empty() {
+        let other = sqlx::query_scalar::<_, Uuid>(
+            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END FROM dm_channels WHERE id=$1"
+        ).bind(dm_id).bind(claims.sub).fetch_optional(&state.db).await?.unwrap_or(claims.sub);
+
+        let event = serde_json::json!({
+            "type": "DM_ATTACHMENT_ADDED",
+            "dm_id": dm_id,
+            "message_id": message_id,
+            "attachments": uploaded,
+        });
+        state.broadcast_to_user(other, event.to_string()).await;
+    }
+
+    Ok(Json(uploaded))
 }
 
 // ─── E2E Encrypted DM Messages ───────────────────────────────────────────────

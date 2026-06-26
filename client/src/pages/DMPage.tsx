@@ -224,9 +224,13 @@ export default function DMPage() {
 
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
-    mutationFn: (content: string | null) =>
-      api.post(`/dms/${dmId}/messages`, { content: content ?? '' }),
-    onSuccess: (res) => {
+    mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: import('../components/chat/MessageInput').FileWithTtl[] }) =>
+      api.post(`/dms/${dmId}/messages`, {
+        content: content ?? '',
+        reply_to: replyTo,
+        has_attachments: !!files?.length,
+      }),
+    onSuccess: async (res, vars) => {
       const msg = res.data
       if (msg && me && dmId) {
         addMessage({
@@ -242,6 +246,14 @@ export default function DMPage() {
           pinned: false,
           edited_at: null,
         })
+        if (vars.files && vars.files.length > 0 && msg.id) {
+          const fd = new FormData()
+          for (const fw of vars.files) {
+            fd.append('files', fw.file)
+            if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
+          }
+          await api.post(`/dms/${dmId}/messages/${msg.id}/attachments`, fd).catch(() => null)
+        }
       }
     },
     onError: () => toast.error('Envoi impossible'),
@@ -473,7 +485,7 @@ export default function DMPage() {
         <DMConversation
           dmId={dmId}
           partnerName={partnerName}
-          onSend={(content, _replyTo, _files) => sendDm.mutate(content || null)}
+          onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
           onLoadMore={loadMoreDM}
         />
       )}
