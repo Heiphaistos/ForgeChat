@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useWs } from '../../store/ws'
 
 interface FloatingEmoji { id: string; emoji: string; x: number }
@@ -6,6 +6,7 @@ interface FloatingEmoji { id: string; emoji: string; x: number }
 export default function FloatingReactions({ channelId }: { channelId: string }) {
   const [emojis, setEmojis] = useState<FloatingEmoji[]>([])
   const { on } = useWs()
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
     const off = on('VOICE_REACTION', (data: unknown) => {
@@ -14,9 +15,10 @@ export default function FloatingReactions({ channelId }: { channelId: string }) 
       const id = Math.random().toString(36).slice(2)
       const x = 10 + Math.random() * 80
       setEmojis(prev => [...prev, { id, emoji: d.emoji, x }])
-      setTimeout(() => setEmojis(prev => prev.filter(e => e.id !== id)), 3000)
+      const t = setTimeout(() => setEmojis(prev => prev.filter(e => e.id !== id)), 3000)
+      timers.current.push(t)
     })
-    return off
+    return () => { off(); timers.current.forEach(clearTimeout); timers.current = [] }
   }, [channelId, on])
 
   return (

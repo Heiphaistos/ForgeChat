@@ -80,7 +80,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   })
 
   const { data: messages = [] } = useQuery({
-    queryKey: ['messages', channelId],
+    queryKey: ['messages', serverId, channelId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => r.data),
     enabled: !!channelId && !!serverId,
   })
@@ -96,7 +96,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       setHasMore(true)
       if (serverId) resetServer(serverId)
     }
-  }, [channelId])
+  }, [channelId, serverId])
 
   useEffect(() => {
     if (!channelId) return
@@ -140,7 +140,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       }),
     ]
     return () => offs.forEach(off => off())
-  }, [channelId])
+  }, [channelId, serverId, meId])
 
   useEffect(() => () => clearInterval(slowmodeTimer.current), [])
 
