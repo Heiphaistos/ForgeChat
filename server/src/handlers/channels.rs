@@ -19,15 +19,45 @@ pub async fn get_channels(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
-) -> Result<Json<Vec<Channel>>> {
+) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
-    let channels = sqlx::query_as::<_, Channel>(
-        "SELECT * FROM channels WHERE server_id=$1 ORDER BY position"
+    let rows = sqlx::query(
+        "SELECT c.*,
+               EXISTS(SELECT 1 FROM hidden_channels hc WHERE hc.channel_id = c.id AND hc.user_id = $2) as is_hidden
+        FROM channels c WHERE c.server_id = $1 ORDER BY c.position"
     )
     .bind(server_id)
+    .bind(claims.sub)
     .fetch_all(&state.db)
     .await?;
-    Ok(Json(channels))
+
+    let result = rows.iter().map(|r| {
+        use sqlx::Row;
+        serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "server_id": r.get::<Option<Uuid>, _>("server_id"),
+            "category_id": r.get::<Option<Uuid>, _>("category_id"),
+            "name": r.get::<String, _>("name"),
+            "type": r.get::<String, _>("type"),
+            "topic": r.get::<Option<String>, _>("topic"),
+            "position": r.get::<i32, _>("position"),
+            "is_nsfw": r.get::<bool, _>("is_nsfw"),
+            "slowmode_delay": r.get::<i32, _>("slowmode_delay"),
+            "bitrate": r.get::<Option<i32>, _>("bitrate"),
+            "user_limit": r.get::<Option<i32>, _>("user_limit"),
+            "last_message_id": r.get::<Option<Uuid>, _>("last_message_id"),
+            "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "voice_password_hash": r.get::<Option<String>, _>("voice_password_hash"),
+            "is_auto_create": r.get::<bool, _>("is_auto_create"),
+            "auto_create_name": r.get::<Option<String>, _>("auto_create_name"),
+            "is_temporary": r.get::<bool, _>("is_temporary"),
+            "created_by_auto": r.get::<Option<Uuid>, _>("created_by_auto"),
+            "archived": r.get::<bool, _>("archived"),
+            "hidden": r.get::<bool, _>("is_hidden"),
+        })
+    }).collect();
+
+    Ok(Json(result))
 }
 
 pub async fn create_channel(
@@ -365,4 +395,38 @@ pub async fn archive_channel(
 
     let archived: bool = row.get("archived");
     Ok(Json(serde_json::json!({ "archived": archived })))
+}
+
+pub async fn hide_channel(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query(
+        "INSERT INTO hidden_channels (user_id, channel_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(claims.sub)
+    .bind(channel_id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    Ok(Json(serde_json::json!({ "hidden": true })))
+}
+
+pub async fn unhide_channel(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query(
+        "DELETE FROM hidden_channels WHERE user_id=$1 AND channel_id=$2"
+    )
+    .bind(claims.sub)
+    .bind(channel_id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    Ok(Json(serde_json::json!({ "hidden": false })))
 }

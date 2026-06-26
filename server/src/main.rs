@@ -302,6 +302,10 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/permissions/:target_id",
             put(handlers::channels::put_channel_permission)
             .delete(handlers::channels::delete_channel_permission))
+        // Channel hide (per-user)
+        .route("/channels/:channel_id/hide",
+            post(handlers::channels::hide_channel)
+            .delete(handlers::channels::unhide_channel))
         // Messages
         .route("/servers/:server_id/channels/:channel_id/messages", get(handlers::messages::get_messages))
         .route("/servers/:server_id/channels/:channel_id/messages", post(handlers::messages::send_message))

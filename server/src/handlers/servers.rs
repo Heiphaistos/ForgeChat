@@ -92,6 +92,29 @@ pub async fn get_server(
     .fetch_all(&state.db)
     .await?;
 
+    let hidden_ids: std::collections::HashSet<Uuid> = {
+        use sqlx::Row;
+        sqlx::query(
+            "SELECT channel_id FROM hidden_channels WHERE user_id=$1 \
+             AND channel_id IN (SELECT id FROM channels WHERE server_id=$2)"
+        )
+        .bind(claims.sub)
+        .bind(server_id)
+        .fetch_all(&state.db)
+        .await?
+        .iter()
+        .map(|r| r.get::<Uuid, _>("channel_id"))
+        .collect()
+    };
+
+    let channels_json: Vec<serde_json::Value> = channels.iter().map(|c| {
+        let mut v = serde_json::to_value(c).unwrap_or_default();
+        if let serde_json::Value::Object(ref mut m) = v {
+            m.insert("hidden".to_string(), serde_json::json!(hidden_ids.contains(&c.id)));
+        }
+        v
+    }).collect();
+
     let roles = sqlx::query_as::<_, crate::models::role::Role>(
         "SELECT * FROM roles WHERE server_id=$1 ORDER BY position DESC"
     )
@@ -114,7 +137,7 @@ pub async fn get_server(
 
     Ok(Json(serde_json::json!({
         "server": server,
-        "channels": channels,
+        "channels": channels_json,
         "roles": roles,
         "member": member,
     })))

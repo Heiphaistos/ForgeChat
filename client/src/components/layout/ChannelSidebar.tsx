@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive,
+  Users, X, GripVertical, Shield, Archive, EyeOff,
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
@@ -186,6 +186,7 @@ export default function ChannelSidebar() {
   const [passwordPrompt, setPasswordPrompt] = useState<{ channel: any } | null>(null)
   const [draggedChannelId, setDraggedChannelId] = useState<string | null>(null)
   const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false)
   const qc = useQueryClient()
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
@@ -339,7 +340,8 @@ export default function ChannelSidebar() {
 
   const server = data?.server
   const allChannels: any[] = data?.channels ?? []
-  const channels: any[] = allChannels.filter((c: any) => !c.archived)
+  const channels: any[] = allChannels.filter((c: any) => !c.archived && !c.hidden)
+  const hiddenChannels: any[] = allChannels.filter((c: any) => c.hidden && !c.archived)
   const archivedChannels: any[] = allChannels.filter((c: any) => c.archived)
 
   // Déterminer si l'utilisateur courant est owner ou admin
@@ -358,6 +360,16 @@ export default function ChannelSidebar() {
 
   const archiveChannel = useMutation({
     mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const hideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const unhideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
   })
 
@@ -445,7 +457,7 @@ export default function ChannelSidebar() {
     }
   }
 
-  const renderChannel = (ch: any, groupChannels: any[]) => {
+  const renderChannel = (ch: any, groupChannels: any[], extraClass = '') => {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
@@ -470,7 +482,7 @@ export default function ChannelSidebar() {
         onDragOver={isOwnerOrAdmin ? e => handleChannelDragOver(e, ch.id) : undefined}
         onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels) : undefined}
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
-        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''}`}
+        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
       >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
@@ -560,6 +572,13 @@ export default function ChannelSidebar() {
               <Archive size={12} />
             </button>
           )}
+          <button
+            onClick={e => { e.stopPropagation(); ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) }}
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
+            title={ch.hidden ? "Afficher ce canal" : "Masquer ce canal"}
+          >
+            <EyeOff size={12} />
+          </button>
         </button>
 
         {/* Participants vocaux */}
@@ -711,6 +730,20 @@ export default function ChannelSidebar() {
           {channels.length === 0 && (
             <div className="text-center text-fc-muted text-xs py-4">
               Aucun canal — crée-en un !
+            </div>
+          )}
+
+          {/* Canaux masqués */}
+          {hiddenChannels.length > 0 && (
+            <div className="mt-2 mb-1">
+              <button
+                onClick={() => setShowHidden(p => !p)}
+                className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-fc-muted hover:text-white transition"
+              >
+                <EyeOff size={12} />
+                {showHidden ? 'Masquer' : `Masqués (${hiddenChannels.length})`}
+              </button>
+              {showHidden && hiddenChannels.map((c: any) => renderChannel(c, hiddenChannels, 'opacity-50'))}
             </div>
           )}
 
