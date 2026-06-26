@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::require_member;
+use super::servers::{require_member, require_channel_in_server};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct ForumPost {
@@ -99,11 +99,17 @@ pub async fn create_post(
     Json(body): Json<CreatePostReq>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let title = body.title.trim().to_string();
     if title.is_empty() || title.len() > 200 {
         return Err(AppError::BadRequest("Titre requis (max 200 chars)".into()));
     }
+
+    let content_raw = body.content.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let content_str: Option<String> = content_raw.map(|s| {
+        if s.len() > 8000 { s.chars().take(8000).collect() } else { s.to_string() }
+    });
 
     let tags = body.tags.unwrap_or_default();
 
@@ -113,7 +119,7 @@ pub async fn create_post(
     )
     .bind(channel_id)
     .bind(&title)
-    .bind(body.content.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+    .bind(content_str.as_deref())
     .bind(claims.sub)
     .bind(&tags)
     .fetch_one(&state.db)
@@ -195,10 +201,15 @@ pub async fn reply_to_post(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
 
-    let content = body.content.trim().to_string();
-    if content.is_empty() {
+    let content_raw = body.content.trim().to_string();
+    if content_raw.is_empty() {
         return Err(AppError::BadRequest("Réponse vide".into()));
     }
+    let content: String = if content_raw.len() > 4000 {
+        content_raw.chars().take(4000).collect()
+    } else {
+        content_raw
+    };
 
     let locked = sqlx::query_scalar::<_, bool>(
         "SELECT locked FROM forum_posts WHERE id = $1"
