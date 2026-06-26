@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, middleware::auth::Claims, state::AppState};
+use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, state::AppState};
 
 #[derive(Deserialize)]
 pub struct SaveMessageBody {
@@ -35,6 +35,11 @@ pub async fn save_message(
     Extension(claims): Extension<Claims>,
     Json(body): Json<SaveMessageBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // Vérifier que l'utilisateur a accès au canal/serveur référencé
+    if let Some(sid) = body.server_id {
+        require_member(&state, claims.sub, sid).await?;
+        require_channel_in_server(&state, body.channel_id, sid).await?;
+    }
     sqlx::query(
         "INSERT INTO saved_messages (user_id, message_id, channel_id, server_id, content, author_username, author_avatar)
          VALUES ($1,$2,$3,$4,$5,$6,$7)

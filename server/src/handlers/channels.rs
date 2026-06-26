@@ -554,3 +554,34 @@ pub async fn purge_messages(
 
     Ok(Json(serde_json::json!({ "deleted": count })))
 }
+
+#[derive(serde::Deserialize)]
+pub struct SetGithubTokenBody {
+    pub token: Option<String>, // None = désactiver le webhook GitHub
+}
+
+pub async fn set_github_webhook_token(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<SetGithubTokenBody>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    use crate::handlers::servers::require_channel_in_server;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    let token = body.token.as_deref().map(|t| t.trim()).filter(|t| !t.is_empty());
+    if let Some(t) = token {
+        if t.len() < 16 {
+            return Err(AppError::BadRequest("Le token doit faire au moins 16 caractères".into()));
+        }
+    }
+
+    sqlx::query("UPDATE channels SET github_webhook_token=$1 WHERE id=$2")
+        .bind(body.token.as_deref().and_then(|t| if t.trim().is_empty() { None } else { Some(t) }))
+        .bind(channel_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true, "active": body.token.is_some() })))
+}
