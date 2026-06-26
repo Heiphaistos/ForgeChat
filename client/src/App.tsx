@@ -294,9 +294,18 @@ function AppInner() {
       nav('/')
     })
     const offRemove = on('MEMBER_REMOVE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+      }
     })
-    return () => { offKicked(); offBanned(); offRemove() }
+    const offLeave = on('MEMBER_LEAVE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      }
+    })
+    return () => { offKicked(); offBanned(); offRemove(); offLeave() }
   }, [user?.id])
 
   // Raccourcis clavier globaux
