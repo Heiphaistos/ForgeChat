@@ -383,14 +383,18 @@ pub async fn ban_member(
     ).await?;
 
     let reason = body["reason"].as_str().map(String::from);
+    let expires_at = body["duration_hours"].as_i64().map(|h| {
+        chrono::Utc::now() + chrono::Duration::hours(h)
+    });
 
     sqlx::query(
-        "INSERT INTO bans (user_id, server_id, reason) VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING"
+        "INSERT INTO bans (user_id, server_id, reason, expires_at) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, server_id) DO UPDATE SET reason=EXCLUDED.reason, expires_at=EXCLUDED.expires_at"
     )
     .bind(user_id)
     .bind(server_id)
     .bind(reason)
+    .bind(expires_at)
     .execute(&state.db)
     .await?;
 
