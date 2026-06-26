@@ -421,6 +421,67 @@ pub async fn set_notification_override(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+// ─── Channel Notification Overrides ──────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ChannelNotifOverride {
+    pub id: Uuid,
+    pub channel_id: Uuid,
+    pub level: String,
+    pub muted: bool,
+}
+
+pub async fn get_channel_notification_override(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let row = sqlx::query_as::<_, ChannelNotifOverride>(
+        "SELECT id, channel_id, level, muted FROM notification_overrides_channel
+         WHERE user_id=$1 AND channel_id=$2"
+    )
+    .bind(claims.sub)
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    Ok(Json(match row {
+        Some(r) => serde_json::json!({ "level": r.level, "muted": r.muted }),
+        None => serde_json::json!({ "level": "inherit", "muted": false }),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetChannelNotifOverride {
+    pub level: String,
+    pub muted: bool,
+}
+
+pub async fn set_channel_notification_override(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
+    Json(body): Json<SetChannelNotifOverride>,
+) -> Result<Json<serde_json::Value>> {
+    if !["all", "mentions", "nothing", "inherit"].contains(&body.level.as_str()) {
+        return Err(crate::error::AppError::BadRequest("level invalide".into()));
+    }
+    if body.level == "inherit" && !body.muted {
+        // Supprimer le record au lieu d'insérer inherit/unmuted (nettoyage)
+        sqlx::query("DELETE FROM notification_overrides_channel WHERE user_id=$1 AND channel_id=$2")
+            .bind(claims.sub).bind(channel_id).execute(&state.db).await?;
+    } else {
+        sqlx::query(
+            "INSERT INTO notification_overrides_channel (user_id, channel_id, level, muted)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (user_id, channel_id) DO UPDATE SET level=EXCLUDED.level, muted=EXCLUDED.muted"
+        )
+        .bind(claims.sub).bind(channel_id).bind(&body.level).bind(body.muted)
+        .execute(&state.db).await?;
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 // ─── Keybindings ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]

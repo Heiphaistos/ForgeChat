@@ -227,7 +227,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
-    tracing::info!("ForgeChat v3.5.0 écoute sur {addr}");
+    tracing::info!("ForgeChat v3.6.0 écoute sur {addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(
@@ -663,6 +663,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account))
         .route("/user/notification-overrides", get(handlers::user_settings::get_notification_overrides))
         .route("/user/notification-overrides", post(handlers::user_settings::set_notification_override))
+        .route("/user/channel-notif/:channel_id", get(handlers::user_settings::get_channel_notification_override))
+        .route("/user/channel-notif/:channel_id", post(handlers::user_settings::set_channel_notification_override))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))

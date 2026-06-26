@@ -22,6 +22,7 @@ import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
+import ChannelNotifModal from '../components/modals/ChannelNotifModal'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -65,6 +66,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
+  const [showNotifModal, setShowNotifModal] = useState(false)
+  const bellRef = useRef<HTMLButtonElement>(null)
 
   // All hooks first — no conditional hooks
   const { data: serverData, isLoading: serverLoading } = useQuery({
@@ -314,9 +317,24 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             >
               <Pin size={18} />
             </button>
-            <button className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover" title="Notifications">
-              <Bell size={18} />
-            </button>
+            <div className="relative">
+              <button
+                ref={bellRef}
+                onClick={() => setShowNotifModal(v => !v)}
+                className={`p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+                title="Notifications"
+              >
+                <Bell size={18} />
+              </button>
+              {showNotifModal && channelId && (
+                <ChannelNotifModal
+                  channelId={channelId}
+                  channelName={currentChannel?.name ?? ''}
+                  onClose={() => setShowNotifModal(false)}
+                  anchorRef={bellRef}
+                />
+              )}
+            </div>
             <button
               onClick={() => setShowMembers(!showMembers)}
               className={`p-1.5 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
