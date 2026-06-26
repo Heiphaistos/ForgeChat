@@ -681,6 +681,84 @@ pub async fn update_server_verification(
     Ok(Json(server))
 }
 
+pub async fn get_admin_stats(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    // Seuls les owners d'au moins un serveur ont accès
+    let is_owner = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !is_owner {
+        return Err(AppError::Forbidden);
+    }
+
+    let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&state.db)
+        .await?;
+
+    let total_messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
+        .fetch_one(&state.db)
+        .await?;
+
+    let messages_today: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages WHERE created_at > CURRENT_DATE"
+    )
+    .fetch_one(&state.db)
+    .await?;
+
+    let total_servers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM servers")
+        .fetch_one(&state.db)
+        .await?;
+
+    let total_channels: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels")
+        .fetch_one(&state.db)
+        .await?;
+
+    let top_servers = sqlx::query(
+        "SELECT s.name, COUNT(m.id) as msg_count
+         FROM servers s
+         JOIN channels c ON c.server_id = s.id
+         JOIN messages m ON m.channel_id = c.id
+         WHERE m.created_at > NOW() - INTERVAL '7 days'
+         GROUP BY s.id, s.name ORDER BY msg_count DESC LIMIT 10"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let messages_per_day = sqlx::query(
+        "SELECT DATE(created_at) as day, COUNT(*) as count
+         FROM messages WHERE created_at > NOW() - INTERVAL '7 days'
+         GROUP BY DATE(created_at) ORDER BY day ASC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Ok(Json(serde_json::json!({
+        "total_users": total_users,
+        "total_messages": total_messages,
+        "messages_today": messages_today,
+        "total_servers": total_servers,
+        "total_channels": total_channels,
+        "top_servers": top_servers.iter().map(|r| serde_json::json!({
+            "name": r.get::<String, _>("name"),
+            "messages": r.get::<i64, _>("msg_count"),
+        })).collect::<Vec<_>>(),
+        "messages_per_day": messages_per_day.iter().map(|r| serde_json::json!({
+            "day": r.get::<chrono::NaiveDate, _>("day").to_string(),
+            "count": r.get::<i64, _>("count"),
+        })).collect::<Vec<_>>(),
+    })))
+}
+
 fn generate_invite_code() -> String {
     rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)

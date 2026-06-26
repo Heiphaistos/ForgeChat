@@ -1,4 +1,4 @@
-import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff, LayoutDashboard } from 'lucide-react'
 import NotificationBell from '../notifications/NotificationBell'
 import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
@@ -234,6 +234,13 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
             <Activity size={16} />
           </button>
         )}
+        <button
+          onClick={() => nav('/admin')}
+          className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+          title="Dashboard Admin"
+        >
+          <LayoutDashboard size={16} />
+        </button>
         <button
           onClick={() => nav('/settings')}
           className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"

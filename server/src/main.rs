@@ -455,6 +455,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
+        .route("/admin/stats", get(handlers::servers::get_admin_stats))
         .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
         .route("/servers/:server_id/leaderboard", get(handlers::servers::get_leaderboard))
         .route("/servers/:server_id/tickets", get(handlers::tickets::list_tickets).post(handlers::tickets::create_ticket))
