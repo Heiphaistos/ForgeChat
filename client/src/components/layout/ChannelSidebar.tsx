@@ -47,7 +47,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
       api.post('/dms/group', { user_ids: selected.map(u => u.id) }).then(r => r.data),
     onSuccess: (dm: any) => {
       qc.invalidateQueries({ queryKey: ['dms'] })
-      nav(`/dms/${dm.dm_id ?? dm.id}`)
+      nav(`/dms/groups/${dm.dm_id ?? dm.id}`)
       onClose()
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création groupe'),
@@ -258,7 +258,7 @@ export default function ChannelSidebar() {
               return (
                 <button
                   key={dm.id}
-                  onClick={() => nav(`/dms/${dm.id}`)}
+                  onClick={() => nav(`/dms/groups/${dm.id}`)}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 >
                   <div className="relative flex-shrink-0">

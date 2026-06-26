@@ -511,6 +511,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/friends/invite-bulk", post(handlers::friends::invite_bulk))
         // DM settings (mute/archive) + block
         .route("/dms/:dm_id/settings", patch(handlers::friends::patch_dm_settings))
+        // Group DMs
+        .route("/dms/group", post(handlers::group_dms::create_group_dm))
+        .route("/dms/groups", get(handlers::group_dms::list_group_dms))
+        .route("/dms/groups/:group_id", get(handlers::group_dms::get_group_dm))
+        .route("/dms/groups/:group_id/messages", get(handlers::group_dms::get_group_messages))
+        .route("/dms/groups/:group_id/messages", post(handlers::group_dms::send_group_message))
         .route("/friends/blocked", get(handlers::friends::get_blocked))
         .route("/friends/block/:user_id", post(handlers::friends::block_user))
         .route("/friends/block/:user_id", delete(handlers::friends::unblock_user))

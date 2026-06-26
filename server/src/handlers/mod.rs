@@ -8,6 +8,7 @@ pub mod invites;
 pub mod uploads;
 pub mod websocket;
 pub mod friends;
+pub mod group_dms;
 pub mod threads;
 pub mod forum;
 pub mod reads;
