@@ -131,6 +131,31 @@ export default function MessageList({
     return () => clearInterval(id)
   }, [channelId])
 
+  // Animation du compteur de réactions quand le compte change (mise à jour WebSocket)
+  useEffect(() => {
+    const newBumped: Record<string, boolean> = {}
+    messages.forEach(msg => {
+      (msg.reactions ?? []).forEach((r: any) => {
+        const key = `${msg.id}:${r.emoji}`
+        const prev = prevCountsRef.current[key] ?? r.count
+        if (r.count !== prev) newBumped[key] = true
+      })
+    })
+    // Mettre à jour la map de référence
+    const nextCounts: Record<string, number> = {}
+    messages.forEach(msg => {
+      (msg.reactions ?? []).forEach((r: any) => {
+        nextCounts[`${msg.id}:${r.emoji}`] = r.count
+      })
+    })
+    prevCountsRef.current = nextCounts
+    if (Object.keys(newBumped).length > 0) {
+      setBumped(newBumped)
+      const t = setTimeout(() => setBumped({}), 200)
+      return () => clearTimeout(t)
+    }
+  }, [messages])
+
   useEffect(() => {
     if (!initialHighlightId || messages.length === 0) return
     const timer = setTimeout(() => jumpToMessage(initialHighlightId), 300)
@@ -213,6 +238,8 @@ export default function MessageList({
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
+  const [bumped, setBumped] = useState<Record<string, boolean>>({})
+  const prevCountsRef = useRef<Record<string, number>>({})
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
@@ -548,7 +575,7 @@ export default function MessageList({
                               title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                             >
                               <span>{r.emoji}</span>
-                              <span className={`transition-transform duration-150 inline-block ${isPopping ? 'scale-110' : ''}`}>{r.count}</span>
+                              <span className={`transition-transform duration-150 inline-block ${isPopping || bumped[`${msg.id}:${r.emoji}`] ? 'scale-110' : 'scale-100'}`}>{r.count}</span>
                             </button>
                           )
                         })}
