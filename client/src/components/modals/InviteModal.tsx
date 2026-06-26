@@ -190,6 +190,16 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                 <span>·</span>
                 <span>{maxUses === null ? 'Utilisations illimitées' : `Max ${maxUses} utilisation${maxUses !== 1 ? 's' : ''}`}</span>
               </div>
+              {/* QR code */}
+              <div className="flex flex-col items-center gap-2 pt-2 border-t border-fc-hover">
+                <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide">QR Code</p>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(inviteUrl)}&bgcolor=1e1f29&color=ffffff&qzone=1`}
+                  alt="QR code invitation"
+                  className="w-32 h-32 rounded-lg border border-fc-hover"
+                />
+                <p className="text-[10px] text-fc-muted">Scanner pour rejoindre</p>
+              </div>
             </div>
           )}
 
