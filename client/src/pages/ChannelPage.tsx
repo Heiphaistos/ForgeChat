@@ -125,8 +125,8 @@ export default function ChannelPage() {
   }
 
   const sendMsg = useMutation({
-    mutationFn: ({ content, reply_to }: { content: string | null; reply_to?: string }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to }),
+    mutationFn: ({ content, reply_to, expires_at_seconds }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null }) =>
+      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds }),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
         const delay = currentChannel?.slowmode_delay ?? 30
@@ -357,9 +357,9 @@ export default function ChannelPage() {
           channelId={channelId}
           serverId={serverId}
           placeholder={slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
-          onSend={async (content, replyToId, files) => {
+          onSend={async (content, replyToId, files, ttlSeconds) => {
             try {
-              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId })
+              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds })
               const msgId = res.data?.id
               if (files && files.length > 0 && msgId) {
                 const fd = new FormData()

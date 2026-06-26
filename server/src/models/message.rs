@@ -36,6 +36,7 @@ pub struct MessageWithAuthor {
     pub author_is_bot: bool,
     pub attachments: Vec<Attachment>,
     pub reactions: Vec<ReactionCount>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
@@ -62,6 +63,7 @@ pub struct ReactionCount {
 pub struct SendMessageRequest {
     pub content: Option<String>,
     pub reply_to: Option<Uuid>,
+    pub expires_at_seconds: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -31,6 +31,7 @@ interface Message {
   attachments: Attachment[]
   reactions: ReactionCount[]
   poll_id?: string | null
+  expires_at?: string | null
 }
 
 interface ReactionCount {

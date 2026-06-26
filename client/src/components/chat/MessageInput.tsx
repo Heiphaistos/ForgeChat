@@ -20,6 +20,14 @@ import VoiceMessageRecorder from './VoiceMessageRecorder'
 
 const MAX_CHARS = 4000
 
+const MSG_TTL_OPTIONS = [
+  { label: 'Aucune expiration', value: null },
+  { label: '5 minutes', value: 300 },
+  { label: '1 heure', value: 3600 },
+  { label: '24 heures', value: 86400 },
+  { label: '7 jours', value: 604800 },
+]
+
 interface SlashCommand {
   name: string
   description: string
@@ -89,7 +97,7 @@ interface Props {
   channelId: string
   serverId: string
   placeholder?: string
-  onSend: (content: string, replyTo?: string, files?: FileWithTtl[]) => void
+  onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
   replyTo?: ReplyTarget | null
   onCancelReply?: () => void
 }
@@ -140,6 +148,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [scheduledAt, setScheduledAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
+  const [msgTtl, setMsgTtl] = useState<number | null>(null)
+  const [showTtlPicker, setShowTtlPicker] = useState(false)
   // Slash commands
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
@@ -481,7 +491,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       // Sinon : c'est peut-être une bot command, on envoie le message tel quel
     }
 
-    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined)
+    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl)
     setContent('')
     setFiles([])
     setShowMentions(false)
@@ -895,6 +905,36 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* TTL message éphémère */}
+          <div className="relative">
+            <button
+              onClick={() => { setShowTtlPicker(v => !v) }}
+              className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title={msgTtl ? `Message éphémère : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
+            >
+              <Clock size={18} />
+            </button>
+            {showTtlPicker && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="px-3 py-2 border-b border-fc-hover text-xs font-semibold text-fc-muted uppercase">
+                  Expiration du message
+                </div>
+                {MSG_TTL_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    onClick={() => { setMsgTtl(opt.value); setShowTtlPicker(false) }}
+                    className={`w-full text-left px-3 py-2 text-sm transition hover:bg-fc-hover ${
+                      msgTtl === opt.value ? 'text-fc-accent' : 'text-fc-text'
+                    }`}
+                  >
+                    {opt.label}
+                    {msgTtl === opt.value && ' ✓'}
+                  </button>
+                ))}
               </div>
             )}
           </div>

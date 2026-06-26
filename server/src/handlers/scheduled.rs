@@ -172,6 +172,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     author_is_bot: row.try_get("is_bot").unwrap_or(false),
                     attachments: vec![],
                     reactions: vec![],
+                    expires_at: None,
                 };
 
                 let event = serde_json::json!({

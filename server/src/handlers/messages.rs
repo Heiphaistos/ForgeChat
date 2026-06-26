@@ -33,6 +33,7 @@ pub async fn get_messages(
              LEFT JOIN messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at < (SELECT created_at FROM messages WHERE id=$2)
+             AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $3"
         )
         .bind(channel_id).bind(before).bind(limit)
@@ -45,7 +46,7 @@ pub async fn get_messages(
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1
+             WHERE m.channel_id=$1 AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $2"
         )
         .bind(channel_id).bind(limit)
@@ -103,6 +104,7 @@ pub async fn get_messages(
             author_is_bot: row.get("is_bot"),
             attachments,
             reactions,
+            expires_at: row.try_get("expires_at").ok().flatten(),
         });
     }
 
@@ -202,15 +204,18 @@ pub async fn send_message(
 
     let mention_everyone = content_str.map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 
+    let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s));
+
     let msg = sqlx::query(
-        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(channel_id)
     .bind(claims.sub)
     .bind(content_str)
     .bind(body.reply_to)
     .bind(mention_everyone)
+    .bind(expires_at)
     .fetch_one(&state.db)
     .await?;
 
@@ -266,6 +271,7 @@ pub async fn send_message(
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: msg.try_get("expires_at").ok().flatten(),
     };
 
     let event = serde_json::json!({
@@ -537,6 +543,7 @@ pub async fn search_messages(
         author_is_bot: r.try_get("is_bot").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: r.try_get("expires_at").ok().flatten(),
     }).collect();
 
     Ok(Json(result))
@@ -652,6 +659,7 @@ pub async fn forward_message(
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
+        expires_at: None,
     };
 
     let event = serde_json::json!({

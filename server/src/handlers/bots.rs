@@ -262,6 +262,7 @@ pub async fn bot_send_message(
         author_is_bot: true,
         attachments: vec![],
         reactions: vec![],
+        expires_at: None,
     };
 
     let event = serde_json::json!({ "type": "MESSAGE_CREATE", "message": full_msg });

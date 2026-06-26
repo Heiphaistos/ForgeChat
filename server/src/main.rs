@@ -123,6 +123,20 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Tâche de suppression des messages éphémères expirés (toutes les 60 secondes)
+    let ephemeral_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            let _ = sqlx::query(
+                "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < NOW()"
+            )
+            .execute(&ephemeral_state.db)
+            .await;
+        }
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
         .allow_methods([

@@ -388,6 +388,12 @@ export default function MessageList({
                               (modifié)
                             </button>
                           )}
+                          {msg.expires_at && (
+                            <span className="inline-flex items-center gap-1 ml-2 text-[10px] text-fc-muted border border-fc-muted/30 rounded px-1.5 py-0.5">
+                              <Clock size={9} />
+                              Éphémère
+                            </span>
+                          )}
                           {translations[msg.id] && (
                             <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
                               <span className="text-xs text-fc-accent font-medium mr-1.5">Traduction :</span>
