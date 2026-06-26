@@ -26,7 +26,7 @@ pub async fn get_messages(
 
     let messages = if let Some(before) = params.before {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, ru.username as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -40,7 +40,7 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, ru.username as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -102,6 +102,7 @@ pub async fn get_messages(
             author_discriminator: row.get("discriminator"),
             author_avatar: row.get("avatar"),
             author_is_bot: row.get("is_bot"),
+            author_verified: row.try_get("is_verified").unwrap_or(false),
             attachments,
             reactions,
             expires_at: row.try_get("expires_at").ok().flatten(),
@@ -235,7 +236,7 @@ pub async fn send_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_one(&state.db)
@@ -278,6 +279,7 @@ pub async fn send_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
+        author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
         expires_at: msg.try_get("expires_at").ok().flatten(),
@@ -517,7 +519,7 @@ pub async fn search_messages(
 
     let pattern = format!("%{}%", q.to_lowercase());
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot,
+        "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                 rm.content as reply_to_content, ru.username as reply_to_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
@@ -550,6 +552,7 @@ pub async fn search_messages(
         author_discriminator: r.get("discriminator"),
         author_avatar: r.get("avatar"),
         author_is_bot: r.try_get("is_bot").unwrap_or(false),
+        author_verified: r.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
         expires_at: r.try_get("expires_at").ok().flatten(),
@@ -642,7 +645,7 @@ pub async fn forward_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_one(&state.db)
@@ -666,6 +669,7 @@ pub async fn forward_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
+        author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
         reactions: vec![],
         expires_at: None,

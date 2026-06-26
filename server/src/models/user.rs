@@ -41,6 +41,7 @@ pub struct UserPublic {
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
     pub focus_mode: bool,
+    pub verified: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -60,6 +61,7 @@ impl From<User> for UserPublic {
             activity_name: u.activity_name,
             activity_detail: u.activity_detail,
             focus_mode: u.focus_mode,
+            verified: u.is_verified,
             created_at: u.created_at,
         }
     }

@@ -28,6 +28,7 @@ interface Message {
   author_discriminator: string
   author_avatar: string | null
   author_is_bot: boolean
+  author_verified?: boolean
   attachments: Attachment[]
   reactions: ReactionCount[]
   poll_id?: string | null

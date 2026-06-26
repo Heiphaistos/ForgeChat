@@ -148,7 +148,15 @@ export default function UserProfileCard({
         {user ? (
           <>
             {/* Identité */}
-            <div className="font-bold text-white text-lg leading-tight">{user.username}</div>
+            <div className="flex items-center gap-1.5 font-bold text-white text-lg leading-tight">
+              {user.username}
+              {user.verified && (
+                <span
+                  className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-fc-accent text-white text-xs font-bold flex-shrink-0"
+                  title="Utilisateur vérifié"
+                >✓</span>
+              )}
+            </div>
             <div className="text-xs text-fc-muted">#{user.discriminator} · {STATUS_LABEL[status] ?? 'Hors ligne'}</div>
 
             {/* Bio */}

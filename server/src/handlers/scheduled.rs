@@ -170,6 +170,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     author_discriminator: row.get("discriminator"),
                     author_avatar: row.get("avatar"),
                     author_is_bot: row.try_get("is_bot").unwrap_or(false),
+                    author_verified: row.try_get("is_verified").unwrap_or(false),
                     attachments: vec![],
                     reactions: vec![],
                     expires_at: None,
