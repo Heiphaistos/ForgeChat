@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Send, Users } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface GDMMessage {
@@ -34,10 +34,13 @@ export default function GroupDMPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const { user } = useAuth()
   const { on } = useWs()
-  const qc = useQueryClient()
   const [content, setContent] = useState('')
   const [showMembers, setShowMembers] = useState(false)
+  const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const initialized = useRef(false)
 
   const { data: group } = useQuery<GroupDM>({
     queryKey: ['group-dm', groupId],
@@ -45,33 +48,82 @@ export default function GroupDMPage() {
     enabled: !!groupId,
   })
 
-  const { data: messages = [] } = useQuery<GDMMessage[]>({
+  const { data: initialMessages } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId],
-    queryFn: () => api.get(`/dms/groups/${groupId}/messages`).then(r => r.data),
+    queryFn: () => api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data),
     enabled: !!groupId,
   })
+
+  // Initialiser les messages une seule fois par groupId
+  useEffect(() => {
+    if (!initialMessages) return
+    initialized.current = false
+  }, [groupId])
+
+  useEffect(() => {
+    if (!initialMessages || initialized.current) return
+    initialized.current = true
+    setAllMessages(initialMessages)
+    setHasMore(initialMessages.length >= 50)
+  }, [initialMessages])
+
+  // Écouter les nouveaux messages via WS
+  useEffect(() => {
+    const off = on('GROUP_DM_MESSAGE', (d: any) => {
+      if (d.group_id !== groupId) return
+      setAllMessages(prev => {
+        if (prev.find(m => m.id === d.message.id)) return prev
+        return [...prev, d.message]
+      })
+    })
+    return off
+  }, [groupId])
+
+  // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
+  const prevLen = useRef(0)
+  useEffect(() => {
+    const cur = allMessages.length
+    if (cur > prevLen.current && cur - prevLen.current === 1) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+    prevLen.current = cur
+  }, [allMessages.length])
+
+  // Scroll to bottom au chargement initial
+  useEffect(() => {
+    if (allMessages.length > 0 && prevLen.current === 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+  }, [allMessages.length])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || allMessages.length === 0 || !groupId) return
+    setLoadingMore(true)
+    try {
+      const oldest = allMessages[0]
+      const res = await api.get(`/dms/groups/${groupId}/messages?before=${oldest.id}&limit=50`)
+      const older: GDMMessage[] = res.data
+      if (older.length < 50) setHasMore(false)
+      if (older.length > 0) {
+        setAllMessages(prev => {
+          const ids = new Set(prev.map(m => m.id))
+          return [...older.filter(m => !ids.has(m.id)), ...prev]
+        })
+      } else {
+        setHasMore(false)
+      }
+    } catch {
+      toast.error('Erreur de chargement')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, hasMore, allMessages, groupId])
 
   const sendMsg = useMutation({
     mutationFn: (text: string) =>
       api.post(`/dms/groups/${groupId}/messages`, { content: text }),
     onError: () => toast.error("Erreur d'envoi"),
   })
-
-  // Écouter les nouveaux messages via WS
-  useEffect(() => {
-    const off = on('GROUP_DM_MESSAGE', (d: any) => {
-      if (d.group_id !== groupId) return
-      qc.setQueryData<GDMMessage[]>(['group-dm-messages', groupId], prev =>
-        prev ? [...prev, d.message] : [d.message]
-      )
-    })
-    return off
-  }, [groupId])
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
 
   const submit = () => {
     const t = content.trim()
@@ -108,8 +160,25 @@ export default function GroupDMPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map(msg => {
+        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
+          {/* Load more */}
+          {hasMore && (
+            <div className="flex justify-center py-2">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition disabled:opacity-50"
+              >
+                {loadingMore
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <ChevronUp size={14} />
+                }
+                {loadingMore ? 'Chargement...' : 'Charger plus'}
+              </button>
+            </div>
+          )}
+
+          {allMessages.map(msg => {
             const isMe = msg.sender_id === user?.id
             return (
               <div key={msg.id} className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}>
