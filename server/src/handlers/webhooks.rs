@@ -71,6 +71,8 @@ pub async fn create_webhook(
     if body.name.trim().is_empty() || body.name.len() > 100 {
         return Err(AppError::BadRequest("Nom invalide".into()));
     }
+    use crate::handlers::servers::require_channel_in_server;
+    require_channel_in_server(&state, body.channel_id, server_id).await?;
     use sqlx::Row;
     let row = sqlx::query(
         "INSERT INTO webhooks (server_id, channel_id, name, created_by)
@@ -105,6 +107,25 @@ pub async fn delete_webhook(
     sqlx::query("DELETE FROM webhooks WHERE id=$1 AND server_id=$2")
         .bind(webhook_id).bind(server_id).execute(&state.db).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// Route publique — POST /api/github-webhook/:channel_id?token=...
+// Le token doit correspondre à channels.github_webhook_token (configuré par le propriétaire du serveur)
+async fn verify_github_token(state: &AppState, channel_id: Uuid, token: &str) -> Result<(), AppError> {
+    use sqlx::Row;
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT github_webhook_token FROM channels WHERE id=$1"
+    )
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?
+    .flatten();
+
+    match stored {
+        Some(t) if t == token => Ok(()),
+        Some(_) => Err(AppError::Unauthorized),
+        None => Err(AppError::Forbidden), // webhook non configuré pour ce canal
+    }
 }
 
 // Route publique — POST /api/webhook/:id/:token
@@ -162,11 +183,15 @@ pub async fn execute_webhook(
 pub async fn receive_github_webhook(
     State(state): State<AppState>,
     axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     headers: axum::http::HeaderMap,
     axum::extract::Json(payload): axum::extract::Json<serde_json::Value>,
 ) -> Result<axum::response::Response, AppError> {
     use axum::response::IntoResponse;
     use sqlx::Row;
+
+    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
+    verify_github_token(&state, channel_id, token).await?;
 
     let event_type = headers
         .get("X-GitHub-Event")
