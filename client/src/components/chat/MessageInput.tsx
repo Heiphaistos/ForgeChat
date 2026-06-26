@@ -6,6 +6,7 @@ import {
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
+import { useDraft } from '../../store/chat'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
@@ -135,7 +136,8 @@ function FileIcon({ file }: { file: File }) {
 }
 
 export default function MessageInput({ channelId, serverId, placeholder, onSend, replyTo, onCancelReply, sending }: Props) {
-  const [content, setContent] = useState('')
+  const { drafts, setDraft, clearDraft } = useDraft()
+  const [content, setContent] = useState(() => drafts[channelId] ?? '')
   const [files, setFiles] = useState<FileWithTtl[]>([])
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -455,10 +457,16 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
+  // Charger le draft quand channelId change
+  useEffect(() => {
+    setContent(drafts[channelId] ?? '')
+  }, [channelId])
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     const pos = e.target.selectionStart ?? 0
     setContent(val)
+    setDraft(channelId, val)
     setCursorPos(pos)
     detectMention(val, pos)
     detectSlash(val)
@@ -484,6 +492,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         })
         if (executed) {
           setContent('')
+          clearDraft(channelId)
           setFiles([])
           setShowSlash(false)
           setShowMentions(false)
@@ -496,6 +505,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
     onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl)
     setContent('')
+    clearDraft(channelId)
     setFiles([])
     setShowMentions(false)
     setShowSlash(false)
