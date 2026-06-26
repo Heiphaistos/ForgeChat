@@ -132,7 +132,7 @@ function AppInner() {
   }, [user?.id])
 
   useEffect(() => {
-    const off = on('PRESENCE_UPDATE', (d: any) => {
+    const offUpdate = on('PRESENCE_UPDATE', (d: any) => {
       if (d.user_id && d.status) setStatus(d.user_id, d.status)
       if (d.user_id) setActivityGlobal(d.user_id, {
         activity_type: d.activity_type,
@@ -147,7 +147,19 @@ function AppInner() {
         if (Object.keys(patch).length > 0) updateMe(patch)
       }
     })
-    return off
+    // Snapshot de présence envoyé au moment de la connexion WS
+    const offInit = on('PRESENCE_INIT', (d: any) => {
+      if (!Array.isArray(d.users)) return
+      for (const u of d.users) {
+        if (u.user_id && u.status) setStatus(u.user_id, u.status)
+        if (u.user_id) setActivityGlobal(u.user_id, {
+          activity_type: u.activity_type,
+          activity_name: u.activity_name,
+          activity_detail: u.activity_detail,
+        })
+      }
+    })
+    return () => { offUpdate(); offInit() }
   }, [user?.id])
 
   // Incrémenter non-lus pour les messages reçus sur des canaux non actifs

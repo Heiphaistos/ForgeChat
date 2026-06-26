@@ -61,6 +61,12 @@ pub async fn unban_member(
         .execute(&state.db)
         .await?;
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_UNBAN",
+        "server_id": server_id,
+        "user_id": user_id,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

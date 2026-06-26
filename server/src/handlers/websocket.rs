@@ -75,6 +75,43 @@ async fn handle_socket(
 
     broadcast_presence(&state, user_id, "online").await;
 
+    // Envoyer au nouveau client le snapshot de présence de tous les users déjà en ligne
+    {
+        use sqlx::Row;
+        let connected_ids: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
+        if !connected_ids.is_empty() {
+            let rows = sqlx::query(
+                "SELECT id, status, activity_type, activity_name, activity_detail
+                 FROM users WHERE id = ANY($1) AND id != $2"
+            )
+            .bind(&connected_ids)
+            .bind(user_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
+
+            if !rows.is_empty() {
+                let users: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+                    "user_id": r.get::<Uuid, _>("id"),
+                    "status": r.get::<String, _>("status"),
+                    "activity_type": r.get::<Option<String>, _>("activity_type"),
+                    "activity_name": r.get::<Option<String>, _>("activity_name"),
+                    "activity_detail": r.get::<Option<String>, _>("activity_detail"),
+                })).collect();
+
+                let init_event = serde_json::json!({
+                    "type": "PRESENCE_INIT",
+                    "users": users,
+                }).to_string();
+
+                let clients = state.clients.read().await;
+                if let Some(tx) = clients.get(&user_id) {
+                    let _ = tx.send(init_event);
+                }
+            }
+        }
+    }
+
     let (mut sender, mut receiver) = socket.split();
     let mut rx = tx.subscribe();
 

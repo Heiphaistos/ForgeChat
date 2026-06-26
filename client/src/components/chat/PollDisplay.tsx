@@ -75,7 +75,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
     mutationFn: (optionId: string) =>
       api.post(
         `/servers/${serverId}/channels/${channelId}/polls/${pollId}/vote`,
-        { option_id: optionId }
+        { option_ids: [optionId] }
       ),
     onMutate: (optionId) => {
       setPendingOptionId(optionId)
