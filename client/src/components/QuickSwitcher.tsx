@@ -5,6 +5,22 @@ import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, Message
 import api from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
+const HISTORY_KEY = 'fc_search_history'
+function loadHistory(): string[] {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') } catch { return [] }
+}
+function saveToHistory(q: string) {
+  if (!q.trim()) return
+  const prev = loadHistory().filter(h => h !== q)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify([q, ...prev].slice(0, 5)))
+}
+function removeFromHistory(q: string) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter(h => h !== q)))
+}
+function clearHistory() {
+  localStorage.removeItem(HISTORY_KEY)
+}
+
 interface Props {
   onClose: () => void
 }
@@ -31,6 +47,7 @@ function ChannelIcon({ type }: { type: string }) {
 
 export default function QuickSwitcher({ onClose }: Props) {
   const [query, setQuery] = useState('')
+  const [history, setHistory] = useState<string[]>(loadHistory)
   const [searchResults, setSearchResults] = useState<{
     messages: any[]
     users: any[]
@@ -80,6 +97,10 @@ export default function QuickSwitcher({ onClose }: Props) {
   const filtered = results.slice(0, 10)
 
   const go = (r: Result) => {
+    if (query.trim()) {
+      saveToHistory(query.trim())
+      setHistory(loadHistory())
+    }
     if (r.type === 'channel') {
       nav(`/servers/${r.serverId}/channels/${r.id}`)
     } else {
@@ -113,6 +134,10 @@ export default function QuickSwitcher({ onClose }: Props) {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { onClose(); return }
+    if (e.key === 'Enter' && query.trim()) {
+      saveToHistory(query.trim())
+      setHistory(loadHistory())
+    }
     navKey(e.nativeEvent)
   }
 
@@ -224,7 +249,23 @@ export default function QuickSwitcher({ onClose }: Props) {
 
         {/* Résultats */}
         <div className="max-h-80 overflow-y-auto py-2">
-          {filtered.length === 0 && (
+          {!query && history.length > 0 && (
+            <div className="mb-1">
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">Recherches récentes</span>
+                <button onClick={() => { clearHistory(); setHistory([]) }} className="text-xs text-fc-muted hover:text-white">Effacer tout</button>
+              </div>
+              {history.map(h => (
+                <div key={h} className="flex items-center justify-between px-3 py-2 hover:bg-fc-hover cursor-pointer rounded-lg mx-1"
+                     onClick={() => setQuery(h)}>
+                  <span className="text-sm text-white">{h}</span>
+                  <button onClick={e => { e.stopPropagation(); removeFromHistory(h); setHistory(loadHistory()) }}
+                          className="text-fc-muted hover:text-white p-1">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {filtered.length === 0 && (query || history.length === 0) && (
             <div className="px-4 py-6 text-center text-fc-muted text-sm">Aucun résultat</div>
           )}
           {filtered.map((r, i) => (
