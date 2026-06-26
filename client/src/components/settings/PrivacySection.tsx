@@ -73,6 +73,26 @@ export default function PrivacySection() {
       >
         {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
       </button>
+
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div className="text-sm font-medium text-white mb-1">Exporter mes données</div>
+        <div className="text-xs text-fc-muted mb-3">Télécharger une copie JSON de votre profil, messages, serveurs et amis (RGPD).</div>
+        <button
+          onClick={() => {
+            api.get('/users/me/data-export', { responseType: 'blob' }).then(res => {
+              const url = URL.createObjectURL(res.data)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'forgechat-mes-donnees.json'
+              a.click()
+              URL.revokeObjectURL(url)
+            }).catch(() => toast.error('Erreur lors de l\'export'))
+          }}
+          className="px-4 py-2 bg-fc-sidebar hover:bg-fc-hover text-white text-sm rounded-lg transition"
+        >
+          Télécharger
+        </button>
+      </div>
     </div>
   )
 }
