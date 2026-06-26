@@ -138,7 +138,7 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
       const raw = r.data as unknown[]
       return (raw as Array<Record<string, unknown>>).map(e => ({
         id:          String(e.id ?? ''),
-        title:       String(e.title ?? ''),
+        title:       String(e.name ?? e.title ?? ''),
         description: e.description != null ? String(e.description) : undefined,
         starts_at:   String(e.starts_at ?? e.start_time ?? ''),
         ends_at:     e.ends_at != null ? String(e.ends_at) : e.end_time != null ? String(e.end_time) : undefined,

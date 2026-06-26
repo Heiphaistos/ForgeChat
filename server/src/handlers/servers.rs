@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::audit::log_event,
     middleware::auth::Claims,
     models::server::{CreateServerRequest, Server, ServerMember, UpdateServerRequest},
     state::AppState,
@@ -391,6 +392,12 @@ pub async fn kick_member(
         .execute(&state.db)
         .await?;
 
+    log_event(
+        &state, server_id, "MEMBER_KICK",
+        Some(claims.sub), None,
+        Some(user_id), None, None,
+    ).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -416,7 +423,7 @@ pub async fn ban_member(
     )
     .bind(user_id)
     .bind(server_id)
-    .bind(reason)
+    .bind(reason.clone())
     .bind(expires_at)
     .execute(&state.db)
     .await?;
@@ -428,6 +435,13 @@ pub async fn ban_member(
     .bind(server_id)
     .execute(&state.db)
     .await?;
+
+    log_event(
+        &state, server_id, "MEMBER_BAN",
+        Some(claims.sub), None,
+        Some(user_id), None,
+        Some(serde_json::json!({ "reason": reason })),
+    ).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

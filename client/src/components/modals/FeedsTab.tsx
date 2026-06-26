@@ -123,9 +123,26 @@ export default function FeedsTab({ serverId, channels }: Props) {
           <Rss size={18} className="text-orange-400" />
           Flux RSS / YouTube / GitHub
         </h3>
-        <p className="text-sm text-fc-muted mb-5">
+        <p className="text-sm text-fc-muted mb-3">
           Abonnez un canal à des flux RSS, YouTube ou GitHub. Les nouveaux contenus sont postés automatiquement toutes les 5 minutes.
         </p>
+
+        {/* Lien RSSDI */}
+        <div className="mb-5 p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-xl flex items-center gap-3">
+          <Rss size={18} className="text-indigo-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white">Importer depuis RSSDI</p>
+            <p className="text-xs text-fc-muted">Accédez à votre agrégateur de flux RSS personnel pour trouver et copier des URLs de flux.</p>
+          </div>
+          <a
+            href="https://rssdi.heiphaistos.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition flex-shrink-0"
+          >
+            Ouvrir RSSDI
+          </a>
+        </div>
 
         {/* Sélection du canal */}
         <div className="mb-5">

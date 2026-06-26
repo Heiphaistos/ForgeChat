@@ -199,14 +199,14 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offReq = on('FRIEND_REQUEST', (d: any) => {
-      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      qcHook.invalidateQueries({ queryKey: ['friends'] })
       toast(`👋 Nouvelle demande d'ami de ${d.from_username ?? 'quelqu\'un'}`, {
         duration: 5000,
         icon: '🤝',
       })
     })
     const offAcc = on('FRIEND_ACCEPTED', (d: any) => {
-      qcHook.invalidateQueries({ queryKey: ['friends-v2'] })
+      qcHook.invalidateQueries({ queryKey: ['friends'] })
       toast.success(`${d.from_username ?? 'Quelqu\'un'} a accepté ta demande d'ami !`)
     })
     return () => { offReq(); offAcc() }

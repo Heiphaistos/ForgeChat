@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     error::Result,
+    handlers::audit::log_event,
     handlers::servers::{require_permission},
     middleware::auth::Claims,
     models::role::{CreateRoleRequest, Permissions, Role, UpdateRoleRequest},
@@ -45,6 +46,12 @@ pub async fn create_role(
     .bind(body.hoisted.unwrap_or(false))
     .fetch_one(&state.db)
     .await?;
+
+    log_event(
+        &state, server_id, "ROLE_CREATE",
+        Some(claims.sub), None,
+        Some(role.id), Some(role.name.as_str()), None,
+    ).await;
 
     Ok(Json(role))
 }
@@ -93,6 +100,12 @@ pub async fn delete_role(
         .bind(server_id)
         .execute(&state.db)
         .await?;
+
+    log_event(
+        &state, server_id, "ROLE_DELETE",
+        Some(claims.sub), None,
+        Some(role_id), None, None,
+    ).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

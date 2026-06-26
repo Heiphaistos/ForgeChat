@@ -72,8 +72,15 @@ export default function SettingsPage() {
     <div className="fixed inset-0 bg-fc-bg z-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-fc-channel flex flex-col flex-shrink-0 border-r border-fc-hover">
-        <div className="p-4 border-b border-fc-hover">
+        <div className="p-4 border-b border-fc-hover flex items-center justify-between">
           <h1 className="text-sm font-semibold text-fc-muted uppercase tracking-wide">Paramètres</h1>
+          <button
+            onClick={() => nav(-1)}
+            className="p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
+            title="Fermer (Échap)"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2">

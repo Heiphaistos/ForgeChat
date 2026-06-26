@@ -1,5 +1,5 @@
-﻿import { useState } from 'react'
-import { Calendar, Plus, MapPin, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
+import { useState } from 'react'
+import { Calendar, Plus, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
@@ -9,22 +9,34 @@ interface Props {
   serverId: string
 }
 
+// Aligned with backend ServerEvent struct
 interface ServerEvent {
   id: string
-  title: string
+  server_id: string
+  channel_id: string | null
+  name: string
   description: string | null
+  event_type: string
   start_time: string
   end_time: string | null
-  location: string | null
-  channel_id: string | null
   creator_id: string
-  status: 'upcoming' | 'live' | 'ended'
-  attendee_count: number
-  is_attending: boolean
+  image_url: string | null
+  max_attendees: number | null
+  attendee_count: number | null
+  user_rsvp: string | null
 }
 
-type FilterType = 'upcoming' | 'live' | 'ended' | 'all'
+type FilterType = 'upcoming' | 'past' | 'all'
 type ViewMode = 'list' | 'calendar'
+
+function getStatus(event: ServerEvent): 'upcoming' | 'live' | 'ended' {
+  const now = Date.now()
+  const start = new Date(event.start_time).getTime()
+  const end = event.end_time ? new Date(event.end_time).getTime() : null
+  if (start > now) return 'upcoming'
+  if (end && now < end) return 'live'
+  return 'ended'
+}
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   upcoming: { label: 'À venir',  cls: 'bg-blue-500/20 text-blue-300' },
@@ -50,11 +62,10 @@ function toDatetimeLocal(iso: string): string {
 }
 
 interface EventFormData {
-  title: string
+  name: string
   description: string
   start_time: string
   end_time: string
-  location: string
 }
 
 interface EventModalProps {
@@ -67,11 +78,10 @@ interface EventModalProps {
 
 function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalProps) {
   const [form, setForm] = useState<EventFormData>({
-    title:       initial?.title       ?? '',
+    name:        initial?.name        ?? '',
     description: initial?.description ?? '',
     start_time:  initial?.start_time  ?? '',
     end_time:    initial?.end_time    ?? '',
-    location:    initial?.location    ?? '',
   })
 
   const set = (k: keyof EventFormData) =>
@@ -80,7 +90,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.start_time) {
+    if (!form.name.trim() || !form.start_time) {
       toast.error('Titre et date de début requis')
       return
     }
@@ -108,8 +118,8 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               Titre <span className="text-fc-red">*</span>
             </label>
             <input
-              value={form.title}
-              onChange={set('title')}
+              value={form.name}
+              onChange={set('name')}
               maxLength={100}
               placeholder="Nom de l'événement"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
@@ -158,19 +168,6 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-              Lieu
-            </label>
-            <input
-              value={form.location}
-              onChange={set('location')}
-              maxLength={200}
-              placeholder="Ex: Canal #général, Discord, Paris..."
-              className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
-            />
-          </div>
-
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -202,18 +199,21 @@ export default function ServerEventsPage({ serverId }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [createDate, setCreateDate] = useState<Date | null>(null)
 
+  const backendFilter = filter === 'past' ? 'past' : filter === 'all' ? 'all' : 'upcoming'
+
   const { data: events = [], isLoading } = useQuery<ServerEvent[]>({
-    queryKey: ['server_events', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/events`).then(r => r.data),
+    queryKey: ['server_events', serverId, backendFilter],
+    queryFn: () => api.get(`/servers/${serverId}/events?filter=${backendFilter}`).then(r => r.data),
     refetchInterval: 60_000,
   })
 
   const createEvent = useMutation({
     mutationFn: (data: EventFormData) =>
       api.post(`/servers/${serverId}/events`, {
-        ...data,
-        start_time: data.start_time ? new Date(data.start_time).toISOString() : undefined,
-        end_time:   data.end_time   ? new Date(data.end_time).toISOString()   : undefined,
+        name: data.name.trim(),
+        description: data.description.trim() || undefined,
+        start_time: new Date(data.start_time).toISOString(),
+        end_time: data.end_time ? new Date(data.end_time).toISOString() : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
@@ -227,9 +227,10 @@ export default function ServerEventsPage({ serverId }: Props) {
   const updateEvent = useMutation({
     mutationFn: ({ id, data }: { id: string; data: EventFormData }) =>
       api.put(`/servers/${serverId}/events/${id}`, {
-        ...data,
+        name: data.name.trim() || undefined,
+        description: data.description.trim() || undefined,
         start_time: data.start_time ? new Date(data.start_time).toISOString() : undefined,
-        end_time:   data.end_time   ? new Date(data.end_time).toISOString()   : undefined,
+        end_time: data.end_time ? new Date(data.end_time).toISOString() : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
@@ -250,17 +251,15 @@ export default function ServerEventsPage({ serverId }: Props) {
   })
 
   const toggleAttend = useMutation({
-    mutationFn: (eventId: string) => api.post(`/events/${eventId}/attend`),
+    mutationFn: ({ id, rsvp }: { id: string; rsvp: string }) =>
+      api.post(`/events/${id}/attend`, { status: rsvp }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server_events', serverId] }),
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
-  const filtered = filter === 'all' ? events : events.filter(e => e.status === filter)
-
   const FILTERS: { id: FilterType; label: string }[] = [
     { id: 'upcoming', label: 'À venir' },
-    { id: 'live',     label: 'En cours' },
-    { id: 'ended',    label: 'Passés' },
+    { id: 'past',     label: 'Passés' },
     { id: 'all',      label: 'Tous' },
   ]
 
@@ -285,7 +284,6 @@ export default function ServerEventsPage({ serverId }: Props) {
           <p className="text-sm text-fc-muted mt-0.5">Planifiez et gérez les événements du serveur.</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Toggle vue liste / calendrier */}
           <div className="flex items-center bg-fc-hover rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('list')}
@@ -327,7 +325,6 @@ export default function ServerEventsPage({ serverId }: Props) {
       {/* Vue Liste */}
       {viewMode === 'list' && (
         <>
-          {/* Filtres */}
           <div className="flex gap-1 flex-wrap">
             {FILTERS.map(f => (
               <button
@@ -344,22 +341,22 @@ export default function ServerEventsPage({ serverId }: Props) {
             ))}
           </div>
 
-          {/* Liste */}
           {isLoading ? (
             <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
-          ) : filtered.length === 0 ? (
+          ) : events.length === 0 ? (
             <div className="text-center py-12">
               <Calendar size={40} className="mx-auto text-fc-muted/30 mb-3" />
               <p className="text-fc-muted text-sm">Aucun événement dans cette catégorie.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map(event => {
-                const badge = STATUS_BADGE[event.status] ?? STATUS_BADGE.upcoming
+              {events.map(event => {
+                const status = getStatus(event)
+                const badge = STATUS_BADGE[status]
+                const isAttending = event.user_rsvp === 'going'
                 return (
                   <div key={event.id} className="bg-fc-channel rounded-lg p-4 hover:bg-fc-hover/20 transition">
                     <div className="flex items-start gap-3">
-                      {/* Icône date */}
                       <div className="flex-shrink-0 w-12 h-12 bg-fc-accent/20 rounded-lg flex flex-col items-center justify-center text-fc-accent">
                         <span className="text-xs font-medium leading-none uppercase">
                           {new Date(event.start_time).toLocaleDateString('fr-FR', { month: 'short' })}
@@ -369,10 +366,9 @@ export default function ServerEventsPage({ serverId }: Props) {
                         </span>
                       </div>
 
-                      {/* Contenu */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="text-white font-semibold text-sm truncate">{event.title}</span>
+                          <span className="text-white font-semibold text-sm truncate">{event.name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.cls}`}>
                             {badge.label}
                           </span>
@@ -388,31 +384,24 @@ export default function ServerEventsPage({ serverId }: Props) {
                             {formatDateFR(event.start_time)}
                             {event.end_time && ` → ${formatDateFR(event.end_time)}`}
                           </span>
-                          {event.location && (
-                            <span className="flex items-center gap-1">
-                              <MapPin size={11} />
-                              {event.location}
-                            </span>
-                          )}
                           <span className="flex items-center gap-1">
                             <Users size={11} />
-                            {event.attendee_count} participant{event.attendee_count !== 1 ? 's' : ''}
+                            {event.attendee_count ?? 0} participant{(event.attendee_count ?? 0) !== 1 ? 's' : ''}
                           </span>
                         </div>
                       </div>
 
-                      {/* Actions */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
-                          onClick={() => toggleAttend.mutate(event.id)}
+                          onClick={() => toggleAttend.mutate({ id: event.id, rsvp: isAttending ? 'not_going' : 'going' })}
                           disabled={toggleAttend.isPending}
                           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition ${
-                            event.is_attending
+                            isAttending
                               ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                               : 'bg-fc-hover text-fc-muted hover:text-white'
                           }`}
                         >
-                          {event.is_attending ? <><Check size={12} /> Inscrit</> : 'Participer'}
+                          {isAttending ? <><Check size={12} /> Inscrit</> : 'Participer'}
                         </button>
 
                         <button
@@ -459,7 +448,6 @@ export default function ServerEventsPage({ serverId }: Props) {
         </>
       )}
 
-      {/* Modal création */}
       {showCreate && (
         <EventModal
           mode="create"
@@ -470,16 +458,14 @@ export default function ServerEventsPage({ serverId }: Props) {
         />
       )}
 
-      {/* Modal édition */}
       {editing && (
         <EventModal
           mode="edit"
           initial={{
-            title:       editing.title,
+            name:        editing.name,
             description: editing.description ?? '',
             start_time:  toDatetimeLocal(editing.start_time),
             end_time:    editing.end_time ? toDatetimeLocal(editing.end_time) : '',
-            location:    editing.location ?? '',
           }}
           onClose={() => setEditing(null)}
           onSubmit={data => updateEvent.mutate({ id: editing.id, data })}

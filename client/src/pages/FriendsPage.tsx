@@ -91,10 +91,11 @@ export default function FriendsPage() {
   const getStatus = usePresence(s => s.getStatus)
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const { data: friends = [], isLoading } = useQuery<FriendRow[]>({
+  const { data: friendsData, isLoading } = useQuery<{ friends: FriendRow[]; counts: Record<string, number> }>({
     queryKey: ['friends'],
-    queryFn: () => api.get('/friends').then(r => r.data),
+    queryFn: () => api.get('/friends/v2?filter=all').then(r => r.data),
   })
+  const friends: FriendRow[] = friendsData?.friends ?? []
 
   const { data: blocked = [] } = useQuery<BlockedRow[]>({
     queryKey: ['friends_blocked'],
@@ -141,7 +142,7 @@ export default function FriendsPage() {
   })
 
   const sendRequest = useMutation({
-    mutationFn: (tag: string) => api.post('/friends', { tag }),
+    mutationFn: (tag: string) => api.post('/friends/by-name', { name: tag }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
       setAddTag('')

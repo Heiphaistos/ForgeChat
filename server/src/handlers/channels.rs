@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::audit::log_event,
     handlers::servers::{require_member, require_permission},
     middleware::auth::Claims,
     models::{
@@ -82,8 +83,14 @@ pub async fn create_channel(
     .fetch_one(&state.db)
     .await?;
 
-    let event = serde_json::json!({ "type": "CHANNEL_CREATE", "channel": channel });
+    let event = serde_json::json!({ "type": "CHANNEL_CREATE", "channel": &channel });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    log_event(
+        &state, server_id, "CHANNEL_CREATE",
+        Some(claims.sub), None,
+        Some(channel.id), Some(channel.name.as_str()), None,
+    ).await;
 
     Ok(Json(channel))
 }
@@ -199,6 +206,12 @@ pub async fn delete_channel(
 
     let event = serde_json::json!({ "type": "CHANNEL_DELETE", "channel_id": channel_id });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    log_event(
+        &state, server_id, "CHANNEL_DELETE",
+        Some(claims.sub), None,
+        Some(channel_id), None, None,
+    ).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

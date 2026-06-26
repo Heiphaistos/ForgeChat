@@ -8,6 +8,7 @@ use redis::AsyncCommands;
 
 use crate::{
     error::{AppError, Result},
+    handlers::audit::log_event,
     handlers::servers::require_member,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
@@ -378,6 +379,15 @@ pub async fn delete_message(
         "channel_id": channel_id,
     });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    if msg_user != claims.sub {
+        log_event(
+            &state, server_id, "MESSAGE_DELETE",
+            Some(claims.sub), None,
+            Some(message_id), None,
+            Some(serde_json::json!({ "channel_id": channel_id, "author_id": msg_user })),
+        ).await;
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

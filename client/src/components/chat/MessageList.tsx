@@ -250,6 +250,15 @@ export default function MessageList({
   const density = localStorage.getItem('fc_density') ?? 'normal'
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    return () => { document.removeEventListener('click', close); document.removeEventListener('contextmenu', close) }
+  }, [!!contextMenu])
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -340,6 +349,11 @@ export default function MessageList({
               onDoubleClick={e => {
                 e.stopPropagation()
                 setDblClickPopover({ msgId: msg.id, x: e.clientX, y: e.clientY })
+              }}
+              onContextMenu={e => {
+                e.preventDefault()
+                e.stopPropagation()
+                setContextMenu({ x: e.clientX, y: e.clientY, msg })
               }}
             >
               {/* Avatar */}
@@ -881,6 +895,108 @@ export default function MessageList({
           initialIndex={lightbox.index}
           onClose={() => setLightbox(null)}
         />
+      )}
+
+      {/* Context menu clic droit */}
+      {contextMenu && (
+        <div
+          className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm"
+          style={{
+            left: Math.min(contextMenu.x, window.innerWidth - 220),
+            top: Math.min(contextMenu.y, window.innerHeight - 280),
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {contextMenu.msg.content && (
+            <button
+              onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            >
+              <Copy size={14} /> Copier le texte
+            </button>
+          )}
+          <button
+            onClick={() => {
+              const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?msg=${contextMenu.msg.id}`
+              navigator.clipboard.writeText(link)
+              toast.success('Lien copié')
+              setContextMenu(null)
+            }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+          >
+            <Link size={14} /> Copier le lien
+          </button>
+          <button
+            onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-muted text-xs"
+          >
+            <Copy size={12} /> Copier l'ID du message
+          </button>
+
+          <div className="border-t border-fc-hover my-1" />
+
+          <button
+            onClick={() => { onReply?.(contextMenu.msg); setContextMenu(null) }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+          >
+            <CornerUpLeft size={14} /> Répondre
+          </button>
+
+          {onOpenThread && (
+            <button
+              onClick={() => { onOpenThread(contextMenu.msg.id); setContextMenu(null) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            >
+              <MessagesSquare size={14} /> Créer un fil
+            </button>
+          )}
+
+          <button
+            onClick={() => { setForwardingMsg({ id: contextMenu.msg.id }); setContextMenu(null) }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+          >
+            <Forward size={14} className="rotate-180" /> Transférer
+          </button>
+
+          {onPinMessage && (
+            <button
+              onClick={() => { onPinMessage(contextMenu.msg.id); setContextMenu(null) }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            >
+              <Pin size={14} /> {contextMenu.msg.pinned ? 'Désépingler' : 'Épingler'}
+            </button>
+          )}
+
+          {contextMenu.msg.author_id === user?.id && (
+            <>
+              <div className="border-t border-fc-hover my-1" />
+              <button
+                onClick={() => { startEdit(contextMenu.msg.id, contextMenu.msg.content ?? ''); setContextMenu(null) }}
+                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+              >
+                <Pencil size={14} /> Modifier
+              </button>
+              <button
+                onClick={() => { onDeleteMessage(contextMenu.msg.id); setContextMenu(null) }}
+                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-red"
+              >
+                <Trash2 size={14} /> Supprimer
+              </button>
+            </>
+          )}
+
+          {contextMenu.msg.author_id !== user?.id && (
+            <>
+              <div className="border-t border-fc-hover my-1" />
+              <button
+                onClick={() => { setReportingMsg(contextMenu.msg.id); setContextMenu(null) }}
+                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-red"
+              >
+                <Flag size={14} /> Signaler
+              </button>
+            </>
+          )}
+        </div>
       )}
     </div>
   )

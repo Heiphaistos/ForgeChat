@@ -25,6 +25,8 @@ pub struct User {
     pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub totp_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -43,6 +45,7 @@ pub struct UserPublic {
     pub activity_detail: Option<String>,
     pub focus_mode: bool,
     pub verified: bool,
+    pub totp_enabled: bool,
     pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
 }
@@ -64,6 +67,7 @@ impl From<User> for UserPublic {
             activity_detail: u.activity_detail,
             focus_mode: u.focus_mode,
             verified: u.is_verified,
+            totp_enabled: u.totp_enabled,
             birthday: u.birthday,
             created_at: u.created_at,
         }

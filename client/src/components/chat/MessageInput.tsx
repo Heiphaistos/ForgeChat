@@ -522,13 +522,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       const mins = Math.floor(duration / 60)
       const secs = duration % 60
       const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
-      const res = await api.post(`/channels/${channelId}/messages`, {
+      const res = await api.post(`/servers/${serverId}/channels/${channelId}/messages`, {
         content: `🎤 Message vocal (${durationStr})`,
       })
       const formData = new FormData()
       const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
       formData.append('file', blob, `voice-${Date.now()}.${ext}`)
-      await api.post(`/messages/${res.data.id}/attachments`, formData, {
+      await api.post(`/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       setShowVoiceRecorder(false)
@@ -536,7 +536,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       toast.error("Erreur lors de l'envoi du message vocal")
       setShowVoiceRecorder(false)
     }
-  }, [channelId])
+  }, [channelId, serverId])
 
   const closeAllPickers = () => {
     setShowEmojiPicker(false)

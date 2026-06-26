@@ -146,6 +146,26 @@ function PermGroup({
   const [open, setOpen] = useState(true)
   const enabledCount = group.perms.filter(p => hasBit(perms, p.bit)).length
 
+  const checkAll = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (disabled) return
+    let p = perms
+    for (const perm of group.perms) {
+      if (!hasBit(p, perm.bit)) p = p + perm.bit
+    }
+    onChange(p)
+  }
+
+  const uncheckAll = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (disabled) return
+    let p = perms
+    for (const perm of group.perms) {
+      if (hasBit(p, perm.bit)) p = p - perm.bit
+    }
+    onChange(p)
+  }
+
   return (
     <div className="border border-fc-hover rounded-xl overflow-hidden mb-2">
       <button
@@ -157,6 +177,20 @@ function PermGroup({
           <span className={`text-sm font-semibold ${group.color}`}>{group.label}</span>
           <span className="text-xs text-fc-muted">({enabledCount}/{group.perms.length})</span>
         </div>
+        {!disabled && (
+          <div className="flex gap-1 ml-2" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={checkAll}
+              className="px-2 py-0.5 text-[10px] rounded bg-fc-accent/20 text-fc-accent hover:bg-fc-accent/30 transition font-medium"
+              title="Tout cocher dans cette catégorie"
+            >Tout</button>
+            <button
+              onClick={uncheckAll}
+              className="px-2 py-0.5 text-[10px] rounded bg-fc-red/20 text-fc-red hover:bg-fc-red/30 transition font-medium"
+              title="Tout décocher dans cette catégorie"
+            >Aucun</button>
+          </div>
+        )}
       </button>
       {open && (
         <div className="px-2 py-1.5 space-y-0.5">

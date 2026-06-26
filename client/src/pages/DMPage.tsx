@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen } from 'lucide-react'
+import { Phone, Video, Search, Lock, LockOpen, X } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -9,6 +9,7 @@ import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
 import { useE2E } from '../hooks/useE2E'
 import DMConversation from '../components/chat/DMConversation'
+import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -49,6 +50,8 @@ export default function DMPage() {
   const [e2eInput, setE2eInput] = useState('')
   const [e2eSending, setE2eSending] = useState(false)
   const e2eBottomRef = useRef<HTMLDivElement>(null)
+  const [showSearch, setShowSearch] = useState(false)
+  const [callMode, setCallMode] = useState<'voice' | 'video' | null>(null)
 
   const { data: dmInfo } = useQuery({
     queryKey: ['dm_info', dmId],
@@ -193,6 +196,24 @@ export default function DMPage() {
   const sendDm = useMutation({
     mutationFn: (content: string | null) =>
       api.post(`/dms/${dmId}/messages`, { content: content ?? '' }),
+    onSuccess: (res) => {
+      const msg = res.data
+      if (msg && me && dmId) {
+        addMessage({
+          ...msg,
+          channel_id: dmId,
+          author_id: me.id,
+          author_username: me.username,
+          author_avatar: me.avatar ?? null,
+          author_discriminator: '0000',
+          attachments: [],
+          reactions: [],
+          type: 'default',
+          pinned: false,
+          edited_at: null,
+        })
+      }
+    },
     onError: () => toast.error('Envoi impossible'),
   })
 
@@ -291,17 +312,67 @@ export default function DMPage() {
           >
             {e2eMode ? <Lock size={18} /> : <LockOpen size={18} />}
           </button>
-          <button className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition" title="Appel vocal">
+          <button
+            onClick={() => setCallMode(callMode === 'voice' ? null : 'voice')}
+            className={`p-1.5 rounded transition ${callMode === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={callMode === 'voice' ? 'Raccrocher' : 'Appel vocal'}
+          >
             <Phone size={18} />
           </button>
-          <button className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition" title="Appel vidéo">
+          <button
+            onClick={() => setCallMode(callMode === 'video' ? null : 'video')}
+            className={`p-1.5 rounded transition ${callMode === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={callMode === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
+          >
             <Video size={18} />
           </button>
-          <button className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition" title="Rechercher">
+          <button
+            onClick={() => setShowSearch(s => !s)}
+            className={`p-1.5 rounded transition ${showSearch ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title="Rechercher dans la conversation"
+          >
             <Search size={18} />
           </button>
         </div>
       </div>
+
+      {/* Panneau d'appel DM vocal/vidéo */}
+      {callMode && (
+        <div className={`flex flex-col items-center justify-center gap-4 p-8 border-b ${callMode === 'video' ? 'border-fc-accent/40 bg-indigo-900/10' : 'border-green-600/40 bg-green-900/10'}`}>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
+              {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+            </div>
+            <p className="text-white font-semibold">{partnerName}</p>
+            <p className="text-sm text-fc-muted animate-pulse">{callMode === 'video' ? 'Appel vidéo en cours...' : 'Appel vocal en cours...'}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {callMode === 'video' && (
+              <button className="p-3 bg-fc-hover rounded-full text-fc-muted hover:text-white transition" title="Caméra">
+                <Video size={20} />
+              </button>
+            )}
+            <button className="p-3 bg-fc-hover rounded-full text-fc-muted hover:text-white transition" title="Micro">
+              <Phone size={20} />
+            </button>
+            <button
+              onClick={() => setCallMode(null)}
+              className="p-3 bg-fc-red rounded-full text-white hover:bg-red-600 transition"
+              title="Raccrocher"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <p className="text-xs text-fc-muted">Appels DM P2P via WebRTC — nécessite TURN actif</p>
+        </div>
+      )}
+
+      {/* Panneau de recherche DM */}
+      {showSearch && dmId && (
+        <div className="border-b border-fc-bg">
+          <SearchPanel channelId={dmId} serverId="" channelName="Messages directs" onClose={() => setShowSearch(false)} />
+        </div>
+      )}
 
       {/* E2E mode: custom encrypted chat area */}
       {e2eMode ? (

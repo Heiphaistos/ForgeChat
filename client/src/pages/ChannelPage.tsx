@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useContext } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
@@ -47,6 +47,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const channelId = forcedChannelId ?? params.channelId
   const { setSplitChannelId } = useContext(SplitContext)
   const [searchParams] = useSearchParams()
+  const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
@@ -200,7 +201,16 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     )
   }
 
-  // Loading state — FIX du bug page noire
+  const channels: any[] = serverData?.channels ?? []
+
+  // Auto-redirect vers le premier canal texte quand aucun canal sélectionné
+  useEffect(() => {
+    if (!channelId && serverData && channels.length > 0 && !isSplit) {
+      const firstText = channels.find((c: any) => c.type === 'text' || c.type === 'announcement')
+      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
+    }
+  }, [channelId, serverData, serverId, isSplit])
+
   if (!channelId && serverLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -209,14 +219,20 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     )
   }
 
-  const channels: any[] = serverData?.channels ?? []
-
   if (!channelId && serverData) {
+    const firstText = channels.find((c: any) => c.type === 'text' || c.type === 'announcement')
+    if (!firstText) {
+      return (
+        <WelcomeScreen
+          server={serverData.server ?? serverData}
+          channels={channels}
+        />
+      )
+    }
     return (
-      <WelcomeScreen
-        server={serverData.server ?? serverData}
-        channels={channels}
-      />
+      <div className="flex items-center justify-center h-full">
+        <Loader2 size={32} className="animate-spin text-fc-accent" />
+      </div>
     )
   }
 
