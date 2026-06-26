@@ -117,6 +117,10 @@ pub async fn create_ticket(
     .bind(priority)
     .fetch_one(&state.db)
     .await?;
+
+    let event = serde_json::json!({ "type": "TICKET_CREATE", "server_id": server_id, "ticket": ticket });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(ticket))
 }
 
@@ -186,6 +190,10 @@ pub async fn update_ticket(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Ticket introuvable".into()))?;
+
+    let event = serde_json::json!({ "type": "TICKET_UPDATE", "server_id": server_id, "ticket": ticket });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(ticket))
 }
 

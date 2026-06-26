@@ -155,6 +155,9 @@ pub async fn create_event(
     .fetch_one(&state.db)
     .await?;
 
+    let ws_event = serde_json::json!({ "type": "SERVER_EVENT_CREATE", "server_id": server_id, "event": event });
+    state.broadcast_to_server_members(server_id, ws_event.to_string()).await;
+
     Ok(Json(event))
 }
 
@@ -237,6 +240,9 @@ pub async fn update_event(
         return Err(AppError::NotFound("Événement introuvable ou non autorisé".into()));
     }
 
+    let ws_event = serde_json::json!({ "type": "SERVER_EVENT_UPDATE", "server_id": server_id, "event_id": event_id });
+    state.broadcast_to_server_members(server_id, ws_event.to_string()).await;
+
     get_event(Extension(claims), Path((server_id, event_id)), State(state)).await
 }
 
@@ -260,6 +266,9 @@ pub async fn delete_event(
     if deleted.rows_affected() == 0 {
         return Err(AppError::NotFound("Événement introuvable ou non autorisé".into()));
     }
+
+    let ws_event = serde_json::json!({ "type": "SERVER_EVENT_DELETE", "server_id": server_id, "event_id": event_id });
+    state.broadcast_to_server_members(server_id, ws_event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -300,6 +309,9 @@ pub async fn attend_event(
     .bind(&body.status)
     .execute(&state.db)
     .await?;
+
+    let ws_event = serde_json::json!({ "type": "EVENT_RSVP_UPDATE", "event_id": event_id, "user_id": claims.sub, "status": body.status });
+    state.broadcast_to_server_members(server_id, ws_event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true, "status": body.status })))
 }

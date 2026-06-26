@@ -101,12 +101,20 @@ pub async fn update_me(
     .fetch_one(&state.db)
     .await?;
 
-    // Broadcast mise à jour statut
-    let event = serde_json::json!({
-        "type": "USER_UPDATE",
-        "user": UserPublic::from(user.clone())
-    });
-    state.broadcast_to_user(claims.sub, event.to_string()).await;
+    // Broadcast mise à jour profil à tous les membres des serveurs communs
+    let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
+    let event_str = event.to_string();
+    state.broadcast_to_user(claims.sub, event_str.clone()).await;
+    let server_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    for sid in server_ids {
+        state.broadcast_to_server_members(sid, event_str.clone()).await;
+    }
 
     Ok(Json(user.into()))
 }
@@ -161,6 +169,21 @@ pub async fn upload_avatar(
         .bind(&avatar_url)
         .fetch_one(&state.db)
         .await?;
+
+        // Notifier les membres des serveurs communs du nouvel avatar
+        let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
+        let event_str = event.to_string();
+        state.broadcast_to_user(claims.sub, event_str.clone()).await;
+        let server_ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+        for sid in server_ids {
+            state.broadcast_to_server_members(sid, event_str.clone()).await;
+        }
 
         return Ok(Json(user.into()));
     }

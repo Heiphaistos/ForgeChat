@@ -125,6 +125,9 @@ pub async fn create_post(
     .fetch_one(&state.db)
     .await?;
 
+    let event = serde_json::json!({ "type": "FORUM_POST_CREATE", "channel_id": channel_id, "post": post });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(serde_json::json!({ "post": post })))
 }
 
@@ -240,6 +243,9 @@ pub async fn reply_to_post(
     .execute(&state.db)
     .await?;
 
+    let event = serde_json::json!({ "type": "FORUM_REPLY_CREATE", "channel_id": channel_id, "post_id": post_id, "reply": reply });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(serde_json::json!({ "reply": reply })))
 }
 
@@ -292,6 +298,9 @@ pub async fn update_post(
     .execute(&state.db)
     .await?;
 
+    let event = serde_json::json!({ "type": "FORUM_POST_UPDATE", "channel_id": channel_id, "post_id": post_id });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -326,6 +335,9 @@ pub async fn delete_post(
         .bind(channel_id)
         .execute(&state.db)
         .await?;
+
+    let event = serde_json::json!({ "type": "FORUM_POST_DELETE", "channel_id": channel_id, "post_id": post_id });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

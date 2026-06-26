@@ -354,6 +354,9 @@ pub async fn create_task(
     .fetch_one(&state.db)
     .await?;
 
+    let event = serde_json::json!({ "type": "TASK_CREATE", "channel_id": channel_id, "task": task });
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+
     Ok(Json(task))
 }
 
@@ -438,6 +441,9 @@ pub async fn update_task(
     .await?
     .ok_or_else(|| AppError::NotFound("Tâche introuvable".into()))?;
 
+    let event = serde_json::json!({ "type": "TASK_UPDATE", "channel_id": channel_id, "task": task });
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+
     Ok(Json(task))
 }
 
@@ -472,6 +478,9 @@ pub async fn delete_task(
     if deleted.rows_affected() == 0 {
         return Err(AppError::NotFound("Tâche introuvable ou non autorisé".into()));
     }
+
+    let event = serde_json::json!({ "type": "TASK_DELETE", "channel_id": channel_id, "task_id": task_id });
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

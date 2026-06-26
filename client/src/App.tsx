@@ -239,6 +239,18 @@ function AppInner() {
     return () => { offTimeout(); offLift() }
   }, [user?.id])
 
+  // Rappels programmés
+  useEffect(() => {
+    if (!user) return
+    const offReminder = on('REMINDER', (d: any) => {
+      toast(d.message ?? 'Rappel !', { icon: '⏰', duration: 10000 })
+    })
+    const offReorder = on('CHANNELS_REORDER', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    return () => { offReminder(); offReorder() }
+  }, [user?.id])
+
   // Expulsion/ban → forcer le retour à l'accueil + refresh liste serveurs
   useEffect(() => {
     if (!user) return

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { BarChart2, Clock, CheckCircle2, Loader2, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -6,6 +6,7 @@ import { fr } from 'date-fns/locale'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../store/auth'
+import { useWs } from '../../store/ws'
 
 interface PollOption {
   id: string
@@ -47,7 +48,18 @@ function ProgressBar({ percent }: { percent: number }) {
 export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const { on } = useWs()
   const [pendingOptionId, setPendingOptionId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const offVote = on('POLL_VOTE', (d: any) => {
+      if (d.poll_id === pollId) queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
+    })
+    const offClosed = on('POLL_CLOSED', (d: any) => {
+      if (d.poll_id === pollId) queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
+    })
+    return () => { offVote(); offClosed() }
+  }, [pollId, on, queryClient])
 
   const { data: poll, isLoading, isError } = useQuery<Poll>({
     queryKey: ['poll', pollId],
