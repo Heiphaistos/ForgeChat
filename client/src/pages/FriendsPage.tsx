@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   UserPlus, MessageCircle, Check, X, Link, Copy, Search,
   MoreHorizontal, UserX, Shield, User, Wifi, WifiOff,
-  Clock, MinusCircle,
+  Clock, MinusCircle, Upload,
 } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
+import ImportContactsModal from '../components/modals/ImportContactsModal'
 
 type FriendTab = 'online' | 'all' | 'pending' | 'blocked'
 type PendingSubTab = 'received' | 'sent'
@@ -84,6 +85,7 @@ export default function FriendsPage() {
   const [copied, setCopied] = useState(false)
   const [search, setSearch] = useState('')
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
   const qc = useQueryClient()
   const nav = useNavigate()
   const getStatus = usePresence(s => s.getStatus)
@@ -310,6 +312,14 @@ export default function FriendsPage() {
           >
             + Ajouter un ami
           </button>
+          <button
+            onClick={() => setShowImport(true)}
+            className="px-3 py-1.5 rounded text-sm font-medium bg-fc-hover hover:bg-fc-input text-fc-text hover:text-white transition ml-1 flex items-center gap-1.5"
+            title="Importer des contacts depuis un CSV"
+          >
+            <Upload size={14} />
+            Importer CSV
+          </button>
         </div>
       </div>
 
@@ -529,5 +539,7 @@ export default function FriendsPage() {
         )}
       </div>
     </div>
+
+    {showImport && <ImportContactsModal onClose={() => setShowImport(false)} />}
   )
 }
