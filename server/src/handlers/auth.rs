@@ -378,8 +378,31 @@ pub async fn refresh(
 pub async fn change_password(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
+    // Rate limit : 5 tentatives / 15min par IP
+    let ip = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string());
+    {
+        let key = format!("chgpw_attempts:{}", ip);
+        let mut redis = state.redis.lock().await;
+        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
+        let count = count.unwrap_or(0);
+        if count >= 5 {
+            return Err(AppError::TooManyRequests);
+        }
+        let _: () = redis.incr(&key, 1).await.unwrap_or(());
+        if count == 0 {
+            let _: () = redis.expire(&key, 900).await.unwrap_or(());
+        }
+    }
+
     let old_pw = body["old_password"]
         .as_str()
         .ok_or_else(|| AppError::BadRequest("old_password requis".into()))?;
@@ -389,6 +412,9 @@ pub async fn change_password(
 
     if new_pw.len() < 8 {
         return Err(AppError::BadRequest("Mot de passe min 8 chars".into()));
+    }
+    if new_pw.len() > 128 {
+        return Err(AppError::BadRequest("Mot de passe max 128 chars".into()));
     }
 
     let pw_hash = sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE id=$1")

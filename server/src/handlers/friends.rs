@@ -398,10 +398,16 @@ pub async fn send_dm(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    let content = body["content"]
+    let content_raw = body["content"]
         .as_str()
         .filter(|c| !c.trim().is_empty())
         .ok_or_else(|| AppError::BadRequest("Contenu vide".into()))?;
+    let content: String = if content_raw.len() > 4000 {
+        content_raw.chars().take(4000).collect()
+    } else {
+        content_raw.to_string()
+    };
+    let content = content.as_str();
 
     let msg = sqlx::query(
         "INSERT INTO dm_messages (dm_channel_id, sender_id, content) VALUES ($1, $2, $3) RETURNING *"

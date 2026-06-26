@@ -179,13 +179,20 @@ pub async fn send_group_message(
     .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
-    let content = body.content.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty());
-    if content.is_none() { return Err(AppError::BadRequest("Message vide".into())); }
+    let content_raw = body.content.as_deref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| AppError::BadRequest("Message vide".into()))?;
+    let content: String = if content_raw.len() > 4000 {
+        content_raw.chars().take(4000).collect()
+    } else {
+        content_raw
+    };
 
     let msg = sqlx::query(
         "INSERT INTO group_dm_messages (dm_id, sender_id, content) VALUES ($1, $2, $3) RETURNING id, created_at"
     )
-    .bind(group_id).bind(claims.sub).bind(content)
+    .bind(group_id).bind(claims.sub).bind(&content)
     .fetch_one(&state.db).await?;
 
     let user = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
