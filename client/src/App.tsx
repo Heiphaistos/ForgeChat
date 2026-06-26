@@ -212,6 +212,33 @@ function AppInner() {
     return () => { offReq(); offAcc() }
   }, [user?.id])
 
+  // Mise à jour temps réel des canaux
+  useEffect(() => {
+    if (!user) return
+    const offUpdate = on('CHANNEL_UPDATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    const offCreate = on('CHANNEL_CREATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    const offDelete = on('CHANNEL_DELETE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    return () => { offUpdate(); offCreate(); offDelete() }
+  }, [user?.id])
+
+  // Timeout utilisateur reçu en temps réel
+  useEffect(() => {
+    if (!user) return
+    const offTimeout = on('USER_TIMEOUT', (d: any) => {
+      toast.error(`Vous avez été mis en sourdine jusqu'à ${new Date(d.expires_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${d.reason ? ` — ${d.reason}` : ''}`, { duration: 8000 })
+    })
+    const offLift = on('USER_TIMEOUT_LIFTED', () => {
+      toast.success('Votre timeout a été levé', { duration: 4000 })
+    })
+    return () => { offTimeout(); offLift() }
+  }, [user?.id])
+
   // Raccourcis clavier globaux
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
