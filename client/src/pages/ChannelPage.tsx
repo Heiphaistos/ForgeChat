@@ -179,6 +179,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     } catch { return false }
   }, [channelId, serverId, hasMore])
 
+  // Auto-redirect vers le premier canal texte — DOIT être avant tout return conditionnel
+  useEffect(() => {
+    if (!channelId && !isSplit && serverId && serverData) {
+      const chans: any[] = serverData?.channels ?? []
+      const firstText = chans.find((c: any) => c.type === 'text' || c.type === 'announcement')
+      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
+    }
+  }, [channelId, serverData, serverId, isSplit])
+
   if (!serverId) return null
 
   const server = serverData?.server ?? serverData
@@ -202,14 +211,6 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }
 
   const channels: any[] = serverData?.channels ?? []
-
-  // Auto-redirect vers le premier canal texte quand aucun canal sélectionné
-  useEffect(() => {
-    if (!channelId && serverData && channels.length > 0 && !isSplit) {
-      const firstText = channels.find((c: any) => c.type === 'text' || c.type === 'announcement')
-      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
-    }
-  }, [channelId, serverData, serverId, isSplit])
 
   if (!channelId && serverLoading) {
     return (
