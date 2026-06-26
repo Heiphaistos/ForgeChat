@@ -11,6 +11,7 @@ pub mod friends;
 pub mod threads;
 pub mod forum;
 pub mod reads;
+pub mod reports;
 pub mod emojis;
 pub mod bots;
 pub mod server_settings;

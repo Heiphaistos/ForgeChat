@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -12,6 +12,7 @@ import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
 import ReminderModal from './ReminderModal'
+import ReportModal from './ReportModal'
 import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
@@ -182,6 +183,7 @@ export default function MessageList({
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
   const [reminderFor, setReminderFor] = useState<string | null>(null)
+  const [reportingMsg, setReportingMsg] = useState<string | null>(null)
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
   const density = localStorage.getItem('fc_density') ?? 'normal'
@@ -656,6 +658,16 @@ export default function MessageList({
                     )}
                   </div>
 
+                  {!isOwn && (
+                    <button
+                      onClick={() => setReportingMsg(msg.id)}
+                      className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
+                      title="Signaler ce message"
+                    >
+                      <Flag size={14} />
+                    </button>
+                  )}
+
                   <button
                     onClick={() => onDeleteMessage(msg.id)}
                     className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
@@ -758,6 +770,14 @@ export default function MessageList({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Modal signalement message */}
+      {reportingMsg && (
+        <ReportModal
+          messageId={reportingMsg}
+          onClose={() => setReportingMsg(null)}
+        />
       )}
 
       {/* Lightbox image plein écran */}
