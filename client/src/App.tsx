@@ -239,6 +239,25 @@ function AppInner() {
     return () => { offTimeout(); offLift() }
   }, [user?.id])
 
+  // Expulsion/ban → forcer le retour à l'accueil + refresh liste serveurs
+  useEffect(() => {
+    if (!user) return
+    const offKicked = on('MEMBER_KICKED', (d: any) => {
+      toast.error('Vous avez été expulsé du serveur', { duration: 6000 })
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['servers'] })
+      nav('/')
+    })
+    const offBanned = on('MEMBER_BANNED', (d: any) => {
+      toast.error('Vous avez été banni du serveur', { duration: 6000 })
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['servers'] })
+      nav('/')
+    })
+    const offRemove = on('MEMBER_REMOVE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    return () => { offKicked(); offBanned(); offRemove() }
+  }, [user?.id])
+
   // Raccourcis clavier globaux
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

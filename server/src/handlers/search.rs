@@ -47,10 +47,22 @@ pub async fn global_search(
     .fetch_all(&state.db)
     .await?;
 
-    // Recherche utilisateurs (par username)
+    // Recherche utilisateurs : amis + membres de serveurs communs uniquement (évite enumération globale)
     let users = sqlx::query(
-        "SELECT id, username, avatar, status FROM users WHERE username ILIKE $1 LIMIT 8"
+        "SELECT DISTINCT u.id, u.username, u.avatar, u.status
+         FROM users u
+         WHERE u.username ILIKE $2
+           AND (
+             EXISTS(SELECT 1 FROM friends f
+                    WHERE f.status='accepted'
+                      AND ((f.user_id=$1 AND f.friend_id=u.id) OR (f.friend_id=$1 AND f.user_id=u.id)))
+             OR EXISTS(SELECT 1 FROM server_members sm1
+                       JOIN server_members sm2 ON sm1.server_id=sm2.server_id
+                       WHERE sm1.user_id=$1 AND sm2.user_id=u.id)
+           )
+         LIMIT 8"
     )
+    .bind(uid)
     .bind(&pattern)
     .fetch_all(&state.db)
     .await?;

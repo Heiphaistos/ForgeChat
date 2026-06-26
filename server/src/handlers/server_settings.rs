@@ -154,6 +154,18 @@ pub async fn assign_tag(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
 
+    // Vérifier que la cible est bien membre du serveur (évite IDOR sur user_id arbitraire)
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !is_member {
+        return Err(crate::error::AppError::NotFound("Membre introuvable".into()));
+    }
+
     sqlx::query(
         "INSERT INTO member_tags (user_id, server_id, tag_id) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING",
@@ -196,6 +208,9 @@ pub async fn get_members_detailed(
     use crate::handlers::servers::require_member;
     require_member(&state, claims.sub, server_id).await?;
 
+    use sqlx::Row;
+
+    // Membres avec rôles et tags en 3 requêtes (au lieu de 2N+1)
     let members = sqlx::query(
         "SELECT sm.user_id, sm.nickname, sm.joined_at, sm.is_owner,
                 u.username, u.discriminator, u.avatar, u.status
@@ -208,51 +223,50 @@ pub async fn get_members_detailed(
     .fetch_all(&state.db)
     .await?;
 
-    use sqlx::Row;
+    let roles_rows = sqlx::query(
+        "SELECT mr.user_id, r.id, r.name, r.color
+         FROM member_roles mr
+         JOIN roles r ON r.id = mr.role_id
+         WHERE mr.server_id=$1",
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
 
-    let mut result = Vec::new();
-    for m in &members {
+    let tags_rows = sqlx::query(
+        "SELECT mt.user_id, st.id, st.name, st.color
+         FROM member_tags mt
+         JOIN server_tags st ON st.id = mt.tag_id
+         WHERE mt.server_id=$1",
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    use std::collections::HashMap;
+    let mut roles_by_user: HashMap<Uuid, Vec<serde_json::Value>> = HashMap::new();
+    for r in &roles_rows {
+        let uid: Uuid = r.get("user_id");
+        roles_by_user.entry(uid).or_default().push(serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "name": r.get::<String, _>("name"),
+            "color": r.get::<i32, _>("color"),
+        }));
+    }
+
+    let mut tags_by_user: HashMap<Uuid, Vec<serde_json::Value>> = HashMap::new();
+    for t in &tags_rows {
+        let uid: Uuid = t.get("user_id");
+        tags_by_user.entry(uid).or_default().push(serde_json::json!({
+            "id": t.get::<Uuid, _>("id"),
+            "name": t.get::<String, _>("name"),
+            "color": t.get::<i32, _>("color"),
+        }));
+    }
+
+    let result: Vec<serde_json::Value> = members.iter().map(|m| {
         let uid: Uuid = m.get("user_id");
-
-        let roles: Vec<serde_json::Value> = sqlx::query(
-            "SELECT r.id, r.name, r.color FROM member_roles mr
-             JOIN roles r ON r.id = mr.role_id
-             WHERE mr.user_id=$1 AND mr.server_id=$2",
-        )
-        .bind(uid)
-        .bind(server_id)
-        .fetch_all(&state.db)
-        .await?
-        .iter()
-        .map(|r| {
-            serde_json::json!({
-                "id": r.get::<Uuid, _>("id"),
-                "name": r.get::<String, _>("name"),
-                "color": r.get::<i32, _>("color"),
-            })
-        })
-        .collect();
-
-        let tags: Vec<serde_json::Value> = sqlx::query(
-            "SELECT st.id, st.name, st.color FROM member_tags mt
-             JOIN server_tags st ON st.id = mt.tag_id
-             WHERE mt.user_id=$1 AND mt.server_id=$2",
-        )
-        .bind(uid)
-        .bind(server_id)
-        .fetch_all(&state.db)
-        .await?
-        .iter()
-        .map(|r| {
-            serde_json::json!({
-                "id": r.get::<Uuid, _>("id"),
-                "name": r.get::<String, _>("name"),
-                "color": r.get::<i32, _>("color"),
-            })
-        })
-        .collect();
-
-        result.push(serde_json::json!({
+        serde_json::json!({
             "user_id": uid,
             "username": m.get::<String, _>("username"),
             "discriminator": m.get::<String, _>("discriminator"),
@@ -261,10 +275,10 @@ pub async fn get_members_detailed(
             "nickname": m.get::<Option<String>, _>("nickname"),
             "is_owner": m.get::<bool, _>("is_owner"),
             "joined_at": m.get::<chrono::DateTime<chrono::Utc>, _>("joined_at"),
-            "roles": roles,
-            "tags": tags,
-        }));
-    }
+            "roles": roles_by_user.get(&uid).cloned().unwrap_or_default(),
+            "tags": tags_by_user.get(&uid).cloned().unwrap_or_default(),
+        })
+    }).collect();
 
     Ok(Json(result))
 }
