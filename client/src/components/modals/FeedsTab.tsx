@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Plus, Trash2, Rss, Youtube, Github, MessageSquare, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Trash2, Rss, Youtube, Github, MessageSquare, ToggleLeft, ToggleRight, Copy, Check } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { SERVER_URL } from '../../api/client'
 import toast from 'react-hot-toast'
 
 interface Channel {
@@ -52,6 +52,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
   const [newName, setNewName] = useState('')
   const [newUrl, setNewUrl] = useState('')
   const [newType, setNewType] = useState('rss')
+  const [copied, setCopied] = useState(false)
 
   const textChannels = channels.filter(c => c.type === 'text')
 
@@ -96,6 +97,19 @@ export default function FeedsTab({ serverId, channels }: Props) {
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur toggle'),
   })
+
+  const webhookBase = SERVER_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+  const webhookUrl = selectedChannelId
+    ? `${webhookBase}/api/github-webhook/${selectedChannelId}`
+    : ''
+
+  function copyWebhookUrl() {
+    if (!webhookUrl) return
+    navigator.clipboard.writeText(webhookUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+    toast.success('URL copiée')
+  }
 
   const canCreate =
     selectedChannelId !== '' &&
@@ -229,6 +243,47 @@ export default function FeedsTab({ serverId, channels }: Props) {
               ))}
             </div>
           )
+        )}
+      </div>
+      {/* GitHub Webhooks entrants */}
+      <div>
+        <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+          <Github size={18} className="text-gray-300" />
+          Webhooks GitHub entrants
+        </h3>
+        <p className="text-sm text-fc-muted mb-5">
+          Configurez un webhook GitHub pour recevoir les événements push, pull request et issues directement dans un canal.
+          Sélectionnez un canal ci-dessus puis copiez l'URL à renseigner dans les paramètres GitHub de votre dépôt
+          (Settings → Webhooks → Add webhook, Content type: <code className="text-xs bg-fc-hover px-1 rounded">application/json</code>).
+        </p>
+
+        {selectedChannelId ? (
+          <div className="p-4 bg-fc-channel rounded-lg space-y-3">
+            <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide">URL du webhook</div>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={webhookUrl}
+                className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-xs font-mono outline-none select-all"
+                onFocus={e => e.target.select()}
+              />
+              <button
+                onClick={copyWebhookUrl}
+                className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition flex-shrink-0"
+                title="Copier l'URL"
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? 'Copié !' : 'Copier'}
+              </button>
+            </div>
+            <div className="text-xs text-fc-muted space-y-1">
+              <div>Événements supportés : <span className="text-white">push</span>, <span className="text-white">pull_request</span>, <span className="text-white">issues</span></div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center text-fc-muted py-6 text-sm bg-fc-channel/40 rounded-lg">
+            Sélectionnez un canal pour obtenir l'URL du webhook GitHub.
+          </div>
         )}
       </div>
     </div>

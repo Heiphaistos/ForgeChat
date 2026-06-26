@@ -171,6 +171,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/bots/:bot_id/commands", post(handlers::bots::register_bot_command))
         // Webhook entrant (sans JWT — auth via token dans l'URL)
         .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook))
+        // Webhook GitHub entrant (sans JWT — push/PR/issues)
+        .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook))
         // Vérification mise à jour desktop (sans auth)
         .route("/api/desktop/update/:target/:arch/:version", get(handlers::desktop::check_update))
         // Routes protégées

@@ -159,6 +159,93 @@ pub async fn execute_webhook(
     Ok(Json(serde_json::json!({ "id": msg_id })))
 }
 
+pub async fn receive_github_webhook(
+    State(state): State<AppState>,
+    axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
+    headers: axum::http::HeaderMap,
+    axum::extract::Json(payload): axum::extract::Json<serde_json::Value>,
+) -> Result<axum::response::Response, AppError> {
+    use axum::response::IntoResponse;
+    use sqlx::Row;
+
+    let event_type = headers
+        .get("X-GitHub-Event")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown");
+
+    let message_content = match event_type {
+        "push" => {
+            let repo = payload["repository"]["full_name"].as_str().unwrap_or("?");
+            let pusher = payload["pusher"]["name"].as_str().unwrap_or("?");
+            let commits_count = payload["commits"].as_array().map(|a| a.len()).unwrap_or(0);
+            let branch = payload["ref"].as_str().unwrap_or("?")
+                .trim_start_matches("refs/heads/");
+            format!("🔨 **{}** a pushé {} commit(s) sur `{}` — {}", pusher, commits_count, branch, repo)
+        }
+        "pull_request" => {
+            let action = payload["action"].as_str().unwrap_or("?");
+            let title = payload["pull_request"]["title"].as_str().unwrap_or("?");
+            let user = payload["pull_request"]["user"]["login"].as_str().unwrap_or("?");
+            let repo = payload["repository"]["full_name"].as_str().unwrap_or("?");
+            let url = payload["pull_request"]["html_url"].as_str().unwrap_or("");
+            format!("🔀 **PR {}** par {} — {} — {} {}", action, user, title, repo, url)
+        }
+        "issues" => {
+            let action = payload["action"].as_str().unwrap_or("?");
+            let title = payload["issue"]["title"].as_str().unwrap_or("?");
+            let user = payload["issue"]["user"]["login"].as_str().unwrap_or("?");
+            let repo = payload["repository"]["full_name"].as_str().unwrap_or("?");
+            let url = payload["issue"]["html_url"].as_str().unwrap_or("");
+            format!("🐛 **Issue {}** par {} — {} — {} {}", action, user, title, repo, url)
+        }
+        "ping" => {
+            return Ok((axum::http::StatusCode::OK, "pong").into_response());
+        }
+        _ => {
+            return Ok((axum::http::StatusCode::OK, "ignored").into_response());
+        }
+    };
+
+    let row = sqlx::query(
+        "SELECT s.owner_id FROM channels c JOIN servers s ON s.id = c.server_id WHERE c.id = $1"
+    )
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?
+    .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
+
+    let owner_id: Uuid = row.get("owner_id");
+    let msg_id = Uuid::new_v4();
+
+    sqlx::query(
+        "INSERT INTO messages (id, channel_id, user_id, content, type) VALUES ($1, $2, $3, $4, 'webhook')"
+    )
+    .bind(msg_id)
+    .bind(channel_id)
+    .bind(owner_id)
+    .bind(&message_content)
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    let event = serde_json::json!({
+        "type": "MESSAGE_CREATE",
+        "channel_id": channel_id,
+        "message": {
+            "id": msg_id,
+            "channel_id": channel_id,
+            "content": message_content,
+            "author_username": "GitHub",
+            "type": "webhook",
+            "created_at": Utc::now(),
+        }
+    });
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+
+    Ok((axum::http::StatusCode::OK, "ok").into_response())
+}
+
 async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Result<(), AppError> {
     use crate::handlers::servers::require_permission;
     use crate::models::role::Permissions;
