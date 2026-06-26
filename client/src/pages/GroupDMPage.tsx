@@ -67,16 +67,20 @@ export default function GroupDMPage() {
     setHasMore(initialMessages.length >= 50)
   }, [initialMessages])
 
-  // Écouter les nouveaux messages via WS
+  // Écouter les nouveaux messages et suppressions via WS
   useEffect(() => {
-    const off = on('GROUP_DM_MESSAGE', (d: any) => {
+    const offNew = on('GROUP_DM_MESSAGE', (d: any) => {
       if (d.group_id !== groupId) return
       setAllMessages(prev => {
         if (prev.find(m => m.id === d.message.id)) return prev
         return [...prev, d.message]
       })
     })
-    return off
+    const offDelete = on('GROUP_DM_MESSAGE_DELETE', (d: any) => {
+      if (d.group_id !== groupId) return
+      setAllMessages(prev => prev.filter(m => m.id !== d.message_id))
+    })
+    return () => { offNew(); offDelete() }
   }, [groupId])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)

@@ -340,6 +340,28 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             }
         }
 
+        Some("DM_READ") => {
+            if let (Some(conv_id_str), Some(msg_id_str)) = (
+                msg["conversation_id"].as_str(),
+                msg["message_id"].as_str(),
+            ) {
+                if let (Ok(conv_uuid), Ok(_msg_uuid)) = (
+                    conv_id_str.parse::<Uuid>(),
+                    msg_id_str.parse::<Uuid>(),
+                ) {
+                    let _ = sqlx::query(
+                        "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
+                         VALUES ($1, $2, NOW())
+                         ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at = NOW()"
+                    )
+                    .bind(conv_uuid)
+                    .bind(user_id)
+                    .execute(&state.db)
+                    .await;
+                }
+            }
+        }
+
         // ────────── Vocal / Vidéo (WebRTC signaling) ──────────
         Some("VOICE_JOIN") => {
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
