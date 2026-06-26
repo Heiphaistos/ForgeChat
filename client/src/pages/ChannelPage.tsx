@@ -124,6 +124,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       on('MESSAGE_ATTACHMENT_ADDED', (d: any) => {
         if (d.channel_id === channelId) mergeAttachments(channelId, d.message_id, d.attachments)
       }),
+      on('MESSAGE_PIN_UPDATE', (d: any) => {
+        if (d.channel_id === channelId) {
+          updateMessage(channelId, d.message_id, { pinned: d.pinned })
+          qc.invalidateQueries({ queryKey: ['pinned', channelId] })
+        }
+      }),
       on('USER_TIMEOUT', (d: any) => {
         if (d.server_id === serverId) setTimeoutUntil(new Date(d.expires_at))
       }),
