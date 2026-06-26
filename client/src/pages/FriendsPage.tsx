@@ -297,6 +297,7 @@ export default function FriendsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
+    <>
     <div className="flex flex-col h-full" onClick={() => menuOpen && setMenuOpen(null)}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 flex-wrap gap-y-2">
@@ -539,7 +540,7 @@ export default function FriendsPage() {
         )}
       </div>
     </div>
-
     {showImport && <ImportContactsModal onClose={() => setShowImport(false)} />}
+    </>
   )
 }
