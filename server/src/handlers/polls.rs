@@ -117,14 +117,16 @@ pub async fn create_poll(
 pub async fn get_poll(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((_server_id, _channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, _channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<PollResponse>, AppError> {
+    require_member(&state, claims.sub, server_id).await?;
     use sqlx::Row;
     let row = sqlx::query(
         "SELECT id, question, channel_id, creator_id, multiple_choice, anonymous, ends_at, created_at
-         FROM polls WHERE id=$1"
+         FROM polls WHERE id=$1 AND server_id=$2"
     )
     .bind(poll_id)
+    .bind(server_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
@@ -179,12 +181,14 @@ pub struct VoteBody {
 pub async fn vote_poll(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((_server_id, channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<VoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    require_member(&state, claims.sub, server_id).await?;
     use sqlx::Row;
-    let row = sqlx::query("SELECT multiple_choice, ends_at FROM polls WHERE id=$1")
+    let row = sqlx::query("SELECT multiple_choice, ends_at FROM polls WHERE id=$1 AND server_id=$2")
         .bind(poll_id)
+        .bind(server_id)
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;

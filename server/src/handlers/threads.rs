@@ -146,9 +146,16 @@ pub async fn create_thread(
 pub async fn get_thread_messages(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+    let thread_ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM threads WHERE id=$1 AND channel_id=$2)"
+    )
+    .bind(thread_id).bind(channel_id)
+    .fetch_one(&state.db).await?;
+    if !thread_ok { return Err(AppError::NotFound("Thread introuvable".into())); }
 
     let rows = sqlx::query(
         "SELECT tm.*, u.username, u.avatar, u.discriminator
@@ -185,10 +192,17 @@ pub async fn get_thread_messages(
 pub async fn send_thread_message(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<SendThreadMessageReq>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+    let thread_ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM threads WHERE id=$1 AND channel_id=$2)"
+    )
+    .bind(thread_id).bind(channel_id)
+    .fetch_one(&state.db).await?;
+    if !thread_ok { return Err(AppError::NotFound("Thread introuvable".into())); }
 
     let content_trimmed = body.content.trim().to_string();
     if content_trimmed.is_empty() {
@@ -234,16 +248,18 @@ pub async fn send_thread_message(
 pub async fn archive_thread(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<Thread>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Vérifier que l'utilisateur est le créateur du thread OU a la permission MANAGE_MESSAGES
     let thread_row = sqlx::query(
-        "SELECT creator_id FROM threads WHERE id = $1"
+        "SELECT creator_id FROM threads WHERE id = $1 AND channel_id = $2"
     )
     .bind(thread_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Thread introuvable".into()))?;
