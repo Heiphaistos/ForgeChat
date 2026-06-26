@@ -714,10 +714,14 @@ pub async fn set_reminder(
         return Err(AppError::NotFound("Message introuvable".into()));
     }
 
-    sqlx::query!(
-        "INSERT INTO message_reminders (user_id, message_id, remind_at) VALUES ($1, $2, $3)",
-        claims.sub, message_id, input.remind_at
-    ).execute(&state.db).await?;
+    sqlx::query(
+        "INSERT INTO message_reminders (user_id, message_id, remind_at) VALUES ($1, $2, $3)"
+    )
+    .bind(claims.sub)
+    .bind(message_id)
+    .bind(input.remind_at)
+    .execute(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

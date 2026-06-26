@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
-            let due = sqlx::query!(
+            let due = sqlx::query(
                 "SELECT r.id, r.user_id, r.message_id, m.content \
                  FROM message_reminders r \
                  JOIN messages m ON m.id = r.message_id \
@@ -96,15 +96,16 @@ async fn main() -> anyhow::Result<()> {
             ).fetch_all(&reminder_state.db).await.unwrap_or_default();
 
             for r in due {
+                use sqlx::Row;
                 let event = serde_json::json!({
                     "type": "REMINDER",
-                    "message_id": r.message_id,
-                    "content": r.content,
+                    "message_id": r.get::<uuid::Uuid, _>("message_id").to_string(),
+                    "content": r.get::<Option<String>, _>("content"),
                 });
-                reminder_state.broadcast_to_user(r.user_id, event.to_string()).await;
-                let _ = sqlx::query!(
-                    "UPDATE message_reminders SET sent = TRUE WHERE id = $1", r.id
-                ).execute(&reminder_state.db).await;
+                reminder_state.broadcast_to_user(r.get::<uuid::Uuid, _>("user_id"), event.to_string()).await;
+                let _ = sqlx::query("UPDATE message_reminders SET sent = TRUE WHERE id = $1")
+                    .bind(r.get::<uuid::Uuid, _>("id"))
+                    .execute(&reminder_state.db).await;
             }
         }
     });
