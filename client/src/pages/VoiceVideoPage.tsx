@@ -3,7 +3,7 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  LayoutTemplate, Layout, Wifi, WifiOff, Music2,
+  LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine,
 } from 'lucide-react'
 import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
@@ -15,6 +15,7 @@ import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
 import Soundboard from '../components/voice/Soundboard'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
+import Whiteboard from '../components/voice/Whiteboard'
 import toast from 'react-hot-toast'
 
 type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
@@ -249,6 +250,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [isRecording, setIsRecording] = useState(false)
   const [showCaptions, setShowCaptions] = useState(false)
   const [showSoundboard, setShowSoundboard] = useState(false)
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
   const [joinTime] = useState(Date.now())
 
   // WS: hand raise
@@ -560,8 +562,22 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
             label="Statistiques orateurs"
           />
+          <CtrlBtn
+            active={showWhiteboard} onClick={() => setShowWhiteboard(v => !v)}
+            activeIcon={<PenLine size={16} />} inactiveIcon={<PenLine size={16} />}
+            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+            label="Tableau blanc"
+          />
         </div>
       </div>
+
+      {/* Whiteboard */}
+      {showWhiteboard && (
+        <Whiteboard
+          channelId={channel.id}
+          onClose={() => setShowWhiteboard(false)}
+        />
+      )}
 
       {/* Soundboard panel */}
       {showSoundboard && (

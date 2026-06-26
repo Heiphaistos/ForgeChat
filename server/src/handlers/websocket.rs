@@ -567,6 +567,23 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             state.broadcast_to_user(to, signal.to_string()).await;
         }
 
+        Some("WHITEBOARD_DRAW") | Some("WHITEBOARD_CLEAR") => {
+            if let Some(channel_id) = msg["channel_id"].as_str()
+                .and_then(|s| s.parse::<Uuid>().ok())
+            {
+                let event = serde_json::json!({
+                    "type": msg["type"].as_str().unwrap_or("WHITEBOARD_DRAW"),
+                    "channel_id": msg["channel_id"],
+                    "tool": msg["tool"],
+                    "color": msg["color"],
+                    "size": msg["size"],
+                    "points": msg["points"],
+                    "user_id": user_id,
+                });
+                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+            }
+        }
+
         _ => {}
     }
 }
