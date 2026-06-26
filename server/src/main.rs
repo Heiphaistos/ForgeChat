@@ -258,6 +258,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/sessions/:id", delete(handlers::auth::revoke_session))
         .route("/users/me", patch(handlers::users::update_me))
         .route("/users/me", delete(handlers::users::delete_account))
+        .route("/users/me/data-export", get(handlers::privacy::export_user_data))
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
         .route("/users/me/banner", post(handlers::users::upload_banner))
         .route("/users/:id", get(handlers::users::get_user))
