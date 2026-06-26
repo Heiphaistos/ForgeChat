@@ -338,6 +338,12 @@ pub async fn create_task(
         return Err(AppError::BadRequest("priority invalide".into()));
     }
 
+    // Valider que l'assignee est bien membre du serveur
+    if let Some(aid) = body.assignee_id {
+        ensure_member(&state, server_id, aid).await
+            .map_err(|_| AppError::BadRequest("L'assignee n'est pas membre du serveur".into()))?;
+    }
+
     let task = sqlx::query_as::<_, ChannelTask>(
         "INSERT INTO channel_tasks (channel_id, title, description, assignee_id, due_date, priority, creator_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
