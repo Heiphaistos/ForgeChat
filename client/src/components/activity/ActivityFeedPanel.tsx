@@ -108,8 +108,8 @@ export default function ActivityFeedPanel({ onClose }: Props) {
   const [filter, setFilter] = useState<FilterType>('all')
 
   const { data: items = [], isLoading } = useQuery<ActivityItem[]>({
-    queryKey: ['activity-feed'],
-    queryFn: () => api.get('/activity-feed').then(r => r.data),
+    queryKey: ['activity-feed-panel'],
+    queryFn: () => api.get('/activity-feed?limit=50').then(r => r.data),
     refetchInterval: 30_000,
     staleTime: 15_000,
   })

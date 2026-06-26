@@ -26,85 +26,6 @@ interface ActivityItem {
   metadata?: Record<string, unknown>
 }
 
-// ─── Données mock (fallback si API absente) ──────────────────────────────────
-
-const MOCK_ITEMS: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'server_join',
-    actor: { id: 'u1', username: 'Alice', avatar: undefined },
-    server: { id: 's1', name: 'ForgeChat Dev' },
-    timestamp: new Date(Date.now() - 2 * 3600_000).toISOString(),
-  },
-  {
-    id: '2',
-    type: 'message_pin',
-    actor: { id: 'u2', username: 'Bob' },
-    server: { id: 's1', name: 'ForgeChat Dev' },
-    channel: { id: 'c1', name: 'général' },
-    timestamp: new Date(Date.now() - 5 * 3600_000).toISOString(),
-  },
-  {
-    id: '3',
-    type: 'achievement',
-    actor: { id: 'u3', username: 'Charlie' },
-    metadata: { achievement: 'Premier message !' },
-    timestamp: new Date(Date.now() - 8 * 3600_000).toISOString(),
-  },
-  {
-    id: '4',
-    type: 'event_rsvp',
-    actor: { id: 'u4', username: 'Diana' },
-    server: { id: 's2', name: 'Nitrite Community' },
-    metadata: { event: 'Bug Hunt Session' },
-    timestamp: new Date(Date.now() - 12 * 3600_000).toISOString(),
-  },
-  {
-    id: '5',
-    type: 'friend_join_server',
-    actor: { id: 'u5', username: 'Eve' },
-    server: { id: 's1', name: 'ForgeChat Dev' },
-    timestamp: new Date(Date.now() - 24 * 3600_000).toISOString(),
-  },
-  {
-    id: '6',
-    type: 'server_join',
-    actor: { id: 'u6', username: 'Frank' },
-    server: { id: 's3', name: 'Gaming Zone' },
-    timestamp: new Date(Date.now() - 26 * 3600_000).toISOString(),
-  },
-  {
-    id: '7',
-    type: 'message_pin',
-    actor: { id: 'u1', username: 'Alice' },
-    server: { id: 's2', name: 'Nitrite Community' },
-    channel: { id: 'c2', name: 'annonces' },
-    timestamp: new Date(Date.now() - 30 * 3600_000).toISOString(),
-  },
-  {
-    id: '8',
-    type: 'achievement',
-    actor: { id: 'u7', username: 'Grace' },
-    metadata: { achievement: '100 messages envoyés' },
-    timestamp: new Date(Date.now() - 36 * 3600_000).toISOString(),
-  },
-  {
-    id: '9',
-    type: 'event_rsvp',
-    actor: { id: 'u2', username: 'Bob' },
-    server: { id: 's3', name: 'Gaming Zone' },
-    metadata: { event: 'Tournoi Vendredi' },
-    timestamp: new Date(Date.now() - 48 * 3600_000).toISOString(),
-  },
-  {
-    id: '10',
-    type: 'friend_join_server',
-    actor: { id: 'u8', username: 'Hugo' },
-    server: { id: 's1', name: 'ForgeChat Dev' },
-    timestamp: new Date(Date.now() - 60 * 3600_000).toISOString(),
-  },
-]
-
 // ─── Config visuelle par type ────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<
@@ -251,10 +172,7 @@ export default function ActivityFeedPage() {
     initialPageParam: 0,
   })
 
-  // Fallback mock si API absente ou erreur
-  const allItems: ActivityItem[] = isError || !data
-    ? MOCK_ITEMS
-    : data.pages.flat()
+  const allItems: ActivityItem[] = data ? data.pages.flat() : []
 
   const visible = filterItems(allItems, filter)
 

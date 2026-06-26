@@ -86,10 +86,11 @@ export const useWs = create<WsState>((set, get) => ({
   },
 
   on: (type, handler) => {
-    const { handlers } = get()
+    const handlers = get().handlers
     const existing = handlers.get(type) ?? []
     handlers.set(type, [...existing, handler])
-    set({ handlers: new Map(handlers) })
+    // Pas de set() ici — les handlers n'ont pas besoin d'être réactifs
+    // set() déclencherait des re-renders inutiles sur tous les abonnés
 
     return () => {
       const current = get().handlers.get(type) ?? []

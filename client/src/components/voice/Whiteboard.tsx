@@ -23,10 +23,12 @@ export default function Whiteboard({ channelId, onClose }: Props) {
   const [size, setSize] = useState(3)
   const [drawing, setDrawing] = useState(false)
   const pointsRef = useRef<{ x: number; y: number }[]>([])
+  const snapshotRef = useRef<ImageData | null>(null)
 
   const getCtx = () => canvasRef.current?.getContext('2d')
 
   const drawPoints = useCallback((ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], t: Tool, c: string, s: number) => {
+    if (pts.length === 0) return
     ctx.strokeStyle = t === 'eraser' ? '#1e1f29' : c
     ctx.lineWidth = t === 'eraser' ? s * 4 : s
     ctx.lineCap = 'round'
@@ -34,6 +36,27 @@ export default function Whiteboard({ channelId, onClose }: Props) {
     if (t === 'pen' || t === 'eraser') {
       ctx.beginPath()
       pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+      ctx.stroke()
+    } else if (t === 'line' && pts.length >= 2) {
+      const start = pts[0]
+      const end = pts[pts.length - 1]
+      ctx.beginPath()
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
+      ctx.stroke()
+    } else if (t === 'rect' && pts.length >= 2) {
+      const start = pts[0]
+      const end = pts[pts.length - 1]
+      ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y)
+    } else if (t === 'circle' && pts.length >= 2) {
+      const start = pts[0]
+      const end = pts[pts.length - 1]
+      const rx = Math.abs(end.x - start.x) / 2
+      const ry = Math.abs(end.y - start.y) / 2
+      const cx = start.x + (end.x - start.x) / 2
+      const cy = start.y + (end.y - start.y) / 2
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
       ctx.stroke()
     }
   }, [])
@@ -62,17 +85,44 @@ export default function Whiteboard({ channelId, onClose }: Props) {
     }
   }
 
-  const onMouseDown = (e: React.MouseEvent) => { setDrawing(true); pointsRef.current = [getPos(e)] }
+  const onMouseDown = (e: React.MouseEvent) => {
+    const pt = getPos(e)
+    setDrawing(true)
+    pointsRef.current = [pt, pt]
+    if (tool !== 'pen' && tool !== 'eraser') {
+      const ctx = getCtx()
+      if (ctx && canvasRef.current) {
+        snapshotRef.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height)
+      }
+    }
+  }
   const onMouseMove = (e: React.MouseEvent) => {
     if (!drawing) return
     const pt = getPos(e)
-    pointsRef.current.push(pt)
     const ctx = getCtx()
-    if (ctx) drawPoints(ctx, pointsRef.current.slice(-2), tool, color, size)
+    if (!ctx || !canvasRef.current) return
+    if (tool === 'pen' || tool === 'eraser') {
+      pointsRef.current.push(pt)
+      drawPoints(ctx, pointsRef.current.slice(-2), tool, color, size)
+    } else {
+      // Pour les formes géométriques: prévisualiser en redessinant le snapshot + forme courante
+      pointsRef.current[1] = pt
+      ctx.putImageData(snapshotRef.current!, 0, 0)
+      drawPoints(ctx, pointsRef.current, tool, color, size)
+    }
   }
   const onMouseUp = () => {
     if (!drawing) return
     setDrawing(false)
+    if (tool !== 'pen' && tool !== 'eraser' && snapshotRef.current) {
+      // Appliquer le snapshot final avec la forme dessinée
+      const ctx = getCtx()
+      if (ctx && canvasRef.current) {
+        ctx.putImageData(snapshotRef.current, 0, 0)
+        drawPoints(ctx, pointsRef.current, tool, color, size)
+      }
+      snapshotRef.current = null
+    }
     send({ type: 'WHITEBOARD_DRAW', channel_id: channelId, tool, color, size, points: pointsRef.current })
     pointsRef.current = []
   }

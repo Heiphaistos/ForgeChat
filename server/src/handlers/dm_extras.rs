@@ -128,6 +128,19 @@ pub async fn pin_dm_message(
     Path((dm_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
+
+    // Vérifier que le message appartient bien à ce DM
+    let msg_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2)"
+    )
+    .bind(message_id)
+    .bind(dm_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !msg_exists {
+        return Err(AppError::NotFound("Message introuvable dans ce DM".into()));
+    }
+
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM dm_pins WHERE dm_channel_id=$1")
         .bind(dm_id).fetch_one(&state.db).await?;
     if count >= 50 { return Err(AppError::BadRequest("Maximum 50 messages épinglés".into())); }
