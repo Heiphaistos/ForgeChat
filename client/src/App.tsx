@@ -155,11 +155,12 @@ function AppInner() {
   // Sons sur events vocaux et mentions
   useEffect(() => {
     if (!user) return
-    const offJoin = on('VOICE_USER_JOINED', () => playJoin())
-    const offLeave = on('VOICE_USER_LEFT', () => playLeave())
+    const offJoin = on('VOICE_USER_JOINED', () => { if (!user.focus_mode) playJoin() })
+    const offLeave = on('VOICE_USER_LEFT', () => { if (!user.focus_mode) playLeave() })
     const offMsg = on('MESSAGE_CREATE', (d: any) => {
       const msg = d.message
       if (!msg || msg.author_id === user.id) return
+      if (user.focus_mode) return
       const content: string = msg.content ?? ''
       if (content.includes(`@${user.username}`) || content.includes('@everyone') || content.includes('@here')) {
         playMention()
@@ -169,7 +170,7 @@ function AppInner() {
       }
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, playJoin, playLeave, playMessage, playMention])
 
   // Demander permission notifications au login
   useEffect(() => {

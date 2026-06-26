@@ -439,6 +439,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // User Settings
         .route("/user/settings", get(handlers::user_settings::get_user_settings))
         .route("/user/settings", put(handlers::user_settings::update_user_settings))
+        .route("/user/focus-mode", patch(handlers::users::toggle_focus_mode))
         .route("/user/connected-accounts", get(handlers::user_settings::list_connected_accounts))
         .route("/user/connected-accounts", post(handlers::user_settings::add_connected_account))
         .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account))

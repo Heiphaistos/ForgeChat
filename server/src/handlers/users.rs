@@ -759,3 +759,17 @@ pub async fn get_mutual_servers(
 
     Ok(Json(serde_json::json!(servers)))
 }
+
+pub async fn toggle_focus_mode(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    let enabled = body["enabled"].as_bool().unwrap_or(false);
+    sqlx::query("UPDATE users SET focus_mode=$1, updated_at=NOW() WHERE id=$2")
+        .bind(enabled)
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true, "focus_mode": enabled })))
+}

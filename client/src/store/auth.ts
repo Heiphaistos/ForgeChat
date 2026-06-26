@@ -15,6 +15,7 @@ interface User {
   status: string
   custom_status: string | null
   email?: string
+  focus_mode?: boolean
 }
 
 interface AuthState {

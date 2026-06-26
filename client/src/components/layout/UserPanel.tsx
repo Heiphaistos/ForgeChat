@@ -1,4 +1,4 @@
-import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff } from 'lucide-react'
 import NotificationBell from '../notifications/NotificationBell'
 import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
@@ -130,10 +130,22 @@ interface UserPanelProps {
 }
 
 export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
-  const { user } = useAuth()
+  const { user, updateMe } = useAuth()
   const nav = useNavigate()
   const { joined, muted, deafened, toggleMute, toggleDeafen } = useVoice()
   const [showStatusPopup, setShowStatusPopup] = useState(false)
+
+  const toggleFocus = async () => {
+    if (!user) return
+    const newVal = !user.focus_mode
+    try {
+      await api.patch('/user/focus-mode', { enabled: newVal })
+      updateMe({ focus_mode: newVal })
+      toast.success(newVal ? 'Mode focus activé 🔕' : 'Mode focus désactivé 🔔')
+    } catch {
+      toast.error('Erreur')
+    }
+  }
 
   if (!user) return null
 
@@ -166,6 +178,15 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
       </button>
 
       <div className="flex items-center gap-0.5 flex-shrink-0">
+        <button
+          onClick={toggleFocus}
+          className={`p-1.5 rounded hover:bg-fc-hover transition ${
+            user.focus_mode ? 'text-fc-accent' : 'text-fc-muted hover:text-white'
+          }`}
+          title={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer mode focus (muet notifications)'}
+        >
+          <BellOff size={16} />
+        </button>
         <NotificationBell />
         <button
           onClick={joined ? toggleMute : undefined}

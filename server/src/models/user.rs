@@ -19,6 +19,7 @@ pub struct User {
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
     pub is_bot: bool,
+    pub focus_mode: bool,
     pub is_verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -37,6 +38,7 @@ pub struct UserPublic {
     pub activity_type: Option<String>,
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
+    pub focus_mode: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -54,6 +56,7 @@ impl From<User> for UserPublic {
             activity_type: u.activity_type,
             activity_name: u.activity_name,
             activity_detail: u.activity_detail,
+            focus_mode: u.focus_mode,
             created_at: u.created_at,
         }
     }
