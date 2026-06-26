@@ -299,7 +299,7 @@ pub async fn get_user_profile(
 
     let user = sqlx::query(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
-                activity_type, activity_name, activity_detail, created_at
+                custom_status_emoji, activity_type, activity_name, activity_detail, created_at
          FROM users WHERE id=$1"
     )
     .bind(user_id)
@@ -308,20 +308,21 @@ pub async fn get_user_profile(
     .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
 
     let mut profile = serde_json::json!({
-        "id":               user.get::<Uuid, _>("id"),
-        "username":         user.get::<String, _>("username"),
-        "discriminator":    user.get::<String, _>("discriminator"),
-        "avatar":           user.get::<Option<String>, _>("avatar"),
-        "banner":           user.get::<Option<String>, _>("banner"),
-        "bio":              user.get::<Option<String>, _>("bio"),
-        "status":           user.get::<String, _>("status"),
-        "custom_status":    user.get::<Option<String>, _>("custom_status"),
-        "activity_type":    user.get::<Option<String>, _>("activity_type"),
-        "activity_name":    user.get::<Option<String>, _>("activity_name"),
-        "activity_detail":  user.get::<Option<String>, _>("activity_detail"),
-        "created_at":       user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "relationship":     "none",
-        "is_favorite":      false,
+        "id":                   user.get::<Uuid, _>("id"),
+        "username":             user.get::<String, _>("username"),
+        "discriminator":        user.get::<String, _>("discriminator"),
+        "avatar":               user.get::<Option<String>, _>("avatar"),
+        "banner":               user.get::<Option<String>, _>("banner"),
+        "bio":                  user.get::<Option<String>, _>("bio"),
+        "status":               user.get::<String, _>("status"),
+        "custom_status":        user.get::<Option<String>, _>("custom_status"),
+        "custom_status_emoji":  user.get::<Option<String>, _>("custom_status_emoji"),
+        "activity_type":        user.get::<Option<String>, _>("activity_type"),
+        "activity_name":        user.get::<Option<String>, _>("activity_name"),
+        "activity_detail":      user.get::<Option<String>, _>("activity_detail"),
+        "created_at":           user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "relationship":         "none",
+        "is_favorite":          false,
     });
 
     if let Some(Extension(claims)) = claims {
@@ -532,6 +533,7 @@ pub async fn get_pubkey(
 pub struct UpdateStatusRequest {
     pub status: Option<String>,
     pub custom_status: Option<String>,
+    pub custom_status_emoji: Option<String>,
 }
 
 /// PATCH /api/user/status
@@ -550,11 +552,13 @@ pub async fn update_status(
         "UPDATE users SET
             status = COALESCE($1, status),
             custom_status = COALESCE($2, custom_status),
+            custom_status_emoji = COALESCE($3, custom_status_emoji),
             updated_at = NOW()
-         WHERE id = $3"
+         WHERE id = $4"
     )
     .bind(&req.status)
     .bind(&req.custom_status)
+    .bind(&req.custom_status_emoji)
     .bind(claims.sub)
     .execute(&state.db)
     .await?;
@@ -564,8 +568,28 @@ pub async fn update_status(
         "user_id": claims.sub,
         "status": req.status,
         "custom_status": req.custom_status,
+        "custom_status_emoji": req.custom_status_emoji,
     });
-    state.broadcast_to_user(claims.sub, event.to_string()).await;
+    let event_str = event.to_string();
+
+    // Broadcaster aux membres de tous les serveurs de l'utilisateur
+    use sqlx::Row;
+    let server_ids: Vec<Uuid> = sqlx::query(
+        "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .iter()
+    .map(|r| r.get::<Uuid, _>("server_id"))
+    .collect();
+
+    for sid in server_ids {
+        state.broadcast_to_server_members(sid, event_str.clone()).await;
+    }
+    // Notifier aussi l'utilisateur lui-même (cas sans serveur ou pour la session courante)
+    state.broadcast_to_user(claims.sub, event_str).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

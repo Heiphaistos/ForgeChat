@@ -43,7 +43,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 
 function AppInner() {
-  const { fetchMe, user } = useAuth()
+  const { fetchMe, user, updateMe } = useAuth()
   const { connect, disconnect, on } = useWs()
   const setStatus = usePresence(s => s.setStatus)
   const setActivityGlobal = usePresence(s => s.setActivity)
@@ -135,9 +135,16 @@ function AppInner() {
         activity_name: d.activity_name,
         activity_detail: d.activity_detail,
       })
+      // Mettre à jour le statut personnalisé de l'utilisateur courant
+      if (d.user_id === user?.id) {
+        const patch: Record<string, unknown> = {}
+        if (d.custom_status !== undefined) patch.custom_status = d.custom_status
+        if (d.custom_status_emoji !== undefined) patch.custom_status_emoji = d.custom_status_emoji
+        if (Object.keys(patch).length > 0) updateMe(patch)
+      }
     })
     return off
-  }, [])
+  }, [user?.id])
 
   // Incrémenter non-lus pour les messages reçus sur des canaux non actifs
   useEffect(() => {

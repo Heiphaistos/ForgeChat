@@ -14,6 +14,7 @@ interface User {
   bio: string | null
   status: string
   custom_status: string | null
+  custom_status_emoji?: string | null
   email?: string
   focus_mode?: boolean
 }
