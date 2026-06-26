@@ -66,9 +66,8 @@ pub async fn upload_file(
             .unwrap_or("fichier")
             .to_string();
 
-        let content_type = field.content_type()
-            .unwrap_or("application/octet-stream")
-            .to_string();
+        // Ignorer le Content-Type du client — dériver depuis l'extension pour éviter le spoofing
+        let _client_content_type = field.content_type().unwrap_or("").to_string();
 
         let data = field.bytes().await
             .map_err(|e| AppError::BadRequest(e.to_string()))?;
@@ -102,6 +101,12 @@ pub async fn upload_file(
         }
 
         let ext = raw_ext;
+
+        // Dériver le MIME type depuis l'extension (pas depuis le header client)
+        let content_type = mime_guess::from_ext(&ext)
+            .first_raw()
+            .unwrap_or("application/octet-stream")
+            .to_string();
 
         // Nettoyer le nom de fichier original (path traversal protection)
         let safe_name = std::path::Path::new(&original_name)
