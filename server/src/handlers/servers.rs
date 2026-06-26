@@ -421,6 +421,17 @@ pub async fn kick_member(
         Some(user_id), None, None,
     ).await;
 
+    // Notifier l'utilisateur exclu + les membres du serveur
+    state.broadcast_to_user(user_id, serde_json::json!({
+        "type": "MEMBER_KICKED",
+        "server_id": server_id,
+    }).to_string()).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_REMOVE",
+        "server_id": server_id,
+        "user_id": user_id,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -473,6 +484,16 @@ pub async fn ban_member(
         Some(user_id), None,
         Some(serde_json::json!({ "reason": reason })),
     ).await;
+
+    state.broadcast_to_user(user_id, serde_json::json!({
+        "type": "MEMBER_BANNED",
+        "server_id": server_id,
+    }).to_string()).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_REMOVE",
+        "server_id": server_id,
+        "user_id": user_id,
+    }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
