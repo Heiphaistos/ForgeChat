@@ -20,7 +20,7 @@ pub async fn list_emojis(
     require_member(&state, claims.sub, server_id).await?;
 
     let rows = sqlx::query(
-        "SELECT id, name, url, creator_id, created_at FROM custom_emojis
+        "SELECT id, name, url, mime_type, creator_id, created_at FROM custom_emojis
          WHERE server_id=$1 ORDER BY created_at ASC"
     )
     .bind(server_id)
@@ -32,6 +32,8 @@ pub async fn list_emojis(
         "id": r.get::<Uuid, _>("id"),
         "name": r.get::<String, _>("name"),
         "url": r.get::<String, _>("url"),
+        "mime_type": r.get::<String, _>("mime_type"),
+        "animated": r.get::<String, _>("mime_type") == "image/gif",
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
     })).collect();
 
@@ -54,7 +56,7 @@ pub async fn create_emoji(
         .map_err(|e| AppError::Internal(e.into()))?;
 
     let mut emoji_name: Option<String> = None;
-    let mut emoji_url: Option<String> = None;
+    let mut emoji_url: Option<(String, String)> = None;
 
     while let Some(field) = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
@@ -78,8 +80,10 @@ pub async fn create_emoji(
             }
             let data = field.bytes().await
                 .map_err(|e| AppError::BadRequest(e.to_string()))?;
-            if data.len() > 256 * 1024 {
-                return Err(AppError::BadRequest("Emoji trop volumineux (max 256KB)".into()));
+            let max_size = if ct == "image/gif" { 512 * 1024 } else { 256 * 1024 };
+            if data.len() > max_size {
+                let limit_kb = max_size / 1024;
+                return Err(AppError::BadRequest(format!("Emoji trop volumineux (max {}KB)", limit_kb)));
             }
             let ext = match ct.as_str() {
                 "image/gif" => "gif",
@@ -93,20 +97,21 @@ pub async fn create_emoji(
             let file_path = upload_dir.join(&filename);
             tokio::fs::write(&file_path, &data).await
                 .map_err(|e| AppError::Internal(e.into()))?;
-            emoji_url = Some(format!("/uploads/emojis/{}", filename));
+            emoji_url = Some((format!("/uploads/emojis/{}", filename), ct));
         }
     }
 
     let name = emoji_name.ok_or_else(|| AppError::BadRequest("Champ 'name' manquant".into()))?;
-    let url = emoji_url.ok_or_else(|| AppError::BadRequest("Champ 'file' manquant".into()))?;
+    let (url, mime_type) = emoji_url.ok_or_else(|| AppError::BadRequest("Champ 'file' manquant".into()))?;
 
     let row = sqlx::query(
-        "INSERT INTO custom_emojis (server_id, name, url, creator_id)
-         VALUES ($1, $2, $3, $4) RETURNING id, name, url, created_at"
+        "INSERT INTO custom_emojis (server_id, name, url, mime_type, creator_id)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, name, url, mime_type, created_at"
     )
     .bind(server_id)
     .bind(&name)
     .bind(&url)
+    .bind(&mime_type)
     .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
@@ -116,6 +121,8 @@ pub async fn create_emoji(
         "id": row.get::<Uuid, _>("id"),
         "name": row.get::<String, _>("name"),
         "url": row.get::<String, _>("url"),
+        "mime_type": row.get::<String, _>("mime_type"),
+        "animated": row.get::<String, _>("mime_type") == "image/gif",
         "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
     })))
 }
