@@ -459,6 +459,7 @@ pub async fn add_reaction(
     let event = serde_json::json!({
         "type": "REACTION_ADD",
         "message_id": message_id,
+        "channel_id": channel_id,
         "user_id": claims.sub,
         "emoji": emoji,
     });
@@ -487,6 +488,7 @@ pub async fn remove_reaction(
     let event = serde_json::json!({
         "type": "REACTION_REMOVE",
         "message_id": message_id,
+        "channel_id": channel_id,
         "user_id": claims.sub,
         "emoji": emoji,
     });

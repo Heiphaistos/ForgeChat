@@ -240,7 +240,14 @@ function AppInner() {
     const offEmojiDelete = on('EMOJI_DELETE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
     })
-    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete() }
+    const offPermUpdate = on('CHANNEL_PERMISSION_UPDATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      if (d.channel_id) qcHook.invalidateQueries({ queryKey: ['channel-permissions', d.channel_id] })
+    })
+    const offArchive = on('CHANNEL_ARCHIVE_UPDATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offPermUpdate(); offArchive() }
   }, [user?.id])
 
   // Timeout utilisateur reçu en temps réel

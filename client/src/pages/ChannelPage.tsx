@@ -7,6 +7,7 @@ import ExportConversationButton from '../components/chat/ExportConversationButto
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
+import { useAuth } from '../store/auth'
 import type { FileWithTtl } from '../components/chat/MessageInput'
 import MessageList from '../components/chat/MessageList'
 import MessageInput, { ReplyTarget } from '../components/chat/MessageInput'
@@ -52,6 +53,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
+  const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
   const resetServer = useUnread(s => s.resetServer)
   const qc = useQueryClient()
@@ -110,10 +112,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         if (d.channel_id === channelId) deleteMessage(channelId, d.message_id)
       }),
       on('REACTION_ADD', (d: any) => {
-        if (d.channel_id === channelId) addReaction(channelId, d.message_id, d.emoji, d.user_id, false)
+        if (d.channel_id === channelId) addReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId)
       }),
       on('REACTION_REMOVE', (d: any) => {
-        if (d.channel_id === channelId) removeReaction(channelId, d.message_id, d.emoji, d.user_id)
+        if (d.channel_id === channelId) removeReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId)
       }),
       on('TYPING_START', (d: any) => {
         if (d.channel_id === channelId) {
