@@ -143,6 +143,16 @@ pub async fn execute_webhook(
     Path((webhook_id, token)): Path<(Uuid, String)>,
     Json(body): Json<WebhookMessageBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    // Rate limit : 10 messages / minute par webhook
+    {
+        use redis::AsyncCommands;
+        let rl_key = format!("webhook_rl:{}", webhook_id);
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&rl_key, 1).await.unwrap_or(0);
+        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
+        if count > 10 { return Err(AppError::TooManyRequests); }
+    }
+
     use sqlx::Row;
     let row = sqlx::query("SELECT channel_id, name, server_id FROM webhooks WHERE id=$1 AND token=$2")
         .bind(webhook_id).bind(&token)
@@ -203,17 +213,17 @@ pub async fn receive_github_webhook(
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     let stored_token = verify_github_token_get(&state, channel_id, token).await?;
 
-    // Vérifier la signature HMAC-SHA256 GitHub (X-Hub-Signature-256)
-    if let Some(sig_header) = headers.get("X-Hub-Signature-256").and_then(|v| v.to_str().ok()) {
-        let hex_sig = sig_header.trim_start_matches("sha256=");
-        let expected = data_encoding::HEXLOWER.decode(hex_sig.as_bytes())
-            .map_err(|_| AppError::Unauthorized)?;
-        let mut mac = Hmac::<Sha256>::new_from_slice(stored_token.as_bytes())
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("hmac key")))?;
-        mac.update(&body_bytes);
-        mac.verify_slice(&expected).map_err(|_| AppError::Unauthorized)?;
-    }
-    // Si header absent : GitHub non configuré avec secret, on accepte (backwards compat)
+    // Vérifier la signature HMAC-SHA256 GitHub (X-Hub-Signature-256) — obligatoire
+    let sig_header = headers.get("X-Hub-Signature-256")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(AppError::Unauthorized)?;
+    let hex_sig = sig_header.trim_start_matches("sha256=");
+    let expected = data_encoding::HEXLOWER.decode(hex_sig.as_bytes())
+        .map_err(|_| AppError::Unauthorized)?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(stored_token.as_bytes())
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("hmac key")))?;
+    mac.update(&body_bytes);
+    mac.verify_slice(&expected).map_err(|_| AppError::Unauthorized)?;
 
     let payload: serde_json::Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| AppError::BadRequest("JSON invalide".into()))?;

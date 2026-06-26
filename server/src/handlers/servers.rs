@@ -930,6 +930,14 @@ pub async fn boost_server(
     .execute(&state.db)
     .await?;
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "SERVER_BOOST",
+        "server_id": server_id,
+        "user_id": claims.sub,
+        "boost_count": boost_count,
+        "boost_level": boost_level,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({
         "boost_count": boost_count,
         "boost_level": boost_level,
