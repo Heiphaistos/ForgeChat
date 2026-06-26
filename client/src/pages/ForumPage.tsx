@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
 import { useAuth } from '../store/auth'
+import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -292,12 +293,39 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
 export default function ForumPage({ channel, serverId, channelId }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null)
+  const qc = useQueryClient()
+  const { on } = useWs()
 
   const { data: posts = [] } = useQuery<ForumPost[]>({
     queryKey: ['forum', channelId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/posts`).then(r => r.data),
     enabled: !!channelId,
   })
+
+  useEffect(() => {
+    const offCreate = on('FORUM_POST_CREATE', (d: any) => {
+      if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['forum', channelId] })
+    })
+    const offUpdate = on('FORUM_POST_UPDATE', (d: any) => {
+      if (d.channel_id === channelId) {
+        qc.invalidateQueries({ queryKey: ['forum', channelId] })
+        qc.invalidateQueries({ queryKey: ['forum-post', d.post_id] })
+      }
+    })
+    const offDelete = on('FORUM_POST_DELETE', (d: any) => {
+      if (d.channel_id === channelId) {
+        qc.invalidateQueries({ queryKey: ['forum', channelId] })
+        if (selectedPost?.id === d.post_id) setSelectedPost(null)
+      }
+    })
+    const offReply = on('FORUM_REPLY_CREATE', (d: any) => {
+      if (d.channel_id === channelId) {
+        qc.invalidateQueries({ queryKey: ['forum', channelId] })
+        if (d.post_id) qc.invalidateQueries({ queryKey: ['forum-post', d.post_id] })
+      }
+    })
+    return () => { offCreate(); offUpdate(); offDelete(); offReply() }
+  }, [channelId, on, qc, selectedPost?.id])
 
   if (selectedPost) {
     return <PostView serverId={serverId} channelId={channelId} post={selectedPost} onBack={() => setSelectedPost(null)} />

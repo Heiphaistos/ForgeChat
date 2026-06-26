@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar, Plus, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
+import { useWs } from '../store/ws'
 import CalendarView from '../components/events/CalendarView'
 
 interface Props {
@@ -192,6 +193,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 
 export default function ServerEventsPage({ serverId }: Props) {
   const qc = useQueryClient()
+  const { on } = useWs()
   const [filter, setFilter] = useState<FilterType>('upcoming')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [showCreate, setShowCreate] = useState(false)
@@ -206,6 +208,19 @@ export default function ServerEventsPage({ serverId }: Props) {
     queryFn: () => api.get(`/servers/${serverId}/events?filter=${backendFilter}`).then(r => r.data),
     refetchInterval: 60_000,
   })
+
+  useEffect(() => {
+    const invalidate = (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server_events', serverId] })
+    }
+    const offs = [
+      on('SERVER_EVENT_CREATE', invalidate),
+      on('SERVER_EVENT_UPDATE', invalidate),
+      on('SERVER_EVENT_DELETE', invalidate),
+      on('EVENT_RSVP_UPDATE', invalidate),
+    ]
+    return () => offs.forEach(off => off())
+  }, [serverId, on, qc])
 
   const createEvent = useMutation({
     mutationFn: (data: EventFormData) =>

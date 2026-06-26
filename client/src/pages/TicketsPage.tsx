@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
+import { useWs } from '../store/ws'
 import api from '../api/client'
 import { Plus, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -34,6 +35,7 @@ export default function TicketsPage() {
   const { serverId } = useParams<{ serverId: string }>()
   const { user } = useAuth()
   const qc = useQueryClient()
+  const { on } = useWs()
   const [newTitle, setNewTitle] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
   const [showCreate, setShowCreate] = useState(false)
@@ -43,6 +45,17 @@ export default function TicketsPage() {
     queryFn: () => api.get(`/servers/${serverId}/tickets`).then(r => r.data),
     enabled: !!serverId,
   })
+
+  useEffect(() => {
+    if (!serverId) return
+    const offCreate = on('TICKET_CREATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['tickets', serverId] })
+    })
+    const offUpdate = on('TICKET_UPDATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['tickets', serverId] })
+    })
+    return () => { offCreate(); offUpdate() }
+  }, [serverId, on, qc])
 
   const createMutation = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/tickets`, { title: newTitle, priority: newPriority }),
