@@ -35,6 +35,7 @@ api.interceptors.response.use(
         const res = await axios.post(`${baseURL}/auth/refresh`, body, { withCredentials: true })
         if (isTauri && res.data.access_token) {
           localStorage.setItem('access_token', res.data.access_token)
+          if (res.data.refresh_token) localStorage.setItem('refresh_token', res.data.refresh_token)
           err.config.headers.Authorization = `Bearer ${res.data.access_token}`
         }
         return api(err.config)

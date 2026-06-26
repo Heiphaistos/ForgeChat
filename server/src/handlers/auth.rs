@@ -332,8 +332,21 @@ pub async fn refresh(
     .ok_or(AppError::Unauthorized)?;
 
     if row.1 < Utc::now() {
+        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
+            .bind(&token_hash)
+            .execute(&state.db)
+            .await?;
         return Err(AppError::Unauthorized);
     }
+
+    // RTR : invalider l'ancien refresh token et émettre un nouveau
+    sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
+        .bind(&token_hash)
+        .execute(&state.db)
+        .await?;
+
+    let new_refresh_token = generate_refresh_token();
+    store_refresh_token(&state, row.0, &new_refresh_token).await?;
 
     let access_token = create_token(row.0, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
@@ -344,12 +357,22 @@ pub async fn refresh(
         "access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400",
         access_token, flag
     );
+    let refresh_cookie = format!(
+        "refresh_token={}; HttpOnly{}; SameSite=Strict; Path=/api/auth; Max-Age={}",
+        new_refresh_token, flag, 30 * 86400
+    );
     let mut resp_headers = HeaderMap::new();
     if let Ok(v) = HeaderValue::from_str(&access_cookie) {
         resp_headers.insert(SET_COOKIE, v);
     }
+    if let Ok(v) = HeaderValue::from_str(&refresh_cookie) {
+        resp_headers.append(SET_COOKIE, v);
+    }
 
-    Ok((resp_headers, Json(serde_json::json!({ "access_token": access_token }))))
+    Ok((resp_headers, Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+    }))))
 }
 
 pub async fn change_password(
