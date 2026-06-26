@@ -430,3 +430,35 @@ pub async fn unhide_channel(
 
     Ok(Json(serde_json::json!({ "hidden": false })))
 }
+
+pub async fn move_channel(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+    axum::extract::Json(body): axum::extract::Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let new_category_id: Option<Uuid> = body.get("category_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok());
+
+    let row = sqlx::query("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
+    let server_id: Uuid = row.get("server_id");
+
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    sqlx::query("UPDATE channels SET category_id=$1 WHERE id=$2 AND server_id=$3")
+        .bind(new_category_id)
+        .bind(channel_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    Ok(Json(serde_json::json!({ "moved": true, "category_id": new_category_id })))
+}

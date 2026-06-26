@@ -373,6 +373,13 @@ export default function ChannelSidebar() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
   })
 
+  const moveChannel = useMutation({
+    mutationFn: ({ channelId, categoryId }: { channelId: string; categoryId: string | null }) =>
+      api.patch(`/channels/${channelId}/move`, { category_id: categoryId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement du canal'),
+  })
+
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
     setDraggedChannelId(channelId)
     e.dataTransfer.effectAllowed = 'move'
@@ -384,7 +391,7 @@ export default function ChannelSidebar() {
     setDragOverChannelId(channelId)
   }, [])
 
-  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[]) => {
+  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[], categoryKey = '') => {
     e.preventDefault()
     if (!draggedChannelId || draggedChannelId === targetChannelId) {
       setDraggedChannelId(null)
@@ -393,6 +400,13 @@ export default function ChannelSidebar() {
     }
     const draggedIdx = groupChannels.findIndex((c: any) => c.id === draggedChannelId)
     const targetIdx = groupChannels.findIndex((c: any) => c.id === targetChannelId)
+    if (draggedIdx === -1 && categoryKey) {
+      const newCategoryId = categoryKey === UNCATEGORIZED_KEY ? null : categoryKey
+      moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
     if (draggedIdx === -1 || targetIdx === -1) {
       setDraggedChannelId(null)
       setDragOverChannelId(null)
@@ -404,7 +418,7 @@ export default function ChannelSidebar() {
     setDraggedChannelId(null)
     setDragOverChannelId(null)
     reorderChannels.mutate(reordered.map((c: any) => c.id))
-  }, [draggedChannelId, reorderChannels])
+  }, [draggedChannelId, reorderChannels, moveChannel])
 
   const handleChannelDragEnd = useCallback(() => {
     setDraggedChannelId(null)
@@ -457,7 +471,7 @@ export default function ChannelSidebar() {
     }
   }
 
-  const renderChannel = (ch: any, groupChannels: any[], extraClass = '') => {
+  const renderChannel = (ch: any, groupChannels: any[], extraClass = '', categoryKey = '') => {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
@@ -480,7 +494,7 @@ export default function ChannelSidebar() {
         draggable={isOwnerOrAdmin}
         onDragStart={isOwnerOrAdmin ? e => handleChannelDragStart(e, ch.id) : undefined}
         onDragOver={isOwnerOrAdmin ? e => handleChannelDragOver(e, ch.id) : undefined}
-        onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels) : undefined}
+        onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels, categoryKey) : undefined}
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
       >
@@ -700,6 +714,14 @@ export default function ChannelSidebar() {
                 <div
                   className="flex items-center justify-between px-2 py-1 group cursor-pointer"
                   onClick={() => toggleGroup(key)}
+                  onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                  onDrop={isOwnerOrAdmin && draggedChannelId ? e => {
+                    e.preventDefault()
+                    const newCategoryId = key === UNCATEGORIZED_KEY ? null : key
+                    moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
+                    setDraggedChannelId(null)
+                    setDragOverChannelId(null)
+                  } : undefined}
                 >
                   <div className="flex items-center gap-1">
                     <ChevronRight
@@ -718,10 +740,10 @@ export default function ChannelSidebar() {
                 </div>
 
                 {!isCollapsed
-                  ? groupChannels.map(ch => renderChannel(ch, groupChannels))
+                  ? groupChannels.map(ch => renderChannel(ch, groupChannels, '', key))
                   : groupChannels
                       .filter(c => (unreadCounts[c.id] ?? 0) > 0)
-                      .map(ch => renderChannel(ch, groupChannels))
+                      .map(ch => renderChannel(ch, groupChannels, '', key))
                 }
               </div>
             )

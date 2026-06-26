@@ -306,6 +306,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/hide",
             post(handlers::channels::hide_channel)
             .delete(handlers::channels::unhide_channel))
+        // Channel move (cross-category)
+        .route("/channels/:id/move", patch(handlers::channels::move_channel))
         // Messages
         .route("/servers/:server_id/channels/:channel_id/messages", get(handlers::messages::get_messages))
         .route("/servers/:server_id/channels/:channel_id/messages", post(handlers::messages::send_message))
