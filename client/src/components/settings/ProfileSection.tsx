@@ -13,12 +13,13 @@ interface Props {
 export default function ProfileSection({ user, updateMe }: Props) {
   const [bio, setBio] = useState(user.bio ?? '')
   const [pronouns, setPronouns] = useState(user.pronouns ?? '')
+  const [birthday, setBirthday] = useState<string>(user.birthday ?? '')
   const [bannerPreview, setBannerPreview] = useState<string | null>(user.banner ?? null)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const bannerRef = React.useRef<HTMLInputElement>(null)
 
   const saveBio = useMutation({
-    mutationFn: () => api.patch('/users/me', { bio, pronouns }),
+    mutationFn: () => api.patch('/users/me', { bio, pronouns, birthday: birthday || null }),
     onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
@@ -138,6 +139,16 @@ export default function ProfileSection({ user, updateMe }: Props) {
           maxLength={30}
           placeholder="il/lui"
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted"
+        />
+      </Field>
+
+      <Field label="Date de naissance (optionnel)">
+        <input
+          type="date"
+          value={birthday}
+          onChange={e => setBirthday(e.target.value)}
+          className="w-full fc-input text-sm"
+          max={new Date().toISOString().split('T')[0]}
         />
       </Field>
 
