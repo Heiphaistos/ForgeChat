@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../../api/client'
@@ -16,6 +17,12 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const nav = useNavigate()
+
+  const jumpToMessage = (msgId: string) => {
+    nav(`/app/servers/${serverId}/channels/${channelId}?highlight=${msgId}`)
+    onClose()
+  }
 
   const { data: results = [], isFetching } = useQuery({
     queryKey: ['search_messages', channelId, search],
@@ -85,7 +92,11 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
         )}
 
         {results.map((msg: any) => (
-          <div key={msg.id} className="bg-fc-bg rounded-lg p-3 border border-fc-hover">
+          <div
+            key={msg.id}
+            onClick={() => jumpToMessage(msg.id)}
+            className="bg-fc-bg rounded-lg p-3 border border-fc-hover cursor-pointer hover:border-fc-accent/50 transition-colors"
+          >
             <div className="flex items-center gap-2 mb-1">
               <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                 {msg.author_username?.charAt(0).toUpperCase()}

@@ -529,6 +529,8 @@ pub async fn pin_message(
         "pinned_by": claims.sub,
     });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
+    log_event(&state, server_id, "MESSAGE_PIN", Some(claims.sub), None, Some(message_id), None,
+        Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -560,6 +562,8 @@ pub async fn unpin_message(
         "pinned": false,
     });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
+    log_event(&state, server_id, "MESSAGE_UNPIN", Some(claims.sub), None, Some(message_id), None,
+        Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
