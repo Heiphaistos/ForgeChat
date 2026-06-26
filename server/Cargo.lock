@@ -536,7 +536,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "forgechat-server"
-version = "3.1.0"
+version = "3.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -545,6 +545,7 @@ dependencies = [
  "bcrypt",
  "bytes",
  "chrono",
+ "data-encoding",
  "dotenvy",
  "futures-util",
  "jsonwebtoken",
@@ -560,10 +561,12 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "totp-lite",
  "tower 0.4.13",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "urlencoding",
  "uuid",
 ]
 
@@ -2583,6 +2586,18 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "totp-lite"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8e43134db17199f7f721803383ac5854edd0d3d523cc34dba321d6acfbe76c3"
+dependencies = [
+ "digest",
+ "hmac",
+ "sha1",
+ "sha2",
 ]
 
 [[package]]
