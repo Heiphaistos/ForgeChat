@@ -52,6 +52,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
   const { on, subscribeChannel } = useWs()
   const markRead = useUnread(s => s.markRead)
+  const resetServer = useUnread(s => s.resetServer)
   const qc = useQueryClient()
   const [showMembers, setShowMembers] = useState(true)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -87,6 +88,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (channelId) {
       markRead(channelId)
       setHasMore(true)
+      if (serverId) resetServer(serverId)
     }
   }, [channelId])
 

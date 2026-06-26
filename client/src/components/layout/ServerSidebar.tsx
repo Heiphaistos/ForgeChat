@@ -6,6 +6,7 @@ import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
 import { useAuth } from '../../store/auth'
+import { useUnread } from '../../store/unread'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -113,6 +114,7 @@ export default function ServerSidebar() {
   const { serverId } = useParams()
   const nav = useNavigate()
   const qc = useQueryClient()
+  const serverCounts = useUnread(s => s.serverCounts)
   const [showCreate, setShowCreate] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
@@ -326,25 +328,33 @@ export default function ServerSidebar() {
     setDraggedServerId(null)
   }
 
-  const ServerIcon = ({ s, folderId }: { s: any; folderId?: string }) => (
-    <button
-      key={s.id}
-      onClick={() => nav(`/servers/${s.id}`)}
-      onContextMenu={e => handleContextMenu(e, s.id)}
-      draggable
-      onDragStart={() => handleDragStart(s.id)}
-      onDragOver={e => e.preventDefault()}
-      onDrop={() => handleDropOnServer(s.id)}
-      className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
-        ${serverId === s.id ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
-        ${draggedServerId === s.id ? 'opacity-50' : ''}`}
-      title={s.name}
-    >
-      {s.icon
-        ? <img src={s.icon} alt={s.name} className="w-full h-full rounded-full object-cover" />
-        : s.name.charAt(0).toUpperCase()}
-    </button>
-  )
+  const ServerIcon = ({ s, folderId: _folderId }: { s: any; folderId?: string }) => {
+    const hasUnread = (serverCounts[s.id] ?? 0) > 0 && serverId !== s.id
+    return (
+      <div className="relative">
+        <button
+          key={s.id}
+          onClick={() => nav(`/servers/${s.id}`)}
+          onContextMenu={e => handleContextMenu(e, s.id)}
+          draggable
+          onDragStart={() => handleDragStart(s.id)}
+          onDragOver={e => e.preventDefault()}
+          onDrop={() => handleDropOnServer(s.id)}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
+            ${serverId === s.id ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
+            ${draggedServerId === s.id ? 'opacity-50' : ''}`}
+          title={s.name}
+        >
+          {s.icon
+            ? <img src={s.icon} alt={s.name} className="w-full h-full rounded-full object-cover" />
+            : s.name.charAt(0).toUpperCase()}
+        </button>
+        {hasUnread && (
+          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto relative">

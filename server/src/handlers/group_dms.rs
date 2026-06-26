@@ -131,6 +131,7 @@ pub async fn get_group_messages(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(group_id): Path<Uuid>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
     let is_member: bool = sqlx::query_scalar(
@@ -139,18 +140,35 @@ pub async fn get_group_messages(
     .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
-    let rows = sqlx::query(
-        "SELECT m.id, m.content, m.created_at, m.sender_id,
-                u.username as sender_username, u.avatar as sender_avatar
-         FROM group_dm_messages m
-         JOIN users u ON u.id = m.sender_id
-         WHERE m.dm_id = $1
-         ORDER BY m.created_at ASC
-         LIMIT 100"
-    )
-    .bind(group_id).fetch_all(&state.db).await?;
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+    let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
 
-    let result = rows.iter().map(|r| serde_json::json!({
+    let rows = if let Some(before_id) = before {
+        sqlx::query(
+            "SELECT m.id, m.content, m.created_at, m.sender_id,
+                    u.username as sender_username, u.avatar as sender_avatar
+             FROM group_dm_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.dm_id = $1
+               AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3)
+             ORDER BY m.created_at DESC LIMIT $2"
+        )
+        .bind(group_id).bind(limit).bind(before_id)
+        .fetch_all(&state.db).await?
+    } else {
+        sqlx::query(
+            "SELECT m.id, m.content, m.created_at, m.sender_id,
+                    u.username as sender_username, u.avatar as sender_avatar
+             FROM group_dm_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.dm_id = $1
+             ORDER BY m.created_at DESC LIMIT $2"
+        )
+        .bind(group_id).bind(limit)
+        .fetch_all(&state.db).await?
+    };
+
+    let mut result: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
         "content": r.get::<Option<String>, _>("content"),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
@@ -158,6 +176,7 @@ pub async fn get_group_messages(
         "sender_username": r.get::<String, _>("sender_username"),
         "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
     })).collect();
+    result.reverse();
     Ok(Json(result))
 }
 

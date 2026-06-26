@@ -3,20 +3,31 @@ import api from '../api/client'
 
 interface UnreadState {
   counts: Record<string, number>
-  increment: (channelId: string) => void
+  serverCounts: Record<string, number>
+  increment: (channelId: string, serverId?: string) => void
   reset: (channelId: string) => void
+  resetServer: (serverId: string) => void
   fetchAll: () => Promise<void>
   markRead: (channelId: string) => Promise<void>
 }
 
 export const useUnread = create<UnreadState>((set, get) => ({
   counts: {},
+  serverCounts: {},
 
-  increment: (channelId) =>
-    set(s => ({ counts: { ...s.counts, [channelId]: (s.counts[channelId] ?? 0) + 1 } })),
+  increment: (channelId, serverId) =>
+    set(s => ({
+      counts: { ...s.counts, [channelId]: (s.counts[channelId] ?? 0) + 1 },
+      serverCounts: serverId
+        ? { ...s.serverCounts, [serverId]: (s.serverCounts[serverId] ?? 0) + 1 }
+        : s.serverCounts,
+    })),
 
   reset: (channelId) =>
     set(s => { const c = { ...s.counts }; delete c[channelId]; return { counts: c } }),
+
+  resetServer: (serverId) =>
+    set(s => { const c = { ...s.serverCounts }; delete c[serverId]; return { serverCounts: c } }),
 
   fetchAll: async () => {
     try {
