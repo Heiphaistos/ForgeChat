@@ -106,6 +106,20 @@ pub async fn create_event(
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("Nom requis".into()));
     }
+
+    // Vérifier que le canal optionnel appartient bien à ce serveur
+    if let Some(ch_id) = body.channel_id {
+        let ok = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
+        )
+        .bind(ch_id)
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !ok {
+            return Err(AppError::Forbidden);
+        }
+    }
     if body.start_time < chrono::Utc::now() {
         return Err(AppError::BadRequest("La date de début doit être dans le futur".into()));
     }
