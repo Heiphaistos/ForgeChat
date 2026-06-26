@@ -223,6 +223,24 @@ export default function ChannelSidebar() {
     })
   }, [])
 
+  // Rafraîchir le serveur sur changements de rôles en temps réel
+  useEffect(() => {
+    if (!serverId) return
+    const offCreate = wsOn('ROLE_CREATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
+    })
+    const offUpdate = wsOn('ROLE_UPDATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
+    })
+    const offDelete = wsOn('ROLE_DELETE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
+    })
+    const offMember = wsOn('MEMBER_ROLE_UPDATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
+    })
+    return () => { offCreate(); offUpdate(); offDelete(); offMember() }
+  }, [serverId])
+
   const { data: dms = [] } = useQuery({
     queryKey: ['dms'],
     queryFn: () => api.get('/dms').then(r => r.data),
@@ -661,9 +679,23 @@ export default function ChannelSidebar() {
                   <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
                 </div>
               </div>
+            ) : server?.icon ? (
+              <div className="relative h-16">
+                <img src={server.icon} alt="" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40" />
+                <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
+                  <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
+                  <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
+                </div>
+              </div>
             ) : (
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="font-semibold text-white truncate">{server?.name ?? '...'}</span>
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-white uppercase">
+                    {(server?.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
+                  </span>
+                </div>
+                <span className="font-semibold text-white truncate flex-1">{server?.name ?? '...'}</span>
                 <ChevronDown size={16} className="text-fc-muted flex-shrink-0" />
               </div>
             )}

@@ -240,3 +240,50 @@ pub async fn vote_poll(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+pub async fn close_poll(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> crate::error::Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    // Seul le créateur du sondage ou un modérateur peut le fermer
+    let creator_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT creator_id FROM polls WHERE id=$1 AND server_id=$2 AND channel_id=$3"
+    )
+    .bind(poll_id)
+    .bind(server_id)
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let creator_id = creator_id.ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
+
+    use crate::models::role::Permissions;
+    let is_mod = crate::handlers::servers::require_permission(
+        &state, claims.sub, server_id, Permissions::MANAGE_MESSAGES
+    ).await.is_ok();
+
+    if creator_id != claims.sub && !is_mod {
+        return Err(AppError::Forbidden);
+    }
+
+    sqlx::query(
+        "UPDATE polls SET ends_at = NOW() WHERE id=$1 AND server_id=$2"
+    )
+    .bind(poll_id)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
+        "type": "POLL_CLOSED",
+        "poll_id": poll_id,
+        "channel_id": channel_id,
+        "server_id": server_id,
+    }).to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

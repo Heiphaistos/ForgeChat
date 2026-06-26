@@ -602,6 +602,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/polls", post(handlers::polls::create_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id", get(handlers::polls::get_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/vote", post(handlers::polls::vote_poll))
+        .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/close", post(handlers::polls::close_poll))
         // Webhooks
         .route("/servers/:server_id/webhooks", get(handlers::webhooks::list_webhooks))
         .route("/servers/:server_id/webhooks", post(handlers::webhooks::create_webhook))
