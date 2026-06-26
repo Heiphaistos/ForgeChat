@@ -45,13 +45,18 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   // Temps réel — écouter les nouveaux messages du thread via WS
   useEffect(() => {
     if (!threadId) return
-    const off = on('THREAD_MESSAGE', (d: any) => {
+    const offMsg = on('THREAD_MESSAGE', (d: any) => {
       if (d.thread_id === threadId || d.parent_id === parentMessageId) {
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
-    return off
-  }, [threadId, parentMessageId, on, qc])
+    const offUpdate = on('THREAD_UPDATE', (d: any) => {
+      if (d.thread_id === threadId) {
+        qc.invalidateQueries({ queryKey: ['threads', channelId] })
+      }
+    })
+    return () => { offMsg(); offUpdate() }
+  }, [threadId, parentMessageId, channelId, on, qc])
 
   // Scroll to bottom quand les messages changent
   useEffect(() => {

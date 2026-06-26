@@ -310,5 +310,14 @@ pub async fn archive_thread(
         .await?
     };
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "THREAD_UPDATE",
+        "thread_id": thread.id,
+        "channel_id": channel_id,
+        "server_id": server_id,
+        "archived": thread.archived,
+        "locked": thread.locked,
+    }).to_string()).await;
+
     Ok(Json(thread))
 }

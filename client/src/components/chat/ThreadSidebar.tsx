@@ -35,11 +35,13 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
   const { on } = useWs()
 
   useEffect(() => {
-    return on('THREAD_CREATE', (d: any) => {
-      if (d.channel_id === channelId) {
-        qc.invalidateQueries({ queryKey: ['threads', channelId] })
-      }
+    const offCreate = on('THREAD_CREATE', (d: any) => {
+      if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['threads', channelId] })
     })
+    const offUpdate = on('THREAD_UPDATE', (d: any) => {
+      if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['threads', channelId] })
+    })
+    return () => { offCreate(); offUpdate() }
   }, [channelId, on, qc])
 
   const { data: threads = [], isLoading } = useQuery<ThreadData[]>({
