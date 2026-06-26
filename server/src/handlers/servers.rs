@@ -379,6 +379,14 @@ pub async fn kick_member(
         return Err(AppError::BadRequest("Impossible de s'auto-kick".into()));
     }
 
+    let owner_id: Uuid = sqlx::query_scalar("SELECT owner_id FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+    if user_id == owner_id {
+        return Err(AppError::Forbidden);
+    }
+
     sqlx::query(
         "DELETE FROM server_members WHERE user_id=$1 AND server_id=$2"
     )
@@ -411,6 +419,14 @@ pub async fn ban_member(
         &state, claims.sub, server_id,
         crate::models::role::Permissions::BAN_MEMBERS,
     ).await?;
+
+    let owner_id: Uuid = sqlx::query_scalar("SELECT owner_id FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+    if user_id == owner_id {
+        return Err(AppError::Forbidden);
+    }
 
     let reason = body["reason"].as_str().map(String::from);
     let expires_at = body["duration_hours"].as_i64().map(|h| {
@@ -547,14 +563,14 @@ pub async fn get_leaderboard(
     };
 
     let rows = sqlx::query(&format!(
-        "SELECT u.id, u.username, u.avatar_url, \
+        "SELECT u.id, u.username, u.avatar, \
          COUNT(m.id) as message_count, \
          COUNT(DISTINCT DATE(m.created_at)) as active_days \
          FROM messages m \
-         JOIN users u ON u.id = m.author_id \
+         JOIN users u ON u.id = m.user_id \
          JOIN channels c ON c.id = m.channel_id \
          WHERE c.server_id = $1 AND m.created_at > {} \
-         GROUP BY u.id, u.username, u.avatar_url \
+         GROUP BY u.id, u.username, u.avatar \
          ORDER BY message_count DESC LIMIT 20",
         since
     ))
@@ -566,7 +582,7 @@ pub async fn get_leaderboard(
     Ok(Json(rows.iter().map(|r| serde_json::json!({
         "user_id": r.get::<Uuid, _>("id"),
         "username": r.get::<String, _>("username"),
-        "avatar": r.get::<Option<String>, _>("avatar_url"),
+        "avatar": r.get::<Option<String>, _>("avatar"),
         "messages": r.get::<i64, _>("message_count"),
         "active_days": r.get::<i64, _>("active_days"),
     })).collect::<Vec<_>>()))

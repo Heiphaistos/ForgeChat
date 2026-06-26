@@ -370,8 +370,10 @@ export default function MessageList({
                         e.preventDefault()
                         e.stopPropagation()
                         avatarCtxMenu.open(e, [
-                          { label: 'Voir le profil', onClick: () => nav(`/profile/${msg.author_id}`) },
-                          { label: 'Envoyer un message', onClick: () => nav(`/dm/${msg.author_id}`), disabled: msg.author_id === user?.id },
+                          { label: 'Voir le profil', onClick: () => nav(`/users/${msg.author_id}`) },
+                          { label: 'Envoyer un message', onClick: () => {
+                            api.post('/dms', { user_id: msg.author_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
+                          }, disabled: msg.author_id === user?.id },
                           { label: `Mentionner @${msg.author_username}`, onClick: () => {
                             const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
                             if (el) { el.value += `@${msg.author_username} `; el.focus() }

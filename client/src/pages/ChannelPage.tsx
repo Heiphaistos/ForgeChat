@@ -415,8 +415,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 }
                 await api.post(
                   `/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`,
-                  fd,
-                  { headers: { 'Content-Type': 'multipart/form-data' } }
+                  fd
                 )
               }
             } catch {
@@ -425,6 +424,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           }}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
+          sending={sendMsg.isPending}
         />
           </>
         )}

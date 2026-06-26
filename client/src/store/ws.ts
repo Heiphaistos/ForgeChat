@@ -5,6 +5,8 @@ type WsHandler = (data: unknown) => void
 
 interface WsState {
   socket: WebSocket | null
+  _reconnectTimeout: ReturnType<typeof setTimeout> | null
+  _heartbeatInterval: ReturnType<typeof setInterval> | null
   handlers: Map<string, WsHandler[]>
   connect: () => Promise<void>
   disconnect: () => void
@@ -26,6 +28,8 @@ async function fetchWsTicket(): Promise<string | null> {
 
 export const useWs = create<WsState>((set, get) => ({
   socket: null,
+  _reconnectTimeout: null,
+  _heartbeatInterval: null,
   handlers: new Map(),
 
   connect: async () => {
@@ -39,8 +43,6 @@ export const useWs = create<WsState>((set, get) => ({
     const wsUrl = `${base}/ws?ticket=${encodeURIComponent(ticket)}`
 
     const ws = new WebSocket(wsUrl)
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
     ws.onmessage = (e) => {
       try {
@@ -51,25 +53,29 @@ export const useWs = create<WsState>((set, get) => ({
     }
 
     ws.onclose = () => {
-      if (heartbeatInterval) clearInterval(heartbeatInterval)
-      set({ socket: null })
+      const { _heartbeatInterval } = get()
+      if (_heartbeatInterval) clearInterval(_heartbeatInterval)
       // Reconnexion automatique après 3s avec un nouveau ticket
-      reconnectTimeout = setTimeout(() => get().connect(), 3000)
+      const timeout = setTimeout(() => get().connect(), 3000)
+      set({ socket: null, _heartbeatInterval: null, _reconnectTimeout: timeout })
     }
 
-    heartbeatInterval = setInterval(() => {
+    const interval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
       }
     }, 30_000)
 
     ws.onopen = () => set({ socket: ws })
-    set({ socket: ws })
+    set({ socket: ws, _heartbeatInterval: interval })
   },
 
   disconnect: () => {
-    get().socket?.close()
-    set({ socket: null })
+    const { socket, _reconnectTimeout, _heartbeatInterval } = get()
+    if (_reconnectTimeout) clearTimeout(_reconnectTimeout)
+    if (_heartbeatInterval) clearInterval(_heartbeatInterval)
+    socket?.close()
+    set({ socket: null, _reconnectTimeout: null, _heartbeatInterval: null })
   },
 
   send: (msg) => {

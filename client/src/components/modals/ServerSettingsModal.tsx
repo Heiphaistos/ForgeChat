@@ -125,9 +125,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
     mutationFn: async (file: File) => {
       const form = new FormData()
       form.append('icon', file)
-      const { data } = await api.post(`/servers/${server.id}/icon`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const { data } = await api.post(`/servers/${server.id}/icon`, form)
       return data
     },
     onSuccess: (data) => {
@@ -176,9 +174,7 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
     mutationFn: async (file: File) => {
       const form = new FormData()
       form.append('icon', file)
-      const { data } = await api.post(`/servers/${server.id}/icon`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const { data } = await api.post(`/servers/${server.id}/icon`, form)
       return data
     },
     onSuccess: (data) => {
