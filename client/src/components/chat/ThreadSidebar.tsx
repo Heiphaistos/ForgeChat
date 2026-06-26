@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, MessagesSquare, Plus } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ThreadItem from '../threads/ThreadItem'
+import { useWs } from '../../store/ws'
 
 interface ThreadData {
   id: string
@@ -31,6 +32,15 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
   const [showNewModal, setShowNewModal] = useState(false)
   const [form, setForm] = useState<NewThreadForm>({ title: '', firstMessage: '' })
   const qc = useQueryClient()
+  const { on } = useWs()
+
+  useEffect(() => {
+    return on('THREAD_CREATE', (d: any) => {
+      if (d.channel_id === channelId) {
+        qc.invalidateQueries({ queryKey: ['threads', channelId] })
+      }
+    })
+  }, [channelId, on, qc])
 
   const { data: threads = [], isLoading } = useQuery<ThreadData[]>({
     queryKey: ['threads', channelId],

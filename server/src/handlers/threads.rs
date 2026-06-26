@@ -140,6 +140,13 @@ pub async fn create_thread(
     .execute(&state.db)
     .await?;
 
+    let event = serde_json::json!({
+        "type": "THREAD_CREATE",
+        "channel_id": channel_id,
+        "thread": thread,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(serde_json::json!({ "thread": thread })))
 }
 
@@ -241,6 +248,15 @@ pub async fn send_thread_message(
     .bind(thread_id)
     .execute(&state.db)
     .await?;
+
+    // Broadcast en temps réel aux membres du serveur
+    let event = serde_json::json!({
+        "type": "THREAD_MESSAGE",
+        "thread_id": thread_id,
+        "channel_id": channel_id,
+        "message": msg,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "message": msg })))
 }
