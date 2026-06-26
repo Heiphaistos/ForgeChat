@@ -1,24 +1,30 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { BarChart2, Clock, CheckCircle2, Loader2 } from 'lucide-react'
+import { BarChart2, Clock, CheckCircle2, Loader2, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useAuth } from '../../store/auth'
 
 interface PollOption {
   id: string
   text: string
+  position: number
   votes: number
+  voted: boolean
 }
 
 interface Poll {
   id: string
   question: string
+  channel_id: string
+  creator_id: string
+  multiple_choice: boolean
+  anonymous: boolean
+  ends_at: string | null
   options: PollOption[]
   total_votes: number
-  expires_at: string | null
-  user_vote_id: string | null
 }
 
 interface Props {
@@ -40,6 +46,7 @@ function ProgressBar({ percent }: { percent: number }) {
 
 export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const [pendingOptionId, setPendingOptionId] = useState<string | null>(null)
 
   const { data: poll, isLoading, isError } = useQuery<Poll>({
@@ -72,6 +79,18 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
     },
   })
 
+  const closeMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/servers/${serverId}/channels/${channelId}/polls/${pollId}/close`),
+    onSuccess: () => {
+      toast.success('Sondage terminé')
+      queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
+    },
+    onError: (e: any) => {
+      toast.error(e.response?.data?.error ?? 'Erreur lors de la fermeture')
+    },
+  })
+
   if (isLoading) {
     return (
       <div className="mt-2 flex items-center gap-2 text-xs text-fc-muted border border-fc-hover rounded-lg p-3 max-w-sm">
@@ -83,9 +102,11 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
 
   if (isError || !poll) return null
 
-  const isExpired = poll.expires_at ? new Date(poll.expires_at) < new Date() : false
-  const hasVoted = !!poll.user_vote_id
+  const isExpired = poll.ends_at ? new Date(poll.ends_at) < new Date() : false
+  const hasVoted = poll.options.some(o => o.voted)
   const canVote = !hasVoted && !isExpired
+  const isCreator = user?.id === poll.creator_id
+  const canClose = isCreator && !isExpired
 
   return (
     <div className="mt-2 bg-fc-channel border border-fc-hover rounded-lg p-3 max-w-sm">
@@ -100,16 +121,28 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
             <span className="text-xs text-fc-muted">
               {poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}
             </span>
-            {poll.expires_at && (
+            {poll.ends_at && (
               <span className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-400' : 'text-fc-muted'}`}>
                 <Clock size={10} />
                 {isExpired
                   ? 'Terminé'
-                  : `Se termine ${formatDistanceToNow(new Date(poll.expires_at), { addSuffix: true, locale: fr })}`}
+                  : `Se termine ${formatDistanceToNow(new Date(poll.ends_at), { addSuffix: true, locale: fr })}`}
               </span>
             )}
           </div>
         </div>
+        {canClose && (
+          <button
+            onClick={() => closeMutation.mutate()}
+            disabled={closeMutation.isPending}
+            title="Terminer le sondage"
+            className="flex-shrink-0 p-1 rounded text-fc-muted hover:text-red-400 hover:bg-red-400/10 transition disabled:opacity-50"
+          >
+            {closeMutation.isPending
+              ? <Loader2 size={13} className="animate-spin" />
+              : <X size={13} />}
+          </button>
+        )}
       </div>
 
       {/* Options */}
@@ -118,7 +151,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
           const percent = poll.total_votes > 0
             ? Math.round((option.votes / poll.total_votes) * 100)
             : 0
-          const isMyVote = poll.user_vote_id === option.id
+          const isMyVote = option.voted
           const isPending = pendingOptionId === option.id
 
           return (

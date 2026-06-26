@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Trash2, Copy } from 'lucide-react'
@@ -15,12 +15,21 @@ export default function AdvancedSection({ user }: Props) {
   const { logout } = useAuth()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
+  const [deletePassword, setDeletePassword] = useState('')
 
   const deleteAccount = useMutation({
-    mutationFn: () => api.delete('/users/me'),
+    mutationFn: () => api.delete('/users/me', { data: { password: deletePassword } }),
     onSuccess: async () => { await logout(); nav('/login') },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
   })
+
+  const canConfirmDelete = deleteInput === user.username && deletePassword.length >= 8
+
+  function resetDelete() {
+    setConfirmDelete(false)
+    setDeleteInput('')
+    setDeletePassword('')
+  }
 
   return (
     <div className="space-y-6">
@@ -38,7 +47,7 @@ export default function AdvancedSection({ user }: Props) {
         <h3 className="text-sm font-semibold text-white mb-1">Informations de débogage</h3>
         <div className="bg-fc-channel rounded-lg p-3 text-xs font-mono text-fc-muted space-y-1">
           <div>UserID: {user.id}</div>
-          <div>Version: 3.1.0</div>
+          <div>Version: 3.14.0</div>
           <div>UA: {navigator.userAgent.slice(0, 60)}...</div>
         </div>
         <button
@@ -66,16 +75,24 @@ export default function AdvancedSection({ user }: Props) {
             <input
               value={deleteInput}
               onChange={e => setDeleteInput(e.target.value)}
-              className="w-full bg-fc-channel border border-fc-red/40 rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
+              placeholder="Nom d'utilisateur"
+              className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
+            />
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={e => setDeletePassword(e.target.value)}
+              placeholder="Mot de passe"
+              className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
             />
             <div className="flex gap-2">
-              <button onClick={() => { setConfirmDelete(false); setDeleteInput('') }}
+              <button onClick={resetDelete}
                 className="flex-1 py-2 border border-fc-hover text-fc-muted rounded-lg text-sm hover:text-white transition">
                 Annuler
               </button>
               <button
                 onClick={() => deleteAccount.mutate()}
-                disabled={deleteInput !== user.username || deleteAccount.isPending}
+                disabled={!canConfirmDelete || deleteAccount.isPending}
                 className="flex-1 py-2 bg-fc-red text-white rounded-lg text-sm disabled:opacity-50 transition hover:bg-fc-red/80"
               >
                 {deleteAccount.isPending ? 'Suppression...' : 'Supprimer définitivement'}
