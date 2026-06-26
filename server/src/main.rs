@@ -137,6 +137,16 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Notifications email — DMs non lus depuis 24h (toutes les 6 heures)
+    let email_notif_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(21600));
+        loop {
+            interval.tick().await;
+            send_dm_notifications(&email_notif_state).await;
+        }
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(config.frontend_url.parse::<axum::http::HeaderValue>()?)
         .allow_methods([
@@ -242,6 +252,89 @@ async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
 
     if count > 0 {
         tracing::info!("Nettoyage : {} pièces jointes expirées supprimées", count);
+    }
+}
+
+async fn send_dm_notifications(state: &AppState) {
+    use sqlx::Row;
+    use uuid::Uuid;
+
+    // Récupère les utilisateurs ayant des DMs non lus depuis 24h avec notifications email activées
+    let rows = sqlx::query(
+        "WITH unread AS (
+            SELECT
+                dm.id          AS msg_id,
+                dm.created_at  AS msg_at,
+                dc.id          AS channel_id,
+                CASE WHEN dc.user1_id = dm.sender_id THEN dc.user2_id ELSE dc.user1_id END AS recipient_id
+            FROM dm_messages dm
+            JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+            WHERE dm.created_at < NOW() - INTERVAL '24 hours'
+        )
+        SELECT
+            un.recipient_id,
+            u.email,
+            u.username,
+            COUNT(un.msg_id) AS unread_count
+        FROM unread un
+        JOIN users u ON u.id = un.recipient_id
+        JOIN email_preferences ep ON ep.user_id = un.recipient_id
+        LEFT JOIN dm_read_receipts rr ON rr.dm_id = un.channel_id AND rr.user_id = un.recipient_id
+        WHERE (rr.last_read_at IS NULL OR un.msg_at > rr.last_read_at)
+          AND ep.dm_unread_notify = TRUE
+          AND (ep.last_notified_at IS NULL OR ep.last_notified_at < NOW() - INTERVAL '24 hours')
+        GROUP BY un.recipient_id, u.email, u.username"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for row in &rows {
+        let recipient_id: Uuid = row.get("recipient_id");
+        let email: String = row.get("email");
+        let username: String = row.get("username");
+        let count: i64 = row.get("unread_count");
+
+        let plural_s = if count > 1 { "s" } else { "" };
+        let html = format!(
+            r#"<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1e1f22;color:#dbdee1;padding:32px">
+<div style="max-width:480px;margin:auto;background:#313338;border-radius:12px;padding:32px">
+  <h2 style="color:#5865f2;margin-top:0">ForgeChat — Messages non lus</h2>
+  <p>Bonjour <strong>{username}</strong>,</p>
+  <p>Tu as <strong>{count}</strong> message{plural_s} direct{plural_s} non lu{plural_s} depuis plus de 24h.</p>
+  <p><a href="{url}" style="display:inline-block;margin-top:12px;padding:10px 20px;background:#5865f2;color:#fff;border-radius:8px;text-decoration:none">Ouvrir ForgeChat</a></p>
+  <p style="color:#949ba4;font-size:12px;margin-top:24px">Pour ne plus recevoir ces emails, désactive les notifications email dans Paramètres &rarr; Emails.</p>
+</div></body></html>"#,
+            username = username,
+            count = count,
+            plural_s = plural_s,
+            url = state.config.frontend_url,
+        );
+
+        match email::send_email(&state.config, &email, "Nouveaux messages directs — ForgeChat", html).await {
+            Ok(true) => {
+                tracing::info!("Email DM digest envoyé à {} ({} non-lus)", username, count);
+            }
+            Ok(false) => {
+                tracing::debug!("SMTP non configuré, email ignoré pour {}", username);
+            }
+            Err(e) => {
+                tracing::error!("Erreur envoi email DM à {}: {}", username, e);
+                continue;
+            }
+        }
+
+        // Mettre à jour last_notified_at
+        let _ = sqlx::query(
+            "UPDATE email_preferences SET last_notified_at = NOW() WHERE user_id = $1"
+        )
+        .bind(recipient_id)
+        .execute(&state.db)
+        .await;
+    }
+
+    if !rows.is_empty() {
+        tracing::info!("DM email digest : {} notification(s) traitée(s)", rows.len());
     }
 }
 
@@ -478,6 +571,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))
+        // Email preferences
+        .route("/user/email-prefs", get(handlers::user_settings::get_email_prefs))
+        .route("/user/email-prefs", put(handlers::user_settings::update_email_prefs))
         // Soundboard
         .route("/servers/:id/soundboard", get(handlers::soundboard::list_sounds))
         .route("/servers/:id/soundboard", post(handlers::soundboard::upload_sound))
