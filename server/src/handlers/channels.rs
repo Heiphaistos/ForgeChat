@@ -379,6 +379,11 @@ pub async fn put_channel_permission(
     .bind(body.deny)
     .execute(&state.db)
     .await?;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "CHANNEL_PERMISSION_UPDATE",
+        "channel_id": channel_id,
+        "server_id": server_id,
+    }).to_string()).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -393,6 +398,11 @@ pub async fn delete_channel_permission(
         .bind(target_id)
         .execute(&state.db)
         .await?;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "CHANNEL_PERMISSION_UPDATE",
+        "channel_id": channel_id,
+        "server_id": server_id,
+    }).to_string()).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -414,6 +424,12 @@ pub async fn archive_channel(
     .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
 
     let archived: bool = row.get("archived");
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "CHANNEL_ARCHIVE_UPDATE",
+        "channel_id": channel_id,
+        "server_id": server_id,
+        "archived": archived,
+    }).to_string()).await;
     Ok(Json(serde_json::json!({ "archived": archived })))
 }
 

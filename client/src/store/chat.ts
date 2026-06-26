@@ -78,7 +78,7 @@ interface ChatState {
   setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
   addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean) => void
-  removeReaction: (channelId: string, msgId: string, emoji: string, userId: string) => void
+  removeReaction: (channelId: string, msgId: string, emoji: string, userId: string, wasMe: boolean) => void
 }
 
 export const useChat = create<ChatState>()(
@@ -143,7 +143,7 @@ export const useChat = create<ChatState>()(
       else msg.reactions.push({ emoji, count: 1, me })
     }),
 
-    removeReaction: (channelId, msgId, emoji, _userId) => set(s => {
+    removeReaction: (channelId, msgId, emoji, _userId, wasMe) => set(s => {
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
       const msg = msgs.find(m => m.id === msgId)
@@ -151,7 +151,7 @@ export const useChat = create<ChatState>()(
       const r = msg.reactions.find(r => r.emoji === emoji)
       if (r) {
         r.count--
-        r.me = false
+        if (wasMe) r.me = false
         if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x.emoji !== emoji)
       }
     }),
