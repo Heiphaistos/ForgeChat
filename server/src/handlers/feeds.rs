@@ -8,6 +8,46 @@ use uuid::Uuid;
 
 use crate::{error::AppError, middleware::auth::Claims, models::role::Permissions, state::AppState};
 
+/// Vérifie qu'une URL de feed ne pointe pas vers un réseau interne (anti-SSRF).
+fn is_ssrf_safe_feed_url(url: &str) -> bool {
+    use std::net::IpAddr;
+
+    let without_scheme = if let Some(s) = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")) {
+        s
+    } else {
+        return false;
+    };
+
+    let host = without_scheme.split('/').next().unwrap_or("");
+    let host = host.split(':').next().unwrap_or("");
+
+    if host.is_empty() { return false; }
+
+    let blocked = ["localhost", "127.0.0.1", "::1", "0.0.0.0",
+        "metadata.google.internal", "169.254.169.254"];
+    let lh = host.to_lowercase();
+    if blocked.iter().any(|b| lh == *b) { return false; }
+    if lh.ends_with(".local") || lh.ends_with(".internal") || lh.ends_with(".localhost") {
+        return false;
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(v4) => {
+                if v4.is_loopback() || v4.is_private() || v4.is_link_local()
+                    || v4.is_broadcast() || v4.is_documentation()
+                {
+                    return false;
+                }
+            }
+            IpAddr::V6(v6) => {
+                if v6.is_loopback() || v6.is_unspecified() { return false; }
+            }
+        }
+    }
+    true
+}
+
 // ---------------------------------------------------------------------------
 // Structs
 // ---------------------------------------------------------------------------
@@ -79,6 +119,9 @@ pub async fn create_channel_feed(
     }
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err(AppError::BadRequest("L'URL doit commencer par http:// ou https://".into()));
+    }
+    if !is_ssrf_safe_feed_url(&url) {
+        return Err(AppError::BadRequest("URL pointe vers un réseau interne — non autorisé".into()));
     }
 
     let feed_type = body.feed_type
@@ -199,6 +242,11 @@ pub async fn poll_rss_feeds(state: &AppState) {
 }
 
 async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String>) -> anyhow::Result<()> {
+    // Défense en profondeur : re-vérifier l'URL avant chaque fetch (protection SSRF)
+    if !is_ssrf_safe_feed_url(&feed.feed_url) {
+        anyhow::bail!("URL de feed bloquée (SSRF) : {}", feed.feed_url);
+    }
+
     // Fetch avec timeout 10s
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
