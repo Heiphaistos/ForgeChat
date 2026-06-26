@@ -19,6 +19,7 @@ pub mod server_settings;
 pub mod polls;
 pub mod webhooks;
 pub mod saved;
+pub mod search;
 pub mod audit;
 pub mod feeds;
 pub mod scheduled;

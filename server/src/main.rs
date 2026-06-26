@@ -413,6 +413,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // User notes
         .route("/notes/:target_id", get(handlers::saved::get_note))
         .route("/notes/:target_id", put(handlers::saved::set_note))
+        // Global search
+        .route("/search", get(handlers::search::global_search))
         // Audit log
         .route("/servers/:server_id/audit", get(handlers::audit::get_audit_log))
         // AutoMod
