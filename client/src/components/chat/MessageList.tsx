@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
+import { useCountdown } from '../../hooks/useCountdown'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy } from 'lucide-react'
@@ -49,6 +50,15 @@ function formatBytes(bytes: number) {
 }
 
 const URL_REGEX = /https?:\/\/[^\s<>"]+/g
+
+function EphemeralBadge({ expiresAt }: { expiresAt: string }) {
+  const remaining = useCountdown(expiresAt)
+  return (
+    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fc-red/20 text-fc-red font-medium">
+      ⏱ {remaining}
+    </span>
+  )
+}
 
 function extractFirstUrl(content: string): string | null {
   const matches = content.match(URL_REGEX)
@@ -102,6 +112,20 @@ export default function MessageList({
   useEffect(() => {
     if (isAtBottom.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
+
+  // Purge des messages éphémères expirés côté client toutes les 5s
+  useEffect(() => {
+    const deleteMessage = useChat.getState().deleteMessage
+    const id = setInterval(() => {
+      const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+      msgs.forEach(m => {
+        if (m.expires_at && new Date(m.expires_at) <= new Date()) {
+          deleteMessage(channelId, m.id)
+        }
+      })
+    }, 5000)
+    return () => clearInterval(id)
+  }, [channelId])
 
   useEffect(() => {
     if (!initialHighlightId || messages.length === 0) return
@@ -274,7 +298,7 @@ export default function MessageList({
               ref={el => { if (el) msgRefs.current[msg.id] = el }}
               className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
                 ${compact ? 'py-0.5' : 'py-1'}
-                ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : 'hover:bg-fc-hover/30'}`}
+                ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : msg.expires_at ? 'bg-red-500/5 border-l-2 border-red-500/30 hover:bg-red-500/8' : 'hover:bg-fc-hover/30'}`}
               onDoubleClick={e => {
                 e.stopPropagation()
                 setDblClickPopover({ msgId: msg.id, x: e.clientX, y: e.clientY })
@@ -320,6 +344,7 @@ export default function MessageList({
                       </span>
                     )}
                     <span className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'}`}>{formatDate(msg.created_at)}</span>
+                    {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
                   </div>
                 )}
 
@@ -397,9 +422,8 @@ export default function MessageList({
                             </button>
                           )}
                           {msg.expires_at && (
-                            <span className="inline-flex items-center gap-1 ml-2 text-[10px] text-fc-muted border border-fc-muted/30 rounded px-1.5 py-0.5">
-                              <Clock size={9} />
-                              Éphémère
+                            <span className="ml-2">
+                              <EphemeralBadge expiresAt={msg.expires_at} />
                             </span>
                           )}
                           {translations[msg.id] && (
