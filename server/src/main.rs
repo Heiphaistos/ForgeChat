@@ -672,9 +672,6 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Email preferences
         .route("/user/email-prefs", get(handlers::user_settings::get_email_prefs))
         .route("/user/email-prefs", put(handlers::user_settings::update_email_prefs))
-        // Sécurité compte
-        .route("/user/change-password", post(handlers::user_settings::change_password))
-        .route("/user/delete-account", post(handlers::user_settings::delete_account))
         // Soundboard
         .route("/servers/:id/soundboard", get(handlers::soundboard::list_sounds))
         .route("/servers/:id/soundboard", post(handlers::soundboard::upload_sound))

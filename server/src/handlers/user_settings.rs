@@ -11,8 +11,6 @@ use crate::{
     state::AppState,
 };
 
-use anyhow;
-
 // ─── User Settings ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -578,89 +576,3 @@ pub async fn update_email_prefs(
     Ok(Json(serde_json::json!({ "dm_unread_notify": notify })))
 }
 
-// ─── Mot de passe ─────────────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct ChangePasswordBody {
-    pub current_password: String,
-    pub new_password: String,
-}
-
-pub async fn change_password(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Json(body): Json<ChangePasswordBody>,
-) -> Result<Json<serde_json::Value>> {
-    if body.new_password.len() < 8 {
-        return Err(AppError::BadRequest("Mot de passe trop court (min 8 caractères)".into()));
-    }
-    if body.new_password.len() > 128 {
-        return Err(AppError::BadRequest("Mot de passe trop long (max 128 caractères)".into()));
-    }
-
-    let current_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id=$1")
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-
-    let valid = bcrypt::verify(&body.current_password, &current_hash)
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("bcrypt verify")))?;
-    if !valid {
-        return Err(AppError::Unauthorized);
-    }
-
-    let new_hash = bcrypt::hash(&body.new_password, 12)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("bcrypt hash: {e}")))?;
-
-    sqlx::query("UPDATE users SET password_hash=$1 WHERE id=$2")
-        .bind(&new_hash)
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-
-    Ok(Json(serde_json::json!({ "ok": true })))
-}
-
-// ─── Suppression de compte ────────────────────────────────────────────────────
-
-#[derive(Deserialize)]
-pub struct DeleteAccountBody {
-    pub password: String,
-}
-
-pub async fn delete_account(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Json(body): Json<DeleteAccountBody>,
-) -> Result<Json<serde_json::Value>> {
-    let current_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id=$1")
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-
-    let valid = bcrypt::verify(&body.password, &current_hash)
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("bcrypt verify")))?;
-    if !valid {
-        return Err(AppError::Unauthorized);
-    }
-
-    // Ne pas permettre de supprimer un compte propriétaire d'un serveur
-    let owns_server = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)"
-    )
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    if owns_server {
-        return Err(AppError::BadRequest(
-            "Transférez ou supprimez vos serveurs avant de supprimer votre compte".into()
-        ));
-    }
-
-    sqlx::query("DELETE FROM users WHERE id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-
-    Ok(Json(serde_json::json!({ "ok": true })))
-}
