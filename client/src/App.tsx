@@ -253,6 +253,12 @@ function AppInner() {
     const offEmojiDelete = on('EMOJI_DELETE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
     })
+    const offEmojiUpdate = on('EMOJI_UPDATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
+    })
+    const offCategoryCreate = on('CATEGORY_CREATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
     const offPermUpdate = on('CHANNEL_PERMISSION_UPDATE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
       if (d.channel_id) qcHook.invalidateQueries({ queryKey: ['channel-permissions', d.channel_id] })
@@ -266,7 +272,7 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
       }
     })
-    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offPermUpdate(); offArchive(); offMemberJoin() }
+    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate(); offPermUpdate(); offArchive(); offMemberJoin() }
   }, [user?.id])
 
   // Timeout utilisateur reçu en temps réel
@@ -298,12 +304,28 @@ function AppInner() {
     if (!user) return
     const offKicked = on('MEMBER_KICKED', (d: any) => {
       toast.error('Vous avez été expulsé du serveur', { duration: 6000 })
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['servers'] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['servers'] })
+        qcHook.removeQueries({ queryKey: ['server', d.server_id] })
+        qcHook.removeQueries({ queryKey: ['members', d.server_id] })
+      }
       nav('/')
     })
     const offBanned = on('MEMBER_BANNED', (d: any) => {
       toast.error('Vous avez été banni du serveur', { duration: 6000 })
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['servers'] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['servers'] })
+        qcHook.removeQueries({ queryKey: ['server', d.server_id] })
+        qcHook.removeQueries({ queryKey: ['members', d.server_id] })
+        qcHook.removeQueries({ queryKey: ['bans', d.server_id] })
+      }
+      nav('/')
+    })
+    const offServerDelete = on('SERVER_DELETE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['servers'] })
+        qcHook.removeQueries({ queryKey: ['server', d.server_id] })
+      }
       nav('/')
     })
     const offRemove = on('MEMBER_REMOVE', (d: any) => {
@@ -318,7 +340,7 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
       }
     })
-    return () => { offKicked(); offBanned(); offRemove(); offLeave() }
+    return () => { offKicked(); offBanned(); offServerDelete(); offRemove(); offLeave() }
   }, [user?.id])
 
   // Raccourcis clavier globaux
