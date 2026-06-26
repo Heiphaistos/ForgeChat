@@ -537,9 +537,13 @@ export default function ServerSidebar() {
                   className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
                   onClick={async () => {
                     if (confirm(`Quitter le serveur "${ctxServer?.name}" ?`)) {
-                      await api.delete(`/servers/${contextMenu.serverId}/members/me`).catch(() => {})
-                      qc.invalidateQueries({ queryKey: ['servers'] })
-                      nav('/friends')
+                      try {
+                        await api.post(`/servers/${contextMenu.serverId}/leave`)
+                        qc.invalidateQueries({ queryKey: ['servers'] })
+                        nav('/friends')
+                      } catch {
+                        toast.error('Impossible de quitter le serveur')
+                      }
                     }
                     setContextMenu(null)
                   }}

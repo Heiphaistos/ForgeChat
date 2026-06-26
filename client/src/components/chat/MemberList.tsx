@@ -29,6 +29,9 @@ export default function MemberList({ serverId }: Props) {
   const nav = useNavigate()
   const me = useAuth(s => s.user)
 
+  const meAsMember = (members as any[]).find((m: any) => m.user_id === me?.id)
+  const canManageMembers = meAsMember?.is_owner === true
+
   // Statut live via presence store (WS), fallback sur le statut DB
   const membersWithLiveStatus = members.map((m: any) => ({
     ...m,
@@ -54,7 +57,7 @@ export default function MemberList({ serverId }: Props) {
         }},
         { separator: true },
         { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
-        ...(me?.id !== m.user_id ? [
+        ...(canManageMembers && me?.id !== m.user_id ? [
           { separator: true as const },
           { label: 'Expulser', danger: true, onClick: () => {
             if (confirm(`Expulser ${m.nickname ?? m.username} ?`)) api.post(`/servers/${serverId}/members/${m.user_id}/kick`)

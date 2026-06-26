@@ -744,6 +744,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
         <textarea
           ref={textareaRef}
+          data-message-input="true"
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
