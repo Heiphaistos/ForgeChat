@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
+import { useChat } from './chat'
+import { usePresence } from './presence'
+import { useUnread } from './unread'
+import { useWs } from './ws'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -61,6 +65,10 @@ export const useAuth = create<AuthState>()(
       const body = isTauri ? { refresh_token: localStorage.getItem('refresh_token') } : {}
       await api.post('/auth/logout', body).catch(() => {})
       if (isTauri) localStorage.clear()
+      useWs.getState().disconnect()
+      useChat.setState({ messagesByChannel: {}, typing: {} })
+      usePresence.setState({ statuses: new Map(), activities: new Map() })
+      useUnread.setState({ counts: {} })
       set(s => { s.user = null })
     },
 

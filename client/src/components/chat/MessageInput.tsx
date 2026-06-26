@@ -101,6 +101,7 @@ interface Props {
   onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
   replyTo?: ReplyTarget | null
   onCancelReply?: () => void
+  sending?: boolean
 }
 
 interface MentionUser {
@@ -133,7 +134,7 @@ function FileIcon({ file }: { file: File }) {
   return <File size={14} className="text-fc-muted" />
 }
 
-export default function MessageInput({ channelId, serverId, placeholder, onSend, replyTo, onCancelReply }: Props) {
+export default function MessageInput({ channelId, serverId, placeholder, onSend, replyTo, onCancelReply, sending }: Props) {
   const [content, setContent] = useState('')
   const [files, setFiles] = useState<FileWithTtl[]>([])
   const [mentionQuery, setMentionQuery] = useState('')
@@ -528,9 +529,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       const formData = new FormData()
       const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
       formData.append('file', blob, `voice-${Date.now()}.${ext}`)
-      await api.post(`/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      await api.post(`/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`, formData)
       setShowVoiceRecorder(false)
     } catch {
       toast.error("Erreur lors de l'envoi du message vocal")
@@ -984,7 +983,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
           <button
             onClick={submit}
-            disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS}
+            disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS || !!sending}
             className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
             title="Envoyer"
           >

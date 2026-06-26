@@ -67,8 +67,29 @@ fn is_secure(state: &AppState) -> bool {
 
 pub async fn register(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<RegisterRequest>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
+    {
+        let client_ip = headers
+            .get("x-real-ip")
+            .or_else(|| headers.get("x-forwarded-for"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+            .unwrap_or_else(|| addr.ip().to_string());
+        let key = format!("register_attempts:{}", client_ip);
+        let mut redis = state.redis.lock().await;
+        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
+        let count = count.unwrap_or(0);
+        if count >= 5 {
+            return Err(AppError::TooManyRequests);
+        }
+        let _: () = redis.incr(&key, 1).await.unwrap_or(());
+        if count == 0 {
+            let _: () = redis.expire(&key, 900).await.unwrap_or(());
+        }
+    }
     if body.username.len() < 2 || body.username.len() > 32 {
         return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
     }

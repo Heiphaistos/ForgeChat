@@ -200,11 +200,11 @@ pub async fn send_message(
         }
     }
 
-    let content_str = body.content.as_ref().map(|c| {
-        if c.len() > 4000 { &c[..4000] } else { c }
+    let content_str: Option<String> = body.content.as_ref().map(|c| {
+        if c.len() > 4000 { c.chars().take(4000).collect() } else { c.clone() }
     });
 
-    let mention_everyone = content_str.map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
+    let mention_everyone = content_str.as_deref().map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 
     // Vérifier permission MENTION_EVERYONE si @everyone ou @here
     if mention_everyone {

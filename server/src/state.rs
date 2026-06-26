@@ -53,12 +53,17 @@ impl AppState {
     }
 
     pub async fn get_or_create_channel_tx(&self, channel_id: Uuid) -> broadcast::Sender<String> {
-        let read = self.channel_subs.read().await;
-        if let Some(tx) = read.get(&channel_id) {
+        {
+            let read = self.channel_subs.read().await;
+            if let Some(tx) = read.get(&channel_id) {
+                return tx.clone();
+            }
+        }
+        let mut write = self.channel_subs.write().await;
+        // Double-check sous le verrou exclusif pour éviter la race TOCTOU
+        if let Some(tx) = write.get(&channel_id) {
             return tx.clone();
         }
-        drop(read);
-        let mut write = self.channel_subs.write().await;
         let (tx, _) = broadcast::channel(256);
         write.insert(channel_id, tx.clone());
         tx

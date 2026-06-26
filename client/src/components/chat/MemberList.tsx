@@ -17,53 +17,11 @@ const STATUS_COLORS: Record<string, string> = {
   invisible: 'bg-fc-muted',
 }
 
-export default function MemberList({ serverId }: Props) {
-  const { data: members = [] } = useQuery({
-    queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
-    refetchInterval: 30_000,
-  })
-
-  const getStatus = usePresence(s => s.getStatus)
-  const ctxMenu = useContextMenu()
-  const nav = useNavigate()
-  const me = useAuth(s => s.user)
-
-  const meAsMember = (members as any[]).find((m: any) => m.user_id === me?.id)
-  const canManageMembers = meAsMember?.is_owner === true
-
-  // Statut live via presence store (WS), fallback sur le statut DB
-  const membersWithLiveStatus = members.map((m: any) => ({
-    ...m,
-    liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
-  }))
-
-  const online = membersWithLiveStatus.filter((m: any) =>
-    m.liveStatus === 'online' || m.liveStatus === 'idle' || m.liveStatus === 'dnd'
-  )
-  const offline = membersWithLiveStatus.filter((m: any) =>
-    m.liveStatus === 'offline' || m.liveStatus === 'invisible'
-  )
-
-  const MemberRow = ({ m }: { m: any }) => (
+function MemberRow({ m, onContextMenu }: { m: any; onContextMenu: (e: React.MouseEvent) => void }) {
+  return (
     <div
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
-      onContextMenu={e => ctxMenu.open(e, [
-        { label: 'Voir le profil', onClick: () => nav(`/profile/${m.user_id}`) },
-        { label: 'Envoyer un message', onClick: () => nav(`/dm/${m.user_id}`) },
-        { label: 'Mentionner', onClick: () => {
-          const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-          if (el) { el.value += `@${m.nickname ?? m.username} `; el.focus() }
-        }},
-        { separator: true },
-        { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
-        ...(canManageMembers && me?.id !== m.user_id ? [
-          { separator: true as const },
-          { label: 'Expulser', danger: true, onClick: () => {
-            if (confirm(`Expulser ${m.nickname ?? m.username} ?`)) api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
-          }},
-        ] : []),
-      ])}
+      onContextMenu={onContextMenu}
     >
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
@@ -94,6 +52,53 @@ export default function MemberList({ serverId }: Props) {
       </div>
     </div>
   )
+}
+
+export default function MemberList({ serverId }: Props) {
+  const { data: members = [] } = useQuery({
+    queryKey: ['members', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    refetchInterval: 30_000,
+  })
+
+  const getStatus = usePresence(s => s.getStatus)
+  const ctxMenu = useContextMenu()
+  const nav = useNavigate()
+  const me = useAuth(s => s.user)
+
+  const meAsMember = (members as any[]).find((m: any) => m.user_id === me?.id)
+  const canManageMembers = meAsMember?.is_owner === true
+
+  const membersWithLiveStatus = members.map((m: any) => ({
+    ...m,
+    liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
+  }))
+
+  const online = membersWithLiveStatus.filter((m: any) =>
+    m.liveStatus === 'online' || m.liveStatus === 'idle' || m.liveStatus === 'dnd'
+  )
+  const offline = membersWithLiveStatus.filter((m: any) =>
+    m.liveStatus === 'offline' || m.liveStatus === 'invisible'
+  )
+
+  const menuItems = (m: any) => [
+    { label: 'Voir le profil', onClick: () => nav(`/users/${m.user_id}`) },
+    { label: 'Envoyer un message', onClick: () => {
+      api.post('/dms', { user_id: m.user_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
+    }},
+    { label: 'Mentionner', onClick: () => {
+      const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
+      if (el) { el.value += `@${m.nickname ?? m.username} `; el.focus() }
+    }},
+    { separator: true as const },
+    { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
+    ...(canManageMembers && me?.id !== m.user_id ? [
+      { separator: true as const },
+      { label: 'Expulser', danger: true as const, onClick: () => {
+        if (confirm(`Expulser ${m.nickname ?? m.username} ?`)) api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
+      }},
+    ] : []),
+  ]
 
   return (
     <div className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto p-2 hidden lg:block">
@@ -102,7 +107,9 @@ export default function MemberList({ serverId }: Props) {
           <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
             En ligne — {online.length}
           </div>
-          {online.map((m: any) => <MemberRow key={m.user_id} m={m} />)}
+          {online.map((m: any) => (
+            <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+          ))}
         </>
       )}
       {offline.length > 0 && (
@@ -110,7 +117,9 @@ export default function MemberList({ serverId }: Props) {
           <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mt-3 mb-1">
             Hors ligne — {offline.length}
           </div>
-          {offline.map((m: any) => <MemberRow key={m.user_id} m={m} />)}
+          {offline.map((m: any) => (
+            <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+          ))}
         </>
       )}
       {ctxMenu.node}

@@ -21,8 +21,8 @@ async fn ensure_moderator(state: &AppState, server_id: Uuid, user_id: Uuid) -> R
            LEFT JOIN roles r ON r.id = mr.role_id
            WHERE sm.server_id = $1 AND sm.user_id = $2
            AND (sm.user_id = (SELECT owner_id FROM servers WHERE id = $1)
-                OR (r.permissions::jsonb ? 'MANAGE_MESSAGES') = true
-                OR (r.permissions::jsonb ? 'ADMINISTRATOR') = true)
+                OR (r.permissions & 8) <> 0
+                OR (r.permissions & 2147483648) <> 0)
          )"
     )
     .bind(server_id)

@@ -213,16 +213,15 @@ export default function ChannelSidebar() {
   const { on: wsOn } = useWs()
 
   // Écouter les erreurs de join vocal
-  useState(() => {
-    const off = wsOn('VOICE_JOIN_ERROR', (d: any) => {
+  useEffect(() => {
+    return wsOn('VOICE_JOIN_ERROR', (d: any) => {
       if (d.reason === 'channel_full') {
         toast.error(`Canal plein (${d.current}/${d.limit} places)`)
       } else if (d.reason === 'wrong_password') {
         toast.error('Mot de passe incorrect')
       }
     })
-    return off
-  })
+  }, [])
 
   const { data: dms = [] } = useQuery({
     queryKey: ['dms'],
