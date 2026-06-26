@@ -166,13 +166,18 @@ pub async fn get_dms(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     let dms = sqlx::query(
-        "SELECT dc.id, dc.created_at,
+        "SELECT dc.id,
          CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END as other_user_id,
-         u.username, u.discriminator, u.avatar, u.status
+         u.username, u.discriminator, u.avatar, u.status,
+         (SELECT created_at FROM dm_messages WHERE dm_channel_id=dc.id ORDER BY created_at DESC LIMIT 1)
+           AS last_message_at
          FROM dm_channels dc
          JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
          WHERE dc.user1_id=$1 OR dc.user2_id=$1
-         ORDER BY dc.created_at DESC"
+         ORDER BY COALESCE(
+           (SELECT created_at FROM dm_messages WHERE dm_channel_id=dc.id ORDER BY created_at DESC LIMIT 1),
+           dc.created_at
+         ) DESC"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
@@ -186,6 +191,7 @@ pub async fn get_dms(
         "discriminator": r.get::<String, _>("discriminator"),
         "avatar": r.get::<Option<String>, _>("avatar"),
         "status": r.get::<String, _>("status"),
+        "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
     })).collect();
 
     Ok(Json(result))

@@ -66,11 +66,15 @@ pub async fn list_group_dms(
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT g.id, g.name, g.created_at,
-                (SELECT COUNT(*) FROM group_dm_members WHERE dm_id = g.id) as member_count
+                (SELECT COUNT(*) FROM group_dm_members WHERE dm_id = g.id) as member_count,
+                (SELECT created_at FROM group_dm_messages WHERE dm_id=g.id ORDER BY created_at DESC LIMIT 1) AS last_message_at
          FROM group_dm_channels g
          JOIN group_dm_members gm ON gm.dm_id = g.id
          WHERE gm.user_id = $1
-         ORDER BY g.created_at DESC"
+         ORDER BY COALESCE(
+           (SELECT created_at FROM group_dm_messages WHERE dm_id=g.id ORDER BY created_at DESC LIMIT 1),
+           g.created_at
+         ) DESC"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
@@ -81,6 +85,7 @@ pub async fn list_group_dms(
         "name": r.get::<String, _>("name"),
         "member_count": r.get::<i64, _>("member_count"),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
     })).collect();
     Ok(Json(result))
 }
