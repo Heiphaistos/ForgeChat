@@ -113,7 +113,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       }),
       on('TYPING_START', (d: any) => {
         if (d.channel_id === channelId) {
-          setTyping(channelId, d.user_id)
+          setTyping(channelId, d.user_id, d.username ?? 'Utilisateur')
           setTimeout(() => clearTyping(channelId, d.user_id), 5000)
         }
       }),

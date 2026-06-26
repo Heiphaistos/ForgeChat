@@ -279,10 +279,18 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
 
         Some("TYPING_START") => {
             if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
+                let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+                    .bind(user_id)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
                 let event = serde_json::json!({
                     "type": "TYPING_START",
                     "channel_id": channel_id,
                     "user_id": user_id,
+                    "username": username,
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;
             }

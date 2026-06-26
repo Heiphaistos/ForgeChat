@@ -43,13 +43,13 @@ interface ReactionCount {
 
 interface ChatState {
   messagesByChannel: Record<string, Message[]>
-  typing: Record<string, Set<string>>
+  typing: Record<string, Record<string, string>>
   addMessages: (channelId: string, messages: Message[], prepend?: boolean) => void
   addMessage: (msg: Message) => void
   updateMessage: (channelId: string, msgId: string, patch: Partial<Message>) => void
   mergeAttachments: (channelId: string, msgId: string, attachments: Attachment[]) => void
   deleteMessage: (channelId: string, msgId: string) => void
-  setTyping: (channelId: string, userId: string) => void
+  setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
   addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean) => void
   removeReaction: (channelId: string, msgId: string, emoji: string, userId: string) => void
@@ -98,13 +98,13 @@ export const useChat = create<ChatState>()(
       s.messagesByChannel[channelId] = msgs.filter(m => m.id !== msgId)
     }),
 
-    setTyping: (channelId, userId) => set(s => {
-      if (!s.typing[channelId]) s.typing[channelId] = new Set()
-      s.typing[channelId].add(userId)
+    setTyping: (channelId, userId, username) => set(s => {
+      if (!s.typing[channelId]) s.typing[channelId] = {}
+      s.typing[channelId][userId] = username
     }),
 
     clearTyping: (channelId, userId) => set(s => {
-      s.typing[channelId]?.delete(userId)
+      if (s.typing[channelId]) delete s.typing[channelId][userId]
     }),
 
     addReaction: (channelId, msgId, emoji, _userId, me) => set(s => {

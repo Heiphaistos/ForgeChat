@@ -810,16 +810,22 @@ export default function MessageList({
         })}
 
         {/* Indicateur de frappe */}
-        {typing && typing.size > 0 && (
-          <div className="text-xs text-fc-muted px-2 py-1 flex items-center gap-1.5 h-6">
-            <div className="flex gap-0.5 items-center">
-              {[0, 150, 300].map(delay => (
-                <span key={delay} className="w-1.5 h-1.5 bg-fc-muted rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-              ))}
+        {typing && Object.keys(typing).length > 0 && (() => {
+          const names = Object.values(typing)
+          const label = names.length === 1
+            ? `${names[0]} est en train d'écrire...`
+            : `${names.slice(0, 2).join(', ')} sont en train d'écrire...`
+          return (
+            <div className="text-xs text-fc-muted px-2 py-1 flex items-center gap-1.5 h-6">
+              <div className="flex gap-0.5 items-center">
+                {[0, 150, 300].map(delay => (
+                  <span key={delay} className="w-1.5 h-1.5 bg-fc-muted rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+                ))}
+              </div>
+              <span>{label}</span>
             </div>
-            <span>quelqu'un est en train d'écrire...</span>
-          </div>
-        )}
+          )
+        })()}
 
         <div ref={bottomRef} />
       </div>
