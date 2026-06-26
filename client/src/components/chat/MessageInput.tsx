@@ -476,6 +476,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   }
 
   const submit = () => {
+    if (sending) return
     const trimmed = content.trim()
     if (!trimmed && files.length === 0) return
 
