@@ -25,7 +25,16 @@ pub async fn create_invite(
         .map(char::from)
         .collect();
 
-    let expires_at = body.expires_hours.map(|h| Utc::now() + chrono::Duration::hours(h));
+    let expires_at = body.expires_hours.map(|h| {
+        // Cap à 7 jours max pour éviter les invitations quasi-permanentes
+        let h = h.clamp(1, 168);
+        Utc::now() + chrono::Duration::hours(h)
+    });
+    if let Some(uses) = body.max_uses {
+        if uses < 1 || uses > 1000 {
+            return Err(AppError::BadRequest("max_uses doit être entre 1 et 1000".into()));
+        }
+    }
 
     let invite = sqlx::query_as::<_, Invite>(
         "INSERT INTO invites (code, server_id, creator_id, max_uses, expires_at)
@@ -50,7 +59,7 @@ pub async fn get_invites(
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
     let invites = sqlx::query_as::<_, Invite>(
-        "SELECT * FROM invites WHERE server_id=$1 ORDER BY created_at DESC"
+        "SELECT * FROM invites WHERE server_id=$1 ORDER BY created_at DESC LIMIT 100"
     )
     .bind(server_id)
     .fetch_all(&state.db)
@@ -66,11 +75,15 @@ pub async fn delete_invite(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
-    sqlx::query("DELETE FROM invites WHERE code=$1 AND server_id=$2")
+    let result = sqlx::query("DELETE FROM invites WHERE code=$1 AND server_id=$2")
         .bind(&code)
         .bind(server_id)
         .execute(&state.db)
         .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Invitation introuvable".into()));
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

@@ -112,7 +112,10 @@ pub async fn delete_webhook(
 // Route publique — POST /api/github-webhook/:channel_id?token=...
 // Le token doit correspondre à channels.github_webhook_token (configuré par le propriétaire du serveur)
 async fn verify_github_token(state: &AppState, channel_id: Uuid, token: &str) -> Result<(), AppError> {
-    use sqlx::Row;
+    verify_github_token_get(state, channel_id, token).await.map(|_| ())
+}
+
+async fn verify_github_token_get(state: &AppState, channel_id: Uuid, token: &str) -> Result<String, AppError> {
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT github_webhook_token FROM channels WHERE id=$1"
     )
@@ -122,9 +125,9 @@ async fn verify_github_token(state: &AppState, channel_id: Uuid, token: &str) ->
     .flatten();
 
     match stored {
-        Some(t) if t == token => Ok(()),
+        Some(t) if t == token => Ok(t),
         Some(_) => Err(AppError::Unauthorized),
-        None => Err(AppError::Forbidden), // webhook non configuré pour ce canal
+        None => Err(AppError::Forbidden),
     }
 }
 
@@ -148,7 +151,12 @@ pub async fn execute_webhook(
 
     let channel_id: Uuid = row.get("channel_id");
     let server_id: Uuid = row.get("server_id");
-    let webhook_name: String = body.username.clone().unwrap_or_else(|| row.get("name"));
+    let raw_name: String = row.get("name");
+    let webhook_name: String = match &body.username {
+        Some(u) if !u.trim().is_empty() && u.len() <= 80 => u.trim().to_string(),
+        Some(_) => return Err(AppError::BadRequest("username invalide (1-80 chars)".into())),
+        None => raw_name,
+    };
     let content = body.content.trim().to_string();
     if content.is_empty() || content.len() > 4000 {
         return Err(AppError::BadRequest("Contenu invalide".into()));
@@ -185,13 +193,30 @@ pub async fn receive_github_webhook(
     axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
     headers: axum::http::HeaderMap,
-    axum::extract::Json(payload): axum::extract::Json<serde_json::Value>,
+    body_bytes: axum::body::Bytes,
 ) -> Result<axum::response::Response, AppError> {
     use axum::response::IntoResponse;
     use sqlx::Row;
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
 
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
-    verify_github_token(&state, channel_id, token).await?;
+    let stored_token = verify_github_token_get(&state, channel_id, token).await?;
+
+    // Vérifier la signature HMAC-SHA256 GitHub (X-Hub-Signature-256)
+    if let Some(sig_header) = headers.get("X-Hub-Signature-256").and_then(|v| v.to_str().ok()) {
+        let hex_sig = sig_header.trim_start_matches("sha256=");
+        let expected = data_encoding::HEXLOWER.decode(hex_sig.as_bytes())
+            .map_err(|_| AppError::Unauthorized)?;
+        let mut mac = Hmac::<Sha256>::new_from_slice(stored_token.as_bytes())
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("hmac key")))?;
+        mac.update(&body_bytes);
+        mac.verify_slice(&expected).map_err(|_| AppError::Unauthorized)?;
+    }
+    // Si header absent : GitHub non configuré avec secret, on accepte (backwards compat)
+
+    let payload: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|_| AppError::BadRequest("JSON invalide".into()))?;
 
     let event_type = headers
         .get("X-GitHub-Event")

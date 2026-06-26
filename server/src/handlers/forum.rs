@@ -196,7 +196,7 @@ pub async fn get_post(
 pub async fn reply_to_post(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<CreateReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
@@ -212,9 +212,10 @@ pub async fn reply_to_post(
     };
 
     let locked = sqlx::query_scalar::<_, bool>(
-        "SELECT locked FROM forum_posts WHERE id = $1"
+        "SELECT locked FROM forum_posts WHERE id = $1 AND channel_id = $2"
     )
     .bind(post_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .unwrap_or(false);
@@ -245,36 +246,35 @@ pub async fn reply_to_post(
 pub async fn update_post(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
 
     let post = sqlx::query(
-        "SELECT creator_id FROM forum_posts WHERE id = $1"
+        "SELECT creator_id FROM forum_posts WHERE id = $1 AND channel_id = $2"
     )
     .bind(post_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
     use sqlx::Row;
     let creator_id = post.get::<Uuid, _>("creator_id");
-    if creator_id != claims.sub {
-        return Err(AppError::Forbidden);
-    }
 
-    // Seul le contenu peut être modifié par le créateur
-    // pinned et locked sont des opérations admin réservées à MANAGE_MESSAGES
     let content = body["content"].as_str();
     let pinned = body["pinned"].as_bool();
     let locked = body["locked"].as_bool();
 
-    // Si pinned ou locked sont demandés, vérifier la permission admin
+    // pin/lock réservé aux modérateurs — creator n'en a pas besoin
     if pinned.is_some() || locked.is_some() {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    } else if creator_id != claims.sub {
+        // modification du contenu : réservée au créateur
+        return Err(AppError::Forbidden);
     }
 
     sqlx::query(
@@ -282,12 +282,13 @@ pub async fn update_post(
             pinned = COALESCE($2, pinned),
             locked = COALESCE($3, locked),
             content = COALESCE($4, content)
-         WHERE id = $1"
+         WHERE id = $1 AND channel_id = $5"
     )
     .bind(post_id)
     .bind(pinned)
     .bind(locked)
     .bind(content)
+    .bind(channel_id)
     .execute(&state.db)
     .await?;
 
@@ -297,23 +298,32 @@ pub async fn update_post(
 pub async fn delete_post(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
 
-    let row = sqlx::query("SELECT creator_id FROM forum_posts WHERE id = $1")
-        .bind(post_id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
+    let row = sqlx::query(
+        "SELECT creator_id FROM forum_posts WHERE id = $1 AND channel_id = $2"
+    )
+    .bind(post_id)
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
     use sqlx::Row;
-    if row.get::<Uuid, _>("creator_id") != claims.sub {
-        return Err(AppError::Forbidden);
+    let creator_id = row.get::<Uuid, _>("creator_id");
+
+    // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
+    if creator_id != claims.sub {
+        use super::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
-    sqlx::query("DELETE FROM forum_posts WHERE id = $1")
+    sqlx::query("DELETE FROM forum_posts WHERE id = $1 AND channel_id = $2")
         .bind(post_id)
+        .bind(channel_id)
         .execute(&state.db)
         .await?;
 

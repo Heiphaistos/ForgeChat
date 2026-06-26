@@ -13,7 +13,8 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::require_member;
+use super::servers::{require_member, require_permission};
+use crate::models::role::Permissions;
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Ticket {
@@ -91,6 +92,20 @@ pub async fn create_ticket(
         return Err(AppError::BadRequest("Priorité invalide".into()));
     }
 
+    // Valider que la catégorie appartient bien à ce serveur
+    if let Some(cat_id) = input.category_id {
+        let valid = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM ticket_categories WHERE id=$1 AND server_id=$2)"
+        )
+        .bind(cat_id)
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !valid {
+            return Err(AppError::BadRequest("Catégorie invalide".into()));
+        }
+    }
+
     let ticket = sqlx::query_as::<_, Ticket>(
         "INSERT INTO tickets (server_id, category_id, creator_id, title, priority)
          VALUES ($1, $2, $3, $4, $5) RETURNING *"
@@ -121,6 +136,36 @@ pub async fn update_ticket(
     if let Some(ref p) = input.priority {
         if !["low", "medium", "high", "urgent"].contains(&p.as_str()) {
             return Err(AppError::BadRequest("Priorité invalide".into()));
+        }
+    }
+
+    // Vérifier ownership : seul le créateur ou un modérateur peut modifier un ticket
+    use sqlx::Row;
+    let creator_row = sqlx::query(
+        "SELECT creator_id FROM tickets WHERE id=$1 AND server_id=$2"
+    )
+    .bind(ticket_id)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Ticket introuvable".into()))?;
+
+    let creator_id: Uuid = creator_row.get("creator_id");
+    if creator_id != claims.sub {
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    }
+
+    // Valider que assigned_to est membre du serveur
+    if let Some(assignee) = input.assigned_to {
+        let is_member = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+        )
+        .bind(server_id)
+        .bind(assignee)
+        .fetch_one(&state.db)
+        .await?;
+        if !is_member {
+            return Err(AppError::BadRequest("Assigné non membre du serveur".into()));
         }
     }
 
@@ -165,7 +210,7 @@ pub async fn create_category(
     Path(server_id): Path<Uuid>,
     Json(input): Json<CreateCategoryInput>,
 ) -> Result<(StatusCode, Json<TicketCategory>)> {
-    require_member(&state, claims.sub, server_id).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
     if input.name.trim().is_empty() || input.name.len() > 100 {
         return Err(AppError::BadRequest("Nom invalide".into()));
     }

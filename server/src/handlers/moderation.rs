@@ -102,6 +102,10 @@ pub async fn create_mod_note(
         return Err(AppError::BadRequest("Note trop longue (max 2000 caractères)".into()));
     }
 
+    // Valider que la cible est membre du serveur
+    ensure_member(&state, server_id, user_id).await
+        .map_err(|_| AppError::BadRequest("Utilisateur non membre du serveur".into()))?;
+
     let note = sqlx::query_as::<_, ModNote>(
         "INSERT INTO mod_notes (server_id, target_user_id, moderator_id, note)
          VALUES ($1, $2, $3, $4)
@@ -383,6 +387,22 @@ pub async fn update_task(
         if !["low", "normal", "high", "urgent"].contains(&p.as_str()) {
             return Err(AppError::BadRequest("priority invalide".into()));
         }
+    }
+
+    // Vérifier ownership : créateur ou modérateur uniquement
+    use sqlx::Row as _;
+    let task_row = sqlx::query(
+        "SELECT creator_id FROM channel_tasks WHERE id=$1 AND channel_id=$2"
+    )
+    .bind(task_id)
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Tâche introuvable".into()))?;
+
+    let task_creator: Uuid = task_row.get("creator_id");
+    if task_creator != claims.sub {
+        ensure_moderator(&state, server_id, claims.sub).await?;
     }
 
     let task = sqlx::query_as::<_, ChannelTask>(
