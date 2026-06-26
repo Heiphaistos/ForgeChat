@@ -247,7 +247,13 @@ function AppInner() {
     const offArchive = on('CHANNEL_ARCHIVE_UPDATE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
-    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offPermUpdate(); offArchive() }
+    const offMemberJoin = on('MEMBER_JOIN', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      }
+    })
+    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offPermUpdate(); offArchive(); offMemberJoin() }
   }, [user?.id])
 
   // Timeout utilisateur reçu en temps réel

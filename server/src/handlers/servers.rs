@@ -305,6 +305,21 @@ pub async fn join_server(
         .fetch_one(&state.db)
         .await?;
 
+    // Informer les membres existants de l'arrivée du nouveau membre
+    let user = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE id=$1")
+        .bind(claims.sub)
+        .fetch_optional(&state.db)
+        .await?;
+    if let Some(u) = user {
+        state.broadcast_to_server_members(invite.server_id, serde_json::json!({
+            "type": "MEMBER_JOIN",
+            "server_id": invite.server_id,
+            "user_id": claims.sub,
+            "username": u.username,
+            "avatar": u.avatar,
+        }).to_string()).await;
+    }
+
     Ok(Json(server))
 }
 
