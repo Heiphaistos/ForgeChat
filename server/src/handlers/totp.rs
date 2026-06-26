@@ -57,6 +57,16 @@ pub async fn confirm_totp(
     Json(input): Json<TotpVerifyInput>,
 ) -> Result<impl IntoResponse, AppError> {
     use sqlx::Row;
+    use redis::AsyncCommands;
+
+    // Rate limit : 5 tentatives / 15 minutes
+    let rl_key = format!("totp_confirm:{}", claims.sub);
+    {
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&rl_key, 1).await.unwrap_or(0);
+        if count == 1 { let _: () = redis.expire(&rl_key, 900).await.unwrap_or(()); }
+        if count > 5 { return Err(AppError::TooManyRequests); }
+    }
 
     let user = sqlx::query("SELECT totp_secret FROM users WHERE id = $1")
         .bind(claims.sub)
@@ -69,6 +79,9 @@ pub async fn confirm_totp(
     if !verify_totp(&secret, &input.code) {
         return Err(AppError::BadRequest("Code invalide".into()));
     }
+
+    // Réinitialiser le compteur sur succès
+    { let mut redis = state.redis.lock().await; let _: () = redis.del(&rl_key).await.unwrap_or(()); }
 
     sqlx::query("UPDATE users SET totp_enabled = TRUE WHERE id = $1")
         .bind(claims.sub)
@@ -84,6 +97,16 @@ pub async fn disable_totp(
     Json(input): Json<TotpVerifyInput>,
 ) -> Result<impl IntoResponse, AppError> {
     use sqlx::Row;
+    use redis::AsyncCommands;
+
+    // Rate limit : 5 tentatives / 15 minutes
+    let rl_key = format!("totp_disable:{}", claims.sub);
+    {
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&rl_key, 1).await.unwrap_or(0);
+        if count == 1 { let _: () = redis.expire(&rl_key, 900).await.unwrap_or(()); }
+        if count > 5 { return Err(AppError::TooManyRequests); }
+    }
 
     let user = sqlx::query("SELECT totp_secret FROM users WHERE id = $1")
         .bind(claims.sub)
@@ -105,6 +128,12 @@ pub async fn disable_totp(
     Ok(Json(serde_json::json!({ "enabled": false })))
 }
 
+/// Comparaison de chaînes en temps constant pour éviter les timing side-channels
+fn ct_str_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() { return false; }
+    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 pub fn verify_totp(secret: &str, code: &str) -> bool {
     let secret_bytes = match BASE32.decode(secret.as_bytes()) {
         Ok(b) => b,
@@ -117,7 +146,7 @@ pub fn verify_totp(secret: &str, code: &str) -> bool {
     for delta in [-1i64, 0, 1] {
         let t = (now as i64 + delta * DEFAULT_STEP as i64) as u64;
         let expected = totp_custom::<Sha1>(DEFAULT_STEP, 6, &secret_bytes, t);
-        if expected == code { return true; }
+        if ct_str_eq(&expected, code) { return true; }
     }
     false
 }
