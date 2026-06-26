@@ -22,6 +22,7 @@ import SavedPage from './pages/SavedPage'
 import ExplorePage from './pages/ExplorePage'
 import ServerDiscoveryPage from './pages/ServerDiscoveryPage'
 import ActivityFeedPage from './pages/ActivityFeedPage'
+import LeaderboardPage from './pages/LeaderboardPage'
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
@@ -241,6 +242,7 @@ function AppInner() {
           <Route path="dms/:dmId" element={<DMPage />} />
           <Route path="servers/:serverId" element={<ChannelPage />} />
           <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
+          <Route path="servers/:serverId/leaderboard" element={<LeaderboardPage />} />
         </Route>
       </Routes>
       {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}

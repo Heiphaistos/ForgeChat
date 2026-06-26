@@ -490,6 +490,47 @@ pub async fn get_server_stats(
     })))
 }
 
+pub async fn get_leaderboard(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    require_member(&state, claims.sub, server_id).await?;
+
+    let period = params.get("period").map(|s| s.as_str()).unwrap_or("month");
+    let since = match period {
+        "week" => "NOW() - INTERVAL '7 days'",
+        "month" => "NOW() - INTERVAL '30 days'",
+        _ => "'1970-01-01'",
+    };
+
+    let rows = sqlx::query(&format!(
+        "SELECT u.id, u.username, u.avatar_url, \
+         COUNT(m.id) as message_count, \
+         COUNT(DISTINCT DATE(m.created_at)) as active_days \
+         FROM messages m \
+         JOIN users u ON u.id = m.author_id \
+         JOIN channels c ON c.id = m.channel_id \
+         WHERE c.server_id = $1 AND m.created_at > {} \
+         GROUP BY u.id, u.username, u.avatar_url \
+         ORDER BY message_count DESC LIMIT 20",
+        since
+    ))
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    use sqlx::Row;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "user_id": r.get::<Uuid, _>("id"),
+        "username": r.get::<String, _>("username"),
+        "avatar": r.get::<Option<String>, _>("avatar_url"),
+        "messages": r.get::<i64, _>("message_count"),
+        "active_days": r.get::<i64, _>("active_days"),
+    })).collect::<Vec<_>>()))
+}
+
 // --- Helpers ---
 
 pub async fn require_member(

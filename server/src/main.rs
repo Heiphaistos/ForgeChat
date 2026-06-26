@@ -251,6 +251,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
+        .route("/servers/:server_id/leaderboard", get(handlers::servers::get_leaderboard))
         // Channels
         .route("/servers/:id/channels", get(handlers::channels::get_channels))
         .route("/servers/:id/channels", post(handlers::channels::create_channel))
