@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from
 import { useCountdown } from '../../hooks/useCountdown'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -14,6 +15,7 @@ import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
 import ReminderModal from './ReminderModal'
 import ReportModal from './ReportModal'
+import LightboxModal from './LightboxModal'
 import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
 import api from '../../api/client'
@@ -81,6 +83,8 @@ export default function MessageList({
   initialHighlightId,
 }: Props) {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const targetMsgId = searchParams.get('msg')
 
   const { data: customEmojisList = [] } = useQuery<{ name: string; url: string }[]>({
     queryKey: ['custom_emojis', serverId],
@@ -132,6 +136,12 @@ export default function MessageList({
     const timer = setTimeout(() => jumpToMessage(initialHighlightId), 300)
     return () => clearTimeout(timer)
   }, [initialHighlightId, messages.length])
+
+  useEffect(() => {
+    if (!targetMsgId || messages.length === 0) return
+    const timer = setTimeout(() => jumpToMessage(targetMsgId), 300)
+    return () => clearTimeout(timer)
+  }, [targetMsgId, messages.length])
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -201,7 +211,7 @@ export default function MessageList({
   }
 
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [poppingReaction, setPoppingReaction] = useState<string | null>(null)
   const [forwardingMsg, setForwardingMsg] = useState<{ id: string } | null>(null)
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
@@ -295,6 +305,7 @@ export default function MessageList({
           return (
             <div
               key={msg.id}
+              id={`msg-${msg.id}`}
               ref={el => { if (el) msgRefs.current[msg.id] = el }}
               className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
                 ${compact ? 'py-0.5' : 'py-1'}
@@ -451,7 +462,10 @@ export default function MessageList({
                               src={att.url}
                               alt={att.filename}
                               className="max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
-                              onClick={() => setLightbox(att.url)}
+                              onClick={() => {
+                                const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
+                                if (imgs.length > 0) setLightbox({ images: imgs, index: imgs.indexOf(att.url) })
+                              }}
                             />
                             {att.expires_at && (
                               <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -619,6 +633,18 @@ export default function MessageList({
                     title="Copier en Markdown"
                   >
                     <Copy size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?msg=${msg.id}`
+                      navigator.clipboard.writeText(url)
+                      toast.success('Lien copié !')
+                    }}
+                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                    title="Copier le lien"
+                  >
+                    <Link size={14} />
                   </button>
 
                   <button
@@ -822,25 +848,12 @@ export default function MessageList({
         />
       )}
 
-      {/* Lightbox image plein écran */}
       {lightbox && (
-        <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] cursor-zoom-out"
-          onClick={() => setLightbox(null)}
-        >
-          <img
-            src={lightbox}
-            alt=""
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            className="absolute top-4 right-4 text-white bg-black/50 p-2 rounded-full hover:bg-black/80 transition"
-            onClick={() => setLightbox(null)}
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <LightboxModal
+          images={lightbox.images}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   )
