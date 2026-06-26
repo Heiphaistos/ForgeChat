@@ -101,19 +101,27 @@ pub async fn update_me(
     .fetch_one(&state.db)
     .await?;
 
-    // Broadcast mise à jour profil à tous les membres des serveurs communs
+    // Broadcast mise à jour profil à tous les membres des serveurs communs (1 query)
     let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
     let event_str = event.to_string();
     state.broadcast_to_user(claims.sub, event_str.clone()).await;
-    let server_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
+    let visible_to: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT sm2.user_id
+         FROM server_members sm1
+         JOIN server_members sm2 ON sm2.server_id = sm1.server_id
+         WHERE sm1.user_id = $1 AND sm2.user_id != $1"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
-    for sid in server_ids {
-        state.broadcast_to_server_members(sid, event_str.clone()).await;
+    {
+        let clients = state.clients.read().await;
+        for uid in visible_to {
+            if let Some(tx) = clients.get(&uid) {
+                let _ = tx.send(event_str.clone());
+            }
+        }
     }
 
     Ok(Json(user.into()))
@@ -170,19 +178,27 @@ pub async fn upload_avatar(
         .fetch_one(&state.db)
         .await?;
 
-        // Notifier les membres des serveurs communs du nouvel avatar
+        // Notifier les membres des serveurs communs du nouvel avatar (1 query)
         let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
         let event_str = event.to_string();
         state.broadcast_to_user(claims.sub, event_str.clone()).await;
-        let server_ids: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
+        let visible_to: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT DISTINCT sm2.user_id
+             FROM server_members sm1
+             JOIN server_members sm2 ON sm2.server_id = sm1.server_id
+             WHERE sm1.user_id = $1 AND sm2.user_id != $1"
         )
         .bind(claims.sub)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default();
-        for sid in server_ids {
-            state.broadcast_to_server_members(sid, event_str.clone()).await;
+        {
+            let clients = state.clients.read().await;
+            for uid in visible_to {
+                if let Some(tx) = clients.get(&uid) {
+                    let _ = tx.send(event_str.clone());
+                }
+            }
         }
 
         return Ok(Json(user.into()));
