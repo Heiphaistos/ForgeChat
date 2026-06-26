@@ -98,9 +98,10 @@ interface Props {
   dmId: string
   partnerName: string
   onSend: (content: string | null, replyTo?: string, files?: FileWithTtl[]) => void
+  onLoadMore?: () => Promise<boolean>
 }
 
-export default function DMConversation({ dmId, partnerName, onSend }: Props) {
+export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }: Props) {
   const { on, send } = useWs()
   const me = useAuth(s => s.user)
 
@@ -199,6 +200,7 @@ export default function DMConversation({ dmId, partnerName, onSend }: Props) {
         serverId=""
         onDeleteMessage={() => {}}
         onEditMessage={() => {}}
+        onLoadMore={onLoadMore}
       />
       <ReadReceiptBar channelId={dmId} receipts={receipts} />
       <TypingIndicator users={typingUsers} />

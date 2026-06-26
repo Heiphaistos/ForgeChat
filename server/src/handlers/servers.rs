@@ -220,6 +220,21 @@ pub async fn join_server(
     Extension(claims): Extension<Claims>,
     Path(code): Path<String>,
 ) -> Result<Json<Server>> {
+    // Rate limit : 10 tentatives d'invitation / 10min par user (anti-énumération)
+    {
+        use redis::AsyncCommands;
+        let key = format!("join_attempts:{}", claims.sub);
+        let mut redis = state.redis.lock().await;
+        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
+        let count = count.unwrap_or(0);
+        if count >= 10 {
+            return Err(AppError::TooManyRequests);
+        }
+        let _: () = redis.incr(&key, 1).await.unwrap_or(());
+        if count == 0 {
+            let _: () = redis.expire(&key, 600).await.unwrap_or(());
+        }
+    }
     let invite = sqlx::query_as::<_, crate::models::server::Invite>(
         "SELECT * FROM invites WHERE code=$1"
     )

@@ -52,6 +52,33 @@ export default function DMPage() {
   const e2eBottomRef = useRef<HTMLDivElement>(null)
   const [showSearch, setShowSearch] = useState(false)
   const [callMode, setCallMode] = useState<'voice' | 'video' | null>(null)
+  const [hasMoreDM, setHasMoreDM] = useState(true)
+
+  const loadMoreDM = useCallback(async (): Promise<boolean> => {
+    if (!dmId || !hasMoreDM) return false
+    const msgs = useChat.getState().messagesByChannel[dmId] ?? []
+    if (msgs.length === 0) return false
+    const oldestId = msgs[0].id
+    try {
+      const { data } = await api.get(`/dms/${dmId}/messages?before=${oldestId}&limit=50`)
+      if (data.length === 0) { setHasMoreDM(false); return false }
+      const normalized = data.map((m: any) => ({
+        ...m,
+        channel_id: dmId,
+        author_id: m.sender_id,
+        author_username: m.sender_username,
+        author_avatar: m.sender_avatar,
+        author_discriminator: '0000',
+        attachments: [],
+        reactions: [],
+        type: 'default',
+        pinned: false,
+      }))
+      addMessages(dmId, normalized, true)
+      if (data.length < 50) setHasMoreDM(false)
+      return true
+    } catch { return false }
+  }, [dmId, hasMoreDM, addMessages])
 
   const { data: dmInfo } = useQuery({
     queryKey: ['dm_info', dmId],
@@ -144,6 +171,9 @@ export default function DMPage() {
   useEffect(() => {
     if (e2eMode) e2eBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [e2eMessages, e2eMode])
+
+  // Reset pagination quand on change de conversation
+  useEffect(() => { setHasMoreDM(true) }, [dmId])
 
   // Normal DM WebSocket listener
   useEffect(() => {
@@ -444,6 +474,7 @@ export default function DMPage() {
           dmId={dmId}
           partnerName={partnerName}
           onSend={(content, _replyTo, _files) => sendDm.mutate(content || null)}
+          onLoadMore={loadMoreDM}
         />
       )}
     </div>

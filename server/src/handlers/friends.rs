@@ -234,17 +234,33 @@ pub async fn get_dm_messages(
     if !ok { return Err(AppError::Forbidden); }
 
     let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+    let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
 
-    let messages = sqlx::query(
-        "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
-         JOIN users u ON u.id = dm.sender_id
-         WHERE dm.dm_channel_id=$1
-         ORDER BY dm.created_at DESC LIMIT $2"
-    )
-    .bind(dm_id)
-    .bind(limit)
-    .fetch_all(&state.db)
-    .await?;
+    let messages = if let Some(before_id) = before {
+        sqlx::query(
+            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+             JOIN users u ON u.id = dm.sender_id
+             WHERE dm.dm_channel_id=$1
+               AND dm.created_at < (SELECT created_at FROM dm_messages WHERE id=$3)
+             ORDER BY dm.created_at DESC LIMIT $2"
+        )
+        .bind(dm_id)
+        .bind(limit)
+        .bind(before_id)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+             JOIN users u ON u.id = dm.sender_id
+             WHERE dm.dm_channel_id=$1
+             ORDER BY dm.created_at DESC LIMIT $2"
+        )
+        .bind(dm_id)
+        .bind(limit)
+        .fetch_all(&state.db)
+        .await?
+    };
 
     use sqlx::Row;
     let mut result: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
