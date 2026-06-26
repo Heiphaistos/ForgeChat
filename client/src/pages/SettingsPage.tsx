@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
-  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail,
+  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail, Clock,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -23,12 +23,13 @@ import SecuritySection from '../components/settings/SecuritySection'
 import SessionsSection from '../components/settings/SessionsSection'
 import StatsSection from '../components/settings/StatsSection'
 import NotificationsEmailSection from '../components/settings/NotificationsEmailSection'
+import LoginHistorySection from '../components/settings/LoginHistorySection'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
   | 'notifications' | 'notifications_email' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
-  | 'stats'
+  | 'stats' | 'login_history'
 
 const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }[] = [
   { id: 'account', label: 'Mon compte', icon: <User size={16} />, group: 'Compte' },
@@ -45,6 +46,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
   { id: 'privacy', label: 'Vie privée', icon: <Shield size={16} />, group: 'Confidentialité' },
   { id: 'security', label: 'Sécurité', icon: <Shield size={16} /> },
   { id: 'sessions', label: 'Sessions', icon: <Monitor size={16} /> },
+  { id: 'login_history', label: 'Connexions', icon: <Clock size={16} /> },
   { id: 'accessibility', label: 'Accessibilité', icon: <Accessibility size={16} /> },
   { id: 'streamer', label: 'Mode Streamer', icon: <Film size={16} /> },
   { id: 'advanced', label: 'Avancé', icon: <Cpu size={16} />, group: 'Avancé' },
@@ -139,6 +141,7 @@ export default function SettingsPage() {
           {section === 'advanced' && <AdvancedSection user={user} />}
           {section === 'security' && <SecuritySection />}
           {section === 'sessions' && <SessionsSection />}
+          {section === 'login_history' && <LoginHistorySection />}
           {section === 'stats' && <StatsSection />}
         </div>
       </div>

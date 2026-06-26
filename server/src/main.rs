@@ -435,6 +435,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me", delete(handlers::users::delete_account))
         .route("/users/me/data-export", get(handlers::privacy::export_user_data))
         .route("/users/me/stats", get(handlers::users::get_my_stats))
+        .route("/users/me/login-history", get(handlers::users::get_login_history))
         .route("/users/me/avatar", post(handlers::users::upload_avatar))
         .route("/users/me/banner", post(handlers::users::upload_banner))
         .route("/users/:id", get(handlers::users::get_user))

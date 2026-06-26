@@ -275,6 +275,35 @@ pub async fn search_users(
     Ok(Json(users))
 }
 
+pub async fn get_login_history(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        "SELECT id, device_info, ip_address, last_seen, created_at
+         FROM user_sessions
+         WHERE user_id = $1
+         ORDER BY last_seen DESC
+         LIMIT 20"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    let result = rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<uuid::Uuid, _>("id").to_string(),
+        "device_info": r.get::<Option<String>, _>("device_info"),
+        "ip_address": r.get::<Option<String>, _>("ip_address"),
+        "last_seen": r.get::<chrono::DateTime<chrono::Utc>, _>("last_seen").to_rfc3339(),
+        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
+    })).collect();
+
+    Ok(Json(result))
+}
+
 // ─── E2E Encryption — Public Key Management ──────────────────────────────────
 
 #[derive(serde::Deserialize)]
