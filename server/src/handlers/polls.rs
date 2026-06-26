@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, middleware::auth::Claims, state::AppState};
+use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, state::AppState};
 
 #[derive(Deserialize)]
 pub struct CreatePollBody {
@@ -52,6 +52,9 @@ pub async fn create_poll(
     if body.options.len() < 2 || body.options.len() > 10 {
         return Err(AppError::BadRequest("Entre 2 et 10 options requises".into()));
     }
+
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let poll_id = Uuid::new_v4();
     sqlx::query(

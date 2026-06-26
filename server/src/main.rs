@@ -19,6 +19,7 @@ use tower_http::{
     set_header::SetResponseHeaderLayer,
     trace::TraceLayer,
 };
+use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderValue};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -220,12 +221,13 @@ async fn main() -> anyhow::Result<()> {
                 ))
                 .service(ServeDir::new(&config.upload_dir))
         )
+        .layer(DefaultBodyLimit::max(52_428_800)) // 50 MB
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
-    tracing::info!("ForgeChat v2.3.0 écoute sur {addr}");
+    tracing::info!("ForgeChat v3.2.0 écoute sur {addr}");
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(

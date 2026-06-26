@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::require_member;
+use super::servers::{require_member, require_channel_in_server};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct Thread {
@@ -56,6 +56,7 @@ pub async fn list_threads(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let threads = sqlx::query(
         "SELECT t.*, u.username as creator_username, u.avatar as creator_avatar
@@ -97,6 +98,7 @@ pub async fn create_thread(
     Json(body): Json<CreateThreadReq>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     if body.first_message.trim().is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
