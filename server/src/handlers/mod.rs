@@ -30,3 +30,4 @@ pub mod dm_extras;
 pub mod stickers;
 pub mod desktop;
 pub mod totp;
+pub mod tickets;

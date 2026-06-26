@@ -252,6 +252,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
         .route("/servers/:server_id/leaderboard", get(handlers::servers::get_leaderboard))
+        .route("/servers/:server_id/tickets", get(handlers::tickets::list_tickets).post(handlers::tickets::create_ticket))
+        .route("/servers/:server_id/tickets/:ticket_id", patch(handlers::tickets::update_ticket))
+        .route("/servers/:server_id/ticket-categories", get(handlers::tickets::list_categories).post(handlers::tickets::create_category))
         // Channels
         .route("/servers/:id/channels", get(handlers::channels::get_channels))
         .route("/servers/:id/channels", post(handlers::channels::create_channel))
