@@ -462,3 +462,82 @@ pub async fn move_channel(
 
     Ok(Json(serde_json::json!({ "moved": true, "category_id": new_category_id })))
 }
+
+pub async fn purge_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+    axum::extract::Json(body): axum::extract::Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+
+    let row = sqlx::query("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
+    let server_id: Uuid = row.get("server_id");
+
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    let before: Option<String> = body.get("before").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let author_id: Option<Uuid> = body.get("author_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok());
+    let limit: i64 = body.get("limit")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(100)
+        .min(1000);
+
+    let deleted = if let Some(before_date) = before {
+        if let Some(aid) = author_id {
+            sqlx::query(
+                "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 LIMIT $4 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+            )
+            .bind(channel_id).bind(&before_date).bind(aid).bind(limit)
+            .fetch_one(&state.db).await
+        } else {
+            sqlx::query(
+                "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz LIMIT $3 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+            )
+            .bind(channel_id).bind(&before_date).bind(limit)
+            .fetch_one(&state.db).await
+        }
+    } else if let Some(aid) = author_id {
+        sqlx::query(
+            "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND user_id=$2 LIMIT $3 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+        )
+        .bind(channel_id).bind(aid).bind(limit)
+        .fetch_one(&state.db).await
+    } else {
+        sqlx::query(
+            "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 LIMIT $2 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+        )
+        .bind(channel_id).bind(limit)
+        .fetch_one(&state.db).await
+    };
+
+    let count: i64 = deleted
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?
+        .get("n");
+
+    sqlx::query(
+        "INSERT INTO audit_log (server_id, action, user_id, target_id, details) VALUES ($1,'PURGE_MESSAGES',$2,$3,$4)"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .bind(channel_id)
+    .bind(serde_json::json!({ "deleted": count, "channel_id": channel_id }))
+    .execute(&state.db)
+    .await
+    .ok();
+
+    let event = serde_json::json!({
+        "type": "CHANNEL_PURGE",
+        "channel_id": channel_id.to_string(),
+        "deleted": count,
+    });
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "deleted": count })))
+}

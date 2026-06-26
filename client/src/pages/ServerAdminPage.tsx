@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2 } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import api from '../api/client'
+import toast from 'react-hot-toast'
 import ServerStatsPage from './ServerStatsPage'
 import AuditLogPage from './AuditLogPage'
 import AutoModPage from './AutoModPage'
 import ServerEventsPage from './ServerEventsPage'
 
-type Tab = 'stats' | 'audit' | 'automod' | 'events' | 'reports'
+type Tab = 'stats' | 'audit' | 'automod' | 'events' | 'reports' | 'moderation'
 
 interface Report {
   id: string
@@ -18,6 +19,87 @@ interface Report {
   comment: string | null
   status: string
   created_at: string
+}
+
+interface Channel {
+  id: string
+  name: string
+  type: string
+}
+
+function ModerationTab({ serverId }: { serverId: string }) {
+  const [purgeChannelId, setPurgeChannelId] = useState('')
+  const [purgeBefore, setPurgeBefore] = useState('')
+  const [purgeLimit, setPurgeLimit] = useState(100)
+
+  const { data: channels = [] } = useQuery<Channel[]>({
+    queryKey: ['server-channels-mod', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/channels`).then(r => r.data),
+  })
+
+  const textChannels = channels.filter(c => c.type === 'text')
+
+  const purge = useMutation({
+    mutationFn: () => api.post(`/channels/${purgeChannelId}/purge`, {
+      before: purgeBefore || undefined,
+      limit: purgeLimit,
+    }),
+    onSuccess: (r) => toast.success(`${r.data.deleted} messages supprimés`),
+    onError: () => toast.error('Erreur lors de la purge'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-red/30 space-y-3">
+        <h3 className="text-sm font-semibold text-fc-red flex items-center gap-2">
+          <Trash2 size={14} />
+          Purge de messages
+        </h3>
+        <p className="text-xs text-fc-muted">Supprime des messages en masse dans un canal. Action irréversible.</p>
+
+        <select
+          value={purgeChannelId}
+          onChange={e => setPurgeChannelId(e.target.value)}
+          className="w-full fc-input text-sm"
+        >
+          <option value="">Choisir un canal...</option>
+          {textChannels.map(c => (
+            <option key={c.id} value={c.id}>#{c.name}</option>
+          ))}
+        </select>
+
+        <div className="flex gap-2">
+          <input
+            type="datetime-local"
+            value={purgeBefore}
+            onChange={e => setPurgeBefore(e.target.value)}
+            className="flex-1 fc-input text-sm"
+            placeholder="Avant (optionnel)"
+          />
+          <input
+            type="number"
+            value={purgeLimit}
+            onChange={e => setPurgeLimit(Number(e.target.value))}
+            min={1}
+            max={1000}
+            className="w-24 fc-input text-sm"
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            if (!purgeChannelId) return
+            if (!confirm(`Purger jusqu'à ${purgeLimit} messages ? Action irréversible.`)) return
+            purge.mutate()
+          }}
+          disabled={!purgeChannelId || purge.isPending}
+          className="px-4 py-2 bg-fc-red hover:bg-fc-red/80 text-white text-sm rounded-lg transition disabled:opacity-50"
+        >
+          {purge.isPending ? 'Purge en cours...' : 'Purger les messages'}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function ReportsTab({ serverId }: { serverId: string }) {
@@ -76,11 +158,12 @@ export default function ServerAdminPage() {
   if (!serverId) return null
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
-    { id: 'stats',   label: 'Statistiques',     Icon: BarChart2 },
-    { id: 'audit',   label: 'Journal d\'audit', Icon: ScrollText },
-    { id: 'automod', label: 'AutoMod',           Icon: Shield },
-    { id: 'events',  label: 'Événements',        Icon: Calendar },
-    { id: 'reports', label: 'Signalements',      Icon: Flag },
+    { id: 'stats',      label: 'Statistiques',     Icon: BarChart2 },
+    { id: 'audit',      label: 'Journal d\'audit', Icon: ScrollText },
+    { id: 'automod',    label: 'AutoMod',           Icon: Shield },
+    { id: 'events',     label: 'Événements',        Icon: Calendar },
+    { id: 'reports',    label: 'Signalements',      Icon: Flag },
+    { id: 'moderation', label: 'Modération',        Icon: Trash2 },
   ]
 
   return (
@@ -117,11 +200,12 @@ export default function ServerAdminPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {tab === 'stats'   && <ServerStatsPage serverId={serverId} />}
-        {tab === 'audit'   && <AuditLogPage serverId={serverId} />}
-        {tab === 'automod' && <AutoModPage serverId={serverId} />}
-        {tab === 'events'  && <ServerEventsPage serverId={serverId} />}
-        {tab === 'reports' && <ReportsTab serverId={serverId} />}
+        {tab === 'stats'      && <ServerStatsPage serverId={serverId} />}
+        {tab === 'audit'      && <AuditLogPage serverId={serverId} />}
+        {tab === 'automod'    && <AutoModPage serverId={serverId} />}
+        {tab === 'events'     && <ServerEventsPage serverId={serverId} />}
+        {tab === 'reports'    && <ReportsTab serverId={serverId} />}
+        {tab === 'moderation' && <ModerationTab serverId={serverId} />}
       </div>
     </div>
   )
