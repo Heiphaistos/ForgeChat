@@ -168,7 +168,8 @@ function AppInner() {
       const msg = d.message
       if (!msg?.channel_id || msg?.author_id === user?.id) return
       const currentPath = window.location.pathname
-      if (!currentPath.includes(msg.channel_id)) {
+      const activeChannelId = currentPath.match(/\/channels\/([^/]+)/)?.[1]
+      if (activeChannelId !== msg.channel_id) {
         incrUnread(msg.channel_id, d.server_id ?? undefined)
       }
     })
