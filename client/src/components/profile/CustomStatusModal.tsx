@@ -55,6 +55,14 @@ function computeExpiresAt(value: string): string | null {
 
 const QUICK_EMOJIS = ['😀', '👋', '🎯', '🔥', '💡', '🎮', '🎵', '📚', '☕', '🏖️', '😴', '🤔']
 
+const STATUS_PRESETS = [
+  { emoji: '🔴', label: 'Ne pas déranger', text: 'Ne pas déranger' },
+  { emoji: '📅', label: 'En réunion', text: 'En réunion' },
+  { emoji: '⏰', label: 'À plus tard', text: 'À plus tard' },
+  { emoji: '🎮', label: 'En train de jouer', text: 'En train de jouer' },
+  { emoji: '🎵', label: 'Écoute de la musique', text: 'Écoute de la musique' },
+]
+
 export default function CustomStatusModal({ onClose }: Props) {
   const { user, updateMe } = useAuth()
   const ref = useRef<HTMLDivElement>(null)
@@ -147,6 +155,26 @@ export default function CustomStatusModal({ onClose }: Props) {
               <span className="text-sm text-fc-text truncate">{text || 'Votre statut...'}</span>
             </div>
           )}
+
+          {/* Presets rapides */}
+          <div>
+            <div className="text-xs text-fc-muted mb-2 font-semibold uppercase tracking-wide">Presets rapides</div>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_PRESETS.map(preset => (
+                <button
+                  key={preset.label}
+                  onClick={() => {
+                    setEmoji(preset.emoji)
+                    setText(preset.text)
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-fc-channel hover:bg-fc-hover rounded-lg text-xs text-white transition border border-fc-hover hover:border-fc-accent"
+                >
+                  <span>{preset.emoji}</span>
+                  <span>{preset.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Saisie */}
           <div className="flex gap-2">
