@@ -132,7 +132,7 @@ pub async fn update_channel(
                 voice_password_hash = $8,
                 is_auto_create = COALESCE($9, is_auto_create),
                 auto_create_name = COALESCE($10, auto_create_name)
-             WHERE id=$1 RETURNING *"
+             WHERE id=$1 AND server_id=$11 RETURNING *"
         )
         .bind(channel_id)
         .bind(body.name)
@@ -144,6 +144,7 @@ pub async fn update_channel(
         .bind(new_hash)
         .bind(body.is_auto_create)
         .bind(body.auto_create_name)
+        .bind(server_id)
         .fetch_one(&state.db)
         .await?
     } else {
@@ -158,7 +159,7 @@ pub async fn update_channel(
                 user_limit = COALESCE($7, user_limit),
                 is_auto_create = COALESCE($8, is_auto_create),
                 auto_create_name = COALESCE($9, auto_create_name)
-             WHERE id=$1 RETURNING *"
+             WHERE id=$1 AND server_id=$10 RETURNING *"
         )
         .bind(channel_id)
         .bind(body.name)
@@ -169,6 +170,7 @@ pub async fn update_channel(
         .bind(body.user_limit)
         .bind(body.is_auto_create)
         .bind(body.auto_create_name)
+        .bind(server_id)
         .fetch_one(&state.db)
         .await?
     };
