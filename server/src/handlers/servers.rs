@@ -182,6 +182,9 @@ pub async fn update_server(
     .fetch_one(&state.db)
     .await?;
 
+    let event = serde_json::json!({ "type": "SERVER_UPDATE", "server_id": server_id, "server": server });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
     Ok(Json(server))
 }
 

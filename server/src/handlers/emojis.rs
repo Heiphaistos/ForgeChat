@@ -117,14 +117,19 @@ pub async fn create_emoji(
     .await?;
 
     use sqlx::Row;
-    Ok(Json(serde_json::json!({
+    let emoji_data = serde_json::json!({
         "id": row.get::<Uuid, _>("id"),
         "name": row.get::<String, _>("name"),
         "url": row.get::<String, _>("url"),
         "mime_type": row.get::<String, _>("mime_type"),
         "animated": row.get::<String, _>("mime_type") == "image/gif",
         "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-    })))
+    });
+
+    let event = serde_json::json!({ "type": "EMOJI_CREATE", "server_id": server_id, "emoji": emoji_data });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(emoji_data))
 }
 
 pub async fn delete_emoji(
@@ -167,6 +172,9 @@ pub async fn delete_emoji(
         .bind(emoji_id)
         .execute(&state.db)
         .await?;
+
+    let event = serde_json::json!({ "type": "EMOJI_DELETE", "server_id": server_id, "emoji_id": emoji_id });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

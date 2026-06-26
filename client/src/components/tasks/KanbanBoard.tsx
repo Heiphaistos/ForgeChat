@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, AlertCircle } from 'lucide-react'
 import api from '../../api/client'
+import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 
 interface Task {
@@ -185,6 +186,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
 
 export default function KanbanBoard({ channelId }: KanbanBoardProps) {
   const qc = useQueryClient()
+  const { on } = useWs()
   const [openCreateCol, setOpenCreateCol] = useState<Col | null>(null)
   const dragId = useRef<string | null>(null)
 
@@ -193,6 +195,18 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
     queryFn: () => api.get(`/channels/${channelId}/tasks`).then(r => r.data),
     retry: 1,
   })
+
+  useEffect(() => {
+    const invalidate = (d: any) => {
+      if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['tasks', channelId] })
+    }
+    const offs = [
+      on('TASK_CREATE', invalidate),
+      on('TASK_UPDATE', invalidate),
+      on('TASK_DELETE', invalidate),
+    ]
+    return () => offs.forEach(off => off())
+  }, [channelId, on, qc])
 
   const updateTask = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Task, 'status' | 'title' | 'priority' | 'due_date' | 'assignee_id'>> }) =>
