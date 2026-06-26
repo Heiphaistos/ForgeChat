@@ -147,6 +147,27 @@ pub async fn send_message(
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
+    // Vérifier si l'utilisateur est en timeout dans ce serveur
+    let server_id_opt: Option<Uuid> = sqlx::query_scalar(
+        "SELECT server_id FROM channels WHERE id=$1"
+    )
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(sid) = server_id_opt {
+        let is_timed_out = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+        )
+        .bind(sid)
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+        if is_timed_out {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     // Enforcement du slowmode
     let slowmode: i32 = sqlx::query_scalar(
         "SELECT slowmode_delay FROM channels WHERE id=$1"
@@ -219,9 +240,12 @@ pub async fn send_message(
         }
     }
 
-    let content_str: Option<String> = body.content.as_ref().map(|c| {
-        if c.len() > 4000 { c.chars().take(4000).collect() } else { c.clone() }
-    });
+    if let Some(c) = &body.content {
+        if c.chars().count() > 4000 {
+            return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+        }
+    }
+    let content_str: Option<String> = body.content.clone();
 
     let mention_everyone = content_str.as_deref().map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 

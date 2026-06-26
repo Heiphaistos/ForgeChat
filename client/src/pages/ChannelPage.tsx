@@ -66,6 +66,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
+  const [timeoutUntil, setTimeoutUntil] = useState<Date | null>(null)
   const [showNotifModal, setShowNotifModal] = useState(false)
   const bellRef = useRef<HTMLButtonElement>(null)
 
@@ -122,6 +123,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       }),
       on('MESSAGE_ATTACHMENT_ADDED', (d: any) => {
         if (d.channel_id === channelId) mergeAttachments(channelId, d.message_id, d.attachments)
+      }),
+      on('USER_TIMEOUT', (d: any) => {
+        if (d.server_id === serverId) setTimeoutUntil(new Date(d.expires_at))
+      }),
+      on('USER_TIMEOUT_LIFTED', (d: any) => {
+        if (d.server_id === serverId) setTimeoutUntil(null)
       }),
     ]
     return () => offs.forEach(off => off())
@@ -418,11 +425,19 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               </div>
             )}
 
+            {/* Bannière timeout */}
+            {timeoutUntil && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-t border-red-500/20 text-red-400 text-xs">
+                <Timer size={12} />
+                <span>Vous êtes en sourdine jusqu'à <strong>{timeoutUntil.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+              </div>
+            )}
+
         {/* Input */}
         <MessageInput
           channelId={channelId}
           serverId={serverId}
-          placeholder={slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
+          placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
           onSend={async (content, replyToId, files, ttlSeconds) => {
             try {
               const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds })
@@ -444,7 +459,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           }}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
-          sending={sendMsg.isPending}
+          sending={sendMsg.isPending || !!timeoutUntil}
         />
           </>
         )}
