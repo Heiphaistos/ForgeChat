@@ -632,6 +632,9 @@ pub async fn update_status(
         }
     }
 
+    let custom_status = req.custom_status.map(|s| s.chars().take(128).collect::<String>());
+    let custom_status_emoji = req.custom_status_emoji.map(|s| s.chars().take(2).collect::<String>());
+
     sqlx::query(
         "UPDATE users SET
             status = COALESCE($1, status),
@@ -641,8 +644,8 @@ pub async fn update_status(
          WHERE id = $4"
     )
     .bind(&req.status)
-    .bind(&req.custom_status)
-    .bind(&req.custom_status_emoji)
+    .bind(&custom_status)
+    .bind(&custom_status_emoji)
     .bind(claims.sub)
     .execute(&state.db)
     .await?;
@@ -651,8 +654,8 @@ pub async fn update_status(
         "type": "PRESENCE_UPDATE",
         "user_id": claims.sub,
         "status": req.status,
-        "custom_status": req.custom_status,
-        "custom_status_emoji": req.custom_status_emoji,
+        "custom_status": custom_status,
+        "custom_status_emoji": custom_status_emoji,
     });
     let event_str = event.to_string();
 
