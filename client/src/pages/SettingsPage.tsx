@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
-  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3,
+  Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -22,10 +22,11 @@ import AdvancedSection from '../components/settings/AdvancedSection'
 import SecuritySection from '../components/settings/SecuritySection'
 import SessionsSection from '../components/settings/SessionsSection'
 import StatsSection from '../components/settings/StatsSection'
+import NotificationsEmailSection from '../components/settings/NotificationsEmailSection'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
-  | 'notifications' | 'audio' | 'video' | 'privacy' | 'language'
+  | 'notifications' | 'notifications_email' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
   | 'stats'
 
@@ -36,6 +37,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
   { id: 'appearance', label: 'Apparence', icon: <Palette size={16} />, group: 'Application' },
   { id: 'text_display', label: 'Texte & Affichage', icon: <Monitor size={16} /> },
   { id: 'notifications', label: 'Notifications', icon: <Bell size={16} /> },
+  { id: 'notifications_email', label: 'Emails', icon: <Mail size={16} /> },
   { id: 'keybindings', label: 'Raccourcis clavier', icon: <Keyboard size={16} /> },
   { id: 'language', label: 'Langue & Région', icon: <Globe size={16} /> },
   { id: 'audio', label: 'Audio', icon: <Mic size={16} />, group: 'Voix & Vidéo' },
@@ -125,6 +127,7 @@ export default function SettingsPage() {
           {section === 'appearance' && <AppearanceSection />}
           {section === 'text_display' && <TextDisplaySection />}
           {section === 'notifications' && <NotificationsSection />}
+          {section === 'notifications_email' && <NotificationsEmailSection />}
           {section === 'audio' && <AudioSection />}
           {section === 'video' && <VideoSection />}
           {section === 'privacy' && <PrivacySection />}

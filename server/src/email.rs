@@ -6,6 +6,36 @@ use lettre::{
 
 use crate::config::Config;
 
+/// Envoi générique d'un email HTML. Retourne `Ok(true)` si envoyé, `Ok(false)` si SMTP non configuré.
+pub async fn send_email(config: &Config, to: &str, subject: &str, html_body: String) -> anyhow::Result<bool> {
+    let (Some(host), Some(user), Some(pass)) = (
+        &config.smtp_host,
+        &config.smtp_user,
+        &config.smtp_pass,
+    ) else {
+        tracing::warn!("SMTP non configuré — email non envoyé à {}", to);
+        return Ok(false);
+    };
+
+    let email = Message::builder()
+        .from(config.smtp_from.parse()?)
+        .to(to.parse()?)
+        .subject(subject)
+        .header(ContentType::TEXT_HTML)
+        .body(html_body)?;
+
+    let creds = Credentials::new(user.clone(), pass.clone());
+
+    let mailer: AsyncSmtpTransport<Tokio1Executor> =
+        AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
+            .port(config.smtp_port)
+            .credentials(creds)
+            .build();
+
+    mailer.send(email).await?;
+    Ok(true)
+}
+
 /// Retourne `Ok(true)` si l'email a été envoyé, `Ok(false)` si SMTP non configuré.
 pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> anyhow::Result<bool> {
     let (Some(host), Some(user), Some(pass)) = (
