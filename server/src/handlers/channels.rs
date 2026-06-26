@@ -176,13 +176,18 @@ pub async fn update_channel(
     // Broadcaster la mise à jour du canal aux membres du serveur
     let event = serde_json::json!({
         "type": "CHANNEL_UPDATE",
+        "server_id": server_id,
         "channel": {
             "id": channel.id,
+            "server_id": server_id,
             "name": channel.name,
             "topic": channel.topic,
             "slowmode_delay": channel.slowmode_delay,
             "user_limit": channel.user_limit,
             "is_nsfw": channel.is_nsfw,
+            "position": channel.position,
+            "is_auto_create": channel.is_auto_create,
+            "auto_create_name": channel.auto_create_name,
             "has_voice_password": channel.voice_password_hash.is_some(),
         }
     });
