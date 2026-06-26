@@ -438,8 +438,18 @@ pub async fn ws_ticket(
 pub async fn logout(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+    axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
+    // Blocklist l'access token courant pour sa durée de vie restante
+    let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
+    if remaining_secs > 0 {
+        let access_hash = crate::middleware::auth::hash_token(&raw_token.0);
+        let blocklist_key = format!("jwtblock:{}", access_hash);
+        let mut redis = state.redis.lock().await;
+        let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
+    }
+
     if let Some(token) = body["refresh_token"].as_str() {
         let token_hash = hash_token(token);
         sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")

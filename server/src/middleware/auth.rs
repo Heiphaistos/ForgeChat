@@ -5,10 +5,24 @@ use axum::{
 };
 use axum_extra::{headers::{Authorization, authorization::Bearer}, TypedHeader};
 use jsonwebtoken::{decode, DecodingKey, Validation, encode, EncodingKey, Header};
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{error::AppError, state::AppState};
+
+/// Raw access token passé aux handlers via extension (pour le blocklist logout)
+#[derive(Clone)]
+pub struct RawToken(pub String);
+
+pub fn hash_token(token: &str) -> String {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    let digest = hasher.finalize();
+    base64::engine::general_purpose::STANDARD.encode(digest)
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -71,8 +85,20 @@ pub async fn require_auth(
     let claims = verify_token(&token, &state.config.jwt_secret, &state.config.jwt_issuer)
         .ok_or(AppError::Unauthorized)?;
 
+    // Vérifier le blocklist JWT (tokens révoqués après logout)
+    let token_hash = hash_token(&token);
+    let blocklist_key = format!("jwtblock:{}", token_hash);
+    {
+        let mut redis = state.redis.lock().await;
+        let blocked: Option<String> = redis.get(&blocklist_key).await.unwrap_or(None);
+        if blocked.is_some() {
+            return Err(AppError::Unauthorized);
+        }
+    }
+
     let mut req = req;
     req.extensions_mut().insert(claims);
+    req.extensions_mut().insert(RawToken(token));
     Ok(next.run(req).await)
 }
 

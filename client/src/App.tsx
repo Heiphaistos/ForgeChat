@@ -279,12 +279,14 @@ function AppInner() {
 
 import React from 'react'
 import Onboarding from './components/Onboarding'
+import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
-
   return (
-    <BrowserRouter>
-      <AppInner />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppInner />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
