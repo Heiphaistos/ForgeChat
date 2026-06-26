@@ -204,6 +204,22 @@ pub async fn create_timeout(
     .fetch_one(&state.db)
     .await?;
 
+    // Notifier l'utilisateur mis en timeout
+    let event = serde_json::json!({
+        "type": "USER_TIMEOUT",
+        "server_id": server_id,
+        "user_id": user_id,
+        "expires_at": timeout.expires_at,
+        "reason": timeout.reason,
+    });
+    state.broadcast_to_user(user_id, event.to_string()).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_TIMEOUT",
+        "server_id": server_id,
+        "user_id": user_id,
+        "expires_at": timeout.expires_at,
+    }).to_string()).await;
+
     Ok(Json(timeout))
 }
 
@@ -221,6 +237,19 @@ pub async fn remove_timeout(
     .bind(user_id)
     .execute(&state.db)
     .await?;
+
+    // Notifier l'utilisateur et les membres du serveur
+    let lift_event = serde_json::json!({
+        "type": "USER_TIMEOUT_LIFTED",
+        "server_id": server_id,
+        "user_id": user_id,
+    });
+    state.broadcast_to_user(user_id, lift_event.to_string()).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_TIMEOUT_LIFTED",
+        "server_id": server_id,
+        "user_id": user_id,
+    }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

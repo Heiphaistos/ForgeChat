@@ -27,6 +27,15 @@ pub async fn get_messages(
     let limit = params.limit.unwrap_or(50).min(100);
 
     let messages = if let Some(before) = params.before {
+        // Vérifier que le curseur existe avant d'utiliser la subquery (évite le retour silencieux vide si UUID invalide)
+        let cursor_ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+            "SELECT created_at FROM messages WHERE id=$1 AND channel_id=$2"
+        )
+        .bind(before).bind(channel_id)
+        .fetch_optional(&state.db).await?;
+
+        let ts = cursor_ts.ok_or_else(|| AppError::NotFound("Curseur invalide".into()))?;
+
         sqlx::query(
             "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, ru.username as reply_to_username
@@ -34,11 +43,11 @@ pub async fn get_messages(
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1 AND m.created_at < (SELECT created_at FROM messages WHERE id=$2)
+             WHERE m.channel_id=$1 AND m.created_at < $2
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $3"
         )
-        .bind(channel_id).bind(before).bind(limit)
+        .bind(channel_id).bind(ts).bind(limit)
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(

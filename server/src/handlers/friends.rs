@@ -454,6 +454,22 @@ pub async fn send_dm(
 
     let other_id: Uuid = other.get("other");
     let created_at = msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
+
+    // Récupérer username + avatar du sender pour la payload WS
+    let sender_info = sqlx::query(
+        "SELECT username, avatar FROM users WHERE id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    use sqlx::Row as _;
+    let (sender_username, sender_avatar) = sender_info.as_ref().map(|r| {
+        (r.get::<String, _>("username"), r.get::<Option<String>, _>("avatar"))
+    }).unwrap_or_else(|| (String::new(), None));
+
     let event = serde_json::json!({
         "type": "DM_MESSAGE",
         "dm_id": dm_id,
@@ -461,6 +477,8 @@ pub async fn send_dm(
             "id": msg_id,
             "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content.clone()) },
             "sender_id": claims.sub,
+            "sender_username": sender_username,
+            "sender_avatar": sender_avatar,
             "reply_to_id": reply_to,
             "created_at": created_at,
         }
