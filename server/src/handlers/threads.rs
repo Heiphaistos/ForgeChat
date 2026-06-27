@@ -113,6 +113,8 @@ pub async fn create_thread(
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| first_msg.chars().take(50).collect::<String>());
 
+    let mut tx = state.db.begin().await?;
+
     let thread = sqlx::query_as::<_, Thread>(
         "INSERT INTO threads (channel_id, parent_message_id, title, creator_id, last_reply_at)
          VALUES ($1, $2, $3, $4, NOW()) RETURNING *"
@@ -121,7 +123,7 @@ pub async fn create_thread(
     .bind(body.parent_message_id)
     .bind(&title)
     .bind(claims.sub)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query(
@@ -130,15 +132,17 @@ pub async fn create_thread(
     .bind(thread.id)
     .bind(claims.sub)
     .bind(first_msg.trim())
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
 
     sqlx::query(
         "UPDATE threads SET message_count = 1 WHERE id = $1"
     )
     .bind(thread.id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     let event = serde_json::json!({
         "type": "THREAD_CREATE",
@@ -222,12 +226,13 @@ pub async fn send_thread_message(
     };
 
     let thread_locked = sqlx::query_scalar::<_, bool>(
-        "SELECT locked FROM threads WHERE id = $1"
+        "SELECT locked FROM threads WHERE id = $1 AND channel_id = $2"
     )
     .bind(thread_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
-    .unwrap_or(false);
+    .ok_or_else(|| AppError::NotFound("Thread introuvable".into()))?;
 
     if thread_locked {
         return Err(AppError::Forbidden);

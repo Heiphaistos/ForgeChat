@@ -299,6 +299,27 @@ pub async fn attend_event(
 
     ensure_member(&state, server_id, claims.sub).await?;
 
+    // Vérifier la limite max_attendees pour le statut "going"
+    if body.status == "going" {
+        let at_limit: bool = sqlx::query_scalar(
+            "SELECT COALESCE(max_attendees, 2147483647) <= (
+               SELECT COUNT(*) FROM event_attendees
+               WHERE event_id=$1 AND status='going'
+               AND user_id != $2
+             )
+             FROM server_events WHERE id=$1"
+        )
+        .bind(event_id)
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+
+        if at_limit {
+            return Err(AppError::BadRequest("Événement complet".into()));
+        }
+    }
+
     sqlx::query(
         "INSERT INTO event_attendees (event_id, user_id, status)
          VALUES ($1, $2, $3)

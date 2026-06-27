@@ -41,12 +41,15 @@ pub async fn setup_totp(
             rand::thread_rng().gen::<u16>()))
         .collect();
 
-    sqlx::query("UPDATE users SET totp_secret = $1, totp_backup_codes = $2 WHERE id = $3")
-        .bind(&secret)
-        .bind(backup_codes.as_slice())
-        .bind(claims.sub)
-        .execute(&state.db).await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    sqlx::query(
+        "UPDATE users SET totp_secret = $1, totp_backup_codes = $2
+         WHERE id = $3 AND totp_enabled = FALSE"
+    )
+    .bind(&secret)
+    .bind(backup_codes.as_slice())
+    .bind(claims.sub)
+    .execute(&state.db).await
+    .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
 
     Ok(Json(TotpSetupResponse { secret, qr_url, backup_codes }))
 }
@@ -120,7 +123,7 @@ pub async fn disable_totp(
         return Err(AppError::BadRequest("Code invalide".into()));
     }
 
-    sqlx::query("UPDATE users SET totp_enabled = FALSE, totp_secret = NULL WHERE id = $1")
+    sqlx::query("UPDATE users SET totp_enabled = FALSE, totp_secret = NULL, totp_backup_codes = NULL WHERE id = $1")
         .bind(claims.sub)
         .execute(&state.db).await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;

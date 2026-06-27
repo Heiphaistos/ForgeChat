@@ -48,6 +48,9 @@ pub async fn create_scheduled(
     if body.send_at <= Utc::now() {
         return Err(AppError::BadRequest("La date doit être dans le futur".into()));
     }
+    if body.send_at > Utc::now() + chrono::Duration::days(30) {
+        return Err(AppError::BadRequest("Planification max 30 jours dans le futur".into()));
+    }
 
     let msg = sqlx::query_as::<_, ScheduledMessage>(
         "INSERT INTO scheduled_messages (channel_id, user_id, content, send_at)
@@ -125,25 +128,28 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         let user_id: Uuid = row.get("user_id");
         let content: String = row.get("content");
 
-        // Insérer dans messages
-        let insert = sqlx::query(
-            "INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
-        )
-        .bind(channel_id)
-        .bind(user_id)
-        .bind(&content)
-        .fetch_one(&state.db)
-        .await;
+        // Insérer dans messages + marquer envoyé dans une transaction atomique
+        let insert = async {
+            let mut tx = state.db.begin().await?;
+            let msg_row = sqlx::query(
+                "INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
+            )
+            .bind(channel_id)
+            .bind(user_id)
+            .bind(&content)
+            .fetch_one(&mut *tx)
+            .await?;
+            sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")
+                .bind(sched_id)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            Ok::<_, sqlx::Error>(msg_row)
+        }.await;
 
         match insert {
             Ok(msg_row) => {
                 let msg_id: Uuid = msg_row.get("id");
-
-                // Marquer le scheduled comme envoyé
-                let _ = sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")
-                    .bind(sched_id)
-                    .execute(&state.db)
-                    .await;
 
                 // Mettre à jour last_message_id du canal
                 let _ = sqlx::query("UPDATE channels SET last_message_id=$1 WHERE id=$2")
