@@ -188,7 +188,9 @@ function AppInner() {
       if (!msg || msg.author_id === user.id) return
       if (user.focus_mode) return
       const content: string = msg.content ?? ''
-      if (content.includes(`@${user.username}`) || content.includes('@everyone') || content.includes('@here')) {
+      const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
+      if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
         sendNativeNotification(msg.author_username ?? 'Quelqu\'un', { body: content.slice(0, 80) })
       } else if (!document.hasFocus()) {
