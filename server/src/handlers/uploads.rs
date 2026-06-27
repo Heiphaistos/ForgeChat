@@ -23,6 +23,19 @@ pub async fn upload_file(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    // Vérifier que le message appartient à l'utilisateur courant et est dans ce canal (IDOR protection)
+    let msg_owned = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2 AND user_id=$3)"
+    )
+    .bind(message_id)
+    .bind(channel_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if !msg_owned {
+        return Err(AppError::Forbidden);
+    }
+
     // Admins/modérateurs/propriétaires peuvent uploader n'importe quel type de fichier
     let is_privileged = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(
