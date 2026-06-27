@@ -155,25 +155,16 @@ pub async fn send_message(
         }
     }
 
-    // Vérifier si l'utilisateur est en timeout dans ce serveur
-    let server_id_opt: Option<Uuid> = sqlx::query_scalar(
-        "SELECT server_id FROM channels WHERE id=$1"
+    // Vérifier si l'utilisateur est en timeout dans ce serveur (server_id déjà validé par require_*)
+    let is_timed_out = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
     )
-    .bind(channel_id)
-    .fetch_optional(&state.db)
+    .bind(server_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
     .await?;
-
-    if let Some(sid) = server_id_opt {
-        let is_timed_out = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
-        )
-        .bind(sid)
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-        if is_timed_out {
-            return Err(AppError::Forbidden);
-        }
+    if is_timed_out {
+        return Err(AppError::Forbidden);
     }
 
     // Enforcement du slowmode
