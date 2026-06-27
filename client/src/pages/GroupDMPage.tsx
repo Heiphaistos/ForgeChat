@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Menu, Trash2 } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Menu, Trash2, Pencil, Check, X } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
 import toast from 'react-hot-toast'
 
@@ -12,6 +12,7 @@ interface GDMMessage {
   id: string
   content: string | null
   created_at: string
+  edited_at: string | null
   sender_id: string
   sender_username: string
   sender_avatar: string | null
@@ -38,6 +39,8 @@ export default function GroupDMPage() {
   const [content, setContent] = useState('')
   const { openSidebar } = useMobile()
   const [showMembers, setShowMembers] = useState(false)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -69,7 +72,7 @@ export default function GroupDMPage() {
     setHasMore(initialMessages.length >= 50)
   }, [initialMessages])
 
-  // Écouter les nouveaux messages et suppressions via WS
+  // Écouter les nouveaux messages, suppressions et éditions via WS
   useEffect(() => {
     const offNew = on('GROUP_DM_MESSAGE', (d: any) => {
       if (d.group_id !== groupId) return
@@ -82,8 +85,14 @@ export default function GroupDMPage() {
       if (d.group_id !== groupId) return
       setAllMessages(prev => prev.filter(m => m.id !== d.message_id))
     })
-    return () => { offNew(); offDelete() }
-  }, [groupId])
+    const offEdit = on('GROUP_DM_MESSAGE_EDIT', (d: any) => {
+      if (d.group_id !== groupId) return
+      setAllMessages(prev => prev.map(m =>
+        m.id === d.message_id ? { ...m, content: d.content, edited_at: new Date().toISOString() } : m
+      ))
+    })
+    return () => { offNew(); offDelete(); offEdit() }
+  }, [groupId, on])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
   const prevLen = useRef(0)
@@ -129,6 +138,13 @@ export default function GroupDMPage() {
     mutationFn: (text: string) =>
       api.post(`/dms/groups/${groupId}/messages`, { content: text }),
     onError: () => toast.error("Erreur d'envoi"),
+  })
+
+  const editMsg = useMutation({
+    mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
+      api.patch(`/dms/groups/${groupId}/messages/${msgId}`, { content }),
+    onSuccess: () => { setEditingMsgId(null); toast.success('Message modifié') },
+    onError: () => toast.error('Impossible de modifier'),
   })
 
   const submit = () => {
@@ -205,27 +221,58 @@ export default function GroupDMPage() {
                   {!isMe && (
                     <span className="text-xs text-fc-muted mb-0.5 ml-1">{msg.sender_username}</span>
                   )}
-                  <div className="flex items-center gap-1">
-                    {isMe && (
-                      <button
-                        onClick={() => {
-                          api.delete(`/dms/groups/${groupId}/messages/${msg.id}`)
-                            .catch(() => toast.error('Impossible de supprimer'))
+                  {editingMsgId === msg.id ? (
+                    <div className="flex items-end gap-1 w-full max-w-xs">
+                      <input
+                        value={editContent}
+                        onChange={e => setEditContent(e.target.value)}
+                        className="flex-1 px-3 py-1.5 bg-fc-input rounded-xl text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
+                        autoFocus
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') setEditingMsgId(null)
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            if (editContent.trim()) editMsg.mutate({ msgId: msg.id, content: editContent.trim() })
+                          }
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-fc-muted hover:text-red-400 rounded transition"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                    <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
-                      isMe
-                        ? 'bg-fc-accent text-white rounded-tr-sm'
-                        : 'bg-fc-channel text-fc-text rounded-tl-sm'
-                    }`}>
-                      {msg.content}
+                      />
+                      <button onClick={() => editContent.trim() && editMsg.mutate({ msgId: msg.id, content: editContent.trim() })}
+                        className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg"
+                      ><Check size={13} /></button>
+                      <button onClick={() => setEditingMsgId(null)}
+                        className="p-1.5 text-fc-muted hover:text-white rounded-lg"
+                      ><X size={13} /></button>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      {isMe && (
+                        <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition">
+                          <button
+                            onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}
+                            className="p-1 text-fc-muted hover:text-white rounded transition"
+                            title="Modifier"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            onClick={() => api.delete(`/dms/groups/${groupId}/messages/${msg.id}`).catch(() => toast.error('Impossible de supprimer'))}
+                            className="p-1 text-fc-muted hover:text-red-400 rounded transition"
+                            title="Supprimer"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      )}
+                      <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
+                        isMe
+                          ? 'bg-fc-accent text-white rounded-tr-sm'
+                          : 'bg-fc-channel text-fc-text rounded-tl-sm'
+                      }`}>
+                        {msg.content}
+                        {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
+                      </div>
+                    </div>
+                  )}
                   <span className="text-[10px] text-fc-muted mt-0.5 mx-1">
                     {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </span>

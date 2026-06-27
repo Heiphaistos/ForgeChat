@@ -309,3 +309,65 @@ pub async fn delete_group_message(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+#[derive(serde::Deserialize)]
+pub struct EditGroupMessageBody {
+    pub content: String,
+}
+
+pub async fn edit_group_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((group_id, msg_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<EditGroupMessageBody>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    )
+    .bind(group_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let content = body.content.trim().to_string();
+    if content.is_empty() || content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+
+    let rows = sqlx::query(
+        "UPDATE group_dm_messages SET content=$1, edited_at=NOW()
+         WHERE id=$2 AND sender_id=$3 AND dm_id=$4"
+    )
+    .bind(&content)
+    .bind(msg_id)
+    .bind(claims.sub)
+    .bind(group_id)
+    .execute(&state.db)
+    .await?;
+
+    if rows.rows_affected() == 0 {
+        return Err(AppError::Forbidden);
+    }
+
+    let members: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    )
+    .bind(group_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let event = serde_json::json!({
+        "type": "GROUP_DM_MESSAGE_EDIT",
+        "group_id": group_id,
+        "message_id": msg_id,
+        "content": content,
+    }).to_string();
+
+    for uid in members {
+        state.broadcast_to_user(uid, event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

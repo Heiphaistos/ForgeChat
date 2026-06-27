@@ -732,6 +732,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id", get(handlers::group_dms::get_group_dm))
         .route("/dms/groups/:group_id/messages", get(handlers::group_dms::get_group_messages))
         .route("/dms/groups/:group_id/messages", post(handlers::group_dms::send_group_message))
+        .route("/dms/groups/:group_id/messages/:msg_id", patch(handlers::group_dms::edit_group_message))
         .route("/dms/groups/:group_id/messages/:msg_id", delete(handlers::group_dms::delete_group_message))
         .route("/friends/blocked", get(handlers::friends::get_blocked))
         .route("/friends/block/:user_id", post(handlers::friends::block_user))
