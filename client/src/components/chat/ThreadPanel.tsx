@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Hash, Send, MessagesSquare } from 'lucide-react'
+import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -22,6 +22,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const qc = useQueryClient()
 
@@ -55,8 +57,39 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         qc.invalidateQueries({ queryKey: ['threads', channelId] })
       }
     })
-    return () => { offMsg(); offUpdate() }
+    const offEdit = on('THREAD_MESSAGE_EDIT', (d: any) => {
+      if (d.thread_id === threadId) {
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
+    })
+    const offDelete = on('THREAD_MESSAGE_DELETE', (d: any) => {
+      if (d.thread_id === threadId) {
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
+    })
+    return () => { offMsg(); offUpdate(); offEdit(); offDelete() }
   }, [threadId, parentMessageId, channelId, on, qc])
+
+  const editMessage = useMutation({
+    mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
+      api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}`, { content }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      setEditingMsgId(null)
+      toast.success('Message modifié')
+    },
+    onError: () => toast.error('Impossible de modifier'),
+  })
+
+  const deleteMessage = useMutation({
+    mutationFn: (msgId: string) =>
+      api.delete(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      toast.success('Message supprimé')
+    },
+    onError: () => toast.error('Impossible de supprimer'),
+  })
 
   // Scroll to bottom quand les messages changent
   useEffect(() => {
@@ -171,26 +204,73 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           </div>
         )}
 
-        {messages.map((msg: any) => (
-          <div key={msg.id} className="flex gap-2">
-            <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
-              {msg.author?.avatar
-                ? <img src={msg.author.avatar} alt="" className="w-full h-full object-cover" />
-                : msg.author?.username?.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-1.5 mb-0.5">
-                <span className={`text-xs font-semibold ${msg.author_id === user?.id || msg.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
-                  {msg.author?.username ?? msg.author_username}
-                </span>
-                <span className="text-xs text-fc-muted">
-                  {format(new Date(msg.created_at), 'HH:mm', { locale: fr })}
-                </span>
+        {messages.map((msg: any) => {
+          const isMe = msg.author_id === user?.id || msg.user_id === user?.id
+          return (
+            <div key={msg.id} className="flex gap-2 group">
+              <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
+                {msg.author?.avatar
+                  ? <img src={msg.author.avatar} alt="" className="w-full h-full object-cover" />
+                  : msg.author?.username?.charAt(0).toUpperCase()}
               </div>
-              <p className="text-sm text-fc-text leading-relaxed break-words">{msg.content}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-1.5 mb-0.5">
+                  <span className={`text-xs font-semibold ${isMe ? 'text-fc-accent' : 'text-white'}`}>
+                    {msg.author?.username ?? msg.author_username}
+                  </span>
+                  <span className="text-xs text-fc-muted">
+                    {format(new Date(msg.created_at), 'HH:mm', { locale: fr })}
+                  </span>
+                  {isMe && editingMsgId !== msg.id && (
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
+                      <button
+                        onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
+                        className="p-0.5 text-fc-muted hover:text-white rounded transition"
+                        title="Modifier"
+                      ><Pencil size={11} /></button>
+                      <button
+                        onClick={() => deleteMessage.mutate(msg.id)}
+                        className="p-0.5 text-fc-muted hover:text-red-400 rounded transition"
+                        title="Supprimer"
+                      ><Trash2 size={11} /></button>
+                    </div>
+                  )}
+                </div>
+                {editingMsgId === msg.id ? (
+                  <div className="flex gap-1">
+                    <textarea
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-fc-input rounded text-xs text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
+                      rows={2}
+                      autoFocus
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') setEditingMsgId(null)
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          if (editContent.trim()) editMessage.mutate({ msgId: msg.id, content: editContent.trim() })
+                        }
+                      }}
+                    />
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        onClick={() => editContent.trim() && editMessage.mutate({ msgId: msg.id, content: editContent.trim() })}
+                        disabled={!editContent.trim() || editMessage.isPending}
+                        className="p-1 bg-fc-accent hover:bg-indigo-500 text-white rounded disabled:opacity-50"
+                      ><Check size={10} /></button>
+                      <button
+                        onClick={() => setEditingMsgId(null)}
+                        className="p-1 text-fc-muted hover:text-white rounded"
+                      ><X size={10} /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-fc-text leading-relaxed break-words">{msg.content}</p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         <div ref={bottomRef} />
       </div>
