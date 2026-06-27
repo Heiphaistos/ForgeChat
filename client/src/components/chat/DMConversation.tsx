@@ -183,7 +183,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
   }, [lastMsgId, dmId, send])
 
   // Écoute WS pour les edits/deletes DM
-  const { updateMessage, deleteMessage: storeDeleteMessage, addReaction, removeReaction } = useChat()
+  const { updateMessage, deleteMessage: storeDeleteMessage, addReaction, removeReaction, mergeAttachments } = useChat()
   useEffect(() => {
     const offEdit = on('DM_MESSAGE_UPDATE', (d: any) => {
       if (d.dm_id !== dmId) return
@@ -199,8 +199,12 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
       if (d.added) addReaction(dmId, d.message_id, d.emoji, d.user_id, isMe)
       else removeReaction(dmId, d.message_id, d.emoji, d.user_id, isMe)
     })
-    return () => { offEdit(); offDelete(); offReaction() }
-  }, [dmId, on, updateMessage, storeDeleteMessage, addReaction, removeReaction, me?.id])
+    const offAttachment = on('DM_ATTACHMENT_ADDED', (d: any) => {
+      if (d.dm_id !== dmId) return
+      mergeAttachments(dmId, d.message_id, d.attachments)
+    })
+    return () => { offEdit(); offDelete(); offReaction(); offAttachment() }
+  }, [dmId, on, updateMessage, storeDeleteMessage, addReaction, removeReaction, mergeAttachments, me?.id])
 
   const handleDeleteMessage = useCallback(async (msgId: string) => {
     try {
