@@ -54,6 +54,8 @@ function formatBytes(bytes: number) {
 
 const URL_REGEX = /https?:\/\/[^\s<>"]+/g
 
+const EMPTY_MESSAGES: any[] = []
+
 function EphemeralBadge({ expiresAt }: { expiresAt: string }) {
   const remaining = useCountdown(expiresAt)
   return (
@@ -100,7 +102,7 @@ export default function MessageList({
     Object.fromEntries(customEmojisList.map(e => [e.name, e.url])),
     [customEmojisList]
   )
-  const messages = useChat(s => s.messagesByChannel[channelId] ?? [])
+  const messages = useChat(s => s.messagesByChannel[channelId] ?? EMPTY_MESSAGES)
   const typing = useChat(s => s.typing[channelId])
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)

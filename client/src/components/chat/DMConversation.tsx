@@ -17,6 +17,8 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import type { FileWithTtl } from './MessageInput'
 
+const EMPTY_MESSAGES: any[] = []
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TypingUser {
@@ -62,7 +64,7 @@ function ReadReceiptBar({
   channelId: string
   receipts: ReceiptMap
 }) {
-  const messages = useChat(s => s.messagesByChannel[channelId] ?? [])
+  const messages = useChat(s => s.messagesByChannel[channelId] ?? EMPTY_MESSAGES)
   if (messages.length === 0 || receipts.size === 0) return null
 
   // Trouver le dernier message qui a au moins un receipt
@@ -168,7 +170,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
   }, [])
 
   // Envoyer DM_READ quand on entre dans la conversation
-  const messages = useChat(s => s.messagesByChannel[dmId] ?? [])
+  const messages = useChat(s => s.messagesByChannel[dmId] ?? EMPTY_MESSAGES)
   const lastMsgId = messages.length > 0 ? messages[messages.length - 1].id : null
   const lastSignaledRef = useRef<string | null>(null)
 
