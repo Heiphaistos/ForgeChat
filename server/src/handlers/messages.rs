@@ -366,6 +366,13 @@ pub async fn edit_message(
         return Err(AppError::Forbidden);
     }
 
+    if body.content.trim().is_empty() {
+        return Err(AppError::BadRequest("Contenu vide".into()));
+    }
+    if body.content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
+
     // Sauvegarder l'ancienne version dans l'historique
     sqlx::query(
         "INSERT INTO message_edits (message_id, content)

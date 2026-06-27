@@ -212,15 +212,13 @@ pub async fn send_group_message(
     .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
-    let content_raw = body.content.as_deref()
+    let content = body.content.as_deref()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| AppError::BadRequest("Message vide".into()))?;
-    let content: String = if content_raw.len() > 4000 {
-        content_raw.chars().take(4000).collect()
-    } else {
-        content_raw
-    };
+    if content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
 
     let msg = sqlx::query(
         "INSERT INTO group_dm_messages (dm_id, sender_id, content) VALUES ($1, $2, $3) RETURNING id, created_at"

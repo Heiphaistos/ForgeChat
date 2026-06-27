@@ -100,14 +100,13 @@ pub async fn create_thread(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
-    let first_msg = if body.first_message.len() > 4000 {
-        body.first_message.chars().take(4000).collect::<String>()
-    } else {
-        body.first_message.clone()
-    };
-    if first_msg.trim().is_empty() {
+    if body.first_message.trim().is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
+    if body.first_message.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
+    let first_msg = body.first_message.clone();
 
     let title = body.title
         .filter(|t| !t.trim().is_empty())
@@ -219,11 +218,9 @@ pub async fn send_thread_message(
     if content_trimmed.is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
-    let content_trimmed: String = if content_trimmed.len() > 4000 {
-        content_trimmed.chars().take(4000).collect()
-    } else {
-        content_trimmed
-    };
+    if content_trimmed.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
 
     let thread_locked = sqlx::query_scalar::<_, bool>(
         "SELECT locked FROM threads WHERE id = $1 AND channel_id = $2"

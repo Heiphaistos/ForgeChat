@@ -439,12 +439,11 @@ pub async fn send_dm(
     if content_raw.is_empty() && !has_attachments {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
+    if content_raw.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
 
-    let content: String = if content_raw.len() > 4000 {
-        content_raw.chars().take(4000).collect()
-    } else {
-        content_raw.clone()
-    };
+    let content = content_raw.clone();
 
     let content_opt: Option<&str> = if content.is_empty() { None } else { Some(content.as_str()) };
     let msg = sqlx::query(
@@ -1490,8 +1489,11 @@ pub async fn edit_dm_message(
     if !ok { return Err(crate::error::AppError::Forbidden); }
 
     let content = body.content.trim().to_string();
-    if content.is_empty() || content.len() > 4000 {
-        return Err(crate::error::AppError::BadRequest("Contenu invalide (1-4000 chars)".into()));
+    if content.is_empty() {
+        return Err(crate::error::AppError::BadRequest("Contenu vide".into()));
+    }
+    if content.chars().count() > 4000 {
+        return Err(crate::error::AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
     // Sauvegarder ancienne version dans l'historique puis éditer

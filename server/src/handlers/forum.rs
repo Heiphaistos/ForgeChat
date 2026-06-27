@@ -212,11 +212,10 @@ pub async fn reply_to_post(
     if content_raw.is_empty() {
         return Err(AppError::BadRequest("Réponse vide".into()));
     }
-    let content: String = if content_raw.len() > 4000 {
-        content_raw.chars().take(4000).collect()
-    } else {
-        content_raw
-    };
+    if content_raw.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+    }
+    let content = content_raw;
 
     // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
     let mut tx = state.db.begin().await?;
