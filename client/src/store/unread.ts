@@ -33,8 +33,14 @@ export const useUnread = create<UnreadState>((set, get) => ({
     try {
       const { data } = await api.get('/unread')
       const counts: Record<string, number> = {}
-      for (const item of data) counts[item.channel_id] = item.count
-      set({ counts })
+      const serverCounts: Record<string, number> = {}
+      for (const item of data) {
+        counts[item.channel_id] = item.count
+        if (item.server_id) {
+          serverCounts[item.server_id] = (serverCounts[item.server_id] ?? 0) + item.count
+        }
+      }
+      set({ counts, serverCounts })
     } catch {}
   },
 

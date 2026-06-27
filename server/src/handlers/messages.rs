@@ -647,7 +647,7 @@ pub async fn search_messages(
         attachments: vec![],
         reactions: vec![],
         expires_at: r.try_get("expires_at").ok().flatten(),
-        poll_id: None,
+        poll_id: r.try_get("poll_id").ok().flatten(),
     }).collect();
 
     Ok(Json(result))

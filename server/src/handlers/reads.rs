@@ -58,7 +58,7 @@ pub async fn get_unread_counts(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT m.channel_id, COUNT(*) as count
+        "SELECT m.channel_id, c.server_id, COUNT(*) as count
          FROM messages m
          JOIN channels c ON c.id = m.channel_id
          JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
@@ -67,7 +67,7 @@ pub async fn get_unread_counts(
                (SELECT read_at FROM last_read WHERE user_id=$1 AND channel_id=m.channel_id),
                NOW() - INTERVAL '30 days'
            )
-         GROUP BY m.channel_id"
+         GROUP BY m.channel_id, c.server_id"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
@@ -77,6 +77,7 @@ pub async fn get_unread_counts(
         let count: i64 = r.get("count");
         serde_json::json!({
             "channel_id": r.get::<Uuid, _>("channel_id"),
+            "server_id": r.get::<Option<Uuid>, _>("server_id"),
             "count": count,
         })
     }).collect();
