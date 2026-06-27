@@ -751,9 +751,19 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            use sqlx::Row as _;
+            let from_username: String = sqlx::query("SELECT username FROM users WHERE id=$1")
+                .bind(user_id)
+                .fetch_optional(&state.db)
+                .await
+                .ok()
+                .flatten()
+                .map(|r| r.get::<String, _>("username"))
+                .unwrap_or_default();
             let event = serde_json::json!({
                 "type": "DM_CALL_INCOMING",
                 "from": user_id,
+                "from_username": from_username,
                 "dm_id": msg["dm_id"],
                 "call_type": msg["call_type"].as_str().unwrap_or("voice"),
             });

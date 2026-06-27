@@ -73,8 +73,8 @@ export default function DMPage() {
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
         author_discriminator: '0000',
-        attachments: [],
-        reactions: [],
+        attachments: m.attachments ?? [],
+        reactions: m.reactions ?? [],
         type: 'default',
         pinned: false,
       }))
@@ -150,8 +150,8 @@ export default function DMPage() {
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
         author_discriminator: '0000',
-        attachments: [],
-        reactions: [],
+        attachments: m.attachments ?? [],
+        reactions: m.reactions ?? [],
         type: 'default',
         pinned: false,
       }))

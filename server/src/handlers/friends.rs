@@ -269,14 +269,103 @@ pub async fn get_dm_messages(
     };
 
     use sqlx::Row;
-    let mut result: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
-        "id": r.get::<Uuid, _>("id"),
-        "content": r.get::<Option<String>, _>("content"),
-        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "sender_id": r.get::<Uuid, _>("sender_id"),
-        "sender_username": r.get::<String, _>("username"),
-        "sender_avatar": r.get::<Option<String>, _>("avatar"),
-    })).collect();
+    let msg_ids: Vec<Uuid> = messages.iter().map(|r| r.get::<Uuid, _>("id")).collect();
+
+    // Batch query attachments
+    let attachments_rows = if msg_ids.is_empty() {
+        vec![]
+    } else {
+        sqlx::query(
+            "SELECT id, dm_message_id, filename, content_type, size, url, expires_at
+             FROM attachments WHERE dm_message_id = ANY($1)"
+        )
+        .bind(&msg_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
+
+    // Batch query reactions
+    let reactions_rows = if msg_ids.is_empty() {
+        vec![]
+    } else {
+        sqlx::query(
+            "SELECT dm_message_id, emoji, user_id FROM dm_reactions WHERE dm_message_id = ANY($1)"
+        )
+        .bind(&msg_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
+
+    // Collect reply_to IDs to fetch reply context
+    let reply_ids: Vec<Uuid> = messages.iter()
+        .filter_map(|r| r.get::<Option<Uuid>, _>("reply_to_id"))
+        .collect();
+    let reply_rows = if reply_ids.is_empty() {
+        vec![]
+    } else {
+        sqlx::query(
+            "SELECT dm.id, dm.content, dm.sender_id, u.username as sender_username
+             FROM dm_messages dm JOIN users u ON u.id = dm.sender_id
+             WHERE dm.id = ANY($1)"
+        )
+        .bind(&reply_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
+
+    // Group by message id
+    let mut att_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for a in &attachments_rows {
+        let mid = a.get::<Uuid, _>("dm_message_id");
+        att_map.entry(mid).or_default().push(serde_json::json!({
+            "id": a.get::<Uuid, _>("id"),
+            "filename": a.get::<String, _>("filename"),
+            "content_type": a.get::<String, _>("content_type"),
+            "size": a.get::<i64, _>("size"),
+            "url": a.get::<String, _>("url"),
+            "expires_at": a.get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at"),
+        }));
+    }
+
+    let mut react_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in &reactions_rows {
+        let mid = r.get::<Uuid, _>("dm_message_id");
+        react_map.entry(mid).or_default().push(serde_json::json!({
+            "emoji": r.get::<String, _>("emoji"),
+            "user_id": r.get::<Uuid, _>("user_id"),
+        }));
+    }
+
+    let mut reply_ctx_map: std::collections::HashMap<Uuid, serde_json::Value> = std::collections::HashMap::new();
+    for r in &reply_rows {
+        let id = r.get::<Uuid, _>("id");
+        reply_ctx_map.insert(id, serde_json::json!({
+            "id": id,
+            "content": r.get::<Option<String>, _>("content"),
+            "sender_id": r.get::<Uuid, _>("sender_id"),
+            "sender_username": r.get::<String, _>("sender_username"),
+        }));
+    }
+
+    let mut result: Vec<serde_json::Value> = messages.iter().map(|r| {
+        let id = r.get::<Uuid, _>("id");
+        let reply_to_id = r.get::<Option<Uuid>, _>("reply_to_id");
+        serde_json::json!({
+            "id": id,
+            "content": r.get::<Option<String>, _>("content"),
+            "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "sender_id": r.get::<Uuid, _>("sender_id"),
+            "sender_username": r.get::<String, _>("username"),
+            "sender_avatar": r.get::<Option<String>, _>("avatar"),
+            "reply_to_id": reply_to_id,
+            "reply_to": reply_to_id.and_then(|rid| reply_ctx_map.get(&rid)).cloned(),
+            "attachments": att_map.get(&id).cloned().unwrap_or_default(),
+            "reactions": react_map.get(&id).cloned().unwrap_or_default(),
+        })
+    }).collect();
 
     result.reverse();
     Ok(Json(result))

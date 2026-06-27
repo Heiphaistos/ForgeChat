@@ -268,19 +268,25 @@ function AppInner() {
       const msg = d.message
       if (!msg || msg.sender_id === user.id) return
       const currentPath = window.location.pathname
-      if (currentPath === `/dms/${d.dm_id}` && document.hasFocus()) return
-      sendNativeNotification(msg.sender_username ?? 'Message privé', {
-        body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
-      })
+      const isActive = currentPath === `/dms/${d.dm_id}` && document.hasFocus()
+      if (!isActive) {
+        incrUnread(d.dm_id)
+        sendNativeNotification(msg.sender_username ?? 'Message privé', {
+          body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+        })
+      }
     })
     const offGroupMsg = on('GROUP_DM_MESSAGE', (d: any) => {
       const msg = d.message
       if (!msg || msg.sender_id === user.id) return
       const currentPath = window.location.pathname
-      if (currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()) return
-      sendNativeNotification(msg.sender_username ?? 'Groupe', {
-        body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
-      })
+      const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
+      if (!isActive) {
+        incrUnread(d.group_id)
+        sendNativeNotification(msg.sender_username ?? 'Groupe', {
+          body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+        })
+      }
     })
     return () => { offDm(); offGroupMsg() }
   }, [user?.id])
