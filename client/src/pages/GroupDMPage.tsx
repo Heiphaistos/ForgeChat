@@ -4,8 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Menu, Trash2, Pencil, Check, X } from 'lucide-react'
-import { useMobile } from '../contexts/MobileContext'
+import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface GDMMessage {
@@ -37,7 +36,7 @@ export default function GroupDMPage() {
   const { user } = useAuth()
   const { on } = useWs()
   const [content, setContent] = useState('')
-  const { openSidebar } = useMobile()
+
   const [showMembers, setShowMembers] = useState(false)
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -165,13 +164,7 @@ export default function GroupDMPage() {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover bg-fc-bg/30 flex-shrink-0">
-          <button
-            className="md:hidden p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 -ml-1"
-            onClick={openSidebar}
-            title="Menu"
-          >
-            <Menu size={20} />
-          </button>
+          <div className="md:hidden w-8 flex-shrink-0" />
           <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
             {group.name.charAt(0).toUpperCase()}
           </div>

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -305,8 +306,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     },
   ]
 
-  return (
-    <div className="fixed inset-0 bg-black/80 flex z-50">
+  const modal = (
+    <div className="fixed inset-0 bg-black/80 flex z-[200]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
       <div className="flex w-full h-full">
         {/* Sidebar */}
         <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4 overflow-y-auto">
@@ -774,4 +775,5 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       </div>
     </div>
   )
+  return createPortal(modal, document.body)
 }

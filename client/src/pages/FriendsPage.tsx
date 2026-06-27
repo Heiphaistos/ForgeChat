@@ -6,7 +6,6 @@ import {
   Clock, MinusCircle, Upload, Menu,
 } from 'lucide-react'
 import api from '../api/client'
-import { useMobile } from '../contexts/MobileContext'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
@@ -86,7 +85,6 @@ export default function FriendsPage() {
   const [copied, setCopied] = useState(false)
   const [search, setSearch] = useState('')
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const { openSidebar } = useMobile()
   const [showImport, setShowImport] = useState(false)
   const qc = useQueryClient()
   const nav = useNavigate()
@@ -304,13 +302,7 @@ export default function FriendsPage() {
     <div className="flex flex-col h-full" onClick={() => menuOpen && setMenuOpen(null)}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 flex-wrap gap-y-2">
-        <button
-          className="md:hidden p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 -ml-1"
-          onClick={openSidebar}
-          title="Menu"
-        >
-          <Menu size={20} />
-        </button>
+        <div className="md:hidden w-8 flex-shrink-0" />
         <span className="font-semibold text-white flex-shrink-0">Amis</span>
         <div className="flex gap-1 flex-wrap">
           <TabBtn t="online" label="En ligne" count={online.length} />

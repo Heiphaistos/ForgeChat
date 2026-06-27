@@ -42,7 +42,10 @@ export default function LeaderboardPage() {
     <div className="flex-1 overflow-y-auto p-6">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Classement</h1>
+          <div className="flex items-center gap-2">
+            <div className="md:hidden w-8 flex-shrink-0" />
+            <h1 className="text-2xl font-bold text-white">Classement</h1>
+          </div>
           <div className="flex gap-1 bg-fc-channel rounded-lg p-1">
             {PERIODS.map(p => (
               <button

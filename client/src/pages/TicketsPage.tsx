@@ -105,6 +105,7 @@ export default function TicketsPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-fc-hover">
         <div className="flex items-center gap-3">
+          <div className="md:hidden w-8 flex-shrink-0" />
           <h1 className="text-xl font-bold text-white">Tickets</h1>
           {categories.length > 0 && (
             <div className="flex items-center gap-1.5">
