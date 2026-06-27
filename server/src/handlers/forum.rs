@@ -218,17 +218,24 @@ pub async fn reply_to_post(
         content_raw
     };
 
-    let locked = sqlx::query_scalar::<_, bool>(
-        "SELECT locked FROM forum_posts WHERE id = $1 AND channel_id = $2"
+    // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
+    let mut tx = state.db.begin().await?;
+
+    let post_row = sqlx::query(
+        "SELECT locked FROM forum_posts WHERE id = $1 AND channel_id = $2 FOR UPDATE"
     )
     .bind(post_id)
     .bind(channel_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
-    if locked {
-        return Err(AppError::Forbidden);
+    {
+        use sqlx::Row;
+        if post_row.get::<bool, _>("locked") {
+            tx.rollback().await.ok();
+            return Err(AppError::Forbidden);
+        }
     }
 
     let reply = sqlx::query_as::<_, ForumReply>(
@@ -237,15 +244,17 @@ pub async fn reply_to_post(
     .bind(post_id)
     .bind(claims.sub)
     .bind(&content)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query(
         "UPDATE forum_posts SET reply_count = reply_count + 1, last_reply_at = NOW() WHERE id = $1"
     )
     .bind(post_id)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     let event = serde_json::json!({ "type": "FORUM_REPLY_CREATE", "channel_id": channel_id, "post_id": post_id, "reply": reply });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
