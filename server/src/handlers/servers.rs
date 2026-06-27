@@ -724,34 +724,31 @@ pub async fn require_owner(
 pub async fn require_permission(
     state: &AppState, user_id: Uuid, server_id: Uuid, perm: i64,
 ) -> Result<()> {
-    // Owner a toutes les permissions
-    let is_owner = sqlx::query_scalar::<_, bool>(
-        "SELECT is_owner FROM server_members WHERE user_id=$1 AND server_id=$2"
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT sm.is_owner, COALESCE(BIT_OR(r.permissions), 0) as combined_perms
+         FROM server_members sm
+         LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+         LEFT JOIN roles r ON r.id = mr.role_id
+         WHERE sm.user_id = $1 AND sm.server_id = $2
+         GROUP BY sm.is_owner"
     )
     .bind(user_id)
     .bind(server_id)
     .fetch_optional(&state.db)
-    .await?
-    .unwrap_or(false);
+    .await?;
 
-    if is_owner { return Ok(()); }
-
-    let perms = sqlx::query_scalar::<_, Option<i64>>(
-        "SELECT BIT_OR(r.permissions) FROM roles r
-         JOIN member_roles mr ON mr.role_id = r.id
-         WHERE mr.user_id=$1 AND mr.server_id=$2"
-    )
-    .bind(user_id)
-    .bind(server_id)
-    .fetch_one(&state.db)
-    .await?
-    .unwrap_or(0);
-
-    // Check ADMINISTRATOR ou la permission spécifique
-    if perms & crate::models::role::Permissions::ADMINISTRATOR != 0 || perms & perm != 0 {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden)
+    match row {
+        None => Err(AppError::Forbidden),
+        Some(r) => {
+            if r.get::<bool, _>("is_owner") { return Ok(()); }
+            let perms: i64 = r.get("combined_perms");
+            if perms & crate::models::role::Permissions::ADMINISTRATOR != 0 || perms & perm != 0 {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden)
+            }
+        }
     }
 }
 
