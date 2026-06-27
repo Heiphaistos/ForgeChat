@@ -246,7 +246,14 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   })
 
   const addFiles = useCallback((newFiles: File[]) => {
-    const wrapped: FileWithTtl[] = newFiles.map(f => ({
+    const MAX_SIZE = 50 * 1024 * 1024
+    const oversized = newFiles.filter(f => f.size > MAX_SIZE)
+    if (oversized.length > 0) {
+      toast.error(`${oversized.map(f => f.name).join(', ')} dépasse${oversized.length > 1 ? 'nt' : ''} la limite de 50 Mo`)
+    }
+    const valid = newFiles.filter(f => f.size <= MAX_SIZE)
+    if (valid.length === 0) return
+    const wrapped: FileWithTtl[] = valid.map(f => ({
       file: f,
       ttlHours: isVideo(f) ? 24 : null,
       preview: isImage(f) ? URL.createObjectURL(f) : null,
