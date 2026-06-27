@@ -238,19 +238,23 @@ pub async fn login(
 
     check_login_rate_limit(&state, &client_ip).await?;
 
-    let user = sqlx::query_as::<_, crate::models::user::User>(
+    let user_opt = sqlx::query_as::<_, crate::models::user::User>(
         "SELECT * FROM users WHERE email=$1",
     )
     .bind(body.email.to_lowercase())
     .fetch_optional(&state.db)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
+    .await?;
 
-    let valid = verify(&body.password, &user.password_hash)
+    // Hash constant pour égaliser le timing même quand l'email n'existe pas
+    const DUMMY_HASH: &str = "$2b$12$KIkwRMJIlEHNBFdnfwDnSOkypZs5yWjn7KDSnT5hHUH2EPT3HCVNS";
+    let hash_to_check = user_opt.as_ref()
+        .map(|u| u.password_hash.as_str())
+        .unwrap_or(DUMMY_HASH);
+
+    let valid = verify(&body.password, hash_to_check)
         .map_err(|e| AppError::Internal(e.into()))?;
-    if !valid {
-        return Err(AppError::Unauthorized);
-    }
+
+    let user = user_opt.filter(|_| valid).ok_or(AppError::Unauthorized)?;
 
     // Vérification 2FA si activée
     if user.totp_enabled {
