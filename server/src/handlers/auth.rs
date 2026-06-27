@@ -93,11 +93,20 @@ pub async fn register(
     if body.username.len() < 2 || body.username.len() > 32 {
         return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
     }
+    if !body.username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+        return Err(AppError::BadRequest("Nom : lettres, chiffres, _ ou - uniquement".into()));
+    }
     if body.password.len() < 8 {
         return Err(AppError::BadRequest("Mot de passe min 8 chars".into()));
     }
+    if body.password.len() > 128 {
+        return Err(AppError::BadRequest("Mot de passe max 128 chars".into()));
+    }
 
     let email_lower = body.email.to_lowercase();
+    if !email_lower.contains('@') || !email_lower.contains('.') {
+        return Err(AppError::BadRequest("Email invalide".into()));
+    }
 
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)",
@@ -323,8 +332,9 @@ pub async fn refresh(
         .ok_or_else(|| AppError::BadRequest("refresh_token requis".into()))?;
 
     let token_hash = hash_token(&token);
+    // RTR atomique : DELETE RETURNING garantit qu'un seul thread invalide le token
     let row = sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
-        "SELECT user_id, expires_at FROM refresh_tokens WHERE token_hash=$1",
+        "DELETE FROM refresh_tokens WHERE token_hash=$1 RETURNING user_id, expires_at",
     )
     .bind(&token_hash)
     .fetch_optional(&state.db)
@@ -332,18 +342,10 @@ pub async fn refresh(
     .ok_or(AppError::Unauthorized)?;
 
     if row.1 < Utc::now() {
-        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
-            .bind(&token_hash)
-            .execute(&state.db)
-            .await?;
         return Err(AppError::Unauthorized);
     }
 
-    // RTR : invalider l'ancien refresh token et émettre un nouveau
-    sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
-        .bind(&token_hash)
-        .execute(&state.db)
-        .await?;
+    // Token supprimé atomiquement ci-dessus — émettre un nouveau
 
     let new_refresh_token = generate_refresh_token();
     store_refresh_token(&state, row.0, &new_refresh_token).await?;

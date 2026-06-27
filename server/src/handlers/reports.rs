@@ -57,7 +57,7 @@ pub async fn create_report(
     let comment = body
         .comment
         .as_deref()
-        .filter(|s| !s.trim().is_empty())
+        .filter(|s| !s.trim().is_empty() && s.trim().len() <= 500)
         .map(|s| s.trim().to_string());
 
     sqlx::query(
@@ -95,7 +95,7 @@ pub async fn list_reports(
                 r.message_id, m.content as message_content,
                 u.username as reporter_username, u.id as reporter_id
          FROM message_reports r
-         JOIN messages m ON m.id = r.message_id
+         LEFT JOIN messages m ON m.id = r.message_id
          JOIN users u ON u.id = r.reporter_id
          WHERE r.server_id = $1
          ORDER BY r.created_at DESC

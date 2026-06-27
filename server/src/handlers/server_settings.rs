@@ -55,17 +55,19 @@ pub async fn unban_member(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS).await?;
 
-    sqlx::query("DELETE FROM bans WHERE server_id=$1 AND user_id=$2")
+    let result = sqlx::query("DELETE FROM bans WHERE server_id=$1 AND user_id=$2")
         .bind(server_id)
         .bind(user_id)
         .execute(&state.db)
         .await?;
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
-        "type": "MEMBER_UNBAN",
-        "server_id": server_id,
-        "user_id": user_id,
-    }).to_string()).await;
+    if result.rows_affected() > 0 {
+        state.broadcast_to_server_members(server_id, serde_json::json!({
+            "type": "MEMBER_UNBAN",
+            "server_id": server_id,
+            "user_id": user_id,
+        }).to_string()).await;
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -170,6 +172,18 @@ pub async fn assign_tag(
     .await?;
     if !is_member {
         return Err(crate::error::AppError::NotFound("Membre introuvable".into()));
+    }
+
+    // Vérifier que le tag appartient bien à ce serveur (IDOR)
+    let tag_ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM server_tags WHERE id=$1 AND server_id=$2)"
+    )
+    .bind(tag_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !tag_ok {
+        return Err(crate::error::AppError::NotFound("Tag introuvable".into()));
     }
 
     sqlx::query(

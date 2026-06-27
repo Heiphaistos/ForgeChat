@@ -57,6 +57,7 @@ pub async fn list_posts(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let rows = sqlx::query(
         "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
@@ -134,17 +135,19 @@ pub async fn create_post(
 pub async fn get_post(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, _channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let post_row = sqlx::query(
         "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
          FROM forum_posts fp
          JOIN users u ON u.id = fp.creator_id
-         WHERE fp.id = $1"
+         WHERE fp.id = $1 AND fp.channel_id = $2"
     )
     .bind(post_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
@@ -203,6 +206,7 @@ pub async fn reply_to_post(
     Json(body): Json<CreateReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let content_raw = body.content.trim().to_string();
     if content_raw.is_empty() {
@@ -221,7 +225,7 @@ pub async fn reply_to_post(
     .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
-    .unwrap_or(false);
+    .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
     if locked {
         return Err(AppError::Forbidden);
@@ -273,13 +277,14 @@ pub async fn update_post(
     let pinned = body["pinned"].as_bool();
     let locked = body["locked"].as_bool();
 
-    // pin/lock réservé aux modérateurs — creator n'en a pas besoin
+    // pin/lock réservé aux modérateurs
     if pinned.is_some() || locked.is_some() {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
-    } else if creator_id != claims.sub {
-        // modification du contenu : réservée au créateur
+    }
+    // content : réservé au créateur indépendamment des autres champs
+    if content.is_some() && creator_id != claims.sub {
         return Err(AppError::Forbidden);
     }
 
@@ -310,6 +315,7 @@ pub async fn delete_post(
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
 
     let row = sqlx::query(
         "SELECT creator_id FROM forum_posts WHERE id = $1 AND channel_id = $2"
