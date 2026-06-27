@@ -24,16 +24,27 @@ export function usePushNotifications() {
 }
 
 // ── Utilitaire pour envoyer une notification si la fenêtre n'est pas focus ──
-export function sendNativeNotification(title: string, options?: NotificationOptions): void {
+export function sendNativeNotification(
+  title: string,
+  options?: NotificationOptions & { onClick?: () => void }
+): void {
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   if (document.hasFocus()) return
 
   try {
-    new Notification(title, {
+    const { onClick, ...notifOptions } = options ?? {}
+    const notif = new Notification(title, {
       icon: '/favicon.ico',
       badge: '/favicon.ico',
-      ...options,
+      ...notifOptions,
     })
+    if (onClick) {
+      notif.onclick = () => {
+        window.focus()
+        onClick()
+        notif.close()
+      }
+    }
   } catch {}
 }

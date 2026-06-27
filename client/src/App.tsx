@@ -204,7 +204,12 @@ function AppInner() {
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
-        sendNativeNotification(msg.author_username ?? 'Quelqu\'un', { body: content.slice(0, 80) })
+        sendNativeNotification(msg.author_username ?? 'Quelqu\'un', {
+          body: content.slice(0, 80),
+          onClick: () => d.message?.channel_id
+            ? nav(`/app/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
+            : undefined,
+        })
       } else if (!document.hasFocus()) {
         playMessage()
       }
@@ -283,6 +288,7 @@ function AppInner() {
         } else {
           sendNativeNotification(msg.sender_username ?? 'Message privé', {
             body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+            onClick: () => nav(`/dms/${d.dm_id}`),
           })
         }
       }
@@ -304,6 +310,7 @@ function AppInner() {
         } else {
           sendNativeNotification(msg.sender_username ?? 'Groupe', {
             body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+            onClick: () => nav(`/dms/groups/${d.group_id}`),
           })
         }
       }
