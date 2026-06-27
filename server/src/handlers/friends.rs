@@ -164,18 +164,20 @@ pub async fn get_dms(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     let dms = sqlx::query(
-        "SELECT dc.id,
-         CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END as other_user_id,
-         u.username, u.discriminator, u.avatar, u.status,
-         (SELECT created_at FROM dm_messages WHERE dm_channel_id=dc.id ORDER BY created_at DESC LIMIT 1)
-           AS last_message_at
+        "WITH last_msg AS (
+           SELECT dm_channel_id, MAX(created_at) AS last_message_at
+           FROM dm_messages
+           GROUP BY dm_channel_id
+         )
+         SELECT dc.id,
+           CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
+           u.username, u.discriminator, u.avatar, u.status,
+           lm.last_message_at
          FROM dm_channels dc
          JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
+         LEFT JOIN last_msg lm ON lm.dm_channel_id = dc.id
          WHERE dc.user1_id=$1 OR dc.user2_id=$1
-         ORDER BY COALESCE(
-           (SELECT created_at FROM dm_messages WHERE dm_channel_id=dc.id ORDER BY created_at DESC LIMIT 1),
-           dc.created_at
-         ) DESC"
+         ORDER BY COALESCE(lm.last_message_at, dc.created_at) DESC"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)

@@ -74,16 +74,25 @@ pub async fn list_group_dms(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT g.id, g.name, g.created_at,
-                (SELECT COUNT(*) FROM group_dm_members WHERE dm_id = g.id) as member_count,
-                (SELECT created_at FROM group_dm_messages WHERE dm_id=g.id ORDER BY created_at DESC LIMIT 1) AS last_message_at
+        "WITH last_msg AS (
+           SELECT dm_id, MAX(created_at) AS last_message_at
+           FROM group_dm_messages
+           GROUP BY dm_id
+         ),
+         member_counts AS (
+           SELECT dm_id, COUNT(*) AS cnt
+           FROM group_dm_members
+           GROUP BY dm_id
+         )
+         SELECT g.id, g.name, g.created_at,
+                mc.cnt AS member_count,
+                lm.last_message_at
          FROM group_dm_channels g
          JOIN group_dm_members gm ON gm.dm_id = g.id
+         LEFT JOIN last_msg lm ON lm.dm_id = g.id
+         LEFT JOIN member_counts mc ON mc.dm_id = g.id
          WHERE gm.user_id = $1
-         ORDER BY COALESCE(
-           (SELECT created_at FROM group_dm_messages WHERE dm_id=g.id ORDER BY created_at DESC LIMIT 1),
-           g.created_at
-         ) DESC"
+         ORDER BY COALESCE(lm.last_message_at, g.created_at) DESC"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
