@@ -125,6 +125,10 @@ function _applyNoiseSuppression(inputStream: MediaStream): MediaStream {
     }
     _noiseAudioCtx = new AudioContext()
     const ctx = _noiseAudioCtx
+    // Resume AudioContext — browsers may suspend it outside a user gesture
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
 
     const source = ctx.createMediaStreamSource(inputStream)
 
@@ -195,8 +199,7 @@ async function _createPC(
   }
 
   pc.ontrack = (e) => {
-    const stream = e.streams[0]
-    if (!stream) return
+    const stream = e.streams[0] ?? new MediaStream([e.track])
     set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, stream } : p) }))
   }
 
@@ -669,7 +672,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         const sat = screenStream.getAudioTracks()[0]
         _localStream.addTrack(sat)
         for (const [peerId, pc] of _pcs) {
-          try { pc.addTrack(sat, _localStream) } catch {}
+          try {
+            pc.addTrack(sat, _localStream)
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
+          } catch {}
         }
       }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen, X } from 'lucide-react'
+import { Phone, Video, Search, Lock, LockOpen, X, Menu } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -11,6 +11,7 @@ import { useE2E } from '../hooks/useE2E'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
+import { useMobile } from '../contexts/MobileContext'
 
 const STATUS_LABEL: Record<string, string> = {
   online: 'En ligne',
@@ -44,6 +45,7 @@ export default function DMPage() {
   const getStatus = usePresence(s => s.getStatus)
   const me = useAuth(s => s.user)
   const { generateAndStoreKeyPair, getSharedKey, encrypt, decrypt } = useE2E()
+  const { openSidebar } = useMobile()
 
   const [e2eMode, setE2eMode] = useState(false)
   const [e2eMessages, setE2eMessages] = useState<E2eMsg[]>([])
@@ -319,6 +321,13 @@ export default function DMPage() {
       <div className={`flex items-center gap-3 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] transition-colors ${
         e2eMode ? 'border-green-600/40 bg-green-900/10' : 'border-fc-bg'
       }`}>
+        <button
+          className="md:hidden p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 -ml-1"
+          onClick={openSidebar}
+          title="Menu"
+        >
+          <Menu size={20} />
+        </button>
         <div className="relative flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {partnerAvatar

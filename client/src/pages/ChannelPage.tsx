@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef, useContext } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, Menu } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
+import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
@@ -47,6 +48,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const params = useParams<{ serverId?: string; channelId?: string }>()
   const serverId = params.serverId
   const channelId = forcedChannelId ?? params.channelId
+  const { openSidebar } = useMobile()
   const { setSplitChannelId } = useContext(SplitContext)
   const [searchParams] = useSearchParams()
   const nav = useNavigate()
@@ -57,7 +59,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const markRead = useUnread(s => s.markRead)
   const resetServer = useUnread(s => s.resetServer)
   const qc = useQueryClient()
-  const [showMembers, setShowMembers] = useState(true)
+  const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 768)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
   const [showThreadSidebar, setShowThreadSidebar] = useState(false)
@@ -283,6 +285,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header canal */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
+          {!isSplit && (
+            <button
+              className="md:hidden p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 -ml-1 mr-1"
+              onClick={openSidebar}
+              title="Menu"
+            >
+              <Menu size={20} />
+            </button>
+          )}
           <span className="text-fc-muted">{channelIcon(currentChannel?.type ?? 'text')}</span>
           <span className="font-semibold text-white">{currentChannel?.name ?? '...'}</span>
           {currentChannel?.type === 'announcement' && (
