@@ -94,16 +94,26 @@ function PeerTile({
   handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const hasVideo = peer.videoEnabled && stream && stream.getVideoTracks().some(t => t.readyState === 'live')
 
   useEffect(() => {
     if (videoRef.current && stream) videoRef.current.srcObject = stream
   }, [stream])
 
+  // Audio séparé pour les peers sans vidéo (évite le silence quand <video> n'est pas rendu)
+  useEffect(() => {
+    if (audioRef.current && stream && !isLocal) {
+      audioRef.current.srcObject = stream
+    }
+  }, [stream, isLocal])
+
   return (
     <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
+      {/* Audio toujours actif pour les peers distants */}
+      {!isLocal && <audio ref={audioRef} autoPlay />}
       {hasVideo ? (
         <video ref={videoRef} autoPlay playsInline muted={muted}
           className="w-full h-full object-cover"
