@@ -1546,6 +1546,15 @@ pub async fn delete_dm_message(
     .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !ok { return Err(crate::error::AppError::Forbidden); }
 
+    // Récupérer les attachments avant suppression
+    let attachment_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT url FROM attachments WHERE dm_message_id=$1"
+    )
+    .bind(msg_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
     let rows = sqlx::query(
         "DELETE FROM dm_messages WHERE id=$1 AND sender_id=$2"
     )
@@ -1554,6 +1563,16 @@ pub async fn delete_dm_message(
     if rows.rows_affected() == 0 {
         return Err(crate::error::AppError::Forbidden);
     }
+
+    // Supprimer les fichiers du disque
+    let upload_dir = state.config.upload_dir.clone();
+    tokio::spawn(async move {
+        for url in attachment_urls {
+            if let Some(rel) = url.strip_prefix("/uploads/") {
+                let _ = tokio::fs::remove_file(std::path::Path::new(&upload_dir).join(rel)).await;
+            }
+        }
+    });
 
     // Notifier les deux participants
     let event = serde_json::json!({
