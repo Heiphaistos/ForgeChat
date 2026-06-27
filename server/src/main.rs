@@ -537,6 +537,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/:dm_id/messages/:msg_id", patch(handlers::friends::edit_dm_message))
         .route("/dms/:dm_id/messages/:msg_id", delete(handlers::friends::delete_dm_message))
         .route("/dms/:dm_id/messages/:msg_id/reactions/:emoji", put(handlers::friends::toggle_dm_reaction))
+        .route("/dms/:dm_id/messages/search", get(handlers::friends::search_dm_messages))
         // E2E encrypted DMs
         .route("/dms/:dm_id/e2e", get(handlers::friends::get_e2e_messages))
         .route("/dms/:dm_id/e2e", post(handlers::friends::send_e2e_message))

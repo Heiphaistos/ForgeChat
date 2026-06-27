@@ -24,10 +24,14 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
     onClose()
   }
 
+  const searchUrl = serverId
+    ? `/servers/${serverId}/channels/${channelId}/messages/search`
+    : `/dms/${channelId}/messages/search`
+
   const { data: results = [], isFetching } = useQuery({
     queryKey: ['search_messages', channelId, search],
     queryFn: () =>
-      api.get(`/servers/${serverId}/channels/${channelId}/messages/search?q=${encodeURIComponent(search)}`).then(r => r.data),
+      api.get(`${searchUrl}?q=${encodeURIComponent(search)}`).then(r => r.data),
     enabled: search.trim().length >= 2,
   })
 

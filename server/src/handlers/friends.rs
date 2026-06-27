@@ -613,7 +613,10 @@ pub async fn send_dm(
             "created_at": created_at,
         }
     });
-    state.broadcast_to_user(other_id, event.to_string()).await;
+    let event_str = event.to_string();
+    state.broadcast_to_user(other_id, event_str.clone()).await;
+    // Sync multi-onglets/appareils : notifier aussi le sender lui-même
+    state.broadcast_to_user(claims.sub, event_str).await;
 
     Ok(Json(serde_json::json!({
         "id": msg_id,
@@ -1776,4 +1779,49 @@ pub async fn toggle_dm_reaction(
     state.broadcast_to_user(claims.sub, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true, "added": added, "count": count })))
+}
+
+pub async fn search_dm_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(dm_id): Path<Uuid>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(AppError::Forbidden); }
+
+    let q = params.get("q").cloned().unwrap_or_default();
+    if q.trim().len() < 2 {
+        return Ok(Json(serde_json::json!([])));
+    }
+    let q_esc = q.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", q_esc);
+
+    let rows = sqlx::query(
+        "SELECT dm.id, dm.content, dm.created_at, u.username as author_username, u.avatar as author_avatar
+         FROM dm_messages dm
+         JOIN users u ON u.id = dm.sender_id
+         WHERE dm.dm_channel_id = $1 AND LOWER(dm.content) LIKE $2
+         ORDER BY dm.created_at DESC LIMIT 50"
+    )
+    .bind(dm_id)
+    .bind(&pattern)
+    .fetch_all(&state.db)
+    .await?;
+
+    let results: Vec<serde_json::Value> = rows.iter().map(|r| {
+        serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "content": r.get::<Option<String>, _>("content"),
+            "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "author_username": r.get::<String, _>("author_username"),
+            "author_avatar": r.get::<Option<String>, _>("author_avatar"),
+        })
+    }).collect();
+
+    Ok(Json(serde_json::json!(results)))
 }
