@@ -42,8 +42,8 @@ pub async fn create_scheduled(
     if body.content.trim().is_empty() {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
-    if body.content.len() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 chars)".into()));
+    if body.content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     if body.send_at <= Utc::now() {
         return Err(AppError::BadRequest("La date doit être dans le futur".into()));

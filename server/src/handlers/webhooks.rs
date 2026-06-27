@@ -173,8 +173,11 @@ pub async fn execute_webhook(
         None => raw_name,
     };
     let content = body.content.trim().to_string();
-    if content.is_empty() || content.len() > 4000 {
-        return Err(AppError::BadRequest("Contenu invalide".into()));
+    if content.is_empty() {
+        return Err(AppError::BadRequest("Contenu vide".into()));
+    }
+    if content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
     let msg_id = Uuid::new_v4();
