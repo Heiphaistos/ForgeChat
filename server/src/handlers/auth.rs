@@ -482,7 +482,7 @@ pub async fn logout(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
-    Json(body): Json<serde_json::Value>,
+    Json(_body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     // Blocklist l'access token courant pour sa durée de vie restante
     let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
