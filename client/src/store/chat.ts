@@ -75,6 +75,7 @@ interface ChatState {
   updateMessage: (channelId: string, msgId: string, patch: Partial<Message>) => void
   mergeAttachments: (channelId: string, msgId: string, attachments: Attachment[]) => void
   deleteMessage: (channelId: string, msgId: string) => void
+  clearChannel: (channelId: string) => void
   setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
   addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean) => void
@@ -122,6 +123,10 @@ export const useChat = create<ChatState>()(
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
       s.messagesByChannel[channelId] = msgs.filter(m => m.id !== msgId)
+    }),
+
+    clearChannel: (channelId) => set(s => {
+      s.messagesByChannel[channelId] = []
     }),
 
     setTyping: (channelId, userId, username) => set(s => {

@@ -53,7 +53,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [searchParams] = useSearchParams()
   const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
-  const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping } = useChat()
+  const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping, clearChannel } = useChat()
   const { on, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
@@ -147,6 +147,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       }),
       on('USER_TIMEOUT_LIFTED', (d: any) => {
         if (d.server_id === serverId) setTimeoutUntil(null)
+      }),
+      on('CHANNEL_PURGE', (d: any) => {
+        if (d.channel_id === channelId) {
+          clearChannel(channelId)
+          toast.success(`${d.deleted ?? ''} messages supprimés`)
+        }
       }),
     ]
     return () => offs.forEach(off => off())
