@@ -90,12 +90,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (messages.length > 0 && channelId) addMessages(channelId, messages)
   }, [messages, channelId])
 
-  // Marquer comme lu + reset load-more quand on ouvre un nouveau canal
+  // Marquer comme lu + reset load-more quand on ouvre un nouveau canal ou focus
   useEffect(() => {
-    if (channelId) {
-      markRead(channelId, serverId || undefined)
-      setHasMore(true)
-    }
+    if (!channelId) return
+    const doMark = () => markRead(channelId, serverId || undefined)
+    doMark()
+    setHasMore(true)
+    window.addEventListener('focus', doMark)
+    return () => window.removeEventListener('focus', doMark)
   }, [channelId, serverId])
 
   useEffect(() => {
