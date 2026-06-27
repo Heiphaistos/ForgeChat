@@ -414,7 +414,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 msg["conversation_id"].as_str(),
                 msg["message_id"].as_str(),
             ) {
-                if let (Ok(conv_uuid), Ok(_msg_uuid)) = (
+                if let (Ok(conv_uuid), Ok(msg_uuid)) = (
                     conv_id_str.parse::<Uuid>(),
                     msg_id_str.parse::<Uuid>(),
                 ) {
@@ -427,6 +427,43 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                     .bind(user_id)
                     .execute(&state.db)
                     .await;
+
+                    // Broadcast DM_READ_RECEIPT to the other participant
+                    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+                        .bind(user_id)
+                        .fetch_optional(&state.db)
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    let avatar: Option<String> = sqlx::query_scalar("SELECT avatar FROM users WHERE id=$1")
+                        .bind(user_id)
+                        .fetch_optional(&state.db)
+                        .await
+                        .ok()
+                        .flatten()
+                        .flatten();
+                    let event = serde_json::json!({
+                        "type": "DM_READ_RECEIPT",
+                        "conversation_id": conv_uuid,
+                        "message_id": msg_uuid,
+                        "user_id": user_id,
+                        "username": username,
+                        "avatar": avatar,
+                    }).to_string();
+                    // Find and notify the other participant
+                    let other: Option<Uuid> = sqlx::query_scalar(
+                        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END FROM dm_channels WHERE id=$1"
+                    )
+                    .bind(conv_uuid)
+                    .bind(user_id)
+                    .fetch_optional(&state.db)
+                    .await
+                    .ok()
+                    .flatten();
+                    if let Some(other_id) = other {
+                        state.broadcast_to_user(other_id, event).await;
+                    }
                 }
             }
         }
