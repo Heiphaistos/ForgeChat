@@ -216,9 +216,13 @@ export default function DMPage() {
   // Reset pagination quand on change de conversation
   useEffect(() => { setHasMoreDM(true) }, [dmId])
 
-  // Effacer le badge non-lu quand on ouvre le DM
+  // Effacer le badge non-lu quand on ouvre ou focus le DM
   useEffect(() => {
-    if (dmId) resetUnread(dmId)
+    if (!dmId) return
+    const markRead = () => resetUnread(dmId)
+    markRead()
+    window.addEventListener('focus', markRead)
+    return () => window.removeEventListener('focus', markRead)
   }, [dmId])
 
   // Normal DM WebSocket listener

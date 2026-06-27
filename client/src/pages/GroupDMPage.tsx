@@ -77,11 +77,27 @@ export default function GroupDMPage() {
     initialized.current = false
   }, [groupId])
 
+  // Cleanup des timers typing au démontage
+  useEffect(() => {
+    return () => {
+      setTypingUsers(prev => {
+        Object.values(prev).forEach(e => clearTimeout(e.timer))
+        return {}
+      })
+      if (typingDebounce.current) clearTimeout(typingDebounce.current)
+    }
+  }, [])
+
   // Effacer le badge non-lu quand on ouvre le groupe (client + serveur)
   useEffect(() => {
     if (!groupId) return
-    resetUnread(groupId)
-    api.post(`/dms/groups/${groupId}/read`).catch(() => {})
+    const markRead = () => {
+      resetUnread(groupId)
+      api.post(`/dms/groups/${groupId}/read`).catch(() => {})
+    }
+    markRead()
+    window.addEventListener('focus', markRead)
+    return () => window.removeEventListener('focus', markRead)
   }, [groupId])
 
   useEffect(() => {
