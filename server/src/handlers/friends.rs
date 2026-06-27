@@ -102,7 +102,7 @@ pub async fn accept_friend(
     use sqlx::Row;
     // Récupère l'expéditeur original (user_id) pour le notifier
     let row = sqlx::query(
-        "UPDATE friendships SET status='accepted', friend_since=NOW() WHERE id=$1 AND friend_id=$2 RETURNING user_id"
+        "UPDATE friendships SET status='accepted', friend_since=NOW() WHERE id=$1 AND friend_id=$2 AND status='pending' RETURNING user_id"
     )
     .bind(friendship_id)
     .bind(claims.sub)

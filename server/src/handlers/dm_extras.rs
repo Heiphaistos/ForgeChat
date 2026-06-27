@@ -10,11 +10,6 @@ async fn assert_dm_member(db: &sqlx::PgPool, dm_id: Uuid, user_id: Uuid) -> Resu
     Ok(())
 }
 
-fn is_user1(row: &sqlx::postgres::PgRow, user_id: Uuid) -> bool {
-    use sqlx::Row;
-    row.get::<Uuid, _>("user1_id") == user_id
-}
-
 // ── Mute ──────────────────────────────────────────────────────────────────────
 
 #[derive(serde::Deserialize)]
@@ -27,12 +22,13 @@ pub async fn mute_dm(
     Json(body): Json<MuteBody>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
-    let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
-        .bind(dm_id).fetch_one(&state.db).await?;
-    let col = if is_user1(&row, claims.sub) { "muted_by_user1_until" } else { "muted_by_user2_until" };
     let until = body.minutes.map(|m| chrono::Utc::now() + chrono::Duration::minutes(m));
-    let sql = format!("UPDATE dm_channels SET {col}=$1 WHERE id=$2");
-    sqlx::query(&sql).bind(until).bind(dm_id).execute(&state.db).await?;
+    sqlx::query(
+        "UPDATE dm_channels SET
+           muted_by_user1_until = CASE WHEN user1_id=$2 THEN $1 ELSE muted_by_user1_until END,
+           muted_by_user2_until = CASE WHEN user2_id=$2 THEN $1 ELSE muted_by_user2_until END
+         WHERE id=$3"
+    ).bind(until).bind(claims.sub).bind(dm_id).execute(&state.db).await?;
     Ok(Json(serde_json::json!({ "ok": true, "muted_until": until })))
 }
 
@@ -42,11 +38,12 @@ pub async fn unmute_dm(
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
-    let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
-        .bind(dm_id).fetch_one(&state.db).await?;
-    let col = if is_user1(&row, claims.sub) { "muted_by_user1_until" } else { "muted_by_user2_until" };
-    let sql = format!("UPDATE dm_channels SET {col}=NULL WHERE id=$1");
-    sqlx::query(&sql).bind(dm_id).execute(&state.db).await?;
+    sqlx::query(
+        "UPDATE dm_channels SET
+           muted_by_user1_until = CASE WHEN user1_id=$2 THEN NULL ELSE muted_by_user1_until END,
+           muted_by_user2_until = CASE WHEN user2_id=$2 THEN NULL ELSE muted_by_user2_until END
+         WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).execute(&state.db).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -58,11 +55,12 @@ pub async fn archive_dm(
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
-    let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
-        .bind(dm_id).fetch_one(&state.db).await?;
-    let col = if is_user1(&row, claims.sub) { "archived_by_user1" } else { "archived_by_user2" };
-    let sql = format!("UPDATE dm_channels SET {col}=TRUE WHERE id=$1");
-    sqlx::query(&sql).bind(dm_id).execute(&state.db).await?;
+    sqlx::query(
+        "UPDATE dm_channels SET
+           archived_by_user1 = CASE WHEN user1_id=$2 THEN TRUE ELSE archived_by_user1 END,
+           archived_by_user2 = CASE WHEN user2_id=$2 THEN TRUE ELSE archived_by_user2 END
+         WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).execute(&state.db).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -72,11 +70,12 @@ pub async fn unarchive_dm(
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
-    let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
-        .bind(dm_id).fetch_one(&state.db).await?;
-    let col = if is_user1(&row, claims.sub) { "archived_by_user1" } else { "archived_by_user2" };
-    let sql = format!("UPDATE dm_channels SET {col}=FALSE WHERE id=$1");
-    sqlx::query(&sql).bind(dm_id).execute(&state.db).await?;
+    sqlx::query(
+        "UPDATE dm_channels SET
+           archived_by_user1 = CASE WHEN user1_id=$2 THEN FALSE ELSE archived_by_user1 END,
+           archived_by_user2 = CASE WHEN user2_id=$2 THEN FALSE ELSE archived_by_user2 END
+         WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).execute(&state.db).await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
