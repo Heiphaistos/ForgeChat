@@ -888,18 +888,17 @@ pub async fn translate_message(
         return Ok(Json(serde_json::json!({ "translated": content })));
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
-        .build()
-        .map_err(|e| AppError::Internal(e.into()))?;
-
     let url = format!(
         "https://api.mymemory.translated.net/get?q={}&langpair=autodetect|{}",
         urlencoding::encode(&content),
         urlencoding::encode(&input.target_lang)
     );
 
-    let resp = client.get(&url).send().await
+    let resp = state.http_client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(8))
+        .send()
+        .await
         .map_err(|_| AppError::BadRequest("Service de traduction indisponible".into()))?;
 
     let json: serde_json::Value = resp.json().await

@@ -251,13 +251,11 @@ async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String
         anyhow::bail!("URL de feed bloquée (SSRF) : {}", feed.feed_url);
     }
 
-    // Fetch avec timeout 10s
-    let client = reqwest::Client::builder()
+    let resp = state.http_client
+        .get(&feed.feed_url)
         .timeout(std::time::Duration::from_secs(10))
-        .user_agent("ForgeChat-RSS/2.3")
-        .build()?;
-
-    let resp = client.get(&feed.feed_url).send().await?;
+        .send()
+        .await?;
     if !resp.status().is_success() {
         anyhow::bail!("HTTP {}", resp.status());
     }

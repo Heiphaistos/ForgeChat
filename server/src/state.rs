@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::config::Config;
 
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub type WsSender = broadcast::Sender<String>;
 pub type ClientMap = Arc<RwLock<HashMap<Uuid, WsSender>>>;
 pub type ConnCountMap = Arc<RwLock<HashMap<Uuid, usize>>>;
@@ -34,6 +36,8 @@ pub struct AppState {
     pub user_voice: Arc<RwLock<HashMap<Uuid, Uuid>>>,
     // État vocal par utilisateur : mute, vidéo, screen share
     pub voice_states: Arc<RwLock<HashMap<Uuid, VoiceStateData>>>,
+    // Client HTTP partagé (pool de connexions réutilisé)
+    pub http_client: reqwest::Client,
 }
 
 impl AppState {
@@ -42,6 +46,11 @@ impl AppState {
         redis: MultiplexedConnection,
         config: Config,
     ) -> Self {
+        let http_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .user_agent(format!("ForgeChat/{} (+https://forgechat.heiphaistos.org)", APP_VERSION))
+            .build()
+            .expect("Failed to build HTTP client");
         Self {
             db,
             redis: Arc::new(Mutex::new(redis)),
@@ -52,6 +61,7 @@ impl AppState {
             voice_rooms: Arc::new(RwLock::new(HashMap::new())),
             user_voice: Arc::new(RwLock::new(HashMap::new())),
             voice_states: Arc::new(RwLock::new(HashMap::new())),
+            http_client,
         }
     }
 

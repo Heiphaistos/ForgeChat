@@ -424,7 +424,7 @@ fn is_ssrf_safe_url(url: &str) -> bool {
 }
 
 pub async fn og_preview(
-    _state: State<AppState>,
+    State(state): State<AppState>,
     _claims: Extension<Claims>,
     Query(q): Query<OgQuery>,
 ) -> Result<Json<OgMeta>, AppError> {
@@ -446,15 +446,12 @@ pub async fn og_preview(
         return Err(AppError::BadRequest("Domaine non autorisé pour l'aperçu".into()));
     }
 
-    // Fetch via reqwest (timeout strict, pas de redirections vers IPs privées)
-    let client = reqwest::Client::builder()
+    let resp = state.http_client
+        .get(&q.url)
         .timeout(std::time::Duration::from_secs(5))
-        .redirect(reqwest::redirect::Policy::limited(3))
-        .user_agent("ForgeChat/2.3.0 (+https://forgechat.heiphaistos.org)")
-        .build()
-        .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
-
-    let resp = client.get(&q.url).send().await.map_err(|_| AppError::NotFound("URL inaccessible".into()))?;
+        .send()
+        .await
+        .map_err(|_| AppError::NotFound("URL inaccessible".into()))?;
 
     // Vérifier que la réponse finale ne redirige pas vers une IP privée
     let final_url = resp.url().to_string();
