@@ -5,10 +5,10 @@ interface UnreadState {
   counts: Record<string, number>
   serverCounts: Record<string, number>
   increment: (channelId: string, serverId?: string) => void
-  reset: (channelId: string) => void
+  reset: (channelId: string, serverId?: string) => void
   resetServer: (serverId: string) => void
   fetchAll: () => Promise<void>
-  markRead: (channelId: string) => Promise<void>
+  markRead: (channelId: string, serverId?: string) => Promise<void>
 }
 
 export const useUnread = create<UnreadState>((set, get) => ({
@@ -23,8 +23,20 @@ export const useUnread = create<UnreadState>((set, get) => ({
         : s.serverCounts,
     })),
 
-  reset: (channelId) =>
-    set(s => { const c = { ...s.counts }; delete c[channelId]; return { counts: c } }),
+  // Subtracts this channel's count from serverCounts instead of zeroing the server
+  reset: (channelId, serverId) =>
+    set(s => {
+      const channelCount = s.counts[channelId] ?? 0
+      const counts = { ...s.counts }
+      delete counts[channelId]
+      if (!serverId || !channelCount) return { counts }
+      const prev = s.serverCounts[serverId] ?? 0
+      const next = Math.max(0, prev - channelCount)
+      const serverCounts = { ...s.serverCounts }
+      if (next === 0) delete serverCounts[serverId]
+      else serverCounts[serverId] = next
+      return { counts, serverCounts }
+    }),
 
   resetServer: (serverId) =>
     set(s => { const c = { ...s.serverCounts }; delete c[serverId]; return { serverCounts: c } }),
@@ -44,8 +56,8 @@ export const useUnread = create<UnreadState>((set, get) => ({
     } catch {}
   },
 
-  markRead: async (channelId) => {
-    get().reset(channelId)
+  markRead: async (channelId, serverId) => {
+    get().reset(channelId, serverId)
     try { await api.post(`/channels/${channelId}/read`) } catch {}
   },
 }))
