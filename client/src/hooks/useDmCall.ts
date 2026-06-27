@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWs } from '../store/ws'
+import api from '../api/client'
 
 export type CallState = 'idle' | 'calling' | 'ringing' | 'connected'
 
-const ICE_SERVERS = [
+const ICE_FALLBACK = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ]
+
+let _iceCache: RTCIceServer[] | null = null
+async function getIceServers(): Promise<RTCIceServer[]> {
+  if (_iceCache) return _iceCache
+  try {
+    const res = await api.get('/voice/ice-config')
+    _iceCache = res.data.ice_servers ?? ICE_FALLBACK
+    return _iceCache!
+  } catch {
+    return ICE_FALLBACK
+  }
+}
 
 export function useDmCall(dmId: string | undefined, partnerId: string | undefined) {
   const { on, send } = useWs()
@@ -33,8 +46,9 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     pendingCandidates.current = []
   }, [])
 
-  const buildPc = useCallback((pid: string) => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+  const buildPc = useCallback(async (pid: string) => {
+    const iceServers = await getIceServers()
+    const pc = new RTCPeerConnection({ iceServers })
     pc.onicecandidate = e => {
       if (e.candidate) {
         send({ type: 'VOICE_SIGNAL', to: pid, payload: { type: 'ice', candidate: e.candidate } })
@@ -58,7 +72,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
       setLocalStream(stream)
-      const pc = buildPc(partnerId)
+      const pc = await buildPc(partnerId)
       stream.getTracks().forEach(t => pc.addTrack(t, stream))
       send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
       setCallState('calling')
@@ -74,7 +88,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
       setLocalStream(stream)
-      const pc = buildPc(fromUserId)
+      const pc = await buildPc(fromUserId)
       stream.getTracks().forEach(t => pc.addTrack(t, stream))
       if (dmId) send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
       setCallState('ringing')
