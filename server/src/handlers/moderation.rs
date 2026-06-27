@@ -170,11 +170,27 @@ pub async fn create_timeout(
 ) -> Result<Json<UserTimeout>> {
     ensure_moderator(&state, server_id, claims.sub).await?;
 
+    if user_id == claims.sub {
+        return Err(AppError::Forbidden);
+    }
+
     if body.duration_minutes < 1 {
         return Err(AppError::BadRequest("Durée minimale : 1 minute".into()));
     }
     if body.duration_minutes > 10080 {
         return Err(AppError::BadRequest("Durée maximale : 7 jours (10080 minutes)".into()));
+    }
+
+    // Vérifier que la cible est membre du serveur
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !is_member {
+        return Err(AppError::BadRequest("Utilisateur non membre du serveur".into()));
     }
 
     // Vérifier qu'on ne timeout pas le propriétaire du serveur
@@ -234,13 +250,17 @@ pub async fn remove_timeout(
 ) -> Result<Json<serde_json::Value>> {
     ensure_moderator(&state, server_id, claims.sub).await?;
 
-    sqlx::query(
+    let deleted = sqlx::query(
         "DELETE FROM user_timeouts WHERE server_id = $1 AND user_id = $2"
     )
     .bind(server_id)
     .bind(user_id)
     .execute(&state.db)
     .await?;
+
+    if deleted.rows_affected() == 0 {
+        return Err(AppError::NotFound("Aucun timeout actif".into()));
+    }
 
     // Notifier l'utilisateur et les membres du serveur
     let lift_event = serde_json::json!({
@@ -319,8 +339,8 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(body): Json<CreateTask>,
 ) -> Result<Json<ChannelTask>> {
-    if body.title.trim().is_empty() {
-        return Err(AppError::BadRequest("Titre requis".into()));
+    if body.title.trim().is_empty() || body.title.len() > 200 {
+        return Err(AppError::BadRequest("Titre requis (1-200 caractères)".into()));
     }
 
     let server_id = sqlx::query_scalar::<_, Uuid>(
@@ -392,6 +412,12 @@ pub async fn update_task(
 
     ensure_member(&state, server_id, claims.sub).await?;
 
+    if let Some(ref t) = body.title {
+        if t.trim().is_empty() || t.len() > 200 {
+            return Err(AppError::BadRequest("Titre invalide (1-200 caractères)".into()));
+        }
+    }
+
     if let Some(ref p) = body.priority {
         if !["low", "normal", "high", "urgent"].contains(&p.as_str()) {
             return Err(AppError::BadRequest("priority invalide".into()));
@@ -412,6 +438,23 @@ pub async fn update_task(
     let task_creator: Uuid = task_row.get("creator_id");
     if task_creator != claims.sub {
         ensure_moderator(&state, server_id, claims.sub).await?;
+    }
+
+    // Valider que le nouvel assignee est membre du serveur
+    if let Some(aid) = body.assignee_id.as_ref()
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<Uuid>().ok())
+    {
+        let is_member = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+        )
+        .bind(server_id)
+        .bind(aid)
+        .fetch_one(&state.db)
+        .await?;
+        if !is_member {
+            return Err(AppError::BadRequest("Assignee non membre du serveur".into()));
+        }
     }
 
     let task = sqlx::query_as::<_, ChannelTask>(
@@ -468,22 +511,27 @@ pub async fn delete_task(
 
     ensure_member(&state, server_id, claims.sub).await?;
 
-    // Créateur ou modérateur peut supprimer
-    let deleted = sqlx::query(
-        "DELETE FROM channel_tasks WHERE id = $1 AND channel_id = $2
-         AND (creator_id = $3
-              OR $3 IN (SELECT owner_id FROM servers WHERE id = $4))"
+    // Vérifier ownership : créateur ou modérateur peut supprimer
+    use sqlx::Row as _;
+    let task_row = sqlx::query(
+        "SELECT creator_id FROM channel_tasks WHERE id=$1 AND channel_id=$2"
     )
     .bind(task_id)
     .bind(channel_id)
-    .bind(claims.sub)
-    .bind(server_id)
-    .execute(&state.db)
-    .await?;
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Tâche introuvable".into()))?;
 
-    if deleted.rows_affected() == 0 {
-        return Err(AppError::NotFound("Tâche introuvable ou non autorisé".into()));
+    let task_creator: Uuid = task_row.get("creator_id");
+    if task_creator != claims.sub {
+        ensure_moderator(&state, server_id, claims.sub).await?;
     }
+
+    sqlx::query("DELETE FROM channel_tasks WHERE id = $1 AND channel_id = $2")
+        .bind(task_id)
+        .bind(channel_id)
+        .execute(&state.db)
+        .await?;
 
     let event = serde_json::json!({ "type": "TASK_DELETE", "channel_id": channel_id, "task_id": task_id });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;

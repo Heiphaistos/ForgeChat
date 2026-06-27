@@ -125,8 +125,12 @@ async fn verify_github_token_get(state: &AppState, channel_id: Uuid, token: &str
     .flatten();
 
     match stored {
-        Some(t) if t == token => Ok(t),
-        Some(_) => Err(AppError::Unauthorized),
+        Some(t) => {
+            // Comparaison en temps constant pour éviter les timing attacks
+            let valid = t.len() == token.len()
+                && t.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
+            if valid { Ok(t) } else { Err(AppError::Unauthorized) }
+        }
         None => Err(AppError::Forbidden),
     }
 }

@@ -68,9 +68,20 @@ pub async fn list_tickets(
 ) -> Result<Json<Vec<Ticket>>> {
     require_member(&state, claims.sub, server_id).await?;
     let tickets = sqlx::query_as::<_, Ticket>(
-        "SELECT * FROM tickets WHERE server_id = $1 ORDER BY created_at DESC LIMIT 100"
+        "SELECT * FROM tickets
+         WHERE server_id = $1
+         AND (creator_id = $2
+              OR EXISTS(
+                SELECT 1 FROM server_members sm
+                LEFT JOIN member_roles mr ON mr.user_id=sm.user_id AND mr.server_id=sm.server_id
+                LEFT JOIN roles r ON r.id=mr.role_id
+                WHERE sm.server_id=$1 AND sm.user_id=$2
+                AND ((r.permissions & 16384)<>0 OR sm.is_owner=true)
+              ))
+         ORDER BY created_at DESC LIMIT 100"
     )
     .bind(server_id)
+    .bind(claims.sub)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(tickets))
@@ -156,7 +167,7 @@ pub async fn update_ticket(
 
     let creator_id: Uuid = creator_row.get("creator_id");
     if creator_id != claims.sub {
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
     }
 
     // Valider que assigned_to est membre du serveur
@@ -222,6 +233,12 @@ pub async fn create_category(
     if input.name.trim().is_empty() || input.name.len() > 100 {
         return Err(AppError::BadRequest("Nom invalide".into()));
     }
+    if let Some(ref d) = input.description {
+        if d.len() > 500 { return Err(AppError::BadRequest("Description trop longue (max 500)".into())); }
+    }
+    if let Some(ref e) = input.emoji {
+        if e.chars().count() > 8 { return Err(AppError::BadRequest("Emoji invalide".into())); }
+    }
     let cat = sqlx::query_as::<_, TicketCategory>(
         "INSERT INTO ticket_categories (server_id, name, description, emoji)
          VALUES ($1, $2, $3, $4) RETURNING *"
@@ -232,5 +249,8 @@ pub async fn create_category(
     .bind(input.emoji.as_deref().unwrap_or("🎫"))
     .fetch_one(&state.db)
     .await?;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "TICKET_CATEGORY_CREATE", "server_id": server_id, "category": cat
+    }).to_string()).await;
     Ok((StatusCode::CREATED, Json(cat)))
 }

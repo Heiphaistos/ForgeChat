@@ -84,14 +84,17 @@ pub async fn list_channel_feeds(
 ) -> Result<Json<Vec<ChannelFeed>>, AppError> {
     crate::handlers::servers::require_member(&state, claims.sub, server_id).await?;
 
+    crate::handlers::servers::require_channel_in_server(&state, channel_id, server_id).await?;
+
     let feeds = sqlx::query_as::<_, ChannelFeed>(
         "SELECT id, server_id, channel_id, name, feed_url, feed_type,
                 last_checked_at, enabled, created_at
          FROM channel_feeds
-         WHERE channel_id = $1
+         WHERE channel_id = $1 AND server_id = $2
          ORDER BY created_at ASC"
     )
     .bind(channel_id)
+    .bind(server_id)
     .fetch_all(&state.db)
     .await?;
 
@@ -106,6 +109,7 @@ pub async fn create_channel_feed(
     Json(body): Json<CreateFeedRequest>,
 ) -> Result<Json<ChannelFeed>, AppError> {
     crate::handlers::servers::require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    crate::handlers::servers::require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Validation basique
     let name = body.name.trim().to_string();

@@ -186,7 +186,7 @@ pub async fn vote_poll(
 ) -> Result<Json<serde_json::Value>, AppError> {
     require_member(&state, claims.sub, server_id).await?;
     use sqlx::Row;
-    let row = sqlx::query("SELECT multiple_choice, ends_at FROM polls WHERE id=$1 AND server_id=$2")
+    let row = sqlx::query("SELECT multiple_choice, ends_at, channel_id FROM polls WHERE id=$1 AND server_id=$2")
         .bind(poll_id)
         .bind(server_id)
         .fetch_optional(&state.db)
@@ -195,6 +195,7 @@ pub async fn vote_poll(
 
     let multiple_choice: bool = row.get("multiple_choice");
     let ends_at: Option<DateTime<Utc>> = row.get("ends_at");
+    let poll_channel_id: Uuid = row.get("channel_id");
     if let Some(end) = ends_at {
         if Utc::now() > end {
             return Err(AppError::BadRequest("Sondage terminé".into()));
@@ -221,22 +222,23 @@ pub async fn vote_poll(
         return Err(AppError::BadRequest("Options invalides pour ce sondage".into()));
     }
 
-    // Supprimer les anciens votes
+    // DELETE + INSERTs dans une transaction pour éviter le double-vote en race condition
+    let mut tx = state.db.begin().await?;
     sqlx::query("DELETE FROM poll_votes WHERE poll_id=$1 AND user_id=$2")
-        .bind(poll_id).bind(claims.sub).execute(&state.db).await?;
-
+        .bind(poll_id).bind(claims.sub).execute(&mut *tx).await?;
     for opt_id in &body.option_ids {
         sqlx::query("INSERT INTO poll_votes (poll_id, option_id, user_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
-            .bind(poll_id).bind(opt_id).bind(claims.sub).execute(&state.db).await?;
+            .bind(poll_id).bind(opt_id).bind(claims.sub).execute(&mut *tx).await?;
     }
+    tx.commit().await?;
 
     let event = serde_json::json!({
         "type": "POLL_VOTE",
         "poll_id": poll_id,
-        "channel_id": channel_id,
+        "channel_id": poll_channel_id,
         "user_id": claims.sub,
     });
-    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+    state.broadcast_to_channel_members(poll_channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
