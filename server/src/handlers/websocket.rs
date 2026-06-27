@@ -359,6 +359,56 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             }
         }
 
+        // Typing indicator pour DMs (1-1 et groupes)
+        Some("TYPING") => {
+            if let Some(conv_id_str) = msg["conversation_id"].as_str() {
+                if let Ok(conv_uuid) = conv_id_str.parse::<Uuid>() {
+                    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+                        .bind(user_id)
+                        .fetch_optional(&state.db)
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default();
+                    let event = serde_json::json!({
+                        "type": "TYPING",
+                        "conversation_id": conv_uuid,
+                        "user_id": user_id,
+                        "username": username,
+                    });
+                    let event_str = event.to_string();
+                    // Broadcast to both DM participants
+                    let other_ids: Vec<Uuid> = sqlx::query_scalar(
+                        "SELECT user1_id as u FROM dm_channels WHERE id=$1 AND user2_id=$2
+                         UNION ALL
+                         SELECT user2_id FROM dm_channels WHERE id=$1 AND user1_id=$2"
+                    )
+                    .bind(conv_uuid)
+                    .bind(user_id)
+                    .fetch_all(&state.db)
+                    .await
+                    .unwrap_or_default();
+                    // Also check group DMs
+                    let group_ids: Vec<Uuid> = if other_ids.is_empty() {
+                        sqlx::query_scalar(
+                            "SELECT user_id FROM group_dm_members WHERE dm_id=$1 AND user_id != $2"
+                        )
+                        .bind(conv_uuid)
+                        .bind(user_id)
+                        .fetch_all(&state.db)
+                        .await
+                        .unwrap_or_default()
+                    } else { vec![] };
+                    let clients = state.clients.read().await;
+                    for uid in other_ids.into_iter().chain(group_ids) {
+                        if let Some(tx) = clients.get(&uid) {
+                            let _ = tx.send(event_str.clone());
+                        }
+                    }
+                }
+            }
+        }
+
         Some("DM_READ") => {
             if let (Some(conv_id_str), Some(msg_id_str)) = (
                 msg["conversation_id"].as_str(),

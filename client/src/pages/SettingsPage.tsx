@@ -113,7 +113,7 @@ export default function SettingsPage() {
           </button>
         </nav>
 
-        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.1.0</div>
+        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.50.0</div>
       </div>
 
       {/* Content */}
