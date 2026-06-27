@@ -271,6 +271,7 @@ function AppInner() {
       const isActive = currentPath === `/dms/${d.dm_id}` && document.hasFocus()
       if (!isActive) {
         incrUnread(d.dm_id)
+        if (!user.focus_mode) playMessage()
         sendNativeNotification(msg.sender_username ?? 'Message privé', {
           body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
         })
@@ -283,13 +284,14 @@ function AppInner() {
       const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
       if (!isActive) {
         incrUnread(d.group_id)
+        if (!user.focus_mode) playMessage()
         sendNativeNotification(msg.sender_username ?? 'Groupe', {
           body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
         })
       }
     })
     return () => { offDm(); offGroupMsg() }
-  }, [user?.id])
+  }, [user?.id, user?.focus_mode, playMessage])
 
   // Mise à jour temps réel des canaux et serveur
   useEffect(() => {

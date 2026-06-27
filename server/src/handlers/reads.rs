@@ -73,7 +73,7 @@ pub async fn get_unread_counts(
     .fetch_all(&state.db)
     .await?;
 
-    let result: Vec<serde_json::Value> = rows.iter().map(|r| {
+    let mut result: Vec<serde_json::Value> = rows.iter().map(|r| {
         let count: i64 = r.get("count");
         serde_json::json!({
             "channel_id": r.get::<Uuid, _>("channel_id"),
@@ -81,6 +81,37 @@ pub async fn get_unread_counts(
             "count": count,
         })
     }).collect();
+
+    // Ajouter les non-lus des DMs 1-1
+    let dm_rows = sqlx::query(
+        "SELECT dm.dm_channel_id as id, COUNT(*) as count
+         FROM dm_messages dm
+         WHERE dm.sender_id != $1
+           AND EXISTS(
+               SELECT 1 FROM dm_channels dc
+               WHERE dc.id = dm.dm_channel_id AND (dc.user1_id=$1 OR dc.user2_id=$1)
+           )
+           AND dm.created_at > COALESCE(
+               (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=dm.dm_channel_id AND user_id=$1),
+               NOW() - INTERVAL '30 days'
+           )
+         GROUP BY dm.dm_channel_id"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for r in &dm_rows {
+        let count: i64 = r.get("count");
+        if count > 0 {
+            result.push(serde_json::json!({
+                "channel_id": r.get::<Uuid, _>("id"),
+                "server_id": serde_json::Value::Null,
+                "count": count,
+            }));
+        }
+    }
 
     Ok(Json(result))
 }

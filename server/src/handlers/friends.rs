@@ -360,6 +360,7 @@ pub async fn get_dm_messages(
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("username"),
             "sender_avatar": r.get::<Option<String>, _>("avatar"),
+            "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "reply_to_id": reply_to_id,
             "reply_to": reply_to_id.and_then(|rid| reply_ctx_map.get(&rid)).cloned(),
             "attachments": att_map.get(&id).cloned().unwrap_or_default(),
@@ -577,6 +578,27 @@ pub async fn send_dm(
         (r.get::<String, _>("username"), r.get::<Option<String>, _>("avatar"))
     }).unwrap_or_else(|| (String::new(), None));
 
+    // Récupérer le contexte du message auquel on répond si applicable
+    let reply_ctx = if let Some(rid) = reply_to {
+        sqlx::query(
+            "SELECT dm.id, dm.content, dm.sender_id, u.username as sender_username
+             FROM dm_messages dm JOIN users u ON u.id = dm.sender_id WHERE dm.id=$1"
+        )
+        .bind(rid)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|r| serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "content": r.get::<Option<String>, _>("content"),
+            "sender_id": r.get::<Uuid, _>("sender_id"),
+            "sender_username": r.get::<String, _>("sender_username"),
+        }))
+    } else {
+        None
+    };
+
     let event = serde_json::json!({
         "type": "DM_MESSAGE",
         "dm_id": dm_id,
@@ -587,6 +609,7 @@ pub async fn send_dm(
             "sender_username": sender_username,
             "sender_avatar": sender_avatar,
             "reply_to_id": reply_to,
+            "reply_to": reply_ctx,
             "created_at": created_at,
         }
     });
@@ -596,7 +619,10 @@ pub async fn send_dm(
         "id": msg_id,
         "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content) },
         "reply_to_id": reply_to,
+        "reply_to": reply_ctx,
         "created_at": created_at,
+        "attachments": [],
+        "reactions": [],
     })))
 }
 
