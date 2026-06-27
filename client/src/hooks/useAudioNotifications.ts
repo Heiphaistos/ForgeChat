@@ -104,5 +104,26 @@ export function useAudioNotifications() {
     playDoubleBip(880, 1100, 0.2)
   }, [enabled])
 
-  return { playJoin, playLeave, playMessage, playMention, enabled, setEnabled: handleSetEnabled }
+  // ring : séquence de sonnerie d'appel (3 bips rapides montants)
+  const playRing = useCallback(() => {
+    if (!enabled) return
+    const ctx = getCtx()
+    const schedule = (offset: number) => {
+      const g = ctx.createGain()
+      g.connect(ctx.destination)
+      g.gain.setValueAtTime(0, ctx.currentTime + offset)
+      g.gain.linearRampToValueAtTime(0.2, ctx.currentTime + offset + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.18)
+      const osc = ctx.createOscillator()
+      osc.connect(g)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, ctx.currentTime + offset)
+      osc.frequency.linearRampToValueAtTime(1100, ctx.currentTime + offset + 0.18)
+      osc.start(ctx.currentTime + offset)
+      osc.stop(ctx.currentTime + offset + 0.2)
+    }
+    schedule(0); schedule(0.25); schedule(0.5)
+  }, [enabled])
+
+  return { playJoin, playLeave, playMessage, playMention, playRing, enabled, setEnabled: handleSetEnabled }
 }

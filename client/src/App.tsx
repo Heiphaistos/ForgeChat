@@ -70,7 +70,7 @@ function AppInner() {
   const [showCommandPalette, setShowCommandPalette] = React.useState(false)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
   const [showOnboarding, setShowOnboarding] = React.useState(() => !localStorage.getItem('fc_onboarding_done'))
-  const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
+  const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
@@ -255,11 +255,12 @@ function AppInner() {
         dmId: String(d.dm_id),
         callType: d.call_type === 'video' ? 'video' : 'voice',
       })
+      playRing()
     })
     const offEnded = on('DM_CALL_ENDED', () => setIncomingCall(null))
     const offDeclined = on('DM_CALL_DECLINED', () => setIncomingCall(null))
     return () => { offIncoming(); offEnded(); offDeclined() }
-  }, [user?.id])
+  }, [user?.id, playRing])
 
   // Notifications push pour les messages privés
   useEffect(() => {
