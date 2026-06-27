@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Menu } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Menu, Trash2 } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
 import toast from 'react-hot-toast'
 
@@ -194,7 +194,7 @@ export default function GroupDMPage() {
           {allMessages.map(msg => {
             const isMe = msg.sender_id === user?.id
             return (
-              <div key={msg.id} className={`flex items-start gap-2.5 ${isMe ? 'flex-row-reverse' : ''}`}>
+              <div key={msg.id} className={`flex items-start gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}>
                 <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {msg.sender_avatar
                     ? <img src={msg.sender_avatar} alt="" className="w-full h-full object-cover" />
@@ -205,12 +205,26 @@ export default function GroupDMPage() {
                   {!isMe && (
                     <span className="text-xs text-fc-muted mb-0.5 ml-1">{msg.sender_username}</span>
                   )}
-                  <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
-                    isMe
-                      ? 'bg-fc-accent text-white rounded-tr-sm'
-                      : 'bg-fc-channel text-fc-text rounded-tl-sm'
-                  }`}>
-                    {msg.content}
+                  <div className="flex items-center gap-1">
+                    {isMe && (
+                      <button
+                        onClick={() => {
+                          api.delete(`/dms/groups/${groupId}/messages/${msg.id}`)
+                            .catch(() => toast.error('Impossible de supprimer'))
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-fc-muted hover:text-red-400 rounded transition"
+                        title="Supprimer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
+                      isMe
+                        ? 'bg-fc-accent text-white rounded-tr-sm'
+                        : 'bg-fc-channel text-fc-text rounded-tl-sm'
+                    }`}>
+                      {msg.content}
+                    </div>
                   </div>
                   <span className="text-[10px] text-fc-muted mt-0.5 mx-1">
                     {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
