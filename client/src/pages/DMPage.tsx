@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff } from 'lucide-react'
 import api from '../api/client'
@@ -42,6 +42,8 @@ interface E2eMsg {
 
 export default function DMPage() {
   const { dmId } = useParams<{ dmId: string }>()
+  const [searchParams] = useSearchParams()
+  const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage } = useChat()
   const { on } = useWs()
   const getStatus = usePresence(s => s.getStatus)
@@ -577,6 +579,7 @@ export default function DMPage() {
           partnerName={partnerName}
           onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
           onLoadMore={loadMoreDM}
+          initialHighlightId={highlightMessageId}
         />
       )}
     </div>

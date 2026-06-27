@@ -20,7 +20,11 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   const nav = useNavigate()
 
   const jumpToMessage = (msgId: string) => {
-    nav(`/app/servers/${serverId}/channels/${channelId}?highlight=${msgId}`)
+    if (serverId) {
+      nav(`/app/servers/${serverId}/channels/${channelId}?highlight=${msgId}`)
+    } else {
+      nav(`/dms/${channelId}?highlight=${msgId}`)
+    }
     onClose()
   }
 
