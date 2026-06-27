@@ -214,14 +214,21 @@ export default function ChannelSidebar() {
 
   // Écouter les erreurs de join vocal
   useEffect(() => {
-    return wsOn('VOICE_JOIN_ERROR', (d: any) => {
+    const offErr = wsOn('VOICE_JOIN_ERROR', (d: any) => {
       if (d.reason === 'channel_full') {
         toast.error(`Canal plein (${d.current}/${d.limit} places)`)
       } else if (d.reason === 'wrong_password') {
         toast.error('Mot de passe incorrect')
       }
     })
-  }, [])
+    const offRedirect = wsOn('VOICE_REDIRECT', (d: any) => {
+      if (serverId) {
+        voiceJoin(d.channel_id, serverId)
+        toast.success('Redirigé vers un sous-canal vocal')
+      }
+    })
+    return () => { offErr(); offRedirect() }
+  }, [voiceJoin, serverId])
 
   // Rafraîchir le serveur sur changements de rôles en temps réel
   useEffect(() => {
