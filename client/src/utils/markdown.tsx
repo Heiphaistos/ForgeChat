@@ -1,4 +1,4 @@
-import hljs from 'highlight.js'
+import hljs from 'highlight.js/lib/common'
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
