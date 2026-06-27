@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen, X } from 'lucide-react'
+import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
 import { useE2E } from '../hooks/useE2E'
+import { useDmCall } from '../hooks/useDmCall'
+import { useCallStore } from '../store/call'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
@@ -52,8 +54,9 @@ export default function DMPage() {
   const [e2eSending, setE2eSending] = useState(false)
   const e2eBottomRef = useRef<HTMLDivElement>(null)
   const [showSearch, setShowSearch] = useState(false)
-  const [callMode, setCallMode] = useState<'voice' | 'video' | null>(null)
   const [hasMoreDM, setHasMoreDM] = useState(true)
+  const localVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
 
   const loadMoreDM = useCallback(async (): Promise<boolean> => {
     if (!dmId || !hasMoreDM) return false
@@ -95,6 +98,35 @@ export default function DMPage() {
   const partnerAvatar = dmInfo?.avatar ?? null
   const partnerId = dmInfo?.other_user_id ?? ''
   const status = partnerId ? getStatus(partnerId) : 'offline'
+
+  const {
+    callState, callType, localStream, remoteStream, micMuted, camOff,
+    startCall, acceptCall, hangup, toggleMic, toggleCam,
+  } = useDmCall(dmId, partnerId || undefined)
+
+  const { pendingAccept, setPendingAccept } = useCallStore()
+
+  // Auto-accept call if navigated here from incoming call modal
+  useEffect(() => {
+    if (pendingAccept && dmId && partnerId) {
+      const { fromUserId, callType: ct } = pendingAccept
+      setPendingAccept(null)
+      acceptCall(fromUserId, ct)
+    }
+  }, [pendingAccept, dmId, partnerId])
+
+  // Attach streams to video elements
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream
+    }
+  }, [localStream])
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream
+    }
+  }, [remoteStream])
 
   const { data: messages = [] } = useQuery({
     queryKey: ['dm_messages', dmId],
@@ -357,16 +389,22 @@ export default function DMPage() {
             {e2eMode ? <Lock size={18} /> : <LockOpen size={18} />}
           </button>
           <button
-            onClick={() => setCallMode(callMode === 'voice' ? null : 'voice')}
-            className={`p-1.5 rounded transition ${callMode === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-            title={callMode === 'voice' ? 'Raccrocher' : 'Appel vocal'}
+            onClick={() => {
+              if (callState !== 'idle') { hangup(); return }
+              startCall('voice').catch(() => toast.error('Accès au micro refusé'))
+            }}
+            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
           >
             <Phone size={18} />
           </button>
           <button
-            onClick={() => setCallMode(callMode === 'video' ? null : 'video')}
-            className={`p-1.5 rounded transition ${callMode === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-            title={callMode === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
+            onClick={() => {
+              if (callState !== 'idle') { hangup(); return }
+              startCall('video').catch(() => toast.error('Accès caméra refusé'))
+            }}
+            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
           >
             <Video size={18} />
           </button>
@@ -381,33 +419,60 @@ export default function DMPage() {
       </div>
 
       {/* Panneau d'appel DM vocal/vidéo */}
-      {callMode && (
-        <div className={`flex flex-col items-center justify-center gap-4 p-8 border-b ${callMode === 'video' ? 'border-fc-accent/40 bg-indigo-900/10' : 'border-green-600/40 bg-green-900/10'}`}>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
-              {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+      {callState !== 'idle' && (
+        <div className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
+          {callType === 'video' ? (
+            <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-full max-h-56 object-contain" />
+              <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
+              {!remoteStream && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
+                  <div className="w-14 h-14 rounded-full bg-fc-accent flex items-center justify-center text-xl font-bold text-white overflow-hidden">
+                    {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-white font-semibold text-sm">{partnerName}</p>
+                  <p className="text-xs text-fc-muted animate-pulse">
+                    {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : 'Connecté'}
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="text-white font-semibold">{partnerName}</p>
-            <p className="text-sm text-fc-muted animate-pulse">{callMode === 'video' ? 'Appel vidéo en cours...' : 'Appel vocal en cours...'}</p>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
+                {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+              </div>
+              <p className="text-white font-semibold">{partnerName}</p>
+              <p className={`text-sm ${callState === 'connected' ? 'text-fc-green' : 'text-fc-muted animate-pulse'}`}>
+                {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : '● Connecté'}
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-3">
-            {callMode === 'video' && (
-              <button className="p-3 bg-fc-hover rounded-full text-fc-muted hover:text-white transition" title="Caméra">
-                <Video size={20} />
+            {callType === 'video' && (
+              <button
+                onClick={toggleCam}
+                className={`p-3 rounded-full transition ${camOff ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+                title={camOff ? 'Activer caméra' : 'Désactiver caméra'}
+              >
+                {camOff ? <VideoOff size={20} /> : <Video size={20} />}
               </button>
             )}
-            <button className="p-3 bg-fc-hover rounded-full text-fc-muted hover:text-white transition" title="Micro">
-              <Phone size={20} />
+            <button
+              onClick={toggleMic}
+              className={`p-3 rounded-full transition ${micMuted ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+              title={micMuted ? 'Activer micro' : 'Couper micro'}
+            >
+              {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
             <button
-              onClick={() => setCallMode(null)}
+              onClick={hangup}
               className="p-3 bg-fc-red rounded-full text-white hover:bg-red-600 transition"
               title="Raccrocher"
             >
-              <X size={20} />
+              <PhoneOff size={20} />
             </button>
           </div>
-          <p className="text-xs text-fc-muted">Appels DM P2P via WebRTC — nécessite TURN actif</p>
         </div>
       )}
 

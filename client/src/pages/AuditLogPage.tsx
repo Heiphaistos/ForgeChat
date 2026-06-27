@@ -13,11 +13,11 @@ interface Props {
 interface AuditEntry {
   id: string
   action: string
-  user_id: string
-  username: string
+  user_id: string | null
+  username: string | null
   target_id: string | null
-  target_type: string | null
-  changes: Record<string, unknown> | null
+  target_name: string | null
+  details: Record<string, unknown> | null
   created_at: string
 }
 
@@ -117,7 +117,7 @@ export default function AuditLogPage({ serverId }: Props) {
     }
     if (userFilter.trim()) {
       const q = userFilter.trim().toLowerCase()
-      list = list.filter(e => e.username.toLowerCase().includes(q))
+      list = list.filter(e => (e.username ?? '').toLowerCase().includes(q))
     }
     return list
   }, [entries, actionFilter, userFilter])
@@ -201,12 +201,15 @@ export default function AuditLogPage({ serverId }: Props) {
                     {/* Contenu */}
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-white text-sm font-medium">{entry.username}</span>
+                        <span className="text-white text-sm font-medium">{entry.username ?? 'Utilisateur inconnu'}</span>
                         <span className={`text-xs ${color}`}>{buildDetails(entry)}</span>
+                        {entry.target_name && (
+                          <span className="text-xs text-fc-muted">→ {entry.target_name}</span>
+                        )}
                       </div>
-                      {entry.changes && Object.keys(entry.changes).length > 0 && (
+                      {entry.details && Object.keys(entry.details).length > 0 && (
                         <div className="text-xs text-fc-muted mt-0.5 truncate">
-                          {Object.entries(entry.changes)
+                          {Object.entries(entry.details)
                             .slice(0, 3)
                             .map(([k, v]) => `${k}: ${String(v)}`)
                             .join(' · ')}

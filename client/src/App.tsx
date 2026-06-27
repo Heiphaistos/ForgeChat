@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
+import { useCallStore } from './store/call'
 import { usePresence } from './store/presence'
 import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
@@ -72,6 +73,7 @@ function AppInner() {
   const { playJoin, playLeave, playMessage, playMention } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
+  const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
 
   useEffect(() => { fetchMe() }, [])
 
@@ -241,6 +243,46 @@ function AppInner() {
       if (d.group?.name) toast(`Groupe créé : ${d.group.name}`, { icon: '👥', duration: 5000 })
     })
     return () => { offReq(); offAcc(); offGroupDm() }
+  }, [user?.id])
+
+  // Appels DM entrants
+  useEffect(() => {
+    if (!user) return
+    const offIncoming = on('DM_CALL_INCOMING', (d: any) => {
+      setIncomingCall({
+        fromUserId: String(d.from),
+        fromUsername: d.from_username ?? 'Utilisateur',
+        dmId: String(d.dm_id),
+        callType: d.call_type === 'video' ? 'video' : 'voice',
+      })
+    })
+    const offEnded = on('DM_CALL_ENDED', () => setIncomingCall(null))
+    const offDeclined = on('DM_CALL_DECLINED', () => setIncomingCall(null))
+    return () => { offIncoming(); offEnded(); offDeclined() }
+  }, [user?.id])
+
+  // Notifications push pour les messages privés
+  useEffect(() => {
+    if (!user) return
+    const offDm = on('DM_MESSAGE', (d: any) => {
+      const msg = d.message
+      if (!msg || msg.sender_id === user.id) return
+      const currentPath = window.location.pathname
+      if (currentPath === `/dms/${d.dm_id}` && document.hasFocus()) return
+      sendNativeNotification(msg.sender_username ?? 'Message privé', {
+        body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+      })
+    })
+    const offGroupMsg = on('GROUP_DM_MESSAGE', (d: any) => {
+      const msg = d.message
+      if (!msg || msg.sender_id === user.id) return
+      const currentPath = window.location.pathname
+      if (currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()) return
+      sendNativeNotification(msg.sender_username ?? 'Groupe', {
+        body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+      })
+    })
+    return () => { offDm(); offGroupMsg() }
   }, [user?.id])
 
   // Mise à jour temps réel des canaux et serveur
@@ -447,6 +489,21 @@ function AppInner() {
       <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
       {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
+      {incomingCall && (
+        <IncomingCallModal
+          call={incomingCall}
+          onAccept={() => {
+            setPendingAccept({ fromUserId: incomingCall.fromUserId, callType: incomingCall.callType })
+            setIncomingCall(null)
+            nav(`/dms/${incomingCall.dmId}`)
+          }}
+          onDecline={() => {
+            const { send } = useWs.getState()
+            send({ type: 'DM_CALL_DECLINE', to: incomingCall.fromUserId, dm_id: incomingCall.dmId })
+            setIncomingCall(null)
+          }}
+        />
+      )}
     </Suspense>
   )
 }
@@ -454,6 +511,47 @@ function AppInner() {
 import React from 'react'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
+import { Phone, Video, PhoneOff } from 'lucide-react'
+import type { IncomingCallInfo } from './store/call'
+
+function IncomingCallModal({ call, onAccept, onDecline }: {
+  call: IncomingCallInfo
+  onAccept: () => void
+  onDecline: () => void
+}) {
+  return (
+    <div className="fixed bottom-6 right-6 z-[9999] bg-fc-channel border border-fc-hover rounded-2xl shadow-2xl p-5 w-80 animate-in slide-in-from-bottom-4 duration-300">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-fc-accent flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
+          {call.fromUsername.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p className="text-white font-semibold text-sm">{call.fromUsername}</p>
+          <p className="text-fc-muted text-xs flex items-center gap-1">
+            {call.callType === 'video' ? <Video size={11} /> : <Phone size={11} />}
+            {call.callType === 'video' ? 'Appel vidéo entrant...' : 'Appel vocal entrant...'}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <button
+          onClick={onDecline}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-fc-red hover:bg-red-600 rounded-xl text-white text-sm font-medium transition"
+        >
+          <PhoneOff size={16} />
+          Refuser
+        </button>
+        <button
+          onClick={onAccept}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-fc-green hover:bg-green-600 rounded-xl text-white text-sm font-medium transition"
+        >
+          {call.callType === 'video' ? <Video size={16} /> : <Phone size={16} />}
+          Accepter
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 

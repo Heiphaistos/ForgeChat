@@ -747,6 +747,55 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             }
         }
 
+        Some("DM_CALL_INIT") => {
+            let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let event = serde_json::json!({
+                "type": "DM_CALL_INCOMING",
+                "from": user_id,
+                "dm_id": msg["dm_id"],
+                "call_type": msg["call_type"].as_str().unwrap_or("voice"),
+            });
+            state.broadcast_to_user(to, event.to_string()).await;
+        }
+
+        Some("DM_CALL_ACCEPT") => {
+            let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let event = serde_json::json!({
+                "type": "DM_CALL_ACCEPTED",
+                "from": user_id,
+                "dm_id": msg["dm_id"],
+            });
+            state.broadcast_to_user(to, event.to_string()).await;
+        }
+
+        Some("DM_CALL_DECLINE") => {
+            let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let event = serde_json::json!({
+                "type": "DM_CALL_DECLINED",
+                "from": user_id,
+                "dm_id": msg["dm_id"],
+            });
+            state.broadcast_to_user(to, event.to_string()).await;
+        }
+
+        Some("DM_CALL_HANGUP") => {
+            let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let event = serde_json::json!({
+                "type": "DM_CALL_ENDED",
+                "from": user_id,
+                "dm_id": msg["dm_id"],
+            });
+            state.broadcast_to_user(to, event.to_string()).await;
+        }
+
         Some("VOICE_REACTION") => {
             if let (Some(channel_id_val), Some(emoji_val)) = (
                 msg["channel_id"].as_str(),
