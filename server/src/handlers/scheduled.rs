@@ -182,6 +182,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     attachments: vec![],
                     reactions: vec![],
                     expires_at: None,
+                    poll_id: None,
                 };
 
                 let event = serde_json::json!({

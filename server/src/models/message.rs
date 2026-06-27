@@ -38,6 +38,7 @@ pub struct MessageWithAuthor {
     pub attachments: Vec<Attachment>,
     pub reactions: Vec<ReactionCount>,
     pub expires_at: Option<DateTime<Utc>>,
+    pub poll_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]

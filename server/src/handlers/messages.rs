@@ -126,6 +126,7 @@ pub async fn get_messages(
             attachments,
             reactions,
             expires_at: row.try_get("expires_at").ok().flatten(),
+            poll_id: row.try_get("poll_id").ok().flatten(),
         });
     }
 
@@ -329,6 +330,7 @@ pub async fn send_message(
         attachments: vec![],
         reactions: vec![],
         expires_at: msg.try_get("expires_at").ok().flatten(),
+        poll_id: None,
     };
 
     let event = serde_json::json!({
@@ -645,6 +647,7 @@ pub async fn search_messages(
         attachments: vec![],
         reactions: vec![],
         expires_at: r.try_get("expires_at").ok().flatten(),
+        poll_id: None,
     }).collect();
 
     Ok(Json(result))
@@ -770,6 +773,7 @@ pub async fn forward_message(
         attachments: vec![],
         reactions: vec![],
         expires_at: None,
+        poll_id: None,
     };
 
     // Broadcast to destination channel's server members

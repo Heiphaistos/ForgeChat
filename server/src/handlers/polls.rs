@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, state::AppState};
+use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, models::message::{MessageWithAuthor, Attachment, ReactionCount}, state::AppState};
 
 #[derive(Deserialize)]
 pub struct CreatePollBody {
@@ -104,12 +104,68 @@ pub async fn create_poll(
         total_votes: 0,
     };
 
-    let event = serde_json::json!({
+    // Créer un message lié pour que le sondage apparaisse dans le flux
+    let msg_id = Uuid::new_v4();
+    let msg_ts: chrono::DateTime<Utc> = sqlx::query_scalar(
+        "INSERT INTO messages (id, channel_id, user_id, content, type, poll_id)
+         VALUES ($1, $2, $3, $4, 'poll', $5)
+         RETURNING created_at"
+    )
+    .bind(msg_id)
+    .bind(channel_id)
+    .bind(claims.sub)
+    .bind(format!("📊 {}", poll.question))
+    .bind(poll_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    // Récupérer les infos du créateur pour le broadcast MESSAGE_CREATE
+    let creator_row = sqlx::query(
+        "SELECT username, discriminator, avatar, is_bot FROM users WHERE id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+
+    let poll_msg = MessageWithAuthor {
+        id: msg_id,
+        channel_id,
+        content: Some(format!("📊 {}", poll.question)),
+        r#type: "poll".to_string(),
+        reply_to: None,
+        reply_to_content: None,
+        reply_to_username: None,
+        forward_from_id: None,
+        forward_from_username: None,
+        pinned: false,
+        edited_at: None,
+        created_at: msg_ts,
+        author_id: claims.sub,
+        author_username: creator_row.get("username"),
+        author_discriminator: creator_row.get("discriminator"),
+        author_avatar: creator_row.get("avatar"),
+        author_is_bot: creator_row.try_get("is_bot").unwrap_or(false),
+        author_verified: false,
+        attachments: vec![],
+        reactions: vec![],
+        expires_at: None,
+        poll_id: Some(poll_id),
+    };
+
+    // Broadcaster MESSAGE_CREATE pour affichage immédiat dans le flux
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
+        "type": "MESSAGE_CREATE",
+        "channel_id": channel_id,
+        "message": &poll_msg,
+    }).to_string()).await;
+
+    // POLL_CREATE pour le composant PollDisplay s'il est déjà monté
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "POLL_CREATE",
         "channel_id": channel_id,
         "poll": &poll,
-    });
-    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+        "message_id": msg_id,
+    }).to_string()).await;
 
     Ok(Json(poll))
 }
