@@ -227,7 +227,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", config.port);
-    tracing::info!("ForgeChat v3.7.0 écoute sur {addr}");
+    tracing::info!("ForgeChat v{} écoute sur {addr}", env!("CARGO_PKG_VERSION"));
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(
