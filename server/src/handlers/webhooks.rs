@@ -218,6 +218,17 @@ pub async fn receive_github_webhook(
     let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
     let stored_token = verify_github_token_get(&state, channel_id, token).await?;
 
+    // Rate limit : 30 événements / minute par canal (fail-closed si Redis down)
+    {
+        use redis::AsyncCommands;
+        let rl_key = format!("gh_webhook_rl:{}", channel_id);
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&rl_key, 1).await
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
+        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
+        if count > 30 { return Err(AppError::TooManyRequests.into()); }
+    }
+
     // Vérifier la signature HMAC-SHA256 GitHub (X-Hub-Signature-256) — obligatoire
     let sig_header = headers.get("X-Hub-Signature-256")
         .and_then(|v| v.to_str().ok())

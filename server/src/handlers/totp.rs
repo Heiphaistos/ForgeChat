@@ -83,6 +83,17 @@ pub async fn confirm_totp(
         return Err(AppError::BadRequest("Code invalide".into()));
     }
 
+    // Protection replay : un code TOTP ne peut être utilisé qu'une seule fois (TTL 90s = 3 fenêtres)
+    let replay_key = format!("totp_used:{}:{}", claims.sub, input.code.trim());
+    {
+        let mut redis = state.redis.lock().await;
+        let newly_set: bool = redis.set_nx(&replay_key, 1i64).await.unwrap_or(false);
+        if !newly_set {
+            return Err(AppError::BadRequest("Code TOTP déjà utilisé".into()));
+        }
+        let _: () = redis.expire(&replay_key, 90i64).await.unwrap_or(());
+    }
+
     // Réinitialiser le compteur sur succès
     { let mut redis = state.redis.lock().await; let _: () = redis.del(&rl_key).await.unwrap_or(()); }
 
@@ -121,6 +132,17 @@ pub async fn disable_totp(
 
     if !verify_totp(&secret, &input.code) {
         return Err(AppError::BadRequest("Code invalide".into()));
+    }
+
+    // Protection replay
+    let replay_key = format!("totp_used:{}:{}", claims.sub, input.code.trim());
+    {
+        let mut redis = state.redis.lock().await;
+        let newly_set: bool = redis.set_nx(&replay_key, 1i64).await.unwrap_or(false);
+        if !newly_set {
+            return Err(AppError::BadRequest("Code TOTP déjà utilisé".into()));
+        }
+        let _: () = redis.expire(&replay_key, 90i64).await.unwrap_or(());
     }
 
     sqlx::query("UPDATE users SET totp_enabled = FALSE, totp_secret = NULL, totp_backup_codes = NULL WHERE id = $1")

@@ -131,12 +131,20 @@ pub async fn create_tag(
     .await?;
 
     use sqlx::Row;
-    Ok(Json(serde_json::json!({
+    let tag = serde_json::json!({
         "id": row.get::<Uuid, _>("id"),
         "name": row.get::<String, _>("name"),
         "color": row.get::<i32, _>("color"),
         "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-    })))
+    });
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "SERVER_TAG_CREATE",
+        "server_id": server_id,
+        "tag": &tag,
+    }).to_string()).await;
+
+    Ok(Json(tag))
 }
 
 pub async fn delete_tag(
@@ -146,11 +154,19 @@ pub async fn delete_tag(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
 
-    sqlx::query("DELETE FROM server_tags WHERE id=$1 AND server_id=$2")
+    let deleted = sqlx::query("DELETE FROM server_tags WHERE id=$1 AND server_id=$2")
         .bind(tag_id)
         .bind(server_id)
         .execute(&state.db)
         .await?;
+
+    if deleted.rows_affected() > 0 {
+        state.broadcast_to_server_members(server_id, serde_json::json!({
+            "type": "SERVER_TAG_DELETE",
+            "server_id": server_id,
+            "tag_id": tag_id,
+        }).to_string()).await;
+    }
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -196,6 +212,13 @@ pub async fn assign_tag(
     .execute(&state.db)
     .await?;
 
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_TAG_ASSIGN",
+        "server_id": server_id,
+        "user_id": user_id,
+        "tag_id": tag_id,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -214,6 +237,13 @@ pub async fn remove_tag(
     .bind(tag_id)
     .execute(&state.db)
     .await?;
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_TAG_REMOVE",
+        "server_id": server_id,
+        "user_id": user_id,
+        "tag_id": tag_id,
+    }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

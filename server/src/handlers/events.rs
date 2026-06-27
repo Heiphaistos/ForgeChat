@@ -208,6 +208,13 @@ pub async fn update_event(
 ) -> Result<Json<ServerEvent>> {
     ensure_member(&state, server_id, claims.sub).await?;
 
+    // Empêcher le backdating de la date de début
+    if let Some(new_start) = body.start_time {
+        if new_start < chrono::Utc::now() {
+            return Err(AppError::BadRequest("La date de début doit être dans le futur".into()));
+        }
+    }
+
     let affected = sqlx::query(
         "UPDATE server_events SET
            name = COALESCE($3, name),

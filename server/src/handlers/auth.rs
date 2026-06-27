@@ -482,13 +482,11 @@ pub async fn logout(
         let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
     }
 
-    if let Some(token) = body["refresh_token"].as_str() {
-        let token_hash = hash_token(token);
-        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1")
-            .bind(&token_hash)
-            .execute(&state.db)
-            .await?;
-    }
+    // Supprimer tous les refresh tokens de l'utilisateur (invalide toutes les sessions)
+    sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
     sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .execute(&state.db)

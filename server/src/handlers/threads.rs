@@ -287,14 +287,20 @@ pub async fn archive_thread(
 
     use sqlx::Row;
     let creator_id: Uuid = thread_row.get("creator_id");
-    if creator_id != claims.sub {
+    let archived = body["archived"].as_bool().unwrap_or(true);
+    let locked = body["locked"].as_bool();
+
+    // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
+    // Archiver : créateur OU modérateur
+    if locked.is_some() {
+        use super::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    } else if creator_id != claims.sub {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
-
-    let archived = body["archived"].as_bool().unwrap_or(true);
-    let locked = body["locked"].as_bool();
 
     let thread = if let Some(locked) = locked {
         sqlx::query_as::<_, Thread>(

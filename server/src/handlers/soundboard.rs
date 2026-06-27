@@ -3,11 +3,14 @@ use axum::{
     Extension, Json,
 };
 use serde::Serialize;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::servers::require_permission,
     middleware::auth::Claims,
+    models::role::Permissions,
     state::AppState,
 };
 
@@ -60,13 +63,25 @@ pub async fn list_sounds(
     Ok(Json(sounds))
 }
 
+const MAX_SOUNDS_PER_SERVER: i64 = 50;
+
 pub async fn upload_sound(
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<Json<SoundboardEntry>> {
-    ensure_member(&state, server_id, claims.sub).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM soundboard WHERE server_id=$1")
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+    if count >= MAX_SOUNDS_PER_SERVER {
+        return Err(AppError::BadRequest(
+            format!("Maximum {} sons par serveur atteint", MAX_SOUNDS_PER_SERVER)
+        ));
+    }
 
     let mut name: Option<String> = None;
     let mut emoji: Option<String> = None;
@@ -113,11 +128,11 @@ pub async fn upload_sound(
         return Err(AppError::BadRequest("Fichier vide".into()));
     }
 
-    // Sauvegarde du fichier dans le répertoire uploads
+    // Sauvegarde du fichier dans le répertoire uploads configuré
     let sound_id = Uuid::new_v4();
     let filename = format!("{sound_id}.{ext}");
-    let upload_dir = std::path::Path::new("uploads/sounds");
-    tokio::fs::create_dir_all(upload_dir)
+    let upload_dir = PathBuf::from(&state.config.upload_dir).join("sounds");
+    tokio::fs::create_dir_all(&upload_dir)
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
 
@@ -150,17 +165,30 @@ pub async fn delete_sound(
     Path((server_id, sound_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>> {
-    ensure_member(&state, server_id, claims.sub).await?;
+    // Modérateurs (MANAGE_SERVER) ou uploadeur peuvent supprimer
+    let is_mod = require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER)
+        .await
+        .is_ok();
 
-    let row = sqlx::query(
-        "DELETE FROM soundboard WHERE id = $1 AND server_id = $2 AND uploader_id = $3
-         RETURNING file_url"
-    )
-    .bind(sound_id)
-    .bind(server_id)
-    .bind(claims.sub)
-    .fetch_optional(&state.db)
-    .await?;
+    let row = if is_mod {
+        sqlx::query(
+            "DELETE FROM soundboard WHERE id = $1 AND server_id = $2 RETURNING file_url"
+        )
+        .bind(sound_id)
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "DELETE FROM soundboard WHERE id = $1 AND server_id = $2 AND uploader_id = $3
+             RETURNING file_url"
+        )
+        .bind(sound_id)
+        .bind(server_id)
+        .bind(claims.sub)
+        .fetch_optional(&state.db)
+        .await?
+    };
 
     if row.is_none() {
         return Err(AppError::NotFound("Son introuvable ou non autorisé".into()));

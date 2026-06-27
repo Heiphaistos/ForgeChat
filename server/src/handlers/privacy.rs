@@ -34,7 +34,7 @@ pub async fn export_user_data(
         "SELECT m.content, m.created_at, c.name as channel_name
          FROM messages m
          JOIN channels c ON c.id = m.channel_id
-         WHERE m.author_id = $1
+         WHERE m.user_id = $1
          ORDER BY m.created_at DESC
          LIMIT 100"
     )
