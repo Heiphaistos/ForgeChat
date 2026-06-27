@@ -168,6 +168,13 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`).then(r => r.data),
   })
 
+  // Sync localPost avec les données fraîches du serveur (ex: lock externe via mod)
+  useEffect(() => {
+    if (data?.post) {
+      setLocalPost(prev => ({ ...prev, pinned: data.post.pinned, locked: data.post.locked }))
+    }
+  }, [data?.post?.pinned, data?.post?.locked])
+
   const replies: ForumReply[] = data?.replies ?? []
 
   const sendReply = useMutation({
@@ -196,24 +203,22 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           </div>
           <p className="text-xs text-fc-muted">par {localPost.creator_username} · {format(new Date(localPost.created_at), 'dd MMM yyyy', { locale: fr })}</p>
         </div>
-        {(user?.id === post.creator_id) && (
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => togglePin.mutate()}
-              title={localPost.pinned ? 'Désépingler' : 'Épingler'}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
-            >
-              <Pin size={15} />
-            </button>
-            <button
-              onClick={() => toggleLock.mutate()}
-              title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
-            >
-              <Lock size={15} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => togglePin.mutate()}
+            title={localPost.pinned ? 'Désépingler' : 'Épingler'}
+            className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
+          >
+            <Pin size={15} />
+          </button>
+          <button
+            onClick={() => toggleLock.mutate()}
+            title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
+            className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
+          >
+            <Lock size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
