@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
@@ -140,8 +140,11 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
   const [reply, setReply] = useState('')
   const [localPost, setLocalPost] = useState(post)
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState('')
   const qc = useQueryClient()
   const { user } = useAuth()
+  const { on } = useWs()
 
   const togglePin = useMutation({
     mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { pinned: !localPost.pinned }),
@@ -174,6 +177,40 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
       setLocalPost(prev => ({ ...prev, pinned: data.post.pinned, locked: data.post.locked }))
     }
   }, [data?.post?.pinned, data?.post?.locked])
+
+  // WS: sync edit/delete des réponses en temps réel
+  useEffect(() => {
+    const offEdit = on('FORUM_REPLY_EDIT', (d: any) => {
+      if (d.post_id !== post.id) return
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+    })
+    const offDelete = on('FORUM_REPLY_DELETE', (d: any) => {
+      if (d.post_id !== post.id) return
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+    })
+    return () => { offEdit(); offDelete() }
+  }, [post.id, on, qc])
+
+  const editReply = useMutation({
+    mutationFn: ({ replyId, content }: { replyId: string; content: string }) =>
+      api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}`, { content }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+      setEditingReplyId(null)
+      toast.success('Réponse modifiée')
+    },
+    onError: () => toast.error('Impossible de modifier'),
+  })
+
+  const deleteReply = useMutation({
+    mutationFn: (replyId: string) =>
+      api.delete(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+      toast.success('Réponse supprimée')
+    },
+    onError: () => toast.error('Impossible de supprimer'),
+  })
 
   const replies: ForumReply[] = data?.replies ?? []
 
@@ -238,7 +275,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
 
         {/* Réponses */}
         {replies.map((r) => (
-          <div key={r.id} className="flex gap-3">
+          <div key={r.id} className="flex gap-3 group">
             <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
               {r.author.username.charAt(0).toUpperCase()}
             </div>
@@ -248,8 +285,60 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   {r.author.username}
                 </span>
                 <span className="text-xs text-fc-muted">{format(new Date(r.created_at), 'dd/MM HH:mm')}</span>
+                {r.user_id === user?.id && editingReplyId !== r.id && (
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
+                    <button
+                      onClick={() => { setEditingReplyId(r.id); setEditContent(r.content) }}
+                      className="p-1 text-fc-muted hover:text-white rounded transition"
+                      title="Modifier"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      onClick={() => deleteReply.mutate(r.id)}
+                      className="p-1 text-fc-muted hover:text-red-400 rounded transition"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
               </div>
-              <p className="text-sm text-fc-text leading-relaxed whitespace-pre-wrap">{r.content}</p>
+              {editingReplyId === r.id ? (
+                <div className="flex gap-2">
+                  <textarea
+                    value={editContent}
+                    onChange={e => setEditContent(e.target.value)}
+                    className="flex-1 px-2 py-1 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
+                    rows={2}
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Escape') setEditingReplyId(null)
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (editContent.trim()) editReply.mutate({ replyId: r.id, content: editContent.trim() })
+                      }
+                    }}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => editContent.trim() && editReply.mutate({ replyId: r.id, content: editContent.trim() })}
+                      disabled={!editContent.trim() || editReply.isPending}
+                      className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded disabled:opacity-50"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      onClick={() => setEditingReplyId(null)}
+                      className="p-1.5 text-fc-muted hover:text-white rounded"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-fc-text leading-relaxed whitespace-pre-wrap">{r.content}</p>
+              )}
             </div>
           </div>
         ))}
