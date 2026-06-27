@@ -259,6 +259,18 @@ export default function ChannelSidebar() {
     enabled: !serverId,
   })
 
+  // Rafraîchir la liste DMs quand un GroupDM est créé/renommé/modifié
+  useEffect(() => {
+    if (serverId) return
+    const refresh = () => qc.invalidateQueries({ queryKey: ['dms'] })
+    const offCreate = wsOn('GROUP_DM_CREATE', refresh)
+    const offRename = wsOn('GROUP_DM_RENAME', refresh)
+    const offLeave = wsOn('GROUP_DM_MEMBER_LEAVE', refresh)
+    const offAdd = wsOn('GROUP_DM_MEMBER_ADD', refresh)
+    const offRemove = wsOn('GROUP_DM_MEMBER_REMOVE', refresh)
+    return () => { offCreate(); offRename(); offLeave(); offAdd(); offRemove() }
+  }, [serverId])
+
   const reorderChannels = useMutation({
     mutationFn: (channel_ids: string[]) =>
       api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),

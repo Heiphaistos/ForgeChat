@@ -279,6 +279,16 @@ pub async fn send_group_message(
     .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
+    // Anti-spam GroupDM : max 5 messages / 3 secondes via Redis
+    {
+        use redis::AsyncCommands;
+        let key = format!("gdm_spam:{}:{}", claims.sub, group_id);
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&key, 1).await.unwrap_or(0);
+        if count == 1 { let _: () = redis.expire(&key, 3).await.unwrap_or(()); }
+        if count > 5 { return Err(AppError::TooManyRequests); }
+    }
+
     let has_attachments = body.has_attachments.unwrap_or(false);
     let content = body.content.as_deref()
         .map(|s| s.trim().to_string())
