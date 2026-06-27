@@ -207,12 +207,6 @@ pub async fn send_thread_message(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
-    let thread_ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM threads WHERE id=$1 AND channel_id=$2)"
-    )
-    .bind(thread_id).bind(channel_id)
-    .fetch_one(&state.db).await?;
-    if !thread_ok { return Err(AppError::NotFound("Thread introuvable".into())); }
 
     let content_trimmed = body.content.trim().to_string();
     if content_trimmed.is_empty() {
@@ -222,8 +216,9 @@ pub async fn send_thread_message(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
-    let thread_locked = sqlx::query_scalar::<_, bool>(
-        "SELECT locked FROM threads WHERE id = $1 AND channel_id = $2"
+    use sqlx::Row;
+    let thread_row = sqlx::query(
+        "SELECT locked, archived FROM threads WHERE id=$1 AND channel_id=$2"
     )
     .bind(thread_id)
     .bind(channel_id)
@@ -231,7 +226,7 @@ pub async fn send_thread_message(
     .await?
     .ok_or_else(|| AppError::NotFound("Thread introuvable".into()))?;
 
-    if thread_locked {
+    if thread_row.get::<bool, _>("locked") || thread_row.get::<bool, _>("archived") {
         return Err(AppError::Forbidden);
     }
 
