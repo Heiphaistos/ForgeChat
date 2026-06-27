@@ -236,10 +236,27 @@ pub struct ReactionDetail {
 
 pub async fn get_reaction_detail(
     State(state): State<AppState>,
-    _claims: Extension<Claims>,
+    claims: Extension<Claims>,
     Query(q): Query<ReactionQuery>,
 ) -> Result<Json<ReactionDetail>, AppError> {
     use sqlx::Row;
+    // Vérifier que l'utilisateur est membre du serveur contenant ce message
+    let member_check = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+            SELECT 1 FROM messages m
+            JOIN channels c ON c.id = m.channel_id
+            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+            WHERE m.id = $1
+        )"
+    )
+    .bind(q.message_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if !member_check {
+        return Err(AppError::Forbidden);
+    }
+
     let rows = sqlx::query(
         "SELECT r.user_id, u.username, u.avatar
          FROM reactions r
@@ -275,7 +292,7 @@ pub async fn set_nickname(
     Json(body): Json<NicknameBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     if let Some(ref nick) = body.nickname {
-        if nick.len() > 32 {
+        if nick.chars().count() > 32 {
             return Err(AppError::BadRequest("Surnom trop long (max 32)".into()));
         }
     }
