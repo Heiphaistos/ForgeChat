@@ -7,6 +7,7 @@ import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
+import { useUnread } from '../store/unread'
 import { useE2E } from '../hooks/useE2E'
 import { useDmCall } from '../hooks/useDmCall'
 import { useCallStore } from '../store/call'
@@ -45,6 +46,7 @@ export default function DMPage() {
   const { on } = useWs()
   const getStatus = usePresence(s => s.getStatus)
   const me = useAuth(s => s.user)
+  const resetUnread = useUnread(s => s.reset)
   const { generateAndStoreKeyPair, getSharedKey, encrypt, decrypt } = useE2E()
 
 
@@ -73,6 +75,9 @@ export default function DMPage() {
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
         author_discriminator: '0000',
+        reply_to: m.reply_to_id ?? null,
+        reply_to_content: m.reply_to?.content ?? null,
+        reply_to_username: m.reply_to?.sender_username ?? null,
         attachments: m.attachments ?? [],
         reactions: m.reactions ?? [],
         type: 'default',
@@ -150,6 +155,9 @@ export default function DMPage() {
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
         author_discriminator: '0000',
+        reply_to: m.reply_to_id ?? null,
+        reply_to_content: m.reply_to?.content ?? null,
+        reply_to_username: m.reply_to?.sender_username ?? null,
         attachments: m.attachments ?? [],
         reactions: m.reactions ?? [],
         type: 'default',
@@ -207,6 +215,11 @@ export default function DMPage() {
 
   // Reset pagination quand on change de conversation
   useEffect(() => { setHasMoreDM(true) }, [dmId])
+
+  // Effacer le badge non-lu quand on ouvre le DM
+  useEffect(() => {
+    if (dmId) resetUnread(dmId)
+  }, [dmId])
 
   // Normal DM WebSocket listener
   useEffect(() => {
