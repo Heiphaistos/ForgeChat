@@ -1,7 +1,8 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Extension, Json,
 };
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
@@ -467,4 +468,46 @@ pub async fn toggle_group_dm_reaction(
     }
 
     Ok(Json(serde_json::json!({ "ok": true, "added": added, "count": count })))
+}
+
+pub async fn search_group_dm_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    )
+    .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let q = params.get("q").cloned().unwrap_or_default();
+    if q.trim().len() < 2 { return Ok(Json(serde_json::json!([]))); }
+
+    let q_esc = q.to_lowercase()
+        .replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", q_esc);
+
+    let rows = sqlx::query(
+        "SELECT gdm.id, gdm.content, gdm.created_at,
+                u.username as author_username, u.avatar as author_avatar
+         FROM group_dm_messages gdm
+         JOIN users u ON u.id = gdm.sender_id
+         WHERE gdm.dm_id = $1 AND LOWER(gdm.content) LIKE $2
+         ORDER BY gdm.created_at DESC LIMIT 50"
+    )
+    .bind(group_id).bind(&pattern)
+    .fetch_all(&state.db).await?;
+
+    let results: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "content": r.get::<Option<String>, _>("content"),
+        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "author_username": r.get::<String, _>("author_username"),
+        "author_avatar": r.get::<Option<String>, _>("author_avatar"),
+    })).collect();
+
+    Ok(Json(serde_json::json!(results)))
 }

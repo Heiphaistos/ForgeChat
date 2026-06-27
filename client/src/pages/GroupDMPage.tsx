@@ -5,9 +5,11 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from '../components/chat/EmojiPicker'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 interface GDMReaction {
   emoji: string
@@ -47,6 +49,9 @@ export default function GroupDMPage() {
   const [content, setContent] = useState('')
 
   const [showMembers, setShowMembers] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
@@ -69,6 +74,12 @@ export default function GroupDMPage() {
     queryKey: ['group-dm-messages', groupId],
     queryFn: () => api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data),
     enabled: !!groupId,
+  })
+
+  const { data: searchResults = [], isFetching: searchFetching } = useQuery<GDMMessage[]>({
+    queryKey: ['group-dm-search', groupId, searchQuery],
+    queryFn: () => api.get(`/dms/groups/${groupId}/messages/search?q=${encodeURIComponent(searchQuery)}`).then(r => r.data),
+    enabled: !!groupId && searchQuery.trim().length >= 2,
   })
 
   // Initialiser les messages une seule fois par groupId
@@ -243,6 +254,13 @@ export default function GroupDMPage() {
             <p className="text-xs text-fc-muted">{group.members.length} membres</p>
           </div>
           <button
+            onClick={() => setShowSearch(v => !v)}
+            className={`p-2 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted'}`}
+            title="Rechercher"
+          >
+            <Search size={18} />
+          </button>
+          <button
             onClick={() => setShowMembers(v => !v)}
             className={`p-2 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted'}`}
             title="Voir les membres"
@@ -250,6 +268,49 @@ export default function GroupDMPage() {
             <Users size={18} />
           </button>
         </div>
+
+        {/* Panneau de recherche */}
+        {showSearch && (
+          <div className="border-b border-fc-hover bg-fc-bg/50 px-4 py-3">
+            <div className="flex gap-2 mb-2">
+              <input
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') setSearchQuery(searchInput.trim()) }}
+                placeholder="Rechercher dans ce groupe..."
+                className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
+                autoFocus
+              />
+              <button
+                onClick={() => setSearchQuery(searchInput.trim())}
+                disabled={searchInput.trim().length < 2}
+                className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition disabled:opacity-40"
+              >
+                <Search size={14} />
+              </button>
+              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} className="p-1.5 text-fc-muted hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            {searchQuery.trim().length >= 2 && (
+              <div className="max-h-56 overflow-y-auto space-y-1">
+                {searchFetching && <p className="text-xs text-fc-muted text-center py-2">Recherche...</p>}
+                {!searchFetching && searchResults.length === 0 && (
+                  <p className="text-xs text-fc-muted text-center py-2">Aucun résultat pour "{searchQuery}"</p>
+                )}
+                {searchResults.map((msg: any) => (
+                  <div key={msg.id} className="bg-fc-channel rounded p-2 text-xs">
+                    <div className="flex gap-1.5 items-baseline mb-0.5">
+                      <span className="font-semibold text-white">{msg.author_username}</span>
+                      <span className="text-fc-muted">{format(new Date(msg.created_at), 'dd/MM HH:mm', { locale: fr })}</span>
+                    </div>
+                    <p className="text-fc-text">{msg.content ?? '📎 Pièce jointe'}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
