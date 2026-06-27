@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
+import { useUnread } from '../store/unread'
 import api from '../api/client'
 import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -35,6 +36,7 @@ export default function GroupDMPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const { user } = useAuth()
   const { on } = useWs()
+  const resetUnread = useUnread(s => s.reset)
   const [content, setContent] = useState('')
 
   const [showMembers, setShowMembers] = useState(false)
@@ -62,6 +64,11 @@ export default function GroupDMPage() {
   useEffect(() => {
     if (!initialMessages) return
     initialized.current = false
+  }, [groupId])
+
+  // Effacer le badge non-lu quand on ouvre le groupe
+  useEffect(() => {
+    if (groupId) resetUnread(groupId)
   }, [groupId])
 
   useEffect(() => {

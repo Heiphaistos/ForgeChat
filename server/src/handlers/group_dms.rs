@@ -191,14 +191,41 @@ pub async fn get_group_messages(
         .fetch_all(&state.db).await?
     };
 
-    let mut result: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
-        "id": r.get::<Uuid, _>("id"),
-        "content": r.get::<Option<String>, _>("content"),
-        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "sender_id": r.get::<Uuid, _>("sender_id"),
-        "sender_username": r.get::<String, _>("sender_username"),
-        "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
-    })).collect();
+    let msg_ids: Vec<Uuid> = rows.iter().map(|r| r.get::<Uuid, _>("id")).collect();
+
+    let reaction_rows = if msg_ids.is_empty() {
+        vec![]
+    } else {
+        sqlx::query(
+            "SELECT group_dm_message_id, emoji, user_id FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)"
+        )
+        .bind(&msg_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
+
+    let mut react_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in &reaction_rows {
+        let mid = r.get::<Uuid, _>("group_dm_message_id");
+        react_map.entry(mid).or_default().push(serde_json::json!({
+            "emoji": r.get::<String, _>("emoji"),
+            "user_id": r.get::<Uuid, _>("user_id"),
+        }));
+    }
+
+    let mut result: Vec<serde_json::Value> = rows.iter().map(|r| {
+        let id = r.get::<Uuid, _>("id");
+        serde_json::json!({
+            "id": id,
+            "content": r.get::<Option<String>, _>("content"),
+            "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "sender_id": r.get::<Uuid, _>("sender_id"),
+            "sender_username": r.get::<String, _>("sender_username"),
+            "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
+            "reactions": react_map.get(&id).cloned().unwrap_or_default(),
+        })
+    }).collect();
     result.reverse();
     Ok(Json(result))
 }
@@ -377,4 +404,67 @@ pub async fn edit_group_message(
     }
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── Réactions sur messages GroupDM ───────────────────────────────────────────
+
+pub async fn toggle_group_dm_reaction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((group_id, msg_id, emoji)): Path<(Uuid, Uuid, String)>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let msg_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_messages WHERE id=$1 AND dm_id=$2)"
+    ).bind(msg_id).bind(group_id).fetch_one(&state.db).await?;
+    if !msg_ok { return Err(AppError::NotFound("Message introuvable".into())); }
+
+    let emoji = emoji.trim().to_string();
+    if emoji.is_empty() || emoji.chars().count() > 16 {
+        return Err(AppError::BadRequest("Emoji invalide".into()));
+    }
+
+    let existing: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_reactions WHERE group_dm_message_id=$1 AND user_id=$2 AND emoji=$3)"
+    ).bind(msg_id).bind(claims.sub).bind(&emoji).fetch_one(&state.db).await?;
+
+    let added = if existing {
+        sqlx::query(
+            "DELETE FROM group_dm_reactions WHERE group_dm_message_id=$1 AND user_id=$2 AND emoji=$3"
+        ).bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        false
+    } else {
+        sqlx::query(
+            "INSERT INTO group_dm_reactions (group_dm_message_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING"
+        ).bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        true
+    };
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM group_dm_reactions WHERE group_dm_message_id=$1 AND emoji=$2"
+    ).bind(msg_id).bind(&emoji).fetch_one(&state.db).await?;
+
+    let members_all: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let react_event = serde_json::json!({
+        "type": "GROUP_DM_REACTION_TOGGLE",
+        "group_id": group_id,
+        "message_id": msg_id,
+        "emoji": emoji,
+        "added": added,
+        "count": count,
+        "user_id": claims.sub,
+    }).to_string();
+
+    for uid in members_all {
+        state.broadcast_to_user(uid, react_event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true, "added": added, "count": count })))
 }
