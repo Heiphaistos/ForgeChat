@@ -70,6 +70,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
+  const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const [timeoutUntil, setTimeoutUntil] = useState<Date | null>(null)
   const [showNotifModal, setShowNotifModal] = useState(false)
   const bellRef = useRef<HTMLButtonElement>(null)
@@ -121,8 +122,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       }),
       on('TYPING_START', (d: any) => {
         if (d.channel_id === channelId) {
-          setTyping(channelId, d.user_id, d.username ?? 'Utilisateur')
-          setTimeout(() => clearTyping(channelId, d.user_id), 5000)
+          const uid: string = d.user_id
+          setTyping(channelId, uid, d.username ?? 'Utilisateur')
+          const old = typingTimers.current.get(uid)
+          if (old) clearTimeout(old)
+          const tid = setTimeout(() => {
+            typingTimers.current.delete(uid)
+            clearTyping(channelId, uid)
+          }, 5000)
+          typingTimers.current.set(uid, tid)
         }
       }),
       on('MESSAGE_ATTACHMENT_ADDED', (d: any) => {
