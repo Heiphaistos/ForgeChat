@@ -5,7 +5,7 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, Paperclip } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import { format } from 'date-fns'
@@ -14,6 +14,14 @@ import { fr } from 'date-fns/locale'
 interface GDMReaction {
   emoji: string
   user_id: string
+}
+
+interface GDMAttachment {
+  id: string
+  url: string
+  filename: string
+  content_type: string
+  size: number
 }
 
 interface GDMMessage {
@@ -25,6 +33,7 @@ interface GDMMessage {
   sender_username: string
   sender_avatar: string | null
   reactions?: GDMReaction[]
+  attachments?: GDMAttachment[]
 }
 
 interface GDMMember {
@@ -58,6 +67,8 @@ export default function GroupDMPage() {
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSent = useRef(0)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -149,6 +160,14 @@ export default function GroupDMPage() {
         return { ...m, reactions: updated }
       }))
     })
+    const offAttach = on('GROUP_DM_ATTACHMENT_ADDED', (d: any) => {
+      if (d.group_id !== groupId) return
+      setAllMessages(prev => prev.map(m =>
+        m.id === d.message_id
+          ? { ...m, attachments: [...(m.attachments ?? []), ...d.attachments] }
+          : m
+      ))
+    })
     const offTyping = on('TYPING', (d: any) => {
       if (d.conversation_id !== groupId || d.user_id === user?.id) return
       setTypingUsers(prev => {
@@ -163,7 +182,7 @@ export default function GroupDMPage() {
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact(); offTyping() }
+    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping() }
   }, [groupId, on, user?.id])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
@@ -207,8 +226,18 @@ export default function GroupDMPage() {
   }, [loadingMore, hasMore, allMessages, groupId])
 
   const sendMsg = useMutation({
-    mutationFn: (text: string) =>
-      api.post(`/dms/groups/${groupId}/messages`, { content: text }),
+    mutationFn: ({ text, files }: { text: string; files: File[] }) =>
+      api.post(`/dms/groups/${groupId}/messages`, {
+        content: text || null,
+        has_attachments: files.length > 0,
+      }),
+    onSuccess: async (res, vars) => {
+      if (vars.files.length > 0 && res.data?.id) {
+        const fd = new FormData()
+        for (const f of vars.files) fd.append('files', f)
+        await api.post(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd).catch(() => null)
+      }
+    },
     onError: () => toast.error("Erreur d'envoi"),
   })
 
@@ -229,9 +258,10 @@ export default function GroupDMPage() {
 
   const submit = () => {
     const t = content.trim()
-    if (!t) return
-    sendMsg.mutate(t)
+    if (!t && pendingFiles.length === 0) return
+    sendMsg.mutate({ text: t, files: pendingFiles })
     setContent('')
+    setPendingFiles([])
   }
 
   if (!group) return (
@@ -405,14 +435,43 @@ export default function GroupDMPage() {
                         </>)}
                       </div>
                       <div className="flex flex-col">
-                        <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
-                          isMe
-                            ? 'bg-fc-accent text-white rounded-tr-sm'
-                            : 'bg-fc-channel text-fc-text rounded-tl-sm'
-                        }`}>
-                          {msg.content}
-                          {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
-                        </div>
+                        {msg.content && (
+                          <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
+                            isMe
+                              ? 'bg-fc-accent text-white rounded-tr-sm'
+                              : 'bg-fc-channel text-fc-text rounded-tl-sm'
+                          }`}>
+                            {msg.content}
+                            {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
+                          </div>
+                        )}
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="flex flex-col gap-1 mt-1">
+                            {msg.attachments.map(att => {
+                              const isImg = att.content_type.startsWith('image/')
+                              return isImg ? (
+                                <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer">
+                                  <img
+                                    src={att.url}
+                                    alt={att.filename}
+                                    className="max-w-[200px] max-h-[200px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition"
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={att.id}
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-3 py-2 bg-fc-channel rounded-xl text-xs text-fc-text hover:bg-fc-hover transition max-w-[200px]"
+                                >
+                                  <Paperclip size={12} className="flex-shrink-0 text-fc-muted" />
+                                  <span className="truncate">{att.filename}</span>
+                                </a>
+                              )
+                            })}
+                          </div>
+                        )}
                         {/* Réactions */}
                         {msg.reactions && msg.reactions.length > 0 && (() => {
                           const grouped: Record<string, { count: number; reacted: boolean }> = {}
@@ -463,7 +522,41 @@ export default function GroupDMPage() {
 
         {/* Input */}
         <div className="px-4 py-3 border-t border-fc-hover flex-shrink-0">
+          {/* Fichiers en attente */}
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-fc-channel rounded-lg text-xs text-fc-text">
+                  <Paperclip size={11} className="text-fc-muted" />
+                  <span className="truncate max-w-[120px]">{f.name}</span>
+                  <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-fc-muted hover:text-red-400">
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 bg-fc-input rounded-xl px-3 py-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={e => {
+                const files = Array.from(e.target.files ?? [])
+                const oversized = files.filter(f => f.size > 50 * 1024 * 1024)
+                if (oversized.length) toast.error('Certains fichiers dépassent 50 Mo')
+                setPendingFiles(prev => [...prev, ...files.filter(f => f.size <= 50 * 1024 * 1024)])
+                e.target.value = ''
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1 text-fc-muted hover:text-fc-accent rounded transition flex-shrink-0"
+              title="Joindre un fichier"
+            >
+              <Paperclip size={16} />
+            </button>
             <input
               type="text"
               value={content}
@@ -482,7 +575,7 @@ export default function GroupDMPage() {
             />
             <button
               onClick={submit}
-              disabled={!content.trim() || sendMsg.isPending}
+              disabled={(!content.trim() && pendingFiles.length === 0) || sendMsg.isPending}
               className="p-1.5 text-fc-muted hover:text-fc-accent disabled:opacity-30 transition rounded"
             >
               <Send size={16} />

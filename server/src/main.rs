@@ -737,6 +737,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id/messages/:msg_id", patch(handlers::group_dms::edit_group_message))
         .route("/dms/groups/:group_id/messages/:msg_id", delete(handlers::group_dms::delete_group_message))
         .route("/dms/groups/:group_id/messages/:msg_id/reactions/:emoji", put(handlers::group_dms::toggle_group_dm_reaction))
+        .route("/dms/groups/:group_id/messages/:msg_id/attachments", post(handlers::group_dms::upload_group_dm_attachment))
         .route("/dms/groups/:group_id/messages/search", get(handlers::group_dms::search_group_dm_messages))
         .route("/friends/blocked", get(handlers::friends::get_blocked))
         .route("/friends/block/:user_id", post(handlers::friends::block_user))
