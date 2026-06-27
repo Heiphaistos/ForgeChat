@@ -28,8 +28,14 @@ interface TypingUser {
   username: string
 }
 
-// key = message_id → [user_id, ...]
-type ReceiptMap = Map<string, string[]>
+interface ReceiptUser {
+  user_id: string
+  username: string
+  avatar?: string
+}
+
+// key = message_id → [ReceiptUser, ...]
+type ReceiptMap = Map<string, ReceiptUser[]>
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
@@ -69,7 +75,6 @@ function ReadReceiptBar({
   const messages = useChat(s => s.messagesByChannel[channelId] ?? EMPTY_MESSAGES)
   if (messages.length === 0 || receipts.size === 0) return null
 
-  // Trouver le dernier message qui a au moins un receipt
   const lastWithReceipt = [...messages].reverse().find(m => (receipts.get(m.id)?.length ?? 0) > 0)
   if (!lastWithReceipt) return null
 
@@ -78,15 +83,16 @@ function ReadReceiptBar({
 
   return (
     <div className="flex items-center justify-end gap-0.5 px-4 pb-1 flex-shrink-0">
-      {readers.slice(0, 3).map(uid => (
+      {readers.slice(0, 3).map(r => (
         <div
-          key={uid}
+          key={r.user_id}
           className="w-3.5 h-3.5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 ring-1 ring-fc-bg flex items-center justify-center"
-          title={`Lu par ${uid}`}
+          title={`Lu par ${r.username}`}
         >
-          <span className="text-[7px] font-bold text-white">
-            {uid.charAt(0).toUpperCase()}
-          </span>
+          {r.avatar
+            ? <img src={r.avatar} alt="" className="w-full h-full object-cover" />
+            : <span className="text-[7px] font-bold text-white">{r.username.charAt(0).toUpperCase()}</span>
+          }
         </div>
       ))}
       {readers.length > 3 && (
@@ -125,11 +131,16 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
     const off = on('DM_READ_RECEIPT', (d: any) => {
       if (d.conversation_id !== dmId) return
       if (d.user_id === me?.id) return
+      const user: ReceiptUser = {
+        user_id: d.user_id,
+        username: d.username ?? d.user_id.slice(0, 4),
+        avatar: d.avatar ?? undefined,
+      }
       setReceipts(prev => {
         const next = new Map(prev)
         const existing = next.get(d.message_id) ?? []
-        if (!existing.includes(d.user_id)) {
-          next.set(d.message_id, [...existing, d.user_id])
+        if (!existing.find(r => r.user_id === d.user_id)) {
+          next.set(d.message_id, [...existing, user])
         }
         return next
       })
