@@ -105,6 +105,11 @@ pub async fn get_invite_info(
             return Err(AppError::BadRequest("Invitation expirée".into()));
         }
     }
+    if let Some(max) = invite.max_uses {
+        if invite.uses >= max {
+            return Err(AppError::BadRequest("Invitation épuisée".into()));
+        }
+    }
 
     let server = sqlx::query(
         "SELECT id, name, icon, member_count FROM servers WHERE id=$1"

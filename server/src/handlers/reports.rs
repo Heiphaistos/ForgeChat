@@ -48,6 +48,18 @@ pub async fn create_report(
 
     require_member(&state, claims.sub, server_id).await?;
 
+    // Rate limit : max 10 reports par heure
+    let recent_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM message_reports
+         WHERE reporter_id=$1 AND created_at > NOW() - INTERVAL '1 hour'"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if recent_count >= 10 {
+        return Err(AppError::TooManyRequests);
+    }
+
     if author_id == claims.sub {
         return Err(AppError::BadRequest(
             "Impossible de signaler son propre message".into(),

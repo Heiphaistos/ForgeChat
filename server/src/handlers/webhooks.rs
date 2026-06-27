@@ -147,12 +147,13 @@ pub async fn execute_webhook(
     Path((webhook_id, token)): Path<(Uuid, String)>,
     Json(body): Json<WebhookMessageBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Rate limit : 10 messages / minute par webhook
+    // Rate limit : 10 messages / minute par webhook (fail-closed si Redis down)
     {
         use redis::AsyncCommands;
         let rl_key = format!("webhook_rl:{}", webhook_id);
         let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&rl_key, 1).await.unwrap_or(0);
+        let count: i64 = redis.incr(&rl_key, 1).await
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
         if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
         if count > 10 { return Err(AppError::TooManyRequests); }
     }
