@@ -551,6 +551,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/threads", post(handlers::threads::create_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", post(handlers::threads::send_thread_message))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", patch(handlers::threads::edit_thread_message))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", delete(handlers::threads::delete_thread_message))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id", patch(handlers::threads::archive_thread))
         // Forum
         .route("/servers/:server_id/channels/:channel_id/posts", get(handlers::forum::list_posts))
@@ -559,6 +561,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id", patch(handlers::forum::update_post))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id", delete(handlers::forum::delete_post))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies", post(handlers::forum::reply_to_post))
+        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", patch(handlers::forum::edit_reply))
+        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", delete(handlers::forum::delete_reply))
         // Custom Emojis
         .route("/servers/:server_id/emojis", get(handlers::emojis::list_emojis))
         .route("/servers/:server_id/emojis", post(handlers::emojis::create_emoji))

@@ -83,9 +83,9 @@ pub async fn upload_file(
             .unwrap_or("bin")
             .to_lowercase();
 
-        // Liste blanche d'extensions autorisées
+        // Liste blanche d'extensions autorisées (SVG réservé aux admins/mods — XSS via JS inline)
         const ALLOWED_EXTENSIONS: &[&str] = &[
-            "jpg", "jpeg", "png", "gif", "webp", "svg",
+            "jpg", "jpeg", "png", "gif", "webp",
             "mp4", "webm", "mov", "mkv",
             "mp3", "ogg", "wav", "flac",
             "pdf", "txt", "md",

@@ -332,3 +332,89 @@ pub async fn archive_thread(
 
     Ok(Json(thread))
 }
+
+#[derive(Deserialize)]
+pub struct EditThreadMessageBody {
+    pub content: String,
+}
+
+pub async fn edit_thread_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, thread_id, msg_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
+    Json(body): Json<EditThreadMessageBody>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    let content = body.content.trim().to_string();
+    if content.is_empty() || content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+
+    let rows = sqlx::query(
+        "UPDATE thread_messages SET content=$1, edited_at=NOW()
+         WHERE id=$2 AND thread_id=$3 AND user_id=$4"
+    )
+    .bind(&content)
+    .bind(msg_id)
+    .bind(thread_id)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+
+    if rows.rows_affected() == 0 {
+        return Err(AppError::Forbidden);
+    }
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "THREAD_MESSAGE_EDIT",
+        "thread_id": thread_id,
+        "channel_id": channel_id,
+        "message_id": msg_id,
+        "content": content,
+    }).to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_thread_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, thread_id, msg_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT user_id FROM thread_messages WHERE id=$1 AND thread_id=$2"
+    )
+    .bind(msg_id)
+    .bind(thread_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+
+    let author_id: Uuid = row.get("user_id");
+    if author_id != claims.sub {
+        use super::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    }
+
+    sqlx::query("DELETE FROM thread_messages WHERE id=$1 AND thread_id=$2")
+        .bind(msg_id)
+        .bind(thread_id)
+        .execute(&state.db)
+        .await?;
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "THREAD_MESSAGE_DELETE",
+        "thread_id": thread_id,
+        "channel_id": channel_id,
+        "message_id": msg_id,
+    }).to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

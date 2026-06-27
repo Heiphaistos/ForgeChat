@@ -356,3 +356,102 @@ pub async fn delete_post(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+#[derive(Debug, Deserialize)]
+pub struct EditReplyReq {
+    pub content: String,
+}
+
+pub async fn edit_reply(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, post_id, reply_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
+    Json(body): Json<EditReplyReq>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    let content = body.content.trim().to_string();
+    if content.is_empty() || content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+
+    // Vérifier que la réponse appartient à ce post et à l'utilisateur
+    let rows = sqlx::query(
+        "UPDATE forum_replies SET content=$1, edited_at=NOW()
+         WHERE id=$2 AND post_id=$3 AND user_id=$4
+         RETURNING id"
+    )
+    .bind(&content)
+    .bind(reply_id)
+    .bind(post_id)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+
+    if rows.rows_affected() == 0 {
+        return Err(AppError::Forbidden);
+    }
+
+    let event = serde_json::json!({
+        "type": "FORUM_REPLY_EDIT",
+        "channel_id": channel_id,
+        "post_id": post_id,
+        "reply_id": reply_id,
+        "content": content,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_reply(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, post_id, reply_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member(&state, claims.sub, server_id).await?;
+    require_channel_in_server(&state, channel_id, server_id).await?;
+
+    // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
+    use sqlx::Row;
+    let reply_row = sqlx::query(
+        "SELECT user_id FROM forum_replies WHERE id=$1 AND post_id=$2"
+    )
+    .bind(reply_id)
+    .bind(post_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Réponse introuvable".into()))?;
+
+    let author_id: Uuid = reply_row.get("user_id");
+    if author_id != claims.sub {
+        use super::servers::require_permission;
+        use crate::models::role::Permissions;
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    }
+
+    sqlx::query("DELETE FROM forum_replies WHERE id=$1 AND post_id=$2")
+        .bind(reply_id)
+        .bind(post_id)
+        .execute(&state.db)
+        .await?;
+
+    // Décrémenter reply_count
+    sqlx::query(
+        "UPDATE forum_posts SET reply_count = GREATEST(0, reply_count - 1) WHERE id=$1"
+    )
+    .bind(post_id)
+    .execute(&state.db)
+    .await?;
+
+    let event = serde_json::json!({
+        "type": "FORUM_REPLY_DELETE",
+        "channel_id": channel_id,
+        "post_id": post_id,
+        "reply_id": reply_id,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
