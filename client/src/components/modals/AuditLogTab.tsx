@@ -13,11 +13,11 @@ interface Server {
 interface AuditEntry {
   id: string
   action: string
-  user_id: string
-  username: string
+  user_id: string | null
+  username: string | null
   target_id: string | null
   target_name: string | null
-  details: string | null
+  details: Record<string, unknown> | null
   created_at: string
 }
 
@@ -114,14 +114,16 @@ export default function AuditLogTab({ server }: Props) {
                     {/* Contenu */}
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-white text-sm font-medium">{entry.username}</span>
+                        <span className="text-white text-sm font-medium">{entry.username ?? 'Utilisateur inconnu'}</span>
                         <span className={`text-xs ${color}`}>{label}</span>
                         {entry.target_name && (
                           <span className="text-xs text-fc-muted">→ <span className="text-white">{entry.target_name}</span></span>
                         )}
                       </div>
-                      {entry.details && (
-                        <div className="text-xs text-fc-muted mt-0.5 truncate">{entry.details}</div>
+                      {entry.details && Object.keys(entry.details).length > 0 && (
+                        <div className="text-xs text-fc-muted mt-0.5 truncate">
+                          {Object.entries(entry.details).slice(0, 3).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+                        </div>
                       )}
                     </div>
 
