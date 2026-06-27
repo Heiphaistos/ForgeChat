@@ -429,6 +429,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
+        <div className="md:hidden w-8 flex-shrink-0" />
         <MessagesSquare size={18} className="text-fc-muted flex-shrink-0" />
         <span className="font-semibold text-white">{channel.name}</span>
         {channel.topic && (

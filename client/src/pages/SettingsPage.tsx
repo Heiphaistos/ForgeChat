@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  User, Palette, Bell, Mic, Shield, Cpu, LogOut, X,
+  User, Palette, Bell, Mic, Shield, Cpu, LogOut, X, ChevronLeft,
   Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail, Clock,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
@@ -59,6 +59,8 @@ export default function SettingsPage() {
   const { user, updateMe, logout } = useAuth()
   const nav = useNavigate()
   const [section, setSection] = useState<Section>('account')
+  // Mobile : on affiche d'abord la nav, puis le contenu
+  const [mobileShowContent, setMobileShowContent] = useState(false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') nav(-1) }
@@ -68,10 +70,21 @@ export default function SettingsPage() {
 
   if (!user) return null
 
+  const currentLabel = NAV.find(n => n.id === section)?.label ?? ''
+
+  const handleSelectSection = (id: Section) => {
+    setSection(id)
+    setMobileShowContent(true)
+  }
+
   return (
     <div className="fixed inset-0 bg-fc-bg z-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-fc-channel flex flex-col flex-shrink-0 border-r border-fc-hover">
+      {/* Sidebar nav — masquée sur mobile quand contenu affiché */}
+      <div className={`
+        flex flex-col flex-shrink-0 bg-fc-channel border-r border-fc-hover
+        w-full md:w-64
+        ${mobileShowContent ? 'hidden md:flex' : 'flex'}
+      `}>
         <div className="p-4 border-b border-fc-hover flex items-center justify-between">
           <h1 className="text-sm font-semibold text-fc-muted uppercase tracking-wide">Paramètres</h1>
           <button
@@ -92,7 +105,7 @@ export default function SettingsPage() {
                 </div>
               )}
               <button
-                onClick={() => setSection(item.id)}
+                onClick={() => handleSelectSection(item.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition mb-0.5
                   ${section === item.id
                     ? 'bg-fc-hover text-white'
@@ -113,19 +126,31 @@ export default function SettingsPage() {
           </button>
         </nav>
 
-        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.50.0</div>
+        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.62.0</div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-8 py-8 pb-20">
+      {/* Content — masqué sur mobile tant que pas de section choisie */}
+      <div className={`
+        flex-1 overflow-y-auto
+        ${!mobileShowContent ? 'hidden md:block' : 'block'}
+      `}>
+        <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 pb-20">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-xl font-bold text-white">
-              {NAV.find(n => n.id === section)?.label}
-            </h2>
+            <div className="flex items-center gap-2">
+              {/* Retour mobile */}
+              <button
+                onClick={() => setMobileShowContent(false)}
+                className="md:hidden p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition -ml-1"
+                title="Retour"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <h2 className="text-xl font-bold text-white">{currentLabel}</h2>
+            </div>
             <button
               onClick={() => nav(-1)}
               className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
+              title="Fermer"
             >
               <X size={20} />
             </button>
