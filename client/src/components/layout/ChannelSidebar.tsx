@@ -243,7 +243,10 @@ export default function ChannelSidebar() {
       if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
     })
     const offMember = wsOn('MEMBER_ROLE_UPDATE', (d: any) => {
-      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['server', serverId] })
+      if (d.server_id === serverId) {
+        qc.invalidateQueries({ queryKey: ['server', serverId] })
+        qc.invalidateQueries({ queryKey: ['members', serverId] })
+      }
     })
     return () => { offCreate(); offUpdate(); offDelete(); offMember() }
   }, [serverId])

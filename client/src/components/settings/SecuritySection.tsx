@@ -1,13 +1,22 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Shield } from 'lucide-react'
+import QRCode from 'qrcode'
 
 export default function SecuritySection() {
   const qc = useQueryClient()
   const [step, setStep] = useState<'idle' | 'setup' | 'confirm'>('idle')
   const [code, setCode] = useState('')
   const [setupData, setSetupData] = useState<{ secret: string; qr_url: string; backup_codes: string[] } | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!setupData?.qr_url) { setQrDataUrl(null); return }
+    QRCode.toDataURL(setupData.qr_url, { width: 180, margin: 1 })
+      .then(url => setQrDataUrl(url))
+      .catch(() => setQrDataUrl(null))
+  }, [setupData?.qr_url])
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -65,11 +74,10 @@ export default function SecuritySection() {
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
           <p className="text-sm text-white font-medium">1. Scannez ce QR code avec votre app d'authentification</p>
           <div className="bg-white p-4 rounded-lg inline-block">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(setupData.qr_url)}`}
-              alt="QR 2FA"
-              className="w-44 h-44"
-            />
+            {qrDataUrl
+              ? <img src={qrDataUrl} alt="QR 2FA" className="w-44 h-44" />
+              : <div className="w-44 h-44 flex items-center justify-center text-xs text-gray-400">Chargement...</div>
+            }
           </div>
           <p className="text-xs text-fc-muted">
             Ou entrez manuellement : <code className="bg-fc-hover px-1 rounded">{setupData.secret}</code>
