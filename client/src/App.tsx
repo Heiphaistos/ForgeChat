@@ -314,10 +314,10 @@ function AppInner() {
       toast.success(`${d.username ?? 'Un membre'} a boosté le serveur !`, { duration: 5000, icon: '🚀' })
     })
     const offTagAssign = on('MEMBER_TAG_ASSIGN', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members-detailed', d.server_id] })
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
     })
     const offTagRemove = on('MEMBER_TAG_REMOVE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members-detailed', d.server_id] })
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
     })
     const offMemberTimeout = on('MEMBER_TIMEOUT', (d: any) => {
       if (d.user_id && d.user_id !== user.id) {
