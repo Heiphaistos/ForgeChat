@@ -16,6 +16,8 @@ import { useChat } from '../../store/chat'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import type { FileWithTtl } from './MessageInput'
+import api from '../../api/client'
+import toast from 'react-hot-toast'
 
 const EMPTY_MESSAGES: any[] = []
 
@@ -180,6 +182,36 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
     send({ type: 'DM_READ', message_id: lastMsgId, conversation_id: dmId })
   }, [lastMsgId, dmId, send])
 
+  // Écoute WS pour les edits/deletes DM
+  const { updateMessage, deleteMessage: storeDeleteMessage } = useChat()
+  useEffect(() => {
+    const offEdit = on('DM_MESSAGE_UPDATE', (d: any) => {
+      if (d.dm_id !== dmId) return
+      updateMessage(dmId, d.message_id, { content: d.content, edited_at: d.edited_at })
+    })
+    const offDelete = on('DM_MESSAGE_DELETE', (d: any) => {
+      if (d.dm_id !== dmId) return
+      storeDeleteMessage(dmId, d.message_id)
+    })
+    return () => { offEdit(); offDelete() }
+  }, [dmId, on, updateMessage, storeDeleteMessage])
+
+  const handleDeleteMessage = useCallback(async (msgId: string) => {
+    try {
+      await api.delete(`/dms/${dmId}/messages/${msgId}`)
+    } catch {
+      toast.error('Impossible de supprimer ce message')
+    }
+  }, [dmId])
+
+  const handleEditMessage = useCallback(async (msgId: string, content: string) => {
+    try {
+      await api.patch(`/dms/${dmId}/messages/${msgId}`, { content })
+    } catch {
+      toast.error('Impossible de modifier ce message')
+    }
+  }, [dmId])
+
   // Intercepter les frappes via la capture sur le conteneur (bubble depuis MessageInput)
   const handleKeyCapture = useCallback(() => {
     if (typingDebounce.current) clearTimeout(typingDebounce.current)
@@ -200,8 +232,8 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
       <MessageList
         channelId={dmId}
         serverId=""
-        onDeleteMessage={() => {}}
-        onEditMessage={() => {}}
+        onDeleteMessage={handleDeleteMessage}
+        onEditMessage={handleEditMessage}
         onLoadMore={onLoadMore}
       />
       <ReadReceiptBar channelId={dmId} receipts={receipts} />

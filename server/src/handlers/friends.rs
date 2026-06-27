@@ -1471,3 +1471,103 @@ pub async fn invite_bulk(
         "not_found": not_found,
     })))
 }
+
+#[derive(serde::Deserialize)]
+pub struct EditDmBody {
+    pub content: String,
+}
+
+pub async fn edit_dm_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((dm_id, msg_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<EditDmBody>,
+) -> crate::error::Result<Json<serde_json::Value>> {
+    // Vérifier accès DM
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(crate::error::AppError::Forbidden); }
+
+    let content = body.content.trim().to_string();
+    if content.is_empty() || content.len() > 4000 {
+        return Err(crate::error::AppError::BadRequest("Contenu invalide (1-4000 chars)".into()));
+    }
+
+    // Sauvegarder ancienne version dans l'historique puis éditer
+    sqlx::query(
+        "INSERT INTO message_edits (message_id, content)
+         SELECT $1, content FROM dm_messages WHERE id=$1 AND sender_id=$2 AND content IS NOT NULL"
+    )
+    .bind(msg_id).bind(claims.sub).execute(&state.db).await?;
+
+    let rows = sqlx::query(
+        "UPDATE dm_messages SET content=$2, edited_at=NOW() WHERE id=$1 AND sender_id=$3 RETURNING dm_channel_id"
+    )
+    .bind(msg_id).bind(&content).bind(claims.sub)
+    .execute(&state.db).await?;
+
+    if rows.rows_affected() == 0 {
+        return Err(crate::error::AppError::Forbidden);
+    }
+
+    // Notifier les deux participants
+    let event = serde_json::json!({
+        "type": "DM_MESSAGE_UPDATE",
+        "dm_id": dm_id,
+        "message_id": msg_id,
+        "content": content,
+        "edited_at": Utc::now(),
+    });
+    // Récupérer l'autre participant
+    use sqlx::Row;
+    if let Some(row) = sqlx::query(
+        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other_id FROM dm_channels WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).fetch_optional(&state.db).await? {
+        let other_id: Uuid = row.get("other_id");
+        state.broadcast_to_user(other_id, event.to_string()).await;
+    }
+    state.broadcast_to_user(claims.sub, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_dm_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((dm_id, msg_id)): Path<(Uuid, Uuid)>,
+) -> crate::error::Result<Json<serde_json::Value>> {
+    // Vérifier accès DM
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    )
+    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(crate::error::AppError::Forbidden); }
+
+    let rows = sqlx::query(
+        "DELETE FROM dm_messages WHERE id=$1 AND sender_id=$2"
+    )
+    .bind(msg_id).bind(claims.sub).execute(&state.db).await?;
+
+    if rows.rows_affected() == 0 {
+        return Err(crate::error::AppError::Forbidden);
+    }
+
+    // Notifier les deux participants
+    let event = serde_json::json!({
+        "type": "DM_MESSAGE_DELETE",
+        "dm_id": dm_id,
+        "message_id": msg_id,
+    });
+    use sqlx::Row;
+    if let Some(row) = sqlx::query(
+        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other_id FROM dm_channels WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).fetch_optional(&state.db).await? {
+        let other_id: Uuid = row.get("other_id");
+        state.broadcast_to_user(other_id, event.to_string()).await;
+    }
+    state.broadcast_to_user(claims.sub, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
