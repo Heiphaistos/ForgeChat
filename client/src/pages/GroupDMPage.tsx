@@ -5,8 +5,14 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import EmojiPicker from '../components/chat/EmojiPicker'
+
+interface GDMReaction {
+  emoji: string
+  user_id: string
+}
 
 interface GDMMessage {
   id: string
@@ -16,6 +22,7 @@ interface GDMMessage {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  reactions?: GDMReaction[]
 }
 
 interface GDMMember {
@@ -42,6 +49,7 @@ export default function GroupDMPage() {
   const [showMembers, setShowMembers] = useState(false)
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -97,7 +105,19 @@ export default function GroupDMPage() {
         m.id === d.message_id ? { ...m, content: d.content, edited_at: new Date().toISOString() } : m
       ))
     })
-    return () => { offNew(); offDelete(); offEdit() }
+    const offReact = on('GROUP_DM_REACTION_TOGGLE', (d: any) => {
+      if (d.group_id !== groupId) return
+      setAllMessages(prev => prev.map(m => {
+        if (m.id !== d.message_id) return m
+        const reactions = m.reactions ?? []
+        const updated = d.added
+          ? [...reactions.filter(r => !(r.emoji === d.emoji && r.user_id === d.user_id)),
+             { emoji: d.emoji, user_id: d.user_id }]
+          : reactions.filter(r => !(r.emoji === d.emoji && r.user_id === d.user_id))
+        return { ...m, reactions: updated }
+      }))
+    })
+    return () => { offNew(); offDelete(); offEdit(); offReact() }
   }, [groupId, on])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
@@ -152,6 +172,14 @@ export default function GroupDMPage() {
     onSuccess: () => { setEditingMsgId(null); toast.success('Message modifié') },
     onError: () => toast.error('Impossible de modifier'),
   })
+
+  const toggleReaction = useCallback(async (msgId: string, emoji: string) => {
+    try {
+      await api.put(`/dms/groups/${groupId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+    } catch {
+      toast.error('Impossible d\'ajouter la réaction')
+    }
+  }, [groupId])
 
   const submit = () => {
     const t = content.trim()
@@ -245,8 +273,25 @@ export default function GroupDMPage() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">
-                      {isMe && (
-                        <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition">
+                      <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition">
+                        <div className="relative">
+                          <button
+                            onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}
+                            className="p-1 text-fc-muted hover:text-fc-accent rounded transition"
+                            title="Réagir"
+                          >
+                            <SmilePlus size={12} />
+                          </button>
+                          {emojiPickerFor === msg.id && (
+                            <div className={`absolute z-50 ${isMe ? 'right-0' : 'left-0'} bottom-7`}>
+                              <EmojiPicker
+                                onPick={emoji => { toggleReaction(msg.id, emoji); setEmojiPickerFor(null) }}
+                                onClose={() => setEmojiPickerFor(null)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}
                             className="p-1 text-fc-muted hover:text-white rounded transition"
@@ -261,15 +306,44 @@ export default function GroupDMPage() {
                           >
                             <Trash2 size={12} />
                           </button>
+                        </>)}
+                      </div>
+                      <div className="flex flex-col">
+                        <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
+                          isMe
+                            ? 'bg-fc-accent text-white rounded-tr-sm'
+                            : 'bg-fc-channel text-fc-text rounded-tl-sm'
+                        }`}>
+                          {msg.content}
+                          {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
                         </div>
-                      )}
-                      <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
-                        isMe
-                          ? 'bg-fc-accent text-white rounded-tr-sm'
-                          : 'bg-fc-channel text-fc-text rounded-tl-sm'
-                      }`}>
-                        {msg.content}
-                        {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
+                        {/* Réactions */}
+                        {msg.reactions && msg.reactions.length > 0 && (() => {
+                          const grouped: Record<string, { count: number; reacted: boolean }> = {}
+                          for (const r of msg.reactions) {
+                            if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, reacted: false }
+                            grouped[r.emoji].count++
+                            if (r.user_id === user?.id) grouped[r.emoji].reacted = true
+                          }
+                          return (
+                            <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              {Object.entries(grouped).map(([emoji, { count, reacted }]) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => toggleReaction(msg.id, emoji)}
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition ${
+                                    reacted
+                                      ? 'bg-fc-accent/20 border-fc-accent/50 text-white'
+                                      : 'bg-fc-channel border-fc-hover text-fc-muted hover:border-fc-accent/50'
+                                  }`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span>{count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   )}
