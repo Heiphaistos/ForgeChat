@@ -45,6 +45,7 @@ export default function StatsTab({ serverId }: Props) {
     queryFn: () => api.get(`/servers/${serverId}/stats`).then(r => r.data),
     refetchInterval: 30_000,
     staleTime: 15_000,
+    retry: false,
   })
 
   if (error) {

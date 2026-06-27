@@ -862,7 +862,7 @@ export default function ChannelSidebar() {
         <InviteModal serverId={server.id} serverName={server.name} onClose={() => setShowInvite(false)} />
       )}
       {showSettings && server && (
-        <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} />
+        <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} isAdmin={isOwnerOrAdmin} />
       )}
       {channelSettings && serverId && (
         <ChannelSettingsModal

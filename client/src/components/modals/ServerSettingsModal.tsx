@@ -46,6 +46,7 @@ interface Server {
 interface Props {
   server: Server
   onClose: () => void
+  isAdmin?: boolean
 }
 
 type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
@@ -94,7 +95,7 @@ function BoostSection({ server }: { server: any }) {
   )
 }
 
-export default function ServerSettingsModal({ server, onClose }: Props) {
+export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
   const [tab, setTab] = useState<Tab>('general')
   const [name, setName] = useState(server.name)
   const [description, setDescription] = useState(server.description ?? '')
@@ -284,10 +285,10 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
         { id: 'roles'    as Tab, label: 'Rôles',     icon: Shield },
         { id: 'members'  as Tab, label: 'Membres',   icon: Users },
         { id: 'tags'     as Tab, label: 'Tags clan',  icon: Tag },
-        { id: 'bans'     as Tab, label: 'Bans',      icon: Ban },
+        ...(isAdmin ? [{ id: 'bans' as Tab, label: 'Bans', icon: Ban }] : []),
         { id: 'emojis'   as Tab, label: 'Emojis',    icon: SmilePlus },
         { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
-        { id: 'webhooks' as Tab, label: 'Webhooks',  icon: Link },
+        ...(isAdmin ? [{ id: 'webhooks' as Tab, label: 'Webhooks', icon: Link }] : []),
         { id: 'feeds'    as Tab, label: 'Flux RSS',  icon: Rss },
       ],
     },
@@ -295,9 +296,11 @@ export default function ServerSettingsModal({ server, onClose }: Props) {
       label: 'Modération',
       tabs: [
         { id: 'events'  as Tab, label: 'Événements', icon: Calendar },
-        { id: 'audit'   as Tab, label: 'Audit Log',  icon: ScrollText },
-        { id: 'automod' as Tab, label: 'AutoMod',    icon: Shield },
-        { id: 'stats'   as Tab, label: 'Statistiques', icon: BarChart2 },
+        ...(isAdmin ? [
+          { id: 'audit'   as Tab, label: 'Audit Log',    icon: ScrollText },
+          { id: 'automod' as Tab, label: 'AutoMod',      icon: Shield },
+          { id: 'stats'   as Tab, label: 'Statistiques', icon: BarChart2 },
+        ] : []),
       ],
     },
   ]

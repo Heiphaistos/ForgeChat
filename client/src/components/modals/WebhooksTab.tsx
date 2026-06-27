@@ -42,6 +42,7 @@ export default function WebhooksTab({ server, channels }: Props) {
   const { data: webhooks = [], isLoading } = useQuery<Webhook[]>({
     queryKey: ['webhooks', server.id],
     queryFn: () => api.get(`/servers/${server.id}/webhooks`).then(r => r.data),
+    retry: false,
   })
 
   const createWebhook = useMutation({

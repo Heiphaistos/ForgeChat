@@ -48,6 +48,7 @@ export default function AutoModTab({ server, channels }: Props) {
   const { data, isLoading } = useQuery<AutoModConfig>({
     queryKey: ['automod', server.id],
     queryFn: () => api.get(`/servers/${server.id}/automod`).then(r => r.data),
+    retry: false,
   })
 
   useEffect(() => {

@@ -61,6 +61,7 @@ export default function AuditLogTab({ server }: Props) {
     queryKey: ['audit', server.id],
     queryFn: () => api.get(`/servers/${server.id}/audit`).then(r => r.data),
     refetchInterval: 30_000,
+    retry: false,
   })
 
   const filtered = filter === 'all' ? entries : entries.filter(e => e.action === filter)
