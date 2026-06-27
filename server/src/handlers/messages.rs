@@ -426,10 +426,30 @@ pub async fn delete_message(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
+    // Récupérer les fichiers attachés avant la suppression pour nettoyage disque
+    let attachment_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT url FROM attachments WHERE message_id=$1"
+    )
+    .bind(message_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
     sqlx::query("DELETE FROM messages WHERE id=$1")
         .bind(message_id)
         .execute(&state.db)
         .await?;
+
+    // Supprimer les fichiers du disque (fail silencieux — DB est la source de vérité)
+    let upload_dir = state.config.upload_dir.clone();
+    tokio::spawn(async move {
+        for url in attachment_urls {
+            if let Some(rel) = url.strip_prefix("/uploads/") {
+                let path = std::path::Path::new(&upload_dir).join(rel);
+                let _ = tokio::fs::remove_file(&path).await;
+            }
+        }
+    });
 
     let event = serde_json::json!({
         "type": "MESSAGE_DELETE",
