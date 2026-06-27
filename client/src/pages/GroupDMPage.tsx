@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
@@ -42,7 +42,7 @@ interface GroupDM {
 export default function GroupDMPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const { user } = useAuth()
-  const { on } = useWs()
+  const { on, send } = useWs()
   const resetUnread = useUnread(s => s.reset)
   const [content, setContent] = useState('')
 
@@ -50,6 +50,9 @@ export default function GroupDMPage() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
+  const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
+  const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTypingSent = useRef(0)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -74,9 +77,11 @@ export default function GroupDMPage() {
     initialized.current = false
   }, [groupId])
 
-  // Effacer le badge non-lu quand on ouvre le groupe
+  // Effacer le badge non-lu quand on ouvre le groupe (client + serveur)
   useEffect(() => {
-    if (groupId) resetUnread(groupId)
+    if (!groupId) return
+    resetUnread(groupId)
+    api.post(`/dms/groups/${groupId}/read`).catch(() => {})
   }, [groupId])
 
   useEffect(() => {
@@ -117,8 +122,22 @@ export default function GroupDMPage() {
         return { ...m, reactions: updated }
       }))
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact() }
-  }, [groupId, on])
+    const offTyping = on('TYPING', (d: any) => {
+      if (d.conversation_id !== groupId || d.user_id === user?.id) return
+      setTypingUsers(prev => {
+        const entry = prev[d.user_id]
+        if (entry) clearTimeout(entry.timer)
+        const timer = setTimeout(() => {
+          setTypingUsers(p => {
+            const { [d.user_id]: _, ...rest } = p
+            return rest
+          })
+        }, 3000)
+        return { ...prev, [d.user_id]: { username: d.username, timer } }
+      })
+    })
+    return () => { offNew(); offDelete(); offEdit(); offReact(); offTyping() }
+  }, [groupId, on, user?.id])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
   const prevLen = useRef(0)
@@ -357,6 +376,14 @@ export default function GroupDMPage() {
           <div ref={bottomRef} />
         </div>
 
+        {/* Typing indicator */}
+        {Object.keys(typingUsers).length > 0 && (
+          <div className="px-4 pb-1 text-xs text-fc-muted flex-shrink-0">
+            {Object.values(typingUsers).map(u => u.username).join(', ')}
+            {Object.keys(typingUsers).length === 1 ? ' est en train d\'écrire...' : ' écrivent...'}
+          </div>
+        )}
+
         {/* Input */}
         <div className="px-4 py-3 border-t border-fc-hover flex-shrink-0">
           <div className="flex items-center gap-2 bg-fc-input rounded-xl px-3 py-2">
@@ -364,7 +391,14 @@ export default function GroupDMPage() {
               type="text"
               value={content}
               onChange={e => setContent(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() } }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); return }
+                const now = Date.now()
+                if (now - lastTypingSent.current > 2000) {
+                  lastTypingSent.current = now
+                  send({ type: 'TYPING', conversation_id: groupId, is_group: true })
+                }
+              }}
               placeholder={`Message dans ${group.name}...`}
               className="flex-1 bg-transparent text-sm text-white placeholder:text-fc-muted outline-none"
               maxLength={4000}

@@ -113,7 +113,63 @@ pub async fn get_unread_counts(
         }
     }
 
+    // Ajouter les non-lus des GroupDMs
+    let gdm_rows = sqlx::query(
+        "SELECT gdm.dm_id as id, COUNT(*) as count
+         FROM group_dm_messages gdm
+         JOIN group_dm_members mbr ON mbr.dm_id = gdm.dm_id AND mbr.user_id = $1
+         WHERE gdm.sender_id != $1
+           AND gdm.created_at > COALESCE(
+               (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=gdm.dm_id AND user_id=$1),
+               NOW() - INTERVAL '30 days'
+           )
+         GROUP BY gdm.dm_id"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    for r in &gdm_rows {
+        let count: i64 = r.get("count");
+        if count > 0 {
+            result.push(serde_json::json!({
+                "channel_id": r.get::<Uuid, _>("id"),
+                "server_id": serde_json::Value::Null,
+                "count": count,
+            }));
+        }
+    }
+
     Ok(Json(result))
+}
+
+/// Marque un GroupDM comme lu pour l'utilisateur courant
+pub async fn mark_group_dm_read(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    )
+    .bind(group_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if !is_member {
+        return Err(AppError::Forbidden);
+    }
+    sqlx::query(
+        "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at = NOW()"
+    )
+    .bind(group_id)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 /// Retourne les @mentions récentes de l'utilisateur (7 derniers jours, max 50)
