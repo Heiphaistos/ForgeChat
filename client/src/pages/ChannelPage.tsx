@@ -57,7 +57,6 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const { on, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
-  const resetServer = useUnread(s => s.resetServer)
   const qc = useQueryClient()
   const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 768)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
@@ -95,9 +94,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   // Marquer comme lu + reset load-more quand on ouvre un nouveau canal
   useEffect(() => {
     if (channelId) {
-      markRead(channelId)
+      markRead(channelId, serverId || undefined)
       setHasMore(true)
-      if (serverId) resetServer(serverId)
     }
   }, [channelId, serverId])
 
