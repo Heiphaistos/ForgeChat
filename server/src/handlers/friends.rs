@@ -163,6 +163,8 @@ pub async fn get_dms(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+
     let dms = sqlx::query(
         "WITH last_msg AS (
            SELECT dm_channel_id, MAX(created_at) AS last_message_at
@@ -183,8 +185,7 @@ pub async fn get_dms(
     .fetch_all(&state.db)
     .await?;
 
-    use sqlx::Row;
-    let result = dms.iter().map(|r| serde_json::json!({
+    let mut result: Vec<serde_json::Value> = dms.iter().map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
         "other_user_id": r.get::<Uuid, _>("other_user_id"),
         "username": r.get::<String, _>("username"),
@@ -192,7 +193,46 @@ pub async fn get_dms(
         "avatar": r.get::<Option<String>, _>("avatar"),
         "status": r.get::<String, _>("status"),
         "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+        "is_group": false,
     })).collect();
+
+    // Inclure les Group DMs
+    let group_dms = sqlx::query(
+        "WITH last_gdm AS (
+           SELECT dm_id, MAX(created_at) AS last_message_at
+           FROM group_dm_messages
+           GROUP BY dm_id
+         ),
+         member_counts AS (
+           SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
+         )
+         SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at
+         FROM group_dm_channels g
+         JOIN group_dm_members gm ON gm.dm_id = g.id AND gm.user_id = $1
+         LEFT JOIN last_gdm lgm ON lgm.dm_id = g.id
+         LEFT JOIN member_counts mc ON mc.dm_id = g.id
+         ORDER BY COALESCE(lgm.last_message_at, g.created_at) DESC"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    for r in &group_dms {
+        result.push(serde_json::json!({
+            "id": r.get::<Uuid, _>("id"),
+            "name": r.get::<String, _>("name"),
+            "member_count": r.get::<Option<i64>, _>("member_count").unwrap_or(0),
+            "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+            "is_group": true,
+        }));
+    }
+
+    // Trier par last_message_at desc (null dernier)
+    result.sort_by(|a, b| {
+        let ta = a["last_message_at"].as_str();
+        let tb = b["last_message_at"].as_str();
+        tb.cmp(&ta)
+    });
 
     Ok(Json(result))
 }
