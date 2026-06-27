@@ -379,10 +379,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
 
             // Destination effective (peut changer si canal auto-create)
             let mut effective_channel_id = channel_id;
+            let mut user_limit: Option<i32> = None;
 
             if let Some(ref row) = channel_row {
                 use sqlx::Row;
-                let user_limit: Option<i32> = row.get("user_limit");
+                user_limit = row.get("user_limit");
                 let password_hash: Option<String> = row.get("voice_password_hash");
                 let is_auto_create: bool = row.get("is_auto_create");
                 let auto_create_name: Option<String> = row.get("auto_create_name");
@@ -400,27 +401,6 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                         });
                         state.broadcast_to_user(user_id, err.to_string()).await;
                         return;
-                    }
-                }
-
-                // Vérification limite utilisateurs
-                if let Some(limit) = user_limit {
-                    if limit > 0 {
-                        let current_count = {
-                            let rooms = state.voice_rooms.read().await;
-                            rooms.get(&channel_id).map(|r| r.len()).unwrap_or(0)
-                        };
-                        if current_count >= limit as usize {
-                            let err = serde_json::json!({
-                                "type": "VOICE_JOIN_ERROR",
-                                "channel_id": channel_id,
-                                "reason": "channel_full",
-                                "limit": limit,
-                                "current": current_count,
-                            });
-                            state.broadcast_to_user(user_id, err.to_string()).await;
-                            return;
-                        }
                     }
                 }
 
@@ -465,7 +445,17 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
                 }
             }
 
-            let existing_ids = state.voice_join(user_id, effective_channel_id).await;
+            let max_users = user_limit.map(|l| l as usize);
+            let Some(existing_ids) = state.voice_join(user_id, effective_channel_id, max_users).await else {
+                let err = serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": effective_channel_id,
+                    "reason": "channel_full",
+                    "limit": user_limit,
+                });
+                state.broadcast_to_user(user_id, err.to_string()).await;
+                return;
+            };
 
             // Construire la liste des pairs existants avec leur état vocal
             let mut existing_peers = Vec::new();

@@ -159,13 +159,13 @@ pub async fn execute_webhook(
     }
 
     use sqlx::Row;
-    let row = sqlx::query("SELECT channel_id, name, server_id FROM webhooks WHERE id=$1 AND token=$2")
+    let row = sqlx::query("SELECT channel_id, name, created_by FROM webhooks WHERE id=$1 AND token=$2")
         .bind(webhook_id).bind(&token)
         .fetch_optional(&state.db).await?
         .ok_or(AppError::Unauthorized)?;
 
     let channel_id: Uuid = row.get("channel_id");
-    let server_id: Uuid = row.get("server_id");
+    let created_by: Uuid = row.get("created_by");
     let raw_name: String = row.get("name");
     let webhook_name: String = match &body.username {
         Some(u) if !u.trim().is_empty() && u.len() <= 80 => u.trim().to_string(),
@@ -180,10 +180,9 @@ pub async fn execute_webhook(
     let msg_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO messages (id, channel_id, user_id, content, type)
-         SELECT $1, $2, owner_id, $3, 'webhook'
-         FROM servers WHERE id=$4"
+         VALUES ($1, $2, $3, $4, 'webhook')"
     )
-    .bind(msg_id).bind(channel_id).bind(&content).bind(server_id)
+    .bind(msg_id).bind(channel_id).bind(created_by).bind(&content)
     .execute(&state.db).await?;
 
     let event = serde_json::json!({

@@ -384,6 +384,7 @@ pub async fn refresh(
 pub async fn change_password(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
+    axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
@@ -433,6 +434,16 @@ pub async fn change_password(
     }
 
     let new_hash = hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
+
+    // Blocklister le token actuel pour sa durée de vie restante
+    let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
+    if remaining_secs > 0 {
+        let access_hash = crate::middleware::auth::hash_token(&raw_token.0);
+        let blocklist_key = format!("jwtblock:{}", access_hash);
+        let mut redis = state.redis.lock().await;
+        let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
+        drop(redis);
+    }
 
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
         .bind(claims.sub)

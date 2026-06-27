@@ -118,7 +118,8 @@ impl AppState {
     }
 
     // Rejoindre un salon vocal — retourne les user_ids déjà présents
-    pub async fn voice_join(&self, user_id: Uuid, channel_id: Uuid) -> Vec<Uuid> {
+    /// Rejoindre un salon vocal. Retourne `None` si la limite est atteinte.
+    pub async fn voice_join(&self, user_id: Uuid, channel_id: Uuid, max_users: Option<usize>) -> Option<Vec<Uuid>> {
         // Auto-leave de l'ancien salon si nécessaire
         {
             let mut user_voice = self.user_voice.write().await;
@@ -135,9 +136,15 @@ impl AppState {
 
         let mut rooms = self.voice_rooms.write().await;
         let room = rooms.entry(channel_id).or_insert_with(HashSet::new);
+        // Vérification atomique de la limite (dans le write lock pour éviter la race condition)
+        if let Some(limit) = max_users {
+            if limit > 0 && !room.contains(&user_id) && room.len() >= limit {
+                return None;
+            }
+        }
         let existing: Vec<Uuid> = room.iter().filter(|&&u| u != user_id).copied().collect();
         room.insert(user_id);
-        existing
+        Some(existing)
     }
 
     // Quitter le salon vocal — retourne le channel_id quitté et les pairs restants

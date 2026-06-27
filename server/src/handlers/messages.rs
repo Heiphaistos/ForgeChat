@@ -446,6 +446,9 @@ pub async fn add_reaction(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id, emoji)): Path<(Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
+    if emoji.is_empty() || emoji.chars().count() > 64 {
+        return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
+    }
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
@@ -482,6 +485,9 @@ pub async fn remove_reaction(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id, emoji)): Path<(Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
+    if emoji.is_empty() || emoji.chars().count() > 64 {
+        return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
+    }
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
