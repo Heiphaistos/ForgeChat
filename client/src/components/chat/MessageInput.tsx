@@ -166,9 +166,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const queryClient = useQueryClient()
 
   const { data: mentionResults = [] } = useQuery<MentionUser[]>({
-    queryKey: ['mention_search', mentionQuery],
-    queryFn: () =>
-      api.get(`/users/search?q=${encodeURIComponent(mentionQuery)}`).then(r => r.data),
+    queryKey: ['mention_search', serverId, mentionQuery],
+    queryFn: () => {
+      const url = serverId
+        ? `/users/search?q=${encodeURIComponent(mentionQuery)}&server_id=${serverId}`
+        : `/users/search?q=${encodeURIComponent(mentionQuery)}`
+      return api.get(url).then(r => r.data)
+    },
     enabled: showMentions && mentionQuery.length >= 1,
   })
 

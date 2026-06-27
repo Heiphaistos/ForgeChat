@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::servers::require_member,
     middleware::auth::Claims,
     models::user::{UpdateProfileRequest, UserPublic},
     state::AppState,
@@ -301,18 +302,36 @@ pub async fn search_users(
 
     let q_esc = query.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     let pattern = format!("%{}%", q_esc);
-    let users = sqlx::query_as::<_, crate::models::user::User>(
-        "SELECT * FROM users WHERE LOWER(username) LIKE $1 AND id != $2 LIMIT 20"
-    )
-    .bind(&pattern)
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await?
-    .into_iter()
-    .map(Into::into)
-    .collect();
 
-    Ok(Json(users))
+    // Scope to server members when server_id is provided
+    let server_id: Option<uuid::Uuid> = params.get("server_id")
+        .and_then(|s| s.parse().ok());
+
+    let users: Vec<crate::models::user::User> = if let Some(sid) = server_id {
+        // Verify caller is also a member before revealing server members
+        require_member(&state, claims.sub, sid).await?;
+        sqlx::query_as::<_, crate::models::user::User>(
+            "SELECT u.* FROM users u
+             JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $3
+             WHERE LOWER(u.username) LIKE $1 AND u.id != $2
+             LIMIT 20"
+        )
+        .bind(&pattern)
+        .bind(claims.sub)
+        .bind(sid)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query_as::<_, crate::models::user::User>(
+            "SELECT * FROM users WHERE LOWER(username) LIKE $1 AND id != $2 LIMIT 20"
+        )
+        .bind(&pattern)
+        .bind(claims.sub)
+        .fetch_all(&state.db)
+        .await?
+    };
+
+    Ok(Json(users.into_iter().map(Into::into).collect()))
 }
 
 pub async fn get_login_history(
