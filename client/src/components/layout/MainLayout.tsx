@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import ServerSidebar from './ServerSidebar'
@@ -6,9 +6,10 @@ import ChannelSidebar from './ChannelSidebar'
 import UserPanel from './UserPanel'
 import VoiceBar from '../voice/VoiceBar'
 import RightSidebar, { useRightSidebar } from './RightSidebar'
-import ChannelPage from '../../pages/ChannelPage'
 import { SplitContext } from '../../contexts/SplitContext'
 import { MobileContext } from '../../contexts/MobileContext'
+
+const ChannelPage = lazy(() => import('../../pages/ChannelPage'))
 
 const SIDEBAR_MIN = 180
 const SIDEBAR_MAX = 360
@@ -151,11 +152,13 @@ export default function MainLayout() {
             {/* Panneau split — second canal (desktop uniquement) */}
             {splitChannelId && (
               <div className="hidden md:flex flex-1 border-l border-fc-hover overflow-hidden min-w-0">
-                <ChannelPage
-                  forcedChannelId={splitChannelId}
-                  isSplit
-                  onClose={() => setSplitChannelId(null)}
-                />
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+                  <ChannelPage
+                    forcedChannelId={splitChannelId}
+                    isSplit
+                    onClose={() => setSplitChannelId(null)}
+                  />
+                </Suspense>
               </div>
             )}
           </div>

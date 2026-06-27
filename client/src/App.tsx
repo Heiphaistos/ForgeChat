@@ -1,39 +1,49 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
 import { usePresence } from './store/presence'
 import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
-import VerifyEmailPage from './pages/VerifyEmailPage'
-import InvitePage from './pages/InvitePage'
-import FriendInvitePage from './pages/FriendInvitePage'
-import SettingsPage from './pages/SettingsPage'
-import MainLayout from './components/layout/MainLayout'
-import ChannelPage from './pages/ChannelPage'
-import DMPage from './pages/DMPage'
-import GroupDMPage from './pages/GroupDMPage'
-import FriendsPage from './pages/FriendsPage'
-import UserProfilePage from './pages/UserProfilePage'
-import QuickSwitcher from './components/QuickSwitcher'
-import CommandPalette from './components/CommandPalette'
-import SavedPage from './pages/SavedPage'
-import ExplorePage from './pages/ExplorePage'
-import ServerDiscoveryPage from './pages/ServerDiscoveryPage'
-import ActivityFeedPage from './pages/ActivityFeedPage'
-import LeaderboardPage from './pages/LeaderboardPage'
-import TicketsPage from './pages/TicketsPage'
-import ServerAdminPage from './pages/ServerAdminPage'
-import AdminPage from './pages/AdminPage'
-import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
 import toast from 'react-hot-toast'
-import LandingPage from './pages/LandingPage'
+
+// Imports statiques pour le chemin critique (login/register sont légers)
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import MainLayout from './components/layout/MainLayout'
+
+// Lazy loading pour les pages non-critiques au premier affichage
+const LandingPage = lazy(() => import('./pages/LandingPage'))
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
+const InvitePage = lazy(() => import('./pages/InvitePage'))
+const FriendInvitePage = lazy(() => import('./pages/FriendInvitePage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const ChannelPage = lazy(() => import('./pages/ChannelPage'))
+const DMPage = lazy(() => import('./pages/DMPage'))
+const GroupDMPage = lazy(() => import('./pages/GroupDMPage'))
+const FriendsPage = lazy(() => import('./pages/FriendsPage'))
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
+const QuickSwitcher = lazy(() => import('./components/QuickSwitcher'))
+const CommandPalette = lazy(() => import('./components/CommandPalette'))
+const SavedPage = lazy(() => import('./pages/SavedPage'))
+const ExplorePage = lazy(() => import('./pages/ExplorePage'))
+const ServerDiscoveryPage = lazy(() => import('./pages/ServerDiscoveryPage'))
+const ActivityFeedPage = lazy(() => import('./pages/ActivityFeedPage'))
+const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
+const TicketsPage = lazy(() => import('./pages/TicketsPage'))
+const ServerAdminPage = lazy(() => import('./pages/ServerAdminPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
+const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'))
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center h-full w-full min-h-[200px]">
+    <div className="w-7 h-7 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+  </div>
+)
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -407,7 +417,7 @@ function AppInner() {
   }, [nav])
 
   return (
-    <>
+    <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -437,7 +447,7 @@ function AppInner() {
       <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
       {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
       {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
-    </>
+    </Suspense>
   )
 }
 
