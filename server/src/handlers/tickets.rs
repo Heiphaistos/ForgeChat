@@ -95,7 +95,7 @@ pub async fn create_ticket(
 ) -> Result<Json<Ticket>> {
     require_member(&state, claims.sub, server_id).await?;
 
-    if input.title.trim().is_empty() || input.title.len() > 200 {
+    if input.title.trim().is_empty() || input.title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre invalide (1-200 caractères)".into()));
     }
     let priority = input.priority.as_deref().unwrap_or("medium");

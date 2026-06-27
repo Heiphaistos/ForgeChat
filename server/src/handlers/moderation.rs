@@ -98,7 +98,7 @@ pub async fn create_mod_note(
     if body.note.trim().is_empty() {
         return Err(AppError::BadRequest("Note vide".into()));
     }
-    if body.note.len() > 2000 {
+    if body.note.chars().count() > 2000 {
         return Err(AppError::BadRequest("Note trop longue (max 2000 caractères)".into()));
     }
 
@@ -339,7 +339,7 @@ pub async fn create_task(
     State(state): State<AppState>,
     Json(body): Json<CreateTask>,
 ) -> Result<Json<ChannelTask>> {
-    if body.title.trim().is_empty() || body.title.len() > 200 {
+    if body.title.trim().is_empty() || body.title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre requis (1-200 caractères)".into()));
     }
 
@@ -413,7 +413,7 @@ pub async fn update_task(
     ensure_member(&state, server_id, claims.sub).await?;
 
     if let Some(ref t) = body.title {
-        if t.trim().is_empty() || t.len() > 200 {
+        if t.trim().is_empty() || t.chars().count() > 200 {
             return Err(AppError::BadRequest("Titre invalide (1-200 caractères)".into()));
         }
     }

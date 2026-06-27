@@ -133,7 +133,7 @@ pub async fn set_note(
     Path(target_id): Path<Uuid>,
     Json(body): Json<SetNoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    if body.content.len() > 2000 {
+    if body.content.chars().count() > 2000 {
         return Err(AppError::BadRequest("Note trop longue (max 2000 chars)".into()));
     }
     sqlx::query(

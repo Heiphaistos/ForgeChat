@@ -103,13 +103,13 @@ pub async fn create_post(
     require_channel_in_server(&state, channel_id, server_id).await?;
 
     let title = body.title.trim().to_string();
-    if title.is_empty() || title.len() > 200 {
+    if title.is_empty() || title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre requis (max 200 chars)".into()));
     }
 
     let content_raw = body.content.as_deref().map(str::trim).filter(|s| !s.is_empty());
     let content_str: Option<String> = content_raw.map(|s| {
-        if s.len() > 8000 { s.chars().take(8000).collect() } else { s.to_string() }
+        if s.chars().count() > 8000 { s.chars().take(8000).collect() } else { s.to_string() }
     });
 
     let tags = body.tags.unwrap_or_default();
