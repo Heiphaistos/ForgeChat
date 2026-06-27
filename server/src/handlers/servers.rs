@@ -123,7 +123,8 @@ pub async fn get_server(
     .fetch_all(&state.db)
     .await?;
 
-    // Statut de vérification du membre courant
+    // Statut du membre courant + ses rôles pour les permissions frontend
+    use sqlx::Row;
     let member = sqlx::query(
         "SELECT verified_at FROM server_members WHERE user_id=$1 AND server_id=$2"
     )
@@ -132,15 +133,24 @@ pub async fn get_server(
     .fetch_optional(&state.db)
     .await?
     .map(|r| {
-        use sqlx::Row;
         serde_json::json!({ "verified_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("verified_at") })
     });
+
+    let my_role_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT role_id FROM member_roles WHERE user_id=$1 AND server_id=$2"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
 
     Ok(Json(serde_json::json!({
         "server": server,
         "channels": channels_json,
         "roles": roles,
         "member": member,
+        "current_user_id": claims.sub,
+        "my_role_ids": my_role_ids,
     })))
 }
 

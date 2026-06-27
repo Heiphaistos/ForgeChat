@@ -14,6 +14,7 @@ import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
+import { useAuth } from '../../store/auth'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
@@ -191,6 +192,7 @@ export default function ChannelSidebar() {
   const qc = useQueryClient()
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
+  const currentUser = useAuth(s => s.user)
 
   const { data } = useQuery({
     queryKey: ['server', serverId],
@@ -449,9 +451,16 @@ export default function ChannelSidebar() {
   const archivedChannels: any[] = allChannels.filter((c: any) => c.archived)
 
   // Déterminer si l'utilisateur courant est owner ou admin
-  const isOwnerOrAdmin = !!server && (
-    server.owner_id === data?.current_user_id ||
-    (data?.member_roles ?? []).some((r: any) => r.permissions?.includes('MANAGE_CHANNELS') || r.is_admin)
+  const MANAGE_CHANNELS_BIT = 1 << 4
+  const ADMINISTRATOR_BIT = 1 << 31
+  const myRoleIds: string[] = data?.my_role_ids ?? []
+  const myRoles = (data?.roles ?? []).filter((r: any) => myRoleIds.includes(r.id))
+  const isOwnerOrAdmin = !!server && !!currentUser && (
+    server.owner_id === currentUser.id ||
+    myRoles.some((r: any) => {
+      const p = Number(r.permissions ?? 0)
+      return (p & ADMINISTRATOR_BIT) !== 0 || (p & MANAGE_CHANNELS_BIT) !== 0
+    })
   )
 
   const toggleGroup = (key: string) => {
