@@ -86,21 +86,42 @@ async fn handle_socket(
         tx
     };
 
-    let _ = sqlx::query("UPDATE users SET status='online' WHERE id=$1")
+    // Lire le statut préféré : les utilisateurs "invisible" restent invisibles au connect
+    let preferred_status: String = {
+        use sqlx::Row;
+        sqlx::query("SELECT status FROM users WHERE id=$1")
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .map(|r| r.get::<String, _>("status"))
+            .unwrap_or_else(|| "online".to_string())
+    };
+
+    let is_invisible = preferred_status == "invisible";
+    // Invisible → on garde le statut invisible en DB ; sinon → online
+    let db_status = if is_invisible { "invisible" } else { "online" };
+    let _ = sqlx::query("UPDATE users SET status=$1 WHERE id=$2")
+        .bind(db_status)
         .bind(user_id)
         .execute(&state.db)
         .await;
 
-    broadcast_presence(&state, user_id, "online").await;
+    // Broadcast "offline" aux autres si invisible, "online" sinon
+    if !is_invisible {
+        broadcast_presence(&state, user_id, "online").await;
+    }
 
     // Envoyer au nouveau client le snapshot de présence de tous les users déjà en ligne
+    // (les utilisateurs invisibles apparaissent hors-ligne pour les autres)
     {
         use sqlx::Row;
         let connected_ids: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
         if !connected_ids.is_empty() {
             let rows = sqlx::query(
                 "SELECT id, status, activity_type, activity_name, activity_detail
-                 FROM users WHERE id = ANY($1) AND id != $2"
+                 FROM users WHERE id = ANY($1) AND id != $2 AND status != 'invisible'"
             )
             .bind(&connected_ids)
             .bind(user_id)

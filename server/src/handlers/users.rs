@@ -670,14 +670,27 @@ pub async fn update_status(
     .execute(&state.db)
     .await?;
 
-    let event = serde_json::json!({
+    // Les utilisateurs invisibles apparaissent hors-ligne pour les autres
+    let broadcast_status = match req.status.as_deref() {
+        Some("invisible") => "offline",
+        Some(s) => s,
+        None => "online",
+    };
+    let event_for_others = serde_json::json!({
+        "type": "PRESENCE_UPDATE",
+        "user_id": claims.sub,
+        "status": broadcast_status,
+        "custom_status": &custom_status,
+        "custom_status_emoji": &custom_status_emoji,
+    });
+    // L'utilisateur lui-même reçoit son vrai statut (pour afficher la bonne icône dans le panneau)
+    let event_for_self = serde_json::json!({
         "type": "PRESENCE_UPDATE",
         "user_id": claims.sub,
         "status": req.status,
-        "custom_status": custom_status,
-        "custom_status_emoji": custom_status_emoji,
+        "custom_status": &custom_status,
+        "custom_status_emoji": &custom_status_emoji,
     });
-    let event_str = event.to_string();
 
     // Broadcaster aux membres de tous les serveurs de l'utilisateur
     use sqlx::Row;
@@ -693,10 +706,10 @@ pub async fn update_status(
     .collect();
 
     for sid in server_ids {
-        state.broadcast_to_server_members(sid, event_str.clone()).await;
+        state.broadcast_to_server_members(sid, event_for_others.to_string()).await;
     }
-    // Notifier aussi l'utilisateur lui-même (cas sans serveur ou pour la session courante)
-    state.broadcast_to_user(claims.sub, event_str).await;
+    // Notifier l'utilisateur lui-même avec son vrai statut
+    state.broadcast_to_user(claims.sub, event_for_self.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
