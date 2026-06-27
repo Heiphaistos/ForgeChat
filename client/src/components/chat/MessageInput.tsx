@@ -470,9 +470,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setCursorPos(pos)
     detectMention(val, pos)
     detectSlash(val)
-    send({ type: 'TYPING_START', channel_id: channelId })
-    clearTimeout(typingTimeout.current)
-    typingTimeout.current = setTimeout(() => {}, 3000)
+    // Throttle: send TYPING_START at most once per 3 seconds
+    if (!typingTimeout.current) {
+      send({ type: 'TYPING_START', channel_id: channelId })
+      typingTimeout.current = setTimeout(() => {
+        typingTimeout.current = undefined as any
+      }, 3000)
+    }
   }
 
   const submit = () => {
