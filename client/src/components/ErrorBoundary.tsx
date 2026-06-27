@@ -25,7 +25,8 @@ export default class ErrorBoundary extends Component<Props, State> {
       return this.props.fallback ?? (
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center',
-          justifyContent: 'center', height: '100%', gap: '12px', color: '#b9bbbe'
+          justifyContent: 'center', minHeight: '100vh', width: '100%',
+          gap: '12px', color: '#b9bbbe', background: '#1a1b1e'
         }}>
           <span style={{ fontSize: '2rem' }}>⚠</span>
           <p style={{ margin: 0 }}>Une erreur est survenue.</p>

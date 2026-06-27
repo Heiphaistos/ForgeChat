@@ -247,6 +247,80 @@ export default function ChannelSidebar() {
     enabled: !serverId,
   })
 
+  const reorderChannels = useMutation({
+    mutationFn: (channel_ids: string[]) =>
+      api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement'),
+  })
+
+  const archiveChannel = useMutation({
+    mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const hideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const unhideChannelMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+  })
+
+  const moveChannel = useMutation({
+    mutationFn: ({ channelId, categoryId }: { channelId: string; categoryId: string | null }) =>
+      api.patch(`/channels/${channelId}/move`, { category_id: categoryId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du déplacement du canal'),
+  })
+
+  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
+    setDraggedChannelId(channelId)
+    e.dataTransfer.effectAllowed = 'move'
+  }, [])
+
+  const handleChannelDragOver = useCallback((e: React.DragEvent, channelId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverChannelId(channelId)
+  }, [])
+
+  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[], categoryKey = '') => {
+    e.preventDefault()
+    if (!draggedChannelId || draggedChannelId === targetChannelId) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const draggedIdx = groupChannels.findIndex((c: any) => c.id === draggedChannelId)
+    const targetIdx = groupChannels.findIndex((c: any) => c.id === targetChannelId)
+    if (draggedIdx === -1 && categoryKey) {
+      const newCategoryId = categoryKey === UNCATEGORIZED_KEY ? null : categoryKey
+      moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    if (draggedIdx === -1 || targetIdx === -1) {
+      setDraggedChannelId(null)
+      setDragOverChannelId(null)
+      return
+    }
+    const reordered = [...groupChannels]
+    const [removed] = reordered.splice(draggedIdx, 1)
+    reordered.splice(targetIdx, 0, removed)
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+    reorderChannels.mutate(reordered.map((c: any) => c.id))
+  }, [draggedChannelId, reorderChannels, moveChannel])
+
+  const handleChannelDragEnd = useCallback(() => {
+    setDraggedChannelId(null)
+    setDragOverChannelId(null)
+  }, [])
+
   if (!serverId) {
     // Séparer groupes et DMs individuels
     const groupDms = (dms as any[]).filter(d => d.is_group)
@@ -369,81 +443,6 @@ export default function ChannelSidebar() {
     server.owner_id === data?.current_user_id ||
     (data?.member_roles ?? []).some((r: any) => r.permissions?.includes('MANAGE_CHANNELS') || r.is_admin)
   )
-
-  // ── Drag & Drop channels ──────────────────────────────────
-  const reorderChannels = useMutation({
-    mutationFn: (channel_ids: string[]) =>
-      api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors du déplacement'),
-  })
-
-  const archiveChannel = useMutation({
-    mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-  })
-
-  const hideChannelMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-  })
-
-  const unhideChannelMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-  })
-
-  const moveChannel = useMutation({
-    mutationFn: ({ channelId, categoryId }: { channelId: string; categoryId: string | null }) =>
-      api.patch(`/channels/${channelId}/move`, { category_id: categoryId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors du déplacement du canal'),
-  })
-
-  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
-    setDraggedChannelId(channelId)
-    e.dataTransfer.effectAllowed = 'move'
-  }, [])
-
-  const handleChannelDragOver = useCallback((e: React.DragEvent, channelId: string) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverChannelId(channelId)
-  }, [])
-
-  const handleChannelDrop = useCallback((e: React.DragEvent, targetChannelId: string, groupChannels: any[], categoryKey = '') => {
-    e.preventDefault()
-    if (!draggedChannelId || draggedChannelId === targetChannelId) {
-      setDraggedChannelId(null)
-      setDragOverChannelId(null)
-      return
-    }
-    const draggedIdx = groupChannels.findIndex((c: any) => c.id === draggedChannelId)
-    const targetIdx = groupChannels.findIndex((c: any) => c.id === targetChannelId)
-    if (draggedIdx === -1 && categoryKey) {
-      const newCategoryId = categoryKey === UNCATEGORIZED_KEY ? null : categoryKey
-      moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
-      setDraggedChannelId(null)
-      setDragOverChannelId(null)
-      return
-    }
-    if (draggedIdx === -1 || targetIdx === -1) {
-      setDraggedChannelId(null)
-      setDragOverChannelId(null)
-      return
-    }
-    const reordered = [...groupChannels]
-    const [removed] = reordered.splice(draggedIdx, 1)
-    reordered.splice(targetIdx, 0, removed)
-    setDraggedChannelId(null)
-    setDragOverChannelId(null)
-    reorderChannels.mutate(reordered.map((c: any) => c.id))
-  }, [draggedChannelId, reorderChannels, moveChannel])
-
-  const handleChannelDragEnd = useCallback(() => {
-    setDraggedChannelId(null)
-    setDragOverChannelId(null)
-  }, [])
 
   const toggleGroup = (key: string) => {
     setCollapsed(prev => {
