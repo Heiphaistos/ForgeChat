@@ -181,7 +181,7 @@ pub struct VoteBody {
 pub async fn vote_poll(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((server_id, _channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<VoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     require_member(&state, claims.sub, server_id).await?;

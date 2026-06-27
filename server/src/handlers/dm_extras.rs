@@ -26,7 +26,6 @@ pub async fn mute_dm(
     Path(dm_id): Path<Uuid>,
     Json(body): Json<MuteBody>,
 ) -> Result<Json<serde_json::Value>> {
-    use sqlx::Row;
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
         .bind(dm_id).fetch_one(&state.db).await?;
@@ -42,7 +41,6 @@ pub async fn unmute_dm(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    use sqlx::Row;
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
         .bind(dm_id).fetch_one(&state.db).await?;
@@ -59,7 +57,6 @@ pub async fn archive_dm(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    use sqlx::Row;
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
         .bind(dm_id).fetch_one(&state.db).await?;
@@ -74,7 +71,6 @@ pub async fn unarchive_dm(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    use sqlx::Row;
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     let row = sqlx::query("SELECT user1_id FROM dm_channels WHERE id=$1")
         .bind(dm_id).fetch_one(&state.db).await?;

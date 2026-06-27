@@ -183,7 +183,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
   }, [lastMsgId, dmId, send])
 
   // Écoute WS pour les edits/deletes DM
-  const { updateMessage, deleteMessage: storeDeleteMessage } = useChat()
+  const { updateMessage, deleteMessage: storeDeleteMessage, addReaction, removeReaction } = useChat()
   useEffect(() => {
     const offEdit = on('DM_MESSAGE_UPDATE', (d: any) => {
       if (d.dm_id !== dmId) return
@@ -193,8 +193,14 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
       if (d.dm_id !== dmId) return
       storeDeleteMessage(dmId, d.message_id)
     })
-    return () => { offEdit(); offDelete() }
-  }, [dmId, on, updateMessage, storeDeleteMessage])
+    const offReaction = on('DM_REACTION_TOGGLE', (d: any) => {
+      if (d.dm_id !== dmId) return
+      const isMe = d.user_id === me?.id
+      if (d.added) addReaction(dmId, d.message_id, d.emoji, d.user_id, isMe)
+      else removeReaction(dmId, d.message_id, d.emoji, d.user_id, isMe)
+    })
+    return () => { offEdit(); offDelete(); offReaction() }
+  }, [dmId, on, updateMessage, storeDeleteMessage, addReaction, removeReaction, me?.id])
 
   const handleDeleteMessage = useCallback(async (msgId: string) => {
     try {
@@ -209,6 +215,14 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
       await api.patch(`/dms/${dmId}/messages/${msgId}`, { content })
     } catch {
       toast.error('Impossible de modifier ce message')
+    }
+  }, [dmId])
+
+  const handleAddReaction = useCallback(async (msgId: string, emoji: string) => {
+    try {
+      await api.put(`/dms/${dmId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+    } catch {
+      toast.error('Impossible d\'ajouter la réaction')
     }
   }, [dmId])
 
@@ -234,6 +248,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore }
         serverId=""
         onDeleteMessage={handleDeleteMessage}
         onEditMessage={handleEditMessage}
+        onAddReaction={handleAddReaction}
         onLoadMore={onLoadMore}
       />
       <ReadReceiptBar channelId={dmId} receipts={receipts} />

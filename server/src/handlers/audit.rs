@@ -99,9 +99,11 @@ pub async fn log_event(
 #[derive(Serialize, Deserialize)]
 pub struct AutoModConfig {
     pub enabled: bool,
-    pub word_filter: Vec<String>,
-    pub action: String,
-    pub log_channel_id: Option<Uuid>,
+    pub blocked_words: Vec<String>,
+    pub max_mentions: i32,
+    pub max_links: i32,
+    pub anti_spam: bool,
+    pub anti_caps: bool,
 }
 
 pub async fn get_automod(
@@ -112,7 +114,8 @@ pub async fn get_automod(
     _check_manage(claims.sub, server_id, &state).await?;
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT enabled, word_filter, action, log_channel_id FROM automod_rules WHERE server_id=$1"
+        "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps
+         FROM automod_rules WHERE server_id=$1"
     )
     .bind(server_id)
     .fetch_optional(&state.db)
@@ -121,16 +124,20 @@ pub async fn get_automod(
     if let Some(r) = row {
         Ok(Json(AutoModConfig {
             enabled: r.get("enabled"),
-            word_filter: r.get::<Vec<String>, _>("word_filter"),
-            action: r.get("action"),
-            log_channel_id: r.get("log_channel_id"),
+            blocked_words: r.get::<Vec<String>, _>("word_filter"),
+            max_mentions: r.get("max_mentions"),
+            max_links: r.get("max_links"),
+            anti_spam: r.get("anti_spam"),
+            anti_caps: r.get("anti_caps"),
         }))
     } else {
         Ok(Json(AutoModConfig {
             enabled: false,
-            word_filter: vec![],
-            action: "delete".into(),
-            log_channel_id: None,
+            blocked_words: vec![],
+            max_mentions: 0,
+            max_links: 0,
+            anti_spam: false,
+            anti_caps: false,
         }))
     }
 }
@@ -142,21 +149,30 @@ pub async fn set_automod(
     Json(body): Json<AutoModConfig>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     _check_manage(claims.sub, server_id, &state).await?;
-    let valid_actions = ["delete", "warn", "kick", "ban"];
-    if !valid_actions.contains(&body.action.as_str()) {
-        return Err(AppError::BadRequest("Action invalide".into()));
+    if body.max_mentions < 0 || body.max_mentions > 50 {
+        return Err(AppError::BadRequest("max_mentions doit être entre 0 et 50".into()));
+    }
+    if body.max_links < 0 || body.max_links > 20 {
+        return Err(AppError::BadRequest("max_links doit être entre 0 et 20".into()));
+    }
+    if body.blocked_words.len() > 200 {
+        return Err(AppError::BadRequest("Maximum 200 mots bloqués".into()));
     }
     sqlx::query(
-        "INSERT INTO automod_rules (server_id, enabled, word_filter, action, log_channel_id, updated_at)
-         VALUES ($1,$2,$3,$4,$5,NOW())
+        "INSERT INTO automod_rules
+             (server_id, enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
          ON CONFLICT (server_id) DO UPDATE
-         SET enabled=$2, word_filter=$3, action=$4, log_channel_id=$5, updated_at=NOW()"
+         SET enabled=$2, word_filter=$3, max_mentions=$4, max_links=$5,
+             anti_spam=$6, anti_caps=$7, updated_at=NOW()"
     )
     .bind(server_id)
     .bind(body.enabled)
-    .bind(&body.word_filter)
-    .bind(&body.action)
-    .bind(body.log_channel_id)
+    .bind(&body.blocked_words)
+    .bind(body.max_mentions)
+    .bind(body.max_links)
+    .bind(body.anti_spam)
+    .bind(body.anti_caps)
     .execute(&state.db)
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))

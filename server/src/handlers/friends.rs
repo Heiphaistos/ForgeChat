@@ -483,7 +483,6 @@ pub async fn send_dm(
     .ok()
     .flatten();
 
-    use sqlx::Row as _;
     let (sender_username, sender_avatar) = sender_info.as_ref().map(|r| {
         (r.get::<String, _>("username"), r.get::<Option<String>, _>("avatar"))
     }).unwrap_or_else(|| (String::new(), None));
@@ -1570,4 +1569,73 @@ pub async fn delete_dm_message(
     state.broadcast_to_user(claims.sub, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+// ── Réactions sur messages DM ─────────────────────────────────────────────────
+
+pub async fn toggle_dm_reaction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((dm_id, msg_id, emoji)): Path<(Uuid, Uuid, String)>,
+) -> Result<Json<serde_json::Value>> {
+    // Vérifier accès au DM
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    ).bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !ok { return Err(AppError::Forbidden); }
+
+    // Vérifier que le message appartient à ce DM
+    let msg_ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2)"
+    ).bind(msg_id).bind(dm_id).fetch_one(&state.db).await?;
+    if !msg_ok { return Err(AppError::NotFound("Message introuvable".into())); }
+
+    // Valider l'emoji (max 64 chars, non vide)
+    let emoji = emoji.trim().to_string();
+    if emoji.is_empty() || emoji.chars().count() > 16 {
+        return Err(AppError::BadRequest("Emoji invalide".into()));
+    }
+
+    // Toggle : si déjà réagi → supprimer, sinon → ajouter
+    let existing = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM dm_reactions WHERE dm_message_id=$1 AND user_id=$2 AND emoji=$3)"
+    ).bind(msg_id).bind(claims.sub).bind(&emoji).fetch_one(&state.db).await?;
+
+    let added = if existing {
+        sqlx::query("DELETE FROM dm_reactions WHERE dm_message_id=$1 AND user_id=$2 AND emoji=$3")
+            .bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        false
+    } else {
+        sqlx::query("INSERT INTO dm_reactions (dm_message_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
+            .bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        true
+    };
+
+    // Récupérer le compte total pour cet emoji sur ce message
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM dm_reactions WHERE dm_message_id=$1 AND emoji=$2"
+    ).bind(msg_id).bind(&emoji).fetch_one(&state.db).await?;
+
+    // Diffuser aux deux participants du DM
+    use sqlx::Row;
+    let other_row = sqlx::query(
+        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END as other_id FROM dm_channels WHERE id=$1"
+    ).bind(dm_id).bind(claims.sub).fetch_optional(&state.db).await?;
+
+    let event = serde_json::json!({
+        "type": "DM_REACTION_TOGGLE",
+        "dm_id": dm_id,
+        "message_id": msg_id,
+        "emoji": emoji,
+        "added": added,
+        "count": count,
+        "user_id": claims.sub,
+    });
+    if let Some(row) = other_row {
+        let other_id: Uuid = row.get("other_id");
+        state.broadcast_to_user(other_id, event.to_string()).await;
+    }
+    state.broadcast_to_user(claims.sub, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true, "added": added, "count": count })))
 }
