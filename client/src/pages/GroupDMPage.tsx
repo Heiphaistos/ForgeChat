@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, Paperclip } from 'lucide-react'
+import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, Paperclip, UserPlus, LogOut, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import { format } from 'date-fns'
@@ -55,10 +55,15 @@ export default function GroupDMPage() {
   const { user } = useAuth()
   const { on, send } = useWs()
   const resetUnread = useUnread(s => s.reset)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [content, setContent] = useState('')
 
   const [showMembers, setShowMembers] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [renameInput, setRenameInput] = useState('')
+  const [addMemberInput, setAddMemberInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
@@ -160,6 +165,24 @@ export default function GroupDMPage() {
         return { ...m, reactions: updated }
       }))
     })
+    const offLeave = on('GROUP_DM_MEMBER_LEAVE', (d: any) => {
+      if (d.group_id !== groupId) return
+      if (d.user_id === user?.id) { navigate('/app'); return }
+      queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+    })
+    const offAdd = on('GROUP_DM_MEMBER_ADD', (d: any) => {
+      if (d.group_id !== groupId) return
+      queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+    })
+    const offRemove = on('GROUP_DM_MEMBER_REMOVE', (d: any) => {
+      if (d.group_id !== groupId) return
+      if (d.user_id === user?.id) { navigate('/app'); return }
+      queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+    })
+    const offRename = on('GROUP_DM_RENAME', (d: any) => {
+      if (d.group_id !== groupId) return
+      queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+    })
     const offAttach = on('GROUP_DM_ATTACHMENT_ADDED', (d: any) => {
       if (d.group_id !== groupId) return
       setAllMessages(prev => prev.map(m =>
@@ -182,7 +205,7 @@ export default function GroupDMPage() {
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping() }
+    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename() }
   }, [groupId, on, user?.id])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
@@ -256,6 +279,30 @@ export default function GroupDMPage() {
     }
   }, [groupId])
 
+  const leaveGroup = useMutation({
+    mutationFn: () => api.post(`/dms/groups/${groupId}/leave`),
+    onSuccess: () => { toast.success('Groupe quitté'); navigate('/app') },
+    onError: () => toast.error('Impossible de quitter le groupe'),
+  })
+
+  const renameGroup = useMutation({
+    mutationFn: (name: string) => api.patch(`/dms/groups/${groupId}/rename`, { name }),
+    onSuccess: (_, name) => { toast.success(`Groupe renommé en "${name}"`); setRenameInput(''); queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] }) },
+    onError: () => toast.error('Impossible de renommer'),
+  })
+
+  const addMember = useMutation({
+    mutationFn: (userId: string) => api.post(`/dms/groups/${groupId}/members`, { user_id: userId }),
+    onSuccess: () => { toast.success('Membre ajouté'); setAddMemberInput('') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible d\'ajouter'),
+  })
+
+  const { data: userSearchResults = [] } = useQuery<{ id: string; username: string; discriminator: string }[]>({
+    queryKey: ['user-search-gdm', addMemberInput],
+    queryFn: () => api.get(`/users/search?q=${encodeURIComponent(addMemberInput)}`).then(r => r.data),
+    enabled: addMemberInput.length >= 2,
+  })
+
   const submit = () => {
     const t = content.trim()
     if (!t && pendingFiles.length === 0) return
@@ -289,6 +336,13 @@ export default function GroupDMPage() {
             title="Rechercher"
           >
             <Search size={18} />
+          </button>
+          <button
+            onClick={() => setShowSettings(v => !v)}
+            className={`p-2 rounded hover:bg-fc-hover transition ${showSettings ? 'text-white' : 'text-fc-muted'}`}
+            title="Paramètres du groupe"
+          >
+            <Settings size={18} />
           </button>
           <button
             onClick={() => setShowMembers(v => !v)}
@@ -339,6 +393,67 @@ export default function GroupDMPage() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Panneau paramètres */}
+        {showSettings && (
+          <div className="border-b border-fc-hover bg-fc-bg/50 px-4 py-3 space-y-3">
+            {/* Renommer */}
+            <div>
+              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">Renommer le groupe</p>
+              <div className="flex gap-2">
+                <input
+                  value={renameInput}
+                  onChange={e => setRenameInput(e.target.value)}
+                  placeholder={group.name}
+                  className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
+                  maxLength={64}
+                />
+                <button
+                  onClick={() => renameInput.trim() && renameGroup.mutate(renameInput.trim())}
+                  disabled={!renameInput.trim() || renameGroup.isPending}
+                  className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition disabled:opacity-40"
+                >
+                  <Check size={14} />
+                </button>
+              </div>
+            </div>
+            {/* Ajouter membre */}
+            <div>
+              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">Ajouter un membre</p>
+              <div className="flex gap-2 mb-1">
+                <input
+                  value={addMemberInput}
+                  onChange={e => setAddMemberInput(e.target.value)}
+                  placeholder="Rechercher un utilisateur..."
+                  className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
+                />
+              </div>
+              {addMemberInput.length >= 2 && userSearchResults.length > 0 && (
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {userSearchResults.filter(u => !group.members.find(m => m.id === u.id)).slice(0, 5).map(u => (
+                    <div key={u.id} className="flex items-center justify-between px-2 py-1 bg-fc-channel rounded text-xs">
+                      <span className="text-white">{u.username}#{u.discriminator}</span>
+                      <button
+                        onClick={() => { addMember.mutate(u.id); setAddMemberInput('') }}
+                        className="p-1 text-fc-accent hover:text-indigo-400"
+                      >
+                        <UserPlus size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Quitter */}
+            <button
+              onClick={() => { if (window.confirm('Quitter ce groupe ?')) leaveGroup.mutate() }}
+              className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition"
+            >
+              <LogOut size={13} />
+              Quitter le groupe
+            </button>
           </div>
         )}
 

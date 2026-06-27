@@ -652,3 +652,166 @@ pub async fn upload_group_dm_attachment(
 
     Ok(Json(uploaded))
 }
+
+// ── Gestion des membres du GroupDM ───────────────────────────────────────────
+
+pub async fn leave_group_dm(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
+        .bind(group_id).bind(claims.sub).execute(&state.db).await?;
+
+    // Notifier les membres restants
+    let remaining: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    if remaining.is_empty() {
+        // Plus personne — supprimer le groupe
+        sqlx::query("DELETE FROM group_dm_channels WHERE id=$1")
+            .bind(group_id).execute(&state.db).await.ok();
+    } else {
+        let event = serde_json::json!({
+            "type": "GROUP_DM_MEMBER_LEAVE",
+            "group_id": group_id,
+            "user_id": claims.sub,
+        }).to_string();
+        for uid in remaining {
+            state.broadcast_to_user(uid, event.clone()).await;
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct AddGroupDmMemberInput {
+    pub user_id: Uuid,
+}
+
+pub async fn add_group_dm_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<AddGroupDmMemberInput>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let member_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_one(&state.db).await.unwrap_or(0);
+    if member_count >= 10 {
+        return Err(AppError::BadRequest("Maximum 10 membres par groupe".into()));
+    }
+
+    sqlx::query(
+        "INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    ).bind(group_id).bind(body.user_id).execute(&state.db).await?;
+
+    let new_user = sqlx::query(
+        "SELECT username, avatar FROM users WHERE id=$1"
+    ).bind(body.user_id).fetch_optional(&state.db).await?
+        .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
+
+    let all_members: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let event = serde_json::json!({
+        "type": "GROUP_DM_MEMBER_ADD",
+        "group_id": group_id,
+        "user": {
+            "id": body.user_id,
+            "username": new_user.get::<String, _>("username"),
+            "avatar": new_user.get::<Option<String>, _>("avatar"),
+        },
+    }).to_string();
+    for uid in all_members {
+        state.broadcast_to_user(uid, event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn remove_group_dm_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((group_id, target_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    // Seul le propriétaire peut exclure un membre
+    let is_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_channels WHERE id=$1 AND owner_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_owner { return Err(AppError::Forbidden); }
+    if target_id == claims.sub { return Err(AppError::BadRequest("Utilisez /leave pour quitter".into())); }
+
+    sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
+        .bind(group_id).bind(target_id).execute(&state.db).await?;
+
+    let remaining: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let event = serde_json::json!({
+        "type": "GROUP_DM_MEMBER_REMOVE",
+        "group_id": group_id,
+        "user_id": target_id,
+    }).to_string();
+    // Notifier les membres restants ET l'exclu
+    for uid in remaining.iter().chain(std::iter::once(&target_id)) {
+        state.broadcast_to_user(*uid, event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct RenameGroupDmInput {
+    pub name: String,
+}
+
+pub async fn rename_group_dm(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<RenameGroupDmInput>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let name = body.name.trim().chars().take(64).collect::<String>();
+    if name.is_empty() { return Err(AppError::BadRequest("Nom invalide".into())); }
+
+    let affected = sqlx::query(
+        "UPDATE group_dm_channels SET name=$1 WHERE id=$2"
+    ).bind(&name).bind(group_id).execute(&state.db).await?.rows_affected();
+    if affected == 0 { return Err(AppError::NotFound("Groupe introuvable".into())); }
+
+    let members: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let event = serde_json::json!({
+        "type": "GROUP_DM_RENAME",
+        "group_id": group_id,
+        "name": name,
+    }).to_string();
+    for uid in members {
+        state.broadcast_to_user(uid, event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true, "name": name })))
+}
