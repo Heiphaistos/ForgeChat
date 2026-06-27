@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, X, Loader2 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TENOR_KEY = (import.meta as any).env?.VITE_TENOR_API_KEY || '***REMOVED***'
+const TENOR_KEY = (import.meta as any).env?.VITE_TENOR_API_KEY || ''
 const TENOR_BASE = 'https://tenor.googleapis.com/v2'
 const LIMIT = 20
 
