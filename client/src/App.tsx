@@ -31,6 +31,7 @@ import KeyboardShortcutsModal from './components/KeyboardShortcutsModal'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useQueryClient } from '@tanstack/react-query'
+import { useChat } from './store/chat'
 import toast from 'react-hot-toast'
 import LandingPage from './pages/LandingPage'
 
@@ -52,6 +53,7 @@ function AppInner() {
   const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
+  const updateUserInMessages = useChat(s => s.updateUserInMessages)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
   const [showCommandPalette, setShowCommandPalette] = React.useState(false)
@@ -297,6 +299,35 @@ function AppInner() {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
     return () => { offReminder(); offReorder() }
+  }, [user?.id])
+
+  // Mise à jour profil utilisateur → sync temps réel dans tous les messages
+  useEffect(() => {
+    if (!user) return
+    const offUserUpdate = on('USER_UPDATE', (d: any) => {
+      const u = d.user
+      if (!u?.id) return
+      updateUserInMessages(u.id, u.username, u.avatar ?? null)
+      qcHook.invalidateQueries({ queryKey: ['members'] })
+    })
+    const offBoost = on('SERVER_BOOST', (d: any) => {
+      toast.success(`${d.username ?? 'Un membre'} a boosté le serveur !`, { duration: 5000, icon: '🚀' })
+    })
+    const offTagAssign = on('MEMBER_TAG_ASSIGN', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members-detailed', d.server_id] })
+    })
+    const offTagRemove = on('MEMBER_TAG_REMOVE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members-detailed', d.server_id] })
+    })
+    const offMemberTimeout = on('MEMBER_TIMEOUT', (d: any) => {
+      if (d.user_id && d.user_id !== user.id) {
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+      }
+    })
+    const offMemberTimeoutLifted = on('MEMBER_TIMEOUT_LIFTED', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+    })
+    return () => { offUserUpdate(); offBoost(); offTagAssign(); offTagRemove(); offMemberTimeout(); offMemberTimeoutLifted() }
   }, [user?.id])
 
   // Expulsion/ban → forcer le retour à l'accueil + refresh liste serveurs

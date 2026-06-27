@@ -76,6 +76,7 @@ interface ChatState {
   mergeAttachments: (channelId: string, msgId: string, attachments: Attachment[]) => void
   deleteMessage: (channelId: string, msgId: string) => void
   clearChannel: (channelId: string) => void
+  updateUserInMessages: (userId: string, username: string, avatar: string | null) => void
   setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
   addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean) => void
@@ -127,6 +128,18 @@ export const useChat = create<ChatState>()(
 
     clearChannel: (channelId) => set(s => {
       s.messagesByChannel[channelId] = []
+    }),
+
+    updateUserInMessages: (userId, username, avatar) => set(s => {
+      for (const msgs of Object.values(s.messagesByChannel)) {
+        if (!msgs) continue
+        for (const msg of msgs) {
+          if (msg.author_id === userId) {
+            msg.author_username = username
+            msg.author_avatar = avatar
+          }
+        }
+      }
     }),
 
     setTyping: (channelId, userId, username) => set(s => {

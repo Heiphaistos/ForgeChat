@@ -14,7 +14,14 @@ interface Ticket {
   priority: 'low' | 'medium' | 'high' | 'urgent'
   creator_id: string
   assigned_to: string | null
+  category_id: string | null
   created_at: string
+}
+
+interface Category {
+  id: string
+  name: string
+  emoji: string | null
 }
 
 const COLUMNS = [
@@ -38,11 +45,19 @@ export default function TicketsPage() {
   const { on } = useWs()
   const [newTitle, setNewTitle] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
+  const [newCategoryId, setNewCategoryId] = useState('')
+  const [filterCategoryId, setFilterCategoryId] = useState('')
   const [showCreate, setShowCreate] = useState(false)
 
   const { data: tickets = [] } = useQuery<Ticket[]>({
     queryKey: ['tickets', serverId],
     queryFn: () => api.get(`/servers/${serverId}/tickets`).then(r => r.data),
+    enabled: !!serverId,
+  })
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['ticket-categories', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/ticket-categories`).then(r => r.data),
     enabled: !!serverId,
   })
 
@@ -54,11 +69,18 @@ export default function TicketsPage() {
     const offUpdate = on('TICKET_UPDATE', (d: any) => {
       if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['tickets', serverId] })
     })
-    return () => { offCreate(); offUpdate() }
+    const offCatCreate = on('TICKET_CATEGORY_CREATE', (d: any) => {
+      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['ticket-categories', serverId] })
+    })
+    return () => { offCreate(); offUpdate(); offCatCreate() }
   }, [serverId, on, qc])
 
   const createMutation = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/tickets`, { title: newTitle, priority: newPriority }),
+    mutationFn: () => api.post(`/servers/${serverId}/tickets`, {
+      title: newTitle,
+      priority: newPriority,
+      ...(newCategoryId ? { category_id: newCategoryId } : {}),
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tickets', serverId] })
       setNewTitle('')
@@ -74,12 +96,36 @@ export default function TicketsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', serverId] }),
   })
 
-  const byStatus = (status: string) => tickets.filter(t => t.status === status)
+  const visibleTickets = filterCategoryId
+    ? tickets.filter(t => t.category_id === filterCategoryId)
+    : tickets
+  const byStatus = (status: string) => visibleTickets.filter(t => t.status === status)
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-fc-hover">
-        <h1 className="text-xl font-bold text-white">Tickets</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-white">Tickets</h1>
+          {categories.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setFilterCategoryId('')}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${!filterCategoryId ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+              >
+                Tous
+              </button>
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setFilterCategoryId(f => f === cat.id ? '' : cat.id)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filterCategoryId === cat.id ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+                >
+                  {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           onClick={() => setShowCreate(v => !v)}
           className="flex items-center gap-2 px-3 py-1.5 bg-fc-accent text-white rounded-lg text-sm font-medium hover:bg-fc-accent/80"
@@ -108,6 +154,18 @@ export default function TicketsPage() {
               <option value="high">Élevé</option>
               <option value="urgent">Urgent</option>
             </select>
+            {categories.length > 0 && (
+              <select
+                value={newCategoryId}
+                onChange={e => setNewCategoryId(e.target.value)}
+                className="bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
+              >
+                <option value="">Catégorie</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.emoji ? `${cat.emoji} ` : ''}{cat.name}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => createMutation.mutate()}
               disabled={!newTitle.trim() || createMutation.isPending}
