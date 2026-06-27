@@ -9,6 +9,7 @@ use crate::config::Config;
 
 pub type WsSender = broadcast::Sender<String>;
 pub type ClientMap = Arc<RwLock<HashMap<Uuid, WsSender>>>;
+pub type ConnCountMap = Arc<RwLock<HashMap<Uuid, usize>>>;
 
 #[derive(Clone, Serialize, Debug)]
 pub struct VoiceStateData {
@@ -25,6 +26,7 @@ pub struct AppState {
     pub redis: Arc<Mutex<MultiplexedConnection>>,
     pub config: Config,
     pub clients: ClientMap,
+    pub conn_counts: ConnCountMap,
     pub channel_subs: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
     // Salons vocaux : channel_id → {user_id}
     pub voice_rooms: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
@@ -45,6 +47,7 @@ impl AppState {
             redis: Arc::new(Mutex::new(redis)),
             config,
             clients: Arc::new(RwLock::new(HashMap::new())),
+            conn_counts: Arc::new(RwLock::new(HashMap::new())),
             channel_subs: Arc::new(RwLock::new(HashMap::new())),
             voice_rooms: Arc::new(RwLock::new(HashMap::new())),
             user_voice: Arc::new(RwLock::new(HashMap::new())),

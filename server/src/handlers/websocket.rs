@@ -65,8 +65,17 @@ async fn handle_socket(
 
     tracing::info!("WS connecté: {}", user_id);
 
-    let (tx, _rx) = broadcast::channel::<String>(512);
-    state.clients.write().await.insert(user_id, tx.clone());
+    // Réutiliser le sender existant pour supporter plusieurs onglets/appareils simultanés
+    let tx = {
+        let mut clients = state.clients.write().await;
+        let tx = clients.entry(user_id).or_insert_with(|| {
+            let (tx, _) = broadcast::channel::<String>(512);
+            tx
+        }).clone();
+        drop(clients);
+        *state.conn_counts.write().await.entry(user_id).or_insert(0) += 1;
+        tx
+    };
 
     let _ = sqlx::query("UPDATE users SET status='online' WHERE id=$1")
         .bind(user_id)
@@ -147,16 +156,26 @@ async fn handle_socket(
         _ = recv_task => {},
     }
 
-    // Nettoyage à la déconnexion
-    state.clients.write().await.remove(&user_id);
-    let _ = sqlx::query("UPDATE users SET status='offline' WHERE id=$1")
-        .bind(user_id)
-        .execute(&state.db)
-        .await;
-    broadcast_presence(&state, user_id, "offline").await;
+    // Nettoyage à la déconnexion — seulement si c'est le dernier onglet/appareil
+    let is_last = {
+        let mut counts = state.conn_counts.write().await;
+        let count = counts.entry(user_id).or_insert(0);
+        *count = count.saturating_sub(1);
+        let last = *count == 0;
+        if last { counts.remove(&user_id); }
+        drop(counts);
+        if last { state.clients.write().await.remove(&user_id); }
+        last
+    };
 
-    // Quitter le salon vocal automatiquement
-    cleanup_voice(&state, user_id).await;
+    if is_last {
+        let _ = sqlx::query("UPDATE users SET status='offline' WHERE id=$1")
+            .bind(user_id)
+            .execute(&state.db)
+            .await;
+        broadcast_presence(&state, user_id, "offline").await;
+        cleanup_voice(&state, user_id).await;
+    }
 
     tracing::info!("WS déconnecté: {}", user_id);
 }
