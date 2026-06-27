@@ -65,6 +65,15 @@ async fn handle_socket(
 
     tracing::info!("WS connecté: {}", user_id);
 
+    // Charger le username une fois au connect pour éviter les DB queries dans les TYPING events
+    let cached_username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+
     // Réutiliser le sender existant pour supporter plusieurs onglets/appareils simultanés
     let tx = {
         let mut clients = state.clients.write().await;
@@ -133,6 +142,7 @@ async fn handle_socket(
     });
 
     let state_clone = state.clone();
+    let username_clone = cached_username.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
@@ -142,7 +152,7 @@ async fn handle_socket(
                         tracing::warn!("WS: message trop grand ({} bytes) de {}", text.len(), user_id);
                         break;
                     }
-                    handle_ws_message(&state_clone, user_id, &text).await;
+                    handle_ws_message(&state_clone, user_id, &text, &username_clone).await;
                 }
                 Message::Close(_) => break,
                 Message::Ping(_) => {}
@@ -276,7 +286,7 @@ async fn broadcast_to_all(state: &AppState, exclude: Uuid, event: String) {
     }
 }
 
-async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
+async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_username: &str) {
     let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) else {
         return;
     };
@@ -335,18 +345,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
 
         Some("TYPING_START") => {
             if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
-                let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
-                    .bind(user_id)
-                    .fetch_optional(&state.db)
-                    .await
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default();
                 let event = serde_json::json!({
                     "type": "TYPING_START",
                     "channel_id": channel_id,
                     "user_id": user_id,
-                    "username": username,
+                    "username": cached_username,
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;
             }
@@ -363,18 +366,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
         Some("TYPING") => {
             if let Some(conv_id_str) = msg["conversation_id"].as_str() {
                 if let Ok(conv_uuid) = conv_id_str.parse::<Uuid>() {
-                    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
-                        .bind(user_id)
-                        .fetch_optional(&state.db)
-                        .await
-                        .ok()
-                        .flatten()
-                        .unwrap_or_default();
                     let event = serde_json::json!({
                         "type": "TYPING",
                         "conversation_id": conv_uuid,
                         "user_id": user_id,
-                        "username": username,
+                        "username": cached_username,
                     });
                     let event_str = event.to_string();
                     // Broadcast to both DM participants
@@ -751,19 +747,17 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str) {
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            use sqlx::Row as _;
-            let from_username: String = sqlx::query("SELECT username FROM users WHERE id=$1")
-                .bind(user_id)
-                .fetch_optional(&state.db)
-                .await
-                .ok()
-                .flatten()
-                .map(|r| r.get::<String, _>("username"))
-                .unwrap_or_default();
+            // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
+            let has_dm = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1))"
+            )
+            .bind(user_id).bind(to)
+            .fetch_one(&state.db).await.unwrap_or(false);
+            if !has_dm { return; }
             let event = serde_json::json!({
                 "type": "DM_CALL_INCOMING",
                 "from": user_id,
-                "from_username": from_username,
+                "from_username": cached_username,
                 "dm_id": msg["dm_id"],
                 "call_type": msg["call_type"].as_str().unwrap_or("voice"),
             });
