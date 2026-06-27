@@ -25,7 +25,8 @@ pub async fn global_search(
         return Err(AppError::BadRequest("Requête trop courte (min 2 caractères)".into()));
     }
 
-    let pattern = format!("%{}%", q);
+    let q_esc = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", q_esc);
     let uid: Uuid = claims.sub;
 
     // Recherche messages (canaux des serveurs dont l'user est membre)

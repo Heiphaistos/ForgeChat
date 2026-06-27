@@ -220,11 +220,15 @@ pub async fn bot_send_message(
         return Err(AppError::Forbidden);
     }
 
-    let content = body.content.trim();
-    if content.is_empty() {
+    let content_raw = body.content.trim().to_string();
+    if content_raw.is_empty() {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
-    let content = &content[..content.len().min(4000)];
+    let content: String = if content_raw.chars().count() > 4000 {
+        content_raw.chars().take(4000).collect()
+    } else {
+        content_raw
+    };
 
     let msg = sqlx::query(
         "INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"

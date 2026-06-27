@@ -299,7 +299,8 @@ pub async fn search_users(
         return Ok(Json(vec![]));
     }
 
-    let pattern = format!("%{}%", query.to_lowercase());
+    let q_esc = query.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", q_esc);
     let users = sqlx::query_as::<_, crate::models::user::User>(
         "SELECT * FROM users WHERE LOWER(username) LIKE $1 AND id != $2 LIMIT 20"
     )

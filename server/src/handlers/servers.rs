@@ -974,7 +974,8 @@ pub async fn discover_servers(
     let page = params.page.unwrap_or(1).max(1);
     let offset = (page - 1) * 20;
     let q = params.q.unwrap_or_default();
-    let search = format!("%{}%", q);
+    let q_esc = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let search = format!("%{}%", q_esc);
     let sort = params.sort.as_deref().unwrap_or("popular");
 
     let order_clause = if sort == "recent" {

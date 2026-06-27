@@ -605,7 +605,8 @@ pub async fn search_messages(
         return Ok(Json(vec![]));
     }
 
-    let pattern = format!("%{}%", q.to_lowercase());
+    let q_esc = q.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    let pattern = format!("%{}%", q_esc);
     let rows = sqlx::query(
         "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
                 rm.content as reply_to_content, ru.username as reply_to_username
