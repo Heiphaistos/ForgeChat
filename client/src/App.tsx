@@ -415,7 +415,7 @@ function AppInner() {
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
         <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
           <Route path="friends" element={<FriendsPage />} />
           <Route path="users/:userId" element={<UserProfilePage />} />
@@ -444,6 +444,19 @@ function AppInner() {
 import React from 'react'
 import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
+
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+function HomeRoute() {
+  const { user, loading } = useAuth()
+  if (!isTauri) return <LandingPage />
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-fc-bg">
+      <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+  return <Navigate to={user ? '/friends' : '/login'} replace />
+}
 
 export default function App() {
   return (

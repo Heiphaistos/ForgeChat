@@ -2,9 +2,9 @@ import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Shield, Palette, Video, Server, Download, MessageSquare, ChevronRight, Lock } from 'lucide-react'
 
-const RELEASE = 'v3.2.0'
+const RELEASE = 'v3.3.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
-const INSTALLER_URL = `${DL_BASE}/ForgeChat_3.2.0_x64-setup.exe`
+const INSTALLER_URL = `${DL_BASE}/ForgeChat_3.3.0_x64-setup.exe`
 const PORTABLE_URL  = `${DL_BASE}/forgechat-desktop.exe`
 
 const FEATURES = [
