@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWs } from '../store/ws'
 import api from '../api/client'
+import toast from 'react-hot-toast'
 
 export type CallState = 'idle' | 'calling' | 'ringing' | 'connected'
 
@@ -31,8 +32,13 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
   const [camOff, setCamOff] = useState(false)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([])
+  const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const cleanup = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current)
+      callTimeoutRef.current = null
+    }
     pcRef.current?.close()
     pcRef.current = null
     setLocalStream(prev => {
@@ -76,6 +82,12 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       stream.getTracks().forEach(t => pc.addTrack(t, stream))
       send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
       setCallState('calling')
+      // Auto-annulation après 45 secondes sans réponse
+      callTimeoutRef.current = setTimeout(() => {
+        if (partnerId && dmId) send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+        cleanup()
+        toast('Appel sans réponse', { icon: '📵' })
+      }, 45_000)
     } catch {
       cleanup()
       throw new Error('Accès micro/caméra refusé')
@@ -164,6 +176,11 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       if (d.dm_id !== dmId) return
       const pc = pcRef.current
       if (!pc) return
+      // L'appel est accepté — annuler le timeout
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current)
+        callTimeoutRef.current = null
+      }
       try {
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)

@@ -1,9 +1,53 @@
 ﻿import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Moon } from 'lucide-react'
+import { Moon, Bell, BellOff } from 'lucide-react'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+
+function DesktopNotifBlock() {
+  const [perm, setPerm] = useState<NotificationPermission>(() =>
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  )
+  const supported = typeof Notification !== 'undefined'
+
+  const request = async () => {
+    if (!supported) return
+    const result = await Notification.requestPermission()
+    setPerm(result)
+    if (result === 'granted') toast.success('Notifications bureau activées !')
+    else if (result === 'denied') toast.error('Permission refusée par le navigateur')
+  }
+
+  const test = () => {
+    if (perm !== 'granted') return
+    new Notification('ForgeChat', { body: 'Les notifications fonctionnent !' , icon: '/favicon.ico' })
+  }
+
+  return (
+    <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-white">
+        {perm === 'granted' ? <Bell size={14} className="text-fc-green" /> : <BellOff size={14} className="text-fc-muted" />}
+        Notifications bureau
+      </div>
+      {!supported && <p className="text-xs text-fc-muted">Non supporté par ce navigateur.</p>}
+      {supported && perm === 'granted' && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-fc-green">Activées</span>
+          <button onClick={test} className="text-xs text-fc-muted underline hover:text-white">Tester</button>
+        </div>
+      )}
+      {supported && perm === 'default' && (
+        <button onClick={request} className="w-full py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium transition">
+          Activer les notifications bureau
+        </button>
+      )}
+      {supported && perm === 'denied' && (
+        <p className="text-xs text-fc-muted">Permission refusée. Modifie les paramètres de ton navigateur pour les activer.</p>
+      )}
+    </div>
+  )
+}
 
 export default function NotificationsSection() {
   const { data: settings, refetch } = useQuery({
@@ -31,6 +75,7 @@ export default function NotificationsSection() {
 
   return (
     <div className="space-y-6">
+      <DesktopNotifBlock />
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
         <div className="flex items-center justify-between">
           <div>

@@ -286,10 +286,19 @@ function AppInner() {
             onClick: () => nav(`/dms/${d.dm_id}`),
           } as any)
         } else {
-          sendNativeNotification(msg.sender_username ?? 'Message privé', {
-            body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
-            onClick: () => nav(`/dms/${d.dm_id}`),
-          })
+          // Fenêtre non focusée → native, sinon toast de repli quand la fenêtre reprend le focus
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            sendNativeNotification(msg.sender_username ?? 'Message privé', {
+              body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
+              onClick: () => nav(`/dms/${d.dm_id}`),
+            })
+          } else {
+            toast(`💬 ${msg.sender_username ?? 'Message privé'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
+              duration: 5000,
+              style: { cursor: 'pointer', maxWidth: '320px' },
+              onClick: () => nav(`/dms/${d.dm_id}`),
+            } as any)
+          }
         }
       }
     })
@@ -307,11 +316,17 @@ function AppInner() {
             style: { cursor: 'pointer', maxWidth: '320px' },
             onClick: () => nav(`/dms/groups/${d.group_id}`),
           } as any)
-        } else {
+        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           sendNativeNotification(msg.sender_username ?? 'Groupe', {
             body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
             onClick: () => nav(`/dms/groups/${d.group_id}`),
           })
+        } else {
+          toast(`👥 ${msg.sender_username ?? 'Groupe'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
+            duration: 5000,
+            style: { cursor: 'pointer', maxWidth: '320px' },
+            onClick: () => nav(`/dms/groups/${d.group_id}`),
+          } as any)
         }
       }
     })
