@@ -768,6 +768,17 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            // Rate limit : max 3 appels par minute par paire d'utilisateurs
+            {
+                use redis::AsyncCommands;
+                let rate_key = format!("call_rate:{}:{}", user_id, to);
+                let mut redis = state.redis.lock().await;
+                let count: i64 = redis.incr(&rate_key, 1i64).await.unwrap_or(0);
+                if count == 1 {
+                    let _: () = redis.expire(&rate_key, 60).await.unwrap_or(());
+                }
+                if count > 3 { return; }
+            }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
             let has_dm = sqlx::query_scalar::<_, bool>(
                 "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1))"

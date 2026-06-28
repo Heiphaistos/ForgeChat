@@ -204,12 +204,28 @@ function AppInner() {
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
-        sendNativeNotification(msg.author_username ?? 'Quelqu\'un', {
-          body: content.slice(0, 80),
-          onClick: () => d.message?.channel_id
-            ? nav(`/app/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
-            : undefined,
-        })
+        const goToMsg = () => d.message?.channel_id
+          ? nav(`/app/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
+          : undefined
+        if (document.hasFocus()) {
+          // Fenêtre focusée → toast cliquable avec badge mention
+          toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
+            duration: 5000,
+            style: { cursor: 'pointer', maxWidth: '360px' },
+            onClick: goToMsg,
+          } as any)
+        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          sendNativeNotification(msg.author_username ?? 'Quelqu\'un', {
+            body: content.slice(0, 80),
+            onClick: goToMsg,
+          })
+        } else {
+          toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
+            duration: 5000,
+            style: { cursor: 'pointer', maxWidth: '360px' },
+            onClick: goToMsg,
+          } as any)
+        }
       } else if (!document.hasFocus()) {
         playMessage()
       }
