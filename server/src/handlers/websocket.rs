@@ -113,15 +113,28 @@ async fn handle_socket(
         broadcast_presence(&state, user_id, "online").await;
     }
 
-    // Envoyer au nouveau client le snapshot de présence de tous les users déjà en ligne
-    // (les utilisateurs invisibles apparaissent hors-ligne pour les autres)
+    // Envoyer au nouveau client le snapshot de présence — filtré aux amis + membres de serveurs communs
     {
         use sqlx::Row;
         let connected_ids: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
         if !connected_ids.is_empty() {
             let rows = sqlx::query(
-                "SELECT id, status, activity_type, activity_name, activity_detail
-                 FROM users WHERE id = ANY($1) AND id != $2 AND status != 'invisible'"
+                "SELECT DISTINCT u.id, u.status, u.activity_type, u.activity_name, u.activity_detail
+                 FROM users u
+                 WHERE u.id = ANY($1) AND u.id != $2 AND u.status != 'invisible'
+                   AND (
+                       EXISTS(
+                           SELECT 1 FROM server_members sm1
+                           JOIN server_members sm2 ON sm1.server_id = sm2.server_id
+                           WHERE sm1.user_id = $2 AND sm2.user_id = u.id
+                       )
+                       OR EXISTS(
+                           SELECT 1 FROM friendships f
+                           WHERE f.status = 'accepted'
+                             AND ((f.user_id = $2 AND f.friend_id = u.id)
+                               OR (f.friend_id = $2 AND f.user_id = u.id))
+                       )
+                   )"
             )
             .bind(&connected_ids)
             .bind(user_id)
@@ -212,6 +225,36 @@ async fn handle_socket(
 }
 
 async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
+    use sqlx::Row;
+
+    let connected: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
+    if connected.is_empty() { return; }
+
+    // Envoyer uniquement aux utilisateurs connectés qui partagent un serveur ou sont amis
+    // (privacy + perf : évite O(n) pour chaque connect/disconnect)
+    let relevant: Vec<Uuid> = sqlx::query_scalar::<_, Uuid>(
+        "SELECT DISTINCT other_id FROM (
+             SELECT sm2.user_id AS other_id
+             FROM server_members sm1
+             JOIN server_members sm2 ON sm1.server_id = sm2.server_id
+             WHERE sm1.user_id = $1 AND sm2.user_id != $1
+               AND sm2.user_id = ANY($2)
+             UNION
+             SELECT CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END AS other_id
+             FROM friendships f
+             WHERE (f.user_id = $1 OR f.friend_id = $1)
+               AND f.status = 'accepted'
+               AND CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END = ANY($2)
+         ) x"
+    )
+    .bind(user_id)
+    .bind(&connected)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if relevant.is_empty() { return; }
+
     // Récupérer l'activité pour l'inclure dans le broadcast
     let activity_row = sqlx::query(
         "SELECT activity_type, activity_name, activity_detail FROM users WHERE id=$1"
@@ -223,7 +266,6 @@ async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
     .flatten();
 
     let event = if let Some(row) = activity_row {
-        use sqlx::Row;
         serde_json::json!({
             "type": "PRESENCE_UPDATE",
             "user_id": user_id,
@@ -242,8 +284,8 @@ async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
     .to_string();
 
     let clients = state.clients.read().await;
-    for (uid, tx) in clients.iter() {
-        if *uid != user_id {
+    for uid in relevant {
+        if let Some(tx) = clients.get(&uid) {
             let _ = tx.send(event.clone());
         }
     }
