@@ -178,6 +178,70 @@ pub async fn set_automod(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Vérifie un contenu de message contre les règles AutoMod du serveur.
+/// Retourne Some(AppError) si le message doit être rejeté.
+pub async fn check_automod(state: &AppState, server_id: Uuid, content: &str) -> Option<AppError> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps
+         FROM automod_rules WHERE server_id=$1"
+    )
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()?;
+
+    if !row.get::<bool, _>("enabled") {
+        return None;
+    }
+
+    let lower = content.to_lowercase();
+
+    // Filtre de mots
+    let blocked: Vec<String> = row.get("word_filter");
+    for word in &blocked {
+        if !word.is_empty() && lower.contains(word.to_lowercase().as_str()) {
+            return Some(AppError::BadRequest("Message bloqué par l'AutoMod (mot interdit)".into()));
+        }
+    }
+
+    // Limite de mentions
+    let max_mentions: i32 = row.get("max_mentions");
+    if max_mentions > 0 {
+        let mention_count = content.matches('@').count() as i32;
+        if mention_count > max_mentions {
+            return Some(AppError::BadRequest(
+                format!("Trop de mentions (max {})", max_mentions)
+            ));
+        }
+    }
+
+    // Limite de liens
+    let max_links: i32 = row.get("max_links");
+    if max_links > 0 {
+        let link_count = (lower.matches("http://").count() + lower.matches("https://").count()) as i32;
+        if link_count > max_links {
+            return Some(AppError::BadRequest(
+                format!("Trop de liens (max {})", max_links)
+            ));
+        }
+    }
+
+    // Anti-caps : rejet si >70% majuscules et message > 10 chars
+    if row.get::<bool, _>("anti_caps") && content.len() > 10 {
+        let alpha: Vec<char> = content.chars().filter(|c| c.is_alphabetic()).collect();
+        if !alpha.is_empty() {
+            let upper = alpha.iter().filter(|c| c.is_uppercase()).count();
+            if upper * 10 > alpha.len() * 7 {
+                return Some(AppError::BadRequest("Message bloqué par l'AutoMod (trop de majuscules)".into()));
+            }
+        }
+    }
+
+    None
+}
+
 // Server discovery
 #[derive(Serialize)]
 pub struct PublicServer {

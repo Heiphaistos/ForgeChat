@@ -219,6 +219,13 @@ pub async fn send_message(
 
     let content_str: Option<String> = body.content.clone();
 
+    // Enforcement AutoMod : vérifier les règles du serveur avant d'insérer le message
+    if let Some(content) = content_str.as_deref() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, content).await {
+            return Err(err);
+        }
+    }
+
     let mention_everyone = content_str.as_deref().map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
 
     // Vérifier permission MENTION_EVERYONE si @everyone ou @here
