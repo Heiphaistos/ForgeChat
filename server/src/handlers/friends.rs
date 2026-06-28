@@ -550,6 +550,24 @@ pub async fn send_dm(
 
     if !ok { return Err(AppError::Forbidden); }
 
+    // Vérifier que le destinataire n'a pas bloqué l'expéditeur
+    {
+        use sqlx::Row;
+        let other_id: Option<Uuid> = sqlx::query(
+            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other
+             FROM dm_channels WHERE id=$1"
+        )
+        .bind(dm_id).bind(claims.sub)
+        .fetch_optional(&state.db).await?
+        .map(|r| r.get("other"));
+        if let Some(oid) = other_id {
+            let blocked: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
+            ).bind(oid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
+            if blocked { return Err(AppError::Forbidden); }
+        }
+    }
+
     // Anti-spam DM : max 5 messages / 3 secondes via Redis
     {
         use redis::AsyncCommands;
@@ -831,6 +849,24 @@ pub async fn send_e2e_message(
     .await?;
 
     if !ok { return Err(AppError::Forbidden); }
+
+    // Vérifier que le destinataire n'a pas bloqué l'expéditeur
+    {
+        use sqlx::Row;
+        let other_id: Option<Uuid> = sqlx::query(
+            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other
+             FROM dm_channels WHERE id=$1"
+        )
+        .bind(dm_id).bind(claims.sub)
+        .fetch_optional(&state.db).await?
+        .map(|r| r.get("other"));
+        if let Some(oid) = other_id {
+            let blocked: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
+            ).bind(oid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
+            if blocked { return Err(AppError::Forbidden); }
+        }
+    }
 
     let ciphertext = body["ciphertext"]
         .as_str()
