@@ -218,10 +218,13 @@ export default function DMPage() {
   // Reset pagination quand on change de conversation
   useEffect(() => { setHasMoreDM(true) }, [dmId])
 
-  // Effacer le badge non-lu quand on ouvre ou focus le DM
+  // Effacer le badge non-lu quand on ouvre ou focus le DM + signaler au serveur
   useEffect(() => {
     if (!dmId) return
-    const markRead = () => resetUnread(dmId)
+    const markRead = () => {
+      resetUnread(dmId)
+      api.post(`/dms/${dmId}/read`).catch(() => {})
+    }
     markRead()
     window.addEventListener('focus', markRead)
     return () => window.removeEventListener('focus', markRead)
@@ -416,9 +419,11 @@ export default function DMPage() {
           <button
             onClick={() => {
               if (callState !== 'idle') { hangup(); return }
+              if (!partnerId) { toast.error('Informations du contact non chargées'); return }
               startCall('voice').catch(() => toast.error('Accès au micro refusé'))
             }}
-            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            disabled={!partnerId && callState === 'idle'}
+            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
           >
             <Phone size={18} />
@@ -426,9 +431,11 @@ export default function DMPage() {
           <button
             onClick={() => {
               if (callState !== 'idle') { hangup(); return }
+              if (!partnerId) { toast.error('Informations du contact non chargées'); return }
               startCall('video').catch(() => toast.error('Accès caméra refusé'))
             }}
-            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            disabled={!partnerId && callState === 'idle'}
+            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
           >
             <Video size={18} />
