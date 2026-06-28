@@ -53,7 +53,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping, clearChannel } = useChat()
-  const { on, subscribeChannel } = useWs()
+  const { on, onOpen, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
   const qc = useQueryClient()
@@ -99,6 +99,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     window.addEventListener('focus', doMark)
     return () => window.removeEventListener('focus', doMark)
   }, [channelId, serverId])
+
+  // Re-subscribe après reconnexion WS (sinon les messages du canal n'arrivent plus)
+  useEffect(() => {
+    if (!channelId) return
+    return onOpen(() => subscribeChannel(channelId))
+  }, [channelId])
 
   useEffect(() => {
     if (!channelId) return
