@@ -750,6 +750,16 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            // Vérifier qu'un canal DM existe entre les deux parties (anti-spam WebRTC)
+            let authorized: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM dm_channels
+                    WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1)
+                )"
+            )
+            .bind(user_id).bind(to)
+            .fetch_one(&state.db).await.unwrap_or(false);
+            if !authorized { return; }
             let signal = serde_json::json!({
                 "type": "VOICE_SIGNAL",
                 "from": user_id,
