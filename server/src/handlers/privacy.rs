@@ -57,7 +57,7 @@ pub async fn export_user_data(
     // Amis
     let friends = sqlx::query(
         "SELECT u.username FROM users u
-         JOIN friends f ON (f.user_id = u.id AND f.friend_id = $1) OR (f.friend_id = u.id AND f.user_id = $1)
+         JOIN friendships f ON (f.user_id = u.id AND f.friend_id = $1) OR (f.friend_id = u.id AND f.user_id = $1)
          WHERE f.status = 'accepted'
          ORDER BY u.username"
     )

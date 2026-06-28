@@ -54,7 +54,7 @@ pub async fn global_search(
          FROM users u
          WHERE u.username ILIKE $2
            AND (
-             EXISTS(SELECT 1 FROM friends f
+             EXISTS(SELECT 1 FROM friendships f
                     WHERE f.status='accepted'
                       AND ((f.user_id=$1 AND f.friend_id=u.id) OR (f.friend_id=$1 AND f.user_id=u.id)))
              OR EXISTS(SELECT 1 FROM server_members sm1
