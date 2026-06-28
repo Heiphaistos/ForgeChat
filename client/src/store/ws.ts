@@ -8,10 +8,12 @@ interface WsState {
   _reconnectTimeout: ReturnType<typeof setTimeout> | null
   _heartbeatInterval: ReturnType<typeof setInterval> | null
   handlers: Map<string, WsHandler[]>
+  _openCallbacks: Set<() => void>
   connect: () => Promise<void>
   disconnect: () => void
   send: (msg: object) => void
   on: (type: string, handler: WsHandler) => () => void
+  onOpen: (cb: () => void) => () => void
   subscribeChannel: (channelId: string) => void
 }
 
@@ -31,6 +33,7 @@ export const useWs = create<WsState>((set, get) => ({
   _reconnectTimeout: null,
   _heartbeatInterval: null,
   handlers: new Map(),
+  _openCallbacks: new Set(),
 
   connect: async () => {
     // Obtenir un ticket éphémère (30s TTL) pour ne pas exposer le JWT dans les logs nginx
@@ -66,7 +69,11 @@ export const useWs = create<WsState>((set, get) => ({
       }
     }, 30_000)
 
-    ws.onopen = () => set({ socket: ws })
+    ws.onopen = () => {
+      set({ socket: ws })
+      // Notifier les listeners de reconnexion (ex: re-subscribe aux canaux)
+      get()._openCallbacks.forEach(cb => cb())
+    }
     set({ socket: ws, _heartbeatInterval: interval })
   },
 
@@ -96,6 +103,11 @@ export const useWs = create<WsState>((set, get) => ({
       const current = get().handlers.get(type) ?? []
       get().handlers.set(type, current.filter(h => h !== handler))
     }
+  },
+
+  onOpen: (cb) => {
+    get()._openCallbacks.add(cb)
+    return () => { get()._openCallbacks.delete(cb) }
   },
 
   subscribeChannel: (channelId) => {
