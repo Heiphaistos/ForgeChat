@@ -523,36 +523,38 @@ function AppInner() {
   }, [nav])
 
   return (
-    <Suspense fallback={<PageFallback />}>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/invite/:code" element={<InvitePage />} />
-        <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
-        <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
-        <Route path="/" element={<HomeRoute />} />
-        <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
-          <Route path="friends" element={<FriendsPage />} />
-          <Route path="users/:userId" element={<UserProfilePage />} />
-          <Route path="saved" element={<SavedPage />} />
-          <Route path="explore" element={<ExplorePage />} />
-          <Route path="discovery" element={<ServerDiscoveryPage />} />
-          <Route path="activity" element={<ActivityFeedPage />} />
-          <Route path="dms/:dmId" element={<DMPage />} />
-          <Route path="dms/groups/:groupId" element={<GroupDMPage />} />
-          <Route path="servers/:serverId" element={<ChannelPage />} />
-          <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
-          <Route path="servers/:serverId/leaderboard" element={<LeaderboardPage />} />
-          <Route path="servers/:serverId/tickets" element={<TicketsPage />} />
-          <Route path="servers/:serverId/admin" element={<ServerAdminPage />} />
-          <Route path="admin" element={<AdminPage />} />
-        </Route>
-      </Routes>
-      {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
-      <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
-      {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
-      {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
+    <>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/invite/:code" element={<InvitePage />} />
+          <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
+          <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
+          <Route path="/" element={<HomeRoute />} />
+          <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
+            <Route path="friends" element={<FriendsPage />} />
+            <Route path="users/:userId" element={<UserProfilePage />} />
+            <Route path="saved" element={<SavedPage />} />
+            <Route path="explore" element={<ExplorePage />} />
+            <Route path="discovery" element={<ServerDiscoveryPage />} />
+            <Route path="activity" element={<ActivityFeedPage />} />
+            <Route path="dms/:dmId" element={<DMPage />} />
+            <Route path="dms/groups/:groupId" element={<GroupDMPage />} />
+            <Route path="servers/:serverId" element={<ChannelPage />} />
+            <Route path="servers/:serverId/channels/:channelId" element={<ChannelPage />} />
+            <Route path="servers/:serverId/leaderboard" element={<LeaderboardPage />} />
+            <Route path="servers/:serverId/tickets" element={<TicketsPage />} />
+            <Route path="servers/:serverId/admin" element={<ServerAdminPage />} />
+            <Route path="admin" element={<AdminPage />} />
+          </Route>
+        </Routes>
+        {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
+        <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
+        {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
+        {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
+      </Suspense>
       {incomingCall && (
         <IncomingCallModal
           call={incomingCall}
@@ -568,7 +570,7 @@ function AppInner() {
           }}
         />
       )}
-    </Suspense>
+    </>
   )
 }
 

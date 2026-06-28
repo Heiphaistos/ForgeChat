@@ -38,7 +38,12 @@ export const useWs = create<WsState>((set, get) => ({
   connect: async () => {
     // Obtenir un ticket éphémère (30s TTL) pour ne pas exposer le JWT dans les logs nginx
     const ticket = await fetchWsTicket()
-    if (!ticket) return
+    if (!ticket) {
+      // Si le ticket échoue (token expiré, réseau), réessayer dans 5s pour ne pas casser la boucle
+      const timeout = setTimeout(() => get().connect(), 5000)
+      set({ _reconnectTimeout: timeout })
+      return
+    }
 
     const base = isTauri
       ? `wss://forgechat.heiphaistos.org`
