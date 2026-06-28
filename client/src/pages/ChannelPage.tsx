@@ -271,6 +271,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         />
       )
     }
+    // Auto-navigate to first text channel when no channelId in URL
+    nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 size={32} className="animate-spin text-fc-accent" />
