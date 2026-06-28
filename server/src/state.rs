@@ -96,12 +96,17 @@ impl AppState {
         }
     }
 
-    /// Broadcast to all connected members of a server (used for channel messages)
+    /// Broadcast to connected members of a server.
+    /// Only queries users who are currently connected (avoids N full-member scans for large servers).
     pub async fn broadcast_to_server_members(&self, server_id: Uuid, event: String) {
+        let connected: Vec<Uuid> = self.clients.read().await.keys().copied().collect();
+        if connected.is_empty() { return; }
+        // Intersect connected clients with server membership in one query
         let member_ids = sqlx::query_scalar::<_, Uuid>(
-            "SELECT user_id FROM server_members WHERE server_id=$1"
+            "SELECT user_id FROM server_members WHERE server_id=$1 AND user_id = ANY($2)"
         )
         .bind(server_id)
+        .bind(&connected)
         .fetch_all(&self.db)
         .await
         .unwrap_or_default();
@@ -114,7 +119,7 @@ impl AppState {
         }
     }
 
-    /// Broadcast to all connected members of a channel's server (resolves channel→server)
+    /// Broadcast to connected members of a channel's server (resolves channel→server).
     pub async fn broadcast_to_channel_members(&self, channel_id: Uuid, event: String) {
         let server_id: Option<Uuid> = sqlx::query_scalar(
             "SELECT server_id FROM channels WHERE id=$1"
