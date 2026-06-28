@@ -191,51 +191,29 @@ pub async fn send_message(
         drop(redis);
     }
 
-    // Anti-spam : max 5 messages par 3 secondes
+    // Anti-spam atomique : max 5 messages par 3 secondes (UPSERT évite la race condition)
     {
-        use sqlx::Row;
-        let row = sqlx::query(
-            "SELECT count, window_start FROM message_spam_track WHERE user_id=$1 AND channel_id=$2"
+        let new_count: i32 = sqlx::query_scalar(
+            "INSERT INTO message_spam_track (user_id, channel_id, count, window_start)
+             VALUES ($1, $2, 1, NOW())
+             ON CONFLICT (user_id, channel_id) DO UPDATE
+             SET count = CASE
+                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN 1
+                     ELSE message_spam_track.count + 1
+                 END,
+                 window_start = CASE
+                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN NOW()
+                     ELSE message_spam_track.window_start
+                 END
+             RETURNING count"
         )
         .bind(claims.sub)
         .bind(channel_id)
-        .fetch_optional(&state.db)
+        .fetch_one(&state.db)
         .await?;
 
-        let now = chrono::Utc::now();
-        let window_secs = chrono::Duration::seconds(3);
-
-        if let Some(r) = &row {
-            let window_start: chrono::DateTime<chrono::Utc> = r.get("window_start");
-            let count: i32 = r.get("count");
-            if now - window_start < window_secs {
-                if count >= 5 {
-                    return Err(AppError::TooManyRequests);
-                }
-                sqlx::query(
-                    "UPDATE message_spam_track SET count = count + 1 WHERE user_id=$1 AND channel_id=$2"
-                )
-                .bind(claims.sub)
-                .bind(channel_id)
-                .execute(&state.db)
-                .await?;
-            } else {
-                sqlx::query(
-                    "UPDATE message_spam_track SET count=1, window_start=NOW() WHERE user_id=$1 AND channel_id=$2"
-                )
-                .bind(claims.sub)
-                .bind(channel_id)
-                .execute(&state.db)
-                .await?;
-            }
-        } else {
-            sqlx::query(
-                "INSERT INTO message_spam_track (user_id, channel_id, count, window_start) VALUES ($1, $2, 1, NOW())"
-            )
-            .bind(claims.sub)
-            .bind(channel_id)
-            .execute(&state.db)
-            .await?;
+        if new_count > 5 {
+            return Err(AppError::TooManyRequests);
         }
     }
 
