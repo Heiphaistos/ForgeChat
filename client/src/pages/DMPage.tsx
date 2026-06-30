@@ -114,13 +114,14 @@ export default function DMPage() {
   const { pendingAccept, setPendingAccept } = useCallStore()
 
   // Auto-accept call if navigated here from incoming call modal
+  // dmInfo must be loaded (so dmId is confirmed valid) before accepting
   useEffect(() => {
-    if (pendingAccept && dmId) {
+    if (pendingAccept && dmId && dmInfo) {
       const { fromUserId, callType: ct } = pendingAccept
       setPendingAccept(null)
       acceptCall(fromUserId, ct)
     }
-  }, [pendingAccept, dmId])
+  }, [pendingAccept, dmId, dmInfo])
 
   // Attach streams to video elements
   useEffect(() => {

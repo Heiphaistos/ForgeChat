@@ -854,6 +854,17 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
             ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
             if is_blocked { return; }
+            // Informer l'appelant si le destinataire est hors ligne
+            let is_online = state.clients.read().await.contains_key(&to);
+            if !is_online {
+                let err = serde_json::json!({
+                    "type": "DM_CALL_ERROR",
+                    "reason": "offline",
+                    "dm_id": msg["dm_id"],
+                });
+                state.broadcast_to_user(user_id, err.to_string()).await;
+                return;
+            }
             let event = serde_json::json!({
                 "type": "DM_CALL_INCOMING",
                 "from": user_id,

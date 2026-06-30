@@ -86,7 +86,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       callTimeoutRef.current = setTimeout(() => {
         if (partnerId && dmId) send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
         cleanup()
-        toast('Appel sans réponse', { icon: '📵' })
+        toast(`Appel ${type === 'video' ? 'vidéo' : 'vocal'} — sans réponse`, { icon: '📵', duration: 5000 })
       }, 45_000)
     } catch {
       cleanup()

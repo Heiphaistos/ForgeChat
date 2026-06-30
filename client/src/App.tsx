@@ -280,7 +280,12 @@ function AppInner() {
     })
     const offEnded = on('DM_CALL_ENDED', () => setIncomingCall(null))
     const offDeclined = on('DM_CALL_DECLINED', () => setIncomingCall(null))
-    return () => { offIncoming(); offEnded(); offDeclined() }
+    const offCallError = on('DM_CALL_ERROR', (d: any) => {
+      if (d.reason === 'offline') {
+        toast('Votre contact est hors ligne', { icon: '📵', duration: 4000 })
+      }
+    })
+    return () => { offIncoming(); offEnded(); offDeclined(); offCallError() }
   }, [user?.id, playRing])
 
   // Notifications push pour les messages privés
