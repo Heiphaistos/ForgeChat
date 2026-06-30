@@ -69,6 +69,14 @@ pub async fn create_channel(
 ) -> Result<Json<Channel>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
 
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("Le nom du canal ne peut pas être vide".into()));
+    }
+    if name.len() > 100 {
+        return Err(AppError::BadRequest("Le nom du canal ne peut pas dépasser 100 caractères".into()));
+    }
+
     let channel_type = body.r#type.as_deref().unwrap_or("text");
     let channel = sqlx::query_as::<_, Channel>(
         "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw)
@@ -76,7 +84,7 @@ pub async fn create_channel(
     )
     .bind(server_id)
     .bind(body.category_id)
-    .bind(&body.name)
+    .bind(name)
     .bind(channel_type)
     .bind(&body.topic)
     .bind(body.is_nsfw.unwrap_or(false))
