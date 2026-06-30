@@ -101,7 +101,7 @@ export default function AuditLogPage({ serverId }: Props) {
   const [userFilter, setUserFilter] = useState('')
   const [page, setPage] = useState(1)
 
-  const { data: entries = [], isLoading } = useQuery<AuditEntry[]>({
+  const { data: entries = [], isLoading, isError } = useQuery<AuditEntry[]>({
     queryKey: ['audit', serverId],
     queryFn: () => api.get(`/servers/${serverId}/audit`).then(r => r.data),
     refetchInterval: 30_000,
@@ -169,6 +169,12 @@ export default function AuditLogPage({ serverId }: Props) {
         {/* Timeline */}
         {isLoading ? (
           <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+        ) : isError ? (
+          <div className="text-center py-12">
+            <ScrollText size={40} className="mx-auto text-fc-muted/30 mb-3" />
+            <p className="text-fc-muted text-sm">Impossible de charger le journal d'audit.</p>
+            <p className="text-fc-muted/60 text-xs mt-1">Vérifiez que vous avez la permission Gérer le serveur.</p>
+          </div>
         ) : visible.length === 0 ? (
           <div className="text-center py-12">
             <ScrollText size={40} className="mx-auto text-fc-muted/30 mb-3" />

@@ -330,29 +330,40 @@ function AppInner() {
       const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
       if (!isActive) {
         incrUnread(d.group_id)
-        if (!user.focus_mode) playMessage()
+        const content: string = msg.content ?? ''
+        const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const mentionedMe = !user.focus_mode && (
+          new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content) ||
+          content.includes('@everyone')
+        )
+        if (!user.focus_mode) {
+          if (mentionedMe) playMention()
+          else playMessage()
+        }
+        const goTo = () => nav(`/dms/groups/${d.group_id}`)
+        const preview = content ? content.slice(0, 60) : '📎 Pièce jointe'
         if (document.hasFocus()) {
-          toast(`${msg.sender_username ?? 'Groupe'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
-            duration: 4000,
+          toast(`${msg.sender_username ?? 'Groupe'}: ${preview}`, {
+            duration: mentionedMe ? 7000 : 4000,
             style: { cursor: 'pointer', maxWidth: '320px' },
-            onClick: () => nav(`/dms/groups/${d.group_id}`),
+            onClick: goTo,
           } as any)
         } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           sendNativeNotification(msg.sender_username ?? 'Groupe', {
-            body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
-            onClick: () => nav(`/dms/groups/${d.group_id}`),
+            body: content ? content.slice(0, 100) : '📎 Pièce jointe',
+            onClick: goTo,
           })
         } else {
-          toast(`👥 ${msg.sender_username ?? 'Groupe'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
-            duration: 5000,
+          toast(`👥 ${msg.sender_username ?? 'Groupe'}: ${preview}`, {
+            duration: mentionedMe ? 7000 : 5000,
             style: { cursor: 'pointer', maxWidth: '320px' },
-            onClick: () => nav(`/dms/groups/${d.group_id}`),
+            onClick: goTo,
           } as any)
         }
       }
     })
     return () => { offDm(); offGroupMsg() }
-  }, [user?.id, user?.focus_mode, playMessage])
+  }, [user?.id, user?.focus_mode, playMessage, playMention])
 
   // Mise à jour temps réel des canaux et serveur
   useEffect(() => {

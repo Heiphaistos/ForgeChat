@@ -107,7 +107,7 @@ export default function AutoModPage({ serverId }: Props) {
   const [local, setLocal] = useState<AutoModConfig>(DEFAULT_CONFIG)
   const [wordInput, setWordInput] = useState('')
 
-  const { data, isLoading } = useQuery<AutoModConfig>({
+  const { data, isLoading, isError } = useQuery<AutoModConfig>({
     queryKey: ['automod', serverId],
     queryFn: () => api.get(`/servers/${serverId}/automod`).then(r => r.data),
   })
@@ -146,6 +146,16 @@ export default function AutoModPage({ serverId }: Props) {
 
   if (isLoading) {
     return <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center py-12">
+        <Shield size={40} className="mx-auto text-fc-muted/30 mb-3" />
+        <p className="text-fc-muted text-sm">Impossible de charger AutoMod.</p>
+        <p className="text-fc-muted/60 text-xs mt-1">Vérifiez que vous avez la permission Gérer le serveur.</p>
+      </div>
+    )
   }
 
   return (

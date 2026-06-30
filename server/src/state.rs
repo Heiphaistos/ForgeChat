@@ -82,13 +82,6 @@ impl AppState {
         tx
     }
 
-    pub async fn broadcast_to_channel(&self, channel_id: Uuid, event: String) {
-        let read = self.channel_subs.read().await;
-        if let Some(tx) = read.get(&channel_id) {
-            let _ = tx.send(event);
-        }
-    }
-
     pub async fn broadcast_to_user(&self, user_id: Uuid, event: String) {
         let read = self.clients.read().await;
         if let Some(tx) = read.get(&user_id) {
@@ -183,16 +176,4 @@ impl AppState {
         }
     }
 
-    // Broadcast à tous les participants d'un salon vocal
-    pub async fn broadcast_to_voice_room(&self, channel_id: Uuid, event: String) {
-        let rooms = self.voice_rooms.read().await;
-        let clients = self.clients.read().await;
-        if let Some(room) = rooms.get(&channel_id) {
-            for uid in room {
-                if let Some(tx) = clients.get(uid) {
-                    let _ = tx.send(event.clone());
-                }
-            }
-        }
-    }
 }
