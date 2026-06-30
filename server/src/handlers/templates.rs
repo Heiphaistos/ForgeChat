@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::{require_member, require_owner},
+    handlers::servers::require_owner,
     middleware::auth::Claims,
     state::AppState,
 };

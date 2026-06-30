@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     middleware::auth::create_token,
-    models::user::{AuthResponse, LoginRequest, PendingRegistration, RegisterRequest, UserPublic},
+    models::user::{AuthResponse, LoginRequest, PendingRegistration, RegisterRequest},
     state::AppState,
 };
 

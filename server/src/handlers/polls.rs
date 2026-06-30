@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, models::message::{MessageWithAuthor, Attachment, ReactionCount}, state::AppState};
+use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, models::message::MessageWithAuthor, state::AppState};
 
 #[derive(Deserialize)]
 pub struct CreatePollBody {
