@@ -374,19 +374,32 @@ pub async fn mark_dm_read(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Vérifier que l'user appartient au DM
-    let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+    // Vérifier que l'user appartient au DM et récupérer l'autre participant
+    let other_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT CASE WHEN user1_id=$1 THEN user2_id ELSE user1_id END
+         FROM dm_channels WHERE id=$2 AND (user1_id=$1 OR user2_id=$1)"
     )
-    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if !ok { return Err(AppError::Forbidden); }
+    .bind(claims.sub).bind(dm_id).fetch_optional(&state.db).await?;
+    if other_id.is_none() { return Err(AppError::Forbidden); }
 
+    let now = chrono::Utc::now();
     sqlx::query(
         "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
          VALUES ($1,$2,NOW())
          ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at=NOW()"
     )
     .bind(dm_id).bind(claims.sub).execute(&state.db).await?;
+
+    // Notifier l'autre participant que le DM a été lu
+    if let Some(other) = other_id {
+        let event = serde_json::json!({
+            "type": "DM_READ",
+            "dm_id": dm_id,
+            "user_id": claims.sub,
+            "read_at": now,
+        });
+        state.broadcast_to_user(other, event.to_string()).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

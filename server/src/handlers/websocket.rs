@@ -436,6 +436,56 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             }
         }
 
+        // Accusé de lecture DM — déclenche DM_READ_RECEIPT chez l'autre participant
+        Some("DM_READ") => {
+            use sqlx::Row;
+            if let (Some(conv_str), Some(msg_str)) = (
+                msg["conversation_id"].as_str(),
+                msg["message_id"].as_str(),
+            ) {
+                if let (Ok(conv_id), Ok(msg_id)) = (
+                    conv_str.parse::<Uuid>(),
+                    msg_str.parse::<Uuid>(),
+                ) {
+                    // Récupérer l'autre participant + infos du lecteur
+                    let row = sqlx::query(
+                        "SELECT
+                            CASE WHEN user1_id=$1 THEN user2_id ELSE user1_id END AS other_id
+                         FROM dm_channels WHERE id=$2 AND (user1_id=$1 OR user2_id=$1)"
+                    )
+                    .bind(user_id).bind(conv_id)
+                    .fetch_optional(&state.db).await;
+
+                    if let Ok(Some(row)) = row {
+                        let other_id: Uuid = row.get("other_id");
+                        // Mettre à jour la table de réception
+                        let _ = sqlx::query(
+                            "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
+                             VALUES ($1,$2,NOW())
+                             ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at=NOW()"
+                        )
+                        .bind(conv_id).bind(user_id)
+                        .execute(&state.db).await;
+
+                        // Récupérer avatar du lecteur
+                        let avatar: Option<String> = sqlx::query_scalar(
+                            "SELECT avatar FROM users WHERE id=$1"
+                        ).bind(user_id).fetch_optional(&state.db).await.ok().flatten();
+
+                        let receipt_event = serde_json::json!({
+                            "type": "DM_READ_RECEIPT",
+                            "conversation_id": conv_id,
+                            "message_id": msg_id,
+                            "user_id": user_id,
+                            "username": cached_username,
+                            "avatar": avatar,
+                        });
+                        state.broadcast_to_user(other_id, receipt_event.to_string()).await;
+                    }
+                }
+            }
+        }
+
         // Typing indicator pour DMs (1-1 et groupes)
         Some("TYPING") => {
             if let Some(conv_id_str) = msg["conversation_id"].as_str() {
