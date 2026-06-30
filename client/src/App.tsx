@@ -291,6 +291,10 @@ function AppInner() {
   // Notifications push pour les messages privés
   useEffect(() => {
     if (!user) return
+    const getDmMuted = (dmId: string): boolean => {
+      const cache = qcHook.getQueryData<any[]>(['dms'])
+      return cache?.find(dm => dm.id === dmId)?.is_muted ?? false
+    }
     const offDm = on('DM_MESSAGE', (d: any) => {
       const msg = d.message
       if (!msg) return
@@ -300,7 +304,9 @@ function AppInner() {
       const currentPath = window.location.pathname
       const isActive = currentPath === `/dms/${d.dm_id}` && document.hasFocus()
       if (!isActive) {
+        const isMuted = getDmMuted(d.dm_id)
         incrUnread(d.dm_id)
+        if (isMuted) return
         if (!user.focus_mode) playMessage()
         if (document.hasFocus()) {
           // Fenêtre focusée mais sur une autre page → toast cliquable
