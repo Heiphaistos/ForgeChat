@@ -143,8 +143,9 @@ pub async fn send_message(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
-    // Autoriser contenu vide si des fichiers seront joints (has_attachments flag)
-    if body.content.as_ref().map(|c| c.trim().is_empty()).unwrap_or(false) {
+    // Refuser si content vide ET pas de pièces jointes annoncées
+    let content_empty = body.content.as_deref().map(|c| c.trim().is_empty()).unwrap_or(true);
+    if content_empty && !body.has_attachments.unwrap_or(false) {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
@@ -309,10 +310,12 @@ pub async fn send_message(
         poll_id: None,
     };
 
+    let pending_attachments = body.has_attachments.unwrap_or(false) && full_msg.content.is_none();
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "server_id": server_id,
-        "message": full_msg
+        "message": full_msg,
+        "pending_attachments": pending_attachments,
     });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 

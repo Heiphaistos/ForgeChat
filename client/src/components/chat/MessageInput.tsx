@@ -139,6 +139,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const { drafts, setDraft, clearDraft } = useDraft()
   const [content, setContent] = useState(() => drafts[channelId] ?? '')
   const [files, setFiles] = useState<FileWithTtl[]>([])
+  const filesRef = useRef<FileWithTtl[]>([])
+  useEffect(() => { filesRef.current = files }, [files])
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showMentions, setShowMentions] = useState(false)
@@ -278,12 +280,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     return () => document.removeEventListener('paste', handlePaste)
   }, [addFiles])
 
-  // Libérer les URLs de preview
-  useEffect(() => {
-    return () => {
-      files.forEach(f => { if (f.preview) URL.revokeObjectURL(f.preview) })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Libérer les URLs de preview — utilise une ref pour capturer l'état courant au démontage
+  useEffect(() => () => filesRef.current.forEach(f => { if (f.preview) URL.revokeObjectURL(f.preview) }), [])
 
   const removeFile = (idx: number) => {
     setFiles(prev => {

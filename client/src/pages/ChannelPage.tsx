@@ -111,7 +111,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     subscribeChannel(channelId)
     const offs = [
       on('MESSAGE_CREATE', (d: any) => {
-        if (d.message.channel_id === channelId) addMessage(d.message)
+        if (d.message.channel_id === channelId && !d.pending_attachments) addMessage(d.message)
       }),
       on('MESSAGE_UPDATE', (d: any) => {
         if (d.channel_id === channelId) updateMessage(channelId, d.message_id, { content: d.content, edited_at: d.edited_at })
@@ -139,7 +139,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         }
       }),
       on('MESSAGE_ATTACHMENT_ADDED', (d: any) => {
-        if (d.channel_id === channelId) mergeAttachments(channelId, d.message_id, d.attachments)
+        if (d.channel_id === channelId) {
+          const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+          if (msgs.find(m => m.id === d.message_id)) {
+            mergeAttachments(channelId, d.message_id, d.attachments)
+          } else {
+            qc.invalidateQueries({ queryKey: ['messages', serverId, channelId] })
+          }
+        }
       }),
       on('MESSAGE_PIN_UPDATE', (d: any) => {
         if (d.channel_id === channelId) {
@@ -177,8 +184,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }
 
   const sendMsg = useMutation({
-    mutationFn: ({ content, reply_to, expires_at_seconds }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds }),
+    mutationFn: ({ content, reply_to, expires_at_seconds, has_attachments }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null; has_attachments?: boolean }) =>
+      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds, has_attachments }),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
         const delay = currentChannel?.slowmode_delay ?? 30
@@ -474,7 +481,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
           onSend={async (content, replyToId, files, ttlSeconds) => {
             try {
-              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds })
+              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
               const msgId = res.data?.id
               if (files && files.length > 0 && msgId) {
                 const fd = new FormData()

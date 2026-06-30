@@ -67,6 +67,7 @@ pub struct SendMessageRequest {
     pub content: Option<String>,
     pub reply_to: Option<Uuid>,
     pub expires_at_seconds: Option<i64>,
+    pub has_attachments: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

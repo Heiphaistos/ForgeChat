@@ -78,6 +78,7 @@ export default function GroupDMPage() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
 
   const { data: group } = useQuery<GroupDM>({
@@ -228,6 +229,8 @@ export default function GroupDMPage() {
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || allMessages.length === 0 || !groupId) return
     setLoadingMore(true)
+    const container = messagesContainerRef.current
+    const prevScrollHeight = container?.scrollHeight ?? 0
     try {
       const oldest = allMessages[0]
       const res = await api.get(`/dms/groups/${groupId}/messages?before=${oldest.id}&limit=50`)
@@ -237,6 +240,9 @@ export default function GroupDMPage() {
         setAllMessages(prev => {
           const ids = new Set(prev.map(m => m.id))
           return [...older.filter(m => !ids.has(m.id)), ...prev]
+        })
+        requestAnimationFrame(() => {
+          if (container) container.scrollTop = container.scrollHeight - prevScrollHeight
         })
       } else {
         setHasMore(false)
@@ -458,7 +464,7 @@ export default function GroupDMPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
           {/* Load more */}
           {hasMore && (
             <div className="flex justify-center py-2">
