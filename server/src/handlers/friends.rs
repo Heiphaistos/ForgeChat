@@ -657,9 +657,11 @@ pub async fn send_dm(
         None
     };
 
+    let pending_att = has_attachments && content.is_empty();
     let event = serde_json::json!({
         "type": "DM_MESSAGE",
         "dm_id": dm_id,
+        "pending_attachments": pending_att,
         "message": {
             "id": msg_id,
             "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content.clone()) },
@@ -782,7 +784,10 @@ pub async fn upload_dm_attachment(
             "message_id": message_id,
             "attachments": uploaded,
         });
-        state.broadcast_to_user(other, event.to_string()).await;
+        let att_event = event.to_string();
+        state.broadcast_to_user(other, att_event.clone()).await;
+        // Sync multi-onglets sender
+        state.broadcast_to_user(claims.sub, att_event).await;
     }
 
     Ok(Json(uploaded))

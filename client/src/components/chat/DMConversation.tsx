@@ -10,6 +10,7 @@
  * Les read receipts sont affichés dans une zone dédiée sous la liste.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
 import { useChat } from '../../store/chat'
@@ -115,6 +116,7 @@ interface Props {
 export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, initialHighlightId }: Props) {
   const { on, send } = useWs()
   const me = useAuth(s => s.user)
+  const qc = useQueryClient()
 
   // --- Read receipts (key = message_id → [user_id]) ---
   const [receipts, setReceipts] = useState<ReceiptMap>(new Map())
@@ -213,7 +215,12 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     })
     const offAttachment = on('DM_ATTACHMENT_ADDED', (d: any) => {
       if (d.dm_id !== dmId) return
-      mergeAttachments(dmId, d.message_id, d.attachments)
+      const msgs = useChat.getState().messagesByChannel[dmId] ?? []
+      if (msgs.find(m => m.id === d.message_id)) {
+        mergeAttachments(dmId, d.message_id, d.attachments)
+      } else {
+        qc.invalidateQueries({ queryKey: ['dm_messages', dmId] })
+      }
     })
     return () => { offEdit(); offDelete(); offReaction(); offAttachment() }
   }, [dmId, on, updateMessage, storeDeleteMessage, addReaction, removeReaction, mergeAttachments, me?.id])

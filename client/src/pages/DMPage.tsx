@@ -234,7 +234,7 @@ export default function DMPage() {
   useEffect(() => {
     if (!dmId || e2eMode) return
     const off = on('DM_MESSAGE', (d: any) => {
-      if (d.dm_id === dmId) {
+      if (d.dm_id === dmId && !d.pending_attachments) {
         addMessage({
           ...d.message,
           channel_id: dmId,
