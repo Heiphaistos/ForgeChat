@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import { useWs } from './ws'
 import api from '../api/client'
 
@@ -36,7 +36,7 @@ interface VoiceStore {
   videoEnabled: boolean
   screenSharing: boolean
   error: string | null
-  // Participants par canal (pour la sidebar â€” tous serveurs)
+  // Participants par canal (pour la sidebar — tous serveurs)
   roomParticipants: Record<string, VoiceRoomParticipant[]>
   // Push-to-talk
   pttActive: boolean
@@ -45,9 +45,9 @@ interface VoiceStore {
   userVolumes: Record<string, number>
   // Priority speaker actif (userId ou null)
   activePrioritySpeaker: string | null
-  // Whisper : liste des userId Ã  qui on chuchote (null = mode normal)
+  // Whisper : liste des userId à qui on chuchote (null = mode normal)
   whisperTargets: string[] | null
-  // Streams actifs Go Live : userId → {userId, username, channelId}
+  // Streams actifs Go Live : userId ? {userId, username, channelId}
   activeStreams: Record<string, { userId: string; username: string; channelId: string }>
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string): Promise<void>
@@ -58,7 +58,7 @@ interface VoiceStore {
   shareScreen(): Promise<void>
   stopScreenShare(): Promise<void>
   clearError(): void
-  // AppelÃ© par App pour Ã©couter les events globaux (joins/leaves)
+  // Appelé par App pour écouter les events globaux (joins/leaves)
   initGlobalListeners(): () => void
   // Push-to-talk
   setPttMode(enabled: boolean): void
@@ -72,21 +72,21 @@ interface VoiceStore {
   setWhisperTargets(targets: string[] | null): void
 }
 
-// â”€â”€ Singletons non-rÃ©actifs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Singletons non-réactifs ──────────────────────────────────────────────────
 const _pcs = new Map<string, RTCPeerConnection>()
 export const getPeerConnections = () => _pcs
 const _iceQueues = new Map<string, RTCIceCandidateInit[]>()
 const _gainNodes = new Map<string, GainNode>()
 let _audioCtx: AudioContext | null = null
 let _localStream: MediaStream | null = null
-let _processedStream: MediaStream | null = null     // stream aprÃ¨s traitement noise suppression
-let _noiseAudioCtx: AudioContext | null = null       // AudioContext dÃ©diÃ© noise suppression
+let _processedStream: MediaStream | null = null     // stream après traitement noise suppression
+let _noiseAudioCtx: AudioContext | null = null       // AudioContext dédié noise suppression
 let _screenTrack: MediaStreamTrack | null = null
 let _cameraTrackBeforeShare: MediaStreamTrack | null = null
 let _offFns: Array<() => void> = []
-let _pttMuted = false // Ã©tat mute "rÃ©el" avant PTT
+let _pttMuted = false // état mute "réel" avant PTT
 
-// Cache de la config ICE â€” fetchÃ©e une seule fois par session
+// Cache de la config ICE — fetchée une seule fois par session
 let _iceConfigCache: RTCConfiguration | null = null
 
 function _getAudioCtx(): AudioContext {
@@ -96,7 +96,7 @@ function _getAudioCtx(): AudioContext {
   return _audioCtx
 }
 
-// Fallback ICE config (STUN seulement) utilisÃ© si le fetch Ã©choue
+// Fallback ICE config (STUN seulement) utilisé si le fetch échoue
 const ICE_FALLBACK: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -112,12 +112,12 @@ async function _getIceConfig(): Promise<RTCConfiguration> {
     _iceConfigCache = { iceServers: res.data.ice_servers }
     return _iceConfigCache
   } catch {
-    // En cas d'erreur rÃ©seau, fallback STUN seulement
+    // En cas d'erreur réseau, fallback STUN seulement
     return ICE_FALLBACK
   }
 }
 
-// â”€â”€ Noise Suppression via Web Audio API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Noise Suppression via Web Audio API ─────────────────────────────────────
 function _applyNoiseSuppression(inputStream: MediaStream): MediaStream {
   try {
     if (_noiseAudioCtx && _noiseAudioCtx.state !== 'closed') {
@@ -125,19 +125,19 @@ function _applyNoiseSuppression(inputStream: MediaStream): MediaStream {
     }
     _noiseAudioCtx = new AudioContext()
     const ctx = _noiseAudioCtx
-    // Resume AudioContext — browsers may suspend it outside a user gesture
+    // Resume AudioContext � browsers may suspend it outside a user gesture
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {})
     }
 
     const source = ctx.createMediaStreamSource(inputStream)
 
-    // Highpass filter : coupe les frÃ©quences < 80 Hz (bruits de ventilateur, vibrations)
+    // Highpass filter : coupe les fréquences < 80 Hz (bruits de ventilateur, vibrations)
     const highpass = ctx.createBiquadFilter()
     highpass.type = 'highpass'
     highpass.frequency.value = 80
 
-    // Dynamics compressor : attÃ©nue les sons faibles (bruit de fond ambiant)
+    // Dynamics compressor : atténue les sons faibles (bruit de fond ambiant)
     const compressor = ctx.createDynamicsCompressor()
     compressor.threshold.value = -50
     compressor.knee.value = 40
@@ -151,13 +151,13 @@ function _applyNoiseSuppression(inputStream: MediaStream): MediaStream {
     highpass.connect(compressor)
     compressor.connect(dest)
 
-    // Conserver les pistes vidÃ©o du stream original
+    // Conserver les pistes vidéo du stream original
     const outputStream = dest.stream
     inputStream.getVideoTracks().forEach(t => outputStream.addTrack(t))
 
     return outputStream
   } catch {
-    // Si Web Audio Ã©choue (ex: navigateur non supportÃ©), retourner le stream original
+    // Si Web Audio échoue (ex: navigateur non supporté), retourner le stream original
     return inputStream
   }
 }
@@ -170,7 +170,7 @@ function _cleanupNoiseSuppression() {
   _processedStream = null
 }
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ──────────────────────────────────────────────────────────────────
 async function _createPC(
   peerId: string,
   info: Partial<VoicePeer>,
@@ -258,7 +258,7 @@ function _refreshLocalStream(set: (fn: (s: VoiceStore) => Partial<VoiceStore>) =
   set(() => ({ localStream: _localStream ? new MediaStream(_localStream.getTracks()) : null }))
 }
 
-// â”€â”€ Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Store ─────────────────────────────────────────────────────────────────────
 export const useVoice = create<VoiceStore>((set, get) => ({
   channelId: null,
   channelName: null,
@@ -279,7 +279,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   whisperTargets: null,
   activeStreams: {},
 
-  // â”€â”€ Listeners globaux (joins/leaves de tout le monde pour la sidebar) â”€â”€â”€â”€â”€â”€
+  // ── Listeners globaux (joins/leaves de tout le monde pour la sidebar) ──────
   initGlobalListeners: () => {
     const ws = useWs.getState()
     const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
@@ -314,7 +314,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         const current = s.roomParticipants[d.channel_id] ?? []
         const prevPriority = s.activePrioritySpeaker
 
-        // Mise Ã  jour du priority speaker actif
+        // Mise à jour du priority speaker actif
         let newActivePriority = s.activePrioritySpeaker
         if (isPriority && !d.muted) {
           newActivePriority = d.user_id
@@ -322,12 +322,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
           newActivePriority = null
         }
 
-        // Duck audio : si un priority speaker vient de commencer Ã  parler
+        // Duck audio : si un priority speaker vient de commencer à parler
         const duckStarted = newActivePriority !== null && prevPriority === null
         const duckEnded = newActivePriority === null && prevPriority !== null
 
         if (duckStarted || duckEnded) {
-          // Appliquer/retirer l'attÃ©nuation sur tous les peers sauf le priority speaker
+          // Appliquer/retirer l'atténuation sur tous les peers sauf le priority speaker
           const ctx = _getAudioCtx()
           s.peers.forEach(peer => {
             if (peer.userId === d.user_id) return
@@ -357,7 +357,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
                 : p
             ),
           },
-          // Mettre Ã  jour le peer si on est dans la mÃªme room
+          // Mettre à jour le peer si on est dans la même room
           peers: s.peers.map(p =>
             p.userId === d.user_id
               ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority }
@@ -384,7 +384,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd() }
   },
 
-  // â”€â”€ Join â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Join ──────────────────────────────────────────────────────────────────
   join: async (channelId, serverId, withVideo = false, password, channelName) => {
     const cur = get()
     if (cur.joined && cur.channelId === channelId) return
@@ -413,22 +413,22 @@ export const useVoice = create<VoiceStore>((set, get) => ({
             audio: audioConstraints,
           })
         } catch {
-          set({ error: 'Impossible d\'accÃ©der au microphone. VÃ©rifiez les permissions du navigateur.' })
+          set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
           return
         }
       } else {
-        set({ error: 'Impossible d\'accÃ©der au microphone. VÃ©rifiez les permissions du navigateur.' })
+        set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
         return
       }
     }
 
     _localStream = stream
 
-    // Appliquer la noise suppression si activÃ©e dans les prÃ©fÃ©rences
+    // Appliquer la noise suppression si activée dans les préférences
     const noiseSuppressionEnabled = localStorage.getItem('fc_noise_suppression') !== 'false'
     if (noiseSuppressionEnabled) {
       _processedStream = _applyNoiseSuppression(stream)
-      // Le stream envoyÃ© aux peers est le stream traitÃ© (audio filtrÃ© + vidÃ©o originale)
+      // Le stream envoyé aux peers est le stream traité (audio filtré + vidéo originale)
       _localStream = _processedStream
     }
 
@@ -490,7 +490,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     const offSignal = ws.on('VOICE_SIGNAL', async (d: any) => {
       const { from, payload } = d
-      // Si on reÃ§oit une offer pour un peer inconnu, crÃ©er le PC
+      // Si on reçoit une offer pour un peer inconnu, créer le PC
       if (payload.type === 'offer' && !_pcs.has(from)) {
         await _createPC(from, { username: from }, get, set)
       }
@@ -526,13 +526,13 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     ws.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
 
-    // Broadcast Ã©tat initial
+    // Broadcast état initial
     setTimeout(() => {
       ws.send({ type: 'VOICE_STATE', channel_id: channelId, muted: false, deafened: false, video: hasVideo, screen: false })
     }, 200)
   },
 
-  // â”€â”€ Leave â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Leave ─────────────────────────────────────────────────────────────────
   leave: () => {
     const { channelId, joined } = get()
     if (!joined) return
@@ -561,7 +561,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     set({ joined: false, channelId: null, channelName: null, serverId: null, localStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
   },
 
-  // â”€â”€ Toggle mute â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Toggle mute ───────────────────────────────────────────────────────────
   toggleMute: () => {
     const { muted } = get()
     const next = !muted
@@ -570,11 +570,11 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _broadcastState(get)
   },
 
-  // â”€â”€ Toggle deafen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Toggle deafen ─────────────────────────────────────────────────────────
   toggleDeafen: () => {
     const { deafened } = get()
     const next = !deafened
-    // Couper/rÃ©tablir l'audio de tous les pairs
+    // Couper/rétablir l'audio de tous les pairs
     get().peers.forEach(peer => {
       peer.stream?.getAudioTracks().forEach(t => { t.enabled = !next })
     })
@@ -582,13 +582,13 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _broadcastState(get)
   },
 
-  // â”€â”€ Toggle vidÃ©o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Toggle vidéo ──────────────────────────────────────────────────────────
   toggleVideo: async () => {
     const { videoEnabled, joined, screenSharing } = get()
     if (!joined || !_localStream || screenSharing) return
 
     if (videoEnabled) {
-      // DÃ©sactiver
+      // Désactiver
       _localStream.getVideoTracks().forEach(t => { t.stop(); _localStream!.removeTrack(t) })
       for (const [, pc] of _pcs) {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video')
@@ -597,7 +597,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       set({ videoEnabled: false })
       _refreshLocalStream(set)
     } else {
-      // Activer la camÃ©ra + renegociation
+      // Activer la caméra + renegociation
       try {
         const savedCamId = localStorage.getItem('fc_video_input') || undefined
         const vs = await navigator.mediaDevices.getUserMedia({
@@ -624,13 +624,13 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         set({ videoEnabled: true })
         _refreshLocalStream(set)
       } catch {
-        set({ error: 'Impossible d\'accÃ©der Ã  la camÃ©ra.' })
+        set({ error: 'Impossible d\'accéder à la caméra.' })
       }
     }
     _broadcastState(get)
   },
 
-  // â”€â”€ Screen share â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Screen share ──────────────────────────────────────────────────────────
   shareScreen: async () => {
     const { joined } = get()
     if (!joined || !_localStream) return
@@ -644,7 +644,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       const svt = screenStream.getVideoTracks()[0]
       _screenTrack = svt
 
-      // Remplacer/ajouter la piste vidÃ©o dans tous les PC
+      // Remplacer/ajouter la piste vidéo dans tous les PC
       for (const [peerId, pc] of _pcs) {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video')
         if (sender) {
@@ -659,15 +659,15 @@ export const useVoice = create<VoiceStore>((set, get) => ({
         }
       }
 
-      // Mettre Ã  jour le stream local (preview)
-      // Mémoriser la piste caméra active (non-screen) pour restaurer après share
+      // Mettre à jour le stream local (preview)
+      // M�moriser la piste cam�ra active (non-screen) pour restaurer apr�s share
       const existingVideoTrack = _localStream?.getVideoTracks()[0] ?? null
       _cameraTrackBeforeShare = existingVideoTrack
 
       _localStream.getVideoTracks().forEach(t => { t.stop(); _localStream!.removeTrack(t) })
       _localStream.addTrack(svt)
 
-      // GÃ©rer l'audio systÃ¨me si capturÃ©
+      // Gérer l'audio système si capturé
       if (screenStream.getAudioTracks().length > 0) {
         const sat = screenStream.getAudioTracks()[0]
         _localStream.addTrack(sat)
@@ -685,14 +685,14 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       _refreshLocalStream(set)
       _broadcastState(get)
 
-      // ArrÃªt auto quand l'utilisateur clique "ArrÃªter" dans le navigateur
+      // Arrêt auto quand l'utilisateur clique "Arrêter" dans le navigateur
       svt.onended = () => { get().stopScreenShare() }
     } catch {
-      // L'utilisateur a annulÃ©
+      // L'utilisateur a annulé
     }
   },
 
-  // â”€â”€ Stop screen share â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Stop screen share ─────────────────────────────────────────────────────
   stopScreenShare: async () => {
     if (!_localStream) return
     _screenTrack?.stop()
@@ -704,7 +704,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       if (sender) sender.replaceTrack(null).catch(() => {})
     }
 
-    // Restaurer la caméra si elle était active avant le screen share
+    // Restaurer la cam�ra si elle �tait active avant le screen share
     if (_cameraTrackBeforeShare && _cameraTrackBeforeShare.readyState !== 'ended') {
       _localStream?.addTrack(_cameraTrackBeforeShare)
       for (const [peerId, pc] of _pcs) {
@@ -726,11 +726,11 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  // â”€â”€ Push-to-talk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Push-to-talk ──────────────────────────────────────────────────────────
   setPttMode: (enabled) => {
     set({ pttMode: enabled })
     if (!enabled) {
-      // Quand on dÃ©sactive PTT, on restaure le vrai Ã©tat mute
+      // Quand on désactive PTT, on restaure le vrai état mute
       const { muted } = get()
       _localStream?.getAudioTracks().forEach(t => { t.enabled = !muted })
     }
@@ -739,7 +739,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   activatePtt: () => {
     const { pttMode, joined } = get()
     if (!pttMode || !joined) return
-    // Ouvrir le micro pendant PTT (sans changer l'Ã©tat muted persistant)
+    // Ouvrir le micro pendant PTT (sans changer l'état muted persistant)
     _localStream?.getAudioTracks().forEach(t => { t.enabled = true })
     set({ pttActive: true })
   },
@@ -747,12 +747,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   deactivatePtt: () => {
     const { pttMode, muted, joined } = get()
     if (!pttMode || !joined) return
-    // Remettre l'Ã©tat de mute d'avant
+    // Remettre l'état de mute d'avant
     _localStream?.getAudioTracks().forEach(t => { t.enabled = !muted })
     set({ pttActive: false })
   },
 
-  // â”€â”€ Volume par utilisateur â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Volume par utilisateur ─────────────────────────────────────────────────
   setUserVolume: (userId, volume) => {
     set(s => ({ userVolumes: { ...s.userVolumes, [userId]: volume } }))
 
@@ -775,19 +775,19 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     gainNode.gain.setTargetAtTime(volume / 100, ctx.currentTime, 0.01)
   },
 
-  // â”€â”€ Noise suppression toggle (persistÃ© en localStorage) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Noise suppression toggle (persisté en localStorage) ───────────────────
   setNoiseSuppressionEnabled: (enabled) => {
     localStorage.setItem('fc_noise_suppression', enabled ? 'true' : 'false')
-    // Si on est en appel, on ne peut pas re-traiter le stream en temps rÃ©el
-    // (il faudrait quit/rejoin) â€” on avertit juste l'utilisateur via un rechargement
+    // Si on est en appel, on ne peut pas re-traiter le stream en temps réel
+    // (il faudrait quit/rejoin) — on avertit juste l'utilisateur via un rechargement
     // du store. En pratique, le changement s'applique au prochain join().
   },
 
-  // â”€â”€ Whisper : parler uniquement Ã  certains peers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Whisper : parler uniquement à certains peers ──────────────────────────
   setWhisperTargets: (targets) => {
     set({ whisperTargets: targets })
 
-    // Activer/dÃ©sactiver les tracks audio vers chaque peer
+    // Activer/désactiver les tracks audio vers chaque peer
     for (const [peerId, pc] of _pcs) {
       const isWhisperTarget = targets === null || targets.includes(peerId)
       const senders = pc.getSenders().filter(s => s.track?.kind === 'audio')

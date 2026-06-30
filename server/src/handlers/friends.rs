@@ -722,7 +722,6 @@ pub async fn upload_dm_attachment(
         }
 
         let original_name = field.file_name().unwrap_or("fichier").to_string();
-        let content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
         let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
 
         if data.len() as u64 > state.config.max_upload_size {
@@ -733,10 +732,12 @@ pub async fn upload_dm_attachment(
             .extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
 
         const ALLOWED: &[&str] = &[
-            "jpg","jpeg","png","gif","webp","svg","mp4","webm","mov","mkv",
+            "jpg","jpeg","png","gif","webp","mp4","webm","mov","mkv",
             "mp3","ogg","wav","flac","pdf","txt","md","zip","tar","gz","7z",
             "rar","doc","docx","xls","xlsx","ppt","pptx","bin",
         ];
+        let content_type = mime_guess::from_ext(&ext)
+            .first_raw().unwrap_or("application/octet-stream").to_string();
         if !ALLOWED.contains(&ext.as_str()) {
             return Err(AppError::BadRequest(format!("Extension .{} non autorisée", ext)));
         }

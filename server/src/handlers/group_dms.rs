@@ -53,8 +53,12 @@ pub async fn create_group_dm(
     sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)")
         .bind(group_id).bind(claims.sub).execute(&state.db).await?;
 
-    // Ajouter les autres membres
+    // Ajouter les autres membres (skip si l'utilisateur a bloqué le créateur)
     for uid in &members {
+        let blocked: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
+        ).bind(uid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
+        if blocked { continue; }
         let _ = sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
             .bind(group_id).bind(uid).execute(&state.db).await;
     }
@@ -726,6 +730,12 @@ pub async fn add_group_dm_member(
     if member_count >= 10 {
         return Err(AppError::BadRequest("Maximum 10 membres par groupe".into()));
     }
+
+    // Vérifier que l'utilisateur à ajouter n'a pas bloqué le demandeur
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
+    ).bind(body.user_id).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
+    if blocked { return Err(AppError::Forbidden); }
 
     sqlx::query(
         "INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"

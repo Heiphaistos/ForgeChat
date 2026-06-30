@@ -22,6 +22,9 @@ pub async fn mute_dm(
     Json(body): Json<MuteBody>,
 ) -> Result<Json<serde_json::Value>> {
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
+    if let Some(m) = body.minutes {
+        if m <= 0 { return Err(AppError::BadRequest("minutes doit être > 0".into())); }
+    }
     let until = body.minutes.map(|m| chrono::Utc::now() + chrono::Duration::minutes(m));
     sqlx::query(
         "UPDATE dm_channels SET
