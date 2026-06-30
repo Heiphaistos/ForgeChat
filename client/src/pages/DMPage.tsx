@@ -115,12 +115,12 @@ export default function DMPage() {
 
   // Auto-accept call if navigated here from incoming call modal
   useEffect(() => {
-    if (pendingAccept && dmId && partnerId) {
+    if (pendingAccept && dmId) {
       const { fromUserId, callType: ct } = pendingAccept
       setPendingAccept(null)
       acceptCall(fromUserId, ct)
     }
-  }, [pendingAccept, dmId, partnerId])
+  }, [pendingAccept, dmId])
 
   // Attach streams to video elements
   useEffect(() => {

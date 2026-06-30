@@ -219,7 +219,7 @@ pub async fn send_message(
 
     let content_str: Option<String> = body.content.clone();
 
-    // Enforcement AutoMod : vérifier les règles du serveur avant d'insérer le message
+    // Enforcement AutoMod
     if let Some(content) = content_str.as_deref() {
         if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, content).await {
             return Err(err);

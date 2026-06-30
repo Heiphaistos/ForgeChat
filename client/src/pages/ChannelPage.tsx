@@ -185,7 +185,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         startSlowmodeCooldown(delay)
         toast.error(`Mode lent — attendez ${delay}s avant d'envoyer`)
       } else {
-        toast.error("Échec de l'envoi")
+        const msg = e?.response?.data?.error || e?.response?.data?.message || "Échec de l'envoi"
+        toast.error(msg)
       }
     },
   })

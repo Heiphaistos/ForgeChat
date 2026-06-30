@@ -162,7 +162,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
-  const typingTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const typingTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const queryClient = useQueryClient()
 
   const { data: mentionResults = [] } = useQuery<MentionUser[]>({
@@ -485,7 +485,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (!typingTimeout.current) {
       send({ type: 'TYPING_START', channel_id: channelId })
       typingTimeout.current = setTimeout(() => {
-        typingTimeout.current = undefined as any
+        typingTimeout.current = undefined
       }, 3000)
     }
   }
