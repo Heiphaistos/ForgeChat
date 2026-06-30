@@ -288,7 +288,10 @@ function AppInner() {
     if (!user) return
     const offDm = on('DM_MESSAGE', (d: any) => {
       const msg = d.message
-      if (!msg || msg.sender_id === user.id) return
+      if (!msg) return
+      // Rafraîchir la liste DMs sidebar (dernier message + ordre) pour sender ET recipient
+      qcHook.invalidateQueries({ queryKey: ['dms'] })
+      if (msg.sender_id === user.id) return
       const currentPath = window.location.pathname
       const isActive = currentPath === `/dms/${d.dm_id}` && document.hasFocus()
       if (!isActive) {
@@ -320,7 +323,9 @@ function AppInner() {
     })
     const offGroupMsg = on('GROUP_DM_MESSAGE', (d: any) => {
       const msg = d.message
-      if (!msg || msg.sender_id === user.id) return
+      if (!msg) return
+      qcHook.invalidateQueries({ queryKey: ['dms'] })
+      if (msg.sender_id === user.id) return
       const currentPath = window.location.pathname
       const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
       if (!isActive) {
@@ -411,7 +416,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offReminder = on('REMINDER', (d: any) => {
-      toast(d.message ?? 'Rappel !', { icon: '⏰', duration: 10000 })
+      toast(d.content ?? 'Rappel !', { icon: '⏰', duration: 10000 })
     })
     const offReorder = on('CHANNELS_REORDER', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })

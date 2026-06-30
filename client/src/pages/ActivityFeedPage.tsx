@@ -227,7 +227,7 @@ export default function ActivityFeedPage() {
 
             {isError && (
               <p className="text-center text-xs text-fc-muted py-2">
-                Données mock — API /activity-feed non disponible
+                Erreur lors du chargement de l'activité.
               </p>
             )}
           </div>
