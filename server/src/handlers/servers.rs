@@ -593,45 +593,84 @@ pub async fn get_server_stats(
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    require_owner(&state, claims.sub, server_id).await?;
+    // Admins (MANAGE_SERVER) peuvent voir les stats, pas seulement owner
+    use crate::models::role::Permissions;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
+
+    use sqlx::Row;
 
     let member_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM server_members WHERE server_id=$1"
-    )
-    .bind(server_id)
-    .fetch_one(&state.db)
-    .await?;
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
 
     let online_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM server_members sm
          JOIN users u ON u.id=sm.user_id
          WHERE sm.server_id=$1 AND u.last_seen > NOW() - INTERVAL '5 minutes'"
-    )
-    .bind(server_id)
-    .fetch_one(&state.db)
-    .await?;
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
 
-    let message_count: i64 = sqlx::query_scalar(
+    let message_count_today: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM messages m
          JOIN channels c ON c.id=m.channel_id
-         WHERE c.server_id=$1"
-    )
-    .bind(server_id)
-    .fetch_one(&state.db)
-    .await?;
+         WHERE c.server_id=$1 AND m.created_at > NOW() - INTERVAL '1 day'"
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
 
-    let channel_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM channels WHERE server_id=$1"
-    )
-    .bind(server_id)
-    .fetch_one(&state.db)
-    .await?;
+    let message_count_week: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages m
+         JOIN channels c ON c.id=m.channel_id
+         WHERE c.server_id=$1 AND m.created_at > NOW() - INTERVAL '7 days'"
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
+
+    let new_members_today: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_members WHERE server_id=$1 AND joined_at > NOW() - INTERVAL '1 day'"
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
+
+    let new_members_week: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM server_members WHERE server_id=$1 AND joined_at > NOW() - INTERVAL '7 days'"
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
+
+    // Top 5 canaux par volume de messages (7 derniers jours)
+    let top_rows = sqlx::query(
+        "SELECT c.id, c.name, COUNT(m.id) AS messages
+         FROM channels c
+         LEFT JOIN messages m ON m.channel_id=c.id AND m.created_at > NOW() - INTERVAL '7 days'
+         WHERE c.server_id=$1
+         GROUP BY c.id, c.name
+         ORDER BY messages DESC
+         LIMIT 5"
+    ).bind(server_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let top_channels: Vec<serde_json::Value> = top_rows.iter().map(|r| serde_json::json!({
+        "id":   r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "messages": r.get::<i64, _>("messages"),
+    })).collect();
+
+    // Activité par heure (aujourd'hui, 24 buckets)
+    let hour_rows = sqlx::query(
+        "SELECT EXTRACT(HOUR FROM m.created_at)::int AS hr, COUNT(*) AS cnt
+         FROM messages m
+         JOIN channels c ON c.id=m.channel_id
+         WHERE c.server_id=$1 AND m.created_at > NOW() - INTERVAL '1 day'
+         GROUP BY hr"
+    ).bind(server_id).fetch_all(&state.db).await.unwrap_or_default();
+
+    let mut active_hours = vec![0i64; 24];
+    for r in &hour_rows {
+        let hr: i32 = r.get("hr");
+        let cnt: i64 = r.get("cnt");
+        if (0..24).contains(&hr) { active_hours[hr as usize] = cnt; }
+    }
 
     Ok(Json(serde_json::json!({
         "member_count": member_count,
         "online_count": online_count,
-        "message_count": message_count,
-        "channel_count": channel_count,
+        "message_count_today": message_count_today,
+        "message_count_week": message_count_week,
+        "new_members_today": new_members_today,
+        "new_members_week": new_members_week,
+        "top_channels": top_channels,
+        "active_hours": active_hours,
     })))
 }
 

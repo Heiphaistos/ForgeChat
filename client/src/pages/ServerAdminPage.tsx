@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, Component, ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2 } from 'lucide-react'
+import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2, AlertTriangle } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
@@ -8,6 +8,22 @@ import ServerStatsPage from './ServerStatsPage'
 import AuditLogPage from './AuditLogPage'
 import AutoModPage from './AutoModPage'
 import ServerEventsPage from './ServerEventsPage'
+
+class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-fc-muted">
+        <AlertTriangle size={28} className="text-fc-red" />
+        <p className="text-sm">Une erreur est survenue dans cet onglet.</p>
+        <p className="text-xs opacity-60">{(this.state.error as Error).message}</p>
+        <button onClick={() => this.setState({ error: null })} className="text-xs text-fc-accent hover:underline mt-1">Réessayer</button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 
 type Tab = 'stats' | 'audit' | 'automod' | 'events' | 'reports' | 'moderation'
 
@@ -200,12 +216,14 @@ export default function ServerAdminPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {tab === 'stats'      && <ServerStatsPage serverId={serverId} />}
-        {tab === 'audit'      && <AuditLogPage serverId={serverId} />}
-        {tab === 'automod'    && <AutoModPage serverId={serverId} />}
-        {tab === 'events'     && <ServerEventsPage serverId={serverId} />}
-        {tab === 'reports'    && <ReportsTab serverId={serverId} />}
-        {tab === 'moderation' && <ModerationTab serverId={serverId} />}
+        <TabErrorBoundary key={tab}>
+          {tab === 'stats'      && <ServerStatsPage serverId={serverId} />}
+          {tab === 'audit'      && <AuditLogPage serverId={serverId} />}
+          {tab === 'automod'    && <AutoModPage serverId={serverId} />}
+          {tab === 'events'     && <ServerEventsPage serverId={serverId} />}
+          {tab === 'reports'    && <ReportsTab serverId={serverId} />}
+          {tab === 'moderation' && <ModerationTab serverId={serverId} />}
+        </TabErrorBoundary>
       </div>
     </div>
   )
