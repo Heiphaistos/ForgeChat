@@ -57,7 +57,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     const pc = new RTCPeerConnection({ iceServers })
     pc.onicecandidate = e => {
       if (e.candidate) {
-        send({ type: 'VOICE_SIGNAL', to: pid, payload: { type: 'ice', candidate: e.candidate } })
+        send({ type: 'VOICE_SIGNAL', to: pid, payload: { type: 'ice', candidate: e.candidate.toJSON() } })
       }
     }
     pc.ontrack = e => {
