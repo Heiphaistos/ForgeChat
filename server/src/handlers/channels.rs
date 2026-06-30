@@ -111,6 +111,16 @@ pub async fn update_channel(
 ) -> Result<Json<Channel>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
 
+    if let Some(ref name) = body.name {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::BadRequest("Le nom du canal ne peut pas être vide".into()));
+        }
+        if trimmed.len() > 100 {
+            return Err(AppError::BadRequest("Le nom du canal ne peut pas dépasser 100 caractères".into()));
+        }
+    }
+
     // Calculer le hash du mot de passe vocal si fourni
     let voice_password_hash: Option<Option<String>> = if body.remove_voice_password.unwrap_or(false) {
         // Suppression explicite du mot de passe
