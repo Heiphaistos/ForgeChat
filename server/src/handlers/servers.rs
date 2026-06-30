@@ -1032,11 +1032,11 @@ pub async fn discover_servers(
     };
 
     let sql = format!(
-        "SELECT id, name, description, icon, banner, member_count, is_public,
-                created_at
-         FROM servers
-         WHERE is_public = true
-           AND ($1 = '' OR name ILIKE $2 OR description ILIKE $2)
+        "SELECT s.id, s.name, s.description, s.icon, s.banner, s.member_count, s.is_public,
+                s.created_at, s.invite_code
+         FROM servers s
+         WHERE s.is_public = true
+           AND ($1 = '' OR s.name ILIKE $2 OR s.description ILIKE $2)
          ORDER BY {order_clause}
          LIMIT 20 OFFSET $3"
     );
@@ -1057,8 +1057,9 @@ pub async fn discover_servers(
         "banner":       r.get::<Option<String>, _>("banner"),
         "member_count": r.get::<i32, _>("member_count"),
         "is_public":    r.get::<bool, _>("is_public"),
+        "invite_code":  r.get::<Option<String>, _>("invite_code"),
+        "tags":         serde_json::Value::Array(vec![]),
         "online_count": 0,
-        "tags":         [],
         "is_verified":  false,
     })).collect();
 
