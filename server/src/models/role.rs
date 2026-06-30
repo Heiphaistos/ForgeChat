@@ -37,6 +37,7 @@ pub struct UpdateRoleRequest {
 
 // Bitfield permissions (comme Discord)
 pub struct Permissions;
+#[allow(dead_code)]
 impl Permissions {
     pub const VIEW_CHANNEL: i64 = 1 << 0;
     pub const SEND_MESSAGES: i64 = 1 << 1;

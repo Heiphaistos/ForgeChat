@@ -37,6 +37,7 @@ pub async fn send_email(config: &Config, to: &str, subject: &str, html_body: Str
 }
 
 /// Retourne `Ok(true)` si l'email a été envoyé, `Ok(false)` si SMTP non configuré.
+#[allow(dead_code)]
 pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> anyhow::Result<bool> {
     let (Some(host), Some(user), Some(pass)) = (
         &config.smtp_host,
