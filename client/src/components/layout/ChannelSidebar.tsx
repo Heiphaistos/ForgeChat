@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive, EyeOff,
+  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff,
 } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import api from '../../api/client'
@@ -347,8 +347,8 @@ export default function ChannelSidebar() {
 
   if (!serverId) {
     // Séparer groupes et DMs individuels
-    const groupDms = (dms as any[]).filter(d => d.is_group)
-    const individualDms = (dms as any[]).filter(d => !d.is_group)
+    const groupDms = (dms as any[]).filter(d => d.is_group && !d.is_archived)
+    const individualDms = (dms as any[]).filter(d => !d.is_group && !d.is_archived)
 
     return (
       <div className="flex-1 overflow-y-auto p-2">
@@ -438,6 +438,10 @@ export default function ChannelSidebar() {
                     : 'Hors ligne'}
                 </div>
               </div>
+              {/* Indicateur mute */}
+              {dm.is_muted && !unread && (
+                <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
+              )}
               {/* Badge non-lus */}
               {unread > 0 && (
                 <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
