@@ -322,9 +322,11 @@ pub async fn send_group_message(
         "attachments": serde_json::json!([]),
     });
 
+    let pending_att = has_attachments && content.is_none();
     let event = serde_json::json!({
         "type": "GROUP_DM_MESSAGE",
         "group_id": group_id,
+        "pending_attachments": pending_att,
         "message": msg_json,
     });
     let event_str = event.to_string();

@@ -135,7 +135,7 @@ export default function GroupDMPage() {
   // Écouter les nouveaux messages, suppressions et éditions via WS
   useEffect(() => {
     const offNew = on('GROUP_DM_MESSAGE', (d: any) => {
-      if (d.group_id !== groupId) return
+      if (d.group_id !== groupId || d.pending_attachments) return
       setAllMessages(prev => {
         if (prev.find(m => m.id === d.message.id)) return prev
         return [...prev, d.message]
@@ -183,11 +183,17 @@ export default function GroupDMPage() {
     })
     const offAttach = on('GROUP_DM_ATTACHMENT_ADDED', (d: any) => {
       if (d.group_id !== groupId) return
-      setAllMessages(prev => prev.map(m =>
-        m.id === d.message_id
-          ? { ...m, attachments: [...(m.attachments ?? []), ...d.attachments] }
-          : m
-      ))
+      setAllMessages(prev => {
+        if (prev.find(m => m.id === d.message_id)) {
+          return prev.map(m =>
+            m.id === d.message_id
+              ? { ...m, attachments: [...(m.attachments ?? []), ...d.attachments] }
+              : m
+          )
+        }
+        queryClient.invalidateQueries({ queryKey: ['group-dm-messages', groupId] })
+        return prev
+      })
     })
     const offTyping = on('TYPING', (d: any) => {
       if (d.conversation_id !== groupId || d.user_id === user?.id) return
