@@ -57,6 +57,7 @@ pub struct UpdateServerRequest {
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct ServerMember {
     pub id: Uuid,
     pub user_id: Uuid,

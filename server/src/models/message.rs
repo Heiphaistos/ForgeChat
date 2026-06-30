@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
+#[allow(dead_code)]
 pub struct Message {
     pub id: Uuid,
     pub channel_id: Uuid,
@@ -76,6 +77,7 @@ pub struct EditMessageRequest {
 #[derive(Debug, Deserialize)]
 pub struct GetMessagesQuery {
     pub before: Option<Uuid>,
+    #[allow(dead_code)]
     pub after: Option<Uuid>,
     pub limit: Option<i64>,
 }

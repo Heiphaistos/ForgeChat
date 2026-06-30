@@ -195,6 +195,7 @@ pub struct UpdateEvent {
     pub event_type: Option<String>,
     pub start_time: Option<chrono::DateTime<chrono::Utc>>,
     pub end_time: Option<serde_json::Value>,
+    #[allow(dead_code)]
     pub channel_id: Option<serde_json::Value>,
     pub image_url: Option<serde_json::Value>,
     pub max_attendees: Option<serde_json::Value>,

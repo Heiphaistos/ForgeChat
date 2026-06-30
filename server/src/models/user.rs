@@ -109,6 +109,7 @@ pub struct UpdateProfileRequest {
 }
 
 #[derive(Debug, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct PendingRegistration {
     pub id: Uuid,
     pub email: String,

@@ -3,7 +3,6 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use axum_extra::{headers::{Authorization, authorization::Bearer}, TypedHeader};
 use jsonwebtoken::{decode, DecodingKey, Validation, encode, EncodingKey, Header};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -103,6 +102,7 @@ pub async fn require_auth(
 }
 
 /// Middleware optionnel : extrait les claims si présents (routes publiques qui bénéficient de l'auth)
+#[allow(dead_code)]
 pub async fn optional_auth(
     State(state): State<AppState>,
     req: Request,

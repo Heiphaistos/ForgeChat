@@ -381,6 +381,7 @@ pub async fn list_server_commands(
 
 /// Envoi d'une slash command à un bot — appelé depuis send_message quand le contenu commence par /
 /// Broadcast WS SLASH_COMMAND au canal pour que les bots connectés reçoivent la commande.
+#[allow(dead_code)]
 pub async fn dispatch_slash_command(
     state: &AppState,
     channel_id: Uuid,

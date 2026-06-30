@@ -111,10 +111,6 @@ pub async fn delete_webhook(
 
 // Route publique — POST /api/github-webhook/:channel_id?token=...
 // Le token doit correspondre à channels.github_webhook_token (configuré par le propriétaire du serveur)
-async fn verify_github_token(state: &AppState, channel_id: Uuid, token: &str) -> Result<(), AppError> {
-    verify_github_token_get(state, channel_id, token).await.map(|_| ())
-}
-
 async fn verify_github_token_get(state: &AppState, channel_id: Uuid, token: &str) -> Result<String, AppError> {
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT github_webhook_token FROM channels WHERE id=$1"

@@ -10,7 +10,7 @@ use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
     middleware::auth::Claims,
-    models::server::{CreateServerRequest, Server, ServerMember, UpdateServerRequest},
+    models::server::{CreateServerRequest, Server, UpdateServerRequest},
     state::AppState,
 };
 
@@ -912,6 +912,7 @@ fn generate_invite_code() -> String {
 #[derive(Debug, Deserialize)]
 pub struct DiscoverQuery {
     pub q: Option<String>,
+    #[allow(dead_code)]
     pub category: Option<String>,
     pub sort: Option<String>, // "popular" | "recent" | "active"
     pub page: Option<i64>,
