@@ -165,7 +165,7 @@ export default function GroupDMPage() {
     })
     const offLeave = on('GROUP_DM_MEMBER_LEAVE', (d: any) => {
       if (d.group_id !== groupId) return
-      if (d.user_id === user?.id) { navigate('/app'); return }
+      if (d.user_id === user?.id) { navigate('/'); return }
       queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
     })
     const offAdd = on('GROUP_DM_MEMBER_ADD', (d: any) => {
@@ -174,7 +174,7 @@ export default function GroupDMPage() {
     })
     const offRemove = on('GROUP_DM_MEMBER_REMOVE', (d: any) => {
       if (d.group_id !== groupId) return
-      if (d.user_id === user?.id) { navigate('/app'); return }
+      if (d.user_id === user?.id) { navigate('/'); return }
       queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
     })
     const offRename = on('GROUP_DM_RENAME', (d: any) => {
@@ -290,7 +290,7 @@ export default function GroupDMPage() {
 
   const leaveGroup = useMutation({
     mutationFn: () => api.post(`/dms/groups/${groupId}/leave`),
-    onSuccess: () => { toast.success('Groupe quitté'); navigate('/app') },
+    onSuccess: () => { toast.success('Groupe quitté'); navigate('/') },
     onError: () => toast.error('Impossible de quitter le groupe'),
   })
 
