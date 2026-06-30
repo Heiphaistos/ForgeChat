@@ -205,7 +205,7 @@ function AppInner() {
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
         const goToMsg = () => d.message?.channel_id
-          ? nav(`/app/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
+          ? nav(`/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
           : undefined
         if (document.hasFocus()) {
           // Fenêtre focusée → toast cliquable avec badge mention

@@ -96,7 +96,7 @@ function formatRelativeTime(unix: number): string {
 }
 
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
-  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|_(.+?)_|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
+  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|_(.+?)_|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
   const result: React.ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -130,6 +130,8 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         <span key={match.index} className="mention mention-everyone">{full}</span>
       )
     } else if (full.startsWith('<@')) {
+      result.push(<span key={match.index} className="mention">{full}</span>)
+    } else if (full.startsWith('@') && full.length > 1) {
       result.push(<span key={match.index} className="mention">{full}</span>)
     } else if (full.startsWith('<t:')) {
       // Timestamp Discord-style <t:1234567890:R>
