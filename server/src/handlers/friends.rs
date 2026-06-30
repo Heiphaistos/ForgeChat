@@ -174,10 +174,13 @@ pub async fn get_dms(
          SELECT dc.id,
            CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
            u.username, u.discriminator, u.avatar, u.status,
-           lm.last_message_at
+           lm.last_message_at,
+           COALESCE(dus.muted, FALSE) AS is_muted,
+           COALESCE(dus.archived, FALSE) AS is_archived
          FROM dm_channels dc
          JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
          LEFT JOIN last_msg lm ON lm.dm_channel_id = dc.id
+         LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = dc.id AND dus.user_id = $1
          WHERE dc.user1_id=$1 OR dc.user2_id=$1
          ORDER BY COALESCE(lm.last_message_at, dc.created_at) DESC"
     )
@@ -193,6 +196,8 @@ pub async fn get_dms(
         "avatar": r.get::<Option<String>, _>("avatar"),
         "status": r.get::<String, _>("status"),
         "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+        "is_muted": r.get::<bool, _>("is_muted"),
+        "is_archived": r.get::<bool, _>("is_archived"),
         "is_group": false,
     })).collect();
 
@@ -223,6 +228,8 @@ pub async fn get_dms(
             "name": r.get::<String, _>("name"),
             "member_count": r.get::<Option<i64>, _>("member_count").unwrap_or(0),
             "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+            "is_muted": false,
+            "is_archived": false,
             "is_group": true,
         }));
     }
