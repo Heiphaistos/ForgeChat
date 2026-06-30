@@ -97,7 +97,7 @@ export interface FileWithTtl {
 
 interface Props {
   channelId: string
-  serverId: string
+  serverId?: string
   placeholder?: string
   onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
   replyTo?: ReplyTarget | null
@@ -543,6 +543,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   }
 
   const handleVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
+    if (!serverId) return
     try {
       const mins = Math.floor(duration / 60)
       const secs = duration % 60
@@ -987,8 +988,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Voice message */}
-          {showVoiceRecorder ? (
+          {/* Voice message — serveur requis */}
+          {serverId && (showVoiceRecorder ? (
             <div className="absolute bottom-full left-0 right-0 mb-2 px-2">
               <VoiceMessageRecorder
                 onSend={handleVoiceMessage}
@@ -1003,7 +1004,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             >
               <Mic size={18} />
             </button>
-          )}
+          ))}
 
           <button
             onClick={submit}

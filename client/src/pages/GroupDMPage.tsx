@@ -5,9 +5,10 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Send, Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, Paperclip, UserPlus, LogOut, Settings } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip } from 'lucide-react'
 import toast from 'react-hot-toast'
 import EmojiPicker from '../components/chat/EmojiPicker'
+import MessageInput from '../components/chat/MessageInput'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -53,11 +54,10 @@ interface GroupDM {
 export default function GroupDMPage() {
   const { groupId } = useParams<{ groupId: string }>()
   const { user } = useAuth()
-  const { on, send } = useWs()
+  const { on } = useWs()
   const resetUnread = useUnread(s => s.reset)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [content, setContent] = useState('')
 
   const [showMembers, setShowMembers] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -71,9 +71,6 @@ export default function GroupDMPage() {
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastTypingSent = useRef(0)
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -308,14 +305,6 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/users/search?q=${encodeURIComponent(addMemberInput)}`).then(r => r.data),
     enabled: addMemberInput.length >= 2,
   })
-
-  const submit = () => {
-    const t = content.trim()
-    if (!t && pendingFiles.length === 0) return
-    sendMsg.mutate({ text: t, files: pendingFiles })
-    setContent('')
-    setPendingFiles([])
-  }
 
   if (!group) return (
     <div className="flex-1 flex items-center justify-center">
@@ -642,67 +631,16 @@ export default function GroupDMPage() {
         )}
 
         {/* Input */}
-        <div className="px-4 py-3 border-t border-fc-hover flex-shrink-0">
-          {/* Fichiers en attente */}
-          {pendingFiles.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              {pendingFiles.map((f, i) => (
-                <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-fc-channel rounded-lg text-xs text-fc-text">
-                  <Paperclip size={11} className="text-fc-muted" />
-                  <span className="truncate max-w-[120px]">{f.name}</span>
-                  <button onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-fc-muted hover:text-red-400">
-                    <X size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-2 bg-fc-input rounded-xl px-3 py-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={e => {
-                const files = Array.from(e.target.files ?? [])
-                const oversized = files.filter(f => f.size > 50 * 1024 * 1024)
-                if (oversized.length) toast.error('Certains fichiers dépassent 50 Mo')
-                setPendingFiles(prev => [...prev, ...files.filter(f => f.size <= 50 * 1024 * 1024)])
-                e.target.value = ''
-              }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1 text-fc-muted hover:text-fc-accent rounded transition flex-shrink-0"
-              title="Joindre un fichier"
-            >
-              <Paperclip size={16} />
-            </button>
-            <input
-              type="text"
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); return }
-                const now = Date.now()
-                if (now - lastTypingSent.current > 2000) {
-                  lastTypingSent.current = now
-                  send({ type: 'TYPING', conversation_id: groupId, is_group: true })
-                }
-              }}
-              placeholder={`Message dans ${group.name}...`}
-              className="flex-1 bg-transparent text-sm text-white placeholder:text-fc-muted outline-none"
-              maxLength={4000}
-            />
-            <button
-              onClick={submit}
-              disabled={(!content.trim() && pendingFiles.length === 0) || sendMsg.isPending}
-              className="p-1.5 text-fc-muted hover:text-fc-accent disabled:opacity-30 transition rounded"
-            >
-              <Send size={16} />
-            </button>
-          </div>
-        </div>
+        <MessageInput
+          channelId={groupId!}
+          placeholder={`Message dans ${group.name}...`}
+          sending={sendMsg.isPending}
+          onSend={async (content, _replyToId, files) => {
+            const t = content?.trim() ?? ''
+            if (!t && (!files || files.length === 0)) return
+            sendMsg.mutate({ text: t, files: files?.map(f => f.file) ?? [] })
+          }}
+        />
       </div>
 
       {/* Panneau membres */}
