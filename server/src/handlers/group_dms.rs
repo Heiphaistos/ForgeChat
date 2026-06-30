@@ -53,12 +53,20 @@ pub async fn create_group_dm(
     sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)")
         .bind(group_id).bind(claims.sub).execute(&state.db).await?;
 
-    // Ajouter les autres membres (skip si l'utilisateur a bloqué le créateur)
+    // Batch: récupérer tous les utilisateurs qui ont bloqué le créateur en une seule requête
+    let blockers: std::collections::HashSet<Uuid> = sqlx::query_scalar(
+        "SELECT blocker_id FROM blocks WHERE blocker_id = ANY($1) AND blocked_id=$2"
+    )
+    .bind(&members)
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
     for uid in &members {
-        let blocked: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-        ).bind(uid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
-        if blocked { continue; }
+        if blockers.contains(uid) { continue; }
         let _ = sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
             .bind(group_id).bind(uid).execute(&state.db).await;
     }
