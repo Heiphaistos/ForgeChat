@@ -412,10 +412,25 @@ export default function ChannelSidebar() {
           const liveStatus = getStatus(dm.other_user_id) || dm.status || 'offline'
           const statusKey = liveStatus in PRESENCE_COLOR ? liveStatus : 'offline'
           const unread = unreadCounts[dm.id] ?? 0
+          const toggleMuteDm = () => {
+            api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
+              .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
+              .catch(() => toast.error('Erreur'))
+          }
+          const archiveDm = () => {
+            api.patch(`/dms/${dm.id}/settings`, { archived: true })
+              .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
+              .catch(() => toast.error('Erreur'))
+          }
           return (
             <button
               key={dm.id}
               onClick={() => nav(`/dms/${dm.id}`)}
+              onContextMenu={e => ctxMenu.open(e, [
+                { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
+                { label: 'Archiver la conversation', onClick: archiveDm },
+                { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
+              ])}
               className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
             >
               <div className="relative flex-shrink-0">
