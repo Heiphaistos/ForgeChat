@@ -39,6 +39,12 @@ impl IntoResponse for AppError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur".into())
             }
             AppError::Database(e) => {
+                // Unique constraint violation → 409 Conflict
+                if let sqlx::Error::Database(db_err) = e {
+                    if db_err.code().as_deref() == Some("23505") {
+                        return (StatusCode::CONFLICT, Json(json!({ "error": "Valeur déjà utilisée" }))).into_response();
+                    }
+                }
                 tracing::error!("DB error: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur base de données".into())
             }

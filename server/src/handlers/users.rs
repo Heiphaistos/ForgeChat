@@ -100,7 +100,15 @@ pub async fn update_me(
     .bind(birthday_val)
     .bind(birthday_clear)
     .fetch_one(&state.db)
-    .await?;
+    .await
+    .map_err(|e| {
+        if let sqlx::Error::Database(ref db_err) = e {
+            if db_err.code().as_deref() == Some("23505") {
+                return AppError::Conflict("Ce nom d'utilisateur est déjà pris".into());
+            }
+        }
+        AppError::from(e)
+    })?;
 
     // Broadcast mise à jour profil à tous les membres des serveurs communs (1 query)
     let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
