@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useWs } from '../store/ws'
+import { useAuth } from '../store/auth'
 import CalendarView from '../components/events/CalendarView'
 
 interface Props {
@@ -194,6 +195,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 export default function ServerEventsPage({ serverId }: Props) {
   const qc = useQueryClient()
   const { on } = useWs()
+  const { user } = useAuth()
   const [filter, setFilter] = useState<FilterType>('upcoming')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [showCreate, setShowCreate] = useState(false)
@@ -369,6 +371,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                 const status = getStatus(event)
                 const badge = STATUS_BADGE[status]
                 const isAttending = event.user_rsvp === 'going'
+                const canManage = user && event.creator_id === user.id
                 return (
                   <div key={event.id} className="bg-fc-channel rounded-lg p-4 hover:bg-fc-hover/20 transition">
                     <div className="flex items-start gap-3">
@@ -419,39 +422,43 @@ export default function ServerEventsPage({ serverId }: Props) {
                           {isAttending ? <><Check size={12} /> Inscrit</> : 'Participer'}
                         </button>
 
-                        <button
-                          onClick={() => setEditing(event)}
-                          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                          title="Modifier"
-                        >
-                          <Edit2 size={13} />
-                        </button>
-
-                        {deletingId === event.id ? (
-                          <div className="flex items-center gap-1">
+                        {canManage && (
+                          <>
                             <button
-                              onClick={() => deleteEvent.mutate(event.id)}
-                              disabled={deleteEvent.isPending}
-                              className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
-                              title="Confirmer"
-                            >
-                              <Check size={13} />
-                            </button>
-                            <button
-                              onClick={() => setDeletingId(null)}
+                              onClick={() => setEditing(event)}
                               className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                              title="Modifier"
                             >
-                              <X size={13} />
+                              <Edit2 size={13} />
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeletingId(event.id)}
-                            className="p-1.5 text-fc-muted hover:text-fc-red hover:bg-fc-hover rounded transition"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+
+                            {deletingId === event.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => deleteEvent.mutate(event.id)}
+                                  disabled={deleteEvent.isPending}
+                                  className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
+                                  title="Confirmer"
+                                >
+                                  <Check size={13} />
+                                </button>
+                                <button
+                                  onClick={() => setDeletingId(null)}
+                                  className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeletingId(event.id)}
+                                className="p-1.5 text-fc-muted hover:text-fc-red hover:bg-fc-hover rounded transition"
+                                title="Supprimer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

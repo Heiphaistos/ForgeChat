@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     middleware::auth::Claims,
+    models::role::Permissions,
     state::AppState,
 };
 
@@ -266,15 +267,28 @@ pub async fn delete_event(
 ) -> Result<Json<serde_json::Value>> {
     ensure_member(&state, server_id, claims.sub).await?;
 
-    // Modérateurs (MANAGE_EVENTS) ou créateur peuvent supprimer
-    let deleted = sqlx::query(
-        "DELETE FROM server_events WHERE id = $1 AND server_id = $2 AND creator_id = $3"
-    )
-    .bind(event_id)
-    .bind(server_id)
-    .bind(claims.sub)
-    .execute(&state.db)
-    .await?;
+    let is_admin = crate::handlers::servers::require_permission(
+        &state, claims.sub, server_id, Permissions::MANAGE_SERVER,
+    ).await.is_ok();
+
+    let deleted = if is_admin {
+        sqlx::query(
+            "DELETE FROM server_events WHERE id = $1 AND server_id = $2"
+        )
+        .bind(event_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "DELETE FROM server_events WHERE id = $1 AND server_id = $2 AND creator_id = $3"
+        )
+        .bind(event_id)
+        .bind(server_id)
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?
+    };
 
     if deleted.rows_affected() == 0 {
         return Err(AppError::NotFound("Événement introuvable ou non autorisé".into()));
