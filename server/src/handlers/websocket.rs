@@ -381,16 +381,21 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 .await
                 .unwrap_or(false);
 
-                // Autoriser aussi les DM channels
+                // Autoriser aussi les DM channels et group DM channels
                 let dm_ok = if !member_ok {
-                    sqlx::query_scalar::<_, bool>(
+                    let dm1: bool = sqlx::query_scalar(
                         "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id = $1 AND (user1_id = $2 OR user2_id = $2))"
                     )
-                    .bind(channel_id)
-                    .bind(user_id)
-                    .fetch_one(&state.db)
-                    .await
-                    .unwrap_or(false)
+                    .bind(channel_id).bind(user_id)
+                    .fetch_one(&state.db).await.unwrap_or(false);
+
+                    if dm1 { dm1 } else {
+                        sqlx::query_scalar::<_, bool>(
+                            "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id = $1 AND user_id = $2)"
+                        )
+                        .bind(channel_id).bind(user_id)
+                        .fetch_one(&state.db).await.unwrap_or(false)
+                    }
                 } else {
                     false
                 };
@@ -404,9 +409,13 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                         let mut rx = tx.subscribe();
                         let user_tx = user_tx.clone();
                         tokio::spawn(async move {
-                            while let Ok(msg) = rx.recv().await {
-                                if user_tx.send(msg).is_err() {
-                                    break;
+                            loop {
+                                match rx.recv().await {
+                                    Ok(msg) => {
+                                        if user_tx.send(msg).is_err() { break; }
+                                    }
+                                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                                 }
                             }
                         });
