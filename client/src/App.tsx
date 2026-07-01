@@ -249,12 +249,12 @@ function AppInner() {
             body: content.slice(0, 80),
             onClick: goToMsg,
           })
-        } else {
-          toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
-            duration: 5000,
-            style: { cursor: 'pointer', maxWidth: '360px' },
-            onClick: goToMsg,
-          } as any)
+        } else if (d.server_id && d.message?.channel_id) {
+          pendingNotifs.current.push({
+            title: msg.author_username ?? 'Mention',
+            body: `🔔 ${content.slice(0, 60)}`,
+            path: `/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`,
+          })
         }
       } else if (!document.hasFocus()) {
         playMessage()
