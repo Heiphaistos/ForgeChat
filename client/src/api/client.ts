@@ -19,6 +19,9 @@ api.interceptors.request.use(cfg => {
   return cfg
 })
 
+// Semaphore: une seule tentative de refresh à la fois, les autres attendent
+let refreshPromise: Promise<void> | null = null
+
 api.interceptors.response.use(
   r => r,
   async err => {
@@ -29,14 +32,23 @@ api.interceptors.response.use(
 
     if (err.response?.status === 401 && !isAuthEndpoint && !onPublicPage) {
       try {
-        const body = isTauri
-          ? { refresh_token: localStorage.getItem('refresh_token') }
-          : {}
-        const res = await axios.post(`${baseURL}/auth/refresh`, body, { withCredentials: true })
-        if (isTauri && res.data.access_token) {
-          localStorage.setItem('access_token', res.data.access_token)
-          if (res.data.refresh_token) localStorage.setItem('refresh_token', res.data.refresh_token)
-          err.config.headers.Authorization = `Bearer ${res.data.access_token}`
+        if (!refreshPromise) {
+          refreshPromise = (async () => {
+            const body = isTauri
+              ? { refresh_token: localStorage.getItem('refresh_token') }
+              : {}
+            const res = await axios.post(`${baseURL}/auth/refresh`, body, { withCredentials: true })
+            if (isTauri && res.data.access_token) {
+              localStorage.setItem('access_token', res.data.access_token)
+              if (res.data.refresh_token) localStorage.setItem('refresh_token', res.data.refresh_token)
+            }
+          })().finally(() => { refreshPromise = null })
+        }
+        await refreshPromise
+        // Mettre à jour le header si Tauri
+        if (isTauri) {
+          const token = localStorage.getItem('access_token')
+          if (token) err.config.headers.Authorization = `Bearer ${token}`
         }
         return api(err.config)
       } catch {
