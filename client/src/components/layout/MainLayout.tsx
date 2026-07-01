@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, useSyncExternalStore } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import ServerSidebar from './ServerSidebar'
@@ -19,10 +19,20 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+// Detect desktop vs mobile, reactive to resize
+function useIsMobile() {
+  return !useSyncExternalStore(
+    cb => { window.addEventListener('resize', cb); return () => window.removeEventListener('resize', cb) },
+    () => window.innerWidth >= 768,
+    () => true,
+  )
+}
+
 export default function MainLayout() {
   const { open: activityOpen, toggle: toggleActivity, close: closeActivity } = useRightSidebar()
   const [splitChannelId, setSplitChannelId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const isMobile = useIsMobile()
   const location = useLocation()
 
   // Sidebar resize
@@ -130,7 +140,7 @@ export default function MainLayout() {
             <ServerSidebar />
             <div
               className="flex flex-col bg-fc-channel flex-shrink-0 h-full"
-              style={{ width: `${sidebarWidth}px` }}
+              style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px` }}
             >
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <ChannelSidebar />

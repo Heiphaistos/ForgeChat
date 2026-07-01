@@ -3,7 +3,12 @@
 @tailwind utilities;
 @import 'highlight.js/styles/github-dark.css';
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; touch-action: manipulation; }
+
+html {
+  overflow: hidden;
+  max-width: 100vw;
+}
 
 body {
   margin: 0;
@@ -11,6 +16,8 @@ body {
   background: #1a1b1e;
   color: #dcddde;
   overflow: hidden;
+  max-width: 100vw;
+  -webkit-text-size-adjust: 100%;
 }
 
 ::-webkit-scrollbar { width: 4px; }
