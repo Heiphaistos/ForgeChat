@@ -510,6 +510,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/messages/:id/translate", post(handlers::messages::translate_message))
         .route("/messages/:id/report", post(handlers::reports::create_report))
         .route("/servers/:server_id/reports", get(handlers::reports::list_reports))
+        .route("/servers/:server_id/reports/:report_id", patch(handlers::reports::update_report))
         // Uploads
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file))
         // Roles

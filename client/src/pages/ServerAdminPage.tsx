@@ -1,7 +1,7 @@
 import { useState, Component, ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2, AlertTriangle } from 'lucide-react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import ServerStatsPage from './ServerStatsPage'
@@ -119,9 +119,17 @@ function ModerationTab({ serverId }: { serverId: string }) {
 }
 
 function ReportsTab({ serverId }: { serverId: string }) {
+  const qc = useQueryClient()
   const { data: reports = [], isLoading } = useQuery<Report[]>({
     queryKey: ['server-reports', serverId],
     queryFn: () => api.get(`/servers/${serverId}/reports`).then(r => r.data),
+  })
+
+  const updateReport = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch(`/servers/${serverId}/reports/${id}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['server-reports', serverId] }),
+    onError: () => toast.error('Erreur lors de la mise à jour'),
   })
 
   const REASON_LABEL: Record<string, string> = {
@@ -146,9 +154,11 @@ function ReportsTab({ serverId }: { serverId: string }) {
       {reports.map(r => (
         <div key={r.id} className="bg-fc-channel rounded-lg p-3 flex items-start gap-3">
           <span className={`mt-0.5 flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-            r.status === 'pending' ? 'bg-fc-red/20 text-fc-red' : 'bg-fc-hover text-fc-muted'
+            r.status === 'pending' ? 'bg-fc-red/20 text-fc-red'
+            : r.status === 'resolved' ? 'bg-fc-green/20 text-fc-green'
+            : 'bg-fc-hover text-fc-muted'
           }`}>
-            {r.status === 'pending' ? 'En attente' : 'Traité'}
+            {r.status === 'pending' ? 'En attente' : r.status === 'resolved' ? 'Résolu' : 'Rejeté'}
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -160,6 +170,26 @@ function ReportsTab({ serverId }: { serverId: string }) {
               <p className="text-xs text-fc-muted mt-1 truncate">{r.comment}</p>
             )}
           </div>
+          {r.status === 'pending' && (
+            <div className="flex gap-1 flex-shrink-0">
+              <button
+                onClick={() => updateReport.mutate({ id: r.id, status: 'resolved' })}
+                disabled={updateReport.isPending}
+                title="Marquer comme résolu"
+                className="p-1 rounded hover:bg-fc-green/20 text-fc-green transition"
+              >
+                <CheckCircle size={16} />
+              </button>
+              <button
+                onClick={() => updateReport.mutate({ id: r.id, status: 'dismissed' })}
+                disabled={updateReport.isPending}
+                title="Rejeter"
+                className="p-1 rounded hover:bg-fc-hover text-fc-muted transition"
+              >
+                <XCircle size={16} />
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
