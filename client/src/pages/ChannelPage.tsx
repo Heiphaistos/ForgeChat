@@ -370,10 +370,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           )}
           <div className="ml-auto flex items-center gap-1">
             {currentChannel && (
-              <ExportConversationButton
-                channelId={channelId}
-                channelName={currentChannel.name ?? channelId}
-              />
+              <span className="hidden md:flex">
+                <ExportConversationButton
+                  channelId={channelId}
+                  channelName={currentChannel.name ?? channelId}
+                />
+              </span>
             )}
             <button
               onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
@@ -416,17 +418,17 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </div>
             <button
               onClick={() => setShowMembers(!showMembers)}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`hidden lg:flex p-1.5 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Liste des membres"
             >
               <Users size={18} />
             </button>
 
-            {/* Bouton split / fermer split */}
+            {/* Bouton split / fermer split — desktop uniquement */}
             {!isSplit ? (
               <button
                 onClick={() => setSplitChannelId(channelId ?? null)}
-                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 title="Ouvrir en split (Ctrl+Shift+S pour fermer)"
               >
                 <Columns2 size={18} />
@@ -434,7 +436,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             ) : (
               <button
                 onClick={onClose}
-                className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 title="Fermer le split (Ctrl+Shift+S)"
               >
                 <X size={18} />
