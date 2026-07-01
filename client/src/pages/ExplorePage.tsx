@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Users, Compass } from 'lucide-react'
+import { Search, Users, Compass, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
+import { useMobile } from '../contexts/MobileContext'
 
 interface PublicServer {
   id: string
@@ -17,6 +18,7 @@ interface PublicServer {
 export default function ExplorePage() {
   const [query, setQuery] = useState('')
   const nav = useNavigate()
+  const { openSidebar } = useMobile()
   const qc = useQueryClient()
 
   const { data: servers = [], isLoading } = useQuery<PublicServer[]>({
@@ -44,7 +46,15 @@ export default function ExplorePage() {
 
   return (
     <div className="flex-1 bg-fc-chat overflow-y-auto">
-      <div className="max-w-5xl mx-auto px-6 py-10">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-10">
+        {/* Bouton retour mobile */}
+        <button
+          className="md:hidden flex items-center gap-2 text-fc-muted hover:text-white transition mb-4"
+          onClick={openSidebar}
+        >
+          <ChevronLeft size={20} />
+          <span className="text-sm">Menu</span>
+        </button>
         {/* En-tête */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-fc-accent/20 mb-4">

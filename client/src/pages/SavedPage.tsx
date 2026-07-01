@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File } from 'lucide-react'
+import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File, ChevronLeft } from 'lucide-react'
+import { useMobile } from '../contexts/MobileContext'
 import { isToday, isThisWeek, isThisMonth } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
@@ -138,6 +139,7 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 export default function SavedPage() {
   const nav = useNavigate()
   const qc = useQueryClient()
+  const { openSidebar } = useMobile()
   const { formatTs } = useFormatDate()
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<SortType>('newest')
@@ -194,7 +196,14 @@ export default function SavedPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-fc-bg">
       {/* ── Header ── */}
-      <div className="px-6 py-4 border-b border-fc-hover flex items-center gap-3">
+      <div className="px-4 py-4 border-b border-fc-hover flex items-center gap-3">
+        <button
+          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <Bookmark size={20} className="text-fc-accent" />
         <h1 className="text-lg font-bold text-white">Messages sauvegardés</h1>
         {saved.length > 0 && (

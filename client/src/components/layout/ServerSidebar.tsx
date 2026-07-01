@@ -668,8 +668,7 @@ function CreateServerModal({
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-fc-channel rounded-xl shadow-2xl overflow-hidden"
-        style={{ width: step === 'template-grid' ? '560px' : '400px' }}
+        className={`bg-fc-channel rounded-xl shadow-2xl overflow-hidden w-[calc(100vw-2rem)] ${step === 'template-grid' ? 'md:w-[560px]' : 'md:w-[400px]'}`}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Étape 1 : Choix ── */}

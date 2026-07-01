@@ -978,8 +978,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Bouton GIF */}
-          <div className="relative">
+          {/* Bouton GIF — masqué sur petits écrans pour laisser de la place au textarea */}
+          <div className="relative hidden sm:block">
             <button
               onClick={() => { closeAllPickers(); setShowGifPicker(p => !p) }}
               className={`px-2 py-1 rounded transition text-xs font-bold tracking-wide
@@ -996,8 +996,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Bouton Sticker */}
-          <div className="relative">
+          {/* Bouton Sticker — masqué sur petits écrans */}
+          <div className="relative hidden sm:block">
             <button
               onClick={() => { closeAllPickers(); setShowStickerPicker(p => !p) }}
               className={`p-1.5 rounded transition text-base leading-none
@@ -1015,8 +1015,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Bouton Quick Replies */}
-          <div className="relative">
+          {/* Bouton Quick Replies — masqué sur petits écrans */}
+          <div className="relative hidden sm:block">
             <button
               onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
               className={`p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -1036,8 +1036,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Bouton Messages programmés */}
-          <div className="relative">
+          {/* Bouton Messages programmés — masqué sur petits écrans */}
+          <div className="relative hidden sm:block">
             <button
               onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
               className={`p-1.5 rounded transition ${showScheduled ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -1120,8 +1120,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* TTL message éphémère */}
-          <div className="relative">
+          {/* TTL message éphémère — masqué sur petits écrans */}
+          <div className="relative hidden sm:block">
             <button
               onClick={() => { setShowTtlPicker(v => !v) }}
               className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
