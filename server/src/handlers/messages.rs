@@ -242,7 +242,7 @@ pub async fn send_message(
         if let Some(ts) = last {
             let remaining = slowmode as i64 - (now - ts);
             if remaining > 0 {
-                return Err(AppError::TooManyRequests);
+                return Err(AppError::SlowMode(remaining));
             }
         }
         let _: () = redis.set_ex(&key, now, (slowmode as u64).saturating_add(5)).await.unwrap_or(());

@@ -210,7 +210,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds, has_attachments }),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
-        const delay = currentChannel?.slowmode_delay ?? 30
+        const delay = e?.response?.data?.retry_after ?? currentChannel?.slowmode_delay ?? 30
         startSlowmodeCooldown(delay)
         toast.error(`Mode lent — attendez ${delay}s avant d'envoyer`)
       } else {

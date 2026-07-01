@@ -16,6 +16,8 @@ pub enum AppError {
     Conflict(String),
     #[error("Trop de tentatives — réessayez dans 15 minutes")]
     TooManyRequests,
+    #[error("Mode lent actif — attendez {0} secondes")]
+    SlowMode(i64),
     #[error("totp_required")]
     TotpRequired,
     #[error("Erreur interne: {0}")]
@@ -33,6 +35,12 @@ impl IntoResponse for AppError {
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
             AppError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
+            AppError::SlowMode(secs) => {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({ "error": self.to_string(), "retry_after": secs })),
+                ).into_response();
+            }
             AppError::TotpRequired => (StatusCode::FORBIDDEN, "totp_required".into()),
             AppError::Internal(e) => {
                 tracing::error!("Internal error: {e:?}");
