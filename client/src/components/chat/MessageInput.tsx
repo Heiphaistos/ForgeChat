@@ -14,8 +14,7 @@ import EmojiPicker from './EmojiPicker'
 import GifPicker from './GifPicker'
 import StickerPicker, { formatStickerMessage } from './StickerPicker'
 import type { Sticker } from './StickerPicker'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useFormatDate } from '../../hooks/useFormatDate'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 
@@ -172,6 +171,7 @@ function FileIcon({ file }: { file: File }) {
 export default function MessageInput({ channelId, serverId, placeholder, onSend, onEdit, replyTo, onCancelReply, sending }: Props) {
   const { drafts, setDraft, clearDraft } = useDraft()
   const me = useAuth(s => s.user)
+  const { formatShortDate } = useFormatDate()
   const [content, setContent] = useState(() => drafts[channelId] ?? '')
   const [files, setFiles] = useState<FileWithTtl[]>([])
   const filesRef = useRef<FileWithTtl[]>([])
@@ -1101,7 +1101,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                       <div key={sm.id} className="flex items-start gap-2 bg-fc-bg rounded-lg px-2 py-2">
                         <div className="flex-1 min-w-0">
                           <div className="text-xs text-fc-muted mb-0.5">
-                            {format(new Date(sm.send_at), "dd/MM 'à' HH:mm", { locale: fr })}
+                            {formatShortDate(sm.send_at)}
                           </div>
                           <div className="text-sm text-fc-text truncate">{sm.content}</div>
                         </div>
