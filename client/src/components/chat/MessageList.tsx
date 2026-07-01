@@ -107,6 +107,7 @@ export default function MessageList({
   const groupingMs = ((userSettings?.message_grouping_minutes as number | undefined) ?? 5) * 60 * 1000
   const timeFormat = (userSettings?.time_format as string | undefined) ?? '24h'
   const dateFormat = (userSettings?.date_format as string | undefined) ?? 'DD/MM/YYYY'
+  const showTimestamps = (userSettings?.show_timestamps as string | undefined) ?? 'always'
 
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -405,7 +406,7 @@ export default function MessageList({
               {!ultraCompact && (
                 <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
                   {/* Heure au survol pour les messages de continuation */}
-                  {isGrouped && (
+                  {isGrouped && showTimestamps !== 'never' && (
                     <span className="opacity-0 group-hover:opacity-100 transition text-[9px] text-fc-muted font-mono select-none flex items-center justify-center h-full">
                       {formatShortTs(msg.created_at)}
                     </span>
@@ -462,7 +463,9 @@ export default function MessageList({
                         BOT
                       </span>
                     )}
-                    <span className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'}`}>{formatTs(msg.created_at)}</span>
+                    {showTimestamps !== 'never' && (
+                      <span className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</span>
+                    )}
                     {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
                   </div>
                 )}
