@@ -348,12 +348,14 @@ function AppInner() {
       const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
       if (!isActive) {
         incrUnread(d.group_id)
+        const isGroupMuted = qcHook.getQueryData<any[]>(['dms'])?.find(dm => dm.id === d.group_id)?.is_muted ?? false
         const content: string = msg.content ?? ''
         const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const mentionedMe = !user.focus_mode && (
           new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content) ||
           content.includes('@everyone')
         )
+        if (isGroupMuted) return
         if (!user.focus_mode) {
           if (mentionedMe) playMention()
           else playMessage()

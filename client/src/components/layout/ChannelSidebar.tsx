@@ -378,10 +378,27 @@ export default function ChannelSidebar() {
             </div>
             {groupDms.map((dm: any) => {
               const unread = unreadCounts[dm.id] ?? 0
+              const toggleMuteGroup = () => {
+                api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
+                  .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
+                  .catch(() => toast.error('Erreur'))
+              }
+              const leaveGroup = async () => {
+                if (!confirm(`Quitter le groupe "${dm.name ?? 'Groupe'}" ?`)) return
+                try {
+                  await api.post(`/dms/groups/${dm.id}/leave`)
+                  qc.invalidateQueries({ queryKey: ['dms'] })
+                  nav('/friends')
+                } catch { toast.error('Impossible de quitter le groupe') }
+              }
               return (
                 <button
                   key={dm.id}
                   onClick={() => nav(`/dms/groups/${dm.id}`)}
+                  onContextMenu={e => ctxMenu.open(e, [
+                    { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
+                    { label: 'Quitter le groupe', onClick: leaveGroup },
+                  ])}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 >
                   <div className="relative flex-shrink-0">
@@ -395,6 +412,9 @@ export default function ChannelSidebar() {
                     </div>
                     <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
                   </div>
+                  {dm.is_muted && !unread && (
+                    <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
+                  )}
                   {unread > 0 && (
                     <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
                       {unread > 99 ? '99+' : unread}

@@ -211,11 +211,14 @@ pub async fn get_dms(
          member_counts AS (
            SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
          )
-         SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at
+         SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at,
+                COALESCE(dus.muted, FALSE) AS is_muted,
+                COALESCE(dus.archived, FALSE) AS is_archived
          FROM group_dm_channels g
          JOIN group_dm_members gm ON gm.dm_id = g.id AND gm.user_id = $1
          LEFT JOIN last_gdm lgm ON lgm.dm_id = g.id
          LEFT JOIN member_counts mc ON mc.dm_id = g.id
+         LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = g.id AND dus.user_id = $1
          ORDER BY COALESCE(lgm.last_message_at, g.created_at) DESC"
     )
     .bind(claims.sub)
@@ -228,8 +231,8 @@ pub async fn get_dms(
             "name": r.get::<String, _>("name"),
             "member_count": r.get::<Option<i64>, _>("member_count").unwrap_or(0),
             "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
-            "is_muted": false,
-            "is_archived": false,
+            "is_muted": r.get::<bool, _>("is_muted"),
+            "is_archived": r.get::<bool, _>("is_archived"),
             "is_group": true,
         }));
     }
@@ -1468,7 +1471,11 @@ pub async fn patch_dm_settings(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
     let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+        "SELECT EXISTS(
+            SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2)
+            UNION ALL
+            SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2
+         )"
     )
     .bind(dm_id)
     .bind(claims.sub)
