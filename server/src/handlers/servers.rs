@@ -765,7 +765,10 @@ pub async fn require_permission(
 ) -> Result<()> {
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT sm.is_owner, COALESCE(BIT_OR(r.permissions), 0) as combined_perms
+        "SELECT sm.is_owner,
+                COALESCE(BIT_OR(r.permissions), 0)
+                | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
+                AS combined_perms
          FROM server_members sm
          LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
          LEFT JOIN roles r ON r.id = mr.role_id
