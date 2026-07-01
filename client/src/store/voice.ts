@@ -481,7 +481,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       channelId,
       channelName: channelName ?? null,
       serverId,
-      localStream: stream,
+      localStream: _localStream,
       videoEnabled: hasVideo,
       muted: false,
       deafened: false,
@@ -584,6 +584,8 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _pcs.forEach(pc => pc.close())
     _pcs.clear()
     _iceQueues.clear()
+    // Déconnecter tous les GainNodes avant de les supprimer
+    _gainNodes.forEach(g => { try { g.disconnect() } catch {} })
     _gainNodes.clear()
 
     // Stopper toutes les pistes des deux streams (raw + processed)

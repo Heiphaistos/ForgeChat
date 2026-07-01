@@ -113,10 +113,11 @@ function PeerTile({
     <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
-      {/* Audio toujours actif pour les peers distants */}
+      {/* Audio peers distants — toujours séparé du <video> pour éviter le double son */}
       {!isLocal && <audio ref={audioRef} autoPlay />}
       {hasVideo ? (
-        <video ref={videoRef} autoPlay playsInline muted={muted}
+        <video ref={videoRef} autoPlay playsInline
+          muted={isLocal ? muted : true}
           className="w-full h-full object-cover"
           style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
       ) : (
@@ -292,11 +293,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     return unsub
   }, [channel.id, on, user?.id])
 
-  // Apply audio output device to video elements
+  // Apply audio output device to all audio/video elements
   useEffect(() => {
     const savedOut = localStorage.getItem('fc_audio_output')
     if (!savedOut) return
-    document.querySelectorAll('video').forEach(el => {
+    document.querySelectorAll('audio, video').forEach(el => {
       if ('setSinkId' in el) (el as any).setSinkId(savedOut).catch(() => {})
     })
   }, [peers])
