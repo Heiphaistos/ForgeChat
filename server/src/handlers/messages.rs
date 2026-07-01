@@ -9,7 +9,8 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_channel_in_server},
+    handlers::servers::{require_member, require_channel_in_server, require_permission},
+    models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
     state::AppState,
@@ -186,6 +187,19 @@ pub async fn send_message(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    // Canaux d'annonces : seuls les gestionnaires peuvent publier
+    let chan_type: Option<String> = sqlx::query_scalar(
+        "SELECT type FROM channels WHERE id=$1"
+    )
+    .bind(channel_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if chan_type.as_deref() == Some("announcement") {
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES)
+            .await
+            .map_err(|_| AppError::Forbidden)?;
+    }
+
     // Refuser si content vide ET pas de pièces jointes annoncées
     let content_empty = body.content.as_deref().map(|c| c.trim().is_empty()).unwrap_or(true);
     if content_empty && !body.has_attachments.unwrap_or(false) {
@@ -274,8 +288,6 @@ pub async fn send_message(
 
     // Vérifier permission MENTION_EVERYONE si @everyone ou @here
     if mention_everyone {
-        use crate::handlers::servers::require_permission;
-        use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE)
             .await
             .map_err(|_| AppError::Forbidden)?;
@@ -442,9 +454,6 @@ pub async fn delete_message(
     .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
 
     if msg_user != claims.sub {
-        // Vérifier permission MANAGE_MESSAGES
-        use crate::handlers::servers::require_permission;
-        use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
@@ -574,8 +583,6 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    use crate::handlers::servers::{require_permission, require_channel_in_server};
-    use crate::models::role::Permissions;
     require_channel_in_server(&state, channel_id, server_id).await?;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
@@ -613,8 +620,6 @@ pub async fn unpin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    use crate::handlers::servers::{require_permission, require_channel_in_server};
-    use crate::models::role::Permissions;
     require_channel_in_server(&state, channel_id, server_id).await?;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
 
