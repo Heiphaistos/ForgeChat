@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef, useContext } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
+import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
@@ -49,6 +50,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const channelId = forcedChannelId ?? params.channelId
 
   const { setSplitChannelId } = useContext(SplitContext)
+  const { openSidebar } = useMobile()
   const [searchParams] = useSearchParams()
   const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
@@ -334,8 +336,17 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header canal */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
-          {/* Espaceur mobile pour laisser la place au hamburger global */}
-          {!isSplit && <div className="md:hidden w-8 flex-shrink-0" />}
+          {/* Bouton "retour à la liste des canaux" sur mobile */}
+          {!isSplit && (
+            <button
+              className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+              onClick={openSidebar}
+              aria-label="Ouvrir la liste des canaux"
+              title="Canaux"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
           <span className="text-fc-muted">{channelIcon(currentChannel?.type ?? 'text')}</span>
           <span className="font-semibold text-white">{currentChannel?.name ?? '...'}</span>
           {currentChannel?.type === 'announcement' && (

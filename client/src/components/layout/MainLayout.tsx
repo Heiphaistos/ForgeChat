@@ -101,15 +101,15 @@ export default function MainLayout() {
             />
           )}
 
-          {/* Bouton hamburger global mobile — visible sur toutes les pages */}
+          {/* Bouton hamburger global mobile — fallback pour les pages sans bouton dédié */}
           {!sidebarOpen && (
             <button
-              className="fixed top-2 left-2 z-30 md:hidden p-2 rounded-lg bg-fc-channel/90 text-fc-muted hover:text-white shadow-lg backdrop-blur-sm"
+              className="fixed top-2.5 left-2.5 z-30 md:hidden p-2 rounded-xl bg-fc-channel/95 text-white shadow-xl backdrop-blur-sm border border-fc-hover/40"
               onClick={() => setSidebarOpen(true)}
               title="Menu"
               aria-label="Ouvrir le menu"
             >
-              <Menu size={18} />
+              <Menu size={20} />
             </button>
           )}
 

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
+import { useMobile } from '../contexts/MobileContext'
 
 interface Props {
   channel: { id: string; name: string; topic?: string }
@@ -389,6 +390,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null)
   const qc = useQueryClient()
   const { on } = useWs()
+  const { openSidebar } = useMobile()
   const { formatShortDate, formatDate } = useFormatDate()
 
   const { data: posts = [] } = useQuery<ForumPost[]>({
@@ -430,7 +432,13 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
-        <div className="md:hidden w-8 flex-shrink-0" />
+        <button
+          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour aux canaux"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <MessagesSquare size={18} className="text-fc-muted flex-shrink-0" />
         <span className="font-semibold text-white">{channel.name}</span>
         {channel.topic && (

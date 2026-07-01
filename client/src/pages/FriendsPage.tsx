@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   UserPlus, MessageCircle, Check, X, Link, Copy, Search,
   MoreHorizontal, UserX, Shield, User, Wifi, WifiOff,
-  Clock, MinusCircle, Upload, Menu,
+  Clock, MinusCircle, Upload, Menu, ChevronLeft,
 } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
 import ImportContactsModal from '../components/modals/ImportContactsModal'
+import { useMobile } from '../contexts/MobileContext'
 
 type FriendTab = 'online' | 'all' | 'pending' | 'blocked'
 type PendingSubTab = 'received' | 'sent'
@@ -78,6 +79,7 @@ function SkeletonCard() {
 }
 
 export default function FriendsPage() {
+  const { openSidebar } = useMobile()
   const [tab, setTab] = useState<FriendTab>('all')
   const [pendingSubTab, setPendingSubTab] = useState<PendingSubTab>('received')
   const [addTag, setAddTag] = useState('')
@@ -303,7 +305,13 @@ export default function FriendsPage() {
     <div className="flex flex-col h-full" onClick={() => menuOpen && setMenuOpen(null)}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 flex-wrap gap-y-2">
-        <div className="md:hidden w-8 flex-shrink-0" />
+        <button
+          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <span className="font-semibold text-white flex-shrink-0">Amis</span>
         <div className="flex gap-1 flex-wrap">
           <TabBtn t="online" label="En ligne" count={online.length} />
