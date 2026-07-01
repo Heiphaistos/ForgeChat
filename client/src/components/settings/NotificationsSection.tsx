@@ -1,9 +1,10 @@
 ﻿import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Moon, Bell, BellOff } from 'lucide-react'
+import { Moon, Bell, BellOff, Volume2 } from 'lucide-react'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 
 function DesktopNotifBlock() {
   const [perm, setPerm] = useState<NotificationPermission>(() =>
@@ -21,7 +22,7 @@ function DesktopNotifBlock() {
 
   const test = () => {
     if (perm !== 'granted') return
-    new Notification('ForgeChat', { body: 'Les notifications fonctionnent !' , icon: '/favicon.ico' })
+    new Notification('ForgeChat', { body: 'Les notifications fonctionnent !', icon: '/icon.svg' })
   }
 
   return (
@@ -50,6 +51,8 @@ function DesktopNotifBlock() {
 }
 
 export default function NotificationsSection() {
+  const { enabled: audioEnabled, setEnabled: setAudioEnabled, playMention } = useAudioNotifications()
+
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -76,6 +79,30 @@ export default function NotificationsSection() {
   return (
     <div className="space-y-6">
       <DesktopNotifBlock />
+
+      {/* Sons de notification */}
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Volume2 size={16} className={audioEnabled ? 'text-fc-accent' : 'text-fc-muted'} />
+            <div>
+              <p className="text-sm font-medium text-white">Sons de notification</p>
+              <p className="text-xs text-fc-muted mt-0.5">Sons pour les messages, mentions et appels entrants</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {audioEnabled && (
+              <button
+                onClick={playMention}
+                className="text-xs text-fc-muted hover:text-white underline"
+              >
+                Tester
+              </button>
+            )}
+            <Toggle value={audioEnabled} onChange={setAudioEnabled} />
+          </div>
+        </div>
+      </div>
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
         <div className="flex items-center justify-between">
           <div>
