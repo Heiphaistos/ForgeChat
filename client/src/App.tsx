@@ -428,7 +428,23 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
       }
     })
-    return () => { offUpdate(); offCreate(); offDelete(); offServerUpdate(); offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate(); offPermUpdate(); offArchive(); offMemberJoin() }
+    const offMemberLeave = on('MEMBER_LEAVE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      }
+    })
+    const offMemberKicked = on('MEMBER_KICKED', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+    })
+    const offMemberBanned = on('MEMBER_BANNED', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+    })
+    return () => {
+      offUpdate(); offCreate(); offDelete(); offServerUpdate()
+      offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate()
+      offPermUpdate(); offArchive(); offMemberJoin(); offMemberLeave(); offMemberKicked(); offMemberBanned()
+    }
   }, [user?.id])
 
   // Timeout utilisateur reçu en temps réel
@@ -481,7 +497,20 @@ function AppInner() {
     const offMemberTimeoutLifted = on('MEMBER_TIMEOUT_LIFTED', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
     })
-    return () => { offUserUpdate(); offBoost(); offTagAssign(); offTagRemove(); offMemberTimeout(); offMemberTimeoutLifted() }
+    const offRoleUpdate = on('ROLE_UPDATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    const offMemberRoleUpdate = on('MEMBER_ROLE_UPDATE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
+      }
+    })
+    return () => {
+      offUserUpdate(); offBoost(); offTagAssign(); offTagRemove()
+      offMemberTimeout(); offMemberTimeoutLifted(); offRoleUpdate(); offMemberRoleUpdate()
+    }
   }, [user?.id])
 
   // Expulsion/ban → forcer le retour à l'accueil + refresh liste serveurs
