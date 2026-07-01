@@ -156,6 +156,17 @@ pub async fn remove_friend(
     .execute(&state.db)
     .await?;
 
+    // Notifier les deux parties pour mise à jour temps réel
+    let event = serde_json::json!({
+        "type": "FRIEND_REMOVED",
+        "user_id": claims.sub,
+    });
+    state.broadcast_to_user(user_id, event.to_string()).await;
+    state.broadcast_to_user(claims.sub, serde_json::json!({
+        "type": "FRIEND_REMOVED",
+        "user_id": user_id,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
