@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
@@ -53,6 +53,8 @@ interface GroupDM {
 
 export default function GroupDMPage() {
   const { groupId } = useParams<{ groupId: string }>()
+  const [searchParams] = useSearchParams()
+  const highlightMsgId = searchParams.get('highlight')
   const { user } = useAuth()
   const { on } = useWs()
   const resetUnread = useUnread(s => s.reset)
@@ -225,9 +227,18 @@ export default function GroupDMPage() {
   // Scroll to bottom au chargement initial
   useEffect(() => {
     if (allMessages.length > 0 && prevLen.current === 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+      if (highlightMsgId) {
+        setTimeout(() => {
+          const el = document.getElementById(`gdm-msg-${highlightMsgId}`)
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          el?.classList.add('bg-fc-accent/10')
+          setTimeout(() => el?.classList.remove('bg-fc-accent/10'), 2000)
+        }, 300)
+      } else {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+      }
     }
-  }, [allMessages.length])
+  }, [allMessages.length, highlightMsgId])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || allMessages.length === 0 || !groupId) return
@@ -480,7 +491,7 @@ export default function GroupDMPage() {
           {allMessages.map(msg => {
             const isMe = msg.sender_id === user?.id
             return (
-              <div key={msg.id} className={`flex items-start gap-2.5 group ${isMe ? 'flex-row-reverse' : ''}`}>
+              <div key={msg.id} id={`gdm-msg-${msg.id}`} className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}>
                 <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {msg.sender_avatar
                     ? <img src={msg.sender_avatar} alt="" className="w-full h-full object-cover" />
