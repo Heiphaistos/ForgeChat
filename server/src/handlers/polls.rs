@@ -56,6 +56,11 @@ pub async fn create_poll(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    let is_timed_out: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if is_timed_out { return Err(AppError::Forbidden); }
+
     let poll_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO polls (id, channel_id, server_id, creator_id, question, multiple_choice, anonymous, ends_at)
