@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useContext } from 'react'
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine,
+  LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
 } from 'lucide-react'
 import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
@@ -18,6 +18,7 @@ import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
 import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
+import { MobileContext } from '../contexts/MobileContext'
 
 type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
 
@@ -182,6 +183,7 @@ function VoiceLobby({
   const { join, error } = useVoice()
   const [joining, setJoining] = useState(false)
   const [withVideo, setWithVideo] = useState(channel.type === 'video')
+  const { openSidebar } = useContext(MobileContext)
 
   const handleJoin = async () => {
     setJoining(true)
@@ -193,7 +195,19 @@ function VoiceLobby({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-6 bg-fc-bg">
+    <div className="flex flex-col h-full bg-fc-bg">
+      {/* Header mobile */}
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg flex-shrink-0 md:hidden">
+        <button
+          className="flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour aux canaux"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <span className="font-semibold text-white text-sm">{channel.name}</span>
+      </div>
+    <div className="flex flex-col items-center justify-center flex-1 gap-6">
       <div className="flex flex-col items-center gap-3">
         <div className="w-20 h-20 rounded-full bg-fc-accent/20 flex items-center justify-center">
           <Volume2 size={36} className="text-fc-accent" />
@@ -227,6 +241,7 @@ function VoiceLobby({
       <p className="text-xs text-fc-muted">
         Votre navigateur peut demander l'accès au microphone
       </p>
+    </div>
     </div>
   )
 }
