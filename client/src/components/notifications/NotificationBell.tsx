@@ -97,7 +97,7 @@ export default function NotificationBell() {
                   <button
                     key={m.message_id}
                     onClick={() => {
-                      nav(`/servers/${m.server_id}/channels/${m.channel_id}`)
+                      nav(`/servers/${m.server_id}/channels/${m.channel_id}?highlight=${m.message_id}`)
                       markRead.mutate(m.channel_id)
                       setOpen(false)
                     }}
