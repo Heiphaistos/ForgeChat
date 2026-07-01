@@ -282,6 +282,12 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
+              if (e.key === 'ArrowUp' && !input && threadId) {
+                const last = [...(messages as any[])].reverse().find((m: any) =>
+                  m.author_id === user?.id || m.user_id === user?.id
+                )
+                if (last) { e.preventDefault(); setEditingMsgId(last.id); setEditContent(last.content ?? ''); return }
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSend()
