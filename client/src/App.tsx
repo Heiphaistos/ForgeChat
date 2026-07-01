@@ -157,18 +157,46 @@ function AppInner() {
     return () => disconnect()
   }, [user?.id])
 
-  // Appliquer les préférences d'accessibilité et streamer mode au démarrage
+  // Appliquer les préférences au démarrage (a11y, apparence, streamer mode)
   useEffect(() => {
     if (!user) return
     import('./api/client').then(({ default: api }) => {
-      api.get('/user/settings').then((r: { data: { reduce_motion?: boolean; high_contrast?: boolean; streamer_mode?: boolean; interface_density?: string } }) => {
+      api.get('/user/settings').then((r: { data: Record<string, unknown> }) => {
         const d = r.data ?? {}
-        document.documentElement.setAttribute('data-reduce-motion', String(d.reduce_motion ?? false))
-        document.documentElement.setAttribute('data-high-contrast', String(d.high_contrast ?? false))
-        document.documentElement.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
-        const density = d.interface_density ?? 'normal'
-        document.documentElement.setAttribute('data-density', density)
+        const root = document.documentElement
+
+        // Accessibilité & modes
+        root.setAttribute('data-reduce-motion', String(d.reduce_motion ?? false))
+        root.setAttribute('data-high-contrast', String(d.high_contrast ?? false))
+        root.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
+
+        // Densité
+        const density = (d.interface_density as string | undefined) ?? 'normal'
+        root.setAttribute('data-density', density)
         localStorage.setItem('fc_density', density)
+
+        // Typographie
+        const fontFamily = (d.font_family as string | undefined) ?? 'Inter'
+        root.style.setProperty('--fc-font-family', `'${fontFamily}', sans-serif`)
+        const fontSize = typeof d.font_size_px === 'number' ? d.font_size_px : 14
+        root.style.setProperty('--fc-font-size', `${fontSize}px`)
+
+        // Couleurs personnalisées
+        if (typeof d.accent_color === 'string' && d.accent_color)
+          root.style.setProperty('--fc-accent', d.accent_color)
+        if (typeof d.font_color === 'string' && d.font_color)
+          root.style.setProperty('--fc-text', d.font_color)
+        if (typeof d.bg_color === 'string' && d.bg_color)
+          root.style.setProperty('--fc-bg', d.bg_color)
+
+        // Glassmorphism, forme avatar, affichage messages
+        root.setAttribute('data-glassmorphism', String(d.glassmorphism ?? false))
+        root.setAttribute('data-avatar-shape', (d.avatar_shape as string | undefined) ?? 'round')
+        root.setAttribute('data-message-display', (d.message_display as string | undefined) ?? 'normal')
+
+        // Largeur sidebar
+        if (typeof d.sidebar_width_px === 'number')
+          root.style.setProperty('--fc-sidebar-width', `${d.sidebar_width_px}px`)
       }).catch(() => {})
     })
   }, [user?.id])

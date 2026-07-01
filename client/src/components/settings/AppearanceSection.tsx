@@ -166,6 +166,17 @@ export default function AppearanceSection() {
   }
 
   const save = () => {
+    const root = document.documentElement
+    if (fontColor) root.style.setProperty('--fc-text', fontColor)
+    else root.style.removeProperty('--fc-text')
+    if (accentColor) root.style.setProperty('--fc-accent', accentColor)
+    else root.style.removeProperty('--fc-accent')
+    if (bgColor) root.style.setProperty('--fc-bg', bgColor)
+    else root.style.removeProperty('--fc-bg')
+    root.setAttribute('data-glassmorphism', String(glassmorphism))
+    root.setAttribute('data-avatar-shape', avatarShape)
+    root.setAttribute('data-message-display', messageDisplay)
+    root.style.setProperty('--fc-sidebar-width', `${sidebarWidth}px`)
     saveMutation.mutate({
       font_family: fontFamily,
       font_size_px: fontSizePx,
