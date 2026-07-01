@@ -113,7 +113,14 @@ export default function AutoModPage({ serverId }: Props) {
   })
 
   useEffect(() => {
-    if (data) setLocal({ ...DEFAULT_CONFIG, ...data, blocked_words: data.blocked_words ?? [] })
+    if (data) setLocal({
+      enabled: data.enabled ?? false,
+      blocked_words: data.blocked_words ?? [],
+      max_mentions: data.max_mentions ?? 0,
+      max_links: data.max_links ?? 0,
+      anti_spam: data.anti_spam ?? false,
+      anti_caps: data.anti_caps ?? false,
+    })
   }, [data])
 
   const save = useMutation({
