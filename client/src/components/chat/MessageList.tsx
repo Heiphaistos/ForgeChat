@@ -732,7 +732,7 @@ export default function MessageList({
 
                   <button
                     onClick={() => {
-                      const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?msg=${msg.id}`
+                      const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${msg.id}`
                       navigator.clipboard.writeText(url)
                       toast.success('Lien copié !')
                     }}
@@ -983,7 +983,7 @@ export default function MessageList({
           )}
           <button
             onClick={() => {
-              const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?msg=${contextMenu.msg.id}`
+              const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${contextMenu.msg.id}`
               navigator.clipboard.writeText(link)
               toast.success('Lien copié')
               setContextMenu(null)
