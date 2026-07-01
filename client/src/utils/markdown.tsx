@@ -1,4 +1,5 @@
 import hljs from 'highlight.js/lib/common'
+import { useState } from 'react'
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -27,16 +28,7 @@ export function renderMarkdown(text: string, customEmojis?: Record<string, strin
         i++
       }
       elements.push(
-        <div key={i} className="bg-[#1e1f29] rounded-lg mt-1 mb-1 overflow-hidden border border-white/5">
-          {lang && (
-            <div className="flex items-center justify-between px-3 py-1 bg-black/30 border-b border-white/5">
-              <span className="text-xs text-fc-muted font-mono">{lang}</span>
-            </div>
-          )}
-          <pre className="p-3 overflow-x-auto text-sm font-mono whitespace-pre leading-relaxed hljs">
-            <code dangerouslySetInnerHTML={{ __html: highlightCode(codeLines.join('\n'), lang) }} />
-          </pre>
-        </div>
+        <CodeBlock key={i} lang={lang} code={codeLines.join('\n')} />
       )
       i++
       continue
@@ -199,7 +191,31 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
   return result
 }
 
-import { useState } from 'react'
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="bg-[#1e1f29] rounded-lg mt-1 mb-1 overflow-hidden border border-white/5">
+      <div className="flex items-center justify-between px-3 py-1 bg-black/30 border-b border-white/5">
+        <span className="text-xs text-fc-muted font-mono">{lang || 'code'}</span>
+        <button
+          onClick={copy}
+          className="text-xs text-fc-muted hover:text-white transition px-1.5 py-0.5 rounded hover:bg-white/10"
+        >
+          {copied ? '✓ Copié' : 'Copier'}
+        </button>
+      </div>
+      <pre className="p-3 overflow-x-auto text-sm font-mono whitespace-pre leading-relaxed hljs">
+        <code dangerouslySetInnerHTML={{ __html: highlightCode(code, lang) }} />
+      </pre>
+    </div>
+  )
+}
 
 function SpoilerText({ text }: { text: string }) {
   const [revealed, setRevealed] = useState(false)
