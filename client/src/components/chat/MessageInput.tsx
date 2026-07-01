@@ -912,7 +912,11 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
         </div>
 
-        <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5 px-2 py-2">
+        {/* Layout: colonne sur mobile (textarea ligne 1, boutons ligne 2) | rangée sur desktop */}
+        <div className="flex flex-col md:flex-row md:items-end gap-1 md:gap-x-2 px-2 py-2">
+
+        {/* Rangée 1 : bouton + et textarea */}
+        <div className="flex items-end gap-2 flex-1 min-w-0">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
@@ -936,9 +940,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           onKeyDown={handleKeyDown}
           placeholder={placeholder ?? 'Envoyer un message...'}
           rows={1}
-          className="flex-1 min-w-[180px] bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
+          className="flex-1 min-w-0 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
         />
+        </div>
 
         {content.length > MAX_CHARS * 0.8 && (
           <div className={`flex justify-end px-1 py-0.5 text-xs ${
@@ -955,6 +960,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
         )}
 
+        {/* Rangée 2 (mobile) / inline (desktop) : boutons d'action */}
         <div className="flex items-center gap-1 flex-shrink-0 relative ml-auto">
           {/* Bouton Emoji */}
           <div className="relative">
