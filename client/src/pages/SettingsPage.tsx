@@ -126,7 +126,7 @@ export default function SettingsPage() {
           </button>
         </nav>
 
-        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v3.62.0</div>
+        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v{__APP_VERSION__}</div>
       </div>
 
       {/* Content — masqué sur mobile tant que pas de section choisie */}
