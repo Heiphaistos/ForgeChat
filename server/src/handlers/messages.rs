@@ -26,7 +26,50 @@ pub async fn get_messages(
 
     let limit = params.limit.unwrap_or(50).min(100);
 
-    let messages = if let Some(before) = params.before {
+    let messages = if let Some(around_id) = params.around {
+        // Fetch up to 25 messages before the target + target + up to 24 after
+        let ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+            "SELECT created_at FROM messages WHERE id=$1 AND channel_id=$2"
+        )
+        .bind(around_id).bind(channel_id)
+        .fetch_optional(&state.db).await?;
+
+        let ts = ts.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+
+        let half = limit / 2;
+        let before_rows = sqlx::query(
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, ru.username as reply_to_username
+             FROM messages m
+             JOIN users u ON u.id = m.user_id
+             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.user_id
+             WHERE m.channel_id=$1 AND m.created_at < $2
+             AND (m.expires_at IS NULL OR m.expires_at > NOW())
+             ORDER BY m.created_at DESC LIMIT $3"
+        )
+        .bind(channel_id).bind(ts).bind(half)
+        .fetch_all(&state.db).await?;
+
+        let after_rows = sqlx::query(
+            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, ru.username as reply_to_username
+             FROM messages m
+             JOIN users u ON u.id = m.user_id
+             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.user_id
+             WHERE m.channel_id=$1 AND m.created_at >= $2
+             AND (m.expires_at IS NULL OR m.expires_at > NOW())
+             ORDER BY m.created_at ASC LIMIT $3"
+        )
+        .bind(channel_id).bind(ts).bind(limit - half + 1)
+        .fetch_all(&state.db).await?;
+
+        // Combine: before (reversed to ASC) + after (target first)
+        let mut combined: Vec<_> = before_rows.into_iter().rev().collect();
+        combined.extend(after_rows);
+        combined
+    } else if let Some(before) = params.before {
         // Vérifier que le curseur existe avant d'utiliser la subquery (évite le retour silencieux vide si UUID invalide)
         let cursor_ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
             "SELECT created_at FROM messages WHERE id=$1 AND channel_id=$2"

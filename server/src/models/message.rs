@@ -80,6 +80,7 @@ pub struct GetMessagesQuery {
     pub before: Option<Uuid>,
     #[allow(dead_code)]
     pub after: Option<Uuid>,
+    pub around: Option<Uuid>,
     pub limit: Option<i64>,
 }
 

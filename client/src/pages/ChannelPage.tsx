@@ -82,7 +82,18 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const { data: messages = [] } = useQuery({
     queryKey: ['messages', serverId, channelId],
-    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => r.data),
+    queryFn: async () => {
+      // If opening with a highlight param, try to load messages around the target first
+      if (highlightMessageId) {
+        try {
+          const res = await api.get(
+            `/servers/${serverId}/channels/${channelId}/messages?around=${highlightMessageId}&limit=50`
+          )
+          if (res.data?.length > 0) return res.data
+        } catch {}
+      }
+      return api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => r.data)
+    },
     enabled: !!channelId && !!serverId,
   })
 
