@@ -240,6 +240,8 @@ function AppInner() {
       const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
+        // Invalidate notification bell so new mention shows immediately
+        qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
         playMention()
         const goToMsg = () => d.server_id && d.message?.channel_id
           ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`)
