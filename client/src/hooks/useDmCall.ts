@@ -33,6 +33,9 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([])
   const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const callStateRef = useRef<CallState>('idle')
+  const partnerIdRef = useRef<string | undefined>(partnerId)
+  const dmIdRef = useRef<string | undefined>(dmId)
 
   const cleanup = useCallback(() => {
     if (callTimeoutRef.current) {
@@ -206,9 +209,21 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     return () => { offSignal(); offAccepted(); offEnded(); offDeclined() }
   }, [dmId, partnerId, on, send, cleanup])
 
-  // Cleanup on unmount
+  // Keep refs current for unmount cleanup
+  useEffect(() => { callStateRef.current = callState }, [callState])
+  useEffect(() => { partnerIdRef.current = partnerId }, [partnerId])
+  useEffect(() => { dmIdRef.current = dmId }, [dmId])
+
+  // Send hangup to partner if a call is active when the component unmounts
   useEffect(() => {
     return () => {
+      if (callStateRef.current !== 'idle' && partnerIdRef.current && dmIdRef.current) {
+        useWs.getState().send({
+          type: 'DM_CALL_HANGUP',
+          to: partnerIdRef.current,
+          dm_id: dmIdRef.current,
+        })
+      }
       pcRef.current?.close()
       pcRef.current = null
     }
