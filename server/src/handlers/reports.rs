@@ -136,3 +136,43 @@ pub async fn list_reports(
 
     Ok(Json(result))
 }
+
+#[derive(serde::Deserialize)]
+pub struct UpdateReportInput {
+    pub status: String,
+}
+
+pub async fn update_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, report_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdateReportInput>,
+) -> Result<Json<serde_json::Value>> {
+    crate::handlers::servers::require_permission(
+        &state,
+        claims.sub,
+        server_id,
+        Permissions::BAN_MEMBERS,
+    )
+    .await?;
+
+    if !["pending", "resolved", "dismissed"].contains(&body.status.as_str()) {
+        return Err(AppError::BadRequest("Statut invalide (pending|resolved|dismissed)".into()));
+    }
+
+    let rows_affected = sqlx::query(
+        "UPDATE message_reports SET status=$1 WHERE id=$2 AND server_id=$3"
+    )
+    .bind(&body.status)
+    .bind(report_id)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(AppError::NotFound("Signalement introuvable".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "ok": true, "status": body.status })))
+}
