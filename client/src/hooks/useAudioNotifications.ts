@@ -68,45 +68,44 @@ function playDoubleBip(freq1: number, freq2: number, duration: number): void {
   osc2.stop(t2 + duration)
 }
 
+// Vérification centralisée depuis localStorage pour éviter les états désynchronisés
+function isEnabled(): boolean {
+  const stored = localStorage.getItem('audio_notif_enabled')
+  return stored === null ? true : stored === 'true'
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 export function useAudioNotifications() {
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    const stored = localStorage.getItem('audio_notif_enabled')
-    return stored === null ? true : stored === 'true'
-  })
+  const [enabled, setEnabled] = useState<boolean>(isEnabled)
 
   const handleSetEnabled = useCallback((value: boolean) => {
     localStorage.setItem('audio_notif_enabled', String(value))
     setEnabled(value)
   }, [])
 
-  // join : ton montant doux 220Hz → 440Hz, 0.3s
+  // Les callbacks lisent toujours localStorage directement — pas la closure stale
   const playJoin = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled()) return
     playTone(220, 440, 0.3)
-  }, [enabled])
+  }, [])
 
-  // leave : ton descendant 440Hz → 220Hz, 0.3s
   const playLeave = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled()) return
     playTone(440, 220, 0.3)
-  }, [enabled])
+  }, [])
 
-  // message : tick court 800Hz, 0.05s
   const playMessage = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled()) return
     playTone(800, 800, 0.05, 0.1)
-  }, [enabled])
+  }, [])
 
-  // mention : double bip 880Hz + 1100Hz, 0.2s
   const playMention = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled()) return
     playDoubleBip(880, 1100, 0.2)
-  }, [enabled])
+  }, [])
 
-  // ring : séquence de sonnerie d'appel (3 bips rapides montants)
   const playRing = useCallback(() => {
-    if (!enabled) return
+    if (!isEnabled()) return
     const ctx = getCtx()
     const schedule = (offset: number) => {
       const g = ctx.createGain()
@@ -123,7 +122,7 @@ export function useAudioNotifications() {
       osc.stop(ctx.currentTime + offset + 0.2)
     }
     schedule(0); schedule(0.25); schedule(0.5)
-  }, [enabled])
+  }, [])
 
   return { playJoin, playLeave, playMessage, playMention, playRing, enabled, setEnabled: handleSetEnabled }
 }
