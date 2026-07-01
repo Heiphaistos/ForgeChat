@@ -1,12 +1,13 @@
 ﻿import { useRef, useState, useEffect, useCallback } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
-import { useDraft } from '../../store/chat'
+import { useDraft, useChat } from '../../store/chat'
+import { useAuth } from '../../store/auth'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
@@ -132,6 +133,7 @@ interface Props {
   serverId?: string
   placeholder?: string
   onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
+  onEdit?: (messageId: string, content: string) => void
   replyTo?: ReplyTarget | null
   onCancelReply?: () => void
   sending?: boolean
@@ -167,8 +169,9 @@ function FileIcon({ file }: { file: File }) {
   return <File size={14} className="text-fc-muted" />
 }
 
-export default function MessageInput({ channelId, serverId, placeholder, onSend, replyTo, onCancelReply, sending }: Props) {
+export default function MessageInput({ channelId, serverId, placeholder, onSend, onEdit, replyTo, onCancelReply, sending }: Props) {
   const { drafts, setDraft, clearDraft } = useDraft()
+  const me = useAuth(s => s.user)
   const [content, setContent] = useState(() => drafts[channelId] ?? '')
   const [files, setFiles] = useState<FileWithTtl[]>([])
   const filesRef = useRef<FileWithTtl[]>([])
@@ -197,6 +200,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showEmojiAuto, setShowEmojiAuto] = useState(false)
   const [emojiAutoQuery, setEmojiAutoQuery] = useState('')
   const [emojiAutoIndex, setEmojiAutoIndex] = useState(0)
+  // Edition de message (↑ sur input vide)
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
@@ -555,6 +560,24 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       }
       if (e.shiftKey && (e.key === 'x' || e.key === 'X')) { e.preventDefault(); wrapSelection('~~'); return }
     }
+    // ↑ sur input vide → éditer le dernier message de l'utilisateur
+    if (e.key === 'ArrowUp' && content === '' && !editingMsgId && onEdit) {
+      const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+      const last = [...msgs].reverse().find(m => m.author_id === me?.id && m.type !== 'system')
+      if (last) {
+        e.preventDefault()
+        setEditingMsgId(last.id)
+        setContent(last.content ?? '')
+        return
+      }
+    }
+    // Escape → annuler l'édition en cours
+    if (e.key === 'Escape' && editingMsgId) {
+      e.preventDefault()
+      setEditingMsgId(null)
+      setContent('')
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
@@ -584,6 +607,16 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const submit = () => {
     if (sending) return
     const trimmed = content.trim()
+
+    // Mode édition (↑ sur input vide)
+    if (editingMsgId) {
+      if (trimmed && onEdit) onEdit(editingMsgId, trimmed)
+      setEditingMsgId(null)
+      setContent('')
+      textareaRef.current?.focus()
+      return
+    }
+
     if (!trimmed && files.length === 0) return
 
     // Essai d'exécution slash command built-in
@@ -675,6 +708,18 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   return (
     <div {...getRootProps()} className={`px-4 pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`}>
       <input {...getInputProps()} />
+
+      {/* Barre d'édition (↑ sur input vide) */}
+      {editingMsgId && (
+        <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-fc-input/60 rounded-t-lg border-b border-fc-hover text-xs">
+          <Edit3 size={12} className="text-yellow-400 flex-shrink-0" />
+          <span className="text-yellow-400 font-medium">Édition du message</span>
+          <span className="text-fc-muted">· Echap pour annuler</span>
+          <button onClick={() => { setEditingMsgId(null); setContent('') }} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler l'édition">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Barre de réponse */}
       {replyTo && (

@@ -282,6 +282,12 @@ export default function DMPage() {
     return off
   }, [dmId, e2eMode, partnerId])
 
+  const editDm = useMutation({
+    mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
+      api.patch(`/dms/${dmId}/messages/${msgId}`, { content }),
+    onError: () => toast.error('Modification impossible'),
+  })
+
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
     mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: import('../components/chat/MessageInput').FileWithTtl[] }) =>
