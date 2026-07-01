@@ -454,6 +454,17 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         {/* Messages + Input (masqués en vue Tâches) */}
         {activeTab === 'Messages' && (
           <>
+            {highlightMessageId && (
+              <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
+                <span className="text-xs text-fc-accent">Affichage du contexte autour d'un message.</span>
+                <button
+                  onClick={() => nav(`/servers/${serverId}/channels/${channelId}`)}
+                  className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
+                >
+                  Voir les derniers messages →
+                </button>
+              </div>
+            )}
             <MessageList
               channelId={channelId}
               serverId={serverId}
