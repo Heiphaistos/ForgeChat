@@ -83,15 +83,21 @@ function AppInner() {
       const notifs = pendingNotifs.current.splice(0)
       if (notifs.length === 0) return
       if (notifs.length === 1) {
-        toast(`💬 ${notifs[0].title}: ${notifs[0].body}`, {
+        const n = notifs[0]
+        toast(`${n.body.startsWith('🔔') ? '' : '💬 '}${n.title}: ${n.body}`, {
           duration: 6000,
           style: { cursor: 'pointer', maxWidth: '320px' },
-          onClick: () => nav(notifs[0].path),
+          onClick: () => nav(n.path),
         } as any)
       } else {
-        toast(`💬 ${notifs.length} nouveaux messages privés`, {
+        // Group by unique senders
+        const senders = [...new Set(notifs.map(n => n.title))]
+        const label = senders.length <= 2
+          ? senders.join(' & ')
+          : `${senders.slice(0, 2).join(', ')} et ${senders.length - 2} autre(s)`
+        toast(`💬 ${notifs.length} messages de ${label}`, {
           duration: 6000,
-          style: { cursor: 'pointer', maxWidth: '320px' },
+          style: { cursor: 'pointer', maxWidth: '360px' },
         } as any)
       }
     }
