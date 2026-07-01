@@ -194,9 +194,9 @@ function AppInner() {
         root.setAttribute('data-avatar-shape', (d.avatar_shape as string | undefined) ?? 'round')
         root.setAttribute('data-message-display', (d.message_display as string | undefined) ?? 'normal')
 
-        // Largeur sidebar
-        if (typeof d.sidebar_width_px === 'number')
-          root.style.setProperty('--fc-sidebar-width', `${d.sidebar_width_px}px`)
+        // Largeur sidebar — sync vers localStorage uniquement si pas déjà forcée par l'utilisateur
+        if (typeof d.sidebar_width_px === 'number' && !localStorage.getItem('fc_sidebar_width'))
+          localStorage.setItem('fc_sidebar_width', String(d.sidebar_width_px))
       }).catch(() => {})
     })
   }, [user?.id])
