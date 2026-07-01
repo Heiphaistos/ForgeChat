@@ -216,6 +216,16 @@ pub async fn send_thread_message(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
+    // Vérifier le timeout (sourdine)
+    let is_timed_out: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if is_timed_out { return Err(AppError::Forbidden); }
+
     use sqlx::Row;
     let thread_row = sqlx::query(
         "SELECT locked, archived FROM threads WHERE id=$1 AND channel_id=$2"
