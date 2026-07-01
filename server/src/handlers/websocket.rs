@@ -426,6 +426,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
 
         Some("TYPING_START") => {
             if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
+                // Rate limit: 1 TYPING_START par 3s par (user, channel) via Redis
+                let rate_key = format!("typing:{}:{}", user_id, channel_id);
+                {
+                    use redis::AsyncCommands;
+                    let mut redis = state.redis.lock().await;
+                    let exists: bool = redis.exists(&rate_key).await.unwrap_or(false);
+                    if exists { return; }
+                    let _: () = redis.set_ex(&rate_key, 1u8, 3).await.unwrap_or(());
+                }
                 // Vérifier que l'utilisateur est membre du serveur du canal
                 let is_member: bool = sqlx::query_scalar(
                     "SELECT EXISTS(
