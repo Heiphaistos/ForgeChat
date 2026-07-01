@@ -213,6 +213,17 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
     onError: () => toast.error('Impossible de supprimer'),
   })
 
+  const deletePost = useMutation({
+    mutationFn: () =>
+      api.delete(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['forum', channelId] })
+      toast.success('Post supprimé')
+      onBack()
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible de supprimer'),
+  })
+
   const replies: ForumReply[] = data?.replies ?? []
 
   const sendReply = useMutation({
@@ -256,6 +267,16 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           >
             <Lock size={15} />
           </button>
+          {user && post.creator_id === user.id && (
+            <button
+              onClick={() => { if (confirm('Supprimer ce post et toutes ses réponses ?')) deletePost.mutate() }}
+              disabled={deletePost.isPending}
+              title="Supprimer le post"
+              className="p-1.5 rounded hover:bg-fc-hover transition text-fc-muted hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
         </div>
       </div>
 
