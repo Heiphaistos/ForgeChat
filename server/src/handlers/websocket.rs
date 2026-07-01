@@ -737,6 +737,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let video = msg["video"].as_bool().unwrap_or(false);
             let screen = msg["screen"].as_bool().unwrap_or(false);
 
+            // Vérifier que l'utilisateur est dans ce canal vocal (voice_states)
+            {
+                let states = state.voice_states.read().await;
+                let in_channel = states.get(&user_id)
+                    .map(|s| s.channel_id == channel_id)
+                    .unwrap_or(false);
+                if !in_channel { return; }
+            }
+
             // Vérifier si l'utilisateur a la permission PRIORITY_SPEAKER
             let server_id_opt = sqlx::query_scalar::<_, Option<Uuid>>(
                 "SELECT server_id FROM channels WHERE id=$1"
