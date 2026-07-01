@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight } from 'lucide-react'
 import api from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
@@ -57,6 +57,8 @@ export default function QuickSwitcher({ onClose }: Props) {
   const nav = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const qc = useQueryClient()
+
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
     queryFn: () => api.get('/servers').then(r => r.data),
@@ -70,7 +72,10 @@ export default function QuickSwitcher({ onClose }: Props) {
   const results: Result[] = []
 
   for (const srv of servers) {
-    for (const ch of srv.channels ?? []) {
+    // Use cached per-server data (includes channels) when available
+    const cached = qc.getQueryData<any>(['server', srv.id])
+    const channels: any[] = cached?.channels ?? srv.channels ?? []
+    for (const ch of channels) {
       if (!query || ch.name.toLowerCase().includes(query.toLowerCase())) {
         results.push({
           type: 'channel',
