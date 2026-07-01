@@ -77,6 +77,10 @@ export const useWs = create<WsState>((set, get) => ({
       } catch {}
     }
 
+    ws.onerror = () => {
+      // l'événement close suit toujours, reconnect géré là-bas
+    }
+
     ws.onclose = () => {
       const { _heartbeatInterval, _reconnectAttempts } = get()
       if (_heartbeatInterval) clearInterval(_heartbeatInterval)
@@ -85,17 +89,16 @@ export const useWs = create<WsState>((set, get) => ({
       set({ socket: null, _heartbeatInterval: null, _reconnectTimeout: timeout, _reconnectAttempts: _reconnectAttempts + 1 })
     }
 
-    const interval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
-      }
-    }, 30_000)
-
     ws.onopen = () => {
-      set({ socket: ws, _reconnectAttempts: 0 })
+      const interval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
+        }
+      }, 30_000)
+      set({ socket: ws, _reconnectAttempts: 0, _heartbeatInterval: interval })
       get()._openCallbacks.forEach(cb => cb())
     }
-    set({ socket: ws, _heartbeatInterval: interval })
+    set({ socket: ws })
   },
 
   disconnect: () => {
