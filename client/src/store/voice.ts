@@ -117,52 +117,66 @@ async function _getIceConfig(): Promise<RTCConfiguration> {
   }
 }
 
-// ── Noise Suppression via Web Audio API ─────────────────────────────────────
+// ── Noise Suppression (chaîne Web Audio "Krisp-like") ────────────────────────
+// Highpass 85Hz → Lowpass 8kHz → Compressor 12:1 → Gain output
+let _noiseGain: GainNode | null = null
+
+function _buildNoiseChain(ctx: AudioContext, source: MediaStreamAudioSourceNode): MediaStreamAudioDestinationNode {
+  const highpass = ctx.createBiquadFilter()
+  highpass.type = 'highpass'
+  highpass.frequency.value = 85
+  highpass.Q.value = 0.5
+
+  const lowpass = ctx.createBiquadFilter()
+  lowpass.type = 'lowpass'
+  lowpass.frequency.value = 8000
+  lowpass.Q.value = 0.5
+
+  const compressor = ctx.createDynamicsCompressor()
+  compressor.threshold.value = -55
+  compressor.knee.value = 30
+  compressor.ratio.value = 12
+  compressor.attack.value = 0.003
+  compressor.release.value = 0.15
+
+  const outputGain = ctx.createGain()
+  outputGain.gain.value = 1.4
+  _noiseGain = outputGain
+
+  const dest = ctx.createMediaStreamDestination()
+  source.connect(highpass)
+  highpass.connect(lowpass)
+  lowpass.connect(compressor)
+  compressor.connect(outputGain)
+  outputGain.connect(dest)
+  return dest
+}
+
 function _applyNoiseSuppression(inputStream: MediaStream): MediaStream {
   try {
-    if (_noiseAudioCtx && _noiseAudioCtx.state !== 'closed') {
-      _noiseAudioCtx.close()
+    // Réutiliser le contexte existant — évite la fuite mémoire sur rejoin
+    if (!_noiseAudioCtx || _noiseAudioCtx.state === 'closed') {
+      _noiseAudioCtx = new AudioContext({ sampleRate: 48000 })
     }
-    _noiseAudioCtx = new AudioContext()
     const ctx = _noiseAudioCtx
-    // Resume AudioContext � browsers may suspend it outside a user gesture
+    // Resume AudioContext� browsers may suspend it outside a user gesture
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {})
     }
 
     const source = ctx.createMediaStreamSource(inputStream)
+    const dest = _buildNoiseChain(ctx, source)
 
-    // Highpass filter : coupe les fréquences < 80 Hz (bruits de ventilateur, vibrations)
-    const highpass = ctx.createBiquadFilter()
-    highpass.type = 'highpass'
-    highpass.frequency.value = 80
-
-    // Dynamics compressor : atténue les sons faibles (bruit de fond ambiant)
-    const compressor = ctx.createDynamicsCompressor()
-    compressor.threshold.value = -50
-    compressor.knee.value = 40
-    compressor.ratio.value = 12
-    compressor.attack.value = 0
-    compressor.release.value = 0.25
-
-    const dest = ctx.createMediaStreamDestination()
-
-    source.connect(highpass)
-    highpass.connect(compressor)
-    compressor.connect(dest)
-
-    // Conserver les pistes vidéo du stream original
     const outputStream = dest.stream
     inputStream.getVideoTracks().forEach(t => outputStream.addTrack(t))
-
     return outputStream
   } catch {
-    // Si Web Audio échoue (ex: navigateur non supporté), retourner le stream original
     return inputStream
   }
 }
 
 function _cleanupNoiseSuppression() {
+  _noiseGain = null
   if (_noiseAudioCtx && _noiseAudioCtx.state !== 'closed') {
     _noiseAudioCtx.close()
     _noiseAudioCtx = null
@@ -203,12 +217,40 @@ async function _createPC(
     set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, stream } : p) }))
   }
 
+  let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-      pc.close()
-      _pcs.delete(peerId)
-      _iceQueues.delete(peerId)
-      set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
+    const state_ = pc.connectionState
+    if (state_ === 'disconnected') {
+      // Attendre 4s avant de fermer — les coupures réseau temporaires récupèrent souvent
+      _reconnectTimer = setTimeout(() => {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          pc.close()
+          _pcs.delete(peerId)
+          _iceQueues.delete(peerId)
+          set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
+        }
+      }, 4000)
+    } else if (state_ === 'failed') {
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
+      // Tentative de renegotiation ICE restart avant de supprimer le peer
+      pc.restartIce()
+      setTimeout(async () => {
+        if (pc.connectionState === 'failed') {
+          try {
+            const offer = await pc.createOffer({ iceRestart: true })
+            await pc.setLocalDescription(offer)
+            useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
+          } catch {
+            pc.close()
+            _pcs.delete(peerId)
+            _iceQueues.delete(peerId)
+            set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
+          }
+        }
+      }, 2000)
+    } else if (state_ === 'connected') {
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
     }
   }
 
@@ -667,17 +709,28 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       _localStream.getVideoTracks().forEach(t => { t.stop(); _localStream!.removeTrack(t) })
       _localStream.addTrack(svt)
 
-      // Gérer l'audio système si capturé
+      // Gérer l'audio système si capturé (sans dupliquer la piste)
       if (screenStream.getAudioTracks().length > 0) {
         const sat = screenStream.getAudioTracks()[0]
-        _localStream.addTrack(sat)
+        // Ajouter au stream local UNIQUEMENT si pas déjà présent
+        if (!_localStream.getTrackById(sat.id)) {
+          _localStream.addTrack(sat)
+        }
         for (const [peerId, pc] of _pcs) {
           try {
-            pc.addTrack(sat, _localStream)
-            const offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
-            useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-          } catch {}
+            // Remplacer la piste audio existante plutôt que d'en ajouter une nouvelle
+            const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
+            if (audioSender) {
+              await audioSender.replaceTrack(sat)
+            } else {
+              pc.addTrack(sat, _localStream)
+              const offer = await pc.createOffer()
+              await pc.setLocalDescription(offer)
+              useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
+            }
+          } catch (e) {
+            console.warn('[Voice] Screen audio track error:', e)
+          }
         }
       }
 
@@ -756,7 +809,6 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   setUserVolume: (userId, volume) => {
     set(s => ({ userVolumes: { ...s.userVolumes, [userId]: volume } }))
 
-    // Appliquer via GainNode WebAudio si le peer a un stream
     const peer = get().peers.find(p => p.userId === userId)
     if (!peer?.stream) return
 
@@ -766,21 +818,45 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     if (!gainNode) {
       const source = ctx.createMediaStreamSource(peer.stream)
       gainNode = ctx.createGain()
-      const dest = ctx.createMediaStreamDestination()
       source.connect(gainNode)
-      gainNode.connect(dest)
+      gainNode.connect(ctx.destination)
       _gainNodes.set(userId, gainNode)
     }
 
     gainNode.gain.setTargetAtTime(volume / 100, ctx.currentTime, 0.01)
   },
 
-  // ── Noise suppression toggle (persisté en localStorage) ───────────────────
+  // ── Noise suppression toggle — appliqué en temps réel si en appel ───────────
   setNoiseSuppressionEnabled: (enabled) => {
     localStorage.setItem('fc_noise_suppression', enabled ? 'true' : 'false')
-    // Si on est en appel, on ne peut pas re-traiter le stream en temps réel
-    // (il faudrait quit/rejoin) — on avertit juste l'utilisateur via un rechargement
-    // du store. En pratique, le changement s'applique au prochain join().
+
+    if (!get().joined || !_localStream) return
+
+    if (enabled && !_noiseGain) {
+      // Activer la chaîne sur le stream brut existant
+      const rawStream = get().localStream
+      if (!rawStream) return
+      const processed = _applyNoiseSuppression(rawStream)
+      _processedStream = processed
+      // Remplacer la piste audio dans tous les PC existants
+      const audioTrack = processed.getAudioTracks()[0]
+      if (audioTrack) {
+        _pcs.forEach(async (pc) => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+          if (sender) try { await sender.replaceTrack(audioTrack) } catch {}
+        })
+      }
+    } else if (!enabled && _noiseGain) {
+      // Désactiver : revenir à la piste audio brute
+      const rawTrack = get().localStream?.getAudioTracks()[0]
+      if (rawTrack) {
+        _pcs.forEach(async (pc) => {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+          if (sender) try { await sender.replaceTrack(rawTrack) } catch {}
+        })
+      }
+      _cleanupNoiseSuppression()
+    }
   },
 
   // ── Whisper : parler uniquement à certains peers ──────────────────────────
