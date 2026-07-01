@@ -94,7 +94,10 @@ export default function DMPage() {
       addMessages(dmId, normalized, true)
       if (data.length < 50) setHasMoreDM(false)
       return true
-    } catch { return false }
+    } catch (e: any) {
+      if (e?.response?.status === 404) setHasMoreDM(false)
+      return false
+    }
   }, [dmId, hasMoreDM, addMessages])
 
   const { data: dmInfo } = useQuery({

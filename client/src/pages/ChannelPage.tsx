@@ -247,7 +247,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       addMessages(channelId, data, true)
       if (data.length < 50) setHasMore(false)
       return true
-    } catch { return false }
+    } catch (e: any) {
+      // Curseur invalide (404) → pas de nouveaux messages à charger
+      if (e?.response?.status === 404) setHasMore(false)
+      return false
+    }
   }, [channelId, serverId, hasMore])
 
   // Auto-redirect vers le premier canal texte — DOIT être avant tout return conditionnel

@@ -292,8 +292,9 @@ export default function GroupDMPage() {
       } else {
         setHasMore(false)
       }
-    } catch {
-      toast.error('Erreur de chargement')
+    } catch (e: any) {
+      if (e?.response?.status === 404) setHasMore(false)
+      else toast.error('Erreur de chargement')
     } finally {
       setLoadingMore(false)
     }
