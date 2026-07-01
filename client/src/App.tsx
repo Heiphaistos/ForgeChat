@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
@@ -67,15 +67,15 @@ function AppInner() {
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
   const nav = useNavigate()
-  const [showQuickSwitcher, setShowQuickSwitcher] = React.useState(false)
-  const [showCommandPalette, setShowCommandPalette] = React.useState(false)
-  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = React.useState(false)
-  const [showOnboarding, setShowOnboarding] = React.useState(() => !localStorage.getItem('fc_onboarding_done'))
+  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('fc_onboarding_done'))
   const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
-  const pendingNotifs = React.useRef<Array<{ title: string; body: string; path: string }>>([])
+  const pendingNotifs = useRef<Array<{ title: string; body: string; path: string }>>([])
 
   // Flush queued notifications as toasts when window regains focus
   useEffect(() => {

@@ -27,7 +27,7 @@ export default defineConfig({
             if (id.includes('date-fns')) return 'vendor-dates'
             if (id.includes('emoji-picker-react')) return 'vendor-emoji'
             if (id.includes('highlight.js')) return 'vendor-hljs'
-            if (id.includes('zustand') || id.includes('immer') || id.includes('axios') || id.includes('react-hot-toast') || id.includes('react-virtuoso') || id.includes('react-dropzone')) return 'vendor-misc'
+            if (id.includes('zustand') || id.includes('immer') || id.includes('axios') || id.includes('react-hot-toast') || id.includes('react-dropzone')) return 'vendor-misc'
           }
         },
       },
