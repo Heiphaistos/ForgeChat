@@ -21,7 +21,7 @@ export default function RightSidebar({ visible, onClose }: Props) {
   if (!visible) return null
 
   return (
-    <div className="w-[260px] bg-fc-channel flex-shrink-0 border-l border-fc-bg flex flex-col">
+    <div className="w-full md:w-[260px] bg-fc-channel flex-shrink-0 border-l border-fc-bg flex flex-col">
       <ActivityFeedPanel onClose={onClose} />
     </div>
   )
