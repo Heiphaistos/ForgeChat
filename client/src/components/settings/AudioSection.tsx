@@ -13,6 +13,7 @@ export default function AudioSection() {
   const testStreamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const testCtxRef = useRef<AudioContext | null>(null)
   const { setNoiseSuppressionEnabled } = useVoice()
 
   const refreshDevices = useCallback(async () => {
@@ -56,6 +57,7 @@ export default function AudioSection() {
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       testStreamRef.current = stream
       const ctx = new AudioContext()
+      testCtxRef.current = ctx
       const src = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 256
@@ -78,6 +80,8 @@ export default function AudioSection() {
     testStreamRef.current?.getTracks().forEach(t => t.stop())
     testStreamRef.current = null
     analyserRef.current = null
+    testCtxRef.current?.close()
+    testCtxRef.current = null
     setVuLevel(0)
   }
 
