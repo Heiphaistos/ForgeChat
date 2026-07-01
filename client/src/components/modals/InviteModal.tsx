@@ -91,8 +91,8 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-[480px] shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[480px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="p-5 border-b border-fc-bg flex items-center justify-between">
           <div>

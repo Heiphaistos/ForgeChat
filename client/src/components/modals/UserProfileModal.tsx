@@ -36,8 +36,8 @@ export default function UserProfileModal({ onClose }: Props) {
   if (!user) return null
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-lg w-[460px] shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
+      <div className="bg-fc-channel rounded-lg w-full max-w-[460px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Banner */}
         <div className="h-24 bg-gradient-to-r from-fc-accent to-purple-600 rounded-t-lg relative">
           <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white transition">

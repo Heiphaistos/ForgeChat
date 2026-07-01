@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useCallback } from 'react'
+﻿import { useRef, useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
   Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3,
@@ -11,9 +11,10 @@ import { useAuth } from '../../store/auth'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import EmojiPicker from './EmojiPicker'
-import GifPicker from './GifPicker'
-import StickerPicker, { formatStickerMessage } from './StickerPicker'
-import type { Sticker } from './StickerPicker'
+import { formatStickerMessage } from './sticker-utils'
+import type { Sticker } from './sticker-utils'
+const GifPicker = lazy(() => import('./GifPicker'))
+const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
@@ -995,10 +996,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               GIF
             </button>
             {showGifPicker && (
-              <GifPicker
-                onPick={handleSendGif}
-                onClose={() => setShowGifPicker(false)}
-              />
+              <Suspense fallback={<div className="absolute bottom-full right-0 mb-2 w-80 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center"><div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+                <GifPicker
+                  onPick={handleSendGif}
+                  onClose={() => setShowGifPicker(false)}
+                />
+              </Suspense>
             )}
           </div>
 
@@ -1013,11 +1016,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               🎭
             </button>
             {showStickerPicker && (
-              <StickerPicker
-                serverId={serverId || undefined}
-                onPick={handleSendSticker}
-                onClose={() => setShowStickerPicker(false)}
-              />
+              <Suspense fallback={<div className="absolute bottom-full right-0 mb-2 w-72 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center"><div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+                <StickerPicker
+                  serverId={serverId || undefined}
+                  onPick={handleSendSticker}
+                  onClose={() => setShowStickerPicker(false)}
+                />
+              </Suspense>
             )}
           </div>
 

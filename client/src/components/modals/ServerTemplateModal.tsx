@@ -133,9 +133,9 @@ export default function ServerTemplateModal({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
       <div
-        className="bg-fc-channel rounded-xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-fc-channel rounded-xl shadow-2xl w-full max-w-[520px] max-h-[90dvh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

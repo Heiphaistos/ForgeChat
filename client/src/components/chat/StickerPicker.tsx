@@ -6,15 +6,9 @@ import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface Sticker {
-  id: string
-  name: string
-  category: string
-  // Emoji stickers (Global)
-  emoji?: string
-  // Image stickers (Serveur)
-  url?: string
-}
+export type { Sticker } from './sticker-utils'
+export { formatStickerMessage, parseStickerMessage } from './sticker-utils'
+import type { Sticker } from './sticker-utils'
 
 interface ServerSticker {
   id: string
@@ -60,22 +54,6 @@ const GLOBAL_CATEGORIES = [...new Set(GLOBAL_STICKERS.map(s => s.category))]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export function formatStickerMessage(sticker: Sticker): string {
-  if (sticker.url) {
-    // Image sticker: [sticker:name](url)
-    return `[sticker:${sticker.name}](${sticker.url})`
-  }
-  // Emoji sticker: [sticker:emoji:name]
-  return `[sticker:${sticker.emoji ?? ''}:${sticker.name}]`
-}
-
-export function parseStickerMessage(content: string): { name: string; url?: string; emoji?: string } | null {
-  const imgMatch = content.match(/^\[sticker:([^\]]+)\]\(([^)]+)\)$/)
-  if (imgMatch) return { name: imgMatch[1], url: imgMatch[2] }
-  const emojiMatch = content.match(/^\[sticker:(.+?):(.+?)\]$/)
-  if (emojiMatch) return { emoji: emojiMatch[1], name: emojiMatch[2] }
-  return null
-}
 
 // ─── Upload panel ─────────────────────────────────────────────────────────────
 

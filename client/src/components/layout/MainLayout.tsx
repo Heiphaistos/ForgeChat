@@ -121,7 +121,7 @@ export default function MainLayout() {
             'flex h-full flex-shrink-0',
             'fixed inset-y-0 left-0 z-50',
             'md:static md:inset-auto md:z-auto',
-            'transition-transform duration-300 ease-in-out',
+            'transition-transform duration-300 ease-in-out will-change-transform',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
           ].join(' ')}>
             <ServerSidebar />

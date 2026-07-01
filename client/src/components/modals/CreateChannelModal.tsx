@@ -74,8 +74,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
   const isTextType = ['text', 'announcement', 'forum'].includes(type)
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-[520px] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[520px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="p-6 border-b border-fc-bg">
           <div className="flex items-start justify-between">

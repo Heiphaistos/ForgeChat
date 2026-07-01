@@ -38,11 +38,11 @@ export default function NicknameModal({ serverId, currentNickname, onClose }: Pr
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0"
       onClick={onClose}
     >
       <div
-        className="bg-fc-channel rounded-lg p-6 w-[420px] shadow-xl"
+        className="bg-fc-channel rounded-lg p-6 w-full max-w-[420px] shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

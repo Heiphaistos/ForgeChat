@@ -355,8 +355,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   ]
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-[600px] max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[600px] max-h-[90dvh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="p-5 border-b border-fc-bg flex items-start justify-between flex-shrink-0">
           <div className="flex items-center gap-2">

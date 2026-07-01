@@ -27,8 +27,8 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
   })
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-      <div className="bg-fc-channel rounded-xl p-6 w-[480px] max-h-[90vh] flex flex-col shadow-2xl">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-3 md:px-0">
+      <div className="bg-fc-channel rounded-xl p-6 w-full max-w-[480px] max-h-[90dvh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">

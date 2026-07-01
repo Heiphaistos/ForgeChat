@@ -98,11 +98,11 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0"
       onClick={onClose}
     >
       <div
-        className="bg-fc-channel rounded-xl p-6 w-[480px] max-h-[80vh] flex flex-col shadow-2xl"
+        className="bg-fc-channel rounded-xl p-6 w-full max-w-[480px] max-h-[90dvh] flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
