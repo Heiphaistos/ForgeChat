@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
-import { Mic, RefreshCw } from 'lucide-react'
+import { Mic, RefreshCw, Waves } from 'lucide-react'
+import { useVoice } from '../../store/voice'
 
 export default function AudioSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
@@ -8,9 +9,11 @@ export default function AudioSection() {
   const [selectedOutput, setSelectedOutput] = useState(localStorage.getItem('fc_audio_output') ?? '')
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [vuLevel, setVuLevel] = useState(0)
+  const [noiseSuppression, setNoiseSuppression] = useState(() => localStorage.getItem('fc_noise_suppression') !== 'false')
   const testStreamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const { setNoiseSuppressionEnabled } = useVoice()
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -168,6 +171,33 @@ export default function AudioSection() {
         {vuLevel === 0 && testStreamRef.current && (
           <p className="text-xs text-fc-muted">Parlez pour voir le niveau...</p>
         )}
+      </div>
+
+      {/* Noise Suppression */}
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Waves size={16} className={noiseSuppression ? 'text-fc-accent' : 'text-fc-muted'} />
+            <div>
+              <p className="text-sm font-medium text-white">Suppression de bruit</p>
+              <p className="text-xs text-fc-muted mt-0.5">Filtre le bruit de fond (ventilateur, clavier, ambiance)</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const next = !noiseSuppression
+              setNoiseSuppression(next)
+              setNoiseSuppressionEnabled(next)
+            }}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer
+              ${noiseSuppression ? 'bg-fc-accent' : 'bg-fc-hover'}`}
+            role="switch"
+            aria-checked={noiseSuppression}
+          >
+            <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200
+              ${noiseSuppression ? 'translate-x-5' : 'translate-x-0'}`} />
+          </button>
+        </div>
       </div>
 
       <Field label="Périphérique de sortie (Haut-parleurs)">
