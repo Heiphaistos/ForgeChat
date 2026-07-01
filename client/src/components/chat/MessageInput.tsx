@@ -706,7 +706,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const hasVideos = files.some(f => isVideo(f.file))
 
   return (
-    <div {...getRootProps()} className={`px-4 pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`}>
+    <div {...getRootProps()} className={`px-2 md:px-4 pb-2 md:pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`} style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       <input {...getInputProps()} />
 
       {/* Barre d'édition (↑ sur input vide) */}
@@ -899,8 +899,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       )}
 
       <div className="bg-fc-input rounded-lg">
-        {/* Barre Rich Text */}
-        <div className="flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
+        {/* Barre Rich Text — masquée sur mobile */}
+        <div className="hidden md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
           <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
           <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
           <button onClick={() => applyFormat('~~')} title="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
@@ -912,7 +912,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
         </div>
 
-        <div className="flex items-end gap-2 px-2 py-2">
+        <div className="flex flex-wrap items-end gap-x-2 gap-y-1.5 px-2 py-2">
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
@@ -936,7 +936,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           onKeyDown={handleKeyDown}
           placeholder={placeholder ?? 'Envoyer un message...'}
           rows={1}
-          className="flex-1 min-w-0 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
+          className="flex-1 min-w-[180px] bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
         />
 
@@ -955,7 +955,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
         )}
 
-        <div className="flex items-center gap-1 flex-shrink-0 relative">
+        <div className="flex items-center gap-1 flex-shrink-0 relative ml-auto">
           {/* Bouton Emoji */}
           <div className="relative">
             <button
@@ -979,7 +979,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
 
           {/* Bouton GIF — masqué sur petits écrans pour laisser de la place au textarea */}
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => { closeAllPickers(); setShowGifPicker(p => !p) }}
               className={`px-2 py-1 rounded transition text-xs font-bold tracking-wide
@@ -997,7 +997,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
 
           {/* Bouton Sticker — masqué sur petits écrans */}
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => { closeAllPickers(); setShowStickerPicker(p => !p) }}
               className={`p-1.5 rounded transition text-base leading-none
@@ -1016,7 +1016,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
 
           {/* Bouton Quick Replies — masqué sur petits écrans */}
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
               className={`p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -1037,7 +1037,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
 
           {/* Bouton Messages programmés — masqué sur petits écrans */}
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
               className={`p-1.5 rounded transition ${showScheduled ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -1121,7 +1121,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
 
           {/* TTL message éphémère — masqué sur petits écrans */}
-          <div className="relative hidden md:block">
+          <div className="relative">
             <button
               onClick={() => { setShowTtlPicker(v => !v) }}
               className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}

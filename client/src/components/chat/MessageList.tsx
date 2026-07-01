@@ -129,7 +129,7 @@ export default function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null)
   // Timestamp d'entrée dans le canal = base pour le divider "Nouveaux messages"
   const channelOpenTime = useRef<number>(Date.now())
-  useEffect(() => { channelOpenTime.current = Date.now() }, [channelId])
+  useEffect(() => { channelOpenTime.current = Date.now(); initialScrollDone.current = false }, [channelId])
   const msgRefs = useRef<Record<string, HTMLDivElement>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -142,8 +142,21 @@ export default function MessageList({
   const [editHistoryMsg, setEditHistoryMsg] = useState<{ id: string } | null>(null)
   const editRef = useRef<HTMLTextAreaElement>(null)
   const isAtBottom = useRef(true)
+  const initialScrollDone = useRef(false)
+
+  // Scroll initial instantané au bas du canal (avant que smooth ne s'active)
+  useEffect(() => {
+    if (!initialScrollDone.current && messages.length > 0) {
+      const el = containerRef.current
+      if (el) {
+        el.scrollTop = el.scrollHeight
+        initialScrollDone.current = true
+      }
+    }
+  }, [messages.length])
 
   useEffect(() => {
+    if (!initialScrollDone.current) return
     if (isAtBottom.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
       setNewMsgCount(0)
