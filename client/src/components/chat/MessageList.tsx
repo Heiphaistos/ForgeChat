@@ -455,7 +455,12 @@ export default function MessageList({
                           }, disabled: msg.author_id === user?.id },
                           { label: `Mentionner @${msg.author_username}`, onClick: () => {
                             const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-                            if (el) { el.value += `@${msg.author_username} `; el.focus() }
+                            if (el) {
+                              el.focus()
+                              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+                              nativeInputValueSetter?.call(el, el.value + `@${msg.author_username} `)
+                              el.dispatchEvent(new Event('input', { bubbles: true }))
+                            }
                           }},
                           { separator: true },
                           { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(msg.author_id) },

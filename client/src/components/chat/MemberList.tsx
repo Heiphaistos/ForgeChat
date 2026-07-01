@@ -89,7 +89,12 @@ export default function MemberList({ serverId }: Props) {
     }},
     { label: 'Mentionner', onClick: () => {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-      if (el) { el.value += `@${m.nickname ?? m.username} `; el.focus() }
+      if (el) {
+        el.focus()
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+        nativeInputValueSetter?.call(el, el.value + `@${m.nickname ?? m.username} `)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
     }},
     { separator: true as const },
     { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
