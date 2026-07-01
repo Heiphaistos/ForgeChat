@@ -135,7 +135,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   }
 
   return (
-    <div className="w-80 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0">
+    <div className="w-full md:w-80 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-3 border-b border-fc-bg flex-shrink-0">
         <MessagesSquare size={16} className="text-fc-muted" />

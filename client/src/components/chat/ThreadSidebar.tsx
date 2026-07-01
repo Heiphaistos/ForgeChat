@@ -74,7 +74,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
   }
 
   return (
-    <div className="w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0">
+    <div className="w-full md:w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2">
