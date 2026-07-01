@@ -379,16 +379,16 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   return (
     <div className="flex flex-col h-full bg-fc-bg relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-fc-sidebar border-b border-fc-hover flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <Volume2 size={16} className="text-fc-accent" />
-          <span className="text-sm font-semibold text-white">{channel.name}</span>
+      <div className="flex items-center justify-between px-3 md:px-4 py-2 bg-fc-sidebar border-b border-fc-hover flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Volume2 size={16} className="text-fc-accent flex-shrink-0" />
+          <span className="text-sm font-semibold text-white truncate max-w-[120px] md:max-w-none">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
           <CallQualityIndicator pcs={getPeerConnections()} />
         </div>
 
-        {/* View mode switcher */}
-        <div className="flex items-center gap-1 bg-fc-channel rounded-lg p-1">
+        {/* View mode switcher — masqué sur mobile */}
+        <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1">
           {([
             { mode: 'grid' as ViewMode, icon: <Grid2x2 size={14} />, label: 'Grille' },
             { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'Spotlight' },
@@ -406,8 +406,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-fc-muted">{allPeers.length} participant{allPeers.length > 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-fc-muted hidden md:inline">{allPeers.length} participant{allPeers.length > 1 ? 's' : ''}</span>
+          <Users size={14} className="text-fc-muted md:hidden" />
+          <span className="text-xs text-fc-muted md:hidden">{allPeers.length}</span>
         </div>
       </div>
 
@@ -528,15 +530,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         </div>
       )}
 
-      {/* Controls bar — Google Meet style */}
-      <div className="flex items-center justify-between px-6 py-3 bg-fc-sidebar border-t border-fc-hover flex-shrink-0">
-        {/* Group 1: Info */}
-        <div className="flex items-center gap-2 min-w-[120px]">
+      {/* Controls bar — responsive (mobile: contrôles essentiels seulement) */}
+      <div className="flex items-center justify-between px-2 md:px-6 py-3 bg-fc-sidebar border-t border-fc-hover flex-shrink-0 gap-2">
+        {/* Group 1: Info — masqué mobile */}
+        <div className="hidden md:flex items-center gap-2 min-w-[120px]">
           <span className="text-xs text-fc-muted">{channel.name}</span>
         </div>
 
         {/* Group 2: Core media controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2 flex-1 md:flex-none justify-center">
           <CtrlBtn
             active={!muted} onClick={toggleMute}
             activeIcon={<Mic size={18} />} inactiveIcon={<MicOff size={18} />}
@@ -572,54 +574,56 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           </button>
         </div>
 
-        {/* Group 3: Extra features */}
-        <div className="flex items-center gap-1 min-w-[120px] justify-end">
-          <CtrlBtn
-            active={handRaised} onClick={toggleHandRaise}
-            activeIcon={<Hand size={16} />} inactiveIcon={<Hand size={16} />}
-            activeClass="bg-fc-yellow text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label="Lever/baisser la main"
-          />
-          <CtrlBtn
-            active={blurBackground} onClick={() => setBlurBackground(v => !v)}
-            activeIcon={<span className="text-xs font-bold">BG</span>}
-            inactiveIcon={<span className="text-xs">BG</span>}
-            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label="Flou d'arrière-plan"
-          />
-          {captionsSupported && (
+        {/* Group 3: Extra features — masqué mobile sauf le bouton réaction */}
+        <div className="flex items-center gap-1 justify-end">
+          <div className="hidden md:flex items-center gap-1">
             <CtrlBtn
-              active={captionsOn} onClick={() => { toggleCaptions(); setShowCaptions(v => !v) }}
-              activeIcon={<MessageSquare size={16} />} inactiveIcon={<MessageSquare size={16} />}
-              activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Sous-titres automatiques"
+              active={handRaised} onClick={toggleHandRaise}
+              activeIcon={<Hand size={16} />} inactiveIcon={<Hand size={16} />}
+              activeClass="bg-fc-yellow text-white" inactiveClass="bg-fc-hover text-fc-muted"
+              label="Lever/baisser la main"
             />
-          )}
-          <CtrlBtn
-            active={isRecording} onClick={isRecording ? stopRecording : startRecording}
-            activeIcon={<Square size={14} className="fill-current" />}
-            inactiveIcon={<Circle size={14} />}
-            activeClass="bg-fc-red text-white animate-pulse" inactiveClass="bg-fc-hover text-fc-muted"
-            label={isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer'}
-          />
-          <CtrlBtn
-            active={showSoundboard} onClick={() => setShowSoundboard(v => !v)}
-            activeIcon={<Music2 size={16} />} inactiveIcon={<Music2 size={16} />}
-            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label="Soundboard"
-          />
-          <CtrlBtn
-            active={showStats} onClick={() => setShowStats(v => !v)}
-            activeIcon={<BarChart2 size={16} />} inactiveIcon={<BarChart2 size={16} />}
-            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label="Statistiques orateurs"
-          />
-          <CtrlBtn
-            active={showWhiteboard} onClick={() => setShowWhiteboard(v => !v)}
-            activeIcon={<PenLine size={16} />} inactiveIcon={<PenLine size={16} />}
-            activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label="Tableau blanc"
-          />
+            <CtrlBtn
+              active={blurBackground} onClick={() => setBlurBackground(v => !v)}
+              activeIcon={<span className="text-xs font-bold">BG</span>}
+              inactiveIcon={<span className="text-xs">BG</span>}
+              activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+              label="Flou d'arrière-plan"
+            />
+            {captionsSupported && (
+              <CtrlBtn
+                active={captionsOn} onClick={() => { toggleCaptions(); setShowCaptions(v => !v) }}
+                activeIcon={<MessageSquare size={16} />} inactiveIcon={<MessageSquare size={16} />}
+                activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+                label="Sous-titres automatiques"
+              />
+            )}
+            <CtrlBtn
+              active={isRecording} onClick={isRecording ? stopRecording : startRecording}
+              activeIcon={<Square size={14} className="fill-current" />}
+              inactiveIcon={<Circle size={14} />}
+              activeClass="bg-fc-red text-white animate-pulse" inactiveClass="bg-fc-hover text-fc-muted"
+              label={isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer'}
+            />
+            <CtrlBtn
+              active={showSoundboard} onClick={() => setShowSoundboard(v => !v)}
+              activeIcon={<Music2 size={16} />} inactiveIcon={<Music2 size={16} />}
+              activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+              label="Soundboard"
+            />
+            <CtrlBtn
+              active={showStats} onClick={() => setShowStats(v => !v)}
+              activeIcon={<BarChart2 size={16} />} inactiveIcon={<BarChart2 size={16} />}
+              activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+              label="Statistiques orateurs"
+            />
+            <CtrlBtn
+              active={showWhiteboard} onClick={() => setShowWhiteboard(v => !v)}
+              activeIcon={<PenLine size={16} />} inactiveIcon={<PenLine size={16} />}
+              activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
+              label="Tableau blanc"
+            />
+          </div>
           <button
             onClick={() => setShowEmojiBar(p => !p)}
             className={`p-2.5 rounded-xl transition ${showEmojiBar ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
