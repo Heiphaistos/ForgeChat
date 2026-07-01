@@ -74,13 +74,13 @@ function timeAgo(dateStr: string): string {
 }
 
 function getActionLabel(action: string): string {
-  const norm = action.toUpperCase()
+  const norm = (action ?? '').toUpperCase()
   const cfg = ACTION_CONFIG[norm] ?? ACTION_CONFIG[action]
-  return cfg?.label ?? action
+  return cfg?.label ?? action ?? 'Inconnu'
 }
 
 function buildDetails(entry: AuditEntry): string {
-  const act = entry.action.toUpperCase()
+  const act = (entry.action ?? '').toUpperCase()
   if (act === 'MEMBER_KICK' || act === 'member_kick') return `a expulsé un membre`
   if (act === 'MEMBER_BAN'  || act === 'member_ban')  return `a banni un membre`
   if (act === 'CHANNEL_CREATE' || act === 'channel_create') return `a créé un canal`
@@ -187,9 +187,10 @@ export default function AuditLogPage({ serverId }: Props) {
 
             <div className="space-y-1">
               {visible.map(entry => {
-                const actKey = entry.action.toUpperCase()
-                const cfg = ACTION_CONFIG[actKey] ?? ACTION_CONFIG[entry.action] ?? {
-                  label: entry.action,
+                const action = entry.action ?? ''
+                const actKey = action.toUpperCase()
+                const cfg = ACTION_CONFIG[actKey] ?? ACTION_CONFIG[action] ?? {
+                  label: action || 'Inconnu',
                   color: 'text-fc-muted',
                   Icon:  ScrollText,
                 }
