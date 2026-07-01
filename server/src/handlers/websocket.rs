@@ -844,6 +844,14 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             if let Some(channel_id) = msg["channel_id"].as_str()
                 .and_then(|s| s.parse::<Uuid>().ok())
             {
+                let is_member: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM channels c
+                        JOIN server_members sm ON sm.server_id = c.server_id
+                        WHERE c.id = $1 AND sm.user_id = $2
+                    )"
+                ).bind(channel_id).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                if !is_member { return; }
                 let event = serde_json::json!({
                     "type": msg["type"].as_str().unwrap_or("WHITEBOARD_DRAW"),
                     "channel_id": msg["channel_id"],
@@ -947,6 +955,14 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 msg["emoji"].as_str(),
             ) {
                 if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    let is_member: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM channels c
+                            JOIN server_members sm ON sm.server_id = c.server_id
+                            WHERE c.id = $1 AND sm.user_id = $2
+                        )"
+                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                    if !is_member { return; }
                     let event = serde_json::json!({
                         "type": "VOICE_REACTION",
                         "channel_id": channel_id_val,
