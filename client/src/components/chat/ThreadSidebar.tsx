@@ -102,11 +102,11 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       {/* Modal nouveau fil */}
       {showNewModal && (
         <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0"
           onClick={() => setShowNewModal(false)}
         >
           <div
-            className="bg-fc-channel rounded-xl w-[400px] shadow-2xl overflow-hidden"
+            className="bg-fc-channel rounded-xl w-full max-w-[400px] max-h-[90dvh] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-fc-hover">
