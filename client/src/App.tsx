@@ -212,8 +212,8 @@ function AppInner() {
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
-        const goToMsg = () => d.message?.channel_id
-          ? nav(`/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
+        const goToMsg = () => d.server_id && d.message?.channel_id
+          ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}`)
           : undefined
         if (document.hasFocus()) {
           toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
