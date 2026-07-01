@@ -14,23 +14,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-query': ['@tanstack/react-query'],
-          'vendor-ui': [
-            '@radix-ui/react-avatar',
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-scroll-area',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-tooltip',
-          ],
-          'vendor-motion': ['framer-motion'],
-          'vendor-dates': ['date-fns'],
-          'vendor-emoji': ['emoji-picker-react'],
-          'vendor-hljs': ['highlight.js'],
-          'vendor-misc': ['zustand', 'immer', 'axios', 'react-hot-toast', 'react-virtuoso', 'react-dropzone'],
+        manualChunks: (id: string) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-router-dom') || id.includes('react-dom') || (id.includes('/react/') && !id.includes('@tanstack'))) return 'vendor-react'
+            if (id.includes('@tanstack/react-query')) return 'vendor-query'
+            if (id.includes('@radix-ui')) return 'vendor-ui'
+            if (id.includes('framer-motion')) return 'vendor-motion'
+            if (id.includes('date-fns')) return 'vendor-dates'
+            if (id.includes('emoji-picker-react')) return 'vendor-emoji'
+            if (id.includes('highlight.js')) return 'vendor-hljs'
+            if (id.includes('zustand') || id.includes('immer') || id.includes('axios') || id.includes('react-hot-toast') || id.includes('react-virtuoso') || id.includes('react-dropzone')) return 'vendor-misc'
+          }
         },
       },
     },
