@@ -7,6 +7,8 @@ interface WsState {
   socket: WebSocket | null
   _reconnectTimeout: ReturnType<typeof setTimeout> | null
   _heartbeatInterval: ReturnType<typeof setInterval> | null
+  _reconnectAttempts: number
+  _connecting: boolean
   handlers: Map<string, WsHandler[]>
   _openCallbacks: Set<() => void>
   connect: () => Promise<void>
@@ -28,20 +30,34 @@ async function fetchWsTicket(): Promise<string | null> {
   }
 }
 
+function backoffDelay(attempt: number): number {
+  // 1s, 2s, 4s, 8s, 16s → capped at 30s
+  return Math.min(1000 * Math.pow(2, attempt), 30_000)
+}
+
 export const useWs = create<WsState>((set, get) => ({
   socket: null,
   _reconnectTimeout: null,
   _heartbeatInterval: null,
+  _reconnectAttempts: 0,
+  _connecting: false,
   handlers: new Map(),
   _openCallbacks: new Set(),
 
   connect: async () => {
-    // Obtenir un ticket éphémère (30s TTL) pour ne pas exposer le JWT dans les logs nginx
+    const { socket, _connecting } = get()
+    // Guard: avoid concurrent connect attempts
+    if (_connecting) return
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return
+
+    set({ _connecting: true })
+
     const ticket = await fetchWsTicket()
     if (!ticket) {
-      // Si le ticket échoue (token expiré, réseau), réessayer dans 5s pour ne pas casser la boucle
-      const timeout = setTimeout(() => get().connect(), 5000)
-      set({ _reconnectTimeout: timeout })
+      const attempts = get()._reconnectAttempts
+      const delay = backoffDelay(attempts)
+      const timeout = setTimeout(() => get().connect(), delay)
+      set({ _reconnectTimeout: timeout, _connecting: false, _reconnectAttempts: attempts + 1 })
       return
     }
 
@@ -51,6 +67,7 @@ export const useWs = create<WsState>((set, get) => ({
     const wsUrl = `${base}/ws?ticket=${encodeURIComponent(ticket)}`
 
     const ws = new WebSocket(wsUrl)
+    set({ _connecting: false })
 
     ws.onmessage = (e) => {
       try {
@@ -61,11 +78,11 @@ export const useWs = create<WsState>((set, get) => ({
     }
 
     ws.onclose = () => {
-      const { _heartbeatInterval } = get()
+      const { _heartbeatInterval, _reconnectAttempts } = get()
       if (_heartbeatInterval) clearInterval(_heartbeatInterval)
-      // Reconnexion automatique après 3s avec un nouveau ticket
-      const timeout = setTimeout(() => get().connect(), 3000)
-      set({ socket: null, _heartbeatInterval: null, _reconnectTimeout: timeout })
+      const delay = backoffDelay(_reconnectAttempts)
+      const timeout = setTimeout(() => get().connect(), delay)
+      set({ socket: null, _heartbeatInterval: null, _reconnectTimeout: timeout, _reconnectAttempts: _reconnectAttempts + 1 })
     }
 
     const interval = setInterval(() => {
@@ -75,8 +92,7 @@ export const useWs = create<WsState>((set, get) => ({
     }, 30_000)
 
     ws.onopen = () => {
-      set({ socket: ws })
-      // Notifier les listeners de reconnexion (ex: re-subscribe aux canaux)
+      set({ socket: ws, _reconnectAttempts: 0 })
       get()._openCallbacks.forEach(cb => cb())
     }
     set({ socket: ws, _heartbeatInterval: interval })
@@ -87,7 +103,7 @@ export const useWs = create<WsState>((set, get) => ({
     if (_reconnectTimeout) clearTimeout(_reconnectTimeout)
     if (_heartbeatInterval) clearInterval(_heartbeatInterval)
     socket?.close()
-    set({ socket: null, _reconnectTimeout: null, _heartbeatInterval: null })
+    set({ socket: null, _reconnectTimeout: null, _heartbeatInterval: null, _reconnectAttempts: 0, _connecting: false })
   },
 
   send: (msg) => {
@@ -101,8 +117,6 @@ export const useWs = create<WsState>((set, get) => ({
     const handlers = get().handlers
     const existing = handlers.get(type) ?? []
     handlers.set(type, [...existing, handler])
-    // Pas de set() ici — les handlers n'ont pas besoin d'être réactifs
-    // set() déclencherait des re-renders inutiles sur tous les abonnés
 
     return () => {
       const current = get().handlers.get(type) ?? []
