@@ -111,7 +111,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                     : m.username.charAt(0).toUpperCase()}
                 </div>
                 <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel
-                  ${m.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+                  ${m.status === 'online' ? 'bg-green-500' : m.status === 'idle' ? 'bg-yellow-400' : m.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500'}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">

@@ -666,7 +666,7 @@ export default function GroupDMPage() {
                   }
                 </div>
                 <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-fc-bg ${
-                  m.status === 'online' ? 'bg-green-400' : 'bg-gray-500'
+                  m.status === 'online' ? 'bg-green-400' : m.status === 'idle' ? 'bg-yellow-400' : m.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500'
                 }`} />
               </div>
               <span className={`text-sm truncate ${m.id === user?.id ? 'text-fc-accent font-medium' : 'text-fc-text'}`}>
