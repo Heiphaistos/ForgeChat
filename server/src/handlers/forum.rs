@@ -102,6 +102,11 @@ pub async fn create_post(
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
+    let is_timed_out: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if is_timed_out { return Err(AppError::Forbidden); }
+
     let title = body.title.trim().to_string();
     if title.is_empty() || title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre requis (max 200 chars)".into()));
@@ -207,6 +212,11 @@ pub async fn reply_to_post(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
     require_channel_in_server(&state, channel_id, server_id).await?;
+
+    let is_timed_out: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if is_timed_out { return Err(AppError::Forbidden); }
 
     let content_raw = body.content.trim().to_string();
     if content_raw.is_empty() {
