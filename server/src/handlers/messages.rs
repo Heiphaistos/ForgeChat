@@ -509,7 +509,8 @@ pub async fn add_reaction(
     if emoji.is_empty() || emoji.chars().count() > 64 {
         return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
     }
-    require_member(&state, claims.sub, server_id).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::ADD_REACTIONS).await
+        .map_err(|_| AppError::Forbidden)?;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Vérifier que le message appartient bien au canal
