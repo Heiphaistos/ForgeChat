@@ -320,6 +320,19 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const currentChannel = channels.find((c: any) => c.id === channelId)
 
+  // Calcul des permissions de l'utilisateur courant pour ce serveur
+  const MANAGE_MESSAGES_BIT = 1 << 3
+  const ADMINISTRATOR_BIT = 1 << 31
+  const myRoleIds: string[] = (serverData?.my_role_ids ?? []).map(String)
+  const allRoles: any[] = serverData?.roles ?? []
+  const everyoneRole = allRoles.find((r: any) => r.is_everyone)
+  const myRoles = allRoles.filter((r: any) => myRoleIds.includes(String(r.id)))
+  const myPerms = myRoles.reduce((acc: number, r: any) => acc | Number(r.permissions), 0)
+    | (everyoneRole ? Number(everyoneRole.permissions) : 0)
+  const isOwner = serverData?.server?.owner_id === meId
+  const canPost = isOwner || !!(myPerms & ADMINISTRATOR_BIT) || !!(myPerms & MANAGE_MESSAGES_BIT)
+  const isAnnouncement = currentChannel?.type === 'announcement'
+
   // Canal vocal / vidéo / scène — même composant WebRTC
   if (currentChannel?.type === 'voice' || currentChannel?.type === 'video' || currentChannel?.type === 'stage') {
     return <VoiceVideoPage channel={currentChannel} serverId={serverId} />
@@ -518,8 +531,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               </div>
             )}
 
-        {/* Input */}
-        <MessageInput
+        {/* Input — canal d'annonces sans permission */}
+        {isAnnouncement && !canPost && (
+          <div className="flex items-center gap-2 px-4 py-3 bg-fc-channel/60 border-t border-fc-hover text-fc-muted text-sm">
+            <Megaphone size={16} className="text-yellow-400 flex-shrink-0" />
+            <span>Seuls les modérateurs peuvent publier dans ce canal d'annonces.</span>
+          </div>
+        )}
+        {(!isAnnouncement || canPost) && <MessageInput
           channelId={channelId}
           serverId={serverId}
           placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
@@ -546,7 +565,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           sending={sendMsg.isPending || !!timeoutUntil}
-        />
+        />}
           </>
         )}
       </div>
