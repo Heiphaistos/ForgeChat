@@ -604,6 +604,10 @@ function AppInner() {
       if (e.key === '?' && !isInput && !e.ctrlKey && !e.metaKey) {
         setShowKeyboardShortcuts(q => !q)
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault()
+        useUnread.getState().markAllRead()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)

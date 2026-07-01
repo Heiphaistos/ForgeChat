@@ -9,6 +9,7 @@ interface UnreadState {
   resetServer: (serverId: string) => void
   fetchAll: () => Promise<void>
   markRead: (channelId: string, serverId?: string) => Promise<void>
+  markAllRead: () => void
 }
 
 export const useUnread = create<UnreadState>((set, get) => ({
@@ -59,5 +60,14 @@ export const useUnread = create<UnreadState>((set, get) => ({
   markRead: async (channelId, serverId) => {
     get().reset(channelId, serverId)
     try { await api.post(`/channels/${channelId}/read`) } catch {}
+  },
+
+  markAllRead: () => {
+    const channelIds = Object.keys(get().counts)
+    set({ counts: {}, serverCounts: {} })
+    // fire-and-forget per channel (no bulk endpoint)
+    for (const id of channelIds) {
+      api.post(`/channels/${id}/read`).catch(() => {})
+    }
   },
 }))
