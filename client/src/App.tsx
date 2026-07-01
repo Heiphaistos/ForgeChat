@@ -492,6 +492,12 @@ function AppInner() {
     const offTagRemove = on('MEMBER_TAG_REMOVE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
     })
+    const offServerTagCreate = on('SERVER_TAG_CREATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['tags', d.server_id] })
+    })
+    const offServerTagDelete = on('SERVER_TAG_DELETE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['tags', d.server_id] })
+    })
     const offMemberTimeout = on('MEMBER_TIMEOUT', (d: any) => {
       if (d.user_id && d.user_id !== user.id) {
         qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
@@ -499,6 +505,12 @@ function AppInner() {
     })
     const offMemberTimeoutLifted = on('MEMBER_TIMEOUT_LIFTED', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+    })
+    const offRoleCreate = on('ROLE_CREATE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+    })
+    const offRoleDelete = on('ROLE_DELETE', (d: any) => {
+      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
     const offRoleUpdate = on('ROLE_UPDATE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
@@ -512,7 +524,8 @@ function AppInner() {
     })
     return () => {
       offUserUpdate(); offBoost(); offTagAssign(); offTagRemove()
-      offMemberTimeout(); offMemberTimeoutLifted(); offRoleUpdate(); offMemberRoleUpdate()
+      offMemberTimeout(); offMemberTimeoutLifted(); offRoleCreate(); offRoleDelete(); offRoleUpdate(); offMemberRoleUpdate()
+      offServerTagCreate(); offServerTagDelete()
     }
   }, [user?.id])
 
