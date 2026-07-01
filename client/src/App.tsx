@@ -213,7 +213,7 @@ function AppInner() {
       if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
         playMention()
         const goToMsg = () => d.server_id && d.message?.channel_id
-          ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}`)
+          ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`)
           : undefined
         if (document.hasFocus()) {
           toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
