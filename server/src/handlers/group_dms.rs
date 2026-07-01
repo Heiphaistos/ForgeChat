@@ -211,9 +211,12 @@ pub async fn get_group_messages(
         vec![]
     } else {
         sqlx::query(
-            "SELECT group_dm_message_id, emoji, user_id FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)"
+            "SELECT group_dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
+             FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)
+             GROUP BY group_dm_message_id, emoji"
         )
         .bind(&msg_ids)
+        .bind(claims.sub)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
@@ -237,7 +240,8 @@ pub async fn get_group_messages(
         let mid = r.get::<Uuid, _>("group_dm_message_id");
         react_map.entry(mid).or_default().push(serde_json::json!({
             "emoji": r.get::<String, _>("emoji"),
-            "user_id": r.get::<Uuid, _>("user_id"),
+            "count": r.get::<i64, _>("count"),
+            "me": r.get::<bool, _>("me"),
         }));
     }
 
