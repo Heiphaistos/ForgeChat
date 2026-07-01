@@ -46,7 +46,7 @@ export default function DMPage() {
   const [searchParams] = useSearchParams()
   const highlightMessageId = searchParams.get('highlight')
   const nav = useNavigate()
-  const { addMessages, addMessage } = useChat()
+  const { addMessages, addMessage, clearChannel } = useChat()
   const { on } = useWs()
   const presenceStatuses = usePresence(s => s.statuses)
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
@@ -164,6 +164,7 @@ export default function DMPage() {
   // Populate chat store with normal messages
   useEffect(() => {
     if (messages.length > 0 && dmId) {
+      if (highlightMessageId) clearChannel(dmId)
       const normalized = messages.map((m: any) => ({
         ...m,
         channel_id: dmId,
