@@ -392,6 +392,12 @@ export default function MessageList({
               {/* Avatar */}
               {!ultraCompact && (
                 <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
+                  {/* Heure au survol pour les messages de continuation */}
+                  {isGrouped && (
+                    <span className="opacity-0 group-hover:opacity-100 transition text-[9px] text-fc-muted font-mono select-none flex items-center justify-center h-full">
+                      {format(new Date(msg.created_at), 'HH:mm')}
+                    </span>
+                  )}
                   {!isGrouped && (
                     <button
                       className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
