@@ -46,7 +46,8 @@ export default function DMPage() {
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage } = useChat()
   const { on } = useWs()
-  const getStatus = usePresence(s => s.getStatus)
+  const presenceStatuses = usePresence(s => s.statuses)
+  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const me = useAuth(s => s.user)
   const resetUnread = useUnread(s => s.reset)
   const { generateAndStoreKeyPair, getSharedKey, encrypt, decrypt } = useE2E()

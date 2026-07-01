@@ -191,7 +191,8 @@ export default function ChannelSidebar() {
   const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   const qc = useQueryClient()
-  const getStatus = usePresence(s => s.getStatus)
+  const presenceStatuses = usePresence(s => s.statuses)
+  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const unreadCounts = useUnread(s => s.counts)
   const markRead = useUnread(s => s.markRead)
   const isChannelMuted = useChannelNotif(s => s.isMuted)

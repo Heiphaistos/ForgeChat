@@ -7,8 +7,8 @@ interface ActivityInfo {
 }
 
 interface PresenceState {
-  statuses: Map<string, string>
-  activities: Map<string, ActivityInfo>
+  statuses: Record<string, string>
+  activities: Record<string, ActivityInfo>
   setStatus: (userId: string, status: string) => void
   getStatus: (userId: string) => string
   setActivity: (userId: string, activity: ActivityInfo) => void
@@ -16,24 +16,16 @@ interface PresenceState {
 }
 
 export const usePresence = create<PresenceState>((set, get) => ({
-  statuses: new Map(),
-  activities: new Map(),
+  statuses: {},
+  activities: {},
 
   setStatus: (userId, status) =>
-    set(s => {
-      const next = new Map(s.statuses)
-      next.set(userId, status)
-      return { statuses: next }
-    }),
+    set(s => ({ statuses: { ...s.statuses, [userId]: status } })),
 
-  getStatus: (userId) => get().statuses.get(userId) ?? 'offline',
+  getStatus: (userId) => get().statuses[userId] ?? 'offline',
 
   setActivity: (userId, activity) =>
-    set(s => {
-      const next = new Map(s.activities)
-      next.set(userId, activity)
-      return { activities: next }
-    }),
+    set(s => ({ activities: { ...s.activities, [userId]: activity } })),
 
-  getActivity: (userId) => get().activities.get(userId),
+  getActivity: (userId) => get().activities[userId],
 }))

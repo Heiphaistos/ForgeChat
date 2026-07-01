@@ -570,7 +570,13 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
       }
     })
-    return () => { offKicked(); offBanned(); offServerDelete(); offRemove(); offLeave() }
+    const offUnban = on('MEMBER_UNBAN', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['bans', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+      }
+    })
+    return () => { offKicked(); offBanned(); offServerDelete(); offRemove(); offLeave(); offUnban() }
   }, [user?.id])
 
   // Raccourcis clavier globaux

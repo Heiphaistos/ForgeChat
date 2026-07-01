@@ -88,7 +88,8 @@ export default function FriendsPage() {
   const [showImport, setShowImport] = useState(false)
   const qc = useQueryClient()
   const nav = useNavigate()
-  const getStatus = usePresence(s => s.getStatus)
+  const presenceStatuses = usePresence(s => s.statuses)
+  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: friendsData, isLoading } = useQuery<{ friends: FriendRow[]; counts: Record<string, number> }>({
@@ -118,10 +119,10 @@ export default function FriendsPage() {
   )
   const online = useMemo(
     () => accepted.filter(f => {
-      const live = getStatus(f.friend_id)
-      return (live || f.user_status) === 'online'
+      const live = presenceStatuses[f.friend_id] ?? f.user_status ?? 'offline'
+      return live === 'online'
     }),
-    [accepted, getStatus]
+    [accepted, presenceStatuses]
   )
 
   const filteredAccepted = useMemo(() => {

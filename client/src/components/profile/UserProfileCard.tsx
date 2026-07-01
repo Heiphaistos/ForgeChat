@@ -53,7 +53,8 @@ export default function UserProfileCard({
   const ref = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
   const qc = useQueryClient()
-  const getStatus = usePresence(s => s.getStatus)
+  const presenceStatuses = usePresence(s => s.statuses)
+  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
 
   // Fermer au clic extérieur et Escape
   useEffect(() => {

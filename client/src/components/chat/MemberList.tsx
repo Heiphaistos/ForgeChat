@@ -61,7 +61,8 @@ export default function MemberList({ serverId }: Props) {
     refetchInterval: 30_000,
   })
 
-  const getStatus = usePresence(s => s.getStatus)
+  const presenceStatuses = usePresence(s => s.statuses)
+  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const ctxMenu = useContextMenu()
   const nav = useNavigate()
   const me = useAuth(s => s.user)

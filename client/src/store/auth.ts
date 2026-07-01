@@ -67,7 +67,7 @@ export const useAuth = create<AuthState>()(
       if (isTauri) localStorage.clear()
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
-      usePresence.setState({ statuses: new Map(), activities: new Map() })
+      usePresence.setState({ statuses: {}, activities: {} })
       useUnread.setState({ counts: {} })
       set(s => { s.user = null })
     },
