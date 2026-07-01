@@ -646,6 +646,7 @@ export default function GroupDMPage() {
             if (!t && (!files || files.length === 0)) return
             sendMsg.mutate({ text: t, files: files?.map(f => f.file) ?? [] })
           }}
+          onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
         />
       </div>
 
