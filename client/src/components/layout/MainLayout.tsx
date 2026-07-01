@@ -97,7 +97,7 @@ export default function MainLayout() {
       closeSidebar: () => setSidebarOpen(false),
     }}>
       <SplitContext.Provider value={{ splitChannelId, setSplitChannelId }}>
-        <div className="flex h-screen overflow-hidden bg-fc-bg">
+        <div className="flex h-dvh overflow-hidden bg-fc-bg">
 
           {/* Mobile backdrop */}
           {sidebarOpen && (
