@@ -138,6 +138,13 @@ export default function GroupDMPage() {
   }, [groupId])
 
   useEffect(() => {
+    // Reset when highlight changes so around-messages replace the current list
+    initialized.current = false
+    setAllMessages([])
+    setHasMore(true)
+  }, [highlightMsgId])
+
+  useEffect(() => {
     if (!initialMessages || initialized.current) return
     initialized.current = true
     setAllMessages(initialMessages)
