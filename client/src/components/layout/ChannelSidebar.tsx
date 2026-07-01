@@ -12,6 +12,7 @@ import { useContextMenu } from '../ui/ContextMenu'
 import ServerBoostBanner from '../server/ServerBoostBanner'
 import { usePresence } from '../../store/presence'
 import { useUnread } from '../../store/unread'
+import { useChannelNotif } from '../../store/channelNotif'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
@@ -193,6 +194,8 @@ export default function ChannelSidebar() {
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
   const markRead = useUnread(s => s.markRead)
+  const isChannelMuted = useChannelNotif(s => s.isMuted)
+  const setChannelMuted = useChannelNotif(s => s.setMuted)
   const currentUser = useAuth(s => s.user)
 
   const { data } = useQuery({
@@ -567,18 +570,26 @@ export default function ChannelSidebar() {
         onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels, categoryKey) : undefined}
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
-        onContextMenu={e => ctxMenu.open(e, [
-          { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
-          { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
-          { separator: true },
-          { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
-          ...(isOwnerOrAdmin ? [
-            { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
-            { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
-            { separator: true as const },
-            { label: 'Supprimer le canal', danger: true, onClick: () => { if (confirm(`Supprimer #${ch.name} ?`)) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
-          ] : []),
-        ])}
+        onContextMenu={e => {
+          const muted = isChannelMuted(ch.id)
+          ctxMenu.open(e, [
+            { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
+            { label: muted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
+              const next = !muted
+              setChannelMuted(ch.id, next)
+              api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
+            }},
+            { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+            { separator: true },
+            { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
+            ...(isOwnerOrAdmin ? [
+              { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+              { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+              { separator: true as const },
+              { label: 'Supprimer le canal', danger: true, onClick: () => { if (confirm(`Supprimer #${ch.name} ?`)) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
+            ] : []),
+          ])
+        }}
       >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
@@ -635,6 +646,11 @@ export default function ChannelSidebar() {
 
           {isMeConnected && (
             <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
+          )}
+          {isChannelMuted(ch.id) && !(unreadCounts[ch.id] > 0 && channelId !== ch.id) && (
+            <span title="Notifications désactivées" className="flex-shrink-0">
+              <BellOff size={11} className="text-fc-muted/50" />
+            </span>
           )}
           {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && (
             <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">

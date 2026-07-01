@@ -673,6 +673,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account))
         .route("/user/notification-overrides", get(handlers::user_settings::get_notification_overrides))
         .route("/user/notification-overrides", post(handlers::user_settings::set_notification_override))
+        .route("/user/channel-notif", get(handlers::user_settings::get_all_channel_notification_overrides))
         .route("/user/channel-notif/:channel_id", get(handlers::user_settings::get_channel_notification_override))
         .route("/user/channel-notif/:channel_id", post(handlers::user_settings::set_channel_notification_override))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))

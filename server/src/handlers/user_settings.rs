@@ -482,6 +482,19 @@ pub async fn set_channel_notification_override(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+pub async fn get_all_channel_notification_overrides(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ChannelNotifOverride>>> {
+    let rows = sqlx::query_as::<_, ChannelNotifOverride>(
+        "SELECT id, channel_id, level, muted FROM notification_overrides_channel WHERE user_id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows))
+}
+
 // ─── Keybindings ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]

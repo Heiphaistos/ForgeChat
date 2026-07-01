@@ -10,6 +10,7 @@ import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
+import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
 
 // Imports statiques pour le chemin critique (login/register sont légers)
@@ -115,10 +116,14 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  const fetchChannelNotif = useChannelNotif(s => s.fetch)
+  const isChannelMuted = useChannelNotif(s => s.isMuted)
+
   useEffect(() => {
     if (!user) return
     connect()
     fetchUnread()
+    fetchChannelNotif()
     return () => disconnect()
   }, [user?.id])
 
@@ -199,6 +204,7 @@ function AppInner() {
       const msg = d.message
       if (!msg || msg.author_id === user.id) return
       if (user.focus_mode) return
+      if (msg.channel_id && isChannelMuted(msg.channel_id)) return
       const content: string = msg.content ?? ''
       const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
@@ -208,7 +214,6 @@ function AppInner() {
           ? nav(`/servers/${d.message.server_id}/channels/${d.message.channel_id}`)
           : undefined
         if (document.hasFocus()) {
-          // Fenêtre focusée → toast cliquable avec badge mention
           toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
             duration: 5000,
             style: { cursor: 'pointer', maxWidth: '360px' },
@@ -231,7 +236,7 @@ function AppInner() {
       }
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, user?.focus_mode, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, isChannelMuted, playJoin, playLeave, playMessage, playMention])
 
   // Demander permission notifications au login
   useEffect(() => {
