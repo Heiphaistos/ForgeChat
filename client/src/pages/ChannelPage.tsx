@@ -345,7 +345,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   // Canal texte / annonces
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="relative flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header canal */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">

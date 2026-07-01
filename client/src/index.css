@@ -3,7 +3,12 @@
 @tailwind utilities;
 @import 'highlight.js/styles/github-dark.css';
 
-* { box-sizing: border-box; touch-action: manipulation; }
+* { box-sizing: border-box; }
+
+/* Empêche le double-tap zoom sur les éléments interactifs sans bloquer le scroll */
+button, a, [role="button"], label, select, summary {
+  touch-action: manipulation;
+}
 
 html {
   overflow: hidden;
@@ -17,7 +22,21 @@ body {
   color: #dcddde;
   overflow: hidden;
   max-width: 100vw;
+  /* Empêche iOS de grossir le texte lors de la rotation */
   -webkit-text-size-adjust: 100%;
+}
+
+/* Scroll tactile fluide sur les conteneurs scrollables */
+[class*="overflow-y-auto"], [class*="overflow-y-scroll"],
+[class*="overflow-auto"], [class*="overflow-scroll"] {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area pour les téléphones avec notch / barre de navigation iOS & Android.
+   Appliqué via Tailwind pb-safe dans les composants qui en ont besoin. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
 }
 
 ::-webkit-scrollbar { width: 4px; }

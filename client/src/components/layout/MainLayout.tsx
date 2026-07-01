@@ -160,7 +160,7 @@ export default function MainLayout() {
           </div>
 
           {/* Zone principale */}
-          <div className="flex flex-1 overflow-hidden min-w-0">
+          <div className="relative flex flex-1 overflow-hidden min-w-0">
             <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               <Outlet />
             </div>
@@ -177,10 +177,10 @@ export default function MainLayout() {
                 </Suspense>
               </div>
             )}
-          </div>
 
-          {/* Sidebar droite — Activité récente */}
-          <RightSidebar visible={activityOpen} onClose={closeActivity} />
+            {/* Sidebar droite — Activité récente (overlay absolu sur mobile, colonne sur desktop) */}
+            <RightSidebar visible={activityOpen} onClose={closeActivity} />
+          </div>
         </div>
       </SplitContext.Provider>
     </MobileContext.Provider>
