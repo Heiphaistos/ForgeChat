@@ -233,9 +233,9 @@ export default function QuickSwitcher({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-[100] flex items-start justify-center pt-24" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 z-[100] flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
       <div
-        className="w-[560px] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
+        className="w-full max-w-[560px] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Input */}

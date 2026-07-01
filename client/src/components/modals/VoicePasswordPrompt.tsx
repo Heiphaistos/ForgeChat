@@ -16,9 +16,9 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
       <div
-        className="bg-fc-channel rounded-lg w-[360px] shadow-2xl p-6"
+        className="bg-fc-channel rounded-lg w-full max-w-[360px] shadow-2xl p-6"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

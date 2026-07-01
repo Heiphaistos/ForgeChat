@@ -303,8 +303,8 @@ export default function FriendsPage() {
   return (
     <>
     <div className="flex flex-col h-full" onClick={() => menuOpen && setMenuOpen(null)}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 flex-wrap gap-y-2">
+      {/* Header — rangée 1 : titre + actions */}
+      <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0">
         <button
           className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
@@ -313,26 +313,32 @@ export default function FriendsPage() {
           <ChevronLeft size={20} />
         </button>
         <span className="font-semibold text-white flex-shrink-0">Amis</span>
-        <div className="flex gap-1 flex-wrap">
-          <TabBtn t="online" label="En ligne" count={online.length} />
-          <TabBtn t="all" label="Tous" />
-          <TabBtn t="pending" label="En attente" count={pendingCount} />
-          <TabBtn t="blocked" label="Bloqués" />
-          <button
-            onClick={() => setTab('pending')}
-            className="px-3 py-1.5 rounded text-sm font-medium bg-fc-accent hover:bg-indigo-500 text-white transition ml-1"
-          >
-            + Ajouter un ami
-          </button>
-          <button
-            onClick={() => setShowImport(true)}
-            className="px-3 py-1.5 rounded text-sm font-medium bg-fc-hover hover:bg-fc-input text-fc-text hover:text-white transition ml-1 flex items-center gap-1.5"
-            title="Importer des contacts depuis un CSV"
-          >
-            <Upload size={14} />
-            Importer CSV
-          </button>
+        {/* Tabs scrollables horizontalement */}
+        <div className="flex-1 overflow-x-auto overflow-y-hidden no-scrollbar">
+          <div className="flex items-center gap-1 min-w-max px-1">
+            <TabBtn t="online" label="En ligne" count={online.length} />
+            <TabBtn t="all" label="Tous" />
+            <TabBtn t="pending" label="En attente" count={pendingCount} />
+            <TabBtn t="blocked" label="Bloqués" />
+          </div>
         </div>
+        {/* Actions — icône sur mobile, texte sur desktop */}
+        <button
+          onClick={() => setTab('pending')}
+          className="flex-shrink-0 p-1.5 md:px-3 md:py-1.5 rounded text-sm font-medium bg-fc-accent hover:bg-indigo-500 text-white transition flex items-center gap-1"
+          title="Ajouter un ami"
+        >
+          <UserPlus size={16} />
+          <span className="hidden md:inline">Ajouter</span>
+        </button>
+        <button
+          onClick={() => setShowImport(true)}
+          className="flex-shrink-0 hidden md:flex px-3 py-1.5 rounded text-sm font-medium bg-fc-hover hover:bg-fc-input text-fc-text hover:text-white transition items-center gap-1.5"
+          title="Importer des contacts depuis un CSV"
+        >
+          <Upload size={14} />
+          Importer CSV
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
