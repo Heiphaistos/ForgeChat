@@ -47,7 +47,7 @@ export default function AdvancedSection({ user }: Props) {
         <h3 className="text-sm font-semibold text-white mb-1">Informations de débogage</h3>
         <div className="bg-fc-channel rounded-lg p-3 text-xs font-mono text-fc-muted space-y-1">
           <div>UserID: {user.id}</div>
-          <div>Version: 3.14.0</div>
+          <div>Version: {__APP_VERSION__}</div>
           <div>UA: {navigator.userAgent.slice(0, 60)}...</div>
         </div>
         <button
