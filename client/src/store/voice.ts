@@ -83,6 +83,7 @@ let _processedStream: MediaStream | null = null     // stream après traitement 
 let _noiseAudioCtx: AudioContext | null = null       // AudioContext dédié noise suppression
 let _screenTrack: MediaStreamTrack | null = null
 let _cameraTrackBeforeShare: MediaStreamTrack | null = null
+let _micTrackBeforeScreenAudio: MediaStreamTrack | null = null
 let _offFns: Array<() => void> = []
 let _pttMuted = false // état mute "réel" avant PTT
 
@@ -598,6 +599,8 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _localStream = null
     _screenTrack?.stop()
     _screenTrack = null
+    _micTrackBeforeScreenAudio = null
+    _cameraTrackBeforeShare = null
 
     _offFns.forEach(off => off())
     _offFns = []
@@ -714,15 +717,17 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       // Gérer l'audio système si capturé (sans dupliquer la piste)
       if (screenStream.getAudioTracks().length > 0) {
         const sat = screenStream.getAudioTracks()[0]
-        // Ajouter au stream local UNIQUEMENT si pas déjà présent
         if (!_localStream.getTrackById(sat.id)) {
           _localStream.addTrack(sat)
         }
         for (const [peerId, pc] of _pcs) {
           try {
-            // Remplacer la piste audio existante plutôt que d'en ajouter une nouvelle
             const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
             if (audioSender) {
+              // Sauvegarder le micro avant de le remplacer
+              if (!_micTrackBeforeScreenAudio && audioSender.track) {
+                _micTrackBeforeScreenAudio = audioSender.track
+              }
               await audioSender.replaceTrack(sat)
             } else {
               pc.addTrack(sat, _localStream)
@@ -730,9 +735,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
               await pc.setLocalDescription(offer)
               useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
             }
-          } catch (e) {
-            console.warn('[Voice] Screen audio track error:', e)
-          }
+          } catch {}
         }
       }
 
@@ -757,6 +760,16 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     for (const [, pc] of _pcs) {
       const sender = pc.getSenders().find(s => s.track?.kind === 'video')
       if (sender) sender.replaceTrack(null).catch(() => {})
+    }
+
+    // Restaurer l'audio micro (si l'audio écran l'avait remplacé)
+    if (_micTrackBeforeScreenAudio) {
+      const micTrack = _micTrackBeforeScreenAudio
+      _micTrackBeforeScreenAudio = null
+      for (const [, pc] of _pcs) {
+        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
+        if (audioSender) try { await audioSender.replaceTrack(micTrack) } catch {}
+      }
     }
 
     // Restaurer la cam�ra si elle �tait active avant le screen share
