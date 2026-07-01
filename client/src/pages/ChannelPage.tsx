@@ -81,9 +81,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   })
 
   const { data: messages = [] } = useQuery({
-    queryKey: ['messages', serverId, channelId],
+    queryKey: ['messages', serverId, channelId, highlightMessageId ?? null],
     queryFn: async () => {
-      // If opening with a highlight param, try to load messages around the target first
       if (highlightMessageId) {
         try {
           const res = await api.get(
@@ -95,10 +94,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       return api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => r.data)
     },
     enabled: !!channelId && !!serverId,
+    staleTime: highlightMessageId ? 0 : 30_000,
   })
 
   useEffect(() => {
-    if (messages.length > 0 && channelId) addMessages(channelId, messages)
+    if (messages.length > 0 && channelId) {
+      // When loading around a highlighted message, replace the store to avoid gaps
+      if (highlightMessageId) clearChannel(channelId)
+      addMessages(channelId, messages)
+    }
   }, [messages, channelId])
 
   // Marquer comme lu + reset load-more quand on ouvre un nouveau canal ou focus
