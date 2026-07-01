@@ -87,7 +87,7 @@ export default function FriendInvitePage() {
               : info.user.username.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-fc-channel
-            ${info.user.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`} />
+            ${info.user.status === 'online' ? 'bg-green-500' : info.user.status === 'idle' ? 'bg-yellow-400' : info.user.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500'}`} />
         </div>
 
         <div className="font-bold text-white text-lg mb-1">{info.user.username}</div>
