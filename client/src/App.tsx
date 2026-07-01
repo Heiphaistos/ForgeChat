@@ -75,6 +75,29 @@ function AppInner() {
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
+  const pendingNotifs = React.useRef<Array<{ title: string; body: string; path: string }>>([])
+
+  // Flush queued notifications as toasts when window regains focus
+  useEffect(() => {
+    const onFocus = () => {
+      const notifs = pendingNotifs.current.splice(0)
+      if (notifs.length === 0) return
+      if (notifs.length === 1) {
+        toast(`💬 ${notifs[0].title}: ${notifs[0].body}`, {
+          duration: 6000,
+          style: { cursor: 'pointer', maxWidth: '320px' },
+          onClick: () => nav(notifs[0].path),
+        } as any)
+      } else {
+        toast(`💬 ${notifs.length} nouveaux messages privés`, {
+          duration: 6000,
+          style: { cursor: 'pointer', maxWidth: '320px' },
+        } as any)
+      }
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   useEffect(() => { fetchMe() }, [])
 
@@ -326,18 +349,13 @@ function AppInner() {
             onClick: () => nav(`/dms/${d.dm_id}`),
           } as any)
         } else {
-          // Fenêtre non focusée → native, sinon toast de repli quand la fenêtre reprend le focus
+          // Fenêtre non focusée → native si permission, sinon mettre en file pour afficher au focus
+          const title = msg.sender_username ?? 'Message privé'
+          const body = msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe'
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-            sendNativeNotification(msg.sender_username ?? 'Message privé', {
-              body: msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe',
-              onClick: () => nav(`/dms/${d.dm_id}`),
-            })
+            sendNativeNotification(title, { body, onClick: () => nav(`/dms/${d.dm_id}`) })
           } else {
-            toast(`💬 ${msg.sender_username ?? 'Message privé'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
-              duration: 5000,
-              style: { cursor: 'pointer', maxWidth: '320px' },
-              onClick: () => nav(`/dms/${d.dm_id}`),
-            } as any)
+            pendingNotifs.current.push({ title, body: body.slice(0, 60), path: `/dms/${d.dm_id}` })
           }
         }
       }
