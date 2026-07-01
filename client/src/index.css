@@ -39,9 +39,21 @@ body {
   .pt-safe { padding-top: env(safe-area-inset-top); }
 }
 
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #202225; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #36383c; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #4f545c; }
+
+/* Overscroll contain pour les listes de messages */
+.message-list-container { overscroll-behavior: contain; }
+
+/* Zones tactiles minimum 44px sur mobile */
+@media (max-width: 767px) {
+  button, a[role="button"], [role="button"] {
+    min-height: 36px;
+    min-width: 36px;
+  }
+}
 
 .mention { color: #5865f2; background: rgba(88,101,242,0.15); border-radius: 3px; padding: 0 2px; cursor: pointer; }
 .mention-everyone { color: #f0b132; background: rgba(240,177,50,0.15); }

@@ -392,7 +392,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             )}
             <button
               onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Fils de discussion"
             >
               <MessagesSquare size={18} />
@@ -406,7 +406,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </button>
             <button
               onClick={() => { setShowPinned(!showPinned); setShowSearch(false); setActiveThreadId(null) }}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Messages épinglés"
             >
               <Pin size={18} />
@@ -415,7 +415,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               <button
                 ref={bellRef}
                 onClick={() => setShowNotifModal(v => !v)}
-                className={`p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+                className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
                 title="Notifications"
               >
                 <Bell size={18} />

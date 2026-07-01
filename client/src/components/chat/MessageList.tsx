@@ -300,6 +300,20 @@ export default function MessageList({
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTarget = useRef<{ x: number; y: number; msg: any } | null>(null)
+
+  const startLongPress = (e: React.TouchEvent, msg: any) => {
+    const t = e.touches[0]
+    longPressTarget.current = { x: t.clientX, y: t.clientY, msg }
+    longPressTimer.current = setTimeout(() => {
+      if (longPressTarget.current) setContextMenu(longPressTarget.current)
+    }, 500)
+  }
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+    longPressTarget.current = null
+  }
 
   useEffect(() => {
     if (!contextMenu) return
@@ -365,7 +379,7 @@ export default function MessageList({
     <div className="flex-1 relative flex flex-col overflow-hidden">
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5"
+        className="flex-1 overflow-y-auto px-2 md:px-4 py-2 space-y-0.5 message-list-container"
         onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
       >
@@ -414,10 +428,13 @@ export default function MessageList({
                 e.stopPropagation()
                 setContextMenu({ x: e.clientX, y: e.clientY, msg })
               }}
+              onTouchStart={e => startLongPress(e, msg)}
+              onTouchEnd={cancelLongPress}
+              onTouchMove={cancelLongPress}
             >
               {/* Avatar */}
               {!ultraCompact && (
-                <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-10'}`}>
+                <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-8 md:w-10'}`}>
                   {/* Heure au survol pour les messages de continuation */}
                   {isGrouped && showTimestamps !== 'never' && (
                     <span className="opacity-0 group-hover:opacity-100 transition text-[9px] text-fc-muted font-mono select-none flex items-center justify-center h-full">
@@ -426,7 +443,7 @@ export default function MessageList({
                   )}
                   {!isGrouped && (
                     <button
-                      className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-10 h-10'}`}
+                      className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
                       onClick={e => openUserPopup(e, msg.author_id)}
                       onContextMenu={e => {
                         e.preventDefault()
