@@ -13,7 +13,8 @@ import { useFormatDate } from '../hooks/useFormatDate'
 
 interface GDMReaction {
   emoji: string
-  user_id: string
+  count: number
+  me: boolean
 }
 
 interface GDMAttachment {
@@ -155,13 +156,25 @@ export default function GroupDMPage() {
     })
     const offReact = on('GROUP_DM_REACTION_TOGGLE', (d: any) => {
       if (d.group_id !== groupId) return
+      const isMe = d.user_id === user?.id
       setAllMessages(prev => prev.map(m => {
         if (m.id !== d.message_id) return m
         const reactions = m.reactions ?? []
-        const updated = d.added
-          ? [...reactions.filter(r => !(r.emoji === d.emoji && r.user_id === d.user_id)),
-             { emoji: d.emoji, user_id: d.user_id }]
-          : reactions.filter(r => !(r.emoji === d.emoji && r.user_id === d.user_id))
+        const existing = reactions.find(r => r.emoji === d.emoji)
+        let updated: GDMReaction[]
+        if (d.added) {
+          if (existing) {
+            updated = reactions.map(r => r.emoji === d.emoji
+              ? { ...r, count: r.count + 1, me: r.me || isMe }
+              : r)
+          } else {
+            updated = [...reactions, { emoji: d.emoji, count: 1, me: isMe }]
+          }
+        } else {
+          updated = reactions
+            .map(r => r.emoji === d.emoji ? { ...r, count: r.count - 1, me: isMe ? false : r.me } : r)
+            .filter(r => r.count > 0)
+        }
         return { ...m, reactions: updated }
       }))
     })
@@ -600,37 +613,29 @@ export default function GroupDMPage() {
                           </div>
                         )}
                         {/* Réactions */}
-                        {msg.reactions && msg.reactions.length > 0 && (() => {
-                          const grouped: Record<string, { count: number; reacted: boolean }> = {}
-                          for (const r of msg.reactions) {
-                            if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, reacted: false }
-                            grouped[r.emoji].count++
-                            if (r.user_id === user?.id) grouped[r.emoji].reacted = true
-                          }
-                          return (
-                            <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                              {Object.entries(grouped).map(([emoji, { count, reacted }]) => (
-                                <button
-                                  key={emoji}
-                                  onClick={() => toggleReaction(msg.id, emoji)}
-                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition ${
-                                    reacted
-                                      ? 'bg-fc-accent/20 border-fc-accent/50 text-white'
-                                      : 'bg-fc-channel border-fc-hover text-fc-muted hover:border-fc-accent/50'
-                                  }`}
-                                >
-                                  <span>{emoji}</span>
-                                  <span>{count}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )
-                        })()}
+                        {msg.reactions && msg.reactions.length > 0 && (
+                          <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                            {msg.reactions.map((r: { emoji: string; count: number; me: boolean }) => (
+                              <button
+                                key={r.emoji}
+                                onClick={() => toggleReaction(msg.id, r.emoji)}
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition ${
+                                  r.me
+                                    ? 'bg-fc-accent/20 border-fc-accent/50 text-white'
+                                    : 'bg-fc-channel border-fc-hover text-fc-muted hover:border-fc-accent/50'
+                                }`}
+                              >
+                                <span>{r.emoji}</span>
+                                <span>{r.count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                   <span className="text-[10px] text-fc-muted mt-0.5 mx-1">
-                    {new Date(msg.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    {formatShortDate(msg.created_at)}
                   </span>
                 </div>
               </div>
