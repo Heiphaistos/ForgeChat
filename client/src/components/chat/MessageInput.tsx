@@ -248,6 +248,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     ? allSlashCommands.filter(c => c.name.startsWith(slashQuery.toLowerCase()))
     : allSlashCommands
 
+  const { data: customEmojis = [] } = useQuery<{ id: string; name: string; url: string }[]>({
+    queryKey: ['custom_emojis', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/emojis`).then(r => r.data),
+    enabled: !!serverId,
+    staleTime: 60_000,
+  })
+
   const { data: scheduledMessages = [] } = useQuery<any[]>({
     queryKey: ['scheduled_messages', serverId, channelId],
     queryFn: () =>
@@ -396,13 +403,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }
 
-  const emojiAutoResults = emojiAutoQuery
-    ? Object.entries(EMOJI_MAP)
-        .filter(([k]) => k.startsWith(emojiAutoQuery))
-        .slice(0, 10)
-    : []
+  type EmojiEntry = { name: string; char?: string; custom?: { id: string; url: string } }
+  const emojiAutoResults: EmojiEntry[] = emojiAutoQuery ? [
+    ...Object.entries(EMOJI_MAP)
+      .filter(([k]) => k.startsWith(emojiAutoQuery))
+      .slice(0, 8)
+      .map(([name, char]) => ({ name, char })),
+    ...customEmojis
+      .filter(e => e.name.toLowerCase().startsWith(emojiAutoQuery.toLowerCase()))
+      .slice(0, 5)
+      .map(e => ({ name: e.name, custom: { id: e.id, url: e.url } })),
+  ].slice(0, 10) : []
 
-  const selectEmojiAuto = (emoji: string) => {
+  const selectEmojiAuto = (entry: EmojiEntry) => {
+    const emoji = entry.char ?? (entry.custom ? `<:${entry.name}:${entry.custom.id}>` : '')
+    if (!emoji) return
     const pos = cursorPos
     const before = content.slice(0, pos)
     const after = content.slice(pos)
@@ -505,7 +520,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (showEmojiAuto && emojiAutoResults.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setEmojiAutoIndex(i => Math.min(i + 1, emojiAutoResults.length - 1)); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setEmojiAutoIndex(i => Math.max(i - 1, 0)); return }
-      if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); selectEmojiAuto(emojiAutoResults[emojiAutoIndex][1]); return }
+      if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); selectEmojiAuto(emojiAutoResults[emojiAutoIndex]); return }
       if (e.key === 'Escape') { setShowEmojiAuto(false); return }
     }
     if (showSlash && filteredSlashCommands.length > 0) {
@@ -764,15 +779,17 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             Emoji — :{emojiAutoQuery}
           </div>
           <div className="flex flex-wrap gap-1 p-2">
-            {emojiAutoResults.map(([name, emoji], idx) => (
+            {emojiAutoResults.map((entry, idx) => (
               <button
-                key={name}
-                onClick={() => selectEmojiAuto(emoji)}
+                key={entry.name}
+                onClick={() => selectEmojiAuto(entry)}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition
                   ${idx === emojiAutoIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
               >
-                <span className="text-lg leading-none">{emoji}</span>
-                <span className="text-xs text-fc-muted">:{name}:</span>
+                {entry.custom
+                  ? <img src={entry.custom.url} alt={entry.name} className="w-5 h-5 object-contain rounded" />
+                  : <span className="text-lg leading-none">{entry.char}</span>}
+                <span className="text-xs text-fc-muted">:{entry.name}:</span>
               </button>
             ))}
           </div>
