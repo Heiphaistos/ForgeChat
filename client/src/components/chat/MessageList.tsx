@@ -107,7 +107,7 @@ export default function MessageList({
   const groupingMs = ((userSettings?.message_grouping_minutes as number | undefined) ?? 5) * 60 * 1000
   const timeFormat = (userSettings?.time_format as string | undefined) ?? '24h'
   const dateFormat = (userSettings?.date_format as string | undefined) ?? 'DD/MM/YYYY'
-  const showTimestamps = (userSettings?.show_timestamps as string | undefined) ?? 'always'
+  const showTimestamps = (userSettings?.show_timestamps as string | undefined) ?? 'hover'
 
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
