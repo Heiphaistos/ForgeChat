@@ -115,6 +115,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     return () => window.removeEventListener('focus', doMark)
   }, [channelId, serverId])
 
+  // Reset hasMore when highlight changes (around-load replaces store content)
+  useEffect(() => {
+    if (highlightMessageId) setHasMore(true)
+  }, [highlightMessageId])
+
   // Re-subscribe après reconnexion WS (sinon les messages du canal n'arrivent plus)
   useEffect(() => {
     if (!channelId) return
