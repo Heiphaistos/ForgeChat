@@ -118,6 +118,7 @@ function AppInner() {
 
   const fetchChannelNotif = useChannelNotif(s => s.fetch)
   const isChannelMuted = useChannelNotif(s => s.isMuted)
+  const isServerMuted = useChannelNotif(s => s.isServerMuted)
 
   useEffect(() => {
     if (!user) return
@@ -205,6 +206,7 @@ function AppInner() {
       if (!msg || msg.author_id === user.id) return
       if (user.focus_mode) return
       if (msg.channel_id && isChannelMuted(msg.channel_id)) return
+      if (d.server_id && isServerMuted(d.server_id)) return
       const content: string = msg.content ?? ''
       const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
@@ -236,7 +238,7 @@ function AppInner() {
       }
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, user?.focus_mode, isChannelMuted, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, playJoin, playLeave, playMessage, playMention])
 
   // Demander permission notifications au login
   useEffect(() => {

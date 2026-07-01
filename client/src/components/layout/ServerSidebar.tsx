@@ -1,12 +1,13 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
 import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
+import { useChannelNotif } from '../../store/channelNotif'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -135,6 +136,8 @@ export default function ServerSidebar() {
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const me = useAuth(s => s.user)
+  const isServerMuted = useChannelNotif(s => s.isServerMuted)
+  const setServerMuted = useChannelNotif(s => s.setServerMuted)
 
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
@@ -352,6 +355,11 @@ export default function ServerSidebar() {
         {hasUnread && (
           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
         )}
+        {!hasUnread && isServerMuted(s.id) && (
+          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
+            <BellOff size={7} className="text-white" />
+          </span>
+        )}
       </div>
     )
   }
@@ -503,6 +511,29 @@ export default function ServerSidebar() {
               onClick={() => { navigator.clipboard.writeText(contextMenu.serverId); toast.success('ID copié'); setContextMenu(null) }}
             >
               <Copy size={12} /> Copier l'ID
+            </button>
+            <button
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={async () => {
+                const muted = isServerMuted(contextMenu.serverId)
+                try {
+                  await api.post('/user/notification-overrides', {
+                    server_id: contextMenu.serverId,
+                    level: 'all',
+                    muted: !muted,
+                  })
+                  setServerMuted(contextMenu.serverId, !muted)
+                  toast.success(muted ? 'Notifications réactivées' : 'Serveur mis en sourdine')
+                } catch {
+                  toast.error('Impossible de modifier les notifications')
+                }
+                setContextMenu(null)
+              }}
+            >
+              {isServerMuted(contextMenu.serverId)
+                ? <><Bell size={12} /> Réactiver les notifications</>
+                : <><BellOff size={12} /> Mettre en sourdine</>
+              }
             </button>
 
             {/* Dossiers */}
