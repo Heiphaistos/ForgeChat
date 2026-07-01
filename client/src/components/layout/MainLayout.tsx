@@ -67,9 +67,14 @@ export default function MainLayout() {
     }
   }, [])
 
-  // Auto-close mobile drawer on navigation
+  // Auto-close mobile drawer on navigation — sauf quand on navigue vers la racine
+  // d'un serveur (ex: /servers/X), car ChannelPage va auto-naviguer vers le premier
+  // canal : on reste ouvert pour que l'utilisateur puisse choisir son canal.
   useEffect(() => {
-    setSidebarOpen(false)
+    const isServerRoot = /^\/servers\/[^/]+$/.test(location.pathname)
+    if (!isServerRoot) {
+      setSidebarOpen(false)
+    }
   }, [location.pathname])
 
   // Ctrl+Shift+S — fermer le split
