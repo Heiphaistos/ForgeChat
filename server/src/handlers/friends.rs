@@ -302,8 +302,40 @@ pub async fn get_dm_messages(
 
     let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
+    let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
 
-    let messages = if let Some(before_id) = before {
+    let messages = if let Some(around_id) = around {
+        let ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+            "SELECT created_at FROM dm_messages WHERE id=$1 AND dm_channel_id=$2"
+        )
+        .bind(around_id).bind(dm_id)
+        .fetch_optional(&state.db).await?;
+
+        let ts = ts.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+        let half = limit / 2;
+
+        let mut before_rows = sqlx::query(
+            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+             JOIN users u ON u.id = dm.sender_id
+             WHERE dm.dm_channel_id=$1 AND dm.created_at < $2
+             ORDER BY dm.created_at DESC LIMIT $3"
+        )
+        .bind(dm_id).bind(ts).bind(half)
+        .fetch_all(&state.db).await?;
+
+        let after_rows = sqlx::query(
+            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+             JOIN users u ON u.id = dm.sender_id
+             WHERE dm.dm_channel_id=$1 AND dm.created_at >= $2
+             ORDER BY dm.created_at ASC LIMIT $3"
+        )
+        .bind(dm_id).bind(ts).bind(limit - half + 1)
+        .fetch_all(&state.db).await?;
+
+        before_rows.reverse();
+        before_rows.extend(after_rows);
+        before_rows
+    } else if let Some(before_id) = before {
         sqlx::query(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id

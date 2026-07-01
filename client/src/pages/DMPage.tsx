@@ -141,7 +141,15 @@ export default function DMPage() {
 
   const { data: messages = [] } = useQuery({
     queryKey: ['dm_messages', dmId],
-    queryFn: () => api.get(`/dms/${dmId}/messages`).then(r => r.data),
+    queryFn: async () => {
+      if (highlightMessageId) {
+        try {
+          const res = await api.get(`/dms/${dmId}/messages?around=${highlightMessageId}&limit=50`)
+          if (res.data?.length > 0) return res.data
+        } catch {}
+      }
+      return api.get(`/dms/${dmId}/messages`).then(r => r.data)
+    },
     enabled: !!dmId && !e2eMode,
   })
 
