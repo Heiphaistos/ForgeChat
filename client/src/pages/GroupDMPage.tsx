@@ -88,7 +88,7 @@ export default function GroupDMPage() {
   })
 
   const { data: initialMessages } = useQuery<GDMMessage[]>({
-    queryKey: ['group-dm-messages', groupId],
+    queryKey: ['group-dm-messages', groupId, highlightMsgId ?? null],
     queryFn: async () => {
       if (highlightMsgId) {
         try {
@@ -99,6 +99,7 @@ export default function GroupDMPage() {
       return api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data)
     },
     enabled: !!groupId,
+    staleTime: highlightMsgId ? 0 : 30_000,
   })
 
   const { data: searchResults = [], isFetching: searchFetching } = useQuery<GDMMessage[]>({
@@ -486,6 +487,19 @@ export default function GroupDMPage() {
             >
               <LogOut size={13} />
               Quitter le groupe
+            </button>
+          </div>
+        )}
+
+        {/* Jump-to-present banner */}
+        {highlightMsgId && (
+          <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
+            <span className="text-xs text-fc-accent">Contexte d'un message.</span>
+            <button
+              onClick={() => navigate(`/dms/groups/${groupId}`)}
+              className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
+            >
+              Voir les derniers messages →
             </button>
           </div>
         )}
