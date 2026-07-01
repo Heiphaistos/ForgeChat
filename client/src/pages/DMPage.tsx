@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff } from 'lucide-react'
+import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
 import { useChat } from '../store/chat'
 import { useWs } from '../store/ws'
@@ -15,6 +15,7 @@ import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
+import { useMobile } from '../contexts/MobileContext'
 
 const STATUS_LABEL: Record<string, string> = {
   online: 'En ligne',
@@ -46,6 +47,7 @@ export default function DMPage() {
   const [searchParams] = useSearchParams()
   const highlightMessageId = searchParams.get('highlight')
   const nav = useNavigate()
+  const { openSidebar } = useMobile()
   const { addMessages, addMessage, clearChannel } = useChat()
   const { on } = useWs()
   const presenceStatuses = usePresence(s => s.statuses)
@@ -402,7 +404,14 @@ export default function DMPage() {
       <div className={`flex items-center gap-3 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] transition-colors ${
         e2eMode ? 'border-green-600/40 bg-green-900/10' : 'border-fc-bg'
       }`}>
-        <div className="md:hidden w-8 flex-shrink-0" />
+        <button
+          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour aux messages privés"
+          title="Messages"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <div className="relative flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {partnerAvatar

@@ -5,8 +5,9 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import MessageInput from '../components/chat/MessageInput'
 import { useFormatDate } from '../hooks/useFormatDate'
@@ -59,6 +60,7 @@ export default function GroupDMPage() {
   const { on } = useWs()
   const { formatShortDate } = useFormatDate()
   const resetUnread = useUnread(s => s.reset)
+  const { openSidebar } = useMobile()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -363,7 +365,13 @@ export default function GroupDMPage() {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover bg-fc-bg/30 flex-shrink-0">
-          <div className="md:hidden w-8 flex-shrink-0" />
+          <button
+            className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+            onClick={openSidebar}
+            aria-label="Retour aux messages"
+          >
+            <ChevronLeft size={20} />
+          </button>
           <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
             {group.name.charAt(0).toUpperCase()}
           </div>

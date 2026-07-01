@@ -1,6 +1,7 @@
 import { useState, Component, ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { BarChart2, ScrollText, Shield, Calendar, Flag, ArrowLeft, Trash2, AlertTriangle, CheckCircle, XCircle, ChevronLeft } from 'lucide-react'
+import { useMobile } from '../contexts/MobileContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
@@ -199,6 +200,7 @@ function ReportsTab({ serverId }: { serverId: string }) {
 export default function ServerAdminPage() {
   const { serverId } = useParams<{ serverId: string }>()
   const nav = useNavigate()
+  const { openSidebar } = useMobile()
   const [tab, setTab] = useState<Tab>('stats')
 
   if (!serverId) return null
@@ -215,10 +217,18 @@ export default function ServerAdminPage() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-fc-bg">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-fc-hover flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-fc-hover flex-shrink-0">
+        {/* Mobile: ouvrir la sidebar pour naviguer */}
+        <button
+          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <button
           onClick={() => nav(-1)}
-          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+          className="hidden md:flex p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
           title="Retour"
         >
           <ArrowLeft size={18} />

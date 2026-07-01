@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import api from '../api/client'
+import { ChevronLeft } from 'lucide-react'
+import { useMobile } from '../contexts/MobileContext'
 
 interface LeaderboardEntry {
   user_id: string
@@ -22,6 +24,7 @@ const PERIODS = [
 export default function LeaderboardPage() {
   const { serverId } = useParams<{ serverId: string }>()
   const { user } = useAuth()
+  const { openSidebar } = useMobile()
   const [period, setPeriod] = useState('month')
 
   const { data: entries = [], isLoading } = useQuery<LeaderboardEntry[]>({
@@ -43,7 +46,13 @@ export default function LeaderboardPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="md:hidden w-8 flex-shrink-0" />
+            <button
+              className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+              onClick={openSidebar}
+              aria-label="Retour"
+            >
+              <ChevronLeft size={20} />
+            </button>
             <h1 className="text-2xl font-bold text-white">Classement</h1>
           </div>
           <div className="flex gap-1 bg-fc-channel rounded-lg p-1">

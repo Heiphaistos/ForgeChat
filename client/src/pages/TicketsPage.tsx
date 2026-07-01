@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Plus, AlertCircle, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, AlertCircle, Clock, CheckCircle, XCircle, ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useMobile } from '../contexts/MobileContext'
 
 interface Ticket {
   id: string
@@ -43,6 +44,7 @@ export default function TicketsPage() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const { on } = useWs()
+  const { openSidebar } = useMobile()
   const [newTitle, setNewTitle] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
   const [newCategoryId, setNewCategoryId] = useState('')
@@ -105,7 +107,13 @@ export default function TicketsPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-fc-hover">
         <div className="flex items-center gap-3">
-          <div className="md:hidden w-8 flex-shrink-0" />
+          <button
+            className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+            onClick={openSidebar}
+            aria-label="Retour"
+          >
+            <ChevronLeft size={20} />
+          </button>
           <h1 className="text-xl font-bold text-white">Tickets</h1>
           {categories.length > 0 && (
             <div className="flex items-center gap-1.5">
