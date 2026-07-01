@@ -7,8 +7,9 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::require_member,
+    handlers::servers::{require_member, require_permission},
     middleware::auth::Claims,
+    models::role::Permissions,
     state::AppState,
 };
 
@@ -46,9 +47,6 @@ pub async fn create_emoji(
     Path(server_id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
-    // Créer un emoji nécessite MANAGE_SERVER (permission modérateur)
-    use crate::handlers::servers::require_permission;
-    use crate::models::role::Permissions;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
     let upload_dir = PathBuf::from(&state.config.upload_dir).join("emojis");
@@ -137,9 +135,6 @@ pub async fn delete_emoji(
     Extension(claims): Extension<Claims>,
     Path((server_id, emoji_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    // Supprimer un emoji nécessite MANAGE_SERVER (cohérent avec create_emoji)
-    use crate::handlers::servers::require_permission;
-    use crate::models::role::Permissions;
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
     // Vérifier que l'emoji appartient au serveur
