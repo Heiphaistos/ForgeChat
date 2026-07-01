@@ -176,7 +176,7 @@ export default function AppearanceSection() {
     root.setAttribute('data-glassmorphism', String(glassmorphism))
     root.setAttribute('data-avatar-shape', avatarShape)
     root.setAttribute('data-message-display', messageDisplay)
-    root.style.setProperty('--fc-sidebar-width', `${sidebarWidth}px`)
+    localStorage.setItem('fc_sidebar_width', String(sidebarWidth))
     saveMutation.mutate({
       font_family: fontFamily,
       font_size_px: fontSizePx,
