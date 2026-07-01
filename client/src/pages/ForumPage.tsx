@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check } from 'lucide-react'
-import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
+import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
@@ -145,6 +145,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   const qc = useQueryClient()
   const { user } = useAuth()
   const { on } = useWs()
+  const { formatShortDate, formatDate } = useFormatDate()
 
   const togglePin = useMutation({
     mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { pinned: !localPost.pinned }),
@@ -238,7 +239,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
             {localPost.locked && <Lock size={14} className="text-red-400 flex-shrink-0" />}
             <h2 className="font-bold text-white truncate">{localPost.title}</h2>
           </div>
-          <p className="text-xs text-fc-muted">par {localPost.creator_username} · {format(new Date(localPost.created_at), 'dd MMM yyyy', { locale: fr })}</p>
+          <p className="text-xs text-fc-muted">par {localPost.creator_username} · {formatDate(localPost.created_at)}</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
@@ -267,7 +268,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 {post.creator_username.charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
-              <span className="text-xs text-fc-muted">{format(new Date(post.created_at), 'dd/MM HH:mm')}</span>
+              <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
             </div>
             <p className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap">{data.post.content}</p>
           </div>
@@ -284,7 +285,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 <span className={`text-sm font-medium ${r.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
                   {r.author.username}
                 </span>
-                <span className="text-xs text-fc-muted">{format(new Date(r.created_at), 'dd/MM HH:mm')}</span>
+                <span className="text-xs text-fc-muted">{formatShortDate(r.created_at)}</span>
                 {r.user_id === user?.id && editingReplyId !== r.id && (
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
                     <button
@@ -389,6 +390,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
   const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null)
   const qc = useQueryClient()
   const { on } = useWs()
+  const { formatShortDate, formatDate } = useFormatDate()
 
   const { data: posts = [] } = useQuery<ForumPost[]>({
     queryKey: ['forum', channelId],
@@ -483,11 +485,11 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
                 <div className="flex items-center gap-2 text-xs text-fc-muted mb-2">
                   <span>{post.creator_username}</span>
                   <span>·</span>
-                  <span>{format(new Date(post.created_at), 'dd MMM yyyy', { locale: fr })}</span>
+                  <span>{formatDate(post.created_at)}</span>
                   {post.last_reply_at && (
                     <>
                       <span>·</span>
-                      <span>Dernière réponse {format(new Date(post.last_reply_at), 'dd MMM', { locale: fr })}</span>
+                      <span>Dernière réponse {formatDate(post.last_reply_at)}</span>
                     </>
                   )}
                 </div>
