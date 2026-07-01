@@ -104,6 +104,7 @@ export default function MessageList({
     staleTime: 300_000,
   })
   const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const groupingMs = ((userSettings?.message_grouping_minutes as number | undefined) ?? 5) * 60 * 1000
 
   const customEmojiMap = useMemo(() =>
     Object.fromEntries(customEmojisList.map(e => [e.name, e.url])),
@@ -354,7 +355,7 @@ export default function MessageList({
           const isGrouped =
             prev &&
             prev.author_id === msg.author_id &&
-            new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 5 * 60 * 1000
+            new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < groupingMs
 
           const isOwn = msg.author_id === user?.id
           const isEditing = editingId === msg.id
