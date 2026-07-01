@@ -18,6 +18,38 @@ import { fr } from 'date-fns/locale'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 
+// ─── Emoji shortcodes ────────────────────────────────────────────────────────
+
+const EMOJI_MAP: Record<string, string> = {
+  smile: '😊', joy: '😂', rofl: '🤣', heart: '❤️', thumbsup: '+1',
+  thumbsdown: '-1', fire: '🔥', star: '⭐', check: '✅', x: '❌',
+  wave: '👋', clap: '👏', pray: '🙏', muscle: '💪', eyes: '👀',
+  thinking: '🤔', sob: '😭', sweat_smile: '😅', flushed: '😳',
+  sunglasses: '😎', wink: '😉', partying: '🥳', rocket: '🚀',
+  tada: '🎉', sparkles: '✨', crown: '👑', trophy: '🏆', lightning: '⚡',
+  poop: '💩', ghost: '👻', skull: '💀', alien: '👽', robot: '🤖',
+  cat: '🐱', dog: '🐶', panda: '🐼', fox: '🦊', wolf: '🐺',
+  snail: '🐌', bug: '🐛', bee: '🐝', butterfly: '🦋', snake: '🐍',
+  pizza: '🍕', burger: '🍔', sushi: '🍣', cake: '🎂', cookie: '🍪',
+  coffee: '☕', beer: '🍺', wine: '🍷', tada_cake: '🎊', gem: '💎',
+  money: '💰', bank: '🏦', hammer: '🔨', wrench: '🔧', key: '🔑',
+  lock: '🔒', unlock: '🔓', bell: '🔔', no_bell: '🔕', loudspeaker: '📢',
+  mega: '📣', envelope: '✉️', bookmark: '🔖', books: '📚', pencil: '✏️',
+  computer: '💻', phone: '📱', camera: '📷', tv: '📺', headphones: '🎧',
+  gamepad: '🎮', soccer: '⚽', basketball: '🏀', tennis: '🎾', golf: '⛳',
+  sun: '☀️', moon: '🌙', cloud: '☁️', rain: '🌧️', snow: '❄️',
+  earth: '🌍', tree: '🌲', rose: '🌹', sunflower: '🌻', mushroom: '🍄',
+  rainbow: '🌈', ok_hand: '👌', peace: '✌️', salute: '🫡', point_right: '👉',
+  point_left: '👈', point_up: '☝️', point_down: '👇', v: '✌️', metal: '🤘',
+  call_me: '🤙', handshake: '🤝', hug: '🤗', shrug: '🤷', facepalm: '🤦',
+  running: '🏃', dancer: '💃', party: '🎊', confused: '😕', angry: '😠',
+  rage: '😡', cry: '😢', scream: '😱', hushed: '😯', gasp: '😲',
+  pleading: '🥺', monocle: '🧐', nerd: '🤓', cool: '😎', imp: '👿',
+  innocent: '😇', kissing: '😘', smirk: '😏', unamused: '😒', tired: '😫',
+  weary: '😩', sleeping: '😴', sick: '🤒', mask: '😷', cold: '🥶',
+  hot: '🥵', dizzy: '😵', exploding: '🤯', cowboy: '🤠', clown: '🤡',
+}
+
 // ─── Slash Commands ───────────────────────────────────────────────────────────
 
 const MAX_CHARS = 4000
@@ -161,6 +193,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
+  // Emoji autocomplete
+  const [showEmojiAuto, setShowEmojiAuto] = useState(false)
+  const [emojiAutoQuery, setEmojiAutoQuery] = useState('')
+  const [emojiAutoIndex, setEmojiAutoIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
@@ -348,6 +384,41 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setShowSlash(false)
   }
 
+  const detectEmojiAuto = (value: string, pos: number) => {
+    const before = value.slice(0, pos)
+    const m = before.match(/:([a-z0-9_+]+)$/)
+    if (m && m[1].length >= 2) {
+      setEmojiAutoQuery(m[1])
+      setEmojiAutoIndex(0)
+      setShowEmojiAuto(true)
+    } else {
+      setShowEmojiAuto(false)
+    }
+  }
+
+  const emojiAutoResults = emojiAutoQuery
+    ? Object.entries(EMOJI_MAP)
+        .filter(([k]) => k.startsWith(emojiAutoQuery))
+        .slice(0, 10)
+    : []
+
+  const selectEmojiAuto = (emoji: string) => {
+    const pos = cursorPos
+    const before = content.slice(0, pos)
+    const after = content.slice(pos)
+    const colonIdx = before.lastIndexOf(':')
+    const newContent = before.slice(0, colonIdx) + emoji + ' ' + after
+    const newPos = colonIdx + emoji.length + 1
+    setContent(newContent)
+    setShowEmojiAuto(false)
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newPos, newPos)
+      }
+    }, 0)
+  }
+
   const selectSlashCommand = (cmd: SlashCommand) => {
     if (cmd.isBot) {
       // Pour les bot commands : on envoie /cmdname args tel quel (bot reçoit via WS)
@@ -431,6 +502,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showEmojiAuto && emojiAutoResults.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setEmojiAutoIndex(i => Math.min(i + 1, emojiAutoResults.length - 1)); return }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setEmojiAutoIndex(i => Math.max(i - 1, 0)); return }
+      if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); selectEmojiAuto(emojiAutoResults[emojiAutoIndex][1]); return }
+      if (e.key === 'Escape') { setShowEmojiAuto(false); return }
+    }
     if (showSlash && filteredSlashCommands.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => Math.min(i + 1, filteredSlashCommands.length - 1)); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIndex(i => Math.max(i - 1, 0)); return }
@@ -479,6 +556,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setCursorPos(pos)
     detectMention(val, pos)
     detectSlash(val)
+    detectEmojiAuto(val, pos)
     // Throttle: send TYPING_START at most once per 3 seconds
     if (!typingTimeout.current) {
       send({ type: 'TYPING_START', channel_id: channelId })
@@ -676,6 +754,28 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               <div className="text-sm font-medium">{ch.name}</div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Dropdown emoji autocomplete */}
+      {showEmojiAuto && emojiAutoResults.length > 0 && (
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50">
+          <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
+            Emoji — :{emojiAutoQuery}
+          </div>
+          <div className="flex flex-wrap gap-1 p-2">
+            {emojiAutoResults.map(([name, emoji], idx) => (
+              <button
+                key={name}
+                onClick={() => selectEmojiAuto(emoji)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-sm transition
+                  ${idx === emojiAutoIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
+              >
+                <span className="text-lg leading-none">{emoji}</span>
+                <span className="text-xs text-fc-muted">:{name}:</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
