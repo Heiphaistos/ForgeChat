@@ -98,6 +98,13 @@ export default function MessageList({
     staleTime: 60_000,
   })
 
+  const { data: userSettings } = useQuery<Record<string, unknown>>({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 300_000,
+  })
+  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+
   const customEmojiMap = useMemo(() =>
     Object.fromEntries(customEmojisList.map(e => [e.name, e.url])),
     [customEmojisList]
@@ -604,8 +611,8 @@ export default function MessageList({
                       />
                     )}
 
-                    {/* Link preview (1 seule, pas si attachments, pas si sondage) */}
-                    {msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
+                    {/* Link preview (1 seule, pas si attachments, pas si sondage, respecte le paramètre utilisateur) */}
+                    {linkPreviewEnabled && msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
                     })()}
