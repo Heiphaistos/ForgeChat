@@ -67,15 +67,16 @@ export default function MainLayout() {
     }
   }, [])
 
-  // Auto-close mobile drawer on navigation — sauf quand on navigue vers la racine
-  // d'un serveur (ex: /servers/X), car ChannelPage va auto-naviguer vers le premier
-  // canal : on reste ouvert pour que l'utilisateur puisse choisir son canal.
+  // Auto-close mobile drawer on navigation.
+  // Exception : auto-navigation ChannelPage (state.autoNav=true) → garder la sidebar
+  // ouverte pour permettre à l'utilisateur de choisir un canal différent sur mobile.
   useEffect(() => {
+    const isAutoNav = (location.state as any)?.autoNav === true
     const isServerRoot = /^\/servers\/[^/]+$/.test(location.pathname)
-    if (!isServerRoot) {
+    if (!isAutoNav && !isServerRoot) {
       setSidebarOpen(false)
     }
-  }, [location.pathname])
+  }, [location.pathname, location.state])
 
   // Ctrl+Shift+S — fermer le split
   useEffect(() => {

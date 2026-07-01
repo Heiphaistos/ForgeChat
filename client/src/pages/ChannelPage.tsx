@@ -255,7 +255,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (!channelId && !isSplit && serverId && serverData) {
       const chans: any[] = serverData?.channels ?? []
       const firstText = chans.find((c: any) => c.type === 'text' || c.type === 'announcement')
-      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
+      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true, state: { autoNav: true } })
     }
   }, [channelId, serverData, serverId, isSplit])
 
@@ -302,7 +302,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       )
     }
     // Auto-navigate to first text channel when no channelId in URL
-    nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true })
+    nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true, state: { autoNav: true } })
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 size={32} className="animate-spin text-fc-accent" />
