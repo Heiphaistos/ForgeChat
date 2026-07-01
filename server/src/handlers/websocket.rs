@@ -562,6 +562,18 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 return;
             };
 
+            // Vérifier que l'utilisateur est membre du serveur propriétaire du canal
+            let is_member: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM channels c
+                    JOIN server_members sm ON sm.server_id = c.server_id
+                    WHERE c.id = $1 AND sm.user_id = $2
+                )"
+            )
+            .bind(channel_id).bind(user_id)
+            .fetch_one(&state.db).await.unwrap_or(false);
+            if !is_member { return; }
+
             // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
                 "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id FROM channels WHERE id=$1"
