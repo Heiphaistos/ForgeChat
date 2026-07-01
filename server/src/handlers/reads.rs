@@ -178,6 +178,16 @@ pub async fn get_user_mentions(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<MentionItem>>> {
     use sqlx::Row;
+
+    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let uid_str = claims.sub.to_string();
+    let pat_username = format!("%@{}%", username);
+    let pat_uuid = format!("%<@{}>%", uid_str);
+
     let rows = sqlx::query(
         "SELECT
             m.id as message_id,
@@ -197,7 +207,12 @@ pub async fn get_user_mentions(
          JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
          WHERE m.created_at > NOW() - INTERVAL '7 days'
            AND m.user_id != $1
-           AND m.content ILIKE $2
+           AND (
+               m.content ILIKE $2
+            OR m.content ILIKE $3
+            OR m.content ILIKE '%@everyone%'
+            OR m.content ILIKE '%@here%'
+           )
            AND m.created_at > COALESCE(
                (SELECT read_at FROM last_read WHERE user_id=$1 AND channel_id=m.channel_id),
                NOW() - INTERVAL '7 days'
@@ -206,28 +221,14 @@ pub async fn get_user_mentions(
          LIMIT 50"
     )
     .bind(claims.sub)
-    .bind(format!("%@%"))
+    .bind(&pat_username)
+    .bind(&pat_uuid)
     .fetch_all(&state.db)
     .await?;
 
-    // Fetch the current user's username for pattern matching
-    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-
-    let uid_str = claims.sub.to_string();
-    let result: Vec<MentionItem> = rows.into_iter().filter_map(|r| {
-        let content: String = r.get("content");
-        let is_mention = content.contains(&format!("@{}", username))
-            || content.contains(&format!("<@{}>", uid_str))
-            || content.contains("@everyone")
-            || content.contains("@here");
-        if !is_mention {
-            return None;
-        }
+    let result: Vec<MentionItem> = rows.into_iter().map(|r| {
         let created_at: chrono::DateTime<chrono::Utc> = r.get("created_at");
-        Some(MentionItem {
+        MentionItem {
             message_id: r.get::<Uuid, _>("message_id").to_string(),
             channel_id: r.get::<Uuid, _>("channel_id").to_string(),
             channel_name: r.get("channel_name"),
@@ -236,9 +237,9 @@ pub async fn get_user_mentions(
             author_id: r.get::<Uuid, _>("author_id").to_string(),
             author_username: r.get("author_username"),
             author_avatar: r.get("author_avatar"),
-            content,
+            content: r.get("content"),
             created_at: created_at.to_rfc3339(),
-        })
+        }
     }).collect();
 
     Ok(Json(result))

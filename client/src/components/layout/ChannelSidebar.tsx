@@ -192,6 +192,7 @@ export default function ChannelSidebar() {
   const qc = useQueryClient()
   const getStatus = usePresence(s => s.getStatus)
   const unreadCounts = useUnread(s => s.counts)
+  const markRead = useUnread(s => s.markRead)
   const currentUser = useAuth(s => s.user)
 
   const { data } = useQuery({
@@ -567,7 +568,7 @@ export default function ChannelSidebar() {
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
         onContextMenu={e => ctxMenu.open(e, [
-          { label: 'Marquer comme lu', onClick: () => {} },
+          { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
           { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
           { separator: true },
           { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
