@@ -564,13 +564,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             label={screenSharing ? 'Arrêter le partage' : 'Partager l\'écran'}
           />
 
-          <div className="w-px h-8 bg-fc-hover mx-1" />
+          <div className="w-px h-8 bg-fc-hover mx-1 hidden md:block" />
 
           <button
             onClick={leave}
-            className="px-5 py-2 bg-fc-red hover:bg-fc-red/80 text-white rounded-xl font-medium text-sm flex items-center gap-2 transition"
+            title="Quitter l'appel"
+            className="p-2.5 md:px-5 md:py-2 bg-fc-red hover:bg-fc-red/80 text-white rounded-xl font-medium text-sm flex items-center gap-2 transition"
           >
-            <PhoneOff size={16} /> Quitter
+            <PhoneOff size={16} />
+            <span className="hidden md:inline">Quitter</span>
           </button>
         </div>
 

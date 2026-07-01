@@ -35,8 +35,8 @@ export function sendNativeNotification(
   try {
     const { onClick, ...notifOptions } = options ?? {}
     const notif = new Notification(title, {
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
+      icon: '/icon.svg',
+      badge: '/icon.svg',
       ...notifOptions,
     })
     if (onClick) {
