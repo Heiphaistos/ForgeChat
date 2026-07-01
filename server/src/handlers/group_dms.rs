@@ -179,8 +179,44 @@ pub async fn get_group_messages(
 
     let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
+    let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
 
-    let rows = if let Some(before_id) = before {
+    let rows = if let Some(around_id) = around {
+        let ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+            "SELECT created_at FROM group_dm_messages WHERE id=$1 AND dm_id=$2"
+        )
+        .bind(around_id).bind(group_id)
+        .fetch_optional(&state.db).await?;
+
+        let ts = ts.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+        let half = limit / 2;
+
+        let mut before_rows = sqlx::query(
+            "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
+                    u.username as sender_username, u.avatar as sender_avatar
+             FROM group_dm_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.dm_id=$1 AND m.created_at < $2
+             ORDER BY m.created_at DESC LIMIT $3"
+        )
+        .bind(group_id).bind(ts).bind(half)
+        .fetch_all(&state.db).await?;
+
+        let after_rows = sqlx::query(
+            "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
+                    u.username as sender_username, u.avatar as sender_avatar
+             FROM group_dm_messages m
+             JOIN users u ON u.id = m.sender_id
+             WHERE m.dm_id=$1 AND m.created_at >= $2
+             ORDER BY m.created_at ASC LIMIT $3"
+        )
+        .bind(group_id).bind(ts).bind(limit - half + 1)
+        .fetch_all(&state.db).await?;
+
+        before_rows.reverse();
+        before_rows.extend(after_rows);
+        before_rows
+    } else if let Some(before_id) = before {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar

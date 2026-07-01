@@ -89,7 +89,15 @@ export default function GroupDMPage() {
 
   const { data: initialMessages } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId],
-    queryFn: () => api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data),
+    queryFn: async () => {
+      if (highlightMsgId) {
+        try {
+          const res = await api.get(`/dms/groups/${groupId}/messages?around=${highlightMsgId}&limit=50`)
+          if (res.data?.length > 0) return res.data
+        } catch {}
+      }
+      return api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data)
+    },
     enabled: !!groupId,
   })
 
