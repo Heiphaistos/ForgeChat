@@ -282,6 +282,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
         serverId=""
         placeholder={`Message @${partnerName}`}
         onSend={(content, replyTo, files) => onSend(content || null, replyTo, files)}
+        onEdit={handleEditMessage}
       />
     </div>
   )

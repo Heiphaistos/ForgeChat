@@ -498,6 +498,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               // erreur déjà gérée par sendMsg
             }
           }}
+          onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           sending={sendMsg.isPending || !!timeoutUntil}
