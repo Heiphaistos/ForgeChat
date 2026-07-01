@@ -395,11 +395,11 @@ function AppInner() {
             onClick: goTo,
           })
         } else {
-          toast(`👥 ${msg.sender_username ?? 'Groupe'}: ${preview}`, {
-            duration: mentionedMe ? 7000 : 5000,
-            style: { cursor: 'pointer', maxWidth: '320px' },
-            onClick: goTo,
-          } as any)
+          pendingNotifs.current.push({
+            title: msg.sender_username ?? 'Groupe',
+            body: preview,
+            path: `/dms/groups/${d.group_id}`,
+          })
         }
       }
     })
