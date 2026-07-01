@@ -9,8 +9,7 @@ import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search,
 import toast from 'react-hot-toast'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import MessageInput from '../components/chat/MessageInput'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useFormatDate } from '../hooks/useFormatDate'
 
 interface GDMReaction {
   emoji: string
@@ -57,6 +56,7 @@ export default function GroupDMPage() {
   const highlightMsgId = searchParams.get('highlight')
   const { user } = useAuth()
   const { on } = useWs()
+  const { formatShortDate } = useFormatDate()
   const resetUnread = useUnread(s => s.reset)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -398,7 +398,7 @@ export default function GroupDMPage() {
                   <div key={msg.id} className="bg-fc-channel rounded p-2 text-xs">
                     <div className="flex gap-1.5 items-baseline mb-0.5">
                       <span className="font-semibold text-white">{msg.author_username}</span>
-                      <span className="text-fc-muted">{format(new Date(msg.created_at), 'dd/MM HH:mm', { locale: fr })}</span>
+                      <span className="text-fc-muted">{formatShortDate(msg.created_at)}</span>
                     </div>
                     <p className="text-fc-text">{msg.content ?? '📎 Pièce jointe'}</p>
                   </div>

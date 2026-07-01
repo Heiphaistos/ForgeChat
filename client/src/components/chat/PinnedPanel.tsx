@@ -1,8 +1,7 @@
 import { X, Pin, Trash2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../../api/client'
+import { useFormatDate } from '../../hooks/useFormatDate'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -14,6 +13,7 @@ interface Props {
 
 export default function PinnedPanel({ serverId, channelId, channelName, onClose }: Props) {
   const qc = useQueryClient()
+  const { formatShortDate } = useFormatDate()
 
   const { data: pinned = [], isLoading } = useQuery({
     queryKey: ['pinned', channelId],
@@ -71,7 +71,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
               </div>
               <span className="text-xs font-semibold text-white">{msg.author_username}</span>
               <span className="text-xs text-fc-muted ml-auto">
-                {format(new Date(msg.created_at), 'dd/MM HH:mm', { locale: fr })}
+                {formatShortDate(msg.created_at)}
               </span>
             </div>
             <p className="text-xs text-fc-text leading-relaxed line-clamp-4">{msg.content}</p>

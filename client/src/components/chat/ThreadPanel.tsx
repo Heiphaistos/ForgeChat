@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
+import { useFormatDate } from '../../hooks/useFormatDate'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -18,6 +17,7 @@ interface Props {
 export default function ThreadPanel({ serverId, channelId, parentMessageId, onClose }: Props) {
   const { user } = useAuth()
   const { on } = useWs()
+  const { formatShort } = useFormatDate()
   const [input, setInput] = useState('')
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -219,7 +219,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     {msg.author?.username ?? msg.author_username}
                   </span>
                   <span className="text-xs text-fc-muted">
-                    {format(new Date(msg.created_at), 'HH:mm', { locale: fr })}
+                    {formatShort(msg.created_at)}
                   </span>
                   {isMe && editingMsgId !== msg.id && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">

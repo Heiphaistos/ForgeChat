@@ -2,9 +2,8 @@ import { useState, useRef } from 'react'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../../api/client'
+import { useFormatDate } from '../../hooks/useFormatDate'
 
 interface Props {
   serverId: string
@@ -18,6 +17,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const nav = useNavigate()
+  const { formatShortDate } = useFormatDate()
 
   const jumpToMessage = (msgId: string) => {
     if (serverId) {
@@ -111,7 +111,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
               </div>
               <span className="text-xs font-semibold text-white">{msg.author_username}</span>
               <span className="text-xs text-fc-muted ml-auto">
-                {format(new Date(msg.created_at), 'dd/MM HH:mm', { locale: fr })}
+                {formatShortDate(msg.created_at)}
               </span>
             </div>
             <p className="text-xs text-fc-text leading-relaxed">

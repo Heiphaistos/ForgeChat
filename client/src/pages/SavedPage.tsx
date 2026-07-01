@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File } from 'lucide-react'
-import { format, isToday, isThisWeek, isThisMonth } from 'date-fns'
+import { isToday, isThisWeek, isThisMonth } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
+import { useFormatDate } from '../hooks/useFormatDate'
 import toast from 'react-hot-toast'
 
 interface SavedMessage {
@@ -137,6 +138,7 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 export default function SavedPage() {
   const nav = useNavigate()
   const qc = useQueryClient()
+  const { formatTs } = useFormatDate()
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<SortType>('newest')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -289,7 +291,7 @@ export default function SavedPage() {
                             <div className="flex items-baseline gap-2 mb-1">
                               <span className="text-sm font-semibold text-white">{item.author_username}</span>
                               <span className="text-xs text-fc-muted">
-                                {format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: fr })}
+                                {formatTs(item.created_at)}
                               </span>
                             </div>
 
@@ -319,7 +321,7 @@ export default function SavedPage() {
 
                             {/* Saved date */}
                             <p className="text-xs text-fc-muted/60 mt-2">
-                              Sauvegardé le {format(new Date(item.saved_at), 'dd/MM/yyyy à HH:mm', { locale: fr })}
+                              Sauvegardé le {formatTs(item.saved_at)}
                             </p>
                           </div>
 
