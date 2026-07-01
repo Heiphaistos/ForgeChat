@@ -1,6 +1,6 @@
 {
   "name": "forgechat-client",
-  "version": "3.183.0",
+  "version": "3.184.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -30,7 +30,6 @@
     "react-dropzone": "^14.2.3",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.24.0",
-    "react-virtuoso": "^4.7.11",
     "zustand": "^4.5.4"
   },
   "devDependencies": {

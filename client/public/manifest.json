@@ -4,7 +4,6 @@
   "description": "Messagerie instantanée self-hosted",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
   "background_color": "#1a1b1e",
   "theme_color": "#5865f2",
   "lang": "fr",
@@ -17,8 +16,8 @@
     }
   ],
   "shortcuts": [
-    { "name": "Messages", "url": "/friends", "description": "Messages directs" },
-    { "name": "Amis", "url": "/friends", "description": "Liste d'amis" }
+    { "name": "Messages directs", "url": "/friends", "description": "Ouvrir les messages directs" },
+    { "name": "Serveurs", "url": "/", "description": "Voir mes serveurs" }
   ],
   "categories": ["social", "communication"]
 }
