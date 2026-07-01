@@ -95,6 +95,11 @@ pub async fn create_ticket(
 ) -> Result<Json<Ticket>> {
     require_member(&state, claims.sub, server_id).await?;
 
+    let is_timed_out: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if is_timed_out { return Err(AppError::Forbidden); }
+
     if input.title.trim().is_empty() || input.title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre invalide (1-200 caractères)".into()));
     }
