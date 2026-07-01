@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { X, History } from 'lucide-react'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../../api/client'
+import { useFormatDate } from '../../hooks/useFormatDate'
 
 interface Props {
   messageId: string
@@ -12,6 +11,7 @@ interface Props {
 }
 
 export default function EditHistoryModal({ messageId, serverId, channelId, onClose }: Props) {
+  const { formatTs } = useFormatDate()
   const { data: edits = [], isLoading } = useQuery<{ content: string; edited_at: string }[]>({
     queryKey: ['message_edits', messageId],
     queryFn: () =>
@@ -60,7 +60,7 @@ export default function EditHistoryModal({ messageId, serverId, channelId, onClo
           {edits.map((edit, i) => (
             <div key={i} className="rounded-lg bg-fc-input p-3">
               <div className="text-xs text-fc-muted mb-1.5">
-                {format(new Date(edit.edited_at), "dd/MM/yyyy 'à' HH:mm:ss", { locale: fr })}
+                {formatTs(edit.edited_at)}
               </div>
               <div className="text-sm text-fc-muted whitespace-pre-wrap break-words leading-relaxed">
                 {edit.content}
