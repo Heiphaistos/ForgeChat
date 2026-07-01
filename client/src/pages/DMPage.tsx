@@ -11,6 +11,7 @@ import { useUnread } from '../store/unread'
 import { useE2E } from '../hooks/useE2E'
 import { useDmCall } from '../hooks/useDmCall'
 import { useCallStore } from '../store/call'
+import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
@@ -50,6 +51,7 @@ export default function DMPage() {
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const me = useAuth(s => s.user)
   const resetUnread = useUnread(s => s.reset)
+  const { formatShort } = useFormatDate()
   const { generateAndStoreKeyPair, getSharedKey, encrypt, decrypt } = useE2E()
 
 
@@ -548,7 +550,7 @@ export default function DMPage() {
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-semibold text-white">{msg.sender_username}</span>
                       <span className="text-xs text-fc-muted">
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatShort(msg.created_at)}
                       </span>
                       <Lock size={9} className="text-green-500/70 mb-0.5" />
                     </div>
