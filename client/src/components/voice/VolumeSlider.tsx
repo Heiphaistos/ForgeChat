@@ -15,13 +15,17 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose()
       }
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler as EventListener)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler as EventListener)
+    }
   }, [onClose])
 
   const handleChange = (v: number) => {
