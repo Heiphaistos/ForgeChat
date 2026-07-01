@@ -266,11 +266,14 @@ function AppInner() {
       qcHook.invalidateQueries({ queryKey: ['friends'] })
       toast.success(`${d.from_username ?? 'Quelqu\'un'} a accepté ta demande d'ami !`)
     })
+    const offRemoved = on('FRIEND_REMOVED', () => {
+      qcHook.invalidateQueries({ queryKey: ['friends'] })
+    })
     const offGroupDm = on('GROUP_DM_CREATE', (d: any) => {
       qcHook.invalidateQueries({ queryKey: ['dms'] })
       if (d.group?.name) toast(`Groupe créé : ${d.group.name}`, { icon: '👥', duration: 5000 })
     })
-    return () => { offReq(); offAcc(); offGroupDm() }
+    return () => { offReq(); offAcc(); offRemoved(); offGroupDm() }
   }, [user?.id])
 
   // Appels DM entrants
