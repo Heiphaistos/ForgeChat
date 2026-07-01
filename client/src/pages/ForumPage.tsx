@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check } from 'lucide-react'
-import { fr } from 'date-fns/locale'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
