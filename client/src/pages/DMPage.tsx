@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff } from 'lucide-react'
 import api from '../api/client'
@@ -45,6 +45,7 @@ export default function DMPage() {
   const { dmId } = useParams<{ dmId: string }>()
   const [searchParams] = useSearchParams()
   const highlightMessageId = searchParams.get('highlight')
+  const nav = useNavigate()
   const { addMessages, addMessage } = useChat()
   const { on } = useWs()
   const presenceStatuses = usePresence(s => s.statuses)
@@ -599,13 +600,26 @@ export default function DMPage() {
           </div>
         </>
       ) : (
-        <DMConversation
-          dmId={dmId}
-          partnerName={partnerName}
-          onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
-          onLoadMore={loadMoreDM}
-          initialHighlightId={highlightMessageId}
-        />
+        <>
+          {highlightMessageId && (
+            <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
+              <span className="text-xs text-fc-accent">Contexte d'un message.</span>
+              <button
+                onClick={() => nav(`/dms/${dmId}`)}
+                className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
+              >
+                Voir les derniers messages →
+              </button>
+            </div>
+          )}
+          <DMConversation
+            dmId={dmId}
+            partnerName={partnerName}
+            onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
+            onLoadMore={loadMoreDM}
+            initialHighlightId={highlightMessageId}
+          />
+        </>
       )}
     </div>
   )
