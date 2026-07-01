@@ -141,7 +141,7 @@ export default function DMPage() {
   }, [remoteStream])
 
   const { data: messages = [] } = useQuery({
-    queryKey: ['dm_messages', dmId],
+    queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
     queryFn: async () => {
       if (highlightMessageId) {
         try {
@@ -152,6 +152,7 @@ export default function DMPage() {
       return api.get(`/dms/${dmId}/messages`).then(r => r.data)
     },
     enabled: !!dmId && !e2eMode,
+    staleTime: highlightMessageId ? 0 : 30_000,
   })
 
   const { data: rawE2eMessages = [] } = useQuery({
@@ -230,6 +231,7 @@ export default function DMPage() {
 
   // Reset pagination quand on change de conversation
   useEffect(() => { setHasMoreDM(true) }, [dmId])
+  useEffect(() => { if (highlightMessageId) setHasMoreDM(true) }, [highlightMessageId])
 
   // Effacer le badge non-lu quand on ouvre ou focus le DM + signaler au serveur
   useEffect(() => {
