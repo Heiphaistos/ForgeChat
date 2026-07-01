@@ -4,6 +4,8 @@ import { useAuth } from '../store/auth'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 export default function VerifyEmailPage() {
   const location = useLocation()
   const nav = useNavigate()
@@ -56,8 +58,11 @@ export default function VerifyEmailPage() {
     setLoading(true)
     try {
       const { data } = await api.post('/auth/verify-email', { email, code })
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
+      // Web: tokens en cookies httpOnly (set par le serveur) — pas de localStorage
+      if (isTauri) {
+        localStorage.setItem('access_token', data.access_token)
+        localStorage.setItem('refresh_token', data.refresh_token)
+      }
       await fetchMe()
       toast.success('Compte créé !')
       nav('/')
