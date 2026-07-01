@@ -79,6 +79,7 @@ const _iceQueues = new Map<string, RTCIceCandidateInit[]>()
 const _gainNodes = new Map<string, GainNode>()
 let _audioCtx: AudioContext | null = null
 let _localStream: MediaStream | null = null
+let _rawAudioTrack: MediaStreamTrack | null = null  // piste audio brute (avant noise suppression)
 let _processedStream: MediaStream | null = null     // stream après traitement noise suppression
 let _noiseAudioCtx: AudioContext | null = null       // AudioContext dédié noise suppression
 let _screenTrack: MediaStreamTrack | null = null
@@ -466,6 +467,8 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     }
 
     _localStream = stream
+    // Sauvegarder la piste audio brute — nécessaire pour restaurer quand NS désactivée
+    _rawAudioTrack = stream.getAudioTracks()[0] ?? null
 
     // Appliquer la noise suppression si activée dans les préférences
     const noiseSuppressionEnabled = localStorage.getItem('fc_noise_suppression') !== 'false'
@@ -597,6 +600,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     _cleanupNoiseSuppression()
     _localStream = null
+    _rawAudioTrack = null
     _screenTrack?.stop()
     _screenTrack = null
     _micTrackBeforeScreenAudio = null
@@ -848,11 +852,19 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     if (!get().joined || !_localStream) return
 
     if (enabled && !_noiseGain) {
-      // Activer la chaîne sur le stream brut existant
-      const rawStream = get().localStream
-      if (!rawStream) return
-      const processed = _applyNoiseSuppression(rawStream)
+      // Activer NS sur la piste brute sauvegardée
+      if (!_rawAudioTrack) {
+        _rawAudioTrack = _localStream?.getAudioTracks()[0] ?? null
+      }
+      if (!_rawAudioTrack) return
+      // Construire le stream brut pour _applyNoiseSuppression
+      const rawStreamForNS = new MediaStream([
+        _rawAudioTrack,
+        ...(_localStream?.getVideoTracks() ?? []),
+      ])
+      const processed = _applyNoiseSuppression(rawStreamForNS)
       _processedStream = processed
+      _localStream = processed
       // Remplacer la piste audio dans tous les PC existants
       const audioTrack = processed.getAudioTracks()[0]
       if (audioTrack) {
@@ -861,16 +873,24 @@ export const useVoice = create<VoiceStore>((set, get) => ({
           if (sender) try { await sender.replaceTrack(audioTrack) } catch {}
         })
       }
+      set(() => ({ localStream: new MediaStream(processed.getTracks()) }))
     } else if (!enabled && _noiseGain) {
-      // Désactiver : revenir à la piste audio brute
-      const rawTrack = get().localStream?.getAudioTracks()[0]
+      // Désactiver : revenir à la piste audio BRUTE (pas la piste du stream traité)
+      const rawTrack = _rawAudioTrack
       if (rawTrack) {
         _pcs.forEach(async (pc) => {
           const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
           if (sender) try { await sender.replaceTrack(rawTrack) } catch {}
         })
       }
+      const videoTracks = _localStream?.getVideoTracks() ?? []
       _cleanupNoiseSuppression()
+      // Reconstruire le stream local avec la piste brute + pistes vidéo originales
+      _localStream = new MediaStream([
+        ...(_rawAudioTrack ? [_rawAudioTrack] : []),
+        ...videoTracks,
+      ])
+      set(() => ({ localStream: _localStream }))
     }
   },
 
