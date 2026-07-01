@@ -98,6 +98,7 @@ function BoostSection({ server }: { server: any }) {
 
 export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
   const [tab, setTab] = useState<Tab>('general')
+  const [mobileShowContent, setMobileShowContent] = useState(false)
   const [name, setName] = useState(server.name)
   const [description, setDescription] = useState(server.description ?? '')
   const [welcomeMessage, setWelcomeMessage] = useState(server.welcome_message ?? '')
@@ -309,10 +310,14 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   const modal = (
     <div className="fixed inset-0 bg-black/80 flex z-[200]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
       <div className="flex w-full h-full">
-        {/* Sidebar */}
-        <div className="w-[220px] bg-fc-channel flex-shrink-0 p-4 overflow-y-auto">
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate">
-            {server.name}
+        {/* Sidebar nav — plein écran sur mobile, 220px sur desktop */}
+        <div className={`bg-fc-channel flex-shrink-0 p-4 overflow-y-auto w-full md:w-[220px] flex-col
+          ${mobileShowContent ? 'hidden md:flex' : 'flex'}`}>
+          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate flex items-center justify-between">
+            <span>{server.name}</span>
+            <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded md:hidden">
+              <X size={16} />
+            </button>
           </div>
           {tabGroups.map((group, gi) => (
             <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
@@ -324,7 +329,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
               {group.tabs.map(t => {
                 const Icon = (t as any).icon
                 return (
-                  <button key={t.id} onClick={() => setTab(t.id)}
+                  <button key={t.id} onClick={() => { setTab(t.id); setMobileShowContent(true) }}
                     className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
                       ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
                   >
@@ -344,12 +349,17 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           </div>
         </div>
 
-        {/* Contenu */}
-        <div className="flex-1 bg-fc-chat overflow-y-auto">
-          <div className="max-w-2xl mx-auto p-8">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-bold text-white">Paramètres du serveur</h2>
-              <button onClick={onClose} className="text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
+        {/* Contenu — plein écran sur mobile quand sélectionné */}
+        <div className={`flex-1 bg-fc-chat overflow-y-auto ${!mobileShowContent ? 'hidden md:block' : 'block'}`}>
+          <div className="max-w-2xl mx-auto p-4 md:p-8">
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setMobileShowContent(false)} className="md:hidden text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded">
+                  <X size={18} />
+                </button>
+                <h2 className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>
+              </div>
+              <button onClick={onClose} className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
                 <X size={20} />
               </button>
             </div>

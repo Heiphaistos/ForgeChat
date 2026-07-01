@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, useSyncExternalStore } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { Menu } from 'lucide-react'
 import ServerSidebar from './ServerSidebar'
 import ChannelSidebar from './ChannelSidebar'
 import UserPanel from './UserPanel'
@@ -115,18 +114,6 @@ export default function MainLayout() {
               className="fixed inset-0 bg-black/60 z-40 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
-          )}
-
-          {/* Bouton hamburger global mobile — fallback pour les pages sans bouton dédié */}
-          {!sidebarOpen && (
-            <button
-              className="fixed top-2.5 left-2.5 z-30 md:hidden p-2 rounded-xl bg-fc-channel/95 text-white shadow-xl backdrop-blur-sm border border-fc-hover/40"
-              onClick={() => setSidebarOpen(true)}
-              title="Menu"
-              aria-label="Ouvrir le menu"
-            >
-              <Menu size={20} />
-            </button>
           )}
 
           {/* Sidebars — drawer fixe sur mobile, inline sur desktop */}
