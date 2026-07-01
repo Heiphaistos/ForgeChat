@@ -92,15 +92,15 @@ export const useChat = create<ChatState>()(
       const existing = s.messagesByChannel[channelId] ?? []
       const ids = new Set(existing.map(m => m.id))
       const newMsgs = messages.filter(m => !ids.has(m.id))
-      s.messagesByChannel[channelId] = prepend
-        ? [...newMsgs, ...existing]
-        : [...existing, ...newMsgs]
+      const merged = prepend ? [...newMsgs, ...existing] : [...existing, ...newMsgs]
+      s.messagesByChannel[channelId] = merged.length > 500 ? (prepend ? merged.slice(0, 500) : merged.slice(merged.length - 500)) : merged
     }),
 
     addMessage: (msg) => set(s => {
       const ch = s.messagesByChannel[msg.channel_id] ?? []
       if (!ch.find(m => m.id === msg.id)) {
-        s.messagesByChannel[msg.channel_id] = [...ch, msg]
+        const next = [...ch, msg]
+        s.messagesByChannel[msg.channel_id] = next.length > 500 ? next.slice(next.length - 500) : next
       }
     }),
 
