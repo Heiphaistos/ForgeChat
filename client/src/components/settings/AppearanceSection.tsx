@@ -37,8 +37,14 @@ const THEMES = [
 ]
 
 const FONTS = [
-  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Poppins',
-  'Source Sans Pro', 'Nunito', 'Raleway', 'Fira Code', 'JetBrains Mono',
+  { name: 'Système', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+  { name: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { name: 'Georgia', value: 'Georgia, "Times New Roman", serif' },
+  { name: 'Trebuchet MS', value: '"Trebuchet MS", Helvetica, sans-serif' },
+  { name: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
+  { name: 'Tahoma', value: 'Tahoma, Geneva, sans-serif' },
+  { name: 'Courier New', value: '"Courier New", Courier, monospace' },
+  { name: 'Consolas', value: 'Consolas, "Courier New", monospace' },
 ]
 
 const DENSITIES = [
@@ -113,7 +119,7 @@ export default function AppearanceSection() {
     staleTime: 60_000,
   })
 
-  const [fontFamily, setFontFamily] = useState('Inter')
+  const [fontFamily, setFontFamily] = useState(FONTS[0].value)
   const [fontSizePx, setFontSizePx] = useState(14)
   const [fontColor, setFontColor] = useState('')
   const [accentColor, setAccentColor] = useState('')
@@ -128,7 +134,7 @@ export default function AppearanceSection() {
 
   useEffect(() => {
     if (settings) {
-      setFontFamily(settings.font_family ?? 'Inter')
+      setFontFamily(settings.font_family ?? FONTS[0].value)
       setFontSizePx(settings.font_size_px ?? 14)
       setFontColor(settings.font_color ?? '')
       setAccentColor(settings.accent_color ?? '')
@@ -153,6 +159,9 @@ export default function AppearanceSection() {
     setActiveTheme(id)
     localStorage.setItem('fc_theme', id)
     document.documentElement.setAttribute('data-theme', id)
+    // Effacer l'override custom pour que la CSS du thème prenne effet
+    document.documentElement.style.removeProperty('--fc-accent-rgb')
+    setAccentColor('')
   }
 
   const applyFontSize = (px: number) => {
@@ -160,17 +169,23 @@ export default function AppearanceSection() {
     document.documentElement.style.setProperty('--fc-font-size', `${px}px`)
   }
 
-  const applyFont = (family: string) => {
-    setFontFamily(family)
-    document.documentElement.style.setProperty('--fc-font-family', `'${family}', sans-serif`)
+  const applyFont = (value: string) => {
+    setFontFamily(value)
+    document.documentElement.style.setProperty('--fc-font-family', value)
   }
 
   const save = () => {
     const root = document.documentElement
     if (fontColor) root.style.setProperty('--fc-text', fontColor)
     else root.style.removeProperty('--fc-text')
-    if (accentColor) root.style.setProperty('--fc-accent', accentColor)
-    else root.style.removeProperty('--fc-accent')
+    if (accentColor) {
+      const [r, g, b] = [
+        parseInt(accentColor.slice(1, 3), 16),
+        parseInt(accentColor.slice(3, 5), 16),
+        parseInt(accentColor.slice(5, 7), 16),
+      ]
+      root.style.setProperty('--fc-accent-rgb', `${r} ${g} ${b}`)
+    } else root.style.removeProperty('--fc-accent-rgb')
     if (bgColor) root.style.setProperty('--fc-bg', bgColor)
     else root.style.removeProperty('--fc-bg')
     root.setAttribute('data-glassmorphism', String(glassmorphism))
@@ -230,16 +245,16 @@ export default function AppearanceSection() {
         <div className="grid grid-cols-2 gap-2">
           {FONTS.map(font => (
             <button
-              key={font}
-              onClick={() => applyFont(font)}
-              style={{ fontFamily: `'${font}', sans-serif` }}
+              key={font.name}
+              onClick={() => applyFont(font.value)}
+              style={{ fontFamily: font.value }}
               className={`px-3 py-2 rounded-lg text-sm border transition text-left ${
-                fontFamily === font
+                fontFamily === font.value
                   ? 'border-fc-accent bg-fc-accent/10 text-white'
                   : 'border-fc-hover text-fc-muted hover:text-white hover:border-fc-hover'
               }`}
             >
-              {font}
+              {font.name}
             </button>
           ))}
         </div>
