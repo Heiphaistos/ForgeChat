@@ -88,6 +88,8 @@ function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
           <img
             src={server.banner}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         ) : (
