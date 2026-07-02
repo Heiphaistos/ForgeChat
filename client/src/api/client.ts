@@ -8,6 +8,7 @@ const api = axios.create({
   baseURL,
   // Envoie les cookies httpOnly automatiquement (auth web)
   withCredentials: true,
+  timeout: 30_000,
 })
 
 api.interceptors.request.use(cfg => {
