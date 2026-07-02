@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::{require_member, require_channel_in_server},
+    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel},
     middleware::auth::Claims,
     state::AppState,
 };
@@ -36,8 +36,7 @@ pub async fn create_scheduled(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateScheduledRequest>,
 ) -> Result<Json<ScheduledMessage>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     if body.content.trim().is_empty() {
         return Err(AppError::BadRequest("Contenu vide".into()));
@@ -71,8 +70,7 @@ pub async fn list_scheduled(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<ScheduledMessage>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let msgs = sqlx::query_as::<_, ScheduledMessage>(
         "SELECT * FROM scheduled_messages

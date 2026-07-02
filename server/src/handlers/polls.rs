@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server}, middleware::auth::Claims, models::message::MessageWithAuthor, state::AppState};
+use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server, require_member_and_channel}, middleware::auth::Claims, models::message::MessageWithAuthor, state::AppState};
 
 #[derive(Deserialize)]
 pub struct CreatePollBody {
@@ -53,8 +53,7 @@ pub async fn create_poll(
         return Err(AppError::BadRequest("Entre 2 et 10 options requises".into()));
     }
 
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -309,8 +308,7 @@ pub async fn close_poll(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> crate::error::Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Seul le créateur du sondage ou un modérateur peut le fermer
     let creator_id: Option<Uuid> = sqlx::query_scalar(

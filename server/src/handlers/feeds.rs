@@ -82,9 +82,7 @@ pub async fn list_channel_feeds(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<ChannelFeed>>, AppError> {
-    crate::handlers::servers::require_member(&state, claims.sub, server_id).await?;
-
-    crate::handlers::servers::require_channel_in_server(&state, channel_id, server_id).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let feeds = sqlx::query_as::<_, ChannelFeed>(
         "SELECT id, server_id, channel_id, name, feed_url, feed_type,

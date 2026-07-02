@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::{require_member, require_channel_in_server},
+    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel},
     middleware::auth::Claims,
     models::role::Permissions,
     state::AppState,
@@ -20,8 +20,7 @@ pub async fn upload_file(
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
     mut multipart: Multipart,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Vérifier que le message appartient à l'utilisateur courant et est dans ce canal (IDOR protection)
     let msg_owned = sqlx::query_scalar::<_, bool>(
