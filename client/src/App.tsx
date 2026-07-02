@@ -305,7 +305,9 @@ function AppInner() {
         const goToMsg = () => d.server_id && d.message?.channel_id
           ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`)
           : undefined
-        if (document.hasFocus()) {
+        const activeChannelId = window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
+        const isActiveChannel = activeChannelId === msg.channel_id
+        if (document.hasFocus() && !isActiveChannel) {
           toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
             duration: 5000,
             style: { cursor: 'pointer', maxWidth: '360px' },
