@@ -1210,7 +1210,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           ) : (
             <button
               onClick={() => setShowVoiceRecorder(true)}
-              className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition"
+              className="p-2.5 md:p-1.5 text-fc-muted hover:text-fc-accent rounded transition"
               title="Message vocal"
             >
               <Mic size={18} />

@@ -32,8 +32,9 @@ async function fetchWsTicket(): Promise<string | null> {
 }
 
 function backoffDelay(attempt: number): number {
-  // 1s, 2s, 4s, 8s, 16s → capped at 30s
-  return Math.min(1000 * Math.pow(2, attempt), 30_000)
+  // 1s, 2s, 4s, 8s, 16s → capped at 30s, with ±20% jitter to spread reconnects
+  const base = Math.min(1000 * Math.pow(2, attempt), 30_000)
+  return base * (0.8 + Math.random() * 0.4)
 }
 
 export const useWs = create<WsState>((set, get) => ({
