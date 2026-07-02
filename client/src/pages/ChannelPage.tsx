@@ -377,17 +377,24 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     <div className="relative flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header canal */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
+        <div className={`flex items-center gap-2 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] ${
+          isSplit ? 'border-fc-accent/30 bg-fc-accent/5' : 'border-fc-bg'
+        }`}>
           {/* Bouton "retour à la liste des canaux" sur mobile */}
           {!isSplit && (
             <button
-              className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+              className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
               onClick={openSidebar}
               aria-label="Ouvrir la liste des canaux"
               title="Canaux"
             >
               <ChevronLeft size={20} />
             </button>
+          )}
+          {isSplit && (
+            <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-fc-accent bg-fc-accent/15 px-1.5 py-0.5 rounded flex-shrink-0">
+              Split
+            </span>
           )}
           <span className="text-fc-muted flex-shrink-0">{channelIcon(currentChannel?.type ?? 'text')}</span>
           <span className="font-semibold text-white truncate min-w-0 max-w-[140px] sm:max-w-[240px] md:max-w-none">{currentChannel?.name ?? '...'}</span>
@@ -428,7 +435,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </button>
             <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Rechercher"
             >
               <Search size={18} />

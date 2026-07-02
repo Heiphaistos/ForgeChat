@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -115,6 +115,9 @@ const BUILTIN_TEMPLATES = [
 export default function ServerSidebar() {
   const { serverId } = useParams()
   const nav = useNavigate()
+  const { pathname } = useLocation()
+  const isDMs = pathname.startsWith('/friends') || pathname.startsWith('/dms') || pathname.startsWith('/dm')
+  const isSaved = pathname.startsWith('/saved')
   const qc = useQueryClient()
   const serverCounts = useUnread(s => s.serverCounts)
   const [showCreate, setShowCreate] = useState(false)
@@ -338,9 +341,17 @@ export default function ServerSidebar() {
 
   const ServerIcon = ({ s, folderId: _folderId }: { s: any; folderId?: string }) => {
     const muted = isServerMuted(s.id)
-    const hasUnread = (serverCounts[s.id] ?? 0) > 0 && serverId !== s.id && !muted
+    const isActive = serverId === s.id
+    const hasUnread = (serverCounts[s.id] ?? 0) > 0 && !isActive && !muted
     return (
-      <div className="relative">
+      <div className="relative w-full flex items-center justify-center">
+        {/* Discord-style active pill indicator */}
+        <span
+          aria-hidden
+          className={`absolute left-0 w-1 rounded-r-full bg-white transition-all duration-200 ${
+            isActive ? 'h-9' : hasUnread ? 'h-2.5' : 'h-0 opacity-0'
+          }`}
+        />
         <button
           key={s.id}
           onClick={() => nav(`/servers/${s.id}`)}
@@ -350,7 +361,7 @@ export default function ServerSidebar() {
           onDragOver={e => e.preventDefault()}
           onDrop={() => handleDropOnServer(s.id)}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
-            ${serverId === s.id ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
+            ${isActive ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
             ${draggedServerId === s.id ? 'opacity-50' : ''}`}
           title={s.name}
         >
@@ -359,10 +370,10 @@ export default function ServerSidebar() {
             : s.name.charAt(0).toUpperCase()}
         </button>
         {hasUnread && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
+          <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
         )}
         {muted && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
+          <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
             <BellOff size={7} className="text-white" />
           </span>
         )}
@@ -373,22 +384,28 @@ export default function ServerSidebar() {
   return (
     <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative">
       {/* DMs */}
-      <button
-        onClick={() => nav('/friends')}
-        className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl"
-        title="Messages directs"
-      >
-        <MessageCircle size={20} className="text-fc-text" />
-      </button>
+      <div className="relative w-full flex items-center justify-center">
+        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isDMs ? 'opacity-100' : 'opacity-0 h-0'}`} />
+        <button
+          onClick={() => nav('/friends')}
+          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isDMs ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
+          title="Messages directs"
+        >
+          <MessageCircle size={20} className="text-fc-text" />
+        </button>
+      </div>
 
       {/* Messages sauvegardés */}
-      <button
-        onClick={() => nav('/saved')}
-        className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl"
-        title="Messages sauvegardés"
-      >
-        <Bookmark size={20} className="text-fc-text" />
-      </button>
+      <div className="relative w-full flex items-center justify-center">
+        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isSaved ? 'opacity-100' : 'opacity-0 h-0'}`} />
+        <button
+          onClick={() => nav('/saved')}
+          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isSaved ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
+          title="Messages sauvegardés"
+        >
+          <Bookmark size={20} className="text-fc-text" />
+        </button>
+      </div>
 
       <div className="w-8 h-px bg-fc-hover mx-auto" />
 
@@ -403,7 +420,7 @@ export default function ServerSidebar() {
         />
       )}
       {orderedFreeServers.map((s: any, idx: number) => (
-        <div key={s.id} className="flex flex-col items-center gap-0">
+        <div key={s.id} className="flex flex-col items-center gap-0 w-full">
           <ServerIcon s={s} />
           {/* Slot après chaque serveur */}
           <div

@@ -238,7 +238,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
       <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           onClick={toggleFocus}
-          className={`p-1.5 rounded hover:bg-fc-hover transition ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             user.focus_mode ? 'text-fc-accent' : 'text-fc-muted hover:text-white'
           }`}
           title={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer mode focus (muet notifications)'}
@@ -248,7 +248,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         <NotificationBell />
         <button
           onClick={joined ? toggleMute : undefined}
-          className={`p-1.5 rounded hover:bg-fc-hover transition ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && muted ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
           title={joined ? (muted ? 'Réactiver le micro (Ctrl+Shift+M)' : 'Couper le micro (Ctrl+Shift+M)') : 'Pas dans un canal vocal'}
@@ -257,7 +257,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         </button>
         <button
           onClick={joined ? toggleDeafen : undefined}
-          className={`p-1.5 rounded hover:bg-fc-hover transition ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && deafened ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
           title={joined ? (deafened ? 'Réactiver le son (Ctrl+Shift+D)' : 'Couper le son (Ctrl+Shift+D)') : 'Pas dans un canal vocal'}
@@ -267,7 +267,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         {onToggleActivity && (
           <button
             onClick={onToggleActivity}
-            className={`p-1.5 rounded hover:bg-fc-hover transition ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
             title="Activité récente (Ctrl+Shift+A)"
           >
             <Activity size={16} />
@@ -275,14 +275,14 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         )}
         <button
           onClick={() => nav('/admin')}
-          className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Dashboard Admin"
         >
           <LayoutDashboard size={16} />
         </button>
         <button
           onClick={() => nav('/settings')}
-          className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Paramètres (Ctrl+,)"
         >
           <Settings size={16} />
