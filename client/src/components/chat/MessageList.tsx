@@ -378,7 +378,7 @@ export default function MessageList({
   }, [translatingId])
 
   return (
-    <div className="flex-1 relative flex flex-col overflow-hidden">
+    <div className="flex-1 relative flex flex-col overflow-hidden channel-fade-in">
       <div
         ref={containerRef}
         className="flex-1 overflow-y-auto px-2 md:px-4 py-2 space-y-0.5 message-list-container"

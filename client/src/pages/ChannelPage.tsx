@@ -515,6 +515,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               </div>
             )}
             <MessageList
+              key={channelId}
               channelId={channelId}
               serverId={serverId}
               onDeleteMessage={(id) => deleteMsg.mutate(id)}

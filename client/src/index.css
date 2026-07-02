@@ -26,10 +26,11 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Scroll tactile fluide sur les conteneurs scrollables */
+/* Scroll tactile fluide + isolation overscroll sur tous les conteneurs scrollables */
 [class*="overflow-y-auto"], [class*="overflow-y-scroll"],
 [class*="overflow-auto"], [class*="overflow-scroll"] {
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Safe area pour les téléphones avec notch / barre de navigation iOS & Android.
@@ -640,6 +641,18 @@ body {
 [data-theme="slate"] .fc-markdown pre,
 [data-theme="slate"] .fc-markdown code { background: #222c3c !important; border-color: #263042 !important; }
 [data-theme="slate"] ::-webkit-scrollbar-thumb { background: #263042 !important; }
+
+/* Fade-in doux au changement de canal */
+@keyframes channel-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.channel-fade-in {
+  animation: channel-fade 0.15s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .channel-fade-in { animation: none; }
+}
 
 /* Animation d'entrée des nouveaux messages (WS live) */
 @keyframes msg-slide-in {
