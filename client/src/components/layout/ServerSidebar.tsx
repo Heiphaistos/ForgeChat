@@ -210,12 +210,16 @@ export default function ServerSidebar() {
   }
 
   // Construire la liste d'affichage : ids de serveurs dans un dossier
-  const serverIdsInFolders = new Set(
-    Object.values(folders).flatMap(f => f.serverIds)
+  const serverIdsInFolders = useMemo(
+    () => new Set(Object.values(folders).flatMap(f => f.serverIds)),
+    [folders]
   )
 
   // Séquence : serveurs libres + dossiers (en ordre d'insertion)
-  const freeServers = (servers as any[]).filter(s => !serverIdsInFolders.has(s.id))
+  const freeServers = useMemo(
+    () => (servers as any[]).filter(s => !serverIdsInFolders.has(s.id)),
+    [servers, serverIdsInFolders]
+  )
 
   // Serveurs libres ordonnés selon serverOrder (localStorage)
   const orderedFreeServers = useMemo(() => {
