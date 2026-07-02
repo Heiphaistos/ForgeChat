@@ -458,10 +458,15 @@ export default function MessageList({
                           { label: `Mentionner @${msg.author_username}`, onClick: () => {
                             const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
                             if (el) {
+                              const pos = el.selectionStart ?? el.value.length
+                              const mention = `@${msg.author_username} `
+                              const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
                               el.focus()
-                              const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-                              nativeInputValueSetter?.call(el, el.value + `@${msg.author_username} `)
+                              const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+                              setter?.call(el, newVal)
                               el.dispatchEvent(new Event('input', { bubbles: true }))
+                              const newPos = pos + mention.length
+                              setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
                             }
                           }},
                           { separator: true },
