@@ -99,7 +99,7 @@ function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
         <div className="absolute -bottom-5 left-4">
           <div className="w-12 h-12 rounded-xl bg-fc-bg border-2 border-fc-channel flex items-center justify-center font-bold text-lg text-white shadow-lg overflow-hidden">
             {server.icon ? (
-              <img src={server.icon} alt={server.name} className="w-full h-full object-cover" />
+              <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : (
               initial
             )}

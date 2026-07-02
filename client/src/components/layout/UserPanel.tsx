@@ -182,7 +182,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         <div className="relative flex-shrink-0">
           <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {user.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+              ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
               : user.username.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[user.status] ?? 'bg-fc-muted'}`} />

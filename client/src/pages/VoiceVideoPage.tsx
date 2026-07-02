@@ -123,7 +123,7 @@ function PeerTile({
       ) : (
         <div className="flex flex-col items-center gap-2">
           {peer.avatar
-            ? <img src={peer.avatar} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-fc-accent/50" />
+            ? <img src={peer.avatar} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-full object-cover border-2 border-fc-accent/50" />
             : <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white">
                 {peer.username.charAt(0).toUpperCase()}
               </div>}

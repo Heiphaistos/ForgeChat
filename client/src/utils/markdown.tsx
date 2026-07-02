@@ -216,6 +216,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       if (url) {
         result.push(
           <img key={match.index} src={url} alt={name} title={`:${name}:`}
+            loading="lazy" decoding="async"
             className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
         )
       } else {
