@@ -249,32 +249,26 @@ pub async fn get_group_messages(
 
     let msg_ids: Vec<Uuid> = rows.iter().map(|r| r.get::<Uuid, _>("id")).collect();
 
-    let reaction_rows = if msg_ids.is_empty() {
-        vec![]
+    let (reaction_rows, attachment_rows) = if msg_ids.is_empty() {
+        (vec![], vec![])
     } else {
-        sqlx::query(
-            "SELECT group_dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
-             FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)
-             GROUP BY group_dm_message_id, emoji"
-        )
-        .bind(&msg_ids)
-        .bind(claims.sub)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
-    };
-
-    let attachment_rows = if msg_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query(
-            "SELECT group_dm_message_id, id, url, filename, content_type, size, expires_at
-             FROM attachments WHERE group_dm_message_id = ANY($1)"
-        )
-        .bind(&msg_ids)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
+        let (react, att) = tokio::join!(
+            sqlx::query(
+                "SELECT group_dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
+                 FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)
+                 GROUP BY group_dm_message_id, emoji"
+            )
+            .bind(&msg_ids)
+            .bind(claims.sub)
+            .fetch_all(&state.db),
+            sqlx::query(
+                "SELECT group_dm_message_id, id, url, filename, content_type, size, expires_at
+                 FROM attachments WHERE group_dm_message_id = ANY($1)"
+            )
+            .bind(&msg_ids)
+            .fetch_all(&state.db),
+        );
+        (react.unwrap_or_default(), att.unwrap_or_default())
     };
 
     let mut react_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();

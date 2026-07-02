@@ -363,40 +363,34 @@ pub async fn get_dm_messages(
     use sqlx::Row;
     let msg_ids: Vec<Uuid> = messages.iter().map(|r| r.get::<Uuid, _>("id")).collect();
 
-    // Batch query attachments
-    let attachments_rows = if msg_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query(
-            "SELECT id, dm_message_id, filename, content_type, size, url, expires_at
-             FROM attachments WHERE dm_message_id = ANY($1)"
-        )
-        .bind(&msg_ids)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
-    };
-
-    // Batch query reactions — agrégées pour correspondre au format { emoji, count, me }
-    let reactions_rows = if msg_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query(
-            "SELECT dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
-             FROM dm_reactions WHERE dm_message_id = ANY($1)
-             GROUP BY dm_message_id, emoji"
-        )
-        .bind(&msg_ids)
-        .bind(claims.sub)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default()
-    };
-
-    // Collect reply_to IDs to fetch reply context
+    // Collect reply_to IDs before the parallel fetch
     let reply_ids: Vec<Uuid> = messages.iter()
         .filter_map(|r| r.get::<Option<Uuid>, _>("reply_to_id"))
         .collect();
+
+    // Paralléliser attachments + reactions (queries indépendantes)
+    let (attachments_rows, reactions_rows) = if msg_ids.is_empty() {
+        (vec![], vec![])
+    } else {
+        let (att, react) = tokio::join!(
+            sqlx::query(
+                "SELECT id, dm_message_id, filename, content_type, size, url, expires_at
+                 FROM attachments WHERE dm_message_id = ANY($1)"
+            )
+            .bind(&msg_ids)
+            .fetch_all(&state.db),
+            sqlx::query(
+                "SELECT dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
+                 FROM dm_reactions WHERE dm_message_id = ANY($1)
+                 GROUP BY dm_message_id, emoji"
+            )
+            .bind(&msg_ids)
+            .bind(claims.sub)
+            .fetch_all(&state.db),
+        );
+        (att.unwrap_or_default(), react.unwrap_or_default())
+    };
+
     let reply_rows = if reply_ids.is_empty() {
         vec![]
     } else {
