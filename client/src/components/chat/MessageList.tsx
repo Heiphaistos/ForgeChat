@@ -479,7 +479,7 @@ export default function MessageList({
                       title={`Profil de ${msg.author_username}`}
                     >
                       {msg.author_avatar
-                        ? <img src={msg.author_avatar} alt="" className="w-full h-full object-cover" />
+                        ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         : msg.author_username.charAt(0).toUpperCase()}
                     </button>
                   )}
@@ -623,6 +623,8 @@ export default function MessageList({
                             <img
                               src={att.url}
                               alt={att.filename}
+                              loading="lazy"
+                              decoding="async"
                               className="max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
                               onClick={() => {
                                 const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []

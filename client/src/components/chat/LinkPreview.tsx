@@ -42,6 +42,8 @@ export default function LinkPreview({ url }: Props) {
         <img
           src={safeImage}
           alt={data.title ?? ''}
+          loading="lazy"
+          decoding="async"
           className="w-full max-h-48 object-cover"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
         />
