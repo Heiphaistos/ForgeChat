@@ -362,6 +362,11 @@ export default function GroupDMPage() {
     enabled: addMemberInput.length >= 2,
   })
 
+  const addableMembersSearchResults = useMemo(
+    () => userSearchResults.filter(u => !group?.members.find(m => m.id === u.id)).slice(0, 5),
+    [userSearchResults, group?.members]
+  )
+
   if (!group) return (
     <div className="flex-1 flex items-center justify-center">
       <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
@@ -489,7 +494,7 @@ export default function GroupDMPage() {
               </div>
               {addMemberInput.length >= 2 && userSearchResults.length > 0 && (
                 <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {userSearchResults.filter(u => !group.members.find(m => m.id === u.id)).slice(0, 5).map(u => (
+                  {addableMembersSearchResults.map(u => (
                     <div key={u.id} className="flex items-center justify-between px-2 py-1 bg-fc-channel rounded text-xs">
                       <span className="text-white">{u.username}#{u.discriminator}</span>
                       <button

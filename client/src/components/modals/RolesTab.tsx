@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Trash2, Save, Shield, ChevronDown, ChevronRight } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -288,7 +288,10 @@ export default function RolesTab({ serverId }: { serverId: string }) {
 
   const isAdmin = hasBit(editPerms, ADMIN_BIT)
 
-  const totalEnabled = ALL_PERMISSIONS.filter(p => hasBit(editPerms, p.bit)).length
+  const totalEnabled = useMemo(
+    () => ALL_PERMISSIONS.filter(p => hasBit(editPerms, p.bit)).length,
+    [editPerms]
+  )
 
   return (
     <div className="flex gap-4 h-full min-h-0">
