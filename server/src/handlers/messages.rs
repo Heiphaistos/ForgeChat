@@ -9,7 +9,7 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_channel_in_server, require_permission},
+    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel, require_permission},
     models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
@@ -22,8 +22,7 @@ pub async fn get_messages(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Query(params): Query<GetMessagesQuery>,
 ) -> Result<Json<Vec<MessageWithAuthor>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let limit = params.limit.unwrap_or(50).min(100);
 
@@ -188,8 +187,7 @@ pub async fn send_message(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<SendMessageRequest>,
 ) -> Result<Json<MessageWithAuthor>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Canaux d'annonces : seuls les gestionnaires peuvent publier
     let chan_type: Option<String> = sqlx::query_scalar(
@@ -387,8 +385,7 @@ pub async fn edit_message(
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<EditMessageRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let owner = sqlx::query_scalar::<_, bool>(
         "SELECT user_id=$2 FROM messages WHERE id=$1 AND channel_id=$3"
@@ -445,8 +442,7 @@ pub async fn delete_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let msg_user = sqlx::query_scalar::<_, Uuid>(
         "SELECT user_id FROM messages WHERE id=$1 AND channel_id=$2"
@@ -553,8 +549,7 @@ pub async fn remove_reaction(
     if emoji.is_empty() || emoji.chars().count() > 64 {
         return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
     }
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Vérifier que le message appartient bien au canal
     let msg_in_channel: bool = sqlx::query_scalar(
@@ -658,8 +653,7 @@ pub async fn search_messages(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<MessageWithAuthor>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let q = params.get("q").cloned().unwrap_or_default();
     if q.trim().len() < 2 {
@@ -717,8 +711,7 @@ pub async fn get_message_edits(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Vérifier que le message appartient au canal
     let msg_in_channel: bool = sqlx::query_scalar(
@@ -751,8 +744,7 @@ pub async fn forward_message(
     Json(body): Json<ForwardMessageRequest>,
 ) -> Result<Json<MessageWithAuthor>> {
     use sqlx::Row;
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Vérifier que le message source existe dans le canal source
     let src = sqlx::query(

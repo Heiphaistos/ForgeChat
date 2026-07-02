@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     extract::{Path, State},
     Extension, Json,
 };
@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::{require_member, require_channel_in_server};
+use super::servers::{require_member, require_channel_in_server, require_member_and_channel};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct ForumPost {
@@ -56,8 +56,7 @@ pub async fn list_posts(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let rows = sqlx::query(
         "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
@@ -99,8 +98,7 @@ pub async fn create_post(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreatePostReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -142,8 +140,7 @@ pub async fn get_post(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let post_row = sqlx::query(
         "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
@@ -210,8 +207,7 @@ pub async fn reply_to_post(
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<CreateReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -220,14 +216,14 @@ pub async fn reply_to_post(
 
     let content_raw = body.content.trim().to_string();
     if content_raw.is_empty() {
-        return Err(AppError::BadRequest("Réponse vide".into()));
+        return Err(AppError::BadRequest("RÃ©ponse vide".into()));
     }
     if content_raw.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractÃ¨res)".into()));
     }
     let content = content_raw;
 
-    // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
+    // Transaction avec SELECT FOR UPDATE pour Ã©viter la race condition locked/INSERT
     let mut tx = state.db.begin().await?;
 
     let post_row = sqlx::query(
@@ -295,13 +291,13 @@ pub async fn update_post(
     let pinned = body["pinned"].as_bool();
     let locked = body["locked"].as_bool();
 
-    // pin/lock réservé aux modérateurs
+    // pin/lock rÃ©servÃ© aux modÃ©rateurs
     if pinned.is_some() || locked.is_some() {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
-    // content : réservé au créateur indépendamment des autres champs
+    // content : rÃ©servÃ© au crÃ©ateur indÃ©pendamment des autres champs
     if content.is_some() && creator_id != claims.sub {
         return Err(AppError::Forbidden);
     }
@@ -332,8 +328,7 @@ pub async fn delete_post(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let row = sqlx::query(
         "SELECT creator_id FROM forum_posts WHERE id = $1 AND channel_id = $2"
@@ -347,7 +342,7 @@ pub async fn delete_post(
     use sqlx::Row;
     let creator_id = row.get::<Uuid, _>("creator_id");
 
-    // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
+    // CrÃ©ateur ou modÃ©rateur MANAGE_MESSAGES peut supprimer
     if creator_id != claims.sub {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
@@ -377,15 +372,14 @@ pub async fn edit_reply(
     Path((server_id, channel_id, post_id, reply_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
     Json(body): Json<EditReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let content = body.content.trim().to_string();
     if content.is_empty() || content.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractÃ¨res)".into()));
     }
 
-    // Vérifier que la réponse appartient à ce post et à l'utilisateur
+    // VÃ©rifier que la rÃ©ponse appartient Ã  ce post et Ã  l'utilisateur
     let rows = sqlx::query(
         "UPDATE forum_replies SET content=$1, edited_at=NOW()
          WHERE id=$2 AND post_id=$3 AND user_id=$4
@@ -419,10 +413,9 @@ pub async fn delete_reply(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, post_id, reply_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
+    // CrÃ©ateur ou modÃ©rateur MANAGE_MESSAGES peut supprimer
     use sqlx::Row;
     let reply_row = sqlx::query(
         "SELECT user_id FROM forum_replies WHERE id=$1 AND post_id=$2"
@@ -431,7 +424,7 @@ pub async fn delete_reply(
     .bind(post_id)
     .fetch_optional(&state.db)
     .await?
-    .ok_or_else(|| AppError::NotFound("Réponse introuvable".into()))?;
+    .ok_or_else(|| AppError::NotFound("RÃ©ponse introuvable".into()))?;
 
     let author_id: Uuid = reply_row.get("user_id");
     if author_id != claims.sub {
@@ -446,7 +439,7 @@ pub async fn delete_reply(
         .execute(&state.db)
         .await?;
 
-    // Décrémenter reply_count
+    // DÃ©crÃ©menter reply_count
     sqlx::query(
         "UPDATE forum_posts SET reply_count = GREATEST(0, reply_count - 1) WHERE id=$1"
     )
@@ -464,3 +457,4 @@ pub async fn delete_reply(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+

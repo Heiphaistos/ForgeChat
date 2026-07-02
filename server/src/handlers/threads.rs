@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     extract::{Path, State},
     Extension, Json,
 };
@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::{require_member, require_channel_in_server};
+use super::servers::{require_member, require_channel_in_server, require_member_and_channel};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct Thread {
@@ -55,8 +55,7 @@ pub async fn list_threads(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let threads = sqlx::query(
         "SELECT t.*, u.username as creator_username, u.avatar as creator_avatar
@@ -97,14 +96,13 @@ pub async fn create_thread(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateThreadReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     if body.first_message.trim().is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if body.first_message.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractÃ¨res)".into()));
     }
     let first_msg = body.first_message.clone();
 
@@ -158,8 +156,7 @@ pub async fn get_thread_messages(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
     let thread_ok = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM threads WHERE id=$1 AND channel_id=$2)"
     )
@@ -205,18 +202,17 @@ pub async fn send_thread_message(
     Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<SendThreadMessageReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let content_trimmed = body.content.trim().to_string();
     if content_trimmed.is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if content_trimmed.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractÃ¨res)".into()));
     }
 
-    // Vérifier le timeout (sourdine)
+    // VÃ©rifier le timeout (sourdine)
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
     )
@@ -256,7 +252,7 @@ pub async fn send_thread_message(
     .execute(&state.db)
     .await?;
 
-    // Broadcast en temps réel aux membres du serveur
+    // Broadcast en temps rÃ©el aux membres du serveur
     let event = serde_json::json!({
         "type": "THREAD_MESSAGE",
         "thread_id": thread_id,
@@ -274,10 +270,9 @@ pub async fn archive_thread(
     Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<Thread>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    // Vérifier que l'utilisateur est le créateur du thread OU a la permission MANAGE_MESSAGES
+    // VÃ©rifier que l'utilisateur est le crÃ©ateur du thread OU a la permission MANAGE_MESSAGES
     let thread_row = sqlx::query(
         "SELECT creator_id FROM threads WHERE id = $1 AND channel_id = $2"
     )
@@ -292,8 +287,8 @@ pub async fn archive_thread(
     let archived = body["archived"].as_bool().unwrap_or(true);
     let locked = body["locked"].as_bool();
 
-    // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
-    // Archiver : créateur OU modérateur
+    // Locker un thread nÃ©cessite toujours MANAGE_MESSAGES (pas juste Ãªtre crÃ©ateur)
+    // Archiver : crÃ©ateur OU modÃ©rateur
     if locked.is_some() {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
@@ -346,12 +341,11 @@ pub async fn edit_thread_message(
     Path((server_id, channel_id, thread_id, msg_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
     Json(body): Json<EditThreadMessageBody>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let content = body.content.trim().to_string();
     if content.is_empty() || content.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractÃ¨res)".into()));
     }
 
     let rows = sqlx::query(
@@ -385,8 +379,7 @@ pub async fn delete_thread_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, thread_id, msg_id)): Path<(Uuid, Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     use sqlx::Row;
     let row = sqlx::query(
@@ -420,3 +413,4 @@ pub async fn delete_thread_message(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
