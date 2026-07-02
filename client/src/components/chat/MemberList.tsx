@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
@@ -69,20 +70,26 @@ export default function MemberList({ serverId }: Props) {
   const nav = useNavigate()
   const me = useAuth(s => s.user)
 
-  const meAsMember = (members as any[]).find((m: any) => m.user_id === me?.id)
+  const meAsMember = useMemo(
+    () => (members as any[]).find((m: any) => m.user_id === me?.id),
+    [members, me?.id]
+  )
   const canManageMembers = meAsMember?.is_owner === true
 
-  const membersWithLiveStatus = members.map((m: any) => ({
-    ...m,
-    liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
-  }))
-
-  const online = membersWithLiveStatus.filter((m: any) =>
-    m.liveStatus === 'online' || m.liveStatus === 'idle' || m.liveStatus === 'dnd'
-  )
-  const offline = membersWithLiveStatus.filter((m: any) =>
-    m.liveStatus === 'offline' || m.liveStatus === 'invisible'
-  )
+  const { online, offline } = useMemo(() => {
+    const withStatus = (members as any[]).map((m: any) => ({
+      ...m,
+      liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
+    }))
+    return {
+      online: withStatus.filter((m: any) =>
+        m.liveStatus === 'online' || m.liveStatus === 'idle' || m.liveStatus === 'dnd'
+      ),
+      offline: withStatus.filter((m: any) =>
+        m.liveStatus === 'offline' || m.liveStatus === 'invisible'
+      ),
+    }
+  }, [members, presenceStatuses])
 
   const menuItems = (m: any) => [
     { label: 'Voir le profil', onClick: () => nav(`/users/${m.user_id}`) },
