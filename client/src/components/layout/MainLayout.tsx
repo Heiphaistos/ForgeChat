@@ -58,14 +58,17 @@ export default function MainLayout() {
       const next = clamp(startW.current + delta, SIDEBAR_MIN, SIDEBAR_MAX)
       setSidebarWidth(next)
     }
+    const SNAP_SIZES = [180, 220, 240, 280, 320]
+    const SNAP_THRESHOLD = 15
     const onUp = () => {
       if (!resizing.current) return
       resizing.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       setSidebarWidth(w => {
-        localStorage.setItem('fc_sidebar_width', String(w))
-        return w
+        const snapped = SNAP_SIZES.find(s => Math.abs(w - s) <= SNAP_THRESHOLD) ?? w
+        localStorage.setItem('fc_sidebar_width', String(snapped))
+        return snapped
       })
     }
     window.addEventListener('mousemove', onMove)
