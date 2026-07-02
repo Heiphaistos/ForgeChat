@@ -181,27 +181,24 @@ pub async fn create_timeout(
         return Err(AppError::BadRequest("Durée maximale : 7 jours (10080 minutes)".into()));
     }
 
-    // Vérifier que la cible est membre du serveur
-    let is_member = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
-    )
-    .bind(server_id)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
+    // Vérifier membre + non-propriétaire en parallèle
+    let (is_member, is_owner) = tokio::try_join!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_one(&state.db),
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM servers WHERE id = $1 AND owner_id = $2)"
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_one(&state.db),
+    )?;
     if !is_member {
         return Err(AppError::BadRequest("Utilisateur non membre du serveur".into()));
     }
-
-    // Vérifier qu'on ne timeout pas le propriétaire du serveur
-    let is_owner = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM servers WHERE id = $1 AND owner_id = $2)"
-    )
-    .bind(server_id)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
-
     if is_owner {
         return Err(AppError::Forbidden);
     }
