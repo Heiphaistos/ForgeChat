@@ -107,7 +107,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               <div className="relative flex-shrink-0">
                 <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-white font-bold text-sm overflow-hidden">
                   {m.avatar
-                    ? <img src={m.avatar} alt="" className="w-full h-full object-cover" />
+                    ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : m.username.charAt(0).toUpperCase()}
                 </div>
                 <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel

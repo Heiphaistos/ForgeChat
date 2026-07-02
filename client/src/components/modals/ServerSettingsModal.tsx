@@ -371,7 +371,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Icône du serveur</label>
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center font-bold text-2xl text-white overflow-hidden flex-shrink-0">
-                      {iconPreview ? <img src={iconPreview} alt="" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
+                      {iconPreview ? <img src={iconPreview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <input ref={iconInputRef} type="file" accept="image/*" className="hidden"
@@ -423,7 +423,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Bannière du serveur</label>
                   {bannerUrl && (
                     <div className="mb-3 rounded-lg overflow-hidden h-[120px] bg-fc-channel">
-                      <img src={bannerUrl} alt="bannière" className="w-full h-full object-cover" />
+                      <img src={bannerUrl} alt="bannière" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -658,7 +658,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     <div className="space-y-2">
                       {emojis.map((emoji: any) => (
                         <div key={emoji.id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
-                          <img src={emoji.url} alt={emoji.name} className="w-8 h-8 object-contain rounded" />
+                          <img src={emoji.url} alt={emoji.name} loading="lazy" decoding="async" className="w-8 h-8 object-contain rounded" />
                           <div className="flex-1">
                             <div className="text-white text-sm font-medium">:{emoji.name}:</div>
                           </div>
@@ -740,7 +740,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         <div key={bot.bot_user_id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
                           <div className="w-10 h-10 rounded-full bg-indigo-500/30 flex items-center justify-center flex-shrink-0">
                             {bot.avatar
-                              ? <img src={bot.avatar} alt="" className="w-full h-full object-cover rounded-full" />
+                              ? <img src={bot.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover rounded-full" />
                               : <Bot size={18} className="text-indigo-400" />}
                           </div>
                           <div className="flex-1 min-w-0">
