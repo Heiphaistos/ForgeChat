@@ -234,6 +234,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
   const [editMentionable, setEditMentionable] = useState(false)
   const [newName, setNewName] = useState('')
   const [activeTab, setActiveTab] = useState<'info' | 'perms' | 'members'>('info')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const { data: roles = [] } = useQuery<Role[]>({
     queryKey: ['roles', serverId],
@@ -347,10 +348,24 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                 {saveRole.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
               </button>
               {!selected.is_everyone && (
-                <button onClick={() => { if (window.confirm('Supprimer ce rôle ?')) deleteRole.mutate(selected.id) }}
-                  className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition" title="Supprimer">
-                  <Trash2 size={14} />
-                </button>
+                <>
+                  <button onClick={() => setShowDeleteConfirm(true)}
+                    className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition" title="Supprimer le rôle">
+                    <Trash2 size={14} />
+                  </button>
+                  {showDeleteConfirm && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
+                      <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-white mb-2">Supprimer « {selected.name} »</h3>
+                        <p className="text-sm text-fc-muted mb-5">Ce rôle sera retiré de tous les membres. Cette action est irréversible.</p>
+                        <div className="flex gap-3 justify-end">
+                          <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
+                          <button onClick={() => { deleteRole.mutate(selected.id); setShowDeleteConfirm(false) }} disabled={deleteRole.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Supprimer</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

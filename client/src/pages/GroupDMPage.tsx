@@ -77,6 +77,7 @@ export default function GroupDMPage() {
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -499,12 +500,24 @@ export default function GroupDMPage() {
             </div>
             {/* Quitter */}
             <button
-              onClick={() => { if (window.confirm('Quitter ce groupe ?')) leaveGroup.mutate() }}
+              onClick={() => setShowLeaveConfirm(true)}
               className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition"
             >
               <LogOut size={13} />
               Quitter le groupe
             </button>
+            {showLeaveConfirm && (
+              <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowLeaveConfirm(false)}>
+                <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-lg font-bold text-white mb-2">Quitter le groupe</h3>
+                  <p className="text-sm text-fc-muted mb-5">Tu ne pourras plus accéder aux messages de ce groupe sans y être réinvité.</p>
+                  <div className="flex gap-3 justify-end">
+                    <button onClick={() => setShowLeaveConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
+                    <button onClick={() => { leaveGroup.mutate(); setShowLeaveConfirm(false) }} disabled={leaveGroup.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Quitter</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

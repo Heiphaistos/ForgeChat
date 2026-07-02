@@ -263,6 +263,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
 export default function ChannelSettingsModal({ channel, serverId, onClose }: Props) {
   const qc = useQueryClient()
   const [tab, setTab] = useState<TabId>('general')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const [name, setName] = useState(channel.name)
   const [topic, setTopic] = useState(channel.topic ?? '')
@@ -578,15 +579,24 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
               <div className="border-t border-fc-hover pt-4">
                 <h4 className="text-sm font-semibold text-red-400 mb-2">Zone dangereuse</h4>
-                <button onClick={() => {
-                  if (window.confirm(`Supprimer le canal #${channel.name} ? Cette action est irréversible.`))
-                    deleteChannel.mutate()
-                }}
+                <button onClick={() => setShowDeleteConfirm(true)}
                   disabled={deleteChannel.isPending}
                   className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition">
                   <Trash2 size={14} />
                   Supprimer le canal #{channel.name}
                 </button>
+                {showDeleteConfirm && (
+                  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
+                    <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                      <h3 className="text-lg font-bold text-white mb-2">Supprimer #{channel.name}</h3>
+                      <p className="text-sm text-fc-muted mb-5">Cette action est irréversible. Tous les messages seront perdus.</p>
+                      <div className="flex gap-3 justify-end">
+                        <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
+                        <button onClick={() => { deleteChannel.mutate(); setShowDeleteConfirm(false) }} disabled={deleteChannel.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Supprimer</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
