@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_permission},
+    handlers::servers::{require_member, require_permission, require_member_and_channel},
     middleware::auth::Claims,
     models::{
         channel::{Channel, CreateChannelRequest, UpdateChannelRequest, CreateCategoryRequest, Category},
@@ -360,11 +360,7 @@ pub async fn get_channel_permissions(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
-    // Vérifier que le canal appartient bien à ce serveur
-    let channel_ok: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)")
-        .bind(channel_id).bind(server_id).fetch_one(&state.db).await?;
-    if !channel_ok { return Err(AppError::NotFound("Canal introuvable".into())); }
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
     let rows = sqlx::query(
         "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
     )

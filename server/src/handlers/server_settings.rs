@@ -260,38 +260,38 @@ pub async fn get_members_detailed(
 
     use sqlx::Row;
 
-    // Membres avec rôles et tags en 3 requêtes (au lieu de 2N+1)
-    let members = sqlx::query(
-        "SELECT sm.user_id, sm.nickname, sm.joined_at, sm.is_owner,
-                u.username, u.discriminator, u.avatar, u.status
-         FROM server_members sm
-         JOIN users u ON u.id = sm.user_id
-         WHERE sm.server_id=$1
-         ORDER BY sm.is_owner DESC, u.username",
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
-
-    let roles_rows = sqlx::query(
-        "SELECT mr.user_id, r.id, r.name, r.color
-         FROM member_roles mr
-         JOIN roles r ON r.id = mr.role_id
-         WHERE mr.server_id=$1",
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
-
-    let tags_rows = sqlx::query(
-        "SELECT mt.user_id, st.id, st.name, st.color
-         FROM member_tags mt
-         JOIN server_tags st ON st.id = mt.tag_id
-         WHERE mt.server_id=$1",
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
+    // Membres avec rôles et tags en 3 requêtes parallèles (au lieu de 2N+1)
+    let (members_res, roles_res, tags_res) = tokio::join!(
+        sqlx::query(
+            "SELECT sm.user_id, sm.nickname, sm.joined_at, sm.is_owner,
+                    u.username, u.discriminator, u.avatar, u.status
+             FROM server_members sm
+             JOIN users u ON u.id = sm.user_id
+             WHERE sm.server_id=$1
+             ORDER BY sm.is_owner DESC, u.username",
+        )
+        .bind(server_id)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT mr.user_id, r.id, r.name, r.color
+             FROM member_roles mr
+             JOIN roles r ON r.id = mr.role_id
+             WHERE mr.server_id=$1",
+        )
+        .bind(server_id)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT mt.user_id, st.id, st.name, st.color
+             FROM member_tags mt
+             JOIN server_tags st ON st.id = mt.tag_id
+             WHERE mt.server_id=$1",
+        )
+        .bind(server_id)
+        .fetch_all(&state.db),
+    );
+    let members = members_res?;
+    let roles_rows = roles_res.unwrap_or_default();
+    let tags_rows = tags_res.unwrap_or_default();
 
     use std::collections::HashMap;
     let mut roles_by_user: HashMap<Uuid, Vec<serde_json::Value>> = HashMap::new();
