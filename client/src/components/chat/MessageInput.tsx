@@ -958,7 +958,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         <div className="flex items-end gap-2 flex-1 min-w-0">
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
+          className="p-2.5 md:p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
           title="Joindre un fichier"
         >
           <Plus size={20} />
@@ -1005,7 +1005,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <div className="relative">
             <button
               onClick={() => { closeAllPickers(); setShowEmojiPicker(p => !p) }}
-              className={`p-1.5 rounded transition ${showEmojiPicker ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              className={`p-2.5 md:p-1.5 rounded transition ${showEmojiPicker ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Emoji"
             >
               <SmilePlus size={20} />
@@ -1047,7 +1047,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <div className="relative">
             <button
               onClick={() => { closeAllPickers(); setShowStickerPicker(p => !p) }}
-              className={`p-1.5 rounded transition text-base leading-none
+              className={`p-2.5 md:p-1.5 rounded transition text-base leading-none
                 ${showStickerPicker ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
               title="Stickers"
             >
@@ -1068,7 +1068,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <div className="relative">
             <button
               onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
-              className={`p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              className={`p-2.5 md:p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Réponses rapides"
             >
               <Zap size={16} />
@@ -1220,7 +1220,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <button
             onClick={submit}
             disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS || !!sending}
-            className="p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
+            className="p-2.5 md:p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
             title="Envoyer"
           >
             <Send size={20} />
