@@ -210,7 +210,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             <div key={msg.id} className="flex gap-2 group">
               <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
                 {msg.author?.avatar
-                  ? <img src={msg.author.avatar} alt="" className="w-full h-full object-cover" />
+                  ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : msg.author?.username?.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

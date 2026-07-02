@@ -110,7 +110,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
           >
             <div className="flex items-center gap-2 mb-1">
               {msg.author_avatar
-                ? <img src={msg.author_avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                 : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                     {msg.author_username?.charAt(0).toUpperCase()}
                   </div>
