@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import {
-  Pin, Users, Trophy, Calendar, UserPlus, Zap,
+  Pin, Users, Trophy, Calendar, UserPlus, Zap, ChevronLeft,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
+import { useMobile } from '../contexts/MobileContext'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 
 export default function ActivityFeedPage() {
   const [filter, setFilter] = useState<Filter>('all')
+  const { openSidebar } = useMobile()
 
   const {
     data,
@@ -179,7 +181,14 @@ export default function ActivityFeedPage() {
   return (
     <div className="flex flex-col h-full bg-fc-bg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover flex-shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-fc-hover flex-shrink-0">
+        <button
+          className="flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 md:hidden"
+          onClick={openSidebar}
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} />
+        </button>
         <Zap size={18} className="text-fc-accent" />
         <h1 className="font-semibold text-white">Activité</h1>
       </div>
