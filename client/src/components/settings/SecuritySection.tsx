@@ -21,6 +21,7 @@ export default function SecuritySection() {
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => api.get('/users/me').then(r => r.data),
+    staleTime: 60_000,
   })
 
   const setupMutation = useMutation({

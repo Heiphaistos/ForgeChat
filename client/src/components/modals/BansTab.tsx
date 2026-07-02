@@ -18,6 +18,7 @@ export default function BansTab({ serverId }: { serverId: string }) {
   const { data: bans = [], isLoading } = useQuery<Ban[]>({
     queryKey: ['bans', serverId],
     queryFn: () => api.get(`/servers/${serverId}/bans`).then(r => r.data),
+    staleTime: 30_000,
     retry: false,
   })
 

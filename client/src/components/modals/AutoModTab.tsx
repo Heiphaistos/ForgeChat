@@ -52,6 +52,7 @@ export default function AutoModTab({ server }: Props) {
   const { data, isLoading } = useQuery<AutoModConfig>({
     queryKey: ['automod', server.id],
     queryFn: () => api.get(`/servers/${server.id}/automod`).then(r => r.data),
+    staleTime: 60_000,
     retry: false,
   })
 
