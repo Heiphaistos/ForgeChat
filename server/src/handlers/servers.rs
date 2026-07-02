@@ -814,6 +814,19 @@ pub async fn require_permission(
     }
 }
 
+/// Vérifie permission + appartenance canal en parallèle.
+pub async fn require_permission_and_channel(
+    state: &AppState, user_id: Uuid, server_id: Uuid, channel_id: Uuid, perm: i64,
+) -> Result<()> {
+    let (perm_res, chan_res) = tokio::join!(
+        require_permission(state, user_id, server_id, perm),
+        require_channel_in_server(state, channel_id, server_id),
+    );
+    perm_res?;
+    chan_res?;
+    Ok(())
+}
+
 // ─── Verification Gate ──────────────────────────────────────
 
 pub async fn verify_member(

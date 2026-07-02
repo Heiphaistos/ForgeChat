@@ -9,7 +9,7 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel, require_permission},
+    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel, require_permission, require_permission_and_channel},
     models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
@@ -509,9 +509,8 @@ pub async fn add_reaction(
     if emoji.is_empty() || emoji.chars().count() > 64 {
         return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
     }
-    require_permission(&state, claims.sub, server_id, Permissions::ADD_REACTIONS).await
+    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::ADD_REACTIONS).await
         .map_err(|_| AppError::Forbidden)?;
-    require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Vérifier que le message appartient bien au canal
     let msg_in_channel: bool = sqlx::query_scalar(
@@ -583,8 +582,7 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_channel_in_server(&state, channel_id, server_id).await?;
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query(
         "INSERT INTO pinned_messages (channel_id, message_id, pinned_by) VALUES ($1, $2, $3)
@@ -620,8 +618,7 @@ pub async fn unpin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_channel_in_server(&state, channel_id, server_id).await?;
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_MESSAGES).await?;
 
     sqlx::query("DELETE FROM pinned_messages WHERE channel_id=$1 AND message_id=$2")
         .bind(channel_id)
