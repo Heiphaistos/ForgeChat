@@ -1,22 +1,46 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
-import { Camera, RefreshCw } from 'lucide-react'
+import { Camera, RefreshCw, ShieldCheck, ShieldX } from 'lucide-react'
 
 export default function VideoSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedCamera, setSelectedCamera] = useState(localStorage.getItem('fc_video_input') ?? '')
   const [previewActive, setPreviewActive] = useState(false)
+  const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
-  const refreshDevices = async () => {
+  const refreshDevices = useCallback(async () => {
     try {
       const list = await navigator.mediaDevices.enumerateDevices()
       setDevices(list.filter(d => d.kind === 'videoinput'))
     } catch {}
-  }
+  }, [])
 
-  useEffect(() => { refreshDevices() }, [])
+  useEffect(() => {
+    navigator.permissions
+      .query({ name: 'camera' as PermissionName })
+      .then(p => {
+        setPermission(p.state === 'granted' ? 'granted' : p.state === 'denied' ? 'denied' : 'unknown')
+        if (p.state === 'granted') refreshDevices()
+        p.onchange = () => {
+          setPermission(p.state === 'granted' ? 'granted' : 'denied')
+          if (p.state === 'granted') refreshDevices()
+        }
+      })
+      .catch(() => refreshDevices())
+  }, [refreshDevices])
+
+  const requestPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      stream.getTracks().forEach(t => t.stop())
+      setPermission('granted')
+      await refreshDevices()
+    } catch {
+      setPermission('denied')
+    }
+  }
 
   const startPreview = async () => {
     try {
@@ -31,8 +55,11 @@ export default function VideoSection() {
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
       setPreviewActive(true)
+      setPermission('granted')
       await refreshDevices()
-    } catch {}
+    } catch {
+      setPermission('denied')
+    }
   }
 
   const stopPreview = () => {
@@ -55,6 +82,34 @@ export default function VideoSection() {
 
   return (
     <div className="space-y-6">
+      {/* Bloc permission caméra */}
+      {permission !== 'granted' && (
+        <div className={`p-4 rounded-xl border flex items-center gap-3
+          ${permission === 'denied'
+            ? 'bg-fc-red/10 border-fc-red/30'
+            : 'bg-fc-accent/10 border-fc-accent/30'}`}
+        >
+          {permission === 'denied'
+            ? <ShieldX size={20} className="text-fc-red flex-shrink-0" />
+            : <ShieldCheck size={20} className="text-fc-accent flex-shrink-0" />}
+          <div className="flex-1">
+            <p className="text-sm font-medium text-white">
+              {permission === 'denied' ? 'Accès caméra refusé' : 'Accès caméra requis'}
+            </p>
+            <p className="text-xs text-fc-muted mt-0.5">
+              {permission === 'denied'
+                ? 'Autorisez la caméra dans les paramètres de votre navigateur.'
+                : 'Cliquez pour autoriser ForgeChat à accéder à votre caméra.'}
+            </p>
+          </div>
+          {permission !== 'denied' && (
+            <button onClick={requestPermission} className="btn-primary text-xs px-3 py-1.5 flex-shrink-0">
+              Autoriser
+            </button>
+          )}
+        </div>
+      )}
+
       <Field label="Caméra">
         <div className="flex gap-2">
           <select

@@ -70,29 +70,70 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const copyId = () => {
+    navigator.clipboard.writeText(user?.id ?? '').then(() => toast.success('ID copié !'))
+  }
+
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 mb-2 w-64 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+      className="absolute bottom-full left-0 mb-2 w-72 bg-fc-sidebar border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-        <span className="text-sm font-semibold text-white">Statut rapide</span>
-        <button onClick={onClose} className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+      {/* Bannière + Avatar */}
+      <div className="relative">
+        <div className="h-16 bg-gradient-to-br from-fc-accent/60 to-indigo-800/60 overflow-hidden">
+          {user?.banner && (
+            <img src={user.banner} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+          )}
+        </div>
+        <div className="absolute left-3 -bottom-5 flex items-end gap-2">
+          <div className="w-12 h-12 rounded-full border-4 border-fc-sidebar bg-fc-accent flex items-center justify-center font-bold text-white text-base overflow-hidden flex-shrink-0">
+            {user?.avatar
+              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              : user?.username.charAt(0).toUpperCase()}
+          </div>
+          <div className={`w-3.5 h-3.5 rounded-full border-2 border-fc-sidebar mb-0.5 ${STATUS_COLORS[user?.status ?? 'offline']}`} />
+        </div>
+        <button onClick={onClose} className="absolute top-2 right-2 p-0.5 rounded hover:bg-black/40 text-white/70 hover:text-white transition">
           <X size={14} />
         </button>
       </div>
 
-      {/* Boutons de statut */}
-      <div className="p-2 grid grid-cols-2 gap-1.5">
+      {/* Infos profil */}
+      <div className="pt-7 px-3 pb-2">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white truncate">{user?.username}</p>
+            <p className="text-xs text-fc-muted truncate">#{user?.discriminator}</p>
+          </div>
+          <button
+            onClick={copyId}
+            className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-fc-muted hover:text-white bg-fc-channel hover:bg-fc-hover rounded transition flex-shrink-0"
+            title="Copier l'ID"
+          >
+            ID
+          </button>
+        </div>
+        {(user?.custom_status || user?.bio) && (
+          <p className="text-xs text-fc-muted mt-1 truncate">
+            {user.custom_status_emoji && <span className="mr-1">{user.custom_status_emoji}</span>}
+            {user.custom_status || user.bio}
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-white/10 mx-3" />
+
+      {/* Statut */}
+      <div className="p-2 grid grid-cols-2 gap-1">
         {STATUS_ORDER.map(s => (
           <button
             key={s}
             onClick={() => setStatus(s)}
-            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition hover:bg-fc-hover
+            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition hover:bg-fc-hover
               ${user?.status === s ? 'bg-fc-hover ring-1 ring-fc-accent/40' : ''}`}
           >
-            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_COLORS[s]}`} />
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[s]}`} />
             <span className="text-xs text-fc-text truncate">{STATUS_LABELS[s]}</span>
           </button>
         ))}
@@ -108,8 +149,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onChange={e => setCustomEmoji(e.target.value)}
             placeholder="😊"
             maxLength={2}
-            className="w-12 fc-input text-center text-lg py-1.5 flex-shrink-0"
-            title="Emoji du statut"
+            className="w-10 fc-input text-center text-base py-1 flex-shrink-0"
           />
           <input
             type="text"
@@ -117,7 +157,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onChange={e => setCustomStatus(e.target.value)}
             placeholder="Ex : En réunion"
             maxLength={128}
-            className="flex-1 fc-input text-sm py-1.5"
+            className="flex-1 fc-input text-xs py-1"
             onKeyDown={e => { if (e.key === 'Enter') saveCustomStatus() }}
           />
         </div>
@@ -130,9 +170,8 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             {saving ? '...' : 'Sauvegarder'}
           </button>
           <button
-            onClick={() => nav('/settings')}
+            onClick={() => { nav('/settings'); onClose() }}
             className="px-3 py-1.5 text-xs rounded bg-fc-hover hover:bg-fc-hover/70 text-fc-muted hover:text-white transition"
-            title="Voir mon profil"
           >
             Profil
           </button>
