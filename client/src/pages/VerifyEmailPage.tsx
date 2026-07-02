@@ -74,7 +74,7 @@ export default function VerifyEmailPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-fc-bg">
+    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md text-center">
         <div className="w-16 h-16 bg-fc-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
           <svg className="w-8 h-8 text-fc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,6 +108,7 @@ export default function VerifyEmailPage() {
               value={d}
               onChange={e => handleDigit(i, e.target.value)}
               onKeyDown={e => handleKeyDown(i, e)}
+              autoComplete={i === 0 ? 'one-time-code' : 'off'}
               className="w-14 h-16 text-center text-2xl font-bold bg-fc-input text-white rounded-lg
                          outline-none focus:ring-2 focus:ring-fc-accent transition caret-transparent"
             />
