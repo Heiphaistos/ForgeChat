@@ -425,7 +425,7 @@ export default function DMPage() {
         <div className="relative flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {partnerAvatar
-              ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : partnerName.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLOR[status]}`} />
@@ -574,7 +574,7 @@ export default function DMPage() {
                 <div key={msg.id} className="flex items-start gap-2.5 group">
                   <div className="w-8 h-8 rounded-full bg-fc-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                     {msg.sender_avatar
-                      ? <img src={msg.sender_avatar} alt="" className="w-full h-full object-cover" />
+                      ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       : msg.sender_username.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">

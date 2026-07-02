@@ -122,7 +122,7 @@ function ServerCard({
         <div className="absolute inset-0 opacity-20 bg-gradient-to-t from-black to-transparent" />
         <div className="relative w-16 h-16 rounded-2xl bg-fc-bg flex items-center justify-center font-bold text-2xl text-white shadow-lg overflow-hidden border-2 border-fc-hover">
           {server.icon
-            ? <img src={server.icon} alt={server.name} className="w-full h-full object-cover" />
+            ? <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : server.name.charAt(0).toUpperCase()}
         </div>
       </div>

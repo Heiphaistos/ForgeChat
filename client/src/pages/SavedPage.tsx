@@ -291,7 +291,7 @@ export default function SavedPage() {
                           {/* Avatar */}
                           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                             {item.author_avatar
-                              ? <img src={item.author_avatar} alt="" className="w-full h-full object-cover" />
+                              ? <img src={item.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                               : item.author_username.charAt(0).toUpperCase()}
                           </div>
 

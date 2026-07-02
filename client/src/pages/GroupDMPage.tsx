@@ -546,7 +546,7 @@ export default function GroupDMPage() {
               <div key={msg.id} id={`gdm-msg-${msg.id}`} className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}>
                 <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {msg.sender_avatar
-                    ? <img src={msg.sender_avatar} alt="" className="w-full h-full object-cover" />
+                    ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : msg.sender_username.charAt(0).toUpperCase()
                   }
                 </div>
@@ -716,7 +716,7 @@ export default function GroupDMPage() {
               <div className="relative flex-shrink-0">
                 <div className="w-7 h-7 rounded-full bg-fc-channel flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {m.avatar
-                    ? <img src={m.avatar} alt="" className="w-full h-full object-cover" />
+                    ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : m.username.charAt(0).toUpperCase()
                   }
                 </div>

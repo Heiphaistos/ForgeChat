@@ -58,7 +58,7 @@ function AvatarWithStatus({
     <div className="relative flex-shrink-0">
       <div className={`${avatarSize} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden`}>
         {avatar
-          ? <img src={avatar} alt="" className="w-full h-full object-cover" />
+          ? <img src={avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : username.charAt(0).toUpperCase()}
       </div>
       <div className={`absolute ${dotPos} rounded-full border-2 border-fc-channel ${STATUS_COLOR[status] ?? 'bg-fc-muted'}`} />
@@ -535,7 +535,7 @@ export default function FriendsPage() {
                   <div key={b.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition group">
                     <div className="w-10 h-10 rounded-full bg-fc-muted/30 flex items-center justify-center font-bold text-fc-muted overflow-hidden flex-shrink-0">
                       {b.avatar
-                        ? <img src={b.avatar} alt="" className="w-full h-full object-cover opacity-50" />
+                        ? <img src={b.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-50" />
                         : b.username.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">

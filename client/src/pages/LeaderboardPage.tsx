@@ -98,7 +98,7 @@ export default function LeaderboardPage() {
 
                   <div className="w-9 h-9 rounded-full bg-fc-hover flex-shrink-0 overflow-hidden">
                     {entry.avatar ? (
-                      <img src={entry.avatar} alt={entry.username} className="w-full h-full object-cover" />
+                      <img src={entry.avatar} alt={entry.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-fc-muted text-sm font-bold">
                         {entry.username[0]?.toUpperCase()}
