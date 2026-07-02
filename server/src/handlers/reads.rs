@@ -57,23 +57,58 @@ pub async fn get_unread_counts(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
-    // CTE pour éviter la sous-requête corrélée (une lookup last_read par message sinon)
-    let rows = sqlx::query(
-        "WITH lr AS (
-             SELECT channel_id, read_at FROM last_read WHERE user_id = $1
-         )
-         SELECT m.channel_id, c.server_id, COUNT(*) as count
-         FROM messages m
-         JOIN channels c ON c.id = m.channel_id
-         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
-         LEFT JOIN lr ON lr.channel_id = m.channel_id
-         WHERE m.user_id != $1
-           AND m.created_at > COALESCE(lr.read_at, NOW() - INTERVAL '30 days')
-         GROUP BY m.channel_id, c.server_id"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await?;
+
+    // Paralléliser les 3 queries indépendantes (server channels, DMs, GroupDMs)
+    let (rows_result, dm_rows, gdm_rows) = tokio::join!(
+        sqlx::query(
+            "WITH lr AS (
+                 SELECT channel_id, read_at FROM last_read WHERE user_id = $1
+             )
+             SELECT m.channel_id, c.server_id, COUNT(*) as count
+             FROM messages m
+             JOIN channels c ON c.id = m.channel_id
+             JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+             LEFT JOIN lr ON lr.channel_id = m.channel_id
+             WHERE m.user_id != $1
+               AND m.created_at > COALESCE(lr.read_at, NOW() - INTERVAL '30 days')
+             GROUP BY m.channel_id, c.server_id"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT dm.dm_channel_id as id, COUNT(*) as count
+             FROM dm_messages dm
+             WHERE dm.sender_id != $1
+               AND EXISTS(
+                   SELECT 1 FROM dm_channels dc
+                   WHERE dc.id = dm.dm_channel_id AND (dc.user1_id=$1 OR dc.user2_id=$1)
+               )
+               AND dm.created_at > COALESCE(
+                   (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=dm.dm_channel_id AND user_id=$1),
+                   NOW() - INTERVAL '30 days'
+               )
+             GROUP BY dm.dm_channel_id"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT gdm.dm_id as id, COUNT(*) as count
+             FROM group_dm_messages gdm
+             JOIN group_dm_members mbr ON mbr.dm_id = gdm.dm_id AND mbr.user_id = $1
+             WHERE gdm.sender_id != $1
+               AND gdm.created_at > COALESCE(
+                   (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=gdm.dm_id AND user_id=$1),
+                   NOW() - INTERVAL '30 days'
+               )
+             GROUP BY gdm.dm_id"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+    );
+
+    let rows = rows_result?;
+    let dm_rows = dm_rows.unwrap_or_default();
+    let gdm_rows = gdm_rows.unwrap_or_default();
 
     let mut result: Vec<serde_json::Value> = rows.iter().map(|r| {
         let count: i64 = r.get("count");
@@ -83,26 +118,6 @@ pub async fn get_unread_counts(
             "count": count,
         })
     }).collect();
-
-    // Ajouter les non-lus des DMs 1-1
-    let dm_rows = sqlx::query(
-        "SELECT dm.dm_channel_id as id, COUNT(*) as count
-         FROM dm_messages dm
-         WHERE dm.sender_id != $1
-           AND EXISTS(
-               SELECT 1 FROM dm_channels dc
-               WHERE dc.id = dm.dm_channel_id AND (dc.user1_id=$1 OR dc.user2_id=$1)
-           )
-           AND dm.created_at > COALESCE(
-               (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=dm.dm_channel_id AND user_id=$1),
-               NOW() - INTERVAL '30 days'
-           )
-         GROUP BY dm.dm_channel_id"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
 
     for r in &dm_rows {
         let count: i64 = r.get("count");
@@ -114,23 +129,6 @@ pub async fn get_unread_counts(
             }));
         }
     }
-
-    // Ajouter les non-lus des GroupDMs
-    let gdm_rows = sqlx::query(
-        "SELECT gdm.dm_id as id, COUNT(*) as count
-         FROM group_dm_messages gdm
-         JOIN group_dm_members mbr ON mbr.dm_id = gdm.dm_id AND mbr.user_id = $1
-         WHERE gdm.sender_id != $1
-           AND gdm.created_at > COALESCE(
-               (SELECT last_read_at FROM dm_read_receipts WHERE dm_id=gdm.dm_id AND user_id=$1),
-               NOW() - INTERVAL '30 days'
-           )
-         GROUP BY gdm.dm_id"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
 
     for r in &gdm_rows {
         let count: i64 = r.get("count");
