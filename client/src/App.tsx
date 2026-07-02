@@ -671,6 +671,15 @@ function AppInner() {
         e.preventDefault()
         useUnread.getState().markAllRead()
       }
+      // Ctrl+F — ouvrir la recherche dans le canal courant
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'f') {
+        const isChannel = /\/servers\/[^/]+\/channels\/[^/]+/.test(window.location.pathname)
+        const isDm = /\/dm\//.test(window.location.pathname)
+        if (isChannel || isDm) {
+          e.preventDefault()
+          window.dispatchEvent(new CustomEvent('forgechat:toggle-search'))
+        }
+      }
       // Alt+Arrow — navigation entre canaux non-lus (ou tous les canaux)
       if (e.altKey && !e.ctrlKey && !e.metaKey && !isInput &&
           (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {

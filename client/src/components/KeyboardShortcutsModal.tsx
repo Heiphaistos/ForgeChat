@@ -39,6 +39,7 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['Alt', '↓'], description: 'Canal non-lu suivant' },
       { keys: ['Ctrl', 'Shift', 'A'], description: 'Marquer tout comme lu' },
       { keys: ['Ctrl', 'Shift', 'S'], description: 'Vue en split' },
+      { keys: ['Ctrl', 'F'], description: 'Rechercher dans le canal' },
     ],
   },
   {

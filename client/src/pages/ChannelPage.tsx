@@ -194,6 +194,13 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   useEffect(() => () => clearInterval(slowmodeTimer.current), [])
 
+  // Ctrl+F global → toggle recherche dans ce canal
+  useEffect(() => {
+    const handler = () => { setShowSearch(s => !s); setShowPinned(false); setActiveThreadId(null) }
+    window.addEventListener('forgechat:toggle-search', handler)
+    return () => window.removeEventListener('forgechat:toggle-search', handler)
+  }, [])
+
   const startSlowmodeCooldown = (delay: number) => {
     setSlowmodeCooldown(delay)
     clearInterval(slowmodeTimer.current)

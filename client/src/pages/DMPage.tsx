@@ -239,6 +239,13 @@ export default function DMPage() {
   useEffect(() => { setHasMoreDM(true) }, [dmId])
   useEffect(() => { if (highlightMessageId) setHasMoreDM(true) }, [highlightMessageId])
 
+  // Ctrl+F global → toggle recherche dans ce DM
+  useEffect(() => {
+    const handler = () => setShowSearch(s => !s)
+    window.addEventListener('forgechat:toggle-search', handler)
+    return () => window.removeEventListener('forgechat:toggle-search', handler)
+  }, [])
+
   // Effacer le badge non-lu quand on ouvre ou focus le DM + signaler au serveur
   useEffect(() => {
     if (!dmId) return
