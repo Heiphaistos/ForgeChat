@@ -287,7 +287,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
             <div className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" className="w-full h-full object-cover" />
+                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : post.creator_username.charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
@@ -302,7 +302,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           <div key={r.id} className="flex gap-3 group">
             <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
               {r.author.avatar
-                ? <img src={r.author.avatar} alt="" className="w-full h-full object-cover" />
+                ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 : r.author.username.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -507,7 +507,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" className="w-full h-full object-cover" />
+                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : post.creator_username.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

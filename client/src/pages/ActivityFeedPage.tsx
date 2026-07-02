@@ -129,7 +129,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <div className="relative flex-shrink-0">
         <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
           {item.actor.avatar
-            ? <img src={item.actor.avatar} alt="" className="w-full h-full object-cover" />
+            ? <img src={item.actor.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : item.actor.username.charAt(0).toUpperCase()}
         </div>
         {/* Icône type superposée */}
