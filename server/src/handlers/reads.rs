@@ -177,32 +177,29 @@ pub async fn mark_all_read(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>> {
-    // Canaux serveurs : upsert dans last_read pour tous les canaux dont l'utilisateur est membre
-    sqlx::query(
-        "INSERT INTO last_read (user_id, channel_id, read_at)
-         SELECT $1, c.id, NOW()
-         FROM channels c
-         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
-         ON CONFLICT (user_id, channel_id) DO UPDATE SET read_at = NOW()"
-    )
-    .bind(claims.sub)
-    .execute(&state.db)
-    .await?;
-
-    // DMs 1-1 et GroupDMs : upsert dans dm_read_receipts
-    sqlx::query(
-        "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
-         SELECT id, $1, NOW()
-         FROM (
-             SELECT id FROM dm_channels WHERE user1_id=$1 OR user2_id=$1
-             UNION ALL
-             SELECT dm_id AS id FROM group_dm_members WHERE user_id=$1
-         ) t
-         ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at = NOW()"
-    )
-    .bind(claims.sub)
-    .execute(&state.db)
-    .await?;
+    tokio::join!(
+        sqlx::query(
+            "INSERT INTO last_read (user_id, channel_id, read_at)
+             SELECT $1, c.id, NOW()
+             FROM channels c
+             JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+             ON CONFLICT (user_id, channel_id) DO UPDATE SET read_at = NOW()"
+        )
+        .bind(claims.sub)
+        .execute(&state.db),
+        sqlx::query(
+            "INSERT INTO dm_read_receipts (dm_id, user_id, last_read_at)
+             SELECT id, $1, NOW()
+             FROM (
+                 SELECT id FROM dm_channels WHERE user1_id=$1 OR user2_id=$1
+                 UNION ALL
+                 SELECT dm_id AS id FROM group_dm_members WHERE user_id=$1
+             ) t
+             ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at = NOW()"
+        )
+        .bind(claims.sub)
+        .execute(&state.db),
+    );
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
