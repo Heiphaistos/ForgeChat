@@ -176,7 +176,7 @@ export default function WebhookManager({ serverId }: WebhookManagerProps) {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-full bg-fc-accent/20 flex items-center justify-center flex-shrink-0">
                         {wh.avatar
-                          ? <img src={wh.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                          ? <img src={wh.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
                           : <Webhook size={16} className="text-fc-accent" />}
                       </div>
                       <div className="min-w-0">

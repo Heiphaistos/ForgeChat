@@ -48,7 +48,7 @@ export default function BansTab({ serverId }: { serverId: string }) {
         <div key={b.user_id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
           <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center font-bold text-red-400 overflow-hidden flex-shrink-0">
             {b.avatar
-              ? <img src={b.avatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={b.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : b.username.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">

@@ -35,7 +35,7 @@ export default function AccountSection({ user, updateMe }: Props) {
       <div className="flex items-center gap-4 p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden flex-shrink-0">
           {user.avatar
-            ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+            ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : user.username.charAt(0).toUpperCase()}
         </div>
         <div>

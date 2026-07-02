@@ -138,7 +138,7 @@ function MutualServersSection({ userId }: { userId: string }) {
         <div key={srv.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-fc-hover/20 transition">
           <div className="w-8 h-8 rounded-lg bg-fc-bg flex items-center justify-center font-bold text-sm text-white overflow-hidden flex-shrink-0">
             {srv.icon ? (
-              <img src={srv.icon} alt={srv.name} className="w-full h-full object-cover" />
+              <img src={srv.icon} alt={srv.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : (
               srv.name.charAt(0).toUpperCase()
             )}
@@ -234,6 +234,8 @@ export default function UserProfilePage() {
               <img
                 src={user.banner}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -250,7 +252,7 @@ export default function UserProfilePage() {
               <div className="relative flex-shrink-0">
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                    <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     user.username.charAt(0).toUpperCase()
                   )}

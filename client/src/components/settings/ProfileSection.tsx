@@ -58,7 +58,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           onClick={() => bannerRef.current?.click()}
         >
           {bannerPreview
-            ? <img src={bannerPreview} alt="" className="w-full h-full object-cover" />
+            ? <img src={bannerPreview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : <div className="w-full h-full bg-fc-channel flex items-center justify-center">
                 <div className="text-center">
                   <Camera size={20} className="text-fc-muted mx-auto mb-1" />
@@ -95,7 +95,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
         <div className="relative">
           <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-3xl font-bold text-white overflow-hidden">
             {user.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : user.username.charAt(0).toUpperCase()}
           </div>
           <button
