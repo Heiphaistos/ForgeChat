@@ -463,7 +463,7 @@ export default function ChannelSidebar() {
               <div className="relative flex-shrink-0">
                 <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
                   {dm.avatar
-                    ? <img src={dm.avatar} alt="" className="w-full h-full object-cover" />
+                    ? <img src={dm.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : dm.username.charAt(0).toUpperCase()}
                 </div>
                 {/* Indicateur de présence coloré (vert/jaune/rouge/gris) */}
@@ -723,7 +723,7 @@ export default function ChannelSidebar() {
               <div key={p.userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80">
                 <div className="w-5 h-5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white">
                   {p.avatar
-                    ? <img src={p.avatar} alt="" className="w-full h-full object-cover" />
+                    ? <img src={p.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : p.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-[11px] truncate flex-1">{p.username}</span>
@@ -761,7 +761,7 @@ export default function ChannelSidebar() {
           >
             {server?.banner ? (
               <div className="relative h-16">
-                <img src={server.banner} alt="" className="w-full h-full object-cover" />
+                <img src={server.banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/50" />
                 <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
                   <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
@@ -770,7 +770,7 @@ export default function ChannelSidebar() {
               </div>
             ) : server?.icon ? (
               <div className="relative h-16">
-                <img src={server.icon} alt="" className="w-full h-full object-cover" />
+                <img src={server.icon} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40" />
                 <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
                   <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
