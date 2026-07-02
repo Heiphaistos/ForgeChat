@@ -408,18 +408,17 @@ pub async fn get_dm_read(
     Extension(claims): Extension<Claims>,
     Path(dm_id): Path<Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>, AppError> {
-    // Vérifier que l'user appartient au DM
-    let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
-    )
-    .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if !ok { return Err(AppError::Forbidden); }
-
     use sqlx::Row;
-    let rows = sqlx::query(
-        "SELECT user_id, last_read_at FROM dm_read_receipts WHERE dm_id=$1"
-    )
-    .bind(dm_id).fetch_all(&state.db).await?;
+    let (ok_res, rows) = tokio::join!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+        ).bind(dm_id).bind(claims.sub).fetch_one(&state.db),
+        sqlx::query(
+            "SELECT user_id, last_read_at FROM dm_read_receipts WHERE dm_id=$1"
+        ).bind(dm_id).fetch_all(&state.db),
+    );
+    if !ok_res.unwrap_or(false) { return Err(AppError::Forbidden); }
+    let rows = rows.unwrap_or_default();
     let list: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
         "user_id": r.get::<Uuid, _>("user_id"),
         "last_read_at": r.get::<DateTime<Utc>, _>("last_read_at"),
