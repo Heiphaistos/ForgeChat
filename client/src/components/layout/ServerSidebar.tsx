@@ -332,7 +332,8 @@ export default function ServerSidebar() {
   }
 
   const ServerIcon = ({ s, folderId: _folderId }: { s: any; folderId?: string }) => {
-    const hasUnread = (serverCounts[s.id] ?? 0) > 0 && serverId !== s.id
+    const muted = isServerMuted(s.id)
+    const hasUnread = (serverCounts[s.id] ?? 0) > 0 && serverId !== s.id && !muted
     return (
       <div className="relative">
         <button
@@ -355,7 +356,7 @@ export default function ServerSidebar() {
         {hasUnread && (
           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
         )}
-        {!hasUnread && isServerMuted(s.id) && (
+        {muted && (
           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
             <BellOff size={7} className="text-white" />
           </span>
