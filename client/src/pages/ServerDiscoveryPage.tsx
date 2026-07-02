@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Users, Compass, Tag } from 'lucide-react'
+import { Search, Users, Compass, Tag, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
+import { useMobile } from '../contexts/MobileContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,7 @@ export default function ServerDiscoveryPage() {
   const [sort, setSort] = useState<SortMode>('popular')
   const nav = useNavigate()
   const qc = useQueryClient()
+  const { openSidebar } = useMobile()
 
   const { data: servers = [], isLoading } = useQuery<DiscoverServer[]>({
     queryKey: ['servers', 'discover', category],
@@ -200,6 +202,17 @@ export default function ServerDiscoveryPage() {
 
   return (
     <div className="flex-1 bg-fc-chat overflow-y-auto">
+      {/* Bouton retour mobile */}
+      <div className="flex items-center gap-2 px-4 py-2 md:hidden border-b border-fc-hover flex-shrink-0">
+        <button
+          className="flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+          onClick={openSidebar}
+          aria-label="Retour"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <span className="font-semibold text-white text-sm">Découvrir</span>
+      </div>
       <div className="max-w-5xl mx-auto px-6 py-10">
         {/* En-tête */}
         <div className="text-center mb-8">
