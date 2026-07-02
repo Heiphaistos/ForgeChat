@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
-import { Users, MessageSquare, Server, Hash } from 'lucide-react'
+import { Users, MessageSquare, Server, Hash, ChevronLeft } from 'lucide-react'
+import { useMobile } from '../contexts/MobileContext'
 
 interface AdminStats {
   total_users: number
@@ -15,6 +16,7 @@ interface AdminStats {
 
 export default function AdminPage() {
   const nav = useNavigate()
+  const { openSidebar } = useMobile()
   const { data: stats, isLoading, error } = useQuery<AdminStats>({
     queryKey: ['admin-stats'],
     queryFn: () => api.get('/admin/stats').then(r => r.data),
@@ -46,12 +48,20 @@ export default function AdminPage() {
   const maxMsgs = Math.max(1, ...(stats?.messages_per_day.map(d => d.count) ?? [1]))
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 bg-fc-bg">
+    <div className="flex-1 overflow-y-auto bg-fc-bg">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px] sticky top-0 bg-fc-bg z-10">
+        <button
+          className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          onClick={openSidebar}
+          aria-label="Ouvrir le menu"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <h1 className="text-lg font-bold text-white">Dashboard Admin</h1>
+        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← Retour</button>
+      </div>
+      <div className="p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Dashboard Admin</h1>
-          <button onClick={() => nav(-1)} className="text-fc-muted hover:text-white text-sm transition">← Retour</button>
-        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {cards.map(c => (
@@ -93,6 +103,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </div>
   )

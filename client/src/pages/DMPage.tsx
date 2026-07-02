@@ -415,7 +415,7 @@ export default function DMPage() {
         e2eMode ? 'border-green-600/40 bg-green-900/10' : 'border-fc-bg'
       }`}>
         <button
-          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
           aria-label="Retour aux messages privés"
           title="Messages"
@@ -449,7 +449,7 @@ export default function DMPage() {
           <button
             onClick={toggleE2e}
             title={e2eMode ? 'Désactiver le chiffrement E2E' : 'Activer le chiffrement E2E (ECDH P-256 + AES-GCM)'}
-            className={`p-1.5 rounded transition ${
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${
               e2eMode
                 ? 'text-green-400 bg-green-900/30 hover:bg-green-900/50 hover:text-green-300'
                 : 'text-fc-muted hover:text-white hover:bg-fc-hover'
@@ -464,7 +464,7 @@ export default function DMPage() {
               startCall('voice').catch(() => toast.error('Accès au micro refusé'))
             }}
             disabled={!partnerId && callState === 'idle'}
-            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
           >
             <Phone size={18} />
@@ -476,14 +476,14 @@ export default function DMPage() {
               startCall('video').catch(() => toast.error('Accès caméra refusé'))
             }}
             disabled={!partnerId && callState === 'idle'}
-            className={`p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
           >
             <Video size={18} />
           </button>
           <button
             onClick={() => setShowSearch(s => !s)}
-            className={`p-1.5 rounded transition ${showSearch ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showSearch ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
             title="Rechercher dans la conversation"
           >
             <Search size={18} />

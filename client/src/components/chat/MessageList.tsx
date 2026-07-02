@@ -1047,11 +1047,24 @@ export default function MessageList({
           className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm overflow-y-auto"
           style={{
             left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 220)),
-            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 420)),
-            maxHeight: Math.min(420, window.innerHeight - 16),
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 440)),
+            maxHeight: Math.min(440, window.innerHeight - 16),
           }}
           onClick={e => e.stopPropagation()}
         >
+          {/* Barre d'emojis rapides — particulièrement utile sur mobile */}
+          <div className="flex items-center justify-around px-2 py-2 border-b border-fc-hover/50">
+            {QUICK_EMOJIS.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => { toggleReaction(contextMenu.msg.id, emoji); setContextMenu(null) }}
+                className="text-lg hover:scale-125 transition-transform active:scale-110 p-0.5 rounded"
+                title={`Réagir ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
           {contextMenu.msg.content && (
             <button
               onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null) }}

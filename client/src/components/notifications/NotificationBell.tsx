@@ -60,7 +60,7 @@ export default function NotificationBell() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className={`p-1.5 rounded hover:bg-fc-hover transition relative ${
+        className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition relative ${
           open ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white'
         }`}
         title={`Mentions (${count})`}

@@ -459,7 +459,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px]">
         <button
-          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
           aria-label="Retour aux canaux"
         >
