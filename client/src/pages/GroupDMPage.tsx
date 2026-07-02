@@ -601,7 +601,7 @@ export default function GroupDMPage() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">
-                      <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition">
+                      <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-0.5 transition">
                         <div className="relative">
                           <button
                             onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}

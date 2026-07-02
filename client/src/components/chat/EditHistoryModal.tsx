@@ -28,7 +28,7 @@ export default function EditHistoryModal({ messageId, serverId, channelId, onClo
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
+        className="w-full max-w-lg max-h-[90dvh] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
