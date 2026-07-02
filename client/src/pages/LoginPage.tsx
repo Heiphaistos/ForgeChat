@@ -61,6 +61,14 @@ export default function LoginPage() {
         <p className="text-center mt-3">
           <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
         </p>
+        <p className="text-center mt-2">
+          <a
+            href="https://heiphaistos.org/legal/" target="_blank" rel="noopener noreferrer"
+            className="text-xs text-fc-muted hover:text-white transition"
+          >
+            Mentions légales & confidentialité
+          </a>
+        </p>
       </div>
     </div>
   )
