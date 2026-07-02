@@ -65,6 +65,8 @@ function AppInner() {
   const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
+  const toggleMute = useVoice(s => s.toggleMute)
+  const toggleDeafen = useVoice(s => s.toggleDeafen)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false)
@@ -677,6 +679,16 @@ function AppInner() {
         e.preventDefault()
         useUnread.getState().markAllRead()
       }
+      // Ctrl+Shift+M — couper/réactiver le micro (vocal)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault()
+        toggleMute()
+      }
+      // Ctrl+Shift+D — couper/réactiver le son (vocal)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault()
+        toggleDeafen()
+      }
       // Ctrl+F — ouvrir la recherche dans le canal courant
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'f') {
         const isChannel = /\/servers\/[^/]+\/channels\/[^/]+/.test(window.location.pathname)
@@ -709,7 +721,7 @@ function AppInner() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [nav, qcHook])
+  }, [nav, qcHook, toggleMute, toggleDeafen])
 
   return (
     <>

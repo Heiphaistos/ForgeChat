@@ -49,6 +49,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['Espace'], description: 'Push-to-Talk (maintenir)' },
       { keys: ['V'], description: 'Toggle caméra' },
       { keys: ['S'], description: 'Screen share / Go Live' },
+      { keys: ['Ctrl', 'Shift', 'M'], description: 'Couper / Réactiver le micro' },
+      { keys: ['Ctrl', 'Shift', 'D'], description: 'Couper / Réactiver le son' },
     ],
   },
   {
