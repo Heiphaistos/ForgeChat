@@ -169,6 +169,25 @@ function AppInner() {
     return onOpen(() => { fetchUnread() })
   }, [user?.id, onOpen, fetchUnread])
 
+  // Forcer reconnexion WS immédiate quand l'onglet redevient visible
+  // (évite le backoff excessif si le navigateur a suspendu la connexion)
+  useEffect(() => {
+    if (!user) return
+    const handler = () => {
+      if (document.visibilityState === 'visible') {
+        const { socket, _reconnectTimeout } = useWs.getState()
+        const isDisconnected = !socket || socket.readyState === WebSocket.CLOSED
+        if (isDisconnected) {
+          if (_reconnectTimeout) clearTimeout(_reconnectTimeout)
+          useWs.setState({ _reconnectAttempts: 0, _reconnectTimeout: null })
+          useWs.getState().connect()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [user?.id])
+
   // Appliquer les préférences au démarrage (a11y, apparence, streamer mode)
   useEffect(() => {
     if (!user) return
