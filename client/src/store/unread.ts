@@ -63,11 +63,7 @@ export const useUnread = create<UnreadState>((set, get) => ({
   },
 
   markAllRead: () => {
-    const channelIds = Object.keys(get().counts)
     set({ counts: {}, serverCounts: {} })
-    // fire-and-forget per channel (no bulk endpoint)
-    for (const id of channelIds) {
-      api.post(`/channels/${id}/read`).catch(() => {})
-    }
+    api.post('/unread/mark-all').catch(() => {})
   },
 }))
