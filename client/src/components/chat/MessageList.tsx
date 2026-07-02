@@ -403,9 +403,11 @@ export default function MessageList({
           const msgTs = new Date(msg.created_at).getTime()
           const prevTs = prev ? new Date(prev.created_at).getTime() : 0
           const isFirstUnread = msgTs >= channelOpenTime.current && prevTs < channelOpenTime.current
+          // Animer uniquement les messages qui arrivent en temps réel (après le chargement initial)
+          const isLiveMsg = initialScrollDone.current && msgTs >= channelOpenTime.current
 
           return (
-            <div key={msg.id}>
+            <div key={msg.id} className={isLiveMsg ? 'msg-enter' : undefined}>
             {isFirstUnread && (
               <div className="flex items-center gap-2 my-2 px-2 select-none">
                 <div className="flex-1 h-px bg-red-400/60" />
