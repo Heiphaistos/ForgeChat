@@ -30,7 +30,7 @@ export default function InvitePage() {
 
   if (loading || loadingInfo) {
     return (
-      <div className="flex items-center justify-center h-screen bg-fc-bg">
+      <div className="flex items-center justify-center min-h-screen bg-fc-bg">
         <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -38,7 +38,7 @@ export default function InvitePage() {
 
   if (!serverInfo) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-fc-bg text-fc-muted">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-fc-bg text-fc-muted px-4 text-center">
         <p className="text-xl font-semibold text-white mb-2">Invitation invalide</p>
         <p className="mb-4">Ce lien a expiré ou n'existe pas.</p>
         <button onClick={() => nav('/')} className="px-4 py-2 bg-fc-accent text-white rounded text-sm">
@@ -49,11 +49,11 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen bg-fc-bg">
+    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
       <div className="bg-fc-channel rounded-lg p-8 w-full max-w-sm shadow-2xl text-center">
-        <div className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4">
+        <div className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4 overflow-hidden">
           {serverInfo.server.icon
-            ? <img src={serverInfo.server.icon} alt="" className="w-full h-full rounded-2xl object-cover" />
+            ? <img src={serverInfo.server.icon} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
             : serverInfo.server.name.charAt(0)}
         </div>
         <p className="text-fc-muted text-sm mb-1">Tu as été invité(e) à rejoindre</p>
