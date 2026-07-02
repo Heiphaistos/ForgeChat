@@ -96,6 +96,7 @@ export default function TicketsPage() {
     mutationFn: ({ id, ...data }: { id: string; status?: string; priority?: string }) =>
       api.patch(`/servers/${serverId}/tickets/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', serverId] }),
+    onError: () => toast.error('Erreur lors de la mise à jour'),
   })
 
   const visibleTickets = filterCategoryId

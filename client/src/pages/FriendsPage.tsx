@@ -166,6 +166,7 @@ export default function FriendsPage() {
   const decline = useMutation({
     mutationFn: (id: string) => api.post(`/friends/${id}/decline`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends'] }),
+    onError: () => toast.error('Erreur lors du refus'),
   })
 
   const remove = useMutation({
@@ -174,6 +175,7 @@ export default function FriendsPage() {
       qc.invalidateQueries({ queryKey: ['friends'] })
       toast.success('Ami supprimé')
     },
+    onError: () => toast.error('Erreur lors de la suppression'),
   })
 
   const blockUser = useMutation({
@@ -183,11 +185,13 @@ export default function FriendsPage() {
       qc.invalidateQueries({ queryKey: ['friends_blocked'] })
       toast.success('Utilisateur bloqué')
     },
+    onError: () => toast.error('Erreur lors du blocage'),
   })
 
   const unblockUser = useMutation({
     mutationFn: (userId: string) => api.delete(`/friends/block/${userId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends_blocked'] }),
+    onError: () => toast.error('Erreur lors du déblocage'),
   })
 
   const openDm = async (userId: string) => {
