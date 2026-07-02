@@ -350,7 +350,7 @@ export default function ServerSidebar() {
           title={s.name}
         >
           {s.icon
-            ? <img src={s.icon} alt={s.name} className="w-full h-full rounded-full object-cover" />
+            ? <img src={s.icon} alt={s.name} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : s.name.charAt(0).toUpperCase()}
         </button>
         {hasUnread && (
