@@ -17,6 +17,7 @@ export default function SessionsSection() {
   const { data: sessions = [] } = useQuery<Session[]>({
     queryKey: ['sessions'],
     queryFn: () => api.get('/users/me/sessions').then(r => r.data),
+    staleTime: 60_000,
   })
   const revoke = useMutation({
     mutationFn: (id: string) => api.delete(`/users/me/sessions/${id}`),

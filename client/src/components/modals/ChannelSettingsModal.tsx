@@ -95,11 +95,13 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
   const { data: roles = [] } = useQuery({
     queryKey: ['roles', serverId],
     queryFn: () => api.get(`/servers/${serverId}/roles`).then(r => r.data),
+    staleTime: 60_000,
   })
 
   const { data: overrides = [], refetch } = useQuery({
     queryKey: ['channel-permissions', channel.id],
     queryFn: () => api.get(`/channels/${channel.id}/permissions`).then(r => r.data).catch(() => []),
+    staleTime: 30_000,
   })
 
   const saveOverride = useMutation({

@@ -80,6 +80,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     queryKey: ['server', serverId],
     queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data),
     enabled: !!serverId,
+    staleTime: 60_000,
   })
 
   const { data: messages = [] } = useQuery({

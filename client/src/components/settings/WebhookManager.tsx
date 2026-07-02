@@ -39,6 +39,7 @@ export default function WebhookManager({ serverId }: WebhookManagerProps) {
   const { data: channels = [] } = useQuery<Channel[]>({
     queryKey: ['server_channels', serverId],
     queryFn: () => api.get(`/servers/${serverId}/channels`).then(r => r.data),
+    staleTime: 60_000,
   })
 
   const textChannels = channels.filter(c => c.type === 'text' || c.type === 'announcement')
@@ -46,6 +47,7 @@ export default function WebhookManager({ serverId }: WebhookManagerProps) {
   const { data: webhooks = [], isLoading } = useQuery<WebhookItem[]>({
     queryKey: ['webhooks', serverId],
     queryFn: () => api.get(`/servers/${serverId}/webhooks`).then(r => r.data),
+    staleTime: 60_000,
   })
 
   const createWebhook = useMutation({
