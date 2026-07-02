@@ -60,7 +60,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 function AppInner() {
   const { fetchMe, user, updateMe } = useAuth()
-  const { connect, disconnect, on } = useWs()
+  const { connect, disconnect, on, onOpen } = useWs()
   const setStatus = usePresence(s => s.setStatus)
   const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
@@ -156,6 +156,12 @@ function AppInner() {
     fetchChannelNotif()
     return () => disconnect()
   }, [user?.id])
+
+  // Re-fetch unread counts on every WS reconnect (catches messages missed during disconnect)
+  useEffect(() => {
+    if (!user) return
+    return onOpen(() => { fetchUnread() })
+  }, [user?.id, onOpen, fetchUnread])
 
   // Appliquer les préférences au démarrage (a11y, apparence, streamer mode)
   useEffect(() => {
