@@ -176,28 +176,51 @@ pub async fn get_dms(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
 
-    let dms = sqlx::query(
-        "WITH last_msg AS (
-           SELECT dm_channel_id, MAX(created_at) AS last_message_at
-           FROM dm_messages
-           GROUP BY dm_channel_id
-         )
-         SELECT dc.id,
-           CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
-           u.username, u.discriminator, u.avatar, u.status,
-           lm.last_message_at,
-           COALESCE(dus.muted, FALSE) AS is_muted,
-           COALESCE(dus.archived, FALSE) AS is_archived
-         FROM dm_channels dc
-         JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
-         LEFT JOIN last_msg lm ON lm.dm_channel_id = dc.id
-         LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = dc.id AND dus.user_id = $1
-         WHERE dc.user1_id=$1 OR dc.user2_id=$1
-         ORDER BY COALESCE(lm.last_message_at, dc.created_at) DESC"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await?;
+    // Paralléliser la récupération des DMs 1:1 et Group DMs
+    let (dms, group_dms) = tokio::try_join!(
+        sqlx::query(
+            "WITH last_msg AS (
+               SELECT dm_channel_id, MAX(created_at) AS last_message_at
+               FROM dm_messages
+               GROUP BY dm_channel_id
+             )
+             SELECT dc.id,
+               CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
+               u.username, u.discriminator, u.avatar, u.status,
+               lm.last_message_at,
+               COALESCE(dus.muted, FALSE) AS is_muted,
+               COALESCE(dus.archived, FALSE) AS is_archived
+             FROM dm_channels dc
+             JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
+             LEFT JOIN last_msg lm ON lm.dm_channel_id = dc.id
+             LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = dc.id AND dus.user_id = $1
+             WHERE dc.user1_id=$1 OR dc.user2_id=$1
+             ORDER BY COALESCE(lm.last_message_at, dc.created_at) DESC"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "WITH last_gdm AS (
+               SELECT dm_id, MAX(created_at) AS last_message_at
+               FROM group_dm_messages
+               GROUP BY dm_id
+             ),
+             member_counts AS (
+               SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
+             )
+             SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at,
+                    COALESCE(dus.muted, FALSE) AS is_muted,
+                    COALESCE(dus.archived, FALSE) AS is_archived
+             FROM group_dm_channels g
+             JOIN group_dm_members gm ON gm.dm_id = g.id AND gm.user_id = $1
+             LEFT JOIN last_gdm lgm ON lgm.dm_id = g.id
+             LEFT JOIN member_counts mc ON mc.dm_id = g.id
+             LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = g.id AND dus.user_id = $1
+             ORDER BY COALESCE(lgm.last_message_at, g.created_at) DESC"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+    )?;
 
     let mut result: Vec<serde_json::Value> = dms.iter().map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
@@ -211,30 +234,6 @@ pub async fn get_dms(
         "is_archived": r.get::<bool, _>("is_archived"),
         "is_group": false,
     })).collect();
-
-    // Inclure les Group DMs
-    let group_dms = sqlx::query(
-        "WITH last_gdm AS (
-           SELECT dm_id, MAX(created_at) AS last_message_at
-           FROM group_dm_messages
-           GROUP BY dm_id
-         ),
-         member_counts AS (
-           SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
-         )
-         SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at,
-                COALESCE(dus.muted, FALSE) AS is_muted,
-                COALESCE(dus.archived, FALSE) AS is_archived
-         FROM group_dm_channels g
-         JOIN group_dm_members gm ON gm.dm_id = g.id AND gm.user_id = $1
-         LEFT JOIN last_gdm lgm ON lgm.dm_id = g.id
-         LEFT JOIN member_counts mc ON mc.dm_id = g.id
-         LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = g.id AND dus.user_id = $1
-         ORDER BY COALESCE(lgm.last_message_at, g.created_at) DESC"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await?;
 
     for r in &group_dms {
         result.push(serde_json::json!({
