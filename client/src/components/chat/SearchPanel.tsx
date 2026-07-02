@@ -61,7 +61,10 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            onKeyDown={e => {
+              if (e.key === 'Enter') handleSearch()
+              else if (e.key === 'Escape') onClose()
+            }}
             placeholder="Rechercher dans #..."
             className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
             autoFocus
