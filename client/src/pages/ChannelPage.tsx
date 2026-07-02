@@ -531,6 +531,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}
               initialHighlightId={highlightMessageId}
+              canManageMessages={isOwner || !!(myPerms & ADMINISTRATOR_BIT) || !!(myPerms & MANAGE_MESSAGES_BIT)}
             />
 
             {/* Countdown slowmode */}

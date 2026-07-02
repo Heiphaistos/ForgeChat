@@ -33,6 +33,7 @@ interface Props {
   onReply?: (msg: any) => void
   onLoadMore?: () => Promise<boolean>
   initialHighlightId?: string | null
+  canManageMessages?: boolean
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
@@ -84,6 +85,7 @@ export default function MessageList({
   onReply,
   onLoadMore,
   initialHighlightId,
+  canManageMessages = false,
 }: Props) {
   const { user } = useAuth()
   const nav = useNavigate()
@@ -1100,15 +1102,17 @@ export default function MessageList({
             </button>
           )}
 
-          {contextMenu.msg.author_id === user?.id && (
+          {(contextMenu.msg.author_id === user?.id || canManageMessages) && (
             <>
               <div className="border-t border-fc-hover my-1" />
-              <button
-                onClick={() => { startEdit(contextMenu.msg.id, contextMenu.msg.content ?? ''); setContextMenu(null) }}
-                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
-              >
-                <Pencil size={14} /> Modifier
-              </button>
+              {contextMenu.msg.author_id === user?.id && (
+                <button
+                  onClick={() => { startEdit(contextMenu.msg.id, contextMenu.msg.content ?? ''); setContextMenu(null) }}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+                >
+                  <Pencil size={14} /> Modifier
+                </button>
+              )}
               <button
                 onClick={() => { onDeleteMessage(contextMenu.msg.id); setContextMenu(null) }}
                 className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-red"
