@@ -582,10 +582,14 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
-  // Réinitialiser le contenu et les fichiers quand le canal change
+  // Réinitialiser le contenu, fichiers et options transientes quand le canal change
   useEffect(() => {
     setContent(drafts[channelId] ?? '')
     setFiles([])
+    setMsgTtl(null)
+    setScheduledAt('')
+    setShowTtlPicker(false)
+    setShowScheduled(false)
   }, [channelId])
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
