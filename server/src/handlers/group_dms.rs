@@ -65,10 +65,16 @@ pub async fn create_group_dm(
     .into_iter()
     .collect();
 
-    for uid in &members {
-        if blockers.contains(uid) { continue; }
-        let _ = sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
-            .bind(group_id).bind(uid).execute(&state.db).await;
+    let allowed: Vec<Uuid> = members.iter().filter(|u| !blockers.contains(u)).copied().collect();
+    if !allowed.is_empty() {
+        let _ = sqlx::query(
+            "INSERT INTO group_dm_members (dm_id, user_id)
+             SELECT $1, UNNEST($2::uuid[]) ON CONFLICT DO NOTHING"
+        )
+        .bind(group_id)
+        .bind(&allowed)
+        .execute(&state.db)
+        .await;
     }
 
     // Notifier tous les membres de la création du groupe

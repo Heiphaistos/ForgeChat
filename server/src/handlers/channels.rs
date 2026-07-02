@@ -330,19 +330,18 @@ pub async fn reorder_channels(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
 
-    let mut tx = state.db.begin().await?;
-    for (idx, channel_id) in req.channel_ids.iter().enumerate() {
-        sqlx::query(
-            "UPDATE channels SET position=$1 WHERE id=$2 AND server_id=$3"
-        )
-        .bind(idx as i32)
-        .bind(channel_id)
-        .bind(server_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| AppError::Internal(e.into()))?;
-    }
-    tx.commit().await?;
+    let positions: Vec<i32> = (0..req.channel_ids.len() as i32).collect();
+    sqlx::query(
+        "UPDATE channels SET position = v.pos
+         FROM (SELECT UNNEST($1::uuid[]) AS id, UNNEST($2::int[]) AS pos) AS v
+         WHERE channels.id = v.id AND channels.server_id = $3"
+    )
+    .bind(&req.channel_ids)
+    .bind(&positions)
+    .bind(server_id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| AppError::Internal(e.into()))?;
 
     let event = serde_json::json!({
         "type": "CHANNELS_REORDER",
