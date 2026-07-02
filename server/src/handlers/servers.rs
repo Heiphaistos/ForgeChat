@@ -91,33 +91,50 @@ pub async fn get_server(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
 
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id=$1")
+    use sqlx::Row;
+
+    // Paralléliser les 5 queries indépendantes
+    let (server_opt, channels, hidden_rows, roles, member_row, my_role_ids) = tokio::try_join!(
+        sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id=$1")
+            .bind(server_id)
+            .fetch_optional(&state.db),
+        sqlx::query_as::<_, crate::models::channel::Channel>(
+            "SELECT * FROM channels WHERE server_id=$1 ORDER BY position"
+        )
         .bind(server_id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Serveur introuvable".into()))?;
-
-    let channels = sqlx::query_as::<_, crate::models::channel::Channel>(
-        "SELECT * FROM channels WHERE server_id=$1 ORDER BY position"
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
-
-    let hidden_ids: std::collections::HashSet<Uuid> = {
-        use sqlx::Row;
+        .fetch_all(&state.db),
         sqlx::query(
             "SELECT channel_id FROM hidden_channels WHERE user_id=$1 \
              AND channel_id IN (SELECT id FROM channels WHERE server_id=$2)"
         )
         .bind(claims.sub)
         .bind(server_id)
-        .fetch_all(&state.db)
-        .await?
+        .fetch_all(&state.db),
+        sqlx::query_as::<_, crate::models::role::Role>(
+            "SELECT * FROM roles WHERE server_id=$1 ORDER BY position DESC"
+        )
+        .bind(server_id)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT verified_at FROM server_members WHERE user_id=$1 AND server_id=$2"
+        )
+        .bind(claims.sub)
+        .bind(server_id)
+        .fetch_optional(&state.db),
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT role_id FROM member_roles WHERE user_id=$1 AND server_id=$2"
+        )
+        .bind(claims.sub)
+        .bind(server_id)
+        .fetch_all(&state.db),
+    )?;
+
+    let server = server_opt.ok_or_else(|| AppError::NotFound("Serveur introuvable".into()))?;
+
+    let hidden_ids: std::collections::HashSet<Uuid> = hidden_rows
         .iter()
         .map(|r| r.get::<Uuid, _>("channel_id"))
-        .collect()
-    };
+        .collect();
 
     let channels_json: Vec<serde_json::Value> = channels.iter().map(|c| {
         let mut v = serde_json::to_value(c).unwrap_or_default();
@@ -127,33 +144,9 @@ pub async fn get_server(
         v
     }).collect();
 
-    let roles = sqlx::query_as::<_, crate::models::role::Role>(
-        "SELECT * FROM roles WHERE server_id=$1 ORDER BY position DESC"
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
-
-    // Statut du membre courant + ses rôles pour les permissions frontend
-    use sqlx::Row;
-    let member = sqlx::query(
-        "SELECT verified_at FROM server_members WHERE user_id=$1 AND server_id=$2"
-    )
-    .bind(claims.sub)
-    .bind(server_id)
-    .fetch_optional(&state.db)
-    .await?
-    .map(|r| {
+    let member = member_row.map(|r| {
         serde_json::json!({ "verified_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("verified_at") })
     });
-
-    let my_role_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT role_id FROM member_roles WHERE user_id=$1 AND server_id=$2"
-    )
-    .bind(claims.sub)
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?;
 
     Ok(Json(serde_json::json!({
         "server": server,
