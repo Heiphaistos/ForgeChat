@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { Trash2, Copy } from 'lucide-react'
+import { Trash2, Copy, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -16,6 +16,7 @@ export default function AdvancedSection({ user }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
   const [deletePassword, setDeletePassword] = useState('')
+  const [showDeletePw, setShowDeletePw] = useState(false)
 
   const deleteAccount = useMutation({
     mutationFn: () => api.delete('/users/me', { data: { password: deletePassword } }),
@@ -78,13 +79,24 @@ export default function AdvancedSection({ user }: Props) {
               placeholder="Nom d'utilisateur"
               className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
             />
-            <input
-              type="password"
-              value={deletePassword}
-              onChange={e => setDeletePassword(e.target.value)}
-              placeholder="Mot de passe"
-              className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showDeletePw ? 'text' : 'password'}
+                value={deletePassword}
+                onChange={e => setDeletePassword(e.target.value)}
+                placeholder="Mot de passe"
+                autoComplete="current-password"
+                className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-fc-red outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowDeletePw(v => !v)}
+                tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white transition"
+              >
+                {showDeletePw ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
             <div className="flex gap-2">
               <button onClick={resetDelete}
                 className="flex-1 py-2 border border-fc-hover text-fc-muted rounded-lg text-sm hover:text-white transition">
