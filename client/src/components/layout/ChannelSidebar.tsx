@@ -668,7 +668,7 @@ export default function ChannelSidebar() {
           {isMeConnected && (
             <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
           )}
-          {isChannelMuted(ch.id) && !(unreadCounts[ch.id] > 0 && channelId !== ch.id) && (
+          {isChannelMuted(ch.id) && (
             <span title="Notifications désactivées" className="flex-shrink-0">
               <BellOff size={11} className="text-fc-muted/50" />
             </span>
