@@ -28,8 +28,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       const w = ref.current.offsetWidth || 200
       const h = ref.current.offsetHeight || 40 * items.length
       setPos({
-        x: Math.min(x, window.innerWidth - w - 8),
-        y: Math.min(y, window.innerHeight - h - 8),
+        x: Math.max(8, Math.min(x, window.innerWidth - w - 8)),
+        y: Math.max(8, Math.min(y, window.innerHeight - h - 8)),
       })
     }
   }, [x, y])

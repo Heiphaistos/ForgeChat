@@ -107,13 +107,13 @@ export default function UserProfileCard({
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
-  // Positionner en restant dans l'écran
+  // Positionner en restant dans l'écran (clamp sur les 4 bords)
   const style: React.CSSProperties = { position: 'fixed', zIndex: 9999 }
   if (position) {
     const CARD_W = 320
     const CARD_H = 480
-    style.left = Math.min(position.x, window.innerWidth - CARD_W - 8)
-    style.top = Math.min(position.y, window.innerHeight - CARD_H - 8)
+    style.left = Math.max(8, Math.min(position.x, window.innerWidth - CARD_W - 8))
+    style.top = Math.max(8, Math.min(position.y, window.innerHeight - CARD_H - 8))
   }
 
   const liveStatus = getStatus(userId)

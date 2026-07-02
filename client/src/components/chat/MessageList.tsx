@@ -999,7 +999,7 @@ export default function MessageList({
       {dblClickPopover && (
         <div
           className="fixed z-50"
-          style={{ left: dblClickPopover.x - 80, top: dblClickPopover.y - 48 }}
+          style={{ left: Math.max(8, Math.min(dblClickPopover.x - 80, window.innerWidth - 200)), top: Math.max(8, dblClickPopover.y - 48) }}
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center gap-1 bg-fc-bg border border-fc-hover rounded-full shadow-xl px-2 py-1.5">
@@ -1040,8 +1040,8 @@ export default function MessageList({
         <div
           className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm overflow-y-auto"
           style={{
-            left: Math.min(contextMenu.x, window.innerWidth - 220),
-            top: Math.min(contextMenu.y, window.innerHeight - 420),
+            left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 220)),
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 420)),
             maxHeight: Math.min(420, window.innerHeight - 16),
           }}
           onClick={e => e.stopPropagation()}

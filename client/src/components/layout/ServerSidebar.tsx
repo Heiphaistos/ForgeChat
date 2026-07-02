@@ -498,7 +498,7 @@ export default function ServerSidebar() {
           <div
             ref={contextMenuRef}
             className="fixed z-[100] bg-fc-channel border border-fc-hover rounded-lg shadow-2xl py-1 min-w-[200px]"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
+            style={{ top: Math.min(contextMenu.y, window.innerHeight - 280), left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 210)) }}
           >
             {/* Actions serveur */}
             <button
