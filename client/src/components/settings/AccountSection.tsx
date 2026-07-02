@@ -78,8 +78,8 @@ export default function AccountSection({ user, updateMe }: Props) {
         {showPwForm && (
           <div className="space-y-3">
             {[
-              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld) },
-              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew) },
+              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld), autoComplete: 'current-password' },
+              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew), autoComplete: 'new-password' },
             ].map(field => (
               <Field key={field.label} label={field.label}>
                 <div className="relative">
@@ -87,6 +87,7 @@ export default function AccountSection({ user, updateMe }: Props) {
                     type={field.show ? 'text' : 'password'}
                     value={field.value}
                     onChange={e => field.setValue(e.target.value)}
+                    autoComplete={field.autoComplete}
                     className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-fc-accent outline-none"
                   />
                   <button
