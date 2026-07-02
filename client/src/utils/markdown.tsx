@@ -45,6 +45,50 @@ export function renderMarkdown(text: string, customEmojis?: Record<string, strin
       continue
     }
 
+    // Headers # / ## / ###
+    if (line.startsWith('### ')) {
+      elements.push(<h3 key={i} className="text-base font-semibold text-white mt-1 mb-0.5">{inlineMarkdown(line.slice(4), customEmojis)}</h3>)
+      i++; continue
+    }
+    if (line.startsWith('## ')) {
+      elements.push(<h2 key={i} className="text-lg font-bold text-white mt-1 mb-0.5">{inlineMarkdown(line.slice(3), customEmojis)}</h2>)
+      i++; continue
+    }
+    if (line.startsWith('# ')) {
+      elements.push(<h1 key={i} className="text-xl font-bold text-white mt-1 mb-0.5">{inlineMarkdown(line.slice(2), customEmojis)}</h1>)
+      i++; continue
+    }
+
+    // Liste à puces - / *
+    if (/^[*-] /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^[*-] /.test(lines[i])) {
+        items.push(lines[i].slice(2))
+        i++
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="list-disc list-inside my-0.5 space-y-0.5 pl-1">
+          {items.map((item, idx) => <li key={idx}>{inlineMarkdown(item, customEmojis)}</li>)}
+        </ul>
+      )
+      continue
+    }
+
+    // Liste numérotée 1. 2. …
+    if (/^\d+\. /.test(line)) {
+      const items: string[] = []
+      while (i < lines.length && /^\d+\. /.test(lines[i])) {
+        items.push(lines[i].replace(/^\d+\. /, ''))
+        i++
+      }
+      elements.push(
+        <ol key={`ol-${i}`} className="list-decimal list-inside my-0.5 space-y-0.5 pl-1">
+          {items.map((item, idx) => <li key={idx}>{inlineMarkdown(item, customEmojis)}</li>)}
+        </ol>
+      )
+      continue
+    }
+
     // Ligne vide
     if (line.trim() === '') {
       elements.push(<br key={i} />)
