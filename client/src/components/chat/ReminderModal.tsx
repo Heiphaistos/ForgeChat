@@ -3,6 +3,7 @@ import { Bell, X } from 'lucide-react'
 import { addMinutes, addHours, addDays, setHours, setMinutes, setSeconds } from 'date-fns'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const PRESETS = [
   {
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export default function ReminderModal({ messageId, onClose }: Props) {
+  useEscapeKey(onClose)
   const [custom, setCustom] = useState('')
   const [loading, setLoading] = useState(false)
 

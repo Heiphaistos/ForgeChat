@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { X, History } from 'lucide-react'
 import api from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   messageId: string
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function EditHistoryModal({ messageId, serverId, channelId, onClose }: Props) {
+  useEscapeKey(onClose)
   const { formatTs } = useFormatDate()
   const { data: edits = [], isLoading } = useQuery<{ content: string; edited_at: string }[]>({
     queryKey: ['message_edits', messageId],

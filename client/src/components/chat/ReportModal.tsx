@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const REASONS = [
   { value: 'spam', label: '🚫 Spam' },
@@ -19,6 +20,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
+  useEscapeKey(onClose)
 
   const submit = async () => {
     if (!reason) { toast.error('Choisissez une raison'); return }

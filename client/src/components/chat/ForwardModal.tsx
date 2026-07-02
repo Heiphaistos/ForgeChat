@@ -3,6 +3,7 @@ import { X, Search, Send, ChevronDown, ChevronRight, Hash } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   messageId: string
@@ -25,6 +26,7 @@ interface Channel {
 }
 
 export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, onClose }: Props) {
+  useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set([sourceServerId]))
