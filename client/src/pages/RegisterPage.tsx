@@ -124,6 +124,16 @@ export default function RegisterPage() {
           >
             {loading ? 'Création...' : 'Créer un compte'}
           </button>
+          <p className="text-xs text-fc-muted text-center mt-3">
+            En créant un compte, vous acceptez les{' '}
+            <a
+              href="https://heiphaistos.org/legal/" target="_blank" rel="noopener noreferrer"
+              className="text-fc-accent hover:underline"
+            >
+              conditions d'utilisation et la politique de confidentialité
+            </a>
+            .
+          </p>
         </form>
 
         <p className="text-fc-muted text-sm text-center mt-4">
