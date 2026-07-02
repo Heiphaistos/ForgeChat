@@ -201,6 +201,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showSlash, setShowSlash] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
   const [slashIndex, setSlashIndex] = useState(0)
+  // Inline link popup (replaces window.prompt)
+  const [showLinkPopup, setShowLinkPopup] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('https://')
+  const [linkSelection, setLinkSelection] = useState<{ start: number; end: number; text: string }>({ start: 0, end: 0, text: '' })
   // Emoji autocomplete
   const [showEmojiAuto, setShowEmojiAuto] = useState(false)
   const [emojiAutoQuery, setEmojiAutoQuery] = useState('')
@@ -516,14 +520,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const insertLink = () => {
     const ta = textareaRef.current
     if (!ta) return
-    const selected = content.slice(ta.selectionStart, ta.selectionEnd) || 'texte'
-    const url = window.prompt('URL du lien :', 'https://')
-    if (!url) return
     const start = ta.selectionStart
     const end = ta.selectionEnd
-    const newContent = content.slice(0, start) + `[${selected}](${url})` + content.slice(end)
+    const text = content.slice(start, end) || 'texte'
+    setLinkSelection({ start, end, text })
+    setLinkUrl('https://')
+    setShowLinkPopup(true)
+  }
+
+  const confirmInsertLink = () => {
+    if (!linkUrl || linkUrl === 'https://') return
+    const { start, end, text } = linkSelection
+    const newContent = content.slice(0, start) + `[${text}](${linkUrl})` + content.slice(end)
     setContent(newContent)
-    setTimeout(() => ta.focus(), 0)
+    setShowLinkPopup(false)
+    setTimeout(() => textareaRef.current?.focus(), 0)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -921,6 +932,24 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <div className="w-px h-4 bg-fc-hover mx-0.5" />
           <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
         </div>
+
+        {/* Popup URL inline */}
+        {showLinkPopup && (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-fc-bg border border-fc-hover rounded-lg mx-2 mb-1">
+            <Link size={12} className="text-fc-muted flex-shrink-0" />
+            <input
+              autoFocus
+              type="url"
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmInsertLink() } if (e.key === 'Escape') setShowLinkPopup(false) }}
+              placeholder="https://..."
+              className="flex-1 bg-transparent text-white text-xs outline-none placeholder-fc-muted min-w-0"
+            />
+            <button onClick={confirmInsertLink} className="px-2 py-0.5 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition font-medium">OK</button>
+            <button onClick={() => setShowLinkPopup(false)} className="p-0.5 text-fc-muted hover:text-white transition text-xs">✕</button>
+          </div>
+        )}
 
         {/* Layout: colonne sur mobile (textarea ligne 1, boutons ligne 2) | rangée sur desktop */}
         <div className="flex flex-col md:flex-row md:items-end gap-1 md:gap-x-2 px-2 py-2">
