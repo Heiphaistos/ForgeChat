@@ -335,12 +335,19 @@ function AppInner() {
     if (user) requestPermission()
   }, [user?.id])
 
-  // Badge non-lus dans le titre de la page
+  // Badge non-lus dans le titre de la page (hors serveurs muets)
   const allUnread = useUnread(s => s.counts)
+  const allServerCounts = useUnread(s => s.serverCounts)
   useEffect(() => {
-    const total = Object.values(allUnread).reduce((sum: number, n) => sum + (n as number), 0)
+    const allTotal = Object.values(allUnread).reduce((sum, n) => sum + n, 0)
+    const serverTotal = Object.values(allServerCounts).reduce((sum, n) => sum + n, 0)
+    const dmTotal = Math.max(0, allTotal - serverTotal)
+    const unmutedServerTotal = Object.entries(allServerCounts)
+      .filter(([svId]) => !isServerMuted(svId))
+      .reduce((sum, [, n]) => sum + n, 0)
+    const total = dmTotal + unmutedServerTotal
     document.title = total > 0 ? `(${total}) ForgeChat` : 'ForgeChat'
-  }, [allUnread])
+  }, [allUnread, allServerCounts, isServerMuted])
 
   // Notifications temps réel pour les demandes d'ami
   useEffect(() => {
