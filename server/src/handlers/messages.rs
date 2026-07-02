@@ -831,23 +831,13 @@ pub async fn forward_message(
         poll_id: None,
     };
 
-    // Broadcast to destination channel's server members
-    let dest_server_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT server_id FROM channels WHERE id=$1"
-    )
-    .bind(body.channel_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten();
-    if let Some(dst_server) = dest_server_id {
-        let event = serde_json::json!({
-            "type": "MESSAGE_CREATE",
-            "server_id": dst_server,
-            "message": full_msg
-        });
-        state.broadcast_to_server_members(dst_server, event.to_string()).await;
-    }
+    // Broadcast to destination channel's server members (dest_server_id already known from earlier)
+    let event = serde_json::json!({
+        "type": "MESSAGE_CREATE",
+        "server_id": dest_server_id,
+        "message": full_msg
+    });
+    state.broadcast_to_server_members(dest_server_id, event.to_string()).await;
 
     Ok(Json(full_msg))
 }

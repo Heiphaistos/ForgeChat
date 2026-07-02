@@ -33,7 +33,7 @@ export default function FriendInvitePage() {
 
   const accept = async () => {
     if (!user) {
-      nav('/login', { state: { redirect: `/friend-invite/${code}` } })
+      nav(`/login?redirect=/friend-invite/${code}`)
       return
     }
     setAccepting(true)

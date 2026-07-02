@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
@@ -11,13 +11,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const nav = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     try {
       await login(email, password, needTotp ? totpCode : undefined)
-      nav('/friends')
+      const redirect = searchParams.get('redirect')
+      nav(redirect && redirect.startsWith('/') ? redirect : '/friends')
     } catch (err: any) {
       const msg = err.response?.data?.error ?? ''
       if (msg === 'totp_required') {
