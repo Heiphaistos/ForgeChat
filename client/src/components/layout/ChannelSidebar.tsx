@@ -6,7 +6,7 @@ import {
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
   Users, X, GripVertical, Shield, Archive, EyeOff, BellOff,
 } from 'lucide-react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import { useContextMenu } from '../ui/ContextMenu'
 import ServerBoostBanner from '../server/ServerBoostBanner'
@@ -359,10 +359,10 @@ export default function ChannelSidebar() {
     setDragOverChannelId(null)
   }, [])
 
+  const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived), [dms])
+  const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived), [dms])
+
   if (!serverId) {
-    // Séparer groupes et DMs individuels
-    const groupDms = (dms as any[]).filter(d => d.is_group && !d.is_archived)
-    const individualDms = (dms as any[]).filter(d => !d.is_group && !d.is_archived)
 
     return (
       <div className="flex-1 overflow-y-auto overscroll-y-contain p-2">
@@ -511,22 +511,24 @@ export default function ChannelSidebar() {
 
   const server = data?.server
   const allChannels: any[] = data?.channels ?? []
-  const channels: any[] = allChannels.filter((c: any) => !c.archived && !c.hidden)
-  const hiddenChannels: any[] = allChannels.filter((c: any) => c.hidden && !c.archived)
-  const archivedChannels: any[] = allChannels.filter((c: any) => c.archived)
 
-  // Déterminer si l'utilisateur courant est owner ou admin
-  const MANAGE_CHANNELS_BIT = 1 << 4
-  const ADMINISTRATOR_BIT = 1 << 31
-  const myRoleIds: string[] = data?.my_role_ids ?? []
-  const myRoles = (data?.roles ?? []).filter((r: any) => myRoleIds.includes(r.id))
-  const isOwnerOrAdmin = !!server && !!currentUser && (
-    server.owner_id === currentUser.id ||
-    myRoles.some((r: any) => {
-      const p = Number(r.permissions ?? 0)
-      return (p & ADMINISTRATOR_BIT) !== 0 || (p & MANAGE_CHANNELS_BIT) !== 0
-    })
-  )
+  const { channels, hiddenChannels, archivedChannels, isOwnerOrAdmin } = useMemo(() => {
+    const ch = allChannels.filter((c: any) => !c.archived && !c.hidden)
+    const hidden = allChannels.filter((c: any) => c.hidden && !c.archived)
+    const archived = allChannels.filter((c: any) => c.archived)
+    const MANAGE_CHANNELS_BIT = 1 << 4
+    const ADMINISTRATOR_BIT = 1 << 31
+    const myRoleIds: string[] = data?.my_role_ids ?? []
+    const myRoles = (data?.roles ?? []).filter((r: any) => myRoleIds.includes(r.id))
+    const isAdmin = !!server && !!currentUser && (
+      server.owner_id === currentUser.id ||
+      myRoles.some((r: any) => {
+        const p = Number(r.permissions ?? 0)
+        return (p & ADMINISTRATOR_BIT) !== 0 || (p & MANAGE_CHANNELS_BIT) !== 0
+      })
+    )
+    return { channels: ch, hiddenChannels: hidden, archivedChannels: archived, isOwnerOrAdmin: isAdmin }
+  }, [allChannels, data, server, currentUser?.id])
 
   const toggleGroup = (key: string) => {
     setCollapsed(prev => {
@@ -537,33 +539,28 @@ export default function ChannelSidebar() {
   }
 
   // Construire les groupes dynamiques basés sur les catégories DB
-  // Chaque catégorie regroupe ses canaux ; les canaux sans category_id vont dans "sans catégorie"
-  const categoryGroups: Array<{ key: string; label: string; channels: any[] }> = []
-
-  // Canaux rattachés à une catégorie connue
-  for (const cat of categories) {
-    const catChannels = channels.filter((c: any) => c.category_id === cat.id)
-    if (catChannels.length > 0) {
-      categoryGroups.push({ key: cat.id, label: cat.name, channels: catChannels })
+  const categoryGroups = useMemo(() => {
+    const groups: Array<{ key: string; label: string; channels: any[] }> = []
+    for (const cat of categories) {
+      const catChannels = channels.filter((c: any) => c.category_id === cat.id)
+      if (catChannels.length > 0) {
+        groups.push({ key: cat.id, label: cat.name, channels: catChannels })
+      }
     }
-  }
-
-  // Canaux sans catégorie (category_id null ou catégorie inconnue)
-  const knownCatIds = new Set(categories.map((c: any) => c.id))
-  const uncategorized = channels.filter(
-    (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
-  )
-
-  // Si pas de catégories du tout, on fallback sur l'ancien groupement par type
-  // pour que les serveurs sans catégories affichent quand même leurs canaux
-  if (categories.length === 0 && channels.length > 0) {
-    const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
-    const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
-    if (textChannels.length > 0) categoryGroups.push({ key: 'texte', label: 'Texte', channels: textChannels })
-    if (voiceChannels.length > 0) categoryGroups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
-  } else if (uncategorized.length > 0) {
-    categoryGroups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
-  }
+    const knownCatIds = new Set(categories.map((c: any) => c.id))
+    const uncategorized = channels.filter(
+      (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
+    )
+    if (categories.length === 0 && channels.length > 0) {
+      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
+      const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
+      if (textChannels.length > 0) groups.push({ key: 'texte', label: 'Texte', channels: textChannels })
+      if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
+    } else if (uncategorized.length > 0) {
+      groups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
+    }
+    return groups
+  }, [channels, categories])
 
   const handleVoiceChannelClick = (ch: any) => {
     if (ch.voice_password_hash) {
