@@ -76,6 +76,7 @@ export default function GroupDMPage() {
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -362,7 +363,7 @@ export default function GroupDMPage() {
   )
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 overflow-hidden relative">
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover bg-fc-bg/30 flex-shrink-0">
@@ -604,7 +605,7 @@ export default function GroupDMPage() {
                             <Pencil size={12} />
                           </button>
                           <button
-                            onClick={() => api.delete(`/dms/groups/${groupId}/messages/${msg.id}`).catch(() => toast.error('Impossible de supprimer'))}
+                            onClick={() => setDeleteConfirmId(msg.id)}
                             className="p-1 text-fc-muted hover:text-red-400 rounded transition"
                             title="Supprimer"
                           >
@@ -706,7 +707,7 @@ export default function GroupDMPage() {
 
       {/* Panneau membres */}
       {showMembers && (
-        <div className="absolute right-0 inset-y-0 z-20 md:relative md:inset-auto md:z-auto md:w-56 w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto py-3 panel-slide-right">
+        <div className="absolute right-0 inset-y-0 z-20 w-full md:relative md:inset-auto md:z-auto md:w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto py-3 panel-slide-right">
           <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-3 mb-2">
             Membres ({group.members.length})
           </p>
@@ -728,6 +729,34 @@ export default function GroupDMPage() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modale confirmation suppression */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] px-4" onClick={() => setDeleteConfirmId(null)}>
+          <div className="bg-fc-channel rounded-xl shadow-2xl w-full max-w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-fc-hover">
+              <h3 className="text-white font-semibold">Supprimer le message</h3>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-fc-text text-sm">Êtes-vous sûr de vouloir supprimer ce message ? Cette action est irréversible.</p>
+            </div>
+            <div className="px-5 pb-4 flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 rounded text-sm text-fc-text hover:text-white hover:bg-fc-hover transition">
+                Annuler
+              </button>
+              <button
+                onClick={() => {
+                  api.delete(`/dms/groups/${groupId}/messages/${deleteConfirmId}`).catch(() => toast.error('Impossible de supprimer'))
+                  setDeleteConfirmId(null)
+                }}
+                className="px-4 py-2 rounded text-sm font-medium bg-fc-red hover:bg-red-500 text-white transition"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
