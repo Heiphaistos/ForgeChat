@@ -168,9 +168,13 @@ function PermGroup({
 
   return (
     <div className="border border-fc-hover rounded-xl overflow-hidden mb-2">
-      <button
+      {/* div instead of button to avoid nested interactive content (invalid HTML) */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-fc-channel hover:bg-fc-hover/50 transition"
+        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-fc-channel hover:bg-fc-hover/50 transition cursor-pointer"
       >
         <div className="flex items-center gap-2">
           {open ? <ChevronDown size={14} className="text-fc-muted" /> : <ChevronRight size={14} className="text-fc-muted" />}
@@ -191,7 +195,7 @@ function PermGroup({
             >Aucun</button>
           </div>
         )}
-      </button>
+      </div>
       {open && (
         <div className="px-2 py-1.5 space-y-0.5">
           {group.perms.map(p => {
