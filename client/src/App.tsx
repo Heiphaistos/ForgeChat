@@ -13,6 +13,13 @@ import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
 
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `${r} ${g} ${b}`
+}
+
 // Imports statiques pour le chemin critique (login/register sont légers)
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -213,8 +220,9 @@ function AppInner() {
         root.style.setProperty('--fc-font-size', `${fontSize}px`)
 
         // Couleurs personnalisées
-        if (typeof d.accent_color === 'string' && d.accent_color)
-          root.style.setProperty('--fc-accent', d.accent_color)
+        if (typeof d.accent_color === 'string' && d.accent_color) {
+          root.style.setProperty('--fc-accent-rgb', hexToRgb(d.accent_color))
+        }
         if (typeof d.font_color === 'string' && d.font_color)
           root.style.setProperty('--fc-text', d.font_color)
         if (typeof d.bg_color === 'string' && d.bg_color)

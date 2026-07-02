@@ -10,7 +10,7 @@ export default {
           channel: '#232428',
           chat: '#36393f',
           input: '#40444b',
-          accent: '#5865f2',
+          accent: 'rgb(var(--fc-accent-rgb) / <alpha-value>)',
           hover: '#2c2f33',
           text: '#dcddde',
           muted: '#72767d',

@@ -3,6 +3,40 @@
 @tailwind utilities;
 @import 'highlight.js/styles/github-dark.css';
 
+/* Valeurs par défaut des CSS custom properties */
+:root {
+  --fc-accent-rgb: 88 101 242;
+  --fc-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fc-font-size: 14px;
+}
+
+/* Couleur d'accent RGB par thème (pour que bg-fc-accent/XX fonctionne) */
+[data-theme="dracula"]    { --fc-accent-rgb: 189 147 249; }
+[data-theme="nord"]       { --fc-accent-rgb: 94 129 172; }
+[data-theme="catppuccin"] { --fc-accent-rgb: 203 166 247; }
+[data-theme="gruvbox"]    { --fc-accent-rgb: 214 93 14; }
+[data-theme="tokyonight"] { --fc-accent-rgb: 122 162 247; }
+[data-theme="onedark"]    { --fc-accent-rgb: 97 175 239; }
+[data-theme="cyberpunk"]  { --fc-accent-rgb: 240 225 74; }
+[data-theme="monokai"]    { --fc-accent-rgb: 166 226 46; }
+[data-theme="solarized"]  { --fc-accent-rgb: 38 139 210; }
+[data-theme="forest"]     { --fc-accent-rgb: 108 179 64; }
+[data-theme="ocean"]      { --fc-accent-rgb: 0 212 255; }
+[data-theme="neon"]       { --fc-accent-rgb: 0 255 136; }
+[data-theme="matrix"]     { --fc-accent-rgb: 0 255 0; }
+[data-theme="rosepine"]   { --fc-accent-rgb: 235 111 146; }
+[data-theme="everforest"] { --fc-accent-rgb: 167 192 128; }
+[data-theme="kanagawa"]   { --fc-accent-rgb: 126 156 216; }
+[data-theme="midnight"]   { --fc-accent-rgb: 98 114 164; }
+[data-theme="sunset"]     { --fc-accent-rgb: 240 112 80; }
+[data-theme="coffee"]     { --fc-accent-rgb: 200 121 65; }
+[data-theme="winter"]     { --fc-accent-rgb: 52 152 219; }
+[data-theme="emerald"]    { --fc-accent-rgb: 46 204 113; }
+[data-theme="bloodmoon"]  { --fc-accent-rgb: 204 34 34; }
+[data-theme="violet"]     { --fc-accent-rgb: 155 89 182; }
+[data-theme="slate"]      { --fc-accent-rgb: 93 138 168; }
+[data-theme="retro"]      { --fc-accent-rgb: 212 136 58; }
+
 * { box-sizing: border-box; }
 
 /* Empêche le double-tap zoom sur les éléments interactifs sans bloquer le scroll */
@@ -17,7 +51,8 @@ html {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--fc-font-family);
+  font-size: var(--fc-font-size);
   background: #1a1b1e;
   color: #dcddde;
   overflow: hidden;
