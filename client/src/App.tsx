@@ -671,10 +671,30 @@ function AppInner() {
         e.preventDefault()
         useUnread.getState().markAllRead()
       }
+      // Alt+Arrow — navigation entre canaux non-lus (ou tous les canaux)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !isInput &&
+          (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault()
+        const m = window.location.pathname.match(/\/servers\/([^/]+)(?:\/channels\/([^/]+))?/)
+        if (!m) return
+        const svId = m[1]; const chId = m[2] ?? ''
+        const srvData = qcHook.getQueryData<{ channels: any[] }>(['server', svId])
+        const navChs = (srvData?.channels ?? []).filter((c: any) =>
+          !c.archived && !c.hidden && (c.type === 'text' || c.type === 'announcement')
+        )
+        if (navChs.length === 0) return
+        const unread = navChs.filter((c: any) => (useUnread.getState().counts[c.id] ?? 0) > 0)
+        const list = unread.length > 0 ? unread : navChs
+        const idx = list.findIndex((c: any) => c.id === chId)
+        const next = e.key === 'ArrowDown'
+          ? (idx + 1) % list.length
+          : (idx - 1 + list.length) % list.length
+        nav(`/servers/${svId}/channels/${list[next].id}`)
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [nav])
+  }, [nav, qcHook])
 
   return (
     <>

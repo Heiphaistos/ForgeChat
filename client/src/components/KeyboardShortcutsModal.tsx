@@ -35,9 +35,10 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: 'Canaux',
     shortcuts: [
-      { keys: ['Alt', '↑'], description: 'Canal précédent' },
-      { keys: ['Alt', '↓'], description: 'Canal suivant' },
-      { keys: ['Ctrl', 'Shift', 'M'], description: 'Marquer tout comme lu' },
+      { keys: ['Alt', '↑'], description: 'Canal non-lu précédent' },
+      { keys: ['Alt', '↓'], description: 'Canal non-lu suivant' },
+      { keys: ['Ctrl', 'Shift', 'A'], description: 'Marquer tout comme lu' },
+      { keys: ['Ctrl', 'Shift', 'S'], description: 'Vue en split' },
     ],
   },
   {
@@ -45,8 +46,6 @@ const GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['P'], description: 'Push-to-Talk (maintenir)' },
       { keys: ['Espace'], description: 'Push-to-Talk (maintenir)' },
-      { keys: ['Ctrl', 'Shift', 'M'], description: 'Mute / Unmute micro' },
-      { keys: ['Ctrl', 'Shift', 'D'], description: 'Déafen / Réactiver son' },
       { keys: ['V'], description: 'Toggle caméra' },
       { keys: ['S'], description: 'Screen share / Go Live' },
     ],

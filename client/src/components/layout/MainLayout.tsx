@@ -87,17 +87,22 @@ export default function MainLayout() {
     }
   }, [location.pathname, location.state])
 
-  // Ctrl+Shift+S — fermer le split
+  // Ctrl+Shift+S — toggle split (ouvre le canal courant ou ferme)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 's') {
         e.preventDefault()
-        setSplitChannelId(null)
+        if (splitChannelId) {
+          setSplitChannelId(null)
+        } else {
+          const m = window.location.pathname.match(/\/servers\/[^/]+\/channels\/([^/]+)/)
+          if (m) setSplitChannelId(m[1])
+        }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [splitChannelId])
 
   return (
     <MobileContext.Provider value={{
