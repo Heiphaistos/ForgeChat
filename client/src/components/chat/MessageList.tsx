@@ -139,6 +139,7 @@ export default function MessageList({
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
+  const loadingMoreRef = useRef(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupState | null>(null)
   const [editHistoryMsg, setEditHistoryMsg] = useState<{ id: string } | null>(null)
@@ -234,11 +235,13 @@ export default function MessageList({
     setShowScrollBtn(fromBottom > 200)
     if (fromBottom < 60) setNewMsgCount(0)
 
-    // Load more quand on touche le haut
-    if (el.scrollTop < 80 && !loadingMore && onLoadMore) {
+    // Load more quand on touche le haut (ref évite la closure stale)
+    if (el.scrollTop < 80 && !loadingMoreRef.current && onLoadMore) {
+      loadingMoreRef.current = true
       setLoadingMore(true)
       const prevHeight = el.scrollHeight
       const hasMore = await onLoadMore()
+      loadingMoreRef.current = false
       setLoadingMore(false)
       if (hasMore) {
         // Maintenir la position de scroll après chargement
@@ -247,7 +250,7 @@ export default function MessageList({
         })
       }
     }
-  }, [loadingMore, onLoadMore])
+  }, [onLoadMore])
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
