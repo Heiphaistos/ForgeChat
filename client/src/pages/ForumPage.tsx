@@ -67,8 +67,8 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-lg w-[560px] max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3" onClick={onClose}>
+      <div className="bg-fc-channel rounded-lg w-full max-w-[560px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-fc-bg flex items-start justify-between">
           <h2 className="text-xl font-bold text-white">Nouveau post</h2>
           <button onClick={onClose} className="text-fc-muted hover:text-white transition"><X size={20} /></button>
