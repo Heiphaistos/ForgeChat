@@ -206,12 +206,14 @@ export default function ChannelSidebar() {
     queryKey: ['server', serverId],
     queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data),
     enabled: !!serverId,
+    staleTime: 60_000,
   })
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', serverId],
     queryFn: () => api.get(`/servers/${serverId}/categories`).then(r => r.data),
     enabled: !!serverId,
+    staleTime: 60_000,
   })
 
   const ctxMenu = useContextMenu()
@@ -265,6 +267,7 @@ export default function ChannelSidebar() {
     queryKey: ['dms'],
     queryFn: () => api.get('/dms').then(r => r.data),
     enabled: !serverId,
+    staleTime: 30_000,
   })
 
   // Rafraîchir la liste DMs quand un GroupDM est créé/renommé/modifié

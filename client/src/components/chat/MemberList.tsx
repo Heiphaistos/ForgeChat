@@ -60,6 +60,7 @@ export default function MemberList({ serverId }: Props) {
     queryKey: ['members', serverId],
     queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
     refetchInterval: 30_000,
+    staleTime: 30_000,
   })
 
   const presenceStatuses = usePresence(s => s.statuses)
