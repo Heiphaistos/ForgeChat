@@ -38,7 +38,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
   })
 
   return (
-    <div className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0">
+    <div className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right">
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
         <div className="flex items-center gap-2">
           <Pin size={16} className="text-fc-accent" />
