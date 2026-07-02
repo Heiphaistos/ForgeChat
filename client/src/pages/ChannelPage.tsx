@@ -196,7 +196,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         }
       }),
     ]
-    return () => offs.forEach(off => off())
+    return () => {
+      offs.forEach(off => off())
+      typingTimers.current.forEach(clearTimeout)
+      typingTimers.current.clear()
+    }
   }, [channelId, serverId, meId])
 
   useEffect(() => () => clearInterval(slowmodeTimer.current), [])
