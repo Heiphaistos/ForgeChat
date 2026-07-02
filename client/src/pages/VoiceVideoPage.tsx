@@ -352,6 +352,27 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   useEffect(() => () => { recorderRef.current?.stop() }, [])
 
+  // V → toggle camera / S → screen share (raccourcis vocaux)
+  useEffect(() => {
+    if (!joined) return
+    const isInput = (el: EventTarget | null) => {
+      const tag = (el as HTMLElement)?.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement)?.isContentEditable
+    }
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+      if (isInput(e.target)) return
+      if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleVideo() }
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        if (screenSharing) stopScreenShare()
+        else shareScreen()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [joined, toggleVideo, screenSharing, shareScreen, stopScreenShare])
+
   // Push-to-talk — P ou Espace maintenu = micro ouvert (en mode PTT uniquement)
   useEffect(() => {
     if (!pttMode || !joined) return
