@@ -582,9 +582,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
   }
 
-  // Charger le draft quand channelId change
+  // Réinitialiser le contenu et les fichiers quand le canal change
   useEffect(() => {
     setContent(drafts[channelId] ?? '')
+    setFiles([])
   }, [channelId])
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
