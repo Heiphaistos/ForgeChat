@@ -361,14 +361,17 @@ export default function MessageList({
     onError: () => toast.error('Erreur lors de la sauvegarde'),
   })
 
-  const handleReactionHover = async (e: React.MouseEvent, messageId: string, emoji: string) => {
-    try {
-      const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
-      const users = res.data?.users ?? []
-      setReactionPopup({ messageId, emoji, x: e.clientX, y: e.clientY, users })
-    } catch {
-      // silencieux si l'API échoue
-    }
+  const reactionHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleReactionHover = (e: React.MouseEvent, messageId: string, emoji: string) => {
+    const { clientX, clientY } = e
+    if (reactionHoverTimer.current) clearTimeout(reactionHoverTimer.current)
+    reactionHoverTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
+        const users = res.data?.users ?? []
+        setReactionPopup({ messageId, emoji, x: clientX, y: clientY, users })
+      } catch {}
+    }, 300)
   }
 
   const translateMessage = useCallback(async (messageId: string) => {

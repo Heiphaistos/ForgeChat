@@ -146,6 +146,7 @@ export default function ServerSidebar() {
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
     queryFn: () => api.get('/servers').then(r => r.data),
+    staleTime: 30_000,
   })
 
   const createServer = useMutation({

@@ -372,6 +372,23 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     return <ForumPage channel={currentChannel} serverId={serverId} channelId={channelId} />
   }
 
+  const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
+    try {
+      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
+      const msgId = res.data?.id
+      if (files && files.length > 0 && msgId) {
+        const fd = new FormData()
+        for (const fw of files) {
+          fd.append('files', fw.file)
+          if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
+        }
+        await api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd)
+      }
+    } catch {
+      // erreur déjà gérée par sendMsg
+    }
+  }, [sendMsg, serverId, channelId])
+
   // Canal texte / annonces
   return (
     <div className="relative flex h-full overflow-hidden">
@@ -582,25 +599,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           channelId={channelId}
           serverId={serverId}
           placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
-          onSend={async (content, replyToId, files, ttlSeconds) => {
-            try {
-              const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
-              const msgId = res.data?.id
-              if (files && files.length > 0 && msgId) {
-                const fd = new FormData()
-                for (const fw of files) {
-                  fd.append('files', fw.file)
-                  if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
-                }
-                await api.post(
-                  `/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`,
-                  fd
-                )
-              }
-            } catch {
-              // erreur déjà gérée par sendMsg
-            }
-          }}
+          onSend={handleSend}
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
