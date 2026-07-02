@@ -71,11 +71,11 @@ export default function LandingPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link to="/login"
-            className="px-4 py-1.5 text-sm text-white/70 hover:text-white transition rounded-lg hover:bg-white/5">
+            className="flex items-center min-h-[44px] px-4 text-sm text-white/70 hover:text-white transition rounded-lg hover:bg-white/5">
             Se connecter
           </Link>
           <Link to="/register"
-            className="px-4 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition">
+            className="flex items-center min-h-[44px] px-4 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition">
             S'inscrire
           </Link>
         </div>
@@ -196,13 +196,13 @@ export default function LandingPage() {
             <img src="/icon.svg" alt="" className="w-6 h-6 rounded" />
             <span className="text-white/40 text-sm">ForgeChat {RELEASE} · Heiphaistos</span>
           </div>
-          <div className="flex items-center gap-6 text-sm text-white/30">
+          <div className="flex items-center gap-4 text-sm text-white/30">
             <a href="https://github.com/Heiphaistos/ForgeChat" target="_blank" rel="noopener noreferrer"
-              className="hover:text-white/60 transition">GitHub</a>
+              className="py-2 hover:text-white/60 transition">GitHub</a>
             <a href="https://mydepot.heiphaistos.org/Heiphaistos/ForgeChat" target="_blank" rel="noopener noreferrer"
-              className="hover:text-white/60 transition">Forgejo</a>
-            <Link to="/login" className="hover:text-white/60 transition">Connexion</Link>
-            <Link to="/register" className="hover:text-white/60 transition">Inscription</Link>
+              className="py-2 hover:text-white/60 transition">Forgejo</a>
+            <Link to="/login" className="py-2 hover:text-white/60 transition">Connexion</Link>
+            <Link to="/register" className="py-2 hover:text-white/60 transition">Inscription</Link>
           </div>
         </div>
       </footer>

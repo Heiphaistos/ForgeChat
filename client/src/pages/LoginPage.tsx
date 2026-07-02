@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [totpCode, setTotpCode] = useState('')
   const [needTotp, setNeedTotp] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -35,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-fc-bg">
+    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md">
         <h1 className="text-2xl font-bold text-white text-center mb-2">Content de te revoir !</h1>
         <p className="text-fc-muted text-center mb-6">Connecte-toi à ton compte ForgeChat</p>
@@ -46,18 +48,36 @@ export default function LoginPage() {
               <div>
                 <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Email</label>
                 <input
-                  type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  required autoFocus
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                  autoComplete="email"
                   className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Mot de passe</label>
-                <input
-                  type="password" value={password} onChange={e => setPassword(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white transition"
+                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </>
           ) : (
@@ -75,6 +95,7 @@ export default function LoginPage() {
                 onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
                 autoFocus
                 placeholder="000000"
+                autoComplete="one-time-code"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-center text-xl tracking-widest"
               />
               <button
@@ -90,7 +111,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading || (needTotp && totpCode.length < 6)}
-            className="w-full py-2 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
+            className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
             {loading ? 'Connexion...' : needTotp ? 'Valider le code' : 'Se connecter'}
           </button>
