@@ -125,6 +125,12 @@ export default function LoginPage() {
               Pas de compte ?{' '}
               <Link to="/register" className="text-fc-accent hover:underline">S'inscrire</Link>
             </p>
+            <p className="text-fc-muted text-xs text-center mt-2">
+              Mot de passe oublié ?{' '}
+              <a href="mailto:admin@heiphaistos.org" className="text-fc-accent hover:underline">
+                Contacter l'administrateur
+              </a>
+            </p>
             <p className="text-center mt-3">
               <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
             </p>

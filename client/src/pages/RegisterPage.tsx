@@ -21,15 +21,21 @@ export default function RegisterPage() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { register } = useAuth()
   const nav = useNavigate()
 
   const strength = getPasswordStrength(password)
+  const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (password !== confirmPassword) {
+      toast.error('Les mots de passe ne correspondent pas')
+      return
+    }
     setLoading(true)
     try {
       await register(username, email, password)
@@ -121,9 +127,27 @@ export default function RegisterPage() {
             )}
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Confirmer le mot de passe</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              placeholder="Répéter le mot de passe"
+              className={`w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 ${
+                passwordMismatch ? 'focus:ring-red-500 ring-1 ring-red-500/50' : 'focus:ring-fc-accent'
+              }`}
+            />
+            {passwordMismatch && (
+              <p className="text-xs text-red-400 mt-1">Les mots de passe ne correspondent pas</p>
+            )}
+          </div>
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || passwordMismatch}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
             {loading ? 'Création...' : 'Créer un compte'}

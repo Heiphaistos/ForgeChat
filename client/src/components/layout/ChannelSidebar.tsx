@@ -6,7 +6,8 @@ import {
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
   Users, X, GripVertical, Shield, Archive, EyeOff, BellOff,
 } from 'lucide-react'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import api from '../../api/client'
 import { useContextMenu } from '../ui/ContextMenu'
 import ServerBoostBanner from '../server/ServerBoostBanner'
@@ -36,13 +37,15 @@ const PRESENCE_COLOR: Record<string, string> = {
 // Modal léger pour créer un groupe DM
 function CreateGroupModal({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
+  const deferredSearch = useDeferredValue(search)
   const [selected, setSelected] = useState<{ id: string; username: string }[]>([])
   const qc = useQueryClient()
   const nav = useNavigate()
+  useEscapeKey(onClose)
 
   const { data: friends = [] } = useQuery({
-    queryKey: ['friends-dm-search', search],
-    queryFn: () => api.get('/friends', { params: { q: search } }).then(r => r.data),
+    queryKey: ['friends-dm-search', deferredSearch],
+    queryFn: () => api.get('/friends', { params: { q: deferredSearch } }).then(r => r.data),
     staleTime: 10_000,
   })
 
@@ -67,9 +70,9 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="create-group-title" className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
+          <h2 id="create-group-title" className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
           <button onClick={onClose} className="text-fc-muted hover:text-white"><X size={16} /></button>
         </div>
 
@@ -177,6 +180,7 @@ export default function ChannelSidebar() {
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try {
@@ -223,6 +227,18 @@ export default function ChannelSidebar() {
   const voiceChannelId = useVoice(s => s.channelId)
   const voiceJoin = useVoice(s => s.join)
   const { on: wsOn } = useWs()
+
+  // Fermer le dropdown serveur sur clic extérieur ou Escape
+  useEffect(() => {
+    if (!menuOpen) return
+    const onMouse = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
+  }, [menuOpen])
 
   // Écouter les erreurs de join vocal
   useEffect(() => {
@@ -806,8 +822,8 @@ export default function ChannelSidebar() {
 
           {menuOpen && (
             <div
+              ref={menuRef}
               className="absolute top-full left-0 right-0 bg-fc-bg border border-fc-hover rounded-lg shadow-2xl z-40 m-1 p-1"
-              onMouseLeave={() => setMenuOpen(false)}
             >
               <button
                 onClick={() => { setShowInvite(true); setMenuOpen(false) }}
@@ -851,8 +867,11 @@ export default function ChannelSidebar() {
             return (
               <div key={key} className="mb-2">
                 <div
+                  role="button"
+                  tabIndex={0}
                   className="flex items-center justify-between px-2 py-1 group cursor-pointer"
                   onClick={() => toggleGroup(key)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
                     { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
                     ...(isOwnerOrAdmin && key !== UNCATEGORIZED_KEY ? [
@@ -878,7 +897,7 @@ export default function ChannelSidebar() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
-                    className="text-fc-muted opacity-0 group-hover:opacity-100 hover:text-white transition"
+                    className="text-fc-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
                     title={`Créer un canal dans ${label}`}
                   >
                     <Plus size={14} />

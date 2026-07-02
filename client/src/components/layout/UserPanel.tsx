@@ -32,13 +32,15 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Fermer au clic extérieur
+  // Fermer au clic extérieur ou Escape
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const onMouse = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
   }, [onClose])
 
   const setStatus = async (status: string) => {
@@ -248,6 +250,8 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         <NotificationBell />
         <button
           onClick={joined ? toggleMute : undefined}
+          aria-disabled={!joined}
+          aria-label={joined ? (muted ? 'Réactiver le micro' : 'Couper le micro') : 'Pas dans un canal vocal'}
           className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && muted ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
@@ -257,6 +261,8 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         </button>
         <button
           onClick={joined ? toggleDeafen : undefined}
+          aria-disabled={!joined}
+          aria-label={joined ? (deafened ? 'Réactiver le son' : 'Couper le son') : 'Pas dans un canal vocal'}
           className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && deafened ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}

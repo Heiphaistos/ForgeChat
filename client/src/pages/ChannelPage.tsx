@@ -495,10 +495,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         </div>
 
         {/* Onglets Messages / Tâches */}
-        <div className="flex border-b border-fc-hover px-4 flex-shrink-0">
+        <div role="tablist" className="flex border-b border-fc-hover px-4 flex-shrink-0">
           {(['Messages', 'Tâches'] as const).map(tab => (
             <button
               key={tab}
+              role="tab"
+              aria-selected={activeTab === tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-sm transition ${
                 activeTab === tab

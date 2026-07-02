@@ -61,8 +61,8 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
 
       {images.length > 1 && (
         <>
-          <button onClick={prev} className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronLeft size={24} /></button>
-          <button onClick={next} className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronRight size={24} /></button>
+          <button onClick={prev} aria-label="Image précédente" className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronLeft size={24} /></button>
+          <button onClick={next} aria-label="Image suivante" className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronRight size={24} /></button>
         </>
       )}
 

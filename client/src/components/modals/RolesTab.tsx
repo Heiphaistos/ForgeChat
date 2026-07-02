@@ -418,20 +418,22 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                         <div className="text-sm text-white font-medium">Afficher séparément dans la liste</div>
                         <div className="text-xs text-fc-muted">Les membres avec ce rôle apparaissent dans leur propre groupe (hoist)</div>
                       </div>
-                      <div onClick={() => setEditHoisted(v => !v)}
-                        className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer ${editHoisted ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
+                      <button type="button" onClick={() => setEditHoisted(v => !v)}
+                        role="switch" aria-checked={editHoisted}
+                        className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editHoisted ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editHoisted ? 'left-[23px]' : 'left-[3px]'}`} />
-                      </div>
+                      </button>
                     </label>
                     <label className="flex items-center justify-between px-4 py-3 bg-fc-channel rounded-xl cursor-pointer hover:bg-fc-hover/40 transition select-none">
                       <div>
                         <div className="text-sm text-white font-medium">Permettre @mention du rôle</div>
                         <div className="text-xs text-fc-muted">Tout le monde peut mentionner ce rôle pour notifier ses membres</div>
                       </div>
-                      <div onClick={() => setEditMentionable(v => !v)}
-                        className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer ${editMentionable ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
+                      <button type="button" onClick={() => setEditMentionable(v => !v)}
+                        role="switch" aria-checked={editMentionable}
+                        className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editMentionable ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editMentionable ? 'left-[23px]' : 'left-[3px]'}`} />
-                      </div>
+                      </button>
                     </label>
                   </div>
                 </div>
