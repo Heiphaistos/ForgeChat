@@ -84,6 +84,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
     }
 
     try {
+      if (!TENOR_KEY) throw new Error('Tenor API key missing')
       const endpoint = query.trim()
         ? `${TENOR_BASE}/search?q=${encodeURIComponent(query)}&key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
         : `${TENOR_BASE}/featured?key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
