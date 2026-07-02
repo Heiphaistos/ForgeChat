@@ -90,11 +90,11 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler) }
   }, [])
 
-  // Positionner la popup pour qu'elle reste dans l'écran
+  // Positionner la popup pour qu'elle reste dans l'écran (bords gauche+haut inclus)
   const style: React.CSSProperties = {
     position: 'fixed',
-    left: Math.min(anchorX, window.innerWidth - 280),
-    top: Math.min(anchorY, window.innerHeight - 300),
+    left: Math.max(8, Math.min(anchorX, window.innerWidth - 280)),
+    top: Math.max(8, Math.min(anchorY, window.innerHeight - 300)),
     zIndex: 9999,
   }
 
@@ -103,7 +103,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
       {/* Banner */}
       <div className="h-16 relative overflow-hidden">
         {user?.banner
-          ? <img src={user.banner} alt="" className="w-full h-full object-cover" />
+          ? <img src={user.banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
               style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
@@ -113,7 +113,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
         <div className="absolute -bottom-6 left-4">
           <div className="w-16 h-16 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-xl text-white overflow-hidden">
             {user?.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (

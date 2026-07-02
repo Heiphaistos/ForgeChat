@@ -27,7 +27,7 @@ function Avatar({ participant }: { participant: Participant }) {
   return (
     <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden flex-shrink-0">
       {participant.avatar
-        ? <img src={participant.avatar} alt="" className="w-full h-full object-cover" />
+        ? <img src={participant.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
         : participant.username.charAt(0).toUpperCase()}
     </div>
   )

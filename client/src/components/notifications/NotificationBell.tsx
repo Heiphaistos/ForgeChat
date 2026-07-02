@@ -106,7 +106,7 @@ export default function NotificationBell() {
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-bold text-xs text-white overflow-hidden flex-shrink-0 mt-0.5">
                         {m.author_avatar
-                          ? <img src={m.author_avatar} alt="" className="w-full h-full object-cover" />
+                          ? <img src={m.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           : m.author_username.charAt(0).toUpperCase()
                         }
                       </div>

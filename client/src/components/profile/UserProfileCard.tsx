@@ -126,7 +126,7 @@ export default function UserProfileCard({
       {/* Banner h-24 */}
       <div className="h-24 relative overflow-hidden flex-shrink-0">
         {user?.banner
-          ? <img src={user.banner} alt="" className="w-full h-full object-cover" />
+          ? <img src={user.banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
               style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
@@ -136,7 +136,7 @@ export default function UserProfileCard({
         <div className="absolute -bottom-10 left-4">
           <div className="w-20 h-20 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-2xl text-white overflow-hidden">
             {user?.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (

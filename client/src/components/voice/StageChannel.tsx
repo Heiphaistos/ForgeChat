@@ -28,7 +28,7 @@ function Avatar({ user, size = 'md' }: { user: StageUser; size?: 'sm' | 'md' | '
   return (
     <div className={`${dims[size]} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0`}>
       {user.avatar
-        ? <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+        ? <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         : user.username.charAt(0).toUpperCase()}
     </div>
   )

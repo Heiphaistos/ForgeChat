@@ -78,7 +78,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       {/* Avatar */}
       <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-xs text-white overflow-hidden flex-shrink-0">
         {item.user.avatar
-          ? <img src={item.user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+          ? <img src={item.user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
           : item.user.username.charAt(0).toUpperCase()}
       </div>
 
