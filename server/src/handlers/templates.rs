@@ -54,63 +54,38 @@ pub async fn create_template_from_server(
         return Err(AppError::BadRequest("Nom template 2-100 chars".into()));
     }
 
-    // Snapshot des canaux
-    let channels: Vec<serde_json::Value> = sqlx::query(
-        "SELECT id, name, type, topic, position, category_id FROM channels WHERE server_id=$1 ORDER BY position"
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?
-    .iter()
-    .map(|r| {
-        use sqlx::Row;
-        serde_json::json!({
-            "id": r.get::<Uuid, _>("id"),
-            "name": r.get::<String, _>("name"),
-            "type": r.get::<String, _>("type"),
-            "topic": r.get::<Option<String>, _>("topic"),
-            "position": r.get::<i32, _>("position"),
-            "category_id": r.get::<Option<Uuid>, _>("category_id"),
-        })
-    })
-    .collect();
-
-    // Snapshot des catégories
-    let categories: Vec<serde_json::Value> = sqlx::query(
-        "SELECT id, name, position FROM categories WHERE server_id=$1 ORDER BY position"
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?
-    .iter()
-    .map(|r| {
-        use sqlx::Row;
-        serde_json::json!({
-            "id": r.get::<Uuid, _>("id"),
-            "name": r.get::<String, _>("name"),
-            "position": r.get::<i32, _>("position"),
-        })
-    })
-    .collect();
-
-    // Snapshot des rôles (hors @everyone)
-    let roles: Vec<serde_json::Value> = sqlx::query(
-        "SELECT name, permissions, position, color FROM roles WHERE server_id=$1 AND is_everyone=false ORDER BY position"
-    )
-    .bind(server_id)
-    .fetch_all(&state.db)
-    .await?
-    .iter()
-    .map(|r| {
-        use sqlx::Row;
-        serde_json::json!({
-            "name": r.get::<String, _>("name"),
-            "permissions": r.get::<i64, _>("permissions"),
-            "position": r.get::<i32, _>("position"),
-            "color": r.get::<i32, _>("color"),
-        })
-    })
-    .collect();
+    // Snapshot des canaux, catégories et rôles en parallèle
+    use sqlx::Row;
+    let (channels_rows, categories_rows, roles_rows) = tokio::join!(
+        sqlx::query(
+            "SELECT id, name, type, topic, position, category_id FROM channels WHERE server_id=$1 ORDER BY position"
+        ).bind(server_id).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT id, name, position FROM categories WHERE server_id=$1 ORDER BY position"
+        ).bind(server_id).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT name, permissions, position, color FROM roles WHERE server_id=$1 AND is_everyone=false ORDER BY position"
+        ).bind(server_id).fetch_all(&state.db),
+    );
+    let channels: Vec<serde_json::Value> = channels_rows.unwrap_or_default().iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "type": r.get::<String, _>("type"),
+        "topic": r.get::<Option<String>, _>("topic"),
+        "position": r.get::<i32, _>("position"),
+        "category_id": r.get::<Option<Uuid>, _>("category_id"),
+    })).collect();
+    let categories: Vec<serde_json::Value> = categories_rows.unwrap_or_default().iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "position": r.get::<i32, _>("position"),
+    })).collect();
+    let roles: Vec<serde_json::Value> = roles_rows.unwrap_or_default().iter().map(|r| serde_json::json!({
+        "name": r.get::<String, _>("name"),
+        "permissions": r.get::<i64, _>("permissions"),
+        "position": r.get::<i32, _>("position"),
+        "color": r.get::<i32, _>("color"),
+    })).collect();
 
     let template_data = serde_json::json!({
         "channels": channels,
