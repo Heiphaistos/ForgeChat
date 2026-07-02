@@ -792,6 +792,7 @@ function AppInner() {
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
         {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
       </Suspense>
+      <ConfirmModal />
       {/* Bannière de reconnexion WS */}
       {showDisconnectBanner && (
         <div className="fixed top-0 inset-x-0 z-[9998] flex items-center justify-center gap-2 bg-yellow-600/95 text-white text-xs font-medium py-1.5 px-4">
@@ -824,6 +825,7 @@ import Onboarding from './components/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
+import { ConfirmModal } from './components/ui/ConfirmModal'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

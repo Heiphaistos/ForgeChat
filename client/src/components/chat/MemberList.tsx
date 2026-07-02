@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
+import { confirm } from '../ui/ConfirmModal'
 import { useAuth } from '../../store/auth'
 
 interface Props {
@@ -105,8 +106,9 @@ export default function MemberList({ serverId }: Props) {
     { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
     ...(canManageMembers && me?.id !== m.user_id ? [
       { separator: true as const },
-      { label: 'Expulser', danger: true as const, onClick: () => {
-        if (confirm(`Expulser ${m.nickname ?? m.username} ?`)) api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
+      { label: 'Expulser', danger: true as const, onClick: async () => {
+        if (await confirm({ message: `Expulser ${m.nickname ?? m.username} ?`, danger: true, confirmLabel: 'Expulser' }))
+          api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
       }},
     ] : []),
   ]

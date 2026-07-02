@@ -6,6 +6,7 @@ import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
+import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
 
 interface Props {
@@ -269,7 +270,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           </button>
           {user && post.creator_id === user.id && (
             <button
-              onClick={() => { if (confirm('Supprimer ce post et toutes ses réponses ?')) deletePost.mutate() }}
+              onClick={async () => { if (await confirm({ message: 'Supprimer ce post et toutes ses réponses ?', danger: true, confirmLabel: 'Supprimer' })) deletePost.mutate() }}
               disabled={deletePost.isPending}
               title="Supprimer le post"
               className="p-1.5 rounded hover:bg-fc-hover transition text-fc-muted hover:text-red-400 disabled:opacity-50"

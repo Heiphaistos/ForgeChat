@@ -4,6 +4,7 @@ import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, Lay
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { confirm } from '../ui/ConfirmModal'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
 import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
@@ -578,7 +579,7 @@ export default function ServerSidebar() {
                 <button
                   className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
                   onClick={async () => {
-                    if (confirm(`Quitter le serveur "${ctxServer?.name}" ?`)) {
+                    if (await confirm({ message: `Quitter le serveur "${ctxServer?.name}" ?`, danger: true, confirmLabel: 'Quitter' })) {
                       try {
                         await api.post(`/servers/${contextMenu.serverId}/leave`)
                         qc.invalidateQueries({ queryKey: ['servers'] })

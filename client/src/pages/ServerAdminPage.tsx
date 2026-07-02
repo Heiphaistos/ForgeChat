@@ -5,6 +5,7 @@ import { useMobile } from '../contexts/MobileContext'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import toast from 'react-hot-toast'
+import { confirm } from '../components/ui/ConfirmModal'
 import ServerStatsPage from './ServerStatsPage'
 import AuditLogPage from './AuditLogPage'
 import AutoModPage from './AutoModPage'
@@ -104,9 +105,9 @@ function ModerationTab({ serverId }: { serverId: string }) {
         </div>
 
         <button
-          onClick={() => {
+          onClick={async () => {
             if (!purgeChannelId) return
-            if (!confirm(`Purger jusqu'à ${purgeLimit} messages ? Action irréversible.`)) return
+            if (!await confirm({ message: `Purger jusqu'à ${purgeLimit} messages ? Action irréversible.`, title: 'Purge de messages', danger: true, confirmLabel: 'Purger' })) return
             purge.mutate()
           }}
           disabled={!purgeChannelId || purge.isPending}

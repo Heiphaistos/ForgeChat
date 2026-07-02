@@ -22,6 +22,7 @@ import ServerSettingsModal from '../modals/ServerSettingsModal'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
+import { confirm } from '../ui/ConfirmModal'
 
 // Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
 const PRESENCE_COLOR: Record<string, string> = {
@@ -390,7 +391,7 @@ export default function ChannelSidebar() {
                   .catch(() => toast.error('Erreur'))
               }
               const leaveGroup = async () => {
-                if (!confirm(`Quitter le groupe "${dm.name ?? 'Groupe'}" ?`)) return
+                if (!await confirm({ message: `Quitter le groupe "${dm.name ?? 'Groupe'}" ?`, danger: true, confirmLabel: 'Quitter' })) return
                 try {
                   await api.post(`/dms/groups/${dm.id}/leave`)
                   qc.invalidateQueries({ queryKey: ['dms'] })
@@ -612,7 +613,7 @@ export default function ChannelSidebar() {
               { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
               { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
               { separator: true as const },
-              { label: 'Supprimer le canal', danger: true, onClick: () => { if (confirm(`Supprimer #${ch.name} ?`)) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
+              { label: 'Supprimer le canal', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
             ] : []),
           ])
         }}
@@ -856,7 +857,7 @@ export default function ChannelSidebar() {
                     { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
                     ...(isOwnerOrAdmin && key !== UNCATEGORIZED_KEY ? [
                       { separator: true as const },
-                      { label: 'Supprimer la catégorie', danger: true, onClick: () => { if (confirm(`Supprimer la catégorie "${label}" ?`)) api.delete(`/servers/${serverId}/categories/${key}`) } },
+                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) api.delete(`/servers/${serverId}/categories/${key}`) } },
                     ] : []),
                   ])}
                   onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
