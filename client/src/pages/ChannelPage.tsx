@@ -107,8 +107,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [messages, channelId])
 
-  // Reset du reply quand on change de canal pour éviter d'envoyer une réponse au mauvais canal
-  useEffect(() => { setReplyTo(null) }, [channelId])
+  // Reset du reply et du cooldown slowmode quand on change de canal
+  useEffect(() => {
+    setReplyTo(null)
+    setSlowmodeCooldown(0)
+    clearInterval(slowmodeTimer.current)
+  }, [channelId])
 
   // Marquer comme lu + reset load-more quand on ouvre un nouveau canal ou focus
   useEffect(() => {
