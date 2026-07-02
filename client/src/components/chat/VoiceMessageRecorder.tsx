@@ -13,6 +13,7 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const blobRef = useRef<Blob | null>(null)
+  const blobUrlRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
 
@@ -35,7 +36,9 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType || 'audio/webm' })
         blobRef.current = blob
-        setBlobUrl(URL.createObjectURL(blob))
+        const url = URL.createObjectURL(blob)
+        blobUrlRef.current = url
+        setBlobUrl(url)
         setState('preview')
         stream.getTracks().forEach(t => t.stop())
         streamRef.current = null
@@ -59,6 +62,7 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
     return () => {
       stop()
       streamRef.current?.getTracks().forEach(t => t.stop())
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
     }
   }, [start, stop])
 
