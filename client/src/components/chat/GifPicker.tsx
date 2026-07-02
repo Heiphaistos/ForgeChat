@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Search, X, Loader2 } from 'lucide-react'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TENOR_KEY = (import.meta as any).env?.VITE_TENOR_API_KEY || 'AIzaSyAyimkuYQYF_FXVALexPzk7aL3IQe5bQZY'
+const TENOR_KEY = (import.meta as any).env?.VITE_TENOR_API_KEY || ''
 const TENOR_BASE = 'https://tenor.googleapis.com/v2'
 const LIMIT = 20
 
@@ -84,6 +84,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
     }
 
     try {
+      if (!TENOR_KEY) throw new Error('Tenor API key missing')
       const endpoint = query.trim()
         ? `${TENOR_BASE}/search?q=${encodeURIComponent(query)}&key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
         : `${TENOR_BASE}/featured?key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
