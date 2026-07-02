@@ -257,7 +257,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     peers, localStream, muted, deafened, videoEnabled, screenSharing,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, joined, channelId: activeChannelId,
-    roomParticipants,
+    roomParticipants, pttMode, activatePtt, deactivatePtt,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const { isActive: captionsOn, isSupported: captionsSupported, captions, toggle: toggleCaptions } = useCaptions()
@@ -351,6 +351,21 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   }, [])
 
   useEffect(() => () => { recorderRef.current?.stop() }, [])
+
+  // Push-to-talk — P ou Espace maintenu = micro ouvert (en mode PTT uniquement)
+  useEffect(() => {
+    if (!pttMode || !joined) return
+    const isPttKey = (k: string) => k === 'p' || k === 'P' || k === ' '
+    const isInput = (el: EventTarget | null) => {
+      const tag = (el as HTMLElement)?.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement)?.isContentEditable
+    }
+    const onDown = (e: KeyboardEvent) => { if (isPttKey(e.key) && !isInput(e.target)) activatePtt() }
+    const onUp   = (e: KeyboardEvent) => { if (isPttKey(e.key)) deactivatePtt() }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  }, [pttMode, joined, activatePtt, deactivatePtt])
 
   if (!user) return null
 
