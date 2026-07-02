@@ -20,51 +20,35 @@ pub async fn export_user_data(
 
     let uid: Uuid = claims.sub;
 
-    // Profil utilisateur
-    let user = sqlx::query(
-        "SELECT username, email, bio, pronouns, created_at FROM users WHERE id=$1"
-    )
-    .bind(uid)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
-
-    // 100 derniers messages
-    let messages = sqlx::query(
-        "SELECT m.content, m.created_at, c.name as channel_name
-         FROM messages m
-         JOIN channels c ON c.id = m.channel_id
-         WHERE m.user_id = $1
-         ORDER BY m.created_at DESC
-         LIMIT 100"
-    )
-    .bind(uid)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
-    // Serveurs membres
-    let servers = sqlx::query(
-        "SELECT s.name FROM servers s
-         JOIN server_members sm ON sm.server_id = s.id
-         WHERE sm.user_id = $1 ORDER BY s.name"
-    )
-    .bind(uid)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
-    // Amis
-    let friends = sqlx::query(
-        "SELECT u.username FROM users u
-         JOIN friendships f ON (f.user_id = u.id AND f.friend_id = $1) OR (f.friend_id = u.id AND f.user_id = $1)
-         WHERE f.status = 'accepted'
-         ORDER BY u.username"
-    )
-    .bind(uid)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Toutes les données utilisateur en parallèle
+    let (user_res, messages, servers, friends) = tokio::join!(
+        sqlx::query(
+            "SELECT username, email, bio, pronouns, created_at FROM users WHERE id=$1"
+        ).bind(uid).fetch_one(&state.db),
+        sqlx::query(
+            "SELECT m.content, m.created_at, c.name as channel_name
+             FROM messages m
+             JOIN channels c ON c.id = m.channel_id
+             WHERE m.user_id = $1
+             ORDER BY m.created_at DESC
+             LIMIT 100"
+        ).bind(uid).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT s.name FROM servers s
+             JOIN server_members sm ON sm.server_id = s.id
+             WHERE sm.user_id = $1 ORDER BY s.name"
+        ).bind(uid).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT u.username FROM users u
+             JOIN friendships f ON (f.user_id = u.id AND f.friend_id = $1) OR (f.friend_id = u.id AND f.user_id = $1)
+             WHERE f.status = 'accepted'
+             ORDER BY u.username"
+        ).bind(uid).fetch_all(&state.db),
+    );
+    let user = user_res.map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
+    let messages = messages.unwrap_or_default();
+    let servers = servers.unwrap_or_default();
+    let friends = friends.unwrap_or_default();
 
     let export = serde_json::json!({
         "exported_at": chrono::Utc::now().to_rfc3339(),
