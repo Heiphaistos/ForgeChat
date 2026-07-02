@@ -3,6 +3,7 @@ import { Copy, Check, X, Link, RefreshCw, Clock, Users, ChevronDown } from 'luci
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   serverId: string
@@ -52,6 +53,7 @@ function formatExpiry(iso: string | null): string {
 }
 
 export default function InviteModal({ serverId, serverName, onClose }: Props) {
+  useEscapeKey(onClose)
   const [inviteUrl, setInviteUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [expiryHours, setExpiryHours] = useState<number | null>(168)
@@ -92,11 +94,11 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-full max-w-[480px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[480px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
         {/* Header */}
         <div className="p-5 border-b border-fc-bg flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white">Inviter sur <span className="text-fc-accent">{serverName}</span></h2>
+            <h2 id="invite-modal-title" className="text-lg font-bold text-white">Inviter sur <span className="text-fc-accent">{serverName}</span></h2>
             <p className="text-xs text-fc-muted mt-0.5">Partage un lien pour rejoindre le serveur</p>
           </div>
           <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover">

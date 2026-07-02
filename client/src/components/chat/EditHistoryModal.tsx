@@ -30,13 +30,16 @@ export default function EditHistoryModal({ messageId, serverId, channelId, onClo
       <div
         className="w-full max-w-lg max-h-[90dvh] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-history-modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-fc-hover">
-          <div className="flex items-center gap-2 font-semibold text-white">
+          <h2 id="edit-history-modal-title" className="flex items-center gap-2 text-base font-semibold text-white">
             <History size={16} className="text-fc-accent" />
             Historique des modifications
-          </div>
+          </h2>
           <button
             onClick={onClose}
             className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"

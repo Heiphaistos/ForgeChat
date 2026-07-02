@@ -3,6 +3,7 @@ import { Hash, Volume2, X, Video, Megaphone, MessagesSquare, Radio, ChevronDown,
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 type ChannelType = 'text' | 'voice' | 'video' | 'announcement' | 'forum' | 'stage'
 
@@ -32,6 +33,7 @@ interface Props {
 }
 
 export default function CreateChannelModal({ serverId, onClose, defaultCategoryId }: Props) {
+  useEscapeKey(onClose)
   const [name, setName] = useState('')
   const [type, setType] = useState<ChannelType>('text')
   const [topic, setTopic] = useState('')
@@ -75,12 +77,12 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-full max-w-[520px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[520px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-channel-modal-title">
         {/* Header */}
         <div className="p-6 border-b border-fc-bg">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">Créer un canal</h2>
+              <h2 id="create-channel-modal-title" className="text-xl font-bold text-white">Créer un canal</h2>
               {categoryId && categories.find(c => c.id === categoryId) && (
                 <p className="text-fc-muted text-xs mt-0.5">
                   Dans : <span className="text-white">{categories.find(c => c.id === categoryId)?.name}</span>

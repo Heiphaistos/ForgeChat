@@ -3,6 +3,7 @@ import { X, Hash, Volume2, Video, Radio, Megaphone, MessagesSquare, Lock, Shield
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const SLOWMODE_OPTIONS = [
   { label: 'Désactivé', value: 0 },
@@ -263,6 +264,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
 // ─── Modal principale ─────────────────────────────────────────────────────────
 
 export default function ChannelSettingsModal({ channel, serverId, onClose }: Props) {
+  useEscapeKey(onClose)
   const qc = useQueryClient()
   const [tab, setTab] = useState<TabId>('general')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -359,13 +361,13 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
-      <div className="bg-fc-channel rounded-xl w-full max-w-[600px] max-h-[90dvh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-fc-channel rounded-xl w-full max-w-[600px] max-h-[90dvh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="channel-settings-modal-title">
         {/* Header */}
         <div className="p-5 border-b border-fc-bg flex items-start justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <TypeIcon size={20} className={typeColor} />
             <div>
-              <h2 className="font-bold text-white text-lg">#{channel.name}</h2>
+              <h2 id="channel-settings-modal-title" className="font-bold text-white text-lg">#{channel.name}</h2>
               <p className="text-xs text-fc-muted capitalize">{channel.type}</p>
             </div>
           </div>

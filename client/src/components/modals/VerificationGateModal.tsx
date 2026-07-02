@@ -3,6 +3,7 @@ import { Shield, CheckCircle2, X } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   serverId: string
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function VerificationGateModal({ serverId, serverName, rules, onVerified, onClose }: Props) {
+  useEscapeKey(onClose ?? (() => {}))
   const [accepted, setAccepted] = useState(false)
 
   const verify = useMutation({
@@ -28,7 +30,7 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-3 md:px-0">
-      <div className="bg-fc-channel rounded-xl p-6 w-full max-w-[480px] max-h-[90dvh] flex flex-col shadow-2xl">
+      <div className="bg-fc-channel rounded-xl p-6 w-full max-w-[480px] max-h-[90dvh] flex flex-col shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="verification-gate-modal-title">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
@@ -36,7 +38,7 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
               <Shield size={20} className="text-fc-accent" />
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg">Vérification requise</h2>
+              <h2 id="verification-gate-modal-title" className="text-white font-bold text-lg">Vérification requise</h2>
               <p className="text-fc-muted text-xs">{serverName}</p>
             </div>
           </div>

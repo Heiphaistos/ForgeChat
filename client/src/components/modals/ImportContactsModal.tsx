@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useDropzone } from 'react-dropzone'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface ImportContactsModalProps {
   onClose: () => void
@@ -57,6 +58,7 @@ function parseCsv(text: string): ParsedContact[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ImportContactsModal({ onClose }: ImportContactsModalProps) {
+  useEscapeKey(onClose)
   const [contacts, setContacts] = useState<ParsedContact[]>([])
   const [result, setResult] = useState<BulkResult | null>(null)
   const [fileName, setFileName] = useState('')
@@ -104,12 +106,15 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
       <div
         className="bg-fc-channel rounded-xl p-6 w-full max-w-[480px] max-h-[90dvh] flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-contacts-modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Users size={18} className="text-fc-accent" />
-            <h2 className="text-base font-bold text-white">Importer des contacts</h2>
+            <h2 id="import-contacts-modal-title" className="text-base font-bold text-white">Importer des contacts</h2>
           </div>
           <button
             onClick={onClose}

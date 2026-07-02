@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../store/auth'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   serverId: string
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function NicknameModal({ serverId, currentNickname, onClose }: Props) {
+  useEscapeKey(onClose)
   const { user } = useAuth()
   const [value, setValue] = useState(currentNickname ?? '')
 
@@ -44,10 +46,13 @@ export default function NicknameModal({ serverId, currentNickname, onClose }: Pr
       <div
         className="bg-fc-channel rounded-lg p-6 w-full max-w-[420px] max-h-[90dvh] overflow-y-auto shadow-xl"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="nickname-modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">Changer mon surnom</h2>
+          <h2 id="nickname-modal-title" className="text-lg font-bold text-white">Changer mon surnom</h2>
           <button
             onClick={onClose}
             className="text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded"

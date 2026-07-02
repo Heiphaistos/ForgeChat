@@ -629,7 +629,7 @@ export default function ChannelSidebar() {
               { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
               { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
               { separator: true as const },
-              { label: 'Supprimer le canal', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) api.delete(`/servers/${serverId}/channels/${ch.id}`) } },
+              { label: 'Supprimer le canal', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/channels/${ch.id}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
             ] : []),
           ])
         }}
@@ -876,7 +876,7 @@ export default function ChannelSidebar() {
                     { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
                     ...(isOwnerOrAdmin && key !== UNCATEGORIZED_KEY ? [
                       { separator: true as const },
-                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) api.delete(`/servers/${serverId}/categories/${key}`) } },
+                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/categories/${key}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
                     ] : []),
                   ])}
                   onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}

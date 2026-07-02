@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface ServerTemplate {
   id: string
@@ -93,6 +94,7 @@ interface Props {
 }
 
 export default function ServerTemplateModal({ onClose }: Props) {
+  useEscapeKey(onClose)
   const [selected, setSelected] = useState<ServerTemplate | null>(null)
   const [name, setName] = useState('')
   const [step, setStep] = useState<'grid' | 'name'>('grid')
@@ -137,6 +139,9 @@ export default function ServerTemplateModal({ onClose }: Props) {
       <div
         className="bg-fc-channel rounded-xl shadow-2xl w-full max-w-[520px] max-h-[90dvh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="server-template-modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-fc-hover">
@@ -149,7 +154,7 @@ export default function ServerTemplateModal({ onClose }: Props) {
                 ←
               </button>
             )}
-            <span className="text-lg font-bold text-white">
+            <span id="server-template-modal-title" className="text-lg font-bold text-white">
               {step === 'grid' ? 'Choisir un template' : `Template : ${selected?.icon} ${selected?.name}`}
             </span>
           </div>

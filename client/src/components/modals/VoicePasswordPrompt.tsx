@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Lock } from 'lucide-react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   channelName: string
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }: Props) {
+  useEscapeKey(onClose)
   const [password, setPassword] = useState('')
 
   const submit = () => {
@@ -20,11 +22,14 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
       <div
         className="bg-fc-channel rounded-lg w-full max-w-[360px] shadow-2xl p-6"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="voice-password-modal-title"
       >
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Lock size={18} className="text-yellow-400" />
-            <h2 className="text-lg font-bold text-white">Canal protégé</h2>
+            <h2 id="voice-password-modal-title" className="text-lg font-bold text-white">Canal protégé</h2>
           </div>
           <button onClick={onClose} className="text-fc-muted hover:text-white transition">
             <X size={18} />

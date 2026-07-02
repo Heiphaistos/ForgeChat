@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import RolesTab from './RolesTab'
 import MembersTab from './MembersTab'
 import BansTab from './BansTab'
@@ -97,6 +98,7 @@ function BoostSection({ server }: { server: any }) {
 }
 
 export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
+  useEscapeKey(onClose)
   const [tab, setTab] = useState<Tab>('general')
   const [mobileShowContent, setMobileShowContent] = useState(false)
   const [name, setName] = useState(server.name)
@@ -308,7 +310,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   ]
 
   const modal = (
-    <div className="fixed inset-0 bg-black/80 flex z-[200]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
+    <div className="fixed inset-0 bg-black/80 flex z-[200]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }} role="dialog" aria-modal="true" aria-labelledby="server-settings-modal-title">
       <div className="flex w-full h-full">
         {/* Sidebar nav — plein écran sur mobile, 220px sur desktop */}
         <div className={`bg-fc-channel flex-shrink-0 p-4 overflow-y-auto w-full md:w-[220px] flex-col
@@ -357,7 +359,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <button onClick={() => setMobileShowContent(false)} className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition hover:bg-fc-hover rounded">
                   <X size={18} />
                 </button>
-                <h2 className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>
+                <h2 id="server-settings-modal-title" className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>
               </div>
               <button onClick={onClose} className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
                 <X size={20} />

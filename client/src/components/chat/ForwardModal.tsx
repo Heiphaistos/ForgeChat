@@ -97,10 +97,13 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
       <div
         className="bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]"
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="forward-modal-title"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover flex-shrink-0">
-          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h2 id="forward-modal-title" className="text-sm font-semibold text-white flex items-center gap-2">
             <Send size={14} className="text-fc-accent" />
             Transférer le message
           </h2>

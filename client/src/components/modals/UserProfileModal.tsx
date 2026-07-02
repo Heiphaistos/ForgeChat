@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import toast from 'react-hot-toast'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   onClose: () => void
@@ -17,6 +18,7 @@ const STATUSES = [
 ]
 
 export default function UserProfileModal({ onClose }: Props) {
+  useEscapeKey(onClose)
   const { user, updateMe } = useAuth()
   const [username, setUsername] = useState(user?.username ?? '')
   const [bio, setBio] = useState(user?.bio ?? '')
@@ -37,7 +39,8 @@ export default function UserProfileModal({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
-      <div className="bg-fc-channel rounded-lg w-full max-w-[460px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-fc-channel rounded-lg w-full max-w-[460px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="user-profile-modal-title">
+        <h2 id="user-profile-modal-title" className="sr-only">Modifier mon profil</h2>
         {/* Banner */}
         <div className="h-24 bg-gradient-to-r from-fc-accent to-purple-600 rounded-t-lg relative">
           <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white transition">
