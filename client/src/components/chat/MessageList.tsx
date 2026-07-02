@@ -309,6 +309,9 @@ export default function MessageList({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTarget = useRef<{ x: number; y: number; msg: any } | null>(null)
 
+  // Cleanup à l'unmount
+  useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
+
   const startLongPress = (e: React.TouchEvent, msg: any) => {
     const t = e.touches[0]
     longPressTarget.current = { x: t.clientX, y: t.clientY, msg }
