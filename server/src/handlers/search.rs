@@ -29,59 +29,54 @@ pub async fn global_search(
     let pattern = format!("%{}%", q_esc);
     let uid: Uuid = claims.sub;
 
-    // Recherche messages (canaux des serveurs dont l'user est membre)
-    let messages = sqlx::query(
-        "SELECT m.id, m.content, m.created_at,
-                u.username as author_username, u.avatar as author_avatar,
-                c.name as channel_name, c.id as channel_id, c.server_id
-         FROM messages m
-         JOIN users u ON u.id = m.user_id
-         JOIN channels c ON c.id = m.channel_id
-         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
-         WHERE m.content ILIKE $2
-           AND (m.expires_at IS NULL OR m.expires_at > NOW())
-         ORDER BY m.created_at DESC
-         LIMIT 10"
-    )
-    .bind(uid)
-    .bind(&pattern)
-    .fetch_all(&state.db)
-    .await?;
-
-    // Recherche utilisateurs : amis + membres de serveurs communs uniquement (évite enumération globale)
-    let users = sqlx::query(
-        "SELECT DISTINCT u.id, u.username, u.avatar, u.status
-         FROM users u
-         WHERE u.username ILIKE $2
-           AND (
-             EXISTS(SELECT 1 FROM friendships f
-                    WHERE f.status='accepted'
-                      AND ((f.user_id=$1 AND f.friend_id=u.id) OR (f.friend_id=$1 AND f.user_id=u.id)))
-             OR EXISTS(SELECT 1 FROM server_members sm1
-                       JOIN server_members sm2 ON sm1.server_id=sm2.server_id
-                       WHERE sm1.user_id=$1 AND sm2.user_id=u.id)
-           )
-         LIMIT 8"
-    )
-    .bind(uid)
-    .bind(&pattern)
-    .fetch_all(&state.db)
-    .await?;
-
-    // Recherche canaux (dans serveurs où l'user est membre)
-    let channels = sqlx::query(
-        "SELECT c.id, c.name, c.type as channel_type, c.server_id, s.name as server_name
-         FROM channels c
-         JOIN servers s ON s.id = c.server_id
-         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
-         WHERE c.name ILIKE $2
-         ORDER BY c.name ASC
-         LIMIT 8"
-    )
-    .bind(uid)
-    .bind(&pattern)
-    .fetch_all(&state.db)
-    .await?;
+    // Paralléliser les 3 recherches indépendantes
+    let (messages, users, channels) = tokio::try_join!(
+        sqlx::query(
+            "SELECT m.id, m.content, m.created_at,
+                    u.username as author_username, u.avatar as author_avatar,
+                    c.name as channel_name, c.id as channel_id, c.server_id
+             FROM messages m
+             JOIN users u ON u.id = m.user_id
+             JOIN channels c ON c.id = m.channel_id
+             JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+             WHERE m.content ILIKE $2
+               AND (m.expires_at IS NULL OR m.expires_at > NOW())
+             ORDER BY m.created_at DESC
+             LIMIT 10"
+        )
+        .bind(uid)
+        .bind(&pattern)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT DISTINCT u.id, u.username, u.avatar, u.status
+             FROM users u
+             WHERE u.username ILIKE $2
+               AND (
+                 EXISTS(SELECT 1 FROM friendships f
+                        WHERE f.status='accepted'
+                          AND ((f.user_id=$1 AND f.friend_id=u.id) OR (f.friend_id=$1 AND f.user_id=u.id)))
+                 OR EXISTS(SELECT 1 FROM server_members sm1
+                           JOIN server_members sm2 ON sm1.server_id=sm2.server_id
+                           WHERE sm1.user_id=$1 AND sm2.user_id=u.id)
+               )
+             LIMIT 8"
+        )
+        .bind(uid)
+        .bind(&pattern)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT c.id, c.name, c.type as channel_type, c.server_id, s.name as server_name
+             FROM channels c
+             JOIN servers s ON s.id = c.server_id
+             JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+             WHERE c.name ILIKE $2
+             ORDER BY c.name ASC
+             LIMIT 8"
+        )
+        .bind(uid)
+        .bind(&pattern)
+        .fetch_all(&state.db),
+    )?;
 
     let messages_json: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
