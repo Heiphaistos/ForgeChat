@@ -90,10 +90,15 @@ export default function MemberList({ serverId }: Props) {
     { label: 'Mentionner', onClick: () => {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
       if (el) {
+        const pos = el.selectionStart ?? el.value.length
+        const mention = `@${m.nickname ?? m.username} `
+        const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
         el.focus()
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-        nativeInputValueSetter?.call(el, el.value + `@${m.nickname ?? m.username} `)
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+        setter?.call(el, newVal)
         el.dispatchEvent(new Event('input', { bubbles: true }))
+        const newPos = pos + mention.length
+        setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
       }
     }},
     { separator: true as const },
