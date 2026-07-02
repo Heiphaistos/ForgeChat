@@ -5,6 +5,7 @@ type WsHandler = (data: unknown) => void
 
 interface WsState {
   socket: WebSocket | null
+  connected: boolean
   _reconnectTimeout: ReturnType<typeof setTimeout> | null
   _heartbeatInterval: ReturnType<typeof setInterval> | null
   _reconnectAttempts: number
@@ -37,6 +38,7 @@ function backoffDelay(attempt: number): number {
 
 export const useWs = create<WsState>((set, get) => ({
   socket: null,
+  connected: false,
   _reconnectTimeout: null,
   _heartbeatInterval: null,
   _reconnectAttempts: 0,
@@ -86,7 +88,7 @@ export const useWs = create<WsState>((set, get) => ({
       if (_heartbeatInterval) clearInterval(_heartbeatInterval)
       const delay = backoffDelay(_reconnectAttempts)
       const timeout = setTimeout(() => get().connect(), delay)
-      set({ socket: null, _heartbeatInterval: null, _reconnectTimeout: timeout, _reconnectAttempts: _reconnectAttempts + 1 })
+      set({ socket: null, connected: false, _heartbeatInterval: null, _reconnectTimeout: timeout, _reconnectAttempts: _reconnectAttempts + 1 })
     }
 
     ws.onopen = () => {
@@ -95,7 +97,7 @@ export const useWs = create<WsState>((set, get) => ({
           ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
         }
       }, 30_000)
-      set({ socket: ws, _reconnectAttempts: 0, _heartbeatInterval: interval })
+      set({ socket: ws, connected: true, _reconnectAttempts: 0, _heartbeatInterval: interval })
       get()._openCallbacks.forEach(cb => cb())
     }
     set({ socket: ws })
@@ -106,7 +108,7 @@ export const useWs = create<WsState>((set, get) => ({
     if (_reconnectTimeout) clearTimeout(_reconnectTimeout)
     if (_heartbeatInterval) clearInterval(_heartbeatInterval)
     socket?.close()
-    set({ socket: null, _reconnectTimeout: null, _heartbeatInterval: null, _reconnectAttempts: 0, _connecting: false })
+    set({ socket: null, connected: false, _reconnectTimeout: null, _heartbeatInterval: null, _reconnectAttempts: 0, _connecting: false })
   },
 
   send: (msg) => {

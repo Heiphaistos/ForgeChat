@@ -61,6 +61,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function AppInner() {
   const { fetchMe, user, updateMe } = useAuth()
   const { connect, disconnect, on, onOpen } = useWs()
+  const wsConnected = useWs(s => s.connected)
   const setStatus = usePresence(s => s.setStatus)
   const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
@@ -78,6 +79,9 @@ function AppInner() {
   const qcHook = useQueryClient()
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
   const pendingNotifs = useRef<Array<{ title: string; body: string; path: string }>>([])
+  const wasConnected = useRef(false)
+  if (wsConnected) wasConnected.current = true
+  const showDisconnectBanner = !wsConnected && wasConnected.current && !!user
 
   // Flush queued notifications as toasts when window regains focus
   useEffect(() => {
@@ -756,6 +760,14 @@ function AppInner() {
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
         {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
       </Suspense>
+      {/* Bannière de reconnexion WS */}
+      {showDisconnectBanner && (
+        <div className="fixed top-0 inset-x-0 z-[9998] flex items-center justify-center gap-2 bg-yellow-600/95 text-white text-xs font-medium py-1.5 px-4">
+          <span className="inline-block w-2 h-2 rounded-full bg-white/70 animate-pulse flex-shrink-0" />
+          Connexion perdue — reconnexion en cours…
+        </div>
+      )}
+
       {incomingCall && (
         <IncomingCallModal
           call={incomingCall}
