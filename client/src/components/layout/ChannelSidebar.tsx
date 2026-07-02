@@ -288,16 +288,19 @@ export default function ChannelSidebar() {
   const archiveChannel = useMutation({
     mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors de l\'archivage'),
   })
 
   const hideChannelMutation = useMutation({
     mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors du masquage'),
   })
 
   const unhideChannelMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
+    onError: () => toast.error('Erreur lors de l\'affichage'),
   })
 
   const moveChannel = useMutation({
