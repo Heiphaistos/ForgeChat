@@ -347,7 +347,12 @@ export default function GroupDMPage() {
 
   const addMember = useMutation({
     mutationFn: (userId: string) => api.post(`/dms/groups/${groupId}/members`, { user_id: userId }),
-    onSuccess: () => { toast.success('Membre ajouté'); setAddMemberInput('') },
+    onSuccess: () => {
+      toast.success('Membre ajouté')
+      setAddMemberInput('')
+      queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['dms'] })
+    },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible d\'ajouter'),
   })
 
