@@ -712,7 +712,7 @@ export default function MessageList({
                               title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                             >
                               {customEmojiMap[r.emoji]
-                                ? <img src={customEmojiMap[r.emoji]} alt={r.emoji} className="w-4 h-4 object-contain" />
+                                ? <img src={customEmojiMap[r.emoji]} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
                                 : <span>{r.emoji}</span>
                               }
                               <span className={`transition-transform duration-150 inline-block ${isPopping || bumped[`${msg.id}:${r.emoji}`] ? 'scale-110' : 'scale-100'}`}>{r.count}</span>

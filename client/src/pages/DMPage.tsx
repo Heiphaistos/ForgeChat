@@ -501,7 +501,7 @@ export default function DMPage() {
               {!remoteStream && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
                   <div className="w-14 h-14 rounded-full bg-fc-accent flex items-center justify-center text-xl font-bold text-white overflow-hidden">
-                    {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+                    {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
                   </div>
                   <p className="text-white font-semibold text-sm">{partnerName}</p>
                   <p className="text-xs text-fc-muted animate-pulse">
@@ -513,7 +513,7 @@ export default function DMPage() {
           ) : (
             <div className="flex flex-col items-center gap-2">
               <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
-                {partnerAvatar ? <img src={partnerAvatar} alt="" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+                {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>
               <p className="text-white font-semibold">{partnerName}</p>
               <p className={`text-sm ${callState === 'connected' ? 'text-fc-green' : 'text-fc-muted animate-pulse'}`}>

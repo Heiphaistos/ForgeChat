@@ -91,7 +91,7 @@ function ReadReceiptBar({
           title={`Lu par ${r.username}`}
         >
           {r.avatar
-            ? <img src={r.avatar} alt="" className="w-full h-full object-cover" />
+            ? <img src={r.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : <span className="text-[7px] font-bold text-white">{r.username.charAt(0).toUpperCase()}</span>
           }
         </div>

@@ -83,7 +83,7 @@ export default function FriendInvitePage() {
         <div className="relative inline-block mb-4">
           <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-white text-3xl font-bold mx-auto overflow-hidden">
             {info.user.avatar
-              ? <img src={info.user.avatar} alt="" className="w-full h-full object-cover" />
+              ? <img src={info.user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : info.user.username.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-fc-channel

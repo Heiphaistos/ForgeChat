@@ -26,7 +26,7 @@ function MemberRow({ m, onContextMenu }: { m: any; onContextMenu: (e: React.Mous
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
-            ? <img src={m.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+            ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
         <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[m.liveStatus] ?? 'bg-fc-muted'}`} />

@@ -155,7 +155,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
                     : <ChevronRight size={12} className="text-fc-muted flex-shrink-0" />
                   }
                   {server.icon ? (
-                    <img src={server.icon} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                    <img src={server.icon} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs text-white font-bold flex-shrink-0">
                       {server.name.charAt(0).toUpperCase()}

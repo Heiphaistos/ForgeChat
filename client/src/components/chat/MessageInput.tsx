@@ -794,7 +794,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 ${idx === mentionIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
             >
               <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
-                {user.avatar ? <img src={user.avatar} alt="" className="w-full h-full object-cover" /> : user.username.charAt(0).toUpperCase()}
+                {user.avatar ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : user.username.charAt(0).toUpperCase()}
               </div>
               <div>
                 <div className="text-sm font-medium">{user.username}</div>
@@ -842,7 +842,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   ${idx === emojiAutoIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
               >
                 {entry.custom
-                  ? <img src={entry.custom.url} alt={entry.name} className="w-5 h-5 object-contain rounded" />
+                  ? <img src={entry.custom.url} alt={entry.name} loading="lazy" decoding="async" className="w-5 h-5 object-contain rounded" />
                   : <span className="text-lg leading-none">{entry.char}</span>}
                 <span className="text-xs text-fc-muted">:{entry.name}:</span>
               </button>
@@ -859,7 +859,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               {/* Preview image */}
               {fw.preview ? (
                 <div className="w-20 h-20 rounded overflow-hidden border border-fc-hover flex-shrink-0">
-                  <img src={fw.preview} alt="" className="w-full h-full object-cover" />
+                  <img src={fw.preview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-20 h-20 rounded border border-fc-hover bg-fc-bg flex flex-col items-center justify-center gap-1 text-center">

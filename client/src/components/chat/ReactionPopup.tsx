@@ -65,7 +65,7 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
           <div key={u.user_id} className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
               {u.avatar
-                ? <img src={u.avatar} alt="" className="w-full h-full object-cover" />
+                ? <img src={u.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 : u.username.charAt(0).toUpperCase()}
             </div>
             <span className="text-xs text-fc-text truncate">{u.username}</span>
