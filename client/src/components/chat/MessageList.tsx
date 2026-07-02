@@ -302,7 +302,7 @@ export default function MessageList({
   const [reportingMsg, setReportingMsg] = useState<string | null>(null)
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
-  const density = localStorage.getItem('fc_density') ?? 'normal'
+  const density = useMemo(() => localStorage.getItem('fc_density') ?? 'normal', [])
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null)
