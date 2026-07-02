@@ -706,7 +706,7 @@ export default function GroupDMPage() {
 
       {/* Panneau membres */}
       {showMembers && (
-        <div className="w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto py-3">
+        <div className="absolute right-0 inset-y-0 z-20 md:relative md:inset-auto md:z-auto md:w-56 w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto py-3 panel-slide-right">
           <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-3 mb-2">
             Membres ({group.members.length})
           </p>
