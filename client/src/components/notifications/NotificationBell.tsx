@@ -39,6 +39,7 @@ export default function NotificationBell() {
     queryKey: ['user_mentions'],
     queryFn: () => api.get('/user/mentions').then(r => r.data),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const markRead = useMutation({

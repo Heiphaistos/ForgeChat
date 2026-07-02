@@ -343,7 +343,7 @@ export default function MessageList({
   const toggleReaction = (msgId: string, emoji: string) => {
     const msgs = useChat.getState().messagesByChannel[channelId] ?? []
     const msg = msgs.find(m => m.id === msgId)
-    const reaction = msg?.reactions.find(r => r.emoji === emoji)
+    const reaction = msg?.reactions?.find(r => r.emoji === emoji)
     if (reaction?.me) {
       removeReactionMut.mutate({ msgId, emoji })
     } else {

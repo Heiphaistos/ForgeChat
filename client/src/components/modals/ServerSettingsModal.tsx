@@ -315,7 +315,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           ${mobileShowContent ? 'hidden md:flex' : 'flex'}`}>
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate flex items-center justify-between">
             <span>{server.name}</span>
-            <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded md:hidden">
+            <button onClick={onClose} className="text-fc-muted hover:text-white transition md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded">
               <X size={16} />
             </button>
           </div>
@@ -354,7 +354,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           <div className="max-w-2xl mx-auto p-4 md:p-8">
             <div className="flex items-center justify-between mb-6 md:mb-8">
               <div className="flex items-center gap-2">
-                <button onClick={() => setMobileShowContent(false)} className="md:hidden text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded">
+                <button onClick={() => setMobileShowContent(false)} className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition hover:bg-fc-hover rounded">
                   <X size={18} />
                 </button>
                 <h2 className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>

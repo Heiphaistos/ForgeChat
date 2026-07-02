@@ -282,6 +282,24 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [channelId, serverData, serverId, isSplit])
 
+  // useMemo doit être AVANT tout return conditionnel (React Rules of Hooks)
+  const { canPost, canManageMessages } = useMemo(() => {
+    const MANAGE_MESSAGES_BIT = 1 << 3
+    const ADMINISTRATOR_BIT = 1 << 31
+    const myRoleIds: string[] = (serverData?.my_role_ids ?? []).map(String)
+    const allRoles: any[] = serverData?.roles ?? []
+    const everyoneRole = allRoles.find((r: any) => r.is_everyone)
+    const myRoles = allRoles.filter((r: any) => myRoleIds.includes(String(r.id)))
+    const myPerms = myRoles.reduce((acc: number, r: any) => acc | Number(r.permissions), 0)
+      | (everyoneRole ? Number(everyoneRole.permissions) : 0)
+    const isOwner = serverData?.server?.owner_id === meId
+    const hasAdmin = isOwner || !!(myPerms & ADMINISTRATOR_BIT)
+    return {
+      canPost: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
+      canManageMessages: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
+    }
+  }, [serverData, meId])
+
   if (!serverId) return null
 
   const server = serverData?.server ?? serverData
@@ -342,24 +360,6 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }
 
   const currentChannel = channels.find((c: any) => c.id === channelId)
-
-  // Calcul des permissions de l'utilisateur courant pour ce serveur
-  const { canPost, canManageMessages } = useMemo(() => {
-    const MANAGE_MESSAGES_BIT = 1 << 3
-    const ADMINISTRATOR_BIT = 1 << 31
-    const myRoleIds: string[] = (serverData?.my_role_ids ?? []).map(String)
-    const allRoles: any[] = serverData?.roles ?? []
-    const everyoneRole = allRoles.find((r: any) => r.is_everyone)
-    const myRoles = allRoles.filter((r: any) => myRoleIds.includes(String(r.id)))
-    const myPerms = myRoles.reduce((acc: number, r: any) => acc | Number(r.permissions), 0)
-      | (everyoneRole ? Number(everyoneRole.permissions) : 0)
-    const isOwner = serverData?.server?.owner_id === meId
-    const hasAdmin = isOwner || !!(myPerms & ADMINISTRATOR_BIT)
-    return {
-      canPost: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
-      canManageMessages: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
-    }
-  }, [serverData, meId])
   const isAnnouncement = currentChannel?.type === 'announcement'
 
   // Canal vocal / vidéo / scène — même composant WebRTC

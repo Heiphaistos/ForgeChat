@@ -221,7 +221,7 @@ export default function ServerAdminPage() {
       <div className="flex items-center gap-3 px-4 py-4 border-b border-fc-hover flex-shrink-0">
         {/* Mobile: ouvrir la sidebar pour naviguer */}
         <button
-          className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+          className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
           aria-label="Retour"
         >

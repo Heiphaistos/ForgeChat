@@ -42,7 +42,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
+    <div className="flex items-center justify-center min-h-screen overflow-y-auto bg-fc-bg px-4 py-8">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md">
         <h1 className="text-2xl font-bold text-white text-center mb-2">Créer un compte</h1>
         <p className="text-fc-muted text-center mb-6">Rejoins ForgeChat gratuitement</p>
@@ -56,9 +56,11 @@ export default function RegisterPage() {
               required
               minLength={2}
               maxLength={32}
+              type="text"
               autoFocus
               autoComplete="username"
-              className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+              placeholder="tonpseudo"
+              className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
             />
           </div>
           <div>
@@ -69,7 +71,8 @@ export default function RegisterPage() {
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
-              className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+              placeholder="email@exemple.com"
+              className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
             />
           </div>
           <div>
@@ -91,7 +94,8 @@ export default function RegisterPage() {
                 required
                 minLength={8}
                 autoComplete="new-password"
-                className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+                placeholder="8 caractères minimum"
+                className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
               />
               <button
                 type="button"

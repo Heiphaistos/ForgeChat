@@ -109,7 +109,7 @@ export default function TicketsPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-fc-hover">
         <div className="flex items-center gap-3">
           <button
-            className="md:hidden flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+            className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
             onClick={openSidebar}
             aria-label="Retour"
           >

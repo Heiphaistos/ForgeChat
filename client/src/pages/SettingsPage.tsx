@@ -140,7 +140,7 @@ export default function SettingsPage() {
               {/* Retour mobile */}
               <button
                 onClick={() => setMobileShowContent(false)}
-                className="md:hidden p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition -ml-1"
+                className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition -ml-1"
                 title="Retour"
               >
                 <ChevronLeft size={20} />

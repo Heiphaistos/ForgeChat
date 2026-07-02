@@ -37,7 +37,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
+    <div className="flex items-center justify-center min-h-screen overflow-y-auto bg-fc-bg px-4 py-8">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md">
         <h1 className="text-2xl font-bold text-white text-center mb-2">Content de te revoir !</h1>
         <p className="text-fc-muted text-center mb-6">Connecte-toi à ton compte ForgeChat</p>
@@ -54,7 +54,8 @@ export default function LoginPage() {
                   required
                   autoFocus
                   autoComplete="email"
-                  className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+                  placeholder="email@exemple.com"
+                  className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
                 />
               </div>
               <div>
@@ -66,7 +67,8 @@ export default function LoginPage() {
                     onChange={e => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
-                    className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
                   />
                   <button
                     type="button"

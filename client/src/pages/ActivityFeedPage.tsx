@@ -183,7 +183,7 @@ export default function ActivityFeedPage() {
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-fc-hover flex-shrink-0">
         <button
-          className="flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 md:hidden"
+          className="flex items-center justify-center min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 md:hidden"
           onClick={openSidebar}
           aria-label="Retour"
         >
