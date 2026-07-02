@@ -68,7 +68,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
         {/* Icône serveur */}
         <div className="-mt-20 mb-4 w-[90px] h-[90px] rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden shadow-xl flex-shrink-0">
           {server.icon
-            ? <img src={server.icon} alt="" className="w-full h-full object-cover" />
+            ? <img src={server.icon} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : initials}
         </div>
 

@@ -20,6 +20,7 @@ const GROUPS: ShortcutGroup[] = [
     title: 'Navigation',
     shortcuts: [
       { keys: ['Ctrl', 'K'], description: 'Quick Switcher' },
+      { keys: ['Ctrl', '/'], description: 'Raccourcis clavier' },
       { keys: ['Ctrl', ','], description: 'Paramètres' },
       { keys: ['Escape'], description: 'Fermer / Annuler' },
     ],

@@ -50,11 +50,11 @@ body {
 /* Overscroll contain pour les listes de messages */
 .message-list-container { overscroll-behavior: contain; }
 
-/* Zones tactiles minimum 44px sur mobile */
+/* Zones tactiles minimum 44px sur mobile (Apple HIG / WCAG 2.5.5) */
 @media (max-width: 767px) {
   button, a[role="button"], [role="button"] {
-    min-height: 36px;
-    min-width: 36px;
+    min-height: 44px;
+    min-width: 44px;
   }
 }
 
