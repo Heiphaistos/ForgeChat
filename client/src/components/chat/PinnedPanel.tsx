@@ -1,5 +1,6 @@
 import { X, Pin, Trash2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import toast from 'react-hot-toast'
@@ -13,7 +14,13 @@ interface Props {
 
 export default function PinnedPanel({ serverId, channelId, channelName, onClose }: Props) {
   const qc = useQueryClient()
+  const nav = useNavigate()
   const { formatShortDate } = useFormatDate()
+
+  const jumpToMessage = (msgId: string) => {
+    nav(`/servers/${serverId}/channels/${channelId}?highlight=${msgId}`)
+    onClose()
+  }
 
   const { data: pinned = [], isLoading } = useQuery({
     queryKey: ['pinned', channelId],
@@ -63,12 +70,16 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
         {pinned.map((msg: any) => (
           <div
             key={msg.id}
-            className="bg-fc-bg rounded-lg p-3 border border-fc-hover group relative"
+            onClick={() => jumpToMessage(msg.id)}
+            className="bg-fc-bg rounded-lg p-3 border border-fc-hover group relative cursor-pointer hover:border-fc-accent/50 transition-colors"
           >
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                {msg.author_username?.charAt(0).toUpperCase()}
-              </div>
+              {msg.author_avatar
+                ? <img src={msg.author_avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                    {msg.author_username?.charAt(0).toUpperCase()}
+                  </div>
+              }
               <span className="text-xs font-semibold text-white">{msg.author_username}</span>
               <span className="text-xs text-fc-muted ml-auto">
                 {formatShortDate(msg.created_at)}
