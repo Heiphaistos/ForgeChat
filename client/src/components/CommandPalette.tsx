@@ -162,7 +162,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   let flatIdx = 0
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-start justify-center pt-24" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
       <div className="w-full max-w-lg bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-fc-hover">
           <Search size={18} className="text-fc-muted flex-shrink-0" />
