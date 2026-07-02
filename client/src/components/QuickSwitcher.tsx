@@ -148,7 +148,7 @@ export default function QuickSwitcher({ onClose }: Props) {
 
   if (query.startsWith('?')) {
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-24" onClick={onClose}>
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
         <div className="bg-fc-sidebar border border-fc-hover rounded-xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover">
             <Search size={16} className="text-fc-muted flex-shrink-0" />
@@ -193,7 +193,7 @@ export default function QuickSwitcher({ onClose }: Props) {
                         onClick={() => { nav(`/users/${u.id}`); onClose() }}
                         className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-fc-hover transition">
                         <div className="w-7 h-7 rounded-full bg-fc-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                          {u.avatar ? <img src={u.avatar} alt="" className="w-full h-full object-cover" /> : u.username.charAt(0).toUpperCase()}
+                          {u.avatar ? <img src={u.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : u.username.charAt(0).toUpperCase()}
                         </div>
                         <span className="text-sm text-white">{u.username}</span>
                       </button>
