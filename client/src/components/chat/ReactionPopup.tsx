@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 interface ReactionUser {
   user_id: string
@@ -16,6 +16,14 @@ interface Props {
 
 export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const [style, setStyle] = useState<React.CSSProperties>({
+    position: 'fixed',
+    left: x,
+    top: y,
+    zIndex: 200,
+    transform: 'translateY(-100%)',
+    visibility: 'hidden',
+  })
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -25,13 +33,26 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [onClose])
 
-  const style: React.CSSProperties = {
-    position: 'fixed',
-    left: x,
-    top: y,
-    zIndex: 200,
-    transform: 'translateY(-100%)',
-  }
+  // Clamp popup within viewport after first paint
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const { width, height } = el.getBoundingClientRect()
+    const margin = 8
+    let left = x
+    let top = y - height
+
+    // Flip below cursor if would clip top edge
+    if (top < margin) top = y + margin
+
+    // Clamp right edge
+    if (left + width > window.innerWidth - margin) left = window.innerWidth - width - margin
+
+    // Clamp left edge
+    if (left < margin) left = margin
+
+    setStyle({ position: 'fixed', left, top, zIndex: 200, visibility: 'visible' })
+  }, [x, y])
 
   return (
     <div ref={ref} style={style} className="bg-fc-channel border border-fc-hover rounded-lg shadow-xl p-3 min-w-[160px] max-w-[220px]">
