@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import ActivityFeedPanel from '../activity/ActivityFeedPanel'
 
 interface Props {
@@ -7,17 +7,6 @@ interface Props {
 }
 
 export default function RightSidebar({ visible, onClose }: Props) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'A') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-
   if (!visible) return null
 
   return (
