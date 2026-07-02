@@ -57,16 +57,18 @@ pub async fn get_unread_counts(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
+    // CTE pour éviter la sous-requête corrélée (une lookup last_read par message sinon)
     let rows = sqlx::query(
-        "SELECT m.channel_id, c.server_id, COUNT(*) as count
+        "WITH lr AS (
+             SELECT channel_id, read_at FROM last_read WHERE user_id = $1
+         )
+         SELECT m.channel_id, c.server_id, COUNT(*) as count
          FROM messages m
          JOIN channels c ON c.id = m.channel_id
          JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+         LEFT JOIN lr ON lr.channel_id = m.channel_id
          WHERE m.user_id != $1
-           AND m.created_at > COALESCE(
-               (SELECT read_at FROM last_read WHERE user_id=$1 AND channel_id=m.channel_id),
-               NOW() - INTERVAL '30 days'
-           )
+           AND m.created_at > COALESCE(lr.read_at, NOW() - INTERVAL '30 days')
          GROUP BY m.channel_id, c.server_id"
     )
     .bind(claims.sub)
@@ -224,7 +226,10 @@ pub async fn get_user_mentions(
     let pat_uuid = format!("%<@{}>%", uid_str);
 
     let rows = sqlx::query(
-        "SELECT
+        "WITH lr AS (
+             SELECT channel_id, read_at FROM last_read WHERE user_id = $1
+         )
+         SELECT
             m.id as message_id,
             m.channel_id,
             c.name as channel_name,
@@ -240,6 +245,7 @@ pub async fn get_user_mentions(
          JOIN servers s ON s.id = c.server_id
          JOIN users u ON u.id = m.user_id
          JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+         LEFT JOIN lr ON lr.channel_id = m.channel_id
          WHERE m.created_at > NOW() - INTERVAL '7 days'
            AND m.user_id != $1
            AND (
@@ -248,10 +254,7 @@ pub async fn get_user_mentions(
             OR m.content ILIKE '%@everyone%'
             OR m.content ILIKE '%@here%'
            )
-           AND m.created_at > COALESCE(
-               (SELECT read_at FROM last_read WHERE user_id=$1 AND channel_id=m.channel_id),
-               NOW() - INTERVAL '7 days'
-           )
+           AND m.created_at > COALESCE(lr.read_at, NOW() - INTERVAL '7 days')
          ORDER BY m.created_at DESC
          LIMIT 50"
     )
