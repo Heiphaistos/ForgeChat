@@ -619,7 +619,7 @@ export default function ChannelSidebar() {
               ? 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
               : channelId === ch.id
               ? 'bg-fc-hover text-white'
-              : unreadCounts[ch.id] > 0
+              : unreadCounts[ch.id] > 0 && !isChannelMuted(ch.id)
                 ? 'text-white font-semibold hover:bg-fc-hover/50'
                 : 'text-fc-muted hover:bg-fc-hover/50 hover:text-fc-text'}`}
         >
@@ -635,7 +635,7 @@ export default function ChannelSidebar() {
           {isTemporary && !isAutoCreate && (
             <Timer size={10} className="text-purple-400 flex-shrink-0 -mr-0.5" />
           )}
-          <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 ? 'text-white' : 'text-fc-muted'}>
+          <span className={channelId === ch.id ? 'text-white' : unreadCounts[ch.id] > 0 && !isChannelMuted(ch.id) ? 'text-white' : 'text-fc-muted'}>
             <ChannelIcon type={ch.type} size={16} />
           </span>
           <span className="text-sm truncate flex-1">{ch.name}</span>
@@ -673,7 +673,7 @@ export default function ChannelSidebar() {
               <BellOff size={11} className="text-fc-muted/50" />
             </span>
           )}
-          {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && (
+          {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && !isChannelMuted(ch.id) && (
             <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
               {unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}
             </span>
