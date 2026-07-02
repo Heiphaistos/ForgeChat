@@ -109,44 +109,48 @@ pub async fn get_messages(
     };
 
     use sqlx::Row;
+    use std::collections::HashMap;
     let msg_ids: Vec<Uuid> = messages.iter().map(|r| r.get("id")).collect();
 
-    // Batch attachments — 1 requête pour tous les messages
-    let all_attachments = sqlx::query_as::<_, crate::models::message::Attachment>(
-        "SELECT * FROM attachments WHERE message_id = ANY($1) AND (expires_at IS NULL OR expires_at > NOW())"
-    )
-    .bind(&msg_ids)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Paralléliser attachments + reactions (queries indépendantes)
+    let (all_attachments, all_reactions) = tokio::join!(
+        sqlx::query_as::<_, crate::models::message::Attachment>(
+            "SELECT * FROM attachments WHERE message_id = ANY($1) AND (expires_at IS NULL OR expires_at > NOW())"
+        )
+        .bind(&msg_ids)
+        .fetch_all(&state.db),
+        sqlx::query(
+            "SELECT r.message_id, r.emoji, COUNT(*) as count,
+             bool_or(r.user_id = $2) as me
+             FROM reactions r WHERE r.message_id = ANY($1) GROUP BY r.message_id, r.emoji"
+        )
+        .bind(&msg_ids)
+        .bind(claims.sub)
+        .fetch_all(&state.db),
+    );
+    let all_attachments = all_attachments.unwrap_or_default();
+    let all_reactions = all_reactions.unwrap_or_default();
 
-    // Batch reactions — 1 requête pour tous les messages
-    let all_reactions = sqlx::query(
-        "SELECT r.message_id, r.emoji, COUNT(*) as count,
-         bool_or(r.user_id = $2) as me
-         FROM reactions r WHERE r.message_id = ANY($1) GROUP BY r.message_id, r.emoji"
-    )
-    .bind(&msg_ids)
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Grouper par message_id pour accès O(1) plutôt qu'O(n²) avec filter
+    let mut attachments_map: HashMap<Uuid, Vec<crate::models::message::Attachment>> = HashMap::new();
+    for a in all_attachments {
+        attachments_map.entry(a.message_id).or_default().push(a);
+    }
+    let mut reactions_map: HashMap<Uuid, Vec<crate::models::message::ReactionCount>> = HashMap::new();
+    for r in &all_reactions {
+        let mid: Uuid = r.get("message_id");
+        reactions_map.entry(mid).or_default().push(crate::models::message::ReactionCount {
+            emoji: r.get("emoji"),
+            count: r.get("count"),
+            me: r.get("me"),
+        });
+    }
 
     let mut result = Vec::new();
     for row in &messages {
         let msg_id: Uuid = row.get("id");
-        let attachments: Vec<_> = all_attachments.iter()
-            .filter(|a| a.message_id == msg_id)
-            .cloned()
-            .collect();
-        let reactions: Vec<crate::models::message::ReactionCount> = all_reactions.iter()
-            .filter(|r| r.get::<Uuid, _>("message_id") == msg_id)
-            .map(|r| crate::models::message::ReactionCount {
-                emoji: r.get("emoji"),
-                count: r.get("count"),
-                me: r.get("me"),
-            })
-            .collect();
+        let attachments = attachments_map.remove(&msg_id).unwrap_or_default();
+        let reactions = reactions_map.remove(&msg_id).unwrap_or_default();
 
         result.push(MessageWithAuthor {
             id: msg_id,
