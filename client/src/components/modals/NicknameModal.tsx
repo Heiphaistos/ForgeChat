@@ -42,7 +42,7 @@ export default function NicknameModal({ serverId, currentNickname, onClose }: Pr
       onClick={onClose}
     >
       <div
-        className="bg-fc-channel rounded-lg p-6 w-full max-w-[420px] shadow-xl"
+        className="bg-fc-channel rounded-lg p-6 w-full max-w-[420px] max-h-[90dvh] overflow-y-auto shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

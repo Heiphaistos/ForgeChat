@@ -358,7 +358,7 @@ export default function ChannelSidebar() {
     const individualDms = (dms as any[]).filter(d => !d.is_group && !d.is_archived)
 
     return (
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto overscroll-y-contain p-2">
         {/* En-tête + bouton créer groupe */}
         <div className="flex items-center justify-between px-2 py-2">
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
@@ -752,7 +752,7 @@ export default function ChannelSidebar() {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto flex flex-col">
+      <div className="flex-1 overflow-y-auto overscroll-y-contain flex flex-col">
         {/* Header serveur */}
         <div className="relative">
           <button

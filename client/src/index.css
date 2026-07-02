@@ -43,6 +43,8 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #36383c; border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: #4f545c; }
+/* Firefox scrollbar */
+* { scrollbar-width: thin; scrollbar-color: #36383c transparent; }
 
 /* Overscroll contain pour les listes de messages */
 .message-list-container { overscroll-behavior: contain; }

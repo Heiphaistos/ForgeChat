@@ -366,7 +366,7 @@ export default function ServerSidebar() {
   }
 
   return (
-    <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto relative">
+    <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative">
       {/* DMs */}
       <button
         onClick={() => nav('/friends')}

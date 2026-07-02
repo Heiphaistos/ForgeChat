@@ -112,7 +112,7 @@ export default function MemberList({ serverId }: Props) {
   ]
 
   return (
-    <div className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto p-2 hidden lg:block">
+    <div className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 hidden lg:block">
       {online.length > 0 && (
         <>
           <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
