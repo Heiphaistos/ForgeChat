@@ -177,6 +177,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [files, setFiles] = useState<FileWithTtl[]>([])
   const filesRef = useRef<FileWithTtl[]>([])
   useEffect(() => { filesRef.current = files }, [files])
+  const clearFiles = useCallback(() => {
+    filesRef.current.forEach(f => { if (f.preview) URL.revokeObjectURL(f.preview) })
+    setFiles([])
+  }, [])
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
   const [showMentions, setShowMentions] = useState(false)
@@ -459,7 +463,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           onSend(msg, replyTo?.id)
           onCancelReply?.()
           setContent('')
-          setFiles([])
+          clearFiles()
         })
         if (executed) {
           setContent('')
@@ -585,7 +589,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   // Réinitialiser le contenu, fichiers et options transientes quand le canal change
   useEffect(() => {
     setContent(drafts[channelId] ?? '')
-    setFiles([])
+    clearFiles()
     setMsgTtl(null)
     setScheduledAt('')
     setShowTtlPicker(false)
@@ -639,7 +643,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         if (executed) {
           setContent('')
           clearDraft(channelId)
-          setFiles([])
+          clearFiles()
           setShowSlash(false)
           setShowMentions(false)
           textareaRef.current?.focus()
@@ -652,7 +656,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl)
     setContent('')
     clearDraft(channelId)
-    setFiles([])
+    clearFiles()
     setShowMentions(false)
     setShowSlash(false)
     setShowChannels(false)

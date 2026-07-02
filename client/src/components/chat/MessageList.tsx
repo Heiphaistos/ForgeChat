@@ -1035,10 +1035,11 @@ export default function MessageList({
       {/* Context menu clic droit */}
       {contextMenu && (
         <div
-          className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm"
+          className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm overflow-y-auto"
           style={{
             left: Math.min(contextMenu.x, window.innerWidth - 220),
-            top: Math.min(contextMenu.y, window.innerHeight - 280),
+            top: Math.min(contextMenu.y, window.innerHeight - 420),
+            maxHeight: Math.min(420, window.innerHeight - 16),
           }}
           onClick={e => e.stopPropagation()}
         >

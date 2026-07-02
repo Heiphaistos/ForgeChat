@@ -594,11 +594,11 @@ export default function ChannelSidebar() {
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
         onContextMenu={e => {
-          const muted = effectiveMuted(ch.id)
+          const channelMuted = isChannelMuted(ch.id)
           ctxMenu.open(e, [
             { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
-            { label: muted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
-              const next = !muted
+            { label: channelMuted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
+              const next = !channelMuted
               setChannelMuted(ch.id, next)
               api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
             }},

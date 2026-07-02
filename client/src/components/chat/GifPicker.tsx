@@ -73,7 +73,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
     return () => clearTimeout(debounceRef.current)
   }, [search])
 
-  const fetchGifs = useCallback(async (query: string, pos?: string, append = false) => {
+  const fetchGifs = useCallback(async (query: string, pos?: string, append = false, signal?: AbortSignal) => {
     if (!append) {
       setLoading(true)
       setGifs([])
@@ -88,7 +88,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
         ? `${TENOR_BASE}/search?q=${encodeURIComponent(query)}&key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
         : `${TENOR_BASE}/featured?key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
 
-      const res = await fetch(endpoint)
+      const res = await fetch(endpoint, { signal })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const parsed = parseTenorResults(data.results ?? [])
@@ -97,7 +97,8 @@ export default function GifPicker({ onPick, onClose }: Props) {
       setNextPos(data.next)
       setHasMore(!!data.next && parsed.length === LIMIT)
       setDemoMode(false)
-    } catch {
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
       if (!append) {
         setGifs(DEMO_GIFS)
         setDemoMode(true)
@@ -110,7 +111,9 @@ export default function GifPicker({ onPick, onClose }: Props) {
   }, [])
 
   useEffect(() => {
-    fetchGifs(debouncedSearch)
+    const ctrl = new AbortController()
+    fetchGifs(debouncedSearch, undefined, false, ctrl.signal)
+    return () => ctrl.abort()
   }, [debouncedSearch, fetchGifs])
 
   // Infinite scroll
