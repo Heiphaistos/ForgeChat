@@ -88,7 +88,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
             <p className="text-xs text-fc-text leading-relaxed line-clamp-4">{msg.content}</p>
 
             <button
-              onClick={() => unpin.mutate(msg.id)}
+              onClick={e => { e.stopPropagation(); unpin.mutate(msg.id) }}
               className="absolute top-2 right-2 p-1 text-fc-muted hover:text-fc-red rounded opacity-0 group-hover:opacity-100 transition hover:bg-fc-hover"
               title="Désépingler"
             >
