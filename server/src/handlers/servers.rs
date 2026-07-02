@@ -735,6 +735,22 @@ pub async fn require_member(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
+/// Vérifie membership + appartenance canal en 2 queries parallèles.
+/// Remplace le pattern `require_member(...); require_channel_in_server(...)` séquentiel.
+pub async fn require_member_and_channel(
+    state: &AppState, user_id: Uuid, server_id: Uuid, channel_id: Uuid,
+) -> Result<()> {
+    let (member_ok, channel_ok) = tokio::try_join!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)"
+        ).bind(user_id).bind(server_id).fetch_one(&state.db),
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
+        ).bind(channel_id).bind(server_id).fetch_one(&state.db),
+    )?;
+    if !member_ok || !channel_ok { Err(AppError::Forbidden) } else { Ok(()) }
+}
+
 /// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
 pub async fn require_channel_in_server(
     state: &AppState, channel_id: Uuid, server_id: Uuid,
