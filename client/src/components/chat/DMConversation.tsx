@@ -125,6 +125,12 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
   const typingTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
 
+  // Cleanup des timeouts de typing à l'unmount
+  useEffect(() => () => {
+    typingTimeouts.current.forEach(clearTimeout)
+    if (typingDebounce.current) clearTimeout(typingDebounce.current)
+  }, [])
+
   // Debounce envoi TYPING
   const typingDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTypingSent = useRef(0)
