@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useChat } from '../../store/chat'
 import { Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -19,11 +19,9 @@ function formatDate(iso: string): string {
 }
 
 export default function ExportConversationButton({ channelId, channelName }: ExportConversationButtonProps) {
-  const qc = useQueryClient()
+  const messages = useChat(s => s.messagesByChannel[channelId] ?? [])
 
   const handleExport = () => {
-    const messages: any[] = qc.getQueryData(['messages', channelId]) ?? []
-
     if (messages.length === 0) {
       toast.error('Aucun message à exporter')
       return
