@@ -23,6 +23,17 @@ pub async fn create_server(
         return Err(AppError::BadRequest("Nom serveur 2-100 chars".into()));
     }
 
+    // Limiter à 100 serveurs possédés par utilisateur (anti-spam)
+    let owned_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM servers WHERE owner_id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if owned_count >= 100 {
+        return Err(AppError::BadRequest("Limite de 100 serveurs atteinte".into()));
+    }
+
     let invite_code = generate_invite_code();
 
     let server = sqlx::query_as::<_, Server>(
