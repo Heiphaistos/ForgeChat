@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
@@ -26,6 +26,15 @@ export default function LeaderboardPage() {
   const { user } = useAuth()
   const { openSidebar } = useMobile()
   const [period, setPeriod] = useState('month')
+
+  useEffect(() => {
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}Classement | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [])
 
   const { data: entries = [], isLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ['leaderboard', serverId, period],

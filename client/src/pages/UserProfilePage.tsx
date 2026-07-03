@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
@@ -176,6 +176,16 @@ export default function UserProfilePage() {
     queryFn: () => api.get(`/users/${userId}`).then((r) => r.data),
     enabled: !!userId,
   })
+
+  useEffect(() => {
+    if (!user?.username) return
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}@${user.username} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [user?.username])
 
   const handleOpenDm = async () => {
     if (!userId) return

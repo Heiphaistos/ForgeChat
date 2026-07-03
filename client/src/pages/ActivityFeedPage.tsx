@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   Pin, Users, Trophy, Calendar, UserPlus, Zap, ChevronLeft,
@@ -154,6 +154,15 @@ function ActivityRow({ item }: { item: ActivityItem }) {
 export default function ActivityFeedPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const { openSidebar } = useMobile()
+
+  useEffect(() => {
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}Activité récente | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [])
 
   const {
     data,
