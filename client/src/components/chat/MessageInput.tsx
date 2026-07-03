@@ -10,9 +10,9 @@ import { useDraft, useChat } from '../../store/chat'
 import { useAuth } from '../../store/auth'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
-import EmojiPicker from './EmojiPicker'
 import { formatStickerMessage } from './sticker-utils'
 import type { Sticker } from './sticker-utils'
+const EmojiPicker = lazy(() => import('./EmojiPicker'))
 const GifPicker = lazy(() => import('./GifPicker'))
 const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
@@ -1011,15 +1011,17 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               <SmilePlus size={20} />
             </button>
             {showEmojiPicker && (
-              <EmojiPicker
-                serverId={serverId}
-                onPick={(emoji) => {
-                  const pos = textareaRef.current?.selectionStart ?? content.length
-                  setContent(c => c.slice(0, pos) + emoji + c.slice(pos))
-                  setTimeout(() => textareaRef.current?.focus(), 0)
-                }}
-                onClose={() => setShowEmojiPicker(false)}
-              />
+              <Suspense fallback={<div className="absolute bottom-full right-0 mb-2 w-80 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center"><div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+                <EmojiPicker
+                  serverId={serverId}
+                  onPick={(emoji) => {
+                    const pos = textareaRef.current?.selectionStart ?? content.length
+                    setContent(c => c.slice(0, pos) + emoji + c.slice(pos))
+                    setTimeout(() => textareaRef.current?.focus(), 0)
+                  }}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              </Suspense>
             )}
           </div>
 

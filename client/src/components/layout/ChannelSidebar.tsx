@@ -73,7 +73,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
       <div role="dialog" aria-modal="true" aria-labelledby="create-group-title" className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 id="create-group-title" className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
-          <button onClick={onClose} className="text-fc-muted hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="text-fc-muted hover:text-white" title="Fermer"><X size={16} /></button>
         </div>
 
         <input
@@ -92,7 +92,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
                 className="flex items-center gap-1 bg-fc-accent/20 text-fc-accent text-xs px-2 py-0.5 rounded-full"
               >
                 {u.username}
-                <button onClick={() => toggle(u)}><X size={10} /></button>
+                <button onClick={() => toggle(u)} aria-label={`Retirer ${u.username}`} title={`Retirer ${u.username}`}><X size={10} /></button>
               </span>
             ))}
           </div>
@@ -778,6 +778,8 @@ export default function ChannelSidebar() {
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="w-full shadow-sm border-b border-fc-bg/50 hover:brightness-110 transition overflow-hidden"
+            aria-label={menuOpen ? 'Fermer le menu serveur' : 'Ouvrir le menu serveur'}
+            aria-expanded={menuOpen}
           >
             {server?.banner ? (
               <div className="relative h-16">

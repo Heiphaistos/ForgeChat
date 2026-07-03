@@ -209,7 +209,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
   if (!user) return null
 
   return (
-    <div className="flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative">
+    <div className="flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative pb-safe">
       {/* Popup statut rapide */}
       {showStatusPopup && (
         <QuickStatusPopup onClose={() => setShowStatusPopup(false)} />
