@@ -71,7 +71,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           {bannerPreview && (
             <button
               onClick={e => { e.stopPropagation(); setBannerPreview(null); updateMe({ ...user, banner: null }); api.patch('/users/me', { banner: null }) }}
-              className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition hover:bg-red-600"
+              className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded-full text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition hover:bg-red-600"
             >
               <Trash2 size={11} />
             </button>

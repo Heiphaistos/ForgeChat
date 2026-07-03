@@ -139,7 +139,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
         <span className="text-sm text-white font-medium leading-snug break-words">{task.title}</span>
         <button
           onClick={e => { e.stopPropagation(); onDelete(task.id) }}
-          className="opacity-0 group-hover:opacity-100 p-0.5 text-fc-muted hover:text-red-400 transition flex-shrink-0"
+          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 text-fc-muted hover:text-red-400 transition flex-shrink-0"
         >
           <X size={12} />
         </button>
