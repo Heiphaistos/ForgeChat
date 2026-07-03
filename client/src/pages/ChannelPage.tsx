@@ -301,6 +301,19 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [serverData, meId])
 
+  // Titre de page contextuel : "#canal — Serveur | ForgeChat"
+  const _titleCh: string | undefined = (serverData?.channels ?? []).find((c: any) => c.id === channelId)?.name
+  const _titleSrv: string | undefined = serverData?.server?.name ?? (serverData as any)?.name
+  useEffect(() => {
+    if (!_titleCh || !_titleSrv || isSplit) return
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}#${_titleCh} — ${_titleSrv} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [_titleCh, _titleSrv, isSplit, channelId])
+
   const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
     try {
       const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })

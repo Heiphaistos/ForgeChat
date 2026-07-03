@@ -356,7 +356,8 @@ function AppInner() {
       .filter(([svId]) => !isServerMuted(svId))
       .reduce((sum, [, n]) => sum + n, 0)
     const total = dmTotal + unmutedServerTotal
-    document.title = total > 0 ? `(${total}) ForgeChat` : 'ForgeChat'
+    const base = document.title.replace(/^\(\d+\)\s*/, '')
+    document.title = total > 0 ? `(${total}) ${base}` : base
   }, [allUnread, allServerCounts, isServerMuted])
 
   // Notifications temps réel pour les demandes d'ami

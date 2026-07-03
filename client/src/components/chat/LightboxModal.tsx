@@ -14,6 +14,8 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const touchStartX = useRef<number | null>(null)
+  const pinchStartDist = useRef<number | null>(null)
+  const pinchStartZoom = useRef(1)
 
   const prev = useCallback(() => { setIndex(i => (i - 1 + images.length) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
   const next = useCallback(() => { setIndex(i => (i + 1) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
@@ -74,8 +76,30 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         onMouseMove={e => { if (dragging) setPos({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }) }}
         onMouseUp={() => setDragging(false)}
         onMouseLeave={() => setDragging(false)}
-        onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+        onTouchStart={e => {
+          if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            pinchStartDist.current = Math.sqrt(dx * dx + dy * dy)
+            pinchStartZoom.current = zoom
+            touchStartX.current = null
+          } else {
+            touchStartX.current = e.touches[0].clientX
+            pinchStartDist.current = null
+          }
+        }}
+        onTouchMove={e => {
+          if (e.touches.length === 2 && pinchStartDist.current !== null) {
+            e.preventDefault()
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const scale = dist / pinchStartDist.current
+            setZoom(Math.max(0.5, Math.min(4, pinchStartZoom.current * scale)))
+          }
+        }}
         onTouchEnd={e => {
+          if (pinchStartDist.current !== null) { pinchStartDist.current = null; return }
           if (touchStartX.current === null || images.length <= 1) return
           const delta = e.changedTouches[0].clientX - touchStartX.current
           if (Math.abs(delta) > 50) delta < 0 ? next() : prev()

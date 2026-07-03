@@ -605,6 +605,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setScheduledAt('')
     setShowTtlPicker(false)
     setShowScheduled(false)
+    // Focus textarea on desktop (pointer:fine = mouse/trackpad) sans déclencher le clavier virtuel mobile
+    if (window.matchMedia('(pointer: fine)').matches) {
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    }
   }, [channelId])
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
