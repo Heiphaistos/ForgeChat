@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
 
 interface Props {
@@ -13,6 +13,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
   const [dragging, setDragging] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const touchStartX = useRef<number | null>(null)
 
   const prev = useCallback(() => { setIndex(i => (i - 1 + images.length) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
   const next = useCallback(() => { setIndex(i => (i + 1) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
@@ -73,6 +74,13 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         onMouseMove={e => { if (dragging) setPos({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }) }}
         onMouseUp={() => setDragging(false)}
         onMouseLeave={() => setDragging(false)}
+        onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+        onTouchEnd={e => {
+          if (touchStartX.current === null || images.length <= 1) return
+          const delta = e.changedTouches[0].clientX - touchStartX.current
+          if (Math.abs(delta) > 50) delta < 0 ? next() : prev()
+          touchStartX.current = null
+        }}
       >
         <img
           src={images[index]}

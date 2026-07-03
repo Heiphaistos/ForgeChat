@@ -654,6 +654,7 @@ export default function MessageList({
                             <video
                               src={att.url}
                               controls
+                              playsInline
                               preload="metadata"
                               className="max-w-full max-h-72 rounded shadow"
                               style={{ background: '#111' }}
