@@ -55,6 +55,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping, clearChannel } = useChat()
+  const typingUsers = useChat(s => Object.values(s.typing[channelId ?? ''] ?? {}))
   const { on, onOpen, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
@@ -583,6 +584,31 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               initialHighlightId={highlightMessageId}
               canManageMessages={canManageMessages}
             />
+
+            {/* Indicateur de frappe — canal serveur */}
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="px-4 flex-shrink-0 h-5 flex items-center"
+            >
+              {typingUsers.length > 0 && (
+                <span className="text-xs text-fc-muted flex items-center gap-1.5">
+                  <span className="flex gap-0.5 items-center" aria-hidden>
+                    {[0, 1, 2].map(i => (
+                      <span key={i} className="w-1.5 h-1.5 bg-fc-muted rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </span>
+                  <span>
+                    {typingUsers.length === 1
+                      ? `${typingUsers[0]} est en train d'écrire…`
+                      : typingUsers.length <= 3
+                      ? `${typingUsers.join(', ')} écrivent…`
+                      : 'Plusieurs personnes écrivent…'}
+                  </span>
+                </span>
+              )}
+            </div>
 
             {/* Countdown slowmode */}
             {slowmodeCooldown > 0 && (

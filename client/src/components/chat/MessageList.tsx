@@ -391,6 +391,9 @@ export default function MessageList({
     <div className="flex-1 relative flex flex-col overflow-hidden channel-fade-in">
       <div
         ref={containerRef}
+        role="log"
+        aria-label="Historique des messages"
+        aria-live="polite"
         className="flex-1 overflow-y-auto overscroll-contain px-2 md:px-4 py-2 space-y-0.5 message-list-container"
         onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
