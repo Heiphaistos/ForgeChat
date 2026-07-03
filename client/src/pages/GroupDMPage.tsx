@@ -431,6 +431,7 @@ export default function GroupDMPage() {
                 onKeyDown={e => { if (e.key === 'Enter') setSearchQuery(searchInput.trim()) }}
                 placeholder="Rechercher dans ce groupe..."
                 inputMode="search" autoComplete="off"
+                enterKeyHint="search" autoCapitalize="none"
                 className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
                 autoFocus
               />
@@ -446,7 +447,7 @@ export default function GroupDMPage() {
               </button>
             </div>
             {searchQuery.trim().length >= 2 && (
-              <div className="max-h-56 overflow-y-auto space-y-1">
+              <div className="max-h-56 overflow-y-auto overscroll-contain space-y-1">
                 {searchFetching && <p className="text-xs text-fc-muted text-center py-2">Recherche...</p>}
                 {!searchFetching && searchResults.length === 0 && (
                   <p className="text-xs text-fc-muted text-center py-2">Aucun résultat pour "{searchQuery}"</p>
@@ -476,6 +477,8 @@ export default function GroupDMPage() {
                   value={renameInput}
                   onChange={e => setRenameInput(e.target.value)}
                   placeholder={group.name}
+                  enterKeyHint="done"
+                  autoCapitalize="sentences"
                   className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
                   maxLength={64}
                 />
@@ -497,11 +500,12 @@ export default function GroupDMPage() {
                   onChange={e => setAddMemberInput(e.target.value)}
                   placeholder="Rechercher un utilisateur..."
                   inputMode="search" autoComplete="off"
+                  enterKeyHint="search" autoCapitalize="none"
                   className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
                 />
               </div>
               {addMemberInput.length >= 2 && userSearchResults.length > 0 && (
-                <div className="space-y-1 max-h-32 overflow-y-auto">
+                <div className="space-y-1 max-h-32 overflow-y-auto overscroll-contain">
                   {addableMembersSearchResults.map(u => (
                     <div key={u.id} className="flex items-center justify-between px-2 py-1 bg-fc-channel rounded text-xs">
                       <span className="text-white">{u.username}#{u.discriminator}</span>
@@ -592,6 +596,7 @@ export default function GroupDMPage() {
                         onChange={e => setEditContent(e.target.value)}
                         className="flex-1 px-3 py-1.5 bg-fc-input rounded-xl text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
                         autoFocus
+                        enterKeyHint="send"
                         onKeyDown={e => {
                           if (e.key === 'Escape') setEditingMsgId(null)
                           if (e.key === 'Enter') {
@@ -741,7 +746,7 @@ export default function GroupDMPage() {
 
       {/* Panneau membres */}
       {showMembers && (
-        <div className="absolute right-0 inset-y-0 z-20 w-full md:relative md:inset-auto md:z-auto md:w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto py-3 panel-slide-right">
+        <div className="absolute right-0 inset-y-0 z-20 w-full md:relative md:inset-auto md:z-auto md:w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto overscroll-contain py-3 panel-slide-right">
           <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-3 mb-2">
             Membres ({group.members.length})
           </p>

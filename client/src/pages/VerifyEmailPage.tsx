@@ -109,6 +109,7 @@ export default function VerifyEmailPage() {
               ref={refs[i]}
               type="text"
               inputMode="numeric"
+              enterKeyHint={i < 3 ? 'next' : 'done'}
               maxLength={1}
               value={d}
               onChange={e => handleDigit(i, e.target.value)}

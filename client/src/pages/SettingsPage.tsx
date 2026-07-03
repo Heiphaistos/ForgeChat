@@ -96,7 +96,7 @@ export default function SettingsPage() {
           </button>
         </div>
 
-        <nav aria-label="Navigation des paramètres" className="flex-1 overflow-y-auto p-2">
+        <nav aria-label="Navigation des paramètres" className="flex-1 overflow-y-auto overscroll-contain p-2">
           {NAV.map((item, idx) => (
             <div key={item.id}>
               {(idx === 0 || item.group) && (

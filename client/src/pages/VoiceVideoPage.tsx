@@ -491,7 +491,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
                 isLocal={spotlightPeer.isLocal} speaking={(speakingMap[spotlightPeer.userId] ?? 0) > 0.05}
                 handRaised={raisedHands[spotlightPeer.userId]} blurEnabled={blurBackground} />
             </div>
-            <div className="w-48 flex flex-col gap-2 p-2 overflow-y-auto border-l border-fc-hover bg-fc-sidebar/50">
+            <div className="w-48 flex flex-col gap-2 p-2 overflow-y-auto overscroll-contain border-l border-fc-hover bg-fc-sidebar/50">
               {allPeers.map(p => (
                 <div key={p.userId} className="cursor-pointer" onClick={() => setSpotlightUser(p.userId)}>
                   <PeerTile peer={p} stream={p.stream} muted={p.isLocal}
