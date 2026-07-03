@@ -70,7 +70,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             disabled={it.disabled}
             aria-disabled={it.disabled}
             onClick={() => { it.onClick(); onClose() }}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition text-left
+            className={`w-full flex items-center gap-2.5 px-3 py-2 min-h-[44px] text-sm transition text-left
               ${it.danger
                 ? 'text-fc-red hover:bg-fc-red/10'
                 : 'text-fc-text hover:bg-fc-hover hover:text-white'}

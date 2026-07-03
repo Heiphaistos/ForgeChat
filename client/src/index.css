@@ -745,6 +745,18 @@ a:focus-visible,
   .panel-slide-right { animation: none; }
 }
 
+/* Animation "bounce subtil" pour le bouton scroll-to-bottom */
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-4px); }
+}
+.animate-bounce-subtle {
+  animation: bounce-subtle 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-bounce-subtle { animation: none; }
+}
+
 /* RÉDUCTION DU MOUVEMENT */
 [data-reduce-motion="true"] *,
 [data-reduce-motion="true"] *::before,
