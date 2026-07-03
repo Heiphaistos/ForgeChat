@@ -324,7 +324,10 @@ export default function MessageList({
     const t = e.touches[0]
     longPressTarget.current = { x: t.clientX, y: t.clientY, msg }
     longPressTimer.current = setTimeout(() => {
-      if (longPressTarget.current) setContextMenu(longPressTarget.current)
+      if (longPressTarget.current) {
+        if ('vibrate' in navigator) navigator.vibrate(20)
+        setContextMenu(longPressTarget.current)
+      }
     }, 500)
     swipeRef.current = { startX: t.clientX, startY: t.clientY, msg, el: e.currentTarget as HTMLElement }
   }
@@ -1143,13 +1146,14 @@ export default function MessageList({
           onClick={e => e.stopPropagation()}
         >
           {/* Barre d'emojis rapides — particulièrement utile sur mobile */}
-          <div className="flex items-center justify-around px-2 py-2 border-b border-fc-hover/50">
+          <div className="flex items-center justify-around px-1 py-1.5 border-b border-fc-hover/50">
             {QUICK_EMOJIS.map(emoji => (
               <button
                 key={emoji}
                 onClick={() => { toggleReaction(contextMenu.msg.id, emoji); setContextMenu(null) }}
-                className="text-lg hover:scale-125 transition-transform active:scale-110 p-0.5 rounded"
+                className="text-xl hover:scale-125 transition-transform active:scale-110 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-fc-hover"
                 title={`Réagir ${emoji}`}
+                aria-label={`Réagir avec ${emoji}`}
               >
                 {emoji}
               </button>
@@ -1158,7 +1162,7 @@ export default function MessageList({
           {contextMenu.msg.content && (
             <button
               onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null) }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
               <Copy size={14} /> Copier le texte
             </button>
@@ -1170,13 +1174,13 @@ export default function MessageList({
               toast.success('Lien copié')
               setContextMenu(null)
             }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
             <Link size={14} /> Copier le lien
           </button>
           <button
             onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-muted text-xs"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-muted text-xs"
           >
             <Copy size={12} /> Copier l'ID du message
           </button>
@@ -1185,7 +1189,7 @@ export default function MessageList({
 
           <button
             onClick={() => { onReply?.(contextMenu.msg); setContextMenu(null) }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
             <CornerUpLeft size={14} /> Répondre
           </button>
@@ -1193,7 +1197,7 @@ export default function MessageList({
           {onOpenThread && (
             <button
               onClick={() => { onOpenThread(contextMenu.msg.id); setContextMenu(null) }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
               <MessagesSquare size={14} /> Créer un fil
             </button>
@@ -1201,7 +1205,7 @@ export default function MessageList({
 
           <button
             onClick={() => { setForwardingMsg({ id: contextMenu.msg.id }); setContextMenu(null) }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
             <Forward size={14} className="rotate-180" /> Transférer
           </button>
@@ -1209,7 +1213,7 @@ export default function MessageList({
           {onPinMessage && (
             <button
               onClick={() => { onPinMessage(contextMenu.msg.id); setContextMenu(null) }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
               <Pin size={14} /> {contextMenu.msg.pinned ? 'Désépingler' : 'Épingler'}
             </button>
@@ -1221,14 +1225,14 @@ export default function MessageList({
               {contextMenu.msg.author_id === user?.id && (
                 <button
                   onClick={() => { startEdit(contextMenu.msg.id, contextMenu.msg.content ?? ''); setContextMenu(null) }}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-text"
+                  className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
                 >
                   <Pencil size={14} /> Modifier
                 </button>
               )}
               <button
                 onClick={() => { setDeleteConfirmId(contextMenu.msg.id); setContextMenu(null) }}
-                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-red"
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-red"
               >
                 <Trash2 size={14} /> Supprimer
               </button>
@@ -1240,7 +1244,7 @@ export default function MessageList({
               <div className="border-t border-fc-hover my-1" />
               <button
                 onClick={() => { setReportingMsg(contextMenu.msg.id); setContextMenu(null) }}
-                className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-fc-hover transition text-fc-red"
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-red"
               >
                 <Flag size={14} /> Signaler
               </button>

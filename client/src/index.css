@@ -85,12 +85,12 @@ body {
   .pt-safe { padding-top: env(safe-area-inset-top); }
 }
 
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #36383c; border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: #4f545c; }
+::-webkit-scrollbar-thumb { background: #2c2f33; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #40444b; }
 /* Firefox scrollbar */
-* { scrollbar-width: thin; scrollbar-color: #36383c transparent; }
+* { scrollbar-width: thin; scrollbar-color: #2c2f33 transparent; }
 
 /* Overscroll contain pour les listes de messages */
 .message-list-container { overscroll-behavior: contain; }
@@ -200,7 +200,7 @@ a:focus-visible,
 [data-theme="dracula"] .fc-input { background-color: #44475a !important; }
 [data-theme="dracula"] .fc-markdown pre,
 [data-theme="dracula"] .fc-markdown code { background: #1e1f2b !important; border-color: #353746 !important; }
-[data-theme="dracula"] ::-webkit-scrollbar-thumb { background: #353746 !important; }
+[data-theme="dracula"] ::-webkit-scrollbar-thumb { background: #353746 !important; border-radius: 99px !important; }
 
 /* NORD */
 [data-theme="nord"] body { background: #2e3440; color: #e5e9f0; }
@@ -222,7 +222,7 @@ a:focus-visible,
 [data-theme="nord"] .fc-input { background-color: #4c566a !important; }
 [data-theme="nord"] .fc-markdown pre,
 [data-theme="nord"] .fc-markdown code { background: #3b4252 !important; border-color: #434c5e !important; }
-[data-theme="nord"] ::-webkit-scrollbar-thumb { background: #434c5e !important; }
+[data-theme="nord"] ::-webkit-scrollbar-thumb { background: #434c5e !important; border-radius: 99px !important; }
 
 /* CATPPUCCIN */
 [data-theme="catppuccin"] body { background: #1e1e2e; color: #cdd6f4; }
@@ -244,7 +244,7 @@ a:focus-visible,
 [data-theme="catppuccin"] .fc-input { background-color: #45475a !important; }
 [data-theme="catppuccin"] .fc-markdown pre,
 [data-theme="catppuccin"] .fc-markdown code { background: #181825 !important; border-color: #313244 !important; }
-[data-theme="catppuccin"] ::-webkit-scrollbar-thumb { background: #313244 !important; }
+[data-theme="catppuccin"] ::-webkit-scrollbar-thumb { background: #313244 !important; border-radius: 99px !important; }
 
 /* GRUVBOX */
 [data-theme="gruvbox"] body { background: #1d2021; color: #ebdbb2; }
@@ -266,7 +266,7 @@ a:focus-visible,
 [data-theme="gruvbox"] .fc-input { background-color: #504945 !important; }
 [data-theme="gruvbox"] .fc-markdown pre,
 [data-theme="gruvbox"] .fc-markdown code { background: #282828 !important; border-color: #3c3836 !important; }
-[data-theme="gruvbox"] ::-webkit-scrollbar-thumb { background: #3c3836 !important; }
+[data-theme="gruvbox"] ::-webkit-scrollbar-thumb { background: #3c3836 !important; border-radius: 99px !important; }
 
 /* TOKYO NIGHT */
 [data-theme="tokyonight"] body { background: #1a1b2e; color: #c0caf5; }
@@ -288,7 +288,7 @@ a:focus-visible,
 [data-theme="tokyonight"] .fc-input { background-color: #303550 !important; }
 [data-theme="tokyonight"] .fc-markdown pre,
 [data-theme="tokyonight"] .fc-markdown code { background: #1f2040 !important; border-color: #24283b !important; }
-[data-theme="tokyonight"] ::-webkit-scrollbar-thumb { background: #24283b !important; }
+[data-theme="tokyonight"] ::-webkit-scrollbar-thumb { background: #24283b !important; border-radius: 99px !important; }
 
 /* ONE DARK */
 [data-theme="onedark"] body { background: #282c34; color: #abb2bf; }
@@ -310,7 +310,7 @@ a:focus-visible,
 [data-theme="onedark"] .fc-input { background-color: #3f4451 !important; }
 [data-theme="onedark"] .fc-markdown pre,
 [data-theme="onedark"] .fc-markdown code { background: #2c313c !important; border-color: #3b4048 !important; }
-[data-theme="onedark"] ::-webkit-scrollbar-thumb { background: #3b4048 !important; }
+[data-theme="onedark"] ::-webkit-scrollbar-thumb { background: #3b4048 !important; border-radius: 99px !important; }
 
 /* CYBERPUNK */
 [data-theme="cyberpunk"] body { background: #0d0d0d; color: #e0e0e0; }
@@ -332,7 +332,7 @@ a:focus-visible,
 [data-theme="cyberpunk"] .fc-input { background-color: #1a1a1a !important; }
 [data-theme="cyberpunk"] .fc-markdown pre,
 [data-theme="cyberpunk"] .fc-markdown code { background: #111111 !important; border-color: #161616 !important; }
-[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb { background: #161616 !important; }
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb { background: #161616 !important; border-radius: 99px !important; }
 
 /* MONOKAI */
 [data-theme="monokai"] body { background: #272822; color: #f8f8f2; }
@@ -354,7 +354,7 @@ a:focus-visible,
 [data-theme="monokai"] .fc-input { background-color: #3e3e37 !important; }
 [data-theme="monokai"] .fc-markdown pre,
 [data-theme="monokai"] .fc-markdown code { background: #2d2e2a !important; border-color: #383830 !important; }
-[data-theme="monokai"] ::-webkit-scrollbar-thumb { background: #383830 !important; }
+[data-theme="monokai"] ::-webkit-scrollbar-thumb { background: #383830 !important; border-radius: 99px !important; }
 
 /* SOLARIZED */
 [data-theme="solarized"] body { background: #002b36; color: #839496; }
@@ -376,7 +376,7 @@ a:focus-visible,
 [data-theme="solarized"] .fc-input { background-color: #083f4d !important; }
 [data-theme="solarized"] .fc-markdown pre,
 [data-theme="solarized"] .fc-markdown code { background: #073642 !important; border-color: #0d4a5c !important; }
-[data-theme="solarized"] ::-webkit-scrollbar-thumb { background: #0d4a5c !important; }
+[data-theme="solarized"] ::-webkit-scrollbar-thumb { background: #0d4a5c !important; border-radius: 99px !important; }
 
 /* FOREST */
 [data-theme="forest"] body { background: #1a2318; color: #c8dbc4; }
@@ -398,7 +398,7 @@ a:focus-visible,
 [data-theme="forest"] .fc-input { background-color: #2d3e2a !important; }
 [data-theme="forest"] .fc-markdown pre,
 [data-theme="forest"] .fc-markdown code { background: #1e2a1c !important; border-color: #243222 !important; }
-[data-theme="forest"] ::-webkit-scrollbar-thumb { background: #243222 !important; }
+[data-theme="forest"] ::-webkit-scrollbar-thumb { background: #243222 !important; border-radius: 99px !important; }
 
 /* OCEAN */
 [data-theme="ocean"] body { background: #0f2340; color: #a8c8e8; }
@@ -420,7 +420,7 @@ a:focus-visible,
 [data-theme="ocean"] .fc-input { background-color: #1a3557 !important; }
 [data-theme="ocean"] .fc-markdown pre,
 [data-theme="ocean"] .fc-markdown code { background: #0d2238 !important; border-color: #112a47 !important; }
-[data-theme="ocean"] ::-webkit-scrollbar-thumb { background: #112a47 !important; }
+[data-theme="ocean"] ::-webkit-scrollbar-thumb { background: #112a47 !important; border-radius: 99px !important; }
 
 /* NEON */
 [data-theme="neon"] body { background: #0a0a14; color: #e0e0ff; }
@@ -442,7 +442,7 @@ a:focus-visible,
 [data-theme="neon"] .fc-input { background-color: #161630 !important; }
 [data-theme="neon"] .fc-markdown pre,
 [data-theme="neon"] .fc-markdown code { background: #0d0d1a !important; border-color: #111120 !important; }
-[data-theme="neon"] ::-webkit-scrollbar-thumb { background: #111120 !important; }
+[data-theme="neon"] ::-webkit-scrollbar-thumb { background: #111120 !important; border-radius: 99px !important; }
 
 /* MATRIX */
 [data-theme="matrix"] body { background: #000000; color: #33cc33; }
@@ -464,7 +464,7 @@ a:focus-visible,
 [data-theme="matrix"] .fc-input { background-color: #0a140a !important; }
 [data-theme="matrix"] .fc-markdown pre,
 [data-theme="matrix"] .fc-markdown code { background: #040804 !important; border-color: #060c06 !important; }
-[data-theme="matrix"] ::-webkit-scrollbar-thumb { background: #060c06 !important; }
+[data-theme="matrix"] ::-webkit-scrollbar-thumb { background: #060c06 !important; border-radius: 99px !important; }
 
 /* ROSÉ PINE */
 [data-theme="rosepine"] body { background: #191724; color: #e0def4; }
@@ -486,7 +486,7 @@ a:focus-visible,
 [data-theme="rosepine"] .fc-input { background-color: #2a273f !important; }
 [data-theme="rosepine"] .fc-markdown pre,
 [data-theme="rosepine"] .fc-markdown code { background: #26233a !important; border-color: #403d52 !important; }
-[data-theme="rosepine"] ::-webkit-scrollbar-thumb { background: #403d52 !important; }
+[data-theme="rosepine"] ::-webkit-scrollbar-thumb { background: #403d52 !important; border-radius: 99px !important; }
 
 /* EVERFOREST */
 [data-theme="everforest"] body { background: #2d353b; color: #d3c6aa; }
@@ -508,7 +508,7 @@ a:focus-visible,
 [data-theme="everforest"] .fc-input { background-color: #3d484d !important; }
 [data-theme="everforest"] .fc-markdown pre,
 [data-theme="everforest"] .fc-markdown code { background: #343f44 !important; border-color: #374145 !important; }
-[data-theme="everforest"] ::-webkit-scrollbar-thumb { background: #374145 !important; }
+[data-theme="everforest"] ::-webkit-scrollbar-thumb { background: #374145 !important; border-radius: 99px !important; }
 
 /* KANAGAWA */
 [data-theme="kanagawa"] body { background: #1f1f28; color: #dcd7ba; }
@@ -530,7 +530,7 @@ a:focus-visible,
 [data-theme="kanagawa"] .fc-input { background-color: #363646 !important; }
 [data-theme="kanagawa"] .fc-markdown pre,
 [data-theme="kanagawa"] .fc-markdown code { background: #2a2a37 !important; border-color: #2d2d3f !important; }
-[data-theme="kanagawa"] ::-webkit-scrollbar-thumb { background: #2d2d3f !important; }
+[data-theme="kanagawa"] ::-webkit-scrollbar-thumb { background: #2d2d3f !important; border-radius: 99px !important; }
 
 /* MIDNIGHT */
 [data-theme="midnight"] body { background: #0c0e1a; color: #c8cde4; }
@@ -552,7 +552,7 @@ a:focus-visible,
 [data-theme="midnight"] .fc-input { background-color: #1a1d30 !important; }
 [data-theme="midnight"] .fc-markdown pre,
 [data-theme="midnight"] .fc-markdown code { background: #101220 !important; border-color: #151828 !important; }
-[data-theme="midnight"] ::-webkit-scrollbar-thumb { background: #151828 !important; }
+[data-theme="midnight"] ::-webkit-scrollbar-thumb { background: #151828 !important; border-radius: 99px !important; }
 
 /* SUNSET */
 [data-theme="sunset"] body { background: #1a1014; color: #f0c8b8; }
@@ -574,7 +574,7 @@ a:focus-visible,
 [data-theme="sunset"] .fc-input { background-color: #2e1a22 !important; }
 [data-theme="sunset"] .fc-markdown pre,
 [data-theme="sunset"] .fc-markdown code { background: #22141a !important; border-color: #27151c !important; }
-[data-theme="sunset"] ::-webkit-scrollbar-thumb { background: #27151c !important; }
+[data-theme="sunset"] ::-webkit-scrollbar-thumb { background: #27151c !important; border-radius: 99px !important; }
 
 /* COFFEE */
 [data-theme="coffee"] body { background: #1e1510; color: #d4b896; }
@@ -596,7 +596,7 @@ a:focus-visible,
 [data-theme="coffee"] .fc-input { background-color: #33201a !important; }
 [data-theme="coffee"] .fc-markdown pre,
 [data-theme="coffee"] .fc-markdown code { background: #271a12 !important; border-color: #2c1c14 !important; }
-[data-theme="coffee"] ::-webkit-scrollbar-thumb { background: #2c1c14 !important; }
+[data-theme="coffee"] ::-webkit-scrollbar-thumb { background: #2c1c14 !important; border-radius: 99px !important; }
 
 /* WINTER / ICE */
 [data-theme="winter"] body { background: #f0f4f8; color: #2c3e50; }
@@ -618,7 +618,7 @@ a:focus-visible,
 [data-theme="winter"] .fc-input { background-color: #ffffff !important; }
 [data-theme="winter"] .fc-markdown pre,
 [data-theme="winter"] .fc-markdown code { background: #e8f0f8 !important; border-color: #d0e4f0 !important; }
-[data-theme="winter"] ::-webkit-scrollbar-thumb { background: #b0c8da !important; }
+[data-theme="winter"] ::-webkit-scrollbar-thumb { background: #b0c8da !important; border-radius: 99px !important; }
 
 /* EMERALD */
 [data-theme="emerald"] body { background: #0d1f18; color: #a8f0c8; }
@@ -640,7 +640,7 @@ a:focus-visible,
 [data-theme="emerald"] .fc-input { background-color: #1a3428 !important; }
 [data-theme="emerald"] .fc-markdown pre,
 [data-theme="emerald"] .fc-markdown code { background: #122820 !important; border-color: #162e22 !important; }
-[data-theme="emerald"] ::-webkit-scrollbar-thumb { background: #162e22 !important; }
+[data-theme="emerald"] ::-webkit-scrollbar-thumb { background: #162e22 !important; border-radius: 99px !important; }
 
 /* BLOOD MOON */
 [data-theme="bloodmoon"] body { background: #120a0a; color: #f0c8c8; }
@@ -662,7 +662,7 @@ a:focus-visible,
 [data-theme="bloodmoon"] .fc-input { background-color: #2a1414 !important; }
 [data-theme="bloodmoon"] .fc-markdown pre,
 [data-theme="bloodmoon"] .fc-markdown code { background: #1a0e0e !important; border-color: #221010 !important; }
-[data-theme="bloodmoon"] ::-webkit-scrollbar-thumb { background: #221010 !important; }
+[data-theme="bloodmoon"] ::-webkit-scrollbar-thumb { background: #221010 !important; border-radius: 99px !important; }
 
 /* VIOLET */
 [data-theme="violet"] body { background: #160d24; color: #d4b8f0; }
@@ -684,7 +684,7 @@ a:focus-visible,
 [data-theme="violet"] .fc-input { background-color: #281640 !important; }
 [data-theme="violet"] .fc-markdown pre,
 [data-theme="violet"] .fc-markdown code { background: #1e1130 !important; border-color: #221238 !important; }
-[data-theme="violet"] ::-webkit-scrollbar-thumb { background: #221238 !important; }
+[data-theme="violet"] ::-webkit-scrollbar-thumb { background: #221238 !important; border-radius: 99px !important; }
 
 /* SLATE */
 [data-theme="slate"] body { background: #1c2230; color: #c0ccd8; }
@@ -706,7 +706,7 @@ a:focus-visible,
 [data-theme="slate"] .fc-input { background-color: #2a364a !important; }
 [data-theme="slate"] .fc-markdown pre,
 [data-theme="slate"] .fc-markdown code { background: #222c3c !important; border-color: #263042 !important; }
-[data-theme="slate"] ::-webkit-scrollbar-thumb { background: #263042 !important; }
+[data-theme="slate"] ::-webkit-scrollbar-thumb { background: #263042 !important; border-radius: 99px !important; }
 
 /* Fade-in doux au changement de canal */
 @keyframes channel-fade {
@@ -800,4 +800,4 @@ a:focus-visible,
 [data-theme="retro"] .fc-input { background-color: #43342a !important; }
 [data-theme="retro"] .fc-markdown pre,
 [data-theme="retro"] .fc-markdown code { background: #352a1e !important; border-color: #3c2e22 !important; }
-[data-theme="retro"] ::-webkit-scrollbar-thumb { background: #3c2e22 !important; }
+[data-theme="retro"] ::-webkit-scrollbar-thumb { background: #3c2e22 !important; border-radius: 99px !important; }
