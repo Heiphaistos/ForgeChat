@@ -37,7 +37,11 @@ export default function LinkPreview({ url }: Props) {
   const safeImage = data.image && isSafeUrl(data.image) ? data.image : undefined
 
   return (
-    <div className="mt-2 max-w-full sm:max-w-lg rounded-xl border border-fc-hover bg-fc-channel overflow-hidden">
+    <div
+      role="complementary"
+      aria-label={`Aperçu du lien : ${data.title ?? data.site_name ?? url}`}
+      className="mt-2 max-w-full sm:max-w-lg rounded-xl border border-fc-hover bg-fc-channel overflow-hidden"
+    >
       {safeImage && (
         <img
           src={safeImage}
@@ -71,7 +75,7 @@ export default function LinkPreview({ url }: Props) {
           rel="noopener noreferrer"
           className="text-xs text-fc-accent flex items-center gap-1 mt-2"
         >
-          <ExternalLink size={10} />
+          <ExternalLink size={10} aria-hidden />
           <span className="truncate">{safeUrl}</span>
         </a>
       </div>

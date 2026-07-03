@@ -71,10 +71,10 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
   return (
     <button
       onClick={handleExport}
+      aria-label={`Exporter la conversation #${channelName} en fichier texte`}
       className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover"
-      title="Exporter la conversation"
     >
-      <Download size={18} />
+      <Download size={18} aria-hidden />
     </button>
   )
 }

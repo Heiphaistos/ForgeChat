@@ -63,11 +63,11 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#0e1117] text-white overflow-x-hidden">
 
       {/* ── Navigation ──────────────────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0e1117]/80 backdrop-blur-md border-b border-white/5">
+      <nav aria-label="Navigation principale" className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0e1117]/80 backdrop-blur-md border-b border-white/5">
         <div className="flex items-center gap-2">
           <img src="/icon.svg" alt="ForgeChat" className="w-8 h-8 rounded-lg" />
-          <span className="font-bold text-white text-lg">ForgeChat</span>
-          <span className="text-xs text-white/30 ml-1">{RELEASE}</span>
+          <span className="font-bold text-white text-lg" aria-hidden>ForgeChat</span>
+          <span className="text-xs text-white/30 ml-1" aria-hidden>{RELEASE}</span>
         </div>
         <div className="flex items-center gap-2">
           <Link to="/login"
@@ -82,20 +82,20 @@ export default function LandingPage() {
       </nav>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
-      <section className="relative flex flex-col items-center justify-center text-center px-6 pt-40 pb-28 overflow-hidden">
+      <section aria-labelledby="hero-title" className="relative flex flex-col items-center justify-center text-center px-6 pt-40 pb-28 overflow-hidden">
         {/* Glows */}
-        <div className="absolute top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
-        <div className="absolute top-48 left-1/3 w-64 h-64 rounded-full bg-purple-600/15 blur-[100px] pointer-events-none" />
+        <div aria-hidden className="absolute top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-indigo-600/20 blur-[120px] pointer-events-none" />
+        <div aria-hidden className="absolute top-48 left-1/3 w-64 h-64 rounded-full bg-purple-600/15 blur-[100px] pointer-events-none" />
 
         <div className="relative z-10 max-w-4xl mx-auto">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium mb-8">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+            <span aria-hidden className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
             Open-source · Self-hosted · Chiffré
           </div>
 
           {/* Title */}
-          <h1 className="text-5xl sm:text-7xl font-extrabold leading-none tracking-tight mb-6">
+          <h1 id="hero-title" className="text-5xl sm:text-7xl font-extrabold leading-none tracking-tight mb-6">
             Communiquez{' '}
             <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               sans compromis
@@ -112,7 +112,7 @@ export default function LandingPage() {
             <Link to="/register"
               className="flex items-center gap-2 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-base transition shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/40">
               Créer un compte gratuit
-              <ChevronRight size={18} />
+              <ChevronRight size={18} aria-hidden />
             </Link>
             <Link to="/login"
               className="flex items-center gap-2 px-8 py-3.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold text-base transition">
@@ -121,16 +121,16 @@ export default function LandingPage() {
           </div>
 
           {/* Desktop download callout */}
-          <p className="text-sm text-white/30">
+          <p className="text-sm text-white/30" aria-hidden>
             Ou téléchargez le client desktop ↓
           </p>
         </div>
       </section>
 
       {/* ── Features ────────────────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-6 pb-24">
+      <section aria-labelledby="features-title" className="max-w-6xl mx-auto px-6 pb-24">
         <div className="text-center mb-14">
-          <h2 className="text-3xl font-bold text-white mb-3">Tout ce dont vous avez besoin</h2>
+          <h2 id="features-title" className="text-3xl font-bold text-white mb-3">Tout ce dont vous avez besoin</h2>
           <p className="text-white/40">Conçu pour les équipes qui prennent leur vie privée au sérieux</p>
         </div>
 
@@ -138,7 +138,7 @@ export default function LandingPage() {
           {FEATURES.map(f => (
             <div key={f.title}
               className={`p-6 rounded-2xl border ${f.bg} backdrop-blur-sm hover:scale-[1.02] transition-transform`}>
-              <div className={`${f.color} mb-4`}>{f.icon}</div>
+              <div className={`${f.color} mb-4`} aria-hidden>{f.icon}</div>
               <h3 className="text-base font-semibold text-white mb-2">{f.title}</h3>
               <p className="text-sm text-white/50 leading-relaxed">{f.desc}</p>
             </div>
@@ -147,13 +147,13 @@ export default function LandingPage() {
       </section>
 
       {/* ── Download ────────────────────────────────────────────────── */}
-      <section className="relative px-6 pb-28">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <section aria-labelledby="download-title" className="relative px-6 pb-28">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
         <div className="max-w-3xl mx-auto text-center pt-20">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 mb-6">
+          <div aria-hidden className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 mb-6">
             <Download size={24} className="text-indigo-400" />
           </div>
-          <h2 className="text-3xl font-bold text-white mb-3">Client Desktop Windows</h2>
+          <h2 id="download-title" className="text-3xl font-bold text-white mb-3">Client Desktop Windows</h2>
           <p className="text-white/40 mb-10">
             Application native Tauri — léger, rapide, tray icon, instance unique.
             <br />Charge directement votre serveur ForgeChat.
@@ -163,7 +163,7 @@ export default function LandingPage() {
             {/* Installer */}
             <a href={INSTALLER_URL}
               className="flex items-center gap-3 w-full sm:w-auto px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition shadow-lg shadow-indigo-600/25 group">
-              <div className="p-2 bg-white/15 rounded-lg group-hover:bg-white/20 transition">
+              <div aria-hidden className="p-2 bg-white/15 rounded-lg group-hover:bg-white/20 transition">
                 <Download size={18} />
               </div>
               <div className="text-left">
@@ -175,7 +175,7 @@ export default function LandingPage() {
             {/* Portable */}
             <a href={PORTABLE_URL}
               className="flex items-center gap-3 w-full sm:w-auto px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
-              <div className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition">
+              <div aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition">
                 <Download size={18} />
               </div>
               <div className="text-left">
@@ -185,7 +185,7 @@ export default function LandingPage() {
             </a>
           </div>
 
-          <p className="text-xs text-white/25">Windows x64 · Tauri v2 · No telemetry · {RELEASE}</p>
+          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · No telemetry · {RELEASE}</p>
         </div>
       </section>
 
