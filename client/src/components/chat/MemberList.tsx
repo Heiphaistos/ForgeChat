@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
@@ -27,14 +27,26 @@ const STATUS_LABELS: Record<string, string> = {
   invisible: 'Invisible',
 }
 
-function MemberRow({ m, onContextMenu }: { m: any; onContextMenu: (e: React.MouseEvent) => void }) {
+function MemberRow({ m, onContextMenu, onLongPress }: { m: any; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
   const statusLabel = STATUS_LABELS[m.liveStatus] ?? 'Hors ligne'
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   return (
     <div
       role="listitem"
       aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? ' (propriétaire)' : ''}`}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
       onContextMenu={onContextMenu}
+      onTouchStart={e => {
+        const { clientX, clientY } = e.touches[0]
+        longPressTimer.current = setTimeout(() => {
+          longPressTimer.current = null
+          if ('vibrate' in navigator) navigator.vibrate(20)
+          onLongPress(clientX, clientY)
+        }, 500)
+      }}
+      onTouchEnd={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
+      onTouchCancel={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
+      onTouchMove={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
     >
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
@@ -149,7 +161,7 @@ export default function MemberList({ serverId }: Props) {
           </div>
           <div role="list">
             {online.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
@@ -161,7 +173,7 @@ export default function MemberList({ serverId }: Props) {
           </div>
           <div role="list">
             {offline.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
