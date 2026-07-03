@@ -394,22 +394,28 @@ export default function GroupDMPage() {
           </div>
           <button
             onClick={() => setShowSearch(v => !v)}
-            className={`p-2 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted'}`}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted'}`}
             title="Rechercher"
+            aria-label="Rechercher dans le groupe"
+            aria-pressed={showSearch}
           >
             <Search size={18} />
           </button>
           <button
             onClick={() => setShowSettings(v => !v)}
-            className={`p-2 rounded hover:bg-fc-hover transition ${showSettings ? 'text-white' : 'text-fc-muted'}`}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSettings ? 'text-white' : 'text-fc-muted'}`}
             title="Paramètres du groupe"
+            aria-label="Paramètres du groupe"
+            aria-pressed={showSettings}
           >
             <Settings size={18} />
           </button>
           <button
             onClick={() => setShowMembers(v => !v)}
-            className={`p-2 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted'}`}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted'}`}
             title="Voir les membres"
+            aria-label="Membres du groupe"
+            aria-pressed={showMembers}
           >
             <Users size={18} />
           </button>

@@ -771,6 +771,8 @@ export default function MessageList({
                       onClick={(e) => { e.stopPropagation(); setEmojiPickerFor(emojiPickerFor === msg.id ? null : msg.id) }}
                       className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                       title="Réagir"
+                      aria-label="Ajouter une réaction"
+                      aria-expanded={emojiPickerFor === msg.id}
                     >
                       <SmilePlus size={14} />
                     </button>
@@ -796,6 +798,7 @@ export default function MessageList({
                     onClick={() => saveMessage.mutate({ message_id: msg.id, channel_id: channelId, server_id: serverId })}
                     className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
                     title="Sauvegarder"
+                    aria-label="Sauvegarder le message"
                   >
                     <Bookmark size={14} />
                   </button>
@@ -808,6 +811,7 @@ export default function MessageList({
                     }}
                     className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                     title="Copier en Markdown"
+                    aria-label="Copier le message en Markdown"
                   >
                     <Copy size={14} />
                   </button>
@@ -820,6 +824,7 @@ export default function MessageList({
                     }}
                     className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                     title="Copier le lien"
+                    aria-label="Copier le lien du message"
                   >
                     <Link size={14} />
                   </button>
@@ -828,6 +833,7 @@ export default function MessageList({
                     onClick={() => setForwardingMsg({ id: msg.id })}
                     className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                     title="Transférer"
+                    aria-label="Transférer le message"
                   >
                     <Forward size={14} />
                   </button>
@@ -837,6 +843,7 @@ export default function MessageList({
                       onClick={() => onReply(msg)}
                       className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                       title="Répondre"
+                      aria-label="Répondre au message"
                     >
                       <CornerUpLeft size={14} />
                     </button>
@@ -847,6 +854,7 @@ export default function MessageList({
                       onClick={() => { onOpenThread(msg.id); setEmojiPickerFor(null) }}
                       className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                       title="Ouvrir thread"
+                      aria-label="Ouvrir le fil de discussion"
                     >
                       <MessagesSquare size={14} />
                     </button>
@@ -857,6 +865,8 @@ export default function MessageList({
                       onClick={() => onPinMessage(msg.id)}
                       className={`p-1.5 rounded hover:bg-fc-hover transition ${msg.pinned ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
                       title={msg.pinned ? 'Épinglé' : 'Épingler'}
+                      aria-label={msg.pinned ? 'Désépingler le message' : 'Épingler le message'}
+                      aria-pressed={msg.pinned}
                     >
                       <Pin size={14} />
                     </button>
@@ -867,6 +877,7 @@ export default function MessageList({
                       onClick={() => startEdit(msg.id, msg.content ?? '')}
                       className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
                       title="Modifier"
+                      aria-label="Modifier le message"
                     >
                       <Pencil size={14} />
                     </button>
@@ -908,6 +919,7 @@ export default function MessageList({
                       onClick={() => setReportingMsg(msg.id)}
                       className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
                       title="Signaler ce message"
+                      aria-label="Signaler ce message"
                     >
                       <Flag size={14} />
                     </button>
@@ -917,6 +929,7 @@ export default function MessageList({
                     onClick={() => setDeleteConfirmId(msg.id)}
                     className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
                     title="Supprimer"
+                    aria-label="Supprimer le message"
                   >
                     <Trash2 size={14} />
                   </button>

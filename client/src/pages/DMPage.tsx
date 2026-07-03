@@ -449,6 +449,8 @@ export default function DMPage() {
           <button
             onClick={toggleE2e}
             title={e2eMode ? 'Désactiver le chiffrement E2E' : 'Activer le chiffrement E2E (ECDH P-256 + AES-GCM)'}
+            aria-label={e2eMode ? 'Désactiver le chiffrement de bout en bout' : 'Activer le chiffrement de bout en bout'}
+            aria-pressed={e2eMode}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${
               e2eMode
                 ? 'text-green-400 bg-green-900/30 hover:bg-green-900/50 hover:text-green-300'
@@ -466,6 +468,7 @@ export default function DMPage() {
             disabled={!partnerId && callState === 'idle'}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
+            aria-label={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Démarrer un appel vocal'}
           >
             <Phone size={18} />
           </button>
@@ -478,6 +481,7 @@ export default function DMPage() {
             disabled={!partnerId && callState === 'idle'}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
             title={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
+            aria-label={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel vidéo' : 'Démarrer un appel vidéo'}
           >
             <Video size={18} />
           </button>
@@ -485,6 +489,8 @@ export default function DMPage() {
             onClick={() => setShowSearch(s => !s)}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showSearch ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
             title="Rechercher dans la conversation"
+            aria-label="Rechercher dans la conversation"
+            aria-pressed={showSearch}
           >
             <Search size={18} />
           </button>
@@ -527,6 +533,8 @@ export default function DMPage() {
                 onClick={toggleCam}
                 className={`p-3 rounded-full transition ${camOff ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
                 title={camOff ? 'Activer caméra' : 'Désactiver caméra'}
+                aria-label={camOff ? 'Activer la caméra' : 'Désactiver la caméra'}
+                aria-pressed={!camOff}
               >
                 {camOff ? <VideoOff size={20} /> : <Video size={20} />}
               </button>
@@ -535,6 +543,8 @@ export default function DMPage() {
               onClick={toggleMic}
               className={`p-3 rounded-full transition ${micMuted ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
               title={micMuted ? 'Activer micro' : 'Couper micro'}
+              aria-label={micMuted ? 'Activer le microphone' : 'Couper le microphone'}
+              aria-pressed={!micMuted}
             >
               {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
@@ -542,6 +552,7 @@ export default function DMPage() {
               onClick={hangup}
               className="p-3 bg-fc-red rounded-full text-white hover:bg-red-600 transition"
               title="Raccrocher"
+              aria-label="Raccrocher"
             >
               <PhoneOff size={20} />
             </button>
