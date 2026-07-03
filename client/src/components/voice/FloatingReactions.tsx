@@ -22,7 +22,7 @@ export default function FloatingReactions({ channelId }: { channelId: string }) 
   }, [channelId, on])
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
       {emojis.map(e => (
         <div
           key={e.id}

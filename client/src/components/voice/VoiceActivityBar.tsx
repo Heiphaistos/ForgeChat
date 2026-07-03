@@ -70,7 +70,7 @@ function SpeakingBars({ level }: { level: number }) {
   const active = level > 10
   const bars = 4
   return (
-    <div className="flex items-end gap-0.5 h-3">
+    <div aria-hidden="true" className="flex items-end gap-0.5 h-3">
       {Array.from({ length: bars }).map((_, i) => {
         const height = active
           ? Math.min(100, (level / 255) * 100 * (0.6 + (i % 2 === 0 ? 0.4 : 0.2)))
@@ -93,12 +93,18 @@ function ParticipantLevel({ participant }: { participant: Participant }) {
   const speaking = level > 10
 
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition ${speaking ? 'bg-fc-green/10' : 'bg-transparent'}`}>
-      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold overflow-hidden flex-shrink-0
-        ${speaking ? 'ring-1 ring-fc-green' : ''}`}>
+    <div
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition ${speaking ? 'bg-fc-green/10' : 'bg-transparent'}`}
+      aria-label={`${participant.username}${speaking ? ' — parle' : ''}`}
+      title={participant.username}
+    >
+      <div
+        aria-hidden="true"
+        className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold overflow-hidden flex-shrink-0 ${speaking ? 'ring-1 ring-fc-green' : ''}`}
+      >
         <span className="text-white">{participant.username.charAt(0).toUpperCase()}</span>
       </div>
-      <span className={`text-[10px] truncate max-w-[60px] ${speaking ? 'text-white' : 'text-fc-muted'}`}>
+      <span aria-hidden="true" className={`text-[10px] truncate max-w-[60px] ${speaking ? 'text-white' : 'text-fc-muted'}`}>
         {participant.username}
       </span>
       <SpeakingBars level={level} />

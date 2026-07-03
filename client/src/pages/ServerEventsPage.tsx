@@ -99,18 +99,30 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
     onSubmit(form)
   }
 
+  const titleId = `event-modal-title-${mode}`
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
-      <div className="bg-fc-channel w-full max-w-md rounded-xl shadow-2xl">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-fc-channel w-full max-w-md rounded-xl shadow-2xl max-h-[90dvh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-fc-hover">
-          <h3 className="text-lg font-semibold text-white">
+          <h3 id={titleId} className="text-lg font-semibold text-white">
             {mode === 'create' ? 'Créer un événement' : "Modifier l'événement"}
           </h3>
           <button
             onClick={onClose}
-            className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover"
+            aria-label="Fermer"
+            className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover"
           >
-            <X size={18} />
+            <X size={18} aria-hidden />
           </button>
         </div>
 
@@ -301,23 +313,25 @@ export default function ServerEventsPage({ serverId }: Props) {
           <p className="text-sm text-fc-muted mt-0.5">Planifiez et gérez les événements du serveur.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-fc-hover rounded-lg p-0.5">
+          <div role="group" aria-label="Mode d'affichage" className="flex items-center bg-fc-hover rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition ${
                 viewMode === 'list' ? 'bg-fc-channel text-white' : 'text-fc-muted hover:text-white'
               }`}
             >
-              <List size={13} />
+              <List size={13} aria-hidden />
               Liste
             </button>
             <button
               onClick={() => setViewMode('calendar')}
+              aria-pressed={viewMode === 'calendar'}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition ${
                 viewMode === 'calendar' ? 'bg-fc-channel text-white' : 'text-fc-muted hover:text-white'
               }`}
             >
-              <Calendar size={13} />
+              <Calendar size={13} aria-hidden />
               Calendrier
             </button>
           </div>
@@ -342,11 +356,12 @@ export default function ServerEventsPage({ serverId }: Props) {
       {/* Vue Liste */}
       {viewMode === 'list' && (
         <>
-          <div className="flex gap-1 flex-wrap">
+          <div role="group" aria-label="Filtrer les événements" className="flex gap-1 flex-wrap">
             {FILTERS.map(f => (
               <button
                 key={f.id}
                 onClick={() => setFilter(f.id)}
+                aria-pressed={filter === f.id}
                 className={`px-3 py-1.5 rounded text-sm font-medium transition ${
                   filter === f.id
                     ? 'bg-fc-accent text-white'
@@ -438,15 +453,17 @@ export default function ServerEventsPage({ serverId }: Props) {
                                   onClick={() => deleteEvent.mutate(event.id)}
                                   disabled={deleteEvent.isPending}
                                   className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
+                                  aria-label="Confirmer la suppression"
                                   title="Confirmer"
                                 >
-                                  <Check size={13} />
+                                  <Check size={13} aria-hidden />
                                 </button>
                                 <button
                                   onClick={() => setDeletingId(null)}
+                                  aria-label="Annuler la suppression"
                                   className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
                                 >
-                                  <X size={13} />
+                                  <X size={13} aria-hidden />
                                 </button>
                               </div>
                             ) : (
