@@ -92,12 +92,18 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-fc-channel w-full max-w-lg rounded-xl shadow-2xl border border-white/10 overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kbd-shortcuts-title"
+        className="bg-fc-channel w-full max-w-lg rounded-xl shadow-2xl border border-white/10 overflow-hidden"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <h2 className="text-white font-bold text-base">Raccourcis clavier</h2>
+          <h2 id="kbd-shortcuts-title" className="text-white font-bold text-base">Raccourcis clavier</h2>
           <button
             onClick={onClose}
+            aria-label="Fermer les raccourcis clavier"
             className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
           >
             <X size={16} />

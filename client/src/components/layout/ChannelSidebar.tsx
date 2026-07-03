@@ -722,6 +722,7 @@ export default function ChannelSidebar() {
             onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
             className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
             title="Paramètres du canal"
+            aria-label={`Paramètres du canal ${ch.name}`}
           >
             <Settings size={12} />
           </button>
@@ -730,6 +731,7 @@ export default function ChannelSidebar() {
               onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
               title="Archiver ce canal"
+              aria-label={`Archiver le canal ${ch.name}`}
             >
               <Archive size={12} />
             </button>
@@ -738,6 +740,7 @@ export default function ChannelSidebar() {
             onClick={e => { e.stopPropagation(); ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) }}
             className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
             title={ch.hidden ? "Afficher ce canal" : "Masquer ce canal"}
+            aria-label={ch.hidden ? `Afficher le canal ${ch.name}` : `Masquer le canal ${ch.name}`}
           >
             <EyeOff size={12} />
           </button>
@@ -908,6 +911,7 @@ export default function ChannelSidebar() {
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
                     className="text-fc-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
                     title={`Créer un canal dans ${label}`}
+                    aria-label={`Créer un canal dans ${label}`}
                   >
                     <Plus size={14} />
                   </button>
@@ -966,6 +970,7 @@ export default function ChannelSidebar() {
                     onClick={() => archiveChannel.mutate(ch.id)}
                     className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
                     title="Restaurer le canal"
+                    aria-label={`Restaurer le canal ${ch.name}`}
                   >
                     <X size={10} />
                   </button>

@@ -161,45 +161,64 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
 
   let flatIdx = 0
 
+  const activeItemId = selected >= 0 && selected < allItems.length ? `cp-item-${allItems[selected].id}` : undefined
+
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
-      <div className="w-full max-w-lg bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Palette de commandes"
+        className="w-full max-w-lg bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-fc-hover">
-          <Search size={18} className="text-fc-muted flex-shrink-0" />
+          <Search size={18} className="text-fc-muted flex-shrink-0" aria-hidden />
           <input
             ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey} placeholder="Rechercher ou saisir une commande..."
             inputMode="search" autoComplete="off"
+            role="combobox"
+            aria-expanded={allItems.length > 0}
+            aria-controls="cp-listbox"
+            aria-activedescendant={activeItemId}
+            aria-label="Rechercher ou saisir une commande"
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
           {query && (
-            <button onClick={() => setQuery('')} className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+            <button onClick={() => setQuery('')} aria-label="Effacer la recherche" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
               <X size={14} />
             </button>
           )}
-          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded">Échap</kbd>
+          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
         </div>
 
-        <div ref={listRef} className="max-h-96 overflow-y-auto py-2">
-          {allItems.length === 0 && <div className="px-4 py-8 text-center text-fc-muted text-sm">Aucun résultat</div>}
+        <div id="cp-listbox" role="listbox" aria-label="Résultats" ref={listRef} className="max-h-96 overflow-y-auto py-2">
+          {allItems.length === 0 && <div role="status" className="px-4 py-8 text-center text-fc-muted text-sm">Aucun résultat</div>}
           {Object.entries(groups).map(([category, groupItems]) => (
-            <div key={category}>
-              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-fc-muted">{category}</div>
+            <div key={category} role="group" aria-label={category}>
+              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-fc-muted" aria-hidden>{category}</div>
               {groupItems.map(item => {
                 const idx = flatIdx++
+                const isSelected = idx === selected
                 return (
                   <button
-                    key={item.id} data-idx={idx} onClick={item.action}
+                    key={item.id}
+                    id={`cp-item-${item.id}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    data-idx={idx}
+                    onClick={item.action}
                     onMouseEnter={() => setSelected(idx)}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition
-                      ${idx === selected ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
+                      ${isSelected ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
                   >
-                    <div className="flex-shrink-0 w-5 flex items-center justify-center">{item.icon}</div>
+                    <div className="flex-shrink-0 w-5 flex items-center justify-center" aria-hidden>{item.icon}</div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">{item.label}</div>
                       {item.sublabel && <div className="text-xs text-fc-muted truncate">{item.sublabel}</div>}
                     </div>
-                    <ChevronRight size={14} className="text-fc-muted flex-shrink-0 opacity-60" />
+                    <ChevronRight size={14} className="text-fc-muted flex-shrink-0 opacity-60" aria-hidden />
                   </button>
                 )
               })}
@@ -207,7 +226,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
           ))}
         </div>
 
-        <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted">
+        <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted" aria-hidden>
           <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> naviguer</span>
           <span><kbd className="bg-fc-hover px-1 rounded">Entrée</kbd> ouvrir</span>
           <span><kbd className="bg-fc-hover px-1 rounded">Échap</kbd> fermer</span>
