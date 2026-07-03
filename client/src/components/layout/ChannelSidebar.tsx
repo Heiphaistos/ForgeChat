@@ -74,7 +74,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
       <div role="dialog" aria-modal="true" aria-labelledby="create-group-title" className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 id="create-group-title" className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
-          <button onClick={onClose} className="text-fc-muted hover:text-white" title="Fermer"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Fermer" title="Fermer" className="text-fc-muted hover:text-white p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-fc-hover transition"><X size={16} aria-hidden /></button>
         </div>
 
         <input
@@ -392,10 +392,11 @@ export default function ChannelSidebar() {
           </span>
           <button
             onClick={() => setShowCreateGroup(true)}
-            className="text-fc-muted hover:text-white transition"
+            aria-label="Nouveau groupe"
             title="Nouveau groupe"
+            className="text-fc-muted hover:text-white transition p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-fc-hover"
           >
-            <Plus size={15} />
+            <Plus size={15} aria-hidden />
           </button>
         </div>
 

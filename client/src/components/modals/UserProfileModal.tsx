@@ -43,8 +43,12 @@ export default function UserProfileModal({ onClose }: Props) {
         <h2 id="user-profile-modal-title" className="sr-only">Modifier mon profil</h2>
         {/* Banner */}
         <div className="h-24 bg-gradient-to-r from-fc-accent to-purple-600 rounded-t-lg relative">
-          <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white transition">
-            <X size={20} />
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="absolute top-2 right-2 text-white/70 hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full hover:bg-black/30"
+          >
+            <X size={18} aria-hidden />
           </button>
         </div>
 

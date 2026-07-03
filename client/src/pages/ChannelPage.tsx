@@ -455,8 +455,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-              title="Rechercher"
-              aria-label="Rechercher dans le canal"
+              title="Rechercher (Ctrl+F)"
+              aria-label="Rechercher dans le canal (Ctrl+F)"
               aria-pressed={showSearch}
             >
               <Search size={18} />

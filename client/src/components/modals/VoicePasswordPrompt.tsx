@@ -31,8 +31,8 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
             <Lock size={18} className="text-yellow-400" />
             <h2 id="voice-password-modal-title" className="text-lg font-bold text-white">Canal protégé</h2>
           </div>
-          <button onClick={onClose} className="text-fc-muted hover:text-white transition">
-            <X size={18} />
+          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover">
+            <X size={18} aria-hidden />
           </button>
         </div>
 

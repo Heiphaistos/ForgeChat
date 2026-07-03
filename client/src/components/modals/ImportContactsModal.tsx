@@ -118,9 +118,10 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
           </div>
           <button
             onClick={onClose}
-            className="text-fc-muted hover:text-white transition p-1 hover:bg-fc-hover rounded"
+            aria-label="Fermer"
+            className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-fc-hover rounded"
           >
-            <X size={16} />
+            <X size={16} aria-hidden />
           </button>
         </div>
 
