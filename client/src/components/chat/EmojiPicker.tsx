@@ -115,7 +115,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
       )}
 
       {tab === 'server' ? (
-        <div className="h-52 overflow-y-auto p-2">
+        <div className="h-52 overflow-y-auto overscroll-contain p-2">
           {serverEmojis.length === 0 ? (
             <div role="status" className="flex flex-col items-center justify-center h-full gap-2 text-fc-muted">
               <Smile size={32} className="opacity-30" aria-hidden />
@@ -164,7 +164,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
           )}
 
           {/* Grille emojis */}
-          <div className="h-52 overflow-y-auto p-2">
+          <div className="h-52 overflow-y-auto overscroll-contain p-2">
             {!filtered && (
               <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-1" aria-hidden>
                 {CATEGORIES[activeCategory].label.split(' ').slice(1).join(' ')}

@@ -66,7 +66,7 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
         <span aria-hidden className="text-xl">{emoji}</span>
         <span className="text-xs text-fc-muted">{users.length} réaction{users.length > 1 ? 's' : ''}</span>
       </div>
-      <div role="list" className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+      <div role="list" className="flex flex-col gap-1.5 max-h-40 overflow-y-auto overscroll-contain">
         {users.map(u => (
           <div key={u.user_id} role="listitem" className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">

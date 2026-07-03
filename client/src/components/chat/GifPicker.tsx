@@ -181,7 +181,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="overflow-y-auto flex-1"
+        className="overflow-y-auto overscroll-contain flex-1"
         style={{ minHeight: 0 }}
       >
         {loading ? (

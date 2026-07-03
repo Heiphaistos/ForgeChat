@@ -97,7 +97,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
         </div>
       </div>
 
-      <div className="p-2 max-h-72 overflow-y-auto space-y-1">
+      <div className="p-2 max-h-72 overflow-y-auto overscroll-contain space-y-1">
         {replies.map(reply => (
           <div key={reply.id}>
             {!editing ? (

@@ -158,6 +158,7 @@ export default function AuditLogPage({ serverId }: Props) {
             placeholder="Filtrer par utilisateur..."
             aria-label="Filtrer par nom d'utilisateur"
             inputMode="search" autoComplete="off"
+            enterKeyHint="search" autoCapitalize="none"
             className="flex-1 min-w-[180px] px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
         </div>

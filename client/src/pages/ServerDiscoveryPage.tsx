@@ -250,6 +250,7 @@ export default function ServerDiscoveryPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Rechercher un serveur..."
               inputMode="search" autoComplete="off"
+              enterKeyHint="search" autoCapitalize="none"
               className="w-full pl-9 pr-4 py-2.5 bg-fc-channel rounded-xl text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             />
           </div>

@@ -191,7 +191,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
               Aucun sticker — les admins peuvent en ajouter via le bouton ci-dessous.
             </div>
           ) : (
-            <div className="p-2 grid grid-cols-4 gap-1.5 max-h-52 overflow-y-auto">
+            <div className="p-2 grid grid-cols-4 gap-1.5 max-h-52 overflow-y-auto overscroll-contain">
               {serverStickers.map(ss => (
                 <div key={ss.id} className="relative">
                   <button
@@ -250,7 +250,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
               </button>
             ))}
           </div>
-          <div className="p-2 grid grid-cols-5 gap-2 max-h-52 overflow-y-auto">
+          <div className="p-2 grid grid-cols-5 gap-2 max-h-52 overflow-y-auto overscroll-contain">
             {GLOBAL_STICKERS.filter(s => s.category === globalCat).map(sticker => (
               <button
                 key={sticker.id}

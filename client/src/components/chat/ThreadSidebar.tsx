@@ -188,7 +188,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       )}
 
       {/* Liste des threads */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-2">
         {isLoading && (
           <div role="status" aria-label="Chargement des fils de discussion" className="flex items-center justify-center py-10">
             <div aria-hidden className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />

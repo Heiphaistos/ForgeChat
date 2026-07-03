@@ -49,7 +49,7 @@ export default function EditHistoryModal({ messageId, serverId, channelId, onClo
         </div>
 
         {/* Corps */}
-        <div className="overflow-y-auto max-h-[60vh] p-4 space-y-2">
+        <div className="overflow-y-auto overscroll-contain max-h-[60vh] p-4 space-y-2">
           {isLoading && (
             <div className="flex justify-center py-8">
               <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />

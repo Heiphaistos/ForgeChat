@@ -139,7 +139,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
         </div>
 
         {/* Liste serveurs + canaux */}
-        <div className="flex-1 overflow-y-auto py-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain py-2">
           {filteredServers.length === 0 && (
             <div className="text-center text-fc-muted text-sm py-8">Aucun résultat</div>
           )}
