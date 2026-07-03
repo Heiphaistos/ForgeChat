@@ -27,12 +27,16 @@ interface MetricCardProps {
 }
 
 function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProps) {
+  const displayValue = loading ? 'Chargement' : (value !== undefined ? value.toLocaleString('fr-FR') : '—')
   return (
-    <div className="p-4 bg-fc-channel rounded-lg flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+    <div
+      className="p-4 bg-fc-channel rounded-lg flex items-center gap-4"
+      aria-label={`${label} : ${displayValue}${sub ? ` (${sub})` : ''}`}
+    >
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${iconBg}`} aria-hidden>
         {icon}
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0" aria-hidden>
         {loading ? (
           <div className="h-6 w-16 bg-fc-hover animate-pulse rounded mb-1" />
         ) : (
@@ -50,12 +54,12 @@ function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProp
 function BarChart({ data }: { data: number[] }) {
   const max = Math.max(...data, 1)
   return (
-    <div className="flex items-end gap-0.5 h-16">
+    <div role="img" aria-label="Graphique d'activité par heure" className="flex items-end gap-0.5 h-16">
       {data.map((v, i) => {
         const pct = (v / max) * 100
         const isActive = pct > 60
         return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+          <div key={i} aria-hidden className="flex-1 flex flex-col items-center gap-0.5 group relative">
             <div
               className={`w-full rounded-sm transition-all ${isActive ? 'bg-fc-accent' : 'bg-fc-hover'} group-hover:bg-indigo-400`}
               style={{ height: `${Math.max(4, pct)}%` }}
@@ -81,8 +85,8 @@ export default function ServerStatsPage({ serverId }: Props) {
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <BarChart2 size={40} className="mx-auto text-fc-muted/30 mb-3" />
+      <div role="alert" className="text-center py-12">
+        <BarChart2 size={40} aria-hidden className="mx-auto text-fc-muted/30 mb-3" />
         <p className="text-fc-muted text-sm">Impossible de charger les statistiques.</p>
       </div>
     )
@@ -99,7 +103,7 @@ export default function ServerStatsPage({ serverId }: Props) {
       {/* Header */}
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <BarChart2 size={18} className="text-fc-accent" />
+          <BarChart2 size={18} className="text-fc-accent" aria-hidden />
           Statistiques du serveur
         </h3>
         <p className="text-sm text-fc-muted">Actualisées toutes les minutes.</p>
@@ -141,17 +145,23 @@ export default function ServerStatsPage({ serverId }: Props) {
       {/* Taux d'activité */}
       {data && (
         <div className="p-4 bg-fc-channel rounded-lg border border-fc-hover">
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
+          <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
             Taux de présence
           </div>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-2 bg-fc-hover rounded-full overflow-hidden">
               <div
+                role="progressbar"
+                aria-label="Taux de membres en ligne"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={onlineRatio}
+                aria-valuetext={`${onlineRatio}% des membres en ligne`}
                 className="h-full bg-green-500 rounded-full transition-all duration-500"
                 style={{ width: `${onlineRatio}%` }}
               />
             </div>
-            <span className="text-xs text-fc-muted flex-shrink-0">{onlineRatio}% en ligne</span>
+            <span aria-hidden className="text-xs text-fc-muted flex-shrink-0">{onlineRatio}% en ligne</span>
           </div>
         </div>
       )}
@@ -177,22 +187,22 @@ export default function ServerStatsPage({ serverId }: Props) {
       {/* Top salons */}
       {(isLoading || (data?.top_channels && data.top_channels.length > 0)) && (
         <div>
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
+          <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
             Top salons actifs
           </div>
           <div className="space-y-2">
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-10 bg-fc-channel animate-pulse rounded-lg" />
+                  <div key={i} aria-hidden className="h-10 bg-fc-channel animate-pulse rounded-lg" />
                 ))
               : data!.top_channels.slice(0, 5).map((ch, idx) => {
                   const pct = topMax > 0 ? (ch.messages / topMax) * 100 : 0
                   return (
                     <div key={ch.id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
-                      <span className="text-xs text-fc-muted w-4 flex-shrink-0 font-mono">{idx + 1}</span>
-                      <Hash size={13} className="text-fc-muted flex-shrink-0" />
+                      <span aria-hidden className="text-xs text-fc-muted w-4 flex-shrink-0 font-mono">{idx + 1}</span>
+                      <Hash size={13} aria-hidden className="text-fc-muted flex-shrink-0" />
                       <span className="text-sm text-white truncate min-w-0 flex-1">{ch.name}</span>
-                      <div className="w-24 h-1.5 bg-fc-hover rounded-full overflow-hidden flex-shrink-0">
+                      <div aria-hidden className="w-24 h-1.5 bg-fc-hover rounded-full overflow-hidden flex-shrink-0">
                         <div
                           className="h-full bg-fc-accent rounded-full transition-all duration-500"
                           style={{ width: `${pct}%` }}
@@ -212,15 +222,15 @@ export default function ServerStatsPage({ serverId }: Props) {
       {/* Activité par heure */}
       {(isLoading || data?.active_hours) && (
         <div className="p-4 bg-fc-channel rounded-lg">
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-4">
+          <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-4">
             Activité par heure (aujourd'hui)
           </div>
           {isLoading ? (
-            <div className="h-16 bg-fc-hover animate-pulse rounded" />
+            <div aria-hidden className="h-16 bg-fc-hover animate-pulse rounded" />
           ) : (
             <>
               <BarChart data={data!.active_hours} />
-              <div className="flex justify-between mt-2 text-xs text-fc-muted">
+              <div aria-hidden className="flex justify-between mt-2 text-xs text-fc-muted">
                 <span>0h</span>
                 <span>6h</span>
                 <span>12h</span>

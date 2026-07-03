@@ -26,10 +26,10 @@ interface Props {
 function Avatar({ user, size = 'md' }: { user: StageUser; size?: 'sm' | 'md' | 'lg' }) {
   const dims = { sm: 'w-7 h-7 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-14 h-14 text-base' }
   return (
-    <div className={`${dims[size]} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0`}>
+    <div aria-hidden className={`${dims[size]} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0`}>
       {user.avatar
-        ? <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-        : user.username.charAt(0).toUpperCase()}
+        ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        : <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>}
     </div>
   )
 }
@@ -40,7 +40,7 @@ function SpeakerTile({ user }: { user: StageUser }) {
     <div className="flex flex-col items-center gap-1.5">
       <div className="relative">
         <Avatar user={user} size="lg" />
-        <div className="absolute -bottom-1 -right-1 bg-fc-green rounded-full p-0.5">
+        <div aria-hidden className="absolute -bottom-1 -right-1 bg-fc-green rounded-full p-0.5">
           <Mic size={8} className="text-white" />
         </div>
       </div>
@@ -127,8 +127,8 @@ export default function StageChannel({
   return (
     <div className="flex flex-col h-full bg-fc-bg text-white">
       {/* Section Orateurs */}
-      <div className="flex-shrink-0 p-4 border-b border-fc-hover">
-        <div className="flex items-center gap-2 mb-3">
+      <section aria-label="Orateurs sur scène" className="flex-shrink-0 p-4 border-b border-fc-hover">
+        <div className="flex items-center gap-2 mb-3" aria-hidden>
           <Mic size={14} className="text-fc-accent" />
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
             Scene — Orateurs
@@ -136,19 +136,21 @@ export default function StageChannel({
         </div>
 
         {speakers.length === 0 ? (
-          <p className="text-xs text-fc-muted italic">Aucun orateur pour le moment</p>
+          <p role="status" className="text-xs text-fc-muted italic">Aucun orateur pour le moment</p>
         ) : (
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-4" role="list" aria-label={`${speakers.length} orateur${speakers.length > 1 ? 's' : ''}`}>
             {speakers.map(s => (
-              <SpeakerTile key={s.user_id} user={s} />
+              <div key={s.user_id} role="listitem">
+                <SpeakerTile user={s} />
+              </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Section Audience */}
-      <div className="flex-1 overflow-y-auto p-4 border-b border-fc-hover">
-        <div className="flex items-center gap-2 mb-3">
+      <section aria-label="Audience" className="flex-1 overflow-y-auto p-4 border-b border-fc-hover">
+        <div className="flex items-center gap-2 mb-3" aria-hidden>
           <Users size={14} className="text-fc-muted" />
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
             Audience ({audience.length})
@@ -156,33 +158,33 @@ export default function StageChannel({
         </div>
 
         {audience.length === 0 ? (
-          <p className="text-xs text-fc-muted italic">Aucun spectateur</p>
+          <p role="status" className="text-xs text-fc-muted italic">Aucun spectateur</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" role="list" aria-label={`${audience.length} spectateur${audience.length > 1 ? 's' : ''}`}>
             {audience.map(a => (
-              <div key={a.user_id} className="relative group flex flex-col items-center gap-1">
+              <div key={a.user_id} role="listitem" className="relative group flex flex-col items-center gap-1">
                 <Avatar user={a} size="sm" />
-                <span className="text-[9px] text-fc-muted truncate max-w-[48px]">{a.username}</span>
+                <span className="text-[9px] text-fc-muted truncate max-w-[48px]" aria-hidden>{a.username}</span>
                 {isModerator && a.user_id !== currentUserId && (
                   <button
                     onClick={() => handleInviteToSpeak(a.user_id, a.username)}
+                    aria-label={`Inviter ${a.username} à parler`}
                     className="absolute -top-1 -right-1 bg-fc-accent rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition"
-                    title="Inviter à parler"
                   >
-                    <UserPlus size={8} className="text-white" />
+                    <UserPlus size={8} className="text-white" aria-hidden />
                   </button>
                 )}
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Mains levées */}
       {handRaises.length > 0 && (
-        <div className="flex-shrink-0 p-4 border-b border-fc-hover bg-fc-yellow/5">
+        <section aria-label="Demandes à parler" aria-live="polite" className="flex-shrink-0 p-4 border-b border-fc-hover bg-fc-yellow/5">
           <p className="text-xs font-semibold text-fc-yellow mb-2">
-            ✋ Mains levées ({handRaises.length})
+            <span aria-hidden>✋ </span>Mains levées ({handRaises.length})
           </p>
           <div className="space-y-1.5">
             {handRaises.map(h => (
@@ -192,6 +194,7 @@ export default function StageChannel({
                 {isModerator && (
                   <button
                     onClick={() => handleInviteToSpeak(h.user_id, h.username)}
+                    aria-label={`Inviter ${h.username} à parler`}
                     className="text-[10px] bg-fc-accent hover:bg-fc-accent/80 text-white px-2 py-0.5 rounded transition"
                   >
                     Inviter
@@ -200,7 +203,7 @@ export default function StageChannel({
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Actions (audience seulement, ou non-speaker) */}
@@ -209,22 +212,24 @@ export default function StageChannel({
           <button
             onClick={handleRequestSpeak}
             disabled={hasRequestedSpeak}
+            aria-busy={hasRequestedSpeak}
             className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-fc-accent hover:bg-fc-accent/80 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Mic size={14} />
+            <Mic size={14} aria-hidden />
             {hasRequestedSpeak ? 'Demande envoyée...' : 'Demander à parler'}
           </button>
 
           <button
             onClick={handleToggleHand}
+            aria-pressed={handRaised}
+            aria-label={handRaised ? 'Baisser la main' : 'Lever la main'}
             className={`p-2.5 rounded-xl transition ${
               handRaised
                 ? 'bg-fc-yellow text-white'
                 : 'bg-fc-hover text-fc-muted hover:text-white'
             }`}
-            title={handRaised ? 'Baisser la main' : 'Lever la main'}
           >
-            <Hand size={18} />
+            <Hand size={18} aria-hidden />
           </button>
         </div>
       )}
