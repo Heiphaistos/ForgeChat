@@ -82,32 +82,49 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 bg-fc-channel rounded-xl border border-fc-hover">
+    <div
+      role="group"
+      aria-label={state === 'recording' ? 'Enregistrement vocal en cours' : 'Aperçu du message vocal'}
+      className="flex items-center gap-3 px-3 py-2 bg-fc-channel rounded-xl border border-fc-hover"
+    >
       {state === 'recording' ? (
         <>
-          <div className="w-2 h-2 rounded-full bg-fc-red animate-pulse flex-shrink-0" />
-          <span className="text-fc-red text-sm font-mono w-10 flex-shrink-0">{fmt(duration)}</span>
-          <div className="flex-1 h-1 bg-fc-hover rounded-full overflow-hidden">
+          <div className="w-2 h-2 rounded-full bg-fc-red animate-pulse flex-shrink-0" aria-hidden />
+          <span
+            role="timer"
+            aria-live="off"
+            aria-label={`Durée : ${fmt(duration)}`}
+            className="text-fc-red text-sm font-mono w-10 flex-shrink-0"
+          >
+            {fmt(duration)}
+          </span>
+          <div className="flex-1 h-1 bg-fc-hover rounded-full overflow-hidden" aria-hidden>
             <div className="h-full bg-fc-red/50 rounded-full" style={{ width: `${(duration / 120) * 100}%` }} />
           </div>
-          <button onClick={stop} className="p-1.5 bg-fc-red/20 rounded-lg text-fc-red hover:bg-fc-red/30" title="Arrêter">
-            <Square size={14} />
+          <button onClick={stop} aria-label="Arrêter l'enregistrement" className="p-1.5 bg-fc-red/20 rounded-lg text-fc-red hover:bg-fc-red/30">
+            <Square size={14} aria-hidden />
           </button>
-          <button onClick={handleCancel} className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white" title="Annuler">
-            <X size={14} />
+          <button onClick={handleCancel} aria-label="Annuler l'enregistrement" className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white">
+            <X size={14} aria-hidden />
           </button>
         </>
       ) : (
         <>
-          <span className="text-xs text-fc-muted flex-shrink-0">{fmt(duration)}</span>
+          <span className="text-xs text-fc-muted flex-shrink-0" aria-hidden>{fmt(duration)}</span>
           {blobUrl && (
-            <audio src={blobUrl} controls className="h-7 flex-1 min-w-0" style={{ colorScheme: 'dark' }} />
+            <audio
+              src={blobUrl}
+              controls
+              aria-label={`Message vocal — durée ${fmt(duration)}`}
+              className="h-7 flex-1 min-w-0"
+              style={{ colorScheme: 'dark' }}
+            />
           )}
-          <button onClick={handleSend} className="p-1.5 bg-fc-accent rounded-lg text-white hover:bg-fc-accent/80 flex-shrink-0" title="Envoyer">
-            <Send size={14} />
+          <button onClick={handleSend} aria-label="Envoyer le message vocal" className="p-1.5 bg-fc-accent rounded-lg text-white hover:bg-fc-accent/80 flex-shrink-0">
+            <Send size={14} aria-hidden />
           </button>
-          <button onClick={handleCancel} className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white flex-shrink-0" title="Annuler">
-            <X size={14} />
+          <button onClick={handleCancel} aria-label="Annuler et supprimer le message vocal" className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white flex-shrink-0">
+            <X size={14} aria-hidden />
           </button>
         </>
       )}

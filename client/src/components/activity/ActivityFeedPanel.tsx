@@ -33,21 +33,21 @@ function ActivityTypeBadge({ type }: { type: ActivityItem['type'] }) {
     case 'mention':
       return (
         <span className="inline-flex items-center gap-0.5 text-[10px] text-fc-yellow font-medium">
-          <AtSign size={10} />
+          <AtSign size={10} aria-hidden />
           mention
         </span>
       )
     case 'reaction':
       return (
         <span className="inline-flex items-center gap-0.5 text-[10px] text-fc-green font-medium">
-          <Smile size={10} />
+          <Smile size={10} aria-hidden />
           réaction
         </span>
       )
     default:
       return (
         <span className="inline-flex items-center gap-0.5 text-[10px] text-fc-muted font-medium">
-          <MessageSquare size={10} />
+          <MessageSquare size={10} aria-hidden />
           message
         </span>
       )
@@ -74,9 +74,9 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   })
 
   return (
-    <div className="flex gap-2 px-2 py-2 rounded-lg hover:bg-fc-hover/50 transition group cursor-default">
+    <div role="listitem" className="flex gap-2 px-2 py-2 rounded-lg hover:bg-fc-hover/50 transition group cursor-default">
       {/* Avatar */}
-      <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-xs text-white overflow-hidden flex-shrink-0">
+      <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-xs text-white overflow-hidden flex-shrink-0" aria-hidden>
         {item.user.avatar
           ? <img src={item.user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
           : item.user.username.charAt(0).toUpperCase()}
@@ -125,22 +125,25 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-fc-bg flex-shrink-0">
         <div className="flex items-center gap-2">
-          <Activity size={16} className="text-fc-accent" />
+          <Activity size={16} className="text-fc-accent" aria-hidden />
           <span className="font-semibold text-white text-sm">Activité récente</span>
         </div>
         <button
           onClick={onClose}
+          aria-label="Fermer l'activité récente"
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
         >
-          <X size={14} />
+          <X size={14} aria-hidden />
         </button>
       </div>
 
       {/* Filtres */}
-      <div className="flex gap-1 px-2 py-2 border-b border-fc-bg flex-shrink-0">
+      <div role="tablist" aria-label="Filtrer l'activité" className="flex gap-1 px-2 py-2 border-b border-fc-bg flex-shrink-0">
         {FILTERS.map(f => (
           <button
             key={f.id}
+            role="tab"
+            aria-selected={filter === f.id}
             onClick={() => setFilter(f.id)}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition ${
               filter === f.id
@@ -148,7 +151,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
                 : 'text-fc-muted hover:text-white hover:bg-fc-hover'
             }`}
           >
-            {f.icon}
+            <span aria-hidden>{f.icon}</span>
             {f.label}
           </button>
         ))}
@@ -157,14 +160,14 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       {/* Liste */}
       <div className="flex-1 overflow-y-auto p-1">
         {isLoading && (
-          <div className="space-y-1 p-1">
+          <div className="space-y-1 p-1" aria-busy="true" aria-label="Chargement de l'activité">
             {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
           </div>
         )}
 
         {!isLoading && sliced.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full py-12 px-4 text-center">
-            <Activity size={32} className="text-fc-muted opacity-30 mb-3" />
+            <Activity size={32} className="text-fc-muted opacity-30 mb-3" aria-hidden />
             <p className="text-sm text-fc-muted">Aucune activité récente</p>
             <p className="text-xs text-fc-muted/60 mt-1">
               {filter !== 'all' ? 'Essayez le filtre "Tout"' : 'Les messages et mentions apparaîtront ici'}
@@ -173,7 +176,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
         )}
 
         {!isLoading && sliced.length > 0 && (
-          <div className="space-y-0.5">
+          <div role="list" aria-label="Activité récente" className="space-y-0.5">
             {sliced.map(item => (
               <ActivityRow key={item.id} item={item} />
             ))}
