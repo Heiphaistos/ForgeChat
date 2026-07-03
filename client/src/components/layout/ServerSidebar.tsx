@@ -373,7 +373,7 @@ export default function ServerSidebar() {
             : s.name.charAt(0).toUpperCase()}
         </button>
         {hasUnread && (
-          <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
+          <span role="status" aria-label={`${serverCounts[s.id]} message${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} non lu${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} sur ${s.name}`} className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
         )}
         {muted && (
           <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">

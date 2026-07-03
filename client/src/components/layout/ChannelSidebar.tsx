@@ -24,6 +24,7 @@ import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
+import { useMobile } from '../../contexts/MobileContext'
 
 // Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
 const PRESENCE_COLOR: Record<string, string> = {
@@ -176,6 +177,7 @@ const UNCATEGORIZED_KEY = '__uncategorized__'
 export default function ChannelSidebar() {
   const { serverId, channelId } = useParams()
   const nav = useNavigate()
+  const { closeSidebar } = useMobile()
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -584,6 +586,7 @@ export default function ChannelSidebar() {
       setPasswordPrompt({ channel: ch })
     } else {
       nav(`/servers/${serverId}/channels/${ch.id}`)
+      closeSidebar()
     }
   }
 
@@ -635,7 +638,7 @@ export default function ChannelSidebar() {
         }}
       >
         <button
-          onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
+          onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
           aria-current={channelId === ch.id ? 'page' : undefined}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
             ${isMeConnected
@@ -697,8 +700,8 @@ export default function ChannelSidebar() {
             </span>
           )}
           {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && !effectiveMuted(ch.id) && (
-            <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-              {unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}
+            <span role="status" aria-label={`${unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]} message${unreadCounts[ch.id] > 1 ? 's' : ''} non lu${unreadCounts[ch.id] > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+              <span aria-hidden>{unreadCounts[ch.id] > 99 ? '99+' : unreadCounts[ch.id]}</span>
             </span>
           )}
 
@@ -757,7 +760,7 @@ export default function ChannelSidebar() {
             {channelStreams.map(s => (
               <button
                 key={s.userId}
-                onClick={() => nav(`/servers/${serverId}/channels/${ch.id}`)}
+                onClick={() => { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() }}
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-red-500/10 w-full text-left transition"
                 title={`Regarder le live de ${s.username}`}
               >

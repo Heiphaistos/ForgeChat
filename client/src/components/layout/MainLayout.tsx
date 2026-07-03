@@ -120,6 +120,14 @@ export default function MainLayout() {
       <SplitContext.Provider value={{ splitChannelId, setSplitChannelId }}>
         <div className="flex h-dvh overflow-hidden bg-fc-bg">
 
+          {/* Skip navigation — a11y clavier */}
+          <a
+            href="#fc-main"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:bg-white focus:text-black focus:text-sm focus:font-semibold focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg"
+          >
+            Passer au contenu principal
+          </a>
+
           {/* Bannière reconnexion WebSocket */}
           {!wsConnected && wsAttempts > 0 && (
             <div role="status" aria-live="polite" className="fixed top-0 inset-x-0 z-[9999] bg-yellow-600/95 text-white text-xs text-center py-1.5 flex items-center justify-center gap-2 backdrop-blur-sm">
@@ -176,7 +184,7 @@ export default function MainLayout() {
           </div>
 
           {/* Zone principale */}
-          <main className="relative flex flex-1 overflow-hidden min-w-0">
+          <main id="fc-main" className="relative flex flex-1 overflow-hidden min-w-0">
             <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               <Outlet />
             </div>
