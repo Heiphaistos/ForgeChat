@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
@@ -148,35 +148,53 @@ export default function MemberList({ serverId }: Props) {
     ] : []),
   ]
 
+  const [search, setSearch] = useState('')
+  const query = search.trim().toLowerCase()
+  const filteredOnline = query ? online.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : online
+  const filteredOffline = query ? offline.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : offline
+
   return (
     <div
       role="complementary"
       aria-label="Liste des membres"
       className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 hidden lg:block"
     >
-      {online.length > 0 && (
-        <div role="group" aria-label={`En ligne — ${online.length}`}>
+      <div className="px-1 pb-2">
+        <input
+          type="search"
+          placeholder="Rechercher un membre…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          aria-label="Rechercher un membre"
+          className="w-full bg-fc-bg/60 text-fc-text placeholder-fc-muted text-xs px-2.5 py-1.5 rounded outline-none focus:ring-1 focus:ring-fc-accent/50 transition"
+        />
+      </div>
+      {filteredOnline.length > 0 && (
+        <div role="group" aria-label={`En ligne — ${filteredOnline.length}`}>
           <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1" aria-hidden>
-            En ligne — {online.length}
+            En ligne — {filteredOnline.length}
           </div>
           <div role="list">
-            {online.map((m: any) => (
+            {filteredOnline.map((m: any) => (
               <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
       )}
-      {offline.length > 0 && (
-        <div role="group" aria-label={`Hors ligne — ${offline.length}`}>
+      {filteredOffline.length > 0 && (
+        <div role="group" aria-label={`Hors ligne — ${filteredOffline.length}`}>
           <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mt-3 mb-1" aria-hidden>
-            Hors ligne — {offline.length}
+            Hors ligne — {filteredOffline.length}
           </div>
           <div role="list">
-            {offline.map((m: any) => (
+            {filteredOffline.map((m: any) => (
               <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
+      )}
+      {query && filteredOnline.length === 0 && filteredOffline.length === 0 && (
+        <p className="text-xs text-fc-muted px-2 py-4 text-center">Aucun membre trouvé</p>
       )}
       {ctxMenu.node}
     </div>
