@@ -7,6 +7,9 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   plugins: [react()],
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   server: {
     port: 5173,
     proxy: {
@@ -20,7 +23,7 @@ export default defineConfig({
       output: {
         manualChunks: (id: string) => {
           if (id.includes('node_modules')) {
-            if (id.includes('react-router-dom') || id.includes('react-dom') || (id.includes('/react/') && !id.includes('@tanstack'))) return 'vendor-react'
+            if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('use-sync-external-store') || (id.includes('/react/') && !id.includes('@tanstack'))) return 'vendor-react'
             if (id.includes('@tanstack/react-query')) return 'vendor-query'
             if (id.includes('@radix-ui')) return 'vendor-ui'
             if (id.includes('framer-motion')) return 'vendor-motion'

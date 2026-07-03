@@ -7,6 +7,7 @@ import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat } from '../store/chat'
+import { useShallow } from 'zustand/react/shallow'
 import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
 import type { FileWithTtl } from '../components/chat/MessageInput'
@@ -55,7 +56,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const nav = useNavigate()
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping, clearChannel } = useChat()
-  const typingUsers = useChat(s => Object.values(s.typing[channelId ?? ''] ?? {}))
+  const typingUsers = useChat(useShallow(s => Object.values(s.typing[channelId ?? ''] ?? {})))
   const { on, onOpen, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
