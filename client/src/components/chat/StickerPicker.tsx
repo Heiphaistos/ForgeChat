@@ -86,6 +86,8 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
         onChange={e => setName(e.target.value)}
         placeholder="Nom du sticker"
         maxLength={50}
+        enterKeyHint="done"
+        autoCapitalize="none"
         aria-label="Nom du sticker"
         className="w-full fc-input text-xs"
       />

@@ -221,6 +221,7 @@ export default function CustomStatusModal({ onClose }: Props) {
                       maxLength={2}
                       value={emoji}
                       onChange={e => setEmoji(e.target.value)}
+                      enterKeyHint="next"
                       className="w-full px-2 py-1 bg-fc-input text-sm text-white rounded border border-white/10 outline-none focus:border-fc-accent"
                     />
                   </div>
@@ -236,6 +237,9 @@ export default function CustomStatusModal({ onClose }: Props) {
               placeholder="Quel est votre statut ?"
               aria-label="Texte du statut personnalisé"
               maxLength={128}
+              enterKeyHint="send"
+              autoCapitalize="sentences"
+              autoComplete="off"
               className="flex-1 px-3 py-2 bg-fc-input rounded-lg border border-white/10 text-sm text-white placeholder-fc-muted outline-none focus:border-fc-accent transition"
               onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
               autoFocus

@@ -314,7 +314,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
             <Plus size={14} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto space-y-0.5">
+        <div className="flex-1 overflow-y-auto overscroll-contain space-y-0.5">
           {(roles as Role[]).sort((a, b) => b.position - a.position).map(r => (
             <button key={r.id} onClick={() => selectRole(r)}
               className={`w-full text-left px-2.5 py-2 rounded-lg text-sm flex items-center gap-2 transition group
@@ -385,7 +385,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overscroll-contain">
             {/* Tab: Informations */}
             {activeTab === 'info' && (
               <div className="space-y-4 pr-1">

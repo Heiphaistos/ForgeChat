@@ -83,6 +83,10 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
             onChange={e => setSearch(e.target.value)}
             placeholder="Rechercher un emoji..."
             aria-label="Rechercher un emoji"
+            enterKeyHint="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCapitalize="none"
             className="bg-transparent text-sm text-white outline-none flex-1 placeholder-fc-muted"
           />
         </div>

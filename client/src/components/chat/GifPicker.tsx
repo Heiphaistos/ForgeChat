@@ -157,6 +157,10 @@ export default function GifPicker({ onPick, onClose }: Props) {
             onChange={e => setSearch(e.target.value)}
             placeholder="Chercher un GIF..."
             aria-label="Chercher un GIF"
+            enterKeyHint="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCapitalize="none"
             className="bg-transparent text-sm text-white outline-none flex-1 placeholder-fc-muted"
           />
           {search && (
