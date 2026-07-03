@@ -97,7 +97,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
             <button
               onClick={e => { e.stopPropagation(); unpin.mutate(msg.id) }}
               aria-label={`Désépingler le message de ${msg.author_username}`}
-              className="absolute top-2 right-2 p-1 text-fc-muted hover:text-fc-red rounded opacity-0 group-hover:opacity-100 transition hover:bg-fc-hover"
+              className="absolute top-2 right-2 p-1 text-fc-muted hover:text-fc-red rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 transition hover:bg-fc-hover"
             >
               <Trash2 size={12} aria-hidden />
             </button>
