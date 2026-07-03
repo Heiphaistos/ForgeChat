@@ -34,10 +34,18 @@ interface Props {
   channelId: string
 }
 
-function ProgressBar({ percent }: { percent: number }) {
+function ProgressBar({ percent, label }: { percent: number; label: string }) {
   return (
-    <div className="h-1.5 w-full bg-fc-hover rounded-full overflow-hidden">
+    <div
+      role="progressbar"
+      aria-valuenow={percent}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+      className="h-1.5 w-full bg-fc-hover rounded-full overflow-hidden"
+    >
       <div
+        aria-hidden
         className="h-full bg-fc-accent rounded-full transition-all duration-500"
         style={{ width: `${Math.max(percent, percent > 0 ? 2 : 0)}%` }}
       />
@@ -121,21 +129,25 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   const canClose = isCreator && !isExpired
 
   return (
-    <div className="mt-2 bg-fc-channel border border-fc-hover rounded-lg p-3 max-w-full sm:max-w-sm">
+    <div
+      role="group"
+      aria-label={`Sondage : ${poll.question}`}
+      className="mt-2 bg-fc-channel border border-fc-hover rounded-lg p-3 max-w-full sm:max-w-sm"
+    >
       {/* Header */}
       <div className="flex items-start gap-2 mb-3">
-        <div className="p-1 rounded bg-fc-accent/10 flex-shrink-0 mt-0.5">
+        <div className="p-1 rounded bg-fc-accent/10 flex-shrink-0 mt-0.5" aria-hidden>
           <BarChart2 size={13} className="text-fc-accent" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white leading-snug">{poll.question}</p>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-fc-muted">
+            <span aria-live="polite" aria-atomic="true" className="text-xs text-fc-muted">
               {poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}
             </span>
             {poll.ends_at && (
               <span className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-400' : 'text-fc-muted'}`}>
-                <Clock size={10} />
+                <Clock size={10} aria-hidden />
                 {isExpired
                   ? 'Terminé'
                   : `Se termine ${formatDistanceToNow(new Date(poll.ends_at), { addSuffix: true, locale: fr })}`}
@@ -147,12 +159,12 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
           <button
             onClick={() => closeMutation.mutate()}
             disabled={closeMutation.isPending}
-            title="Terminer le sondage"
+            aria-label="Terminer le sondage"
             className="flex-shrink-0 p-1 rounded text-fc-muted hover:text-red-400 hover:bg-red-400/10 transition disabled:opacity-50"
           >
             {closeMutation.isPending
-              ? <Loader2 size={13} className="animate-spin" />
-              : <X size={13} />}
+              ? <Loader2 size={13} className="animate-spin" aria-hidden />
+              : <X size={13} aria-hidden />}
           </button>
         )}
       </div>
@@ -173,6 +185,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   <button
                     onClick={() => voteMutation.mutate(option.id)}
                     disabled={voteMutation.isPending}
+                    aria-label={`Voter pour : ${option.text}`}
                     className={`flex-1 text-left text-sm px-2 py-1 rounded transition
                       ${isPending
                         ? 'text-fc-accent'
@@ -181,7 +194,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   >
                     {isPending ? (
                       <span className="flex items-center gap-1.5">
-                        <Loader2 size={11} className="animate-spin" />
+                        <Loader2 size={11} className="animate-spin" aria-hidden />
                         {option.text}
                       </span>
                     ) : (
@@ -191,15 +204,16 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                 ) : (
                   <div className="flex-1 flex items-center gap-1.5 text-sm px-2 py-1">
                     {isMyVote && (
-                      <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" />
+                      <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />
                     )}
                     <span className={isMyVote ? 'text-white font-medium' : 'text-fc-text'}>
+                      {isMyVote && <span className="sr-only">Votre vote : </span>}
                       {option.text}
                     </span>
                   </div>
                 )}
                 {(hasVoted || isExpired) && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0 text-xs text-fc-muted min-w-[3.5rem] text-right">
+                  <div aria-hidden className="flex items-center gap-1.5 flex-shrink-0 text-xs text-fc-muted min-w-[3.5rem] text-right">
                     <span className={isMyVote ? 'text-fc-accent font-semibold' : ''}>
                       {percent}%
                     </span>
@@ -207,7 +221,12 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   </div>
                 )}
               </div>
-              {(hasVoted || isExpired) && <ProgressBar percent={percent} />}
+              {(hasVoted || isExpired) && (
+                <ProgressBar
+                  percent={percent}
+                  label={`${option.text} : ${percent}% (${option.votes} vote${option.votes !== 1 ? 's' : ''})`}
+                />
+              )}
             </div>
           )
         })}

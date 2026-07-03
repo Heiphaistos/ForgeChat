@@ -38,17 +38,22 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
   })
 
   return (
-    <div className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right">
+    <div
+      role="complementary"
+      aria-label={`Messages épinglés — #${channelName}`}
+      className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"
+    >
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
         <div className="flex items-center gap-2">
-          <Pin size={16} className="text-fc-accent" />
+          <Pin size={16} className="text-fc-accent" aria-hidden />
           <span className="font-semibold text-white text-sm">Messages épinglés</span>
         </div>
         <button
           onClick={onClose}
+          aria-label="Fermer les messages épinglés"
           className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
         >
-          <X size={16} />
+          <X size={16} aria-hidden />
         </button>
       </div>
 
@@ -59,7 +64,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
         {!isLoading && pinned.length === 0 && (
           <div className="text-center py-8">
-            <Pin size={32} className="mx-auto mb-2 text-fc-muted opacity-40" />
+            <Pin size={32} className="mx-auto mb-2 text-fc-muted opacity-40" aria-hidden />
             <p className="text-sm text-fc-muted">Aucun message épinglé</p>
             <p className="text-xs text-fc-muted mt-1 opacity-70">
               Survole un message → bouton pin
@@ -70,13 +75,15 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
         {pinned.map((msg: any) => (
           <div
             key={msg.id}
+            role="article"
+            aria-label={`Message de ${msg.author_username}`}
             onClick={() => jumpToMessage(msg.id)}
             className="bg-fc-bg rounded-lg p-3 border border-fc-hover group relative cursor-pointer hover:border-fc-accent/50 transition-colors"
           >
             <div className="flex items-center gap-2 mb-1.5">
               {msg.author_avatar
-                ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
-                : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                ? <img src={msg.author_avatar} alt={msg.author_username} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0" aria-hidden>
                     {msg.author_username?.charAt(0).toUpperCase()}
                   </div>
               }
@@ -89,16 +96,16 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
             <button
               onClick={e => { e.stopPropagation(); unpin.mutate(msg.id) }}
+              aria-label={`Désépingler le message de ${msg.author_username}`}
               className="absolute top-2 right-2 p-1 text-fc-muted hover:text-fc-red rounded opacity-0 group-hover:opacity-100 transition hover:bg-fc-hover"
-              title="Désépingler"
             >
-              <Trash2 size={12} />
+              <Trash2 size={12} aria-hidden />
             </button>
           </div>
         ))}
       </div>
 
-      <div className="px-4 py-2 border-t border-fc-bg text-xs text-fc-muted">
+      <div className="px-4 py-2 border-t border-fc-bg text-xs text-fc-muted" aria-hidden>
         #{channelName} · {pinned.length} épinglé(s)
       </div>
     </div>

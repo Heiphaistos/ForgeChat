@@ -55,18 +55,24 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
   }, [x, y])
 
   return (
-    <div ref={ref} style={style} className="bg-fc-channel border border-fc-hover rounded-lg shadow-xl p-3 min-w-[160px] max-w-[220px]">
+    <div
+      ref={ref}
+      role="tooltip"
+      aria-label={`${emoji} — ${users.length} réaction${users.length > 1 ? 's' : ''}`}
+      style={style}
+      className="bg-fc-channel border border-fc-hover rounded-lg shadow-xl p-3 min-w-[160px] max-w-[220px]"
+    >
       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-fc-hover">
-        <span className="text-xl">{emoji}</span>
+        <span aria-hidden className="text-xl">{emoji}</span>
         <span className="text-xs text-fc-muted">{users.length} réaction{users.length > 1 ? 's' : ''}</span>
       </div>
-      <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+      <div role="list" className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
         {users.map(u => (
-          <div key={u.user_id} className="flex items-center gap-2">
+          <div key={u.user_id} role="listitem" className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
               {u.avatar
-                ? <img src={u.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                : u.username.charAt(0).toUpperCase()}
+                ? <img src={u.avatar} alt={u.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                : <span aria-hidden>{u.username.charAt(0).toUpperCase()}</span>}
             </div>
             <span className="text-xs text-fc-text truncate">{u.username}</span>
           </div>
