@@ -447,6 +447,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
               className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Fils de discussion"
+              aria-label="Fils de discussion"
+              aria-pressed={showThreadSidebar}
             >
               <MessagesSquare size={18} />
             </button>
@@ -454,6 +456,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Rechercher"
+              aria-label="Rechercher dans le canal"
+              aria-pressed={showSearch}
             >
               <Search size={18} />
             </button>
@@ -461,6 +465,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onClick={() => { setShowPinned(!showPinned); setShowSearch(false); setActiveThreadId(null) }}
               className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Messages épinglés"
+              aria-label="Messages épinglés"
+              aria-pressed={showPinned}
             >
               <Pin size={18} />
             </button>
@@ -470,6 +476,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 onClick={() => setShowNotifModal(v => !v)}
                 className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
                 title="Notifications"
+                aria-label="Paramètres de notifications"
+                aria-pressed={showNotifModal}
               >
                 <Bell size={18} />
               </button>
@@ -486,6 +494,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onClick={() => setShowMembers(!showMembers)}
               className={`hidden lg:flex p-1.5 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Liste des membres"
+              aria-label="Liste des membres"
+              aria-pressed={showMembers}
             >
               <Users size={18} />
             </button>
@@ -496,6 +506,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 onClick={() => setSplitChannelId(channelId ?? null)}
                 className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 title="Ouvrir en split (Ctrl+Shift+S pour fermer)"
+                aria-label="Ouvrir en vue partagée"
               >
                 <Columns2 size={18} />
               </button>
@@ -504,6 +515,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 onClick={onClose}
                 className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 title="Fermer le split (Ctrl+Shift+S)"
+                aria-label="Fermer la vue partagée"
               >
                 <X size={18} />
               </button>

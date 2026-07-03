@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
@@ -177,6 +177,7 @@ const UNCATEGORIZED_KEY = '__uncategorized__'
 export default function ChannelSidebar() {
   const { serverId, channelId } = useParams()
   const nav = useNavigate()
+  const { pathname } = useLocation()
   const { closeSidebar } = useMobile()
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
@@ -427,6 +428,7 @@ export default function ChannelSidebar() {
                     { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
                     { label: 'Quitter le groupe', onClick: leaveGroup },
                   ])}
+                  aria-current={pathname === `/dms/groups/${dm.id}` ? 'page' : undefined}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 >
                   <div className="relative flex-shrink-0">
@@ -483,6 +485,7 @@ export default function ChannelSidebar() {
                 { label: 'Archiver la conversation', onClick: archiveDm },
                 { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
               ])}
+              aria-current={pathname === `/dms/${dm.id}` ? 'page' : undefined}
               className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
             >
               <div className="relative flex-shrink-0">

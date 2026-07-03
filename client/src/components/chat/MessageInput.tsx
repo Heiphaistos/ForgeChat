@@ -991,13 +991,18 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         </div>
 
         {content.length > MAX_CHARS * 0.8 && (
-          <div className={`flex justify-end px-1 py-0.5 text-xs ${
-            content.length > MAX_CHARS
-              ? 'text-fc-red'
-              : content.length > MAX_CHARS * 0.9
-              ? 'text-fc-yellow'
-              : 'text-fc-muted'
-          }`}>
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className={`flex justify-end px-1 py-0.5 text-xs ${
+              content.length > MAX_CHARS
+                ? 'text-fc-red'
+                : content.length > MAX_CHARS * 0.9
+                ? 'text-fc-yellow'
+                : 'text-fc-muted'
+            }`}
+          >
             {content.length > MAX_CHARS
               ? <span className="font-medium">{content.length - MAX_CHARS} caractère{content.length - MAX_CHARS > 1 ? 's' : ''} en trop</span>
               : <span>{MAX_CHARS - content.length} restant{MAX_CHARS - content.length > 1 ? 's' : ''}</span>
