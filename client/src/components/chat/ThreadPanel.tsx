@@ -246,7 +246,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     {formatShort(msg.created_at)}
                   </span>
                   {isMe && editingMsgId !== msg.id && (
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
+                    <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
                       <button
                         onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
                         className="p-0.5 text-fc-muted hover:text-white rounded transition"

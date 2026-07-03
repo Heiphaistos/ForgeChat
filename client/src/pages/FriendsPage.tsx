@@ -258,7 +258,7 @@ export default function FriendsPage() {
         </div>
 
         {/* Actions (visibles au hover) */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+        <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
           <button
             onClick={e => { e.stopPropagation(); openDm(f.friend_id) }}
             title="Envoyer un message"
@@ -562,7 +562,7 @@ export default function FriendsPage() {
                     </div>
                     <button
                       onClick={() => unblockUser.mutate(b.id)}
-                      className="opacity-0 group-hover:opacity-100 px-3 py-1 text-xs bg-fc-input hover:bg-fc-hover text-fc-text rounded transition"
+                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 px-3 py-1 text-xs bg-fc-input hover:bg-fc-hover text-fc-text rounded transition"
                     >
                       Débloquer
                     </button>
