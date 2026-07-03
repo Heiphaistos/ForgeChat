@@ -129,7 +129,7 @@ export default function AuditLogPage({ serverId }: Props) {
     <div className="space-y-5">
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <ScrollText size={18} className="text-fc-accent" />
+          <ScrollText size={18} className="text-fc-accent" aria-hidden />
           Journal d'audit
         </h3>
         <p className="text-sm text-fc-muted mb-5">
@@ -142,19 +142,21 @@ export default function AuditLogPage({ serverId }: Props) {
             <select
               value={actionFilter}
               onChange={e => { setActionFilter(e.target.value); setPage(1) }}
+              aria-label="Filtrer par type d'action"
               className="appearance-none pl-3 pr-8 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm cursor-pointer"
             >
               {ACTION_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
+            <ChevronDown size={14} aria-hidden className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
           </div>
 
           <input
             value={userFilter}
             onChange={e => { setUserFilter(e.target.value); setPage(1) }}
             placeholder="Filtrer par utilisateur..."
+            aria-label="Filtrer par nom d'utilisateur"
             inputMode="search" autoComplete="off"
             className="flex-1 min-w-[180px] px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
@@ -162,31 +164,31 @@ export default function AuditLogPage({ serverId }: Props) {
 
         {/* Compteur */}
         {!isLoading && (
-          <div className="text-xs text-fc-muted mb-4">
+          <div aria-live="polite" aria-atomic="true" className="text-xs text-fc-muted mb-4">
             {filtered.length} entrée{filtered.length !== 1 ? 's' : ''} trouvée{filtered.length !== 1 ? 's' : ''}
           </div>
         )}
 
         {/* Timeline */}
         {isLoading ? (
-          <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+          <div role="status" aria-label="Chargement du journal d'audit" className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
         ) : isError ? (
-          <div className="text-center py-12">
-            <ScrollText size={40} className="mx-auto text-fc-muted/30 mb-3" />
+          <div role="alert" className="text-center py-12">
+            <ScrollText size={40} aria-hidden className="mx-auto text-fc-muted/30 mb-3" />
             <p className="text-fc-muted text-sm">Impossible de charger le journal d'audit.</p>
             <p className="text-fc-muted/60 text-xs mt-1">Vérifiez que vous avez la permission Gérer le serveur.</p>
           </div>
         ) : visible.length === 0 ? (
-          <div className="text-center py-12">
-            <ScrollText size={40} className="mx-auto text-fc-muted/30 mb-3" />
+          <div role="status" className="text-center py-12">
+            <ScrollText size={40} aria-hidden className="mx-auto text-fc-muted/30 mb-3" />
             <p className="text-fc-muted text-sm">Aucune entrée dans le journal.</p>
           </div>
         ) : (
           <div className="relative">
             {/* Ligne verticale */}
-            <div className="absolute left-4 top-0 bottom-0 w-px bg-fc-hover" />
+            <div aria-hidden className="absolute left-4 top-0 bottom-0 w-px bg-fc-hover" />
 
-            <div className="space-y-1">
+            <ul role="list" aria-label="Entrées du journal d'audit" className="space-y-1">
               {visible.map(entry => {
                 const action = entry.action ?? ''
                 const actKey = action.toUpperCase()
@@ -196,21 +198,27 @@ export default function AuditLogPage({ serverId }: Props) {
                   Icon:  ScrollText,
                 }
                 const { color, Icon } = cfg
+                const actor = entry.username ?? 'Utilisateur inconnu'
+                const detail = buildDetails(entry)
+                const entryLabel = entry.target_name
+                  ? `${actor} ${detail} → ${entry.target_name} (${timeAgo(entry.created_at)})`
+                  : `${actor} ${detail} (${timeAgo(entry.created_at)})`
                 return (
-                  <div
+                  <li
                     key={entry.id}
+                    aria-label={entryLabel}
                     className="flex gap-4 pl-2 py-2 group hover:bg-fc-hover/20 rounded-lg transition"
                   >
                     {/* Icône timeline */}
-                    <div className={`w-6 h-6 rounded-full bg-fc-channel flex items-center justify-center flex-shrink-0 z-10 border-2 border-fc-bg ${color}`}>
+                    <div aria-hidden className={`w-6 h-6 rounded-full bg-fc-channel flex items-center justify-center flex-shrink-0 z-10 border-2 border-fc-bg ${color}`}>
                       <Icon size={11} />
                     </div>
 
                     {/* Contenu */}
-                    <div className="flex-1 min-w-0 pt-0.5">
+                    <div aria-hidden className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-white text-sm font-medium">{entry.username ?? 'Utilisateur inconnu'}</span>
-                        <span className={`text-xs ${color}`}>{buildDetails(entry)}</span>
+                        <span className="text-white text-sm font-medium">{actor}</span>
+                        <span className={`text-xs ${color}`}>{detail}</span>
                         {entry.target_name && (
                           <span className="text-xs text-fc-muted">→ {entry.target_name}</span>
                         )}
@@ -225,13 +233,13 @@ export default function AuditLogPage({ serverId }: Props) {
                       )}
                     </div>
 
-                    <div className="text-xs text-fc-muted flex-shrink-0 pt-0.5 whitespace-nowrap">
+                    <div aria-hidden className="text-xs text-fc-muted flex-shrink-0 pt-0.5 whitespace-nowrap">
                       {timeAgo(entry.created_at)}
                     </div>
-                  </div>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           </div>
         )}
 
@@ -240,6 +248,7 @@ export default function AuditLogPage({ serverId }: Props) {
           <div className="mt-4 text-center">
             <button
               onClick={() => setPage(p => p + 1)}
+              aria-label={`Charger ${filtered.length - visible.length} entrée${filtered.length - visible.length > 1 ? 's' : ''} supplémentaire${filtered.length - visible.length > 1 ? 's' : ''}`}
               className="px-4 py-2 bg-fc-channel hover:bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition"
             >
               Charger plus ({filtered.length - visible.length} restant{filtered.length - visible.length > 1 ? 's' : ''})

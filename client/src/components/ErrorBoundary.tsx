@@ -23,14 +23,22 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return this.props.fallback ?? (
-        <div className="flex flex-col items-center justify-center min-h-screen w-full gap-4 bg-fc-bg text-fc-text px-6 text-center">
-          <div className="text-5xl mb-2">⚠️</div>
-          <h2 className="text-white text-xl font-semibold">Quelque chose a planté</h2>
+        <div
+          role="alert"
+          aria-labelledby="error-boundary-title"
+          className="flex flex-col items-center justify-center min-h-screen w-full gap-4 bg-fc-bg text-fc-text px-6 text-center"
+        >
+          <div className="text-5xl mb-2" aria-hidden>⚠️</div>
+          <h2 id="error-boundary-title" className="text-white text-xl font-semibold">Quelque chose a planté</h2>
           <p className="text-fc-muted text-sm max-w-md">
             Une erreur inattendue s'est produite. Vous pouvez essayer de réessayer ou recharger la page.
           </p>
           {process.env.NODE_ENV === 'development' && (
-            <pre className="text-xs text-red-400 bg-red-900/20 rounded-lg p-3 max-w-lg overflow-auto text-left max-h-48">
+            <pre
+              tabIndex={0}
+              aria-label="Message d'erreur technique"
+              className="text-xs text-red-400 bg-red-900/20 rounded-lg p-3 max-w-lg overflow-auto text-left max-h-48"
+            >
               {this.state.error.message}
             </pre>
           )}

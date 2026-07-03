@@ -9,9 +9,13 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
 
   if (boostLevel === 1) {
     return (
-      <div className="mx-2 mb-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/30 flex items-center gap-2">
+      <div
+        role="status"
+        aria-label={`Niveau de boost 1 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
+        className="mx-2 mb-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/30 flex items-center gap-2"
+      >
         <span className="text-xs font-semibold text-indigo-300 truncate">
-          ⚡ Niveau 1 · {boostCount} boost{boostCount > 1 ? 's' : ''}
+          <span aria-hidden>⚡ </span>Niveau 1 · {boostCount} boost{boostCount > 1 ? 's' : ''}
         </span>
       </div>
     )
@@ -20,6 +24,8 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
   if (boostLevel === 2) {
     return (
       <div
+        role="status"
+        aria-label={`Niveau de boost 2 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
         className="mx-2 mb-1 px-3 py-1.5 rounded-md border border-purple-500/40 overflow-hidden relative flex items-center gap-2"
         style={{
           background: 'linear-gradient(90deg, #6d28d9 0%, #7c3aed 40%, #8b5cf6 70%, #6d28d9 100%)',
@@ -29,9 +35,9 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
       >
         <style>{`@keyframes boostSlide { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }`}</style>
         <span className="text-xs font-semibold text-white truncate relative z-10">
-          ✨ Niveau 2 · {boostCount} boost{boostCount > 1 ? 's' : ''}
+          <span aria-hidden>✨ </span>Niveau 2 · {boostCount} boost{boostCount > 1 ? 's' : ''}
         </span>
-        <span className="ml-auto text-[10px] text-purple-200 relative z-10 flex-shrink-0">✦ ✦ ✦</span>
+        <span className="ml-auto text-[10px] text-purple-200 relative z-10 flex-shrink-0" aria-hidden>✦ ✦ ✦</span>
       </div>
     )
   }
@@ -39,6 +45,8 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
   // Niveau 3
   return (
     <div
+      role="status"
+      aria-label={`Niveau de boost 3 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
       className="mx-2 mb-1 px-3 py-1.5 rounded-md border-2 overflow-hidden flex items-center gap-2"
       style={{
         background: 'linear-gradient(90deg, #78350f, #7c3aed, #d97706, #7c3aed, #78350f)',
@@ -49,9 +57,9 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
     >
       <style>{`@keyframes boostGold { 0%{background-position:0% 50%} 100%{background-position:300% 50%} }`}</style>
       <span className="text-xs font-bold text-amber-100 truncate relative z-10">
-        👑 Niveau 3 · {boostCount} boost{boostCount > 1 ? 's' : ''}
+        <span aria-hidden>👑 </span>Niveau 3 · {boostCount} boost{boostCount > 1 ? 's' : ''}
       </span>
-      <span className="ml-auto text-[10px] text-amber-300 relative z-10 flex-shrink-0 animate-pulse">★ ★ ★</span>
+      <span className="ml-auto text-[10px] text-amber-300 relative z-10 flex-shrink-0 animate-pulse" aria-hidden>★ ★ ★</span>
     </div>
   )
 }
