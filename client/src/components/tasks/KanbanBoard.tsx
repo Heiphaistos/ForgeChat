@@ -105,7 +105,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
           ))}
         </select>
         <div className="flex gap-1.5">
-          <button type="button" onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+          <button type="button" onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
             <X size={14} aria-hidden />
           </button>
           <button
@@ -139,7 +139,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
         <span className="text-sm text-white font-medium leading-snug break-words">{task.title}</span>
         <button
           onClick={e => { e.stopPropagation(); onDelete(task.id) }}
-          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-red-400 transition flex-shrink-0 rounded"
+          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-red-400 transition flex-shrink-0 rounded"
           aria-label="Supprimer la tâche"
         >
           <X size={12} />
@@ -281,7 +281,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
               </div>
               <button
                 onClick={() => setOpenCreateCol(openCreateCol === col.id ? null : col.id)}
-                className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
                 title="Ajouter une tâche"
                 aria-label="Ajouter une tâche"
               >

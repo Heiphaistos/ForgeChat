@@ -46,7 +46,7 @@ export default function UserProfileModal({ onClose }: Props) {
           <button
             onClick={onClose}
             aria-label="Fermer"
-            className="absolute top-2 right-2 text-white/70 hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full hover:bg-black/30"
+            className="absolute top-2 right-2 text-white/70 hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full hover:bg-black/30"
           >
             <X size={18} aria-hidden />
           </button>

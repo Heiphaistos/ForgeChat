@@ -119,7 +119,7 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
           <button
             onClick={onClose}
             aria-label="Fermer"
-            className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center hover:bg-fc-hover rounded"
+            className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded"
           >
             <X size={16} aria-hidden />
           </button>

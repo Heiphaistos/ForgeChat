@@ -46,7 +46,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-96 max-w-[95vw] p-5"
+        className="bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-96 max-w-[95vw] max-h-[90dvh] overflow-y-auto p-5"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -54,7 +54,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id="report-modal-title" className="text-white font-semibold text-lg">Signaler le message</h2>
-          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
             <X size={16} aria-hidden />
           </button>
         </div>

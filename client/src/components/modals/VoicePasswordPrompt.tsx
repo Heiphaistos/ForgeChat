@@ -20,7 +20,7 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>
       <div
-        className="bg-fc-channel rounded-lg w-full max-w-[360px] shadow-2xl p-6"
+        className="bg-fc-channel rounded-lg w-full max-w-[360px] max-h-[90dvh] overflow-y-auto shadow-2xl p-6"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -31,7 +31,7 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
             <Lock size={18} className="text-yellow-400" />
             <h2 id="voice-password-modal-title" className="text-lg font-bold text-white">Canal protégé</h2>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover">
+          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
             <X size={18} aria-hidden />
           </button>
         </div>
