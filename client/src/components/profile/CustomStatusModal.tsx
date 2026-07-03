@@ -130,18 +130,23 @@ export default function CustomStatusModal({ onClose }: Props) {
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0">
       <div
         ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cs-title"
         className="bg-fc-channel border border-white/10 rounded-xl shadow-2xl w-full max-w-[400px] max-h-[90dvh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <Smile size={18} className="text-fc-accent" />
-            <span className="font-semibold text-white">Statut personnalisé</span>
+            <Smile size={18} className="text-fc-accent" aria-hidden />
+            <span id="cs-title" className="font-semibold text-white">Statut personnalisé</span>
           </div>
           <button
             onClick={onClose}
+            aria-label="Fermer le statut personnalisé"
             className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+
           >
             <X size={16} />
           </button>
@@ -182,18 +187,25 @@ export default function CustomStatusModal({ onClose }: Props) {
             <div className="relative flex-shrink-0">
               <button
                 onClick={() => setShowEmojiGrid(v => !v)}
+                aria-label={emoji ? `Emoji sélectionné : ${emoji}. Cliquer pour changer` : 'Choisir un emoji'}
+                aria-expanded={showEmojiGrid}
+                aria-haspopup="true"
                 className="w-10 h-10 flex items-center justify-center bg-fc-input rounded-lg border border-white/10 hover:border-fc-accent/60 transition text-lg"
-                title="Choisir un emoji"
               >
-                {emoji || <Smile size={18} className="text-fc-muted" />}
+                {emoji || <Smile size={18} className="text-fc-muted" aria-hidden />}
               </button>
 
               {showEmojiGrid && (
-                <div className="absolute top-full left-0 mt-1 bg-fc-channel border border-white/10 rounded-lg p-2 shadow-2xl z-10 w-48">
+                <div
+                  role="dialog"
+                  aria-label="Choisir un emoji"
+                  className="absolute top-full left-0 mt-1 bg-fc-channel border border-white/10 rounded-lg p-2 shadow-2xl z-10 w-48"
+                >
                   <div className="grid grid-cols-6 gap-1">
                     {QUICK_EMOJIS.map(e => (
                       <button
                         key={e}
+                        aria-label={e}
                         onClick={() => { setEmoji(e); setShowEmojiGrid(false) }}
                         className="w-7 h-7 flex items-center justify-center rounded hover:bg-fc-hover text-base transition"
                       >
@@ -205,6 +217,7 @@ export default function CustomStatusModal({ onClose }: Props) {
                     <input
                       type="text"
                       placeholder="Emoji personnalisé..."
+                      aria-label="Saisir un emoji personnalisé"
                       maxLength={2}
                       value={emoji}
                       onChange={e => setEmoji(e.target.value)}
@@ -221,6 +234,7 @@ export default function CustomStatusModal({ onClose }: Props) {
               value={text}
               onChange={e => setText(e.target.value)}
               placeholder="Quel est votre statut ?"
+              aria-label="Texte du statut personnalisé"
               maxLength={128}
               className="flex-1 px-3 py-2 bg-fc-input rounded-lg border border-white/10 text-sm text-white placeholder-fc-muted outline-none focus:border-fc-accent transition"
               onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
@@ -237,10 +251,11 @@ export default function CustomStatusModal({ onClose }: Props) {
 
           {/* Expiration */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
+            <label htmlFor="cs-expiration" className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
               Effacer après
             </label>
             <select
+              id="cs-expiration"
               value={expiration}
               onChange={e => setExpiration(e.target.value)}
               className="w-full px-3 py-2 bg-fc-input rounded-lg border border-white/10 text-sm text-white outline-none focus:border-fc-accent transition appearance-none cursor-pointer"
@@ -265,9 +280,9 @@ export default function CustomStatusModal({ onClose }: Props) {
                 onClick={handleClear}
                 disabled={save.isPending}
                 className="px-3 py-2 rounded-lg bg-fc-hover hover:bg-fc-red/20 text-fc-muted hover:text-fc-red transition flex items-center gap-1.5 text-sm disabled:opacity-50"
-                title="Effacer le statut"
+                aria-label="Effacer le statut personnalisé"
               >
-                <Trash2 size={14} />
+                <Trash2 size={14} aria-hidden />
                 Effacer
               </button>
             )}

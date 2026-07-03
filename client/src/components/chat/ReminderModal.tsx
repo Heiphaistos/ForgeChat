@@ -58,14 +58,19 @@ export default function ReminderModal({ messageId, onClose }: Props) {
   }
 
   return (
-    <div className="absolute bottom-8 right-0 z-50 bg-fc-sidebar border border-fc-hover rounded-xl shadow-2xl p-4 w-64">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reminder-title"
+      className="absolute bottom-8 right-0 z-50 bg-fc-sidebar border border-fc-hover rounded-xl shadow-2xl p-4 w-64"
+    >
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-white">
-          <Bell size={14} className="text-fc-accent" />
+        <div id="reminder-title" className="flex items-center gap-2 text-sm font-medium text-white">
+          <Bell size={14} className="text-fc-accent" aria-hidden />
           Me rappeler
         </div>
-        <button onClick={onClose} className="text-fc-muted hover:text-white">
-          <X size={14} />
+        <button onClick={onClose} aria-label="Fermer le rappel" className="text-fc-muted hover:text-white">
+          <X size={14} aria-hidden />
         </button>
       </div>
 
@@ -82,11 +87,13 @@ export default function ReminderModal({ messageId, onClose }: Props) {
         ))}
 
         <div className="pt-2 border-t border-fc-hover space-y-2">
-          <label className="text-xs text-fc-muted">Personnalisé</label>
+          <label htmlFor="reminder-custom-dt" className="text-xs text-fc-muted">Personnalisé</label>
           <input
+            id="reminder-custom-dt"
             type="datetime-local"
             value={custom}
             onChange={e => setCustom(e.target.value)}
+            aria-label="Date et heure du rappel personnalisé"
             className="w-full bg-fc-hover border border-fc-hover rounded-lg px-2 py-1.5 text-sm text-white"
           />
           {custom && (

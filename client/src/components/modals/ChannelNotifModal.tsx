@@ -58,27 +58,32 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
   return (
     <div
       ref={modalRef}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="cn-title"
       className="absolute top-10 right-0 z-50 bg-fc-bg border border-fc-hover rounded-lg shadow-xl w-72 p-3"
     >
       <div className="flex items-center justify-between mb-3">
-        <span className="text-white text-sm font-semibold truncate">#{channelName}</span>
-        <button onClick={onClose} className="text-fc-muted hover:text-white transition">
-          <X size={14} />
+        <span id="cn-title" className="text-white text-sm font-semibold truncate">#{channelName}</span>
+        <button onClick={onClose} aria-label="Fermer les notifications" className="text-fc-muted hover:text-white transition">
+          <X size={14} aria-hidden />
         </button>
       </div>
 
-      <p className="text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-2">Notifications</p>
+      <p id="cn-notif-label" className="text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-2">Notifications</p>
 
-      <div className="space-y-1 mb-3">
+      <div role="radiogroup" aria-labelledby="cn-notif-label" className="space-y-1 mb-3">
         {LEVELS.map(opt => (
           <button
             key={opt.value}
+            role="radio"
+            aria-checked={level === opt.value}
             onClick={() => setLevel(opt.value)}
             className={`w-full flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition ${
               level === opt.value ? 'bg-fc-accent/20 text-white' : 'hover:bg-fc-hover text-fc-muted hover:text-white'
             }`}
           >
-            <span className="mt-0.5 flex-shrink-0">{opt.icon}</span>
+            <span className="mt-0.5 flex-shrink-0" aria-hidden>{opt.icon}</span>
             <div>
               <div className="text-sm font-medium leading-tight">{opt.label}</div>
               <div className="text-[11px] text-fc-muted leading-tight">{opt.desc}</div>
@@ -87,8 +92,9 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
         ))}
       </div>
 
-      <label className="flex items-center gap-2.5 px-2.5 py-2 rounded hover:bg-fc-hover transition cursor-pointer mb-3">
+      <label htmlFor="cn-mute" className="flex items-center gap-2.5 px-2.5 py-2 rounded hover:bg-fc-hover transition cursor-pointer mb-3">
         <input
+          id="cn-mute"
           type="checkbox"
           checked={muted}
           onChange={e => setMuted(e.target.checked)}
