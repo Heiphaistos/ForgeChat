@@ -99,9 +99,16 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
   }
 
   return (
-    <div ref={ref} style={style} className="w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden">
+    <div
+      ref={ref}
+      role="dialog"
+      aria-modal="false"
+      aria-label={user ? `Profil de ${user.username}` : 'Profil utilisateur'}
+      style={style}
+      className="w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
+    >
       {/* Banner */}
-      <div className="h-16 relative overflow-hidden">
+      <div className="h-16 relative overflow-hidden" aria-hidden>
         {user?.banner
           ? <img src={user.banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
@@ -113,11 +120,15 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
         <div className="absolute -bottom-6 left-4">
           <div className="w-16 h-16 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-xl text-white overflow-hidden">
             {user?.avatar
-              ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              ? <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (
-            <div className={`absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full border-2 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`} />
+            <div
+              className={`absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full border-2 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`}
+              aria-label={STATUS_LABEL[user.status] ?? 'Hors ligne'}
+              title={STATUS_LABEL[user.status] ?? 'Hors ligne'}
+            />
           )}
         </div>
       </div>

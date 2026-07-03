@@ -149,9 +149,9 @@ export default function QuickSwitcher({ onClose }: Props) {
   if (query.startsWith('?')) {
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
-        <div className="bg-fc-sidebar border border-fc-hover rounded-xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-label="Recherche globale" className="bg-fc-sidebar border border-fc-hover rounded-xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover">
-            <Search size={16} className="text-fc-muted flex-shrink-0" />
+            <Search size={16} className="text-fc-muted flex-shrink-0" aria-hidden />
             <input
               ref={inputRef}
               value={query}
@@ -159,6 +159,7 @@ export default function QuickSwitcher({ onClose }: Props) {
               onKeyDown={e => { if (e.key === 'Escape') onClose() }}
               placeholder="? Rechercher messages, utilisateurs, canaux..."
               inputMode="search" autoComplete="off"
+              aria-label="Rechercher des messages, utilisateurs ou canaux"
               className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-fc-muted"
               autoFocus
             />
@@ -233,55 +234,72 @@ export default function QuickSwitcher({ onClose }: Props) {
     )
   }
 
+  const activeItemId = selected >= 0 && selected < filtered.length
+    ? `qs-item-${filtered[selected].type}-${filtered[selected].id}`
+    : undefined
+
   return (
     <div className="fixed inset-0 bg-black/70 z-[100] flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation rapide"
         className="w-full max-w-[560px] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Input */}
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-fc-hover">
-          <Search size={18} className="text-fc-muted flex-shrink-0" />
+          <Search size={18} className="text-fc-muted flex-shrink-0" aria-hidden />
           <input
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Aller à... (? pour rechercher)"
+            role="combobox"
+            aria-expanded={filtered.length > 0}
+            aria-controls="qs-listbox"
+            aria-activedescendant={activeItemId}
+            aria-label="Naviguer vers un canal ou un message direct"
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
-          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded">Échap</kbd>
+          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
         </div>
 
         {/* Résultats */}
-        <div className="max-h-80 overflow-y-auto py-2">
+        <div id="qs-listbox" role="listbox" aria-label="Canaux et messages directs" className="max-h-80 overflow-y-auto py-2">
           {!query && history.length > 0 && (
-            <div className="mb-1">
+            <div className="mb-1" role="group" aria-label="Recherches récentes">
               <div className="flex items-center justify-between px-3 py-1.5">
-                <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">Recherches récentes</span>
-                <button onClick={() => { clearHistory(); setHistory([]) }} className="text-xs text-fc-muted hover:text-white">Effacer tout</button>
+                <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide" aria-hidden>Recherches récentes</span>
+                <button onClick={() => { clearHistory(); setHistory([]) }} aria-label="Effacer l'historique de recherche" className="text-xs text-fc-muted hover:text-white">Effacer tout</button>
               </div>
               {history.map(h => (
                 <div key={h} className="flex items-center justify-between px-3 py-2 hover:bg-fc-hover cursor-pointer rounded-lg mx-1"
                      onClick={() => setQuery(h)}>
                   <span className="text-sm text-white">{h}</span>
                   <button onClick={e => { e.stopPropagation(); removeFromHistory(h); setHistory(loadHistory()) }}
+                          aria-label={`Supprimer "${h}" de l'historique`}
                           className="text-fc-muted hover:text-white p-1">✕</button>
                 </div>
               ))}
             </div>
           )}
           {filtered.length === 0 && (query || history.length === 0) && (
-            <div className="px-4 py-6 text-center text-fc-muted text-sm">Aucun résultat</div>
+            <div role="status" className="px-4 py-6 text-center text-fc-muted text-sm">Aucun résultat</div>
           )}
           {filtered.map((r, i) => (
             <button
               key={`${r.type}-${r.id}`}
+              id={`qs-item-${r.type}-${r.id}`}
+              role="option"
+              aria-selected={i === selected}
               onClick={() => go(r)}
+              onMouseEnter={() => setSelected(i)}
               className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition
                 ${i === selected ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
             >
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0" aria-hidden>
                 {r.type === 'dm'
                   ? <MessageCircle size={14} className="text-fc-green" />
                   : <ChannelIcon type={r.channelType ?? 'text'} />}
@@ -292,12 +310,12 @@ export default function QuickSwitcher({ onClose }: Props) {
                   <div className="text-xs text-fc-muted truncate">{r.serverName}</div>
                 )}
               </div>
-              <ChevronRight size={14} className="text-fc-muted flex-shrink-0" />
+              <ChevronRight size={14} className="text-fc-muted flex-shrink-0" aria-hidden />
             </button>
           ))}
         </div>
 
-        <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted">
+        <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted" aria-hidden>
           <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> naviguer</span>
           <span><kbd className="bg-fc-hover px-1 rounded">Entrée</kbd> ouvrir</span>
           <span><kbd className="bg-fc-hover px-1 rounded">Échap</kbd> fermer</span>

@@ -65,23 +65,26 @@ export default function NotificationBell() {
           open ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white'
         }`}
         title={`Mentions (${count})`}
+        aria-label={count > 0 ? `Mentions — ${count} non lu${count > 1 ? 'es' : 'e'}` : 'Mentions'}
+        aria-expanded={open}
+        aria-haspopup="dialog"
       >
-        <Bell size={16} />
+        <Bell size={16} aria-hidden />
         {count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+          <span aria-hidden className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
             {count > 99 ? '99+' : count}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div role="dialog" aria-modal="false" aria-label="Mentions récentes" className="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div className="flex items-center gap-2">
-              <AtSign size={14} className="text-fc-accent" />
+              <AtSign size={14} className="text-fc-accent" aria-hidden />
               <span className="text-sm font-semibold text-white">Mentions récentes</span>
             </div>
-            <button onClick={() => setOpen(false)} className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+            <button onClick={() => setOpen(false)} aria-label="Fermer les mentions" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
               <X size={14} />
             </button>
           </div>
