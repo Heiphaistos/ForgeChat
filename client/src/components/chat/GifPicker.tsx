@@ -148,19 +148,20 @@ export default function GifPicker({ onPick, onClose }: Props) {
       onClick={e => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="p-2 border-b border-fc-hover flex-shrink-0">
+      <div role="search" aria-label="Chercher un GIF" className="p-2 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2 bg-fc-input rounded-lg px-2 py-1.5">
-          <Search size={14} className="text-fc-muted flex-shrink-0" />
+          <Search size={14} aria-hidden className="text-fc-muted flex-shrink-0" />
           <input
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Chercher un GIF..."
+            aria-label="Chercher un GIF"
             className="bg-transparent text-sm text-white outline-none flex-1 placeholder-fc-muted"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="text-fc-muted hover:text-white transition">
-              <X size={12} />
+            <button onClick={() => setSearch('')} aria-label="Effacer la recherche" className="text-fc-muted hover:text-white transition">
+              <X size={12} aria-hidden />
             </button>
           )}
         </div>
@@ -168,7 +169,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
           <p className="text-xs text-fc-muted mt-1 text-center">Mode démo — Tenor inaccessible</p>
         )}
         {!demoMode && !search && (
-          <p className="text-xs text-fc-muted mt-1 text-center font-medium">Trending</p>
+          <p className="text-xs text-fc-muted mt-1 text-center font-medium" aria-hidden>Trending</p>
         )}
       </div>
 
@@ -180,13 +181,13 @@ export default function GifPicker({ onPick, onClose }: Props) {
         style={{ minHeight: 0 }}
       >
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
-            <Loader2 size={24} className="animate-spin" />
-            <span className="text-xs">Chargement...</span>
+          <div role="status" aria-label="Chargement des GIFs" className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
+            <Loader2 size={24} aria-hidden className="animate-spin" />
+            <span className="text-xs" aria-hidden>Chargement...</span>
           </div>
         ) : gifs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
-            <span className="text-3xl">🔍</span>
+          <div role="status" className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
+            <span className="text-3xl" aria-hidden>🔍</span>
             <span className="text-xs">Aucun GIF trouvé</span>
           </div>
         ) : demoMode ? (
@@ -196,10 +197,11 @@ export default function GifPicker({ onPick, onClose }: Props) {
               <button
                 key={gif.id}
                 onClick={() => handlePick(gif)}
+                aria-label={gif.title}
                 className="flex flex-col items-center justify-center gap-1 h-20 rounded-lg bg-fc-hover hover:bg-fc-input transition border border-fc-hover hover:border-fc-accent"
               >
-                <span className="text-4xl">{gif.emoji}</span>
-                <span className="text-xs text-fc-muted">{gif.title}</span>
+                <span className="text-4xl" aria-hidden>{gif.emoji}</span>
+                <span className="text-xs text-fc-muted" aria-hidden>{gif.title}</span>
               </button>
             ))}
           </div>
@@ -211,8 +213,8 @@ export default function GifPicker({ onPick, onClose }: Props) {
                 <button
                   key={gif.id}
                   onClick={() => handlePick(gif)}
+                  aria-label={gif.title}
                   className="relative rounded overflow-hidden group hover:opacity-90 transition bg-fc-hover"
-                  title={gif.title}
                 >
                   <img
                     src={gif.preview || gif.url}
@@ -220,7 +222,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
                     className="w-full object-cover rounded"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition rounded" />
+                  <div aria-hidden className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition rounded" />
                 </button>
               ))}
             </div>
@@ -229,8 +231,8 @@ export default function GifPicker({ onPick, onClose }: Props) {
                 <button
                   key={gif.id}
                   onClick={() => handlePick(gif)}
+                  aria-label={gif.title}
                   className="relative rounded overflow-hidden group hover:opacity-90 transition bg-fc-hover"
-                  title={gif.title}
                 >
                   <img
                     src={gif.preview || gif.url}
@@ -238,7 +240,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
                     className="w-full object-cover rounded"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition rounded" />
+                  <div aria-hidden className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition rounded" />
                 </button>
               ))}
             </div>
@@ -247,8 +249,8 @@ export default function GifPicker({ onPick, onClose }: Props) {
 
         {/* Loader infinite scroll */}
         {loadingMore && (
-          <div className="flex justify-center py-3">
-            <Loader2 size={16} className="animate-spin text-fc-muted" />
+          <div role="status" aria-label="Chargement de GIFs supplémentaires" className="flex justify-center py-3">
+            <Loader2 size={16} aria-hidden className="animate-spin text-fc-muted" />
           </div>
         )}
       </div>

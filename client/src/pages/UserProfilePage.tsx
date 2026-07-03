@@ -75,9 +75,9 @@ function BioSection({ bio }: { bio: string }) {
           className="mt-1 text-xs text-fc-accent hover:underline flex items-center gap-0.5"
         >
           {expanded ? (
-            <>Réduire <ChevronUp size={12} /></>
+            <>Réduire <ChevronUp size={12} aria-hidden /></>
           ) : (
-            <>Lire la suite <ChevronDown size={12} /></>
+            <>Lire la suite <ChevronDown size={12} aria-hidden /></>
           )}
         </button>
       )}
@@ -89,9 +89,9 @@ function BioSection({ bio }: { bio: string }) {
 
 function ProfileSkeleton() {
   return (
-    <div className="animate-pulse">
-      <div className="h-48 bg-fc-hover/50 rounded-t-xl" />
-      <div className="px-6 pb-6 bg-fc-channel rounded-b-xl">
+    <div role="status" aria-label="Chargement du profil" className="animate-pulse">
+      <div className="h-48 bg-fc-hover/50 rounded-t-xl" aria-hidden />
+      <div className="px-6 pb-6 bg-fc-channel rounded-b-xl" aria-hidden>
         <div className="flex items-end gap-4 -mt-12 mb-6">
           <div className="w-24 h-24 rounded-full bg-fc-hover border-4 border-fc-channel" />
           <div className="flex-1 pb-2">
@@ -118,9 +118,9 @@ function MutualServersSection({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
+      <div role="status" aria-label="Chargement des serveurs en commun" className="space-y-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-10 bg-fc-hover/30 rounded-lg animate-pulse" />
+          <div key={i} aria-hidden className="h-10 bg-fc-hover/30 rounded-lg animate-pulse" />
         ))}
       </div>
     )
@@ -140,7 +140,7 @@ function MutualServersSection({ userId }: { userId: string }) {
             {srv.icon ? (
               <img src={srv.icon} alt={srv.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : (
-              srv.name.charAt(0).toUpperCase()
+              <span aria-hidden>{srv.name.charAt(0).toUpperCase()}</span>
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -199,10 +199,11 @@ export default function UserProfilePage() {
     return (
       <div className="flex-1 bg-fc-chat flex items-center justify-center">
         <div className="text-center text-fc-muted">
-          <Users size={48} className="mx-auto mb-4 opacity-30" />
+          <Users size={48} aria-hidden className="mx-auto mb-4 opacity-30" />
           <p>Profil introuvable.</p>
           <button
             onClick={() => nav(-1)}
+            aria-label="Retour à la page précédente"
             className="mt-4 text-fc-accent hover:underline text-sm"
           >
             Retour
@@ -220,10 +221,11 @@ export default function UserProfilePage() {
         {/* Bouton retour */}
         <button
           onClick={() => nav(-1)}
+          aria-label="Retour à la page précédente"
           className="flex items-center gap-1.5 text-fc-muted hover:text-white text-sm mb-4 transition"
         >
-          <ArrowLeft size={16} />
-          Retour
+          <ArrowLeft size={16} aria-hidden />
+          <span aria-hidden>Retour</span>
         </button>
 
         {/* Carte profil */}
@@ -239,10 +241,10 @@ export default function UserProfilePage() {
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30" />
+              <div aria-hidden className="w-full h-full bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30" />
             )}
             {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
           </div>
 
           {/* Avatar + infos */}
@@ -254,13 +256,14 @@ export default function UserProfilePage() {
                   {user.avatar ? (
                     <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
-                    user.username.charAt(0).toUpperCase()
+                    <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
                 {/* Indicateur statut */}
                 <span
-                  className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-fc-channel ${statusColor(user.status)}`}
+                  aria-label={statusLabel(user.status)}
                   title={statusLabel(user.status)}
+                  className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-fc-channel ${statusColor(user.status)}`}
                 />
               </div>
 
@@ -269,9 +272,10 @@ export default function UserProfilePage() {
                 {!isSelf && (
                   <button
                     onClick={handleOpenDm}
+                    aria-label={`Envoyer un message à ${user.username}`}
                     className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition"
                   >
-                    <MessageCircle size={15} />
+                    <MessageCircle size={15} aria-hidden />
                     Message
                   </button>
                 )}
@@ -282,7 +286,7 @@ export default function UserProfilePage() {
             <div className="mb-3">
               <h1 className="text-xl font-bold text-white leading-tight">
                 {user.username}
-                <span className="text-fc-muted font-normal text-base">#{user.discriminator}</span>
+                <span aria-hidden className="text-fc-muted font-normal text-base">#{user.discriminator}</span>
               </h1>
               {user.custom_status && (
                 <p className="text-sm text-fc-muted mt-0.5">{user.custom_status}</p>
@@ -296,7 +300,7 @@ export default function UserProfilePage() {
             </div>
 
             {/* Divider */}
-            <div className="border-t border-fc-hover my-4" />
+            <div aria-hidden className="border-t border-fc-hover my-4" />
 
             {/* À propos */}
             {user.bio && (
@@ -322,7 +326,7 @@ export default function UserProfilePage() {
         {!isSelf && userId && (
           <div className="bg-fc-channel rounded-xl p-5">
             <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <Users size={13} />
+              <Users size={13} aria-hidden />
               Serveurs en commun
             </h2>
             <MutualServersSection userId={userId} />
