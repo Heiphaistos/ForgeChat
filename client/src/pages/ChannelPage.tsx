@@ -282,7 +282,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [channelId, serverData, serverId, isSplit])
 
-  // useMemo doit être AVANT tout return conditionnel (React Rules of Hooks)
+  // Tous les hooks doivent être AVANT tout return conditionnel (React Rules of Hooks)
   const { canPost, canManageMessages } = useMemo(() => {
     const MANAGE_MESSAGES_BIT = 1 << 3
     const ADMINISTRATOR_BIT = 1 << 31
@@ -299,6 +299,23 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       canManageMessages: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
     }
   }, [serverData, meId])
+
+  const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
+    try {
+      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
+      const msgId = res.data?.id
+      if (files && files.length > 0 && msgId) {
+        const fd = new FormData()
+        for (const fw of files) {
+          fd.append('files', fw.file)
+          if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
+        }
+        await api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd)
+      }
+    } catch {
+      // erreur déjà gérée par sendMsg
+    }
+  }, [sendMsg, serverId, channelId])
 
   if (!serverId) return null
 
@@ -371,23 +388,6 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   if (currentChannel?.type === 'forum') {
     return <ForumPage channel={currentChannel} serverId={serverId} channelId={channelId} />
   }
-
-  const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
-    try {
-      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
-      const msgId = res.data?.id
-      if (files && files.length > 0 && msgId) {
-        const fd = new FormData()
-        for (const fw of files) {
-          fd.append('files', fw.file)
-          if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
-        }
-        await api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd)
-      }
-    } catch {
-      // erreur déjà gérée par sendMsg
-    }
-  }, [sendMsg, serverId, channelId])
 
   // Canal texte / annonces
   return (
