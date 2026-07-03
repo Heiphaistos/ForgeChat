@@ -855,7 +855,7 @@ export default function ChannelSidebar() {
                 <>
                   <div className="border-t border-fc-hover my-1" />
                   <button
-                    onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false) }}
+                    onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false); closeSidebar() }}
                     className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
                   >
                     <Shield size={16} /> Panel Admin

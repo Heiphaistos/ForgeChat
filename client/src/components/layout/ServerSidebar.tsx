@@ -9,6 +9,7 @@ import ServerTemplateModal from '../modals/ServerTemplateModal'
 import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
+import { useMobile } from '../../contexts/MobileContext'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ export default function ServerSidebar() {
   const { serverId } = useParams()
   const nav = useNavigate()
   const { pathname } = useLocation()
+  const { closeSidebar } = useMobile()
   const isDMs = pathname.startsWith('/friends') || pathname.startsWith('/dms') || pathname.startsWith('/dm')
   const isSaved = pathname.startsWith('/saved')
   const qc = useQueryClient()
@@ -390,7 +392,8 @@ export default function ServerSidebar() {
       <div className="relative w-full flex items-center justify-center">
         <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isDMs ? 'opacity-100' : 'opacity-0 h-0'}`} />
         <button
-          onClick={() => nav('/friends')}
+          onClick={() => { nav('/friends'); closeSidebar() }}
+          aria-current={isDMs ? 'page' : undefined}
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isDMs ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
           title="Messages directs"
         >
@@ -402,7 +405,8 @@ export default function ServerSidebar() {
       <div className="relative w-full flex items-center justify-center">
         <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isSaved ? 'opacity-100' : 'opacity-0 h-0'}`} />
         <button
-          onClick={() => nav('/saved')}
+          onClick={() => { nav('/saved'); closeSidebar() }}
+          aria-current={isSaved ? 'page' : undefined}
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isSaved ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
           title="Messages sauvegardés"
         >
@@ -490,7 +494,7 @@ export default function ServerSidebar() {
 
       {/* Explorer */}
       <button
-        onClick={() => nav('/explore')}
+        onClick={() => { nav('/explore'); closeSidebar() }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
         title="Explorer les serveurs"
       >
