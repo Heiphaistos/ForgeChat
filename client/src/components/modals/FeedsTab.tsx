@@ -39,7 +39,7 @@ function FeedTypeBadge({ type }: { type: string }) {
   const { Icon, color, bg, label } = def
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${bg} ${color}`}>
-      <Icon size={10} />
+      <Icon size={10} aria-hidden />
       {label}
     </span>
   )
@@ -120,7 +120,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <Rss size={18} className="text-orange-400" />
+          <Rss size={18} className="text-orange-400" aria-hidden />
           Flux RSS / YouTube / GitHub
         </h3>
         <p className="text-sm text-fc-muted mb-3">
@@ -129,7 +129,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
 
         {/* Lien RSSDI */}
         <div className="mb-5 p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-xl flex items-center gap-3">
-          <Rss size={18} className="text-indigo-400 flex-shrink-0" />
+          <Rss size={18} className="text-indigo-400 flex-shrink-0" aria-hidden />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white">Importer depuis RSSDI</p>
             <p className="text-xs text-fc-muted">Accédez à votre agrégateur de flux RSS personnel pour trouver et copier des URLs de flux.</p>
@@ -146,10 +146,11 @@ export default function FeedsTab({ serverId, channels }: Props) {
 
         {/* Sélection du canal */}
         <div className="mb-5">
-          <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+          <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2" htmlFor="feeds-channel-select">
             Canal à surveiller
           </label>
           <select
+            id="feeds-channel-select"
             value={selectedChannelId}
             onChange={e => setSelectedChannelId(e.target.value)}
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
@@ -164,7 +165,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
         {/* Formulaire d'ajout */}
         {selectedChannelId && (
           <div className="p-4 bg-fc-channel rounded-lg mb-6 space-y-3">
-            <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+            <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
               Ajouter un flux
             </div>
             <input
@@ -172,6 +173,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
               onChange={e => setNewName(e.target.value)}
               placeholder="Nom du flux (ex: Hacker News)"
               maxLength={100}
+              aria-label="Nom du flux"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             />
             <input
@@ -179,11 +181,13 @@ export default function FeedsTab({ serverId, channels }: Props) {
               onChange={e => setNewUrl(e.target.value)}
               placeholder="URL du flux (https://...)"
               maxLength={2048}
+              aria-label="URL du flux"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono text-xs"
             />
             <select
               value={newType}
               onChange={e => setNewType(e.target.value)}
+              aria-label="Type de flux"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             >
               {FEED_TYPES.map(t => (
@@ -193,9 +197,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
             <button
               onClick={() => createFeed.mutate()}
               disabled={!canCreate || createFeed.isPending}
+              aria-busy={createFeed.isPending}
               className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
             >
-              <Plus size={14} />
+              <Plus size={14} aria-hidden />
               {createFeed.isPending ? 'Ajout...' : 'Ajouter le flux'}
             </button>
           </div>
@@ -204,9 +209,9 @@ export default function FeedsTab({ serverId, channels }: Props) {
         {/* Liste des feeds */}
         {selectedChannelId && (
           isLoading ? (
-            <div className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
+            <div role="status" aria-label="Chargement des flux" className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
           ) : feeds.length === 0 ? (
-            <div className="text-center text-fc-muted py-10 text-sm">
+            <div role="status" className="text-center text-fc-muted py-10 text-sm">
               Aucun flux abonné sur ce canal.
             </div>
           ) : (
@@ -238,12 +243,13 @@ export default function FeedsTab({ serverId, channels }: Props) {
                   <button
                     onClick={() => toggleFeed.mutate(feed.id)}
                     disabled={toggleFeed.isPending}
+                    aria-label={feed.enabled ? `Désactiver le flux ${feed.name}` : `Activer le flux ${feed.name}`}
+                    aria-pressed={feed.enabled}
                     className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition flex-shrink-0"
-                    title={feed.enabled ? 'Désactiver' : 'Activer'}
                   >
                     {feed.enabled
-                      ? <ToggleRight size={18} className="text-fc-green" />
-                      : <ToggleLeft size={18} />
+                      ? <ToggleRight size={18} className="text-fc-green" aria-hidden />
+                      : <ToggleLeft size={18} aria-hidden />
                     }
                   </button>
 
@@ -251,10 +257,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
                   <button
                     onClick={() => deleteFeed.mutate(feed.id)}
                     disabled={deleteFeed.isPending}
+                    aria-label={`Supprimer le flux ${feed.name}`}
                     className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
-                    title="Supprimer ce flux"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={14} aria-hidden />
                   </button>
                 </div>
               ))}
@@ -265,7 +271,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
       {/* GitHub Webhooks entrants */}
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <Github size={18} className="text-gray-300" />
+          <Github size={18} className="text-gray-300" aria-hidden />
           Webhooks GitHub entrants
         </h3>
         <p className="text-sm text-fc-muted mb-5">
@@ -276,21 +282,22 @@ export default function FeedsTab({ serverId, channels }: Props) {
 
         {selectedChannelId ? (
           <div className="p-4 bg-fc-channel rounded-lg space-y-3">
-            <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide">URL du webhook</div>
+            <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide">URL du webhook</div>
             <div className="flex items-center gap-2">
               <input
                 readOnly
                 value={webhookUrl}
+                aria-label="URL du webhook GitHub"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-xs font-mono outline-none select-all"
                 onFocus={e => e.target.select()}
               />
               <button
                 onClick={copyWebhookUrl}
+                aria-label={copied ? 'URL copiée' : "Copier l'URL du webhook GitHub"}
                 className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition flex-shrink-0"
-                title="Copier l'URL"
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? 'Copié !' : 'Copier'}
+                {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+                <span aria-hidden>{copied ? 'Copié !' : 'Copier'}</span>
               </button>
             </div>
             <div className="text-xs text-fc-muted space-y-1">
@@ -298,7 +305,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
             </div>
           </div>
         ) : (
-          <div className="text-center text-fc-muted py-6 text-sm bg-fc-channel/40 rounded-lg">
+          <div role="status" className="text-center text-fc-muted py-6 text-sm bg-fc-channel/40 rounded-lg">
             Sélectionnez un canal pour obtenir l'URL du webhook GitHub.
           </div>
         )}

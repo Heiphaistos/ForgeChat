@@ -70,7 +70,7 @@ export default function AuditLogTab({ server }: Props) {
     <div className="space-y-5">
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <ScrollText size={18} className="text-fc-accent" />
+          <ScrollText size={18} className="text-fc-accent" aria-hidden />
           Journal d'audit
         </h3>
         <p className="text-sm text-fc-muted mb-4">Historique des actions effectuées sur le serveur.</p>
@@ -79,6 +79,7 @@ export default function AuditLogTab({ server }: Props) {
         <select
           value={filter}
           onChange={e => setFilter(e.target.value)}
+          aria-label="Filtrer par type d'action"
           className="px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm mb-5"
         >
           {ACTION_OPTIONS.map(o => (
@@ -88,15 +89,15 @@ export default function AuditLogTab({ server }: Props) {
 
         {/* Timeline */}
         {isLoading ? (
-          <div className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
+          <div role="status" aria-label="Chargement du journal d'audit" className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
         ) : filtered.length === 0 ? (
-          <div className="text-center text-fc-muted py-10 text-sm">Aucune entrée dans le journal.</div>
+          <div role="status" className="text-center text-fc-muted py-10 text-sm">Aucune entrée dans le journal.</div>
         ) : (
           <div className="relative">
             {/* Ligne verticale */}
-            <div className="absolute left-4 top-0 bottom-0 w-px bg-fc-hover" />
+            <div aria-hidden className="absolute left-4 top-0 bottom-0 w-px bg-fc-hover" />
 
-            <div className="space-y-1">
+            <ul role="list" aria-label="Entrées du journal" className="space-y-1">
               {filtered.map(entry => {
                 const cfg = ACTION_CONFIG[entry.action] ?? {
                   label: entry.action,
@@ -104,17 +105,21 @@ export default function AuditLogTab({ server }: Props) {
                   Icon: ScrollText,
                 }
                 const { label, color, Icon } = cfg
+                const actor = entry.username ?? 'Utilisateur inconnu'
+                const entryLabel = entry.target_name
+                  ? `${actor} — ${label} → ${entry.target_name} (${timeAgo(entry.created_at)})`
+                  : `${actor} — ${label} (${timeAgo(entry.created_at)})`
                 return (
-                  <div key={entry.id} className="flex gap-4 pl-2 py-2 group hover:bg-fc-hover/20 rounded-lg transition">
+                  <li key={entry.id} aria-label={entryLabel} className="flex gap-4 pl-2 py-2 group hover:bg-fc-hover/20 rounded-lg transition">
                     {/* Icône sur la timeline */}
-                    <div className={`w-6 h-6 rounded-full bg-fc-channel flex items-center justify-center flex-shrink-0 z-10 border-2 border-fc-bg ${color}`}>
+                    <div aria-hidden className={`w-6 h-6 rounded-full bg-fc-channel flex items-center justify-center flex-shrink-0 z-10 border-2 border-fc-bg ${color}`}>
                       <Icon size={11} />
                     </div>
 
                     {/* Contenu */}
-                    <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex-1 min-w-0 pt-0.5" aria-hidden>
                       <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="text-white text-sm font-medium">{entry.username ?? 'Utilisateur inconnu'}</span>
+                        <span className="text-white text-sm font-medium">{actor}</span>
                         <span className={`text-xs ${color}`}>{label}</span>
                         {entry.target_name && (
                           <span className="text-xs text-fc-muted">→ <span className="text-white">{entry.target_name}</span></span>
@@ -127,13 +132,13 @@ export default function AuditLogTab({ server }: Props) {
                       )}
                     </div>
 
-                    <div className="text-xs text-fc-muted flex-shrink-0 pt-0.5">
+                    <div className="text-xs text-fc-muted flex-shrink-0 pt-0.5" aria-hidden>
                       {timeAgo(entry.created_at)}
                     </div>
-                  </div>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           </div>
         )}
       </div>

@@ -37,18 +37,21 @@ function BadgeTooltip({ achievement, onClose }: { achievement: Achievement; onCl
   const s = RARITY_STYLES[achievement.rarity]
   return (
     <div
+      role="dialog"
+      aria-label={achievement.label}
       className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-lg border p-3 z-50 shadow-lg ${s.border} ${s.bg} bg-fc-bg backdrop-blur`}
       style={{ boxShadow: s.glow ? `0 0 12px var(--tw-shadow-color)` : undefined }}
     >
       <button
         onClick={onClose}
+        aria-label="Fermer"
         className="absolute top-1.5 right-1.5 text-fc-muted hover:text-white text-xs leading-none"
       >
-        ✕
+        <span aria-hidden>✕</span>
       </button>
-      <div className="text-2xl mb-1">{achievement.icon}</div>
+      <div className="text-2xl mb-1" aria-hidden>{achievement.icon}</div>
       <div className={`text-xs font-bold mb-0.5 ${s.label}`}>{achievement.label}</div>
-      <div className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${s.label} opacity-70`}>
+      <div className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${s.label} opacity-70`} aria-hidden>
         {achievement.rarity}
       </div>
       <div className="text-xs text-fc-muted leading-snug">{achievement.description}</div>
@@ -89,26 +92,28 @@ export default function AchievementBadges({ userId, joinedAt }: AchievementBadge
 
   return (
     <div className="mt-3">
-      <div className="text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
+      <div className="text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5" aria-hidden>
         Badges
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5" role="list" aria-label="Badges obtenus">
         {displayBadges.map((badge) => {
           const s = RARITY_STYLES[badge.rarity]
           const isOpen = expanded === badge.id
           return (
-            <div key={badge.id} className="relative">
+            <div key={badge.id} className="relative" role="listitem">
               <button
                 onClick={() => setExpanded(isOpen ? null : badge.id)}
+                aria-label={`${badge.label} (${badge.rarity})`}
+                aria-expanded={isOpen}
+                aria-haspopup="dialog"
                 className={`
                   w-9 h-9 rounded-lg border text-lg flex items-center justify-center transition
                   hover:scale-110 hover:shadow-md
                   ${s.border} ${s.bg}
                   ${isOpen ? 'scale-110 ring-1 ring-offset-1 ring-offset-fc-bg ring-fc-accent' : ''}
                 `}
-                title={badge.label}
               >
-                {badge.icon}
+                <span aria-hidden>{badge.icon}</span>
               </button>
               {isOpen && (
                 <BadgeTooltip achievement={badge} onClose={() => setExpanded(null)} />
