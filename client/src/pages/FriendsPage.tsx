@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   UserPlus, MessageCircle, Check, X, Link, Copy, Search,
@@ -82,6 +82,21 @@ export default function FriendsPage() {
   const { openSidebar } = useMobile()
   const [tab, setTab] = useState<FriendTab>('all')
   const [pendingSubTab, setPendingSubTab] = useState<PendingSubTab>('received')
+
+  const TAB_TITLES: Record<FriendTab, string> = {
+    online: 'Amis en ligne',
+    all: 'Tous les amis',
+    pending: 'Demandes d\'amis',
+    blocked: 'Bloqués',
+  }
+  useEffect(() => {
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}${TAB_TITLES[tab]} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [tab])
   const [addTag, setAddTag] = useState('')
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)

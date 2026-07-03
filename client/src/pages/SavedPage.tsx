@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File, ChevronLeft } from 'lucide-react'
@@ -146,6 +146,15 @@ export default function SavedPage() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<SortType>('newest')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}Messages sauvegardés | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [])
 
   const { data: saved = [], isLoading } = useQuery<SavedMessage[]>({
     queryKey: ['saved_messages'],
