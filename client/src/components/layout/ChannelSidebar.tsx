@@ -83,6 +83,10 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           autoFocus
+          enterKeyHint="search"
+          inputMode="search"
+          autoCapitalize="none"
+          autoComplete="off"
         />
 
         {selected.length > 0 && (

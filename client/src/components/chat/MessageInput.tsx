@@ -944,6 +944,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onChange={e => setLinkUrl(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); confirmInsertLink() } if (e.key === 'Escape') setShowLinkPopup(false) }}
               placeholder="https://..."
+              enterKeyHint="go"
+              inputMode="url"
+              autoCapitalize="none"
+              autoComplete="url"
               className="flex-1 bg-transparent text-white text-xs outline-none placeholder-fc-muted min-w-0"
             />
             <button onClick={confirmInsertLink} className="px-2 py-0.5 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition font-medium">OK</button>

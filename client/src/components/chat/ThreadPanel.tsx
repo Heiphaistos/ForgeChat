@@ -165,6 +165,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
                 placeholder="Titre du thread (optionnel)"
+                enterKeyHint="next"
+                autoCapitalize="sentences"
                 className="w-full px-2 py-1.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
               />
               <div className="text-xs text-fc-muted">Ou écrivez directement votre premier message ci-dessous</div>
@@ -248,6 +250,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                       className="flex-1 px-2 py-1 bg-fc-input rounded text-xs text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
                       rows={2}
                       autoFocus
+                      enterKeyHint="done"
                       onKeyDown={e => {
                         if (e.key === 'Escape') setEditingMsgId(null)
                         if (e.key === 'Enter' && !e.shiftKey) {
@@ -298,6 +301,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
               }
             }}
             placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
+            enterKeyHint="send"
+            autoCapitalize="sentences"
             rows={2}
             className="flex-1 px-2.5 py-2 bg-fc-input rounded-lg text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
           />

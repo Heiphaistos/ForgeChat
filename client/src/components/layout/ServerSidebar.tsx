@@ -822,6 +822,8 @@ function CreateServerModal({
               onChange={e => setName(e.target.value)}
               placeholder="Mon serveur"
               maxLength={100}
+              enterKeyHint="done"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent mb-4"
               onKeyDown={e => e.key === 'Enter' && name.trim() && handleCreate()}
             />

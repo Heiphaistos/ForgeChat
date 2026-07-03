@@ -174,6 +174,8 @@ export default function FeedsTab({ serverId, channels }: Props) {
               placeholder="Nom du flux (ex: Hacker News)"
               maxLength={100}
               aria-label="Nom du flux"
+              enterKeyHint="next"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             />
             <input
@@ -182,6 +184,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
               placeholder="URL du flux (https://...)"
               maxLength={2048}
               aria-label="URL du flux"
+              enterKeyHint="done"
+              inputMode="url"
+              autoCapitalize="none"
+              autoComplete="off"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono text-xs"
             />
             <select

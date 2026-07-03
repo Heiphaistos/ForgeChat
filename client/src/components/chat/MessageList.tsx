@@ -532,6 +532,7 @@ export default function MessageList({
                       onChange={e => setEditContent(e.target.value)}
                       onKeyDown={e => handleEditKey(e, msg.id)}
                       rows={Math.min(editContent.split('\n').length + 1, 6)}
+                      enterKeyHint="done"
                       className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent resize-none"
                     />
                     <div className="flex items-center gap-2 mt-1 text-xs text-fc-muted">
