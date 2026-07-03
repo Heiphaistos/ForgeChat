@@ -693,6 +693,8 @@ export default function MessageList({
                               loading="lazy"
                               decoding="async"
                               className="max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
+                              style={{ opacity: 0, transition: 'opacity 0.25s ease' }}
+                              onLoad={e => { e.currentTarget.style.opacity = '1' }}
                               onClick={() => {
                                 const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
                                 if (imgs.length > 0) setLightbox({ images: imgs, index: imgs.indexOf(att.url) })

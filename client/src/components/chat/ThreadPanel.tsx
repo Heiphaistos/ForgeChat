@@ -5,6 +5,8 @@ import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
+import { isToday, isYesterday, format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -210,10 +212,26 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           </div>
         )}
 
-        {messages.map((msg: any) => {
+        {messages.map((msg: any, i: number) => {
           const isMe = msg.author_id === user?.id || msg.user_id === user?.id
+          const prev: any = messages[i - 1]
+          const msgDate = new Date(msg.created_at)
+          const showDateDivider = !prev || new Date(prev.created_at).toDateString() !== msgDate.toDateString()
+          const dateLabel = isToday(msgDate) ? "Aujourd'hui"
+            : isYesterday(msgDate) ? 'Hier'
+            : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
           return (
-            <div key={msg.id} className="flex gap-2 group">
+            <div key={msg.id}>
+            {showDateDivider && (
+              <div className="flex items-center gap-3 my-2 px-1 select-none" role="separator" aria-label={dateLabel}>
+                <div className="flex-1 h-px bg-fc-hover/70" />
+                <span className="text-[10px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
+                  {dateLabel}
+                </span>
+                <div className="flex-1 h-px bg-fc-hover/70" />
+              </div>
+            )}
+            <div className="flex gap-2 group">
               <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
                 {msg.author?.avatar
                   ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -275,6 +293,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                   <p className="text-sm text-fc-text leading-relaxed break-words">{msg.content}</p>
                 )}
               </div>
+            </div>
             </div>
           )
         })}
