@@ -951,7 +951,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               className="flex-1 bg-transparent text-white text-xs outline-none placeholder-fc-muted min-w-0"
             />
             <button onClick={confirmInsertLink} className="px-2 py-0.5 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition font-medium">OK</button>
-            <button onClick={() => setShowLinkPopup(false)} className="p-0.5 text-fc-muted hover:text-white transition text-xs">✕</button>
+            <button onClick={() => setShowLinkPopup(false)} aria-label="Fermer" className="p-1 min-w-[24px] min-h-[24px] flex items-center justify-center text-fc-muted hover:text-white transition rounded">✕</button>
           </div>
         )}
 

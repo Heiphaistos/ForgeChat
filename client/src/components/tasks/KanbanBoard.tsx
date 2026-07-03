@@ -105,8 +105,8 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
           ))}
         </select>
         <div className="flex gap-1.5">
-          <button type="button" onClick={onClose} className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
-            <X size={14} />
+          <button type="button" onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+            <X size={14} aria-hidden />
           </button>
           <button
             type="submit"

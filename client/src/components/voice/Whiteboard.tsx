@@ -174,11 +174,11 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             onChange={e => setSize(+e.target.value)}
             className="w-20"
           />
-          <button onClick={clear} className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded">
-            <Trash2 size={14} />
+          <button onClick={clear} aria-label="Effacer le tableau" className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-red hover:bg-fc-red/10 rounded">
+            <Trash2 size={14} aria-hidden />
           </button>
-          <button onClick={download} className="p-1.5 text-fc-muted hover:bg-fc-hover rounded">
-            <Download size={14} />
+          <button onClick={download} aria-label="Télécharger le tableau" className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:bg-fc-hover rounded">
+            <Download size={14} aria-hidden />
           </button>
         </div>
         <button onClick={onClose} className="text-fc-muted hover:text-white text-sm px-2 py-1 hover:bg-fc-hover rounded">

@@ -442,8 +442,8 @@ export default function GroupDMPage() {
               >
                 <Search size={14} />
               </button>
-              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} className="p-1.5 text-fc-muted hover:text-white">
-                <X size={16} />
+              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} aria-label="Fermer la recherche" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white">
+                <X size={16} aria-hidden />
               </button>
             </div>
             {searchQuery.trim().length >= 2 && (

@@ -158,8 +158,8 @@ export default function ServerTemplateModal({ onClose }: Props) {
               {step === 'grid' ? 'Choisir un template' : `Template : ${selected?.icon} ${selected?.name}`}
             </span>
           </div>
-          <button onClick={onClose} className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
-            <X size={16} />
+          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+            <X size={16} aria-hidden />
           </button>
         </div>
 

@@ -54,8 +54,8 @@ export default function ReportModal({ messageId, onClose }: Props) {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id="report-modal-title" className="text-white font-semibold text-lg">Signaler le message</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
-            <X size={16} />
+          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+            <X size={16} aria-hidden />
           </button>
         </div>
 

@@ -255,8 +255,8 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-bg flex-shrink-0">
-        <button onClick={onBack} className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
-          <ArrowLeft size={18} />
+        <button onClick={onBack} aria-label="Retour" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
+          <ArrowLeft size={18} aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

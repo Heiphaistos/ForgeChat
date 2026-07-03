@@ -48,10 +48,10 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} /></button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} /></button>
-        <button onClick={download} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} /></button>
-        <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} /></button>
+        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} aria-label="Zoom avant" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} aria-hidden /></button>
+        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} aria-label="Zoom arrière" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} aria-hidden /></button>
+        <button onClick={download} aria-label="Télécharger l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
+        <button onClick={onClose} aria-label="Fermer" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
       </div>
 
       {images.length > 1 && (
