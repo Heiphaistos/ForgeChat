@@ -86,6 +86,8 @@ function TabButton({
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${
         active
@@ -93,7 +95,7 @@ function TabButton({
           : 'text-fc-muted hover:text-white hover:bg-fc-hover'
       }`}
     >
-      <Icon size={14} />
+      <Icon size={14} aria-hidden />
       {label}
     </button>
   )
@@ -213,11 +215,13 @@ export default function SavedPage() {
 
       {/* ── Filter bar ── */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-fc-hover flex-wrap">
-        <TabButton active={filter === 'all'} onClick={() => setFilter('all')} icon={Bookmark} label="Tout" />
-        <TabButton active={filter === 'text'} onClick={() => setFilter('text')} icon={FileText} label="Messages" />
-        <TabButton active={filter === 'image'} onClick={() => setFilter('image')} icon={Image} label="Images" />
-        <TabButton active={filter === 'link'} onClick={() => setFilter('link')} icon={Link2} label="Liens" />
-        <TabButton active={filter === 'file'} onClick={() => setFilter('file')} icon={File} label="Fichiers" />
+        <div role="tablist" aria-label="Filtrer les messages sauvegardés" className="flex items-center gap-2 flex-wrap">
+          <TabButton active={filter === 'all'} onClick={() => setFilter('all')} icon={Bookmark} label="Tout" />
+          <TabButton active={filter === 'text'} onClick={() => setFilter('text')} icon={FileText} label="Messages" />
+          <TabButton active={filter === 'image'} onClick={() => setFilter('image')} icon={Image} label="Images" />
+          <TabButton active={filter === 'link'} onClick={() => setFilter('link')} icon={Link2} label="Liens" />
+          <TabButton active={filter === 'file'} onClick={() => setFilter('file')} icon={File} label="Fichiers" />
+        </div>
         <div className="ml-auto">
           <select
             value={sort}

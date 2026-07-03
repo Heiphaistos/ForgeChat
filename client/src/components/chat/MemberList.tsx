@@ -19,28 +19,43 @@ const STATUS_COLORS: Record<string, string> = {
   invisible: 'bg-fc-muted',
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  online: 'En ligne',
+  idle: 'Absent',
+  dnd: 'Ne pas déranger',
+  offline: 'Hors ligne',
+  invisible: 'Invisible',
+}
+
 function MemberRow({ m, onContextMenu }: { m: any; onContextMenu: (e: React.MouseEvent) => void }) {
+  const statusLabel = STATUS_LABELS[m.liveStatus] ?? 'Hors ligne'
   return (
     <div
+      role="listitem"
+      aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? ' (propriétaire)' : ''}`}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
       onContextMenu={onContextMenu}
     >
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
-            ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+            ? <img src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
-        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[m.liveStatus] ?? 'bg-fc-muted'}`} />
+        <div
+          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[m.liveStatus] ?? 'bg-fc-muted'}`}
+          aria-label={statusLabel}
+          title={statusLabel}
+        />
       </div>
       <div className="min-w-0">
         <div className={`text-sm font-medium truncate ${m.liveStatus === 'offline' || m.liveStatus === 'invisible' ? 'text-fc-muted' : 'text-fc-text group-hover:text-white'}`}>
           {m.nickname ?? m.username}
-          {m.is_owner && <span className="ml-1 text-xs text-fc-yellow">👑</span>}
+          {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
         {m.activity_type && m.activity_name ? (
-          <div className="text-xs text-fc-muted truncate flex items-center gap-1">
-            <span>
+          <div className="text-xs text-fc-muted truncate flex items-center gap-1" aria-label={`${m.activity_type === 'playing' ? 'Joue à' : m.activity_type === 'listening' ? 'Écoute' : m.activity_type === 'watching' ? 'Regarde' : 'Activité'} ${m.activity_name}`}>
+            <span aria-hidden>
               {m.activity_type === 'playing' ? '🎮' :
                m.activity_type === 'listening' ? '🎵' :
                m.activity_type === 'watching' ? '📺' :
@@ -122,26 +137,34 @@ export default function MemberList({ serverId }: Props) {
   ]
 
   return (
-    <div className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 hidden lg:block">
+    <div
+      role="complementary"
+      aria-label="Liste des membres"
+      className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 hidden lg:block"
+    >
       {online.length > 0 && (
-        <>
-          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
+        <div role="group" aria-label={`En ligne — ${online.length}`}>
+          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1" aria-hidden>
             En ligne — {online.length}
           </div>
-          {online.map((m: any) => (
-            <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
-          ))}
-        </>
+          <div role="list">
+            {online.map((m: any) => (
+              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+            ))}
+          </div>
+        </div>
       )}
       {offline.length > 0 && (
-        <>
-          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mt-3 mb-1">
+        <div role="group" aria-label={`Hors ligne — ${offline.length}`}>
+          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mt-3 mb-1" aria-hidden>
             Hors ligne — {offline.length}
           </div>
-          {offline.map((m: any) => (
-            <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
-          ))}
-        </>
+          <div role="list">
+            {offline.map((m: any) => (
+              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} />
+            ))}
+          </div>
+        </div>
       )}
       {ctxMenu.node}
     </div>
