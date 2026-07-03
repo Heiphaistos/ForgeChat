@@ -473,7 +473,7 @@ export default function GroupDMPage() {
               >
                 <Search size={14} />
               </button>
-              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} aria-label="Fermer la recherche" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white">
+              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} aria-label="Fermer la recherche" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white">
                 <X size={16} aria-hidden />
               </button>
             </div>
@@ -665,7 +665,7 @@ export default function GroupDMPage() {
                         <div className="relative">
                           <button
                             onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}
-                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition"
+                            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition"
                             title="Réagir"
                             aria-label="Ajouter une réaction"
                           >
@@ -683,7 +683,7 @@ export default function GroupDMPage() {
                         {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}
-                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
                             title="Modifier"
                             aria-label="Modifier le message"
                           >
@@ -691,7 +691,7 @@ export default function GroupDMPage() {
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(msg.id)}
-                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
+                            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
                             title="Supprimer"
                             aria-label="Supprimer le message"
                           >

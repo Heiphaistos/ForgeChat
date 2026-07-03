@@ -539,12 +539,25 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         </div>
 
         {/* Onglets Messages / Tâches */}
-        <div role="tablist" className="flex border-b border-fc-hover px-4 flex-shrink-0">
+        <div
+          role="tablist"
+          aria-label="Vue du canal"
+          className="flex border-b border-fc-hover px-4 flex-shrink-0"
+          onKeyDown={e => {
+            const tabs = ['Messages', 'Tâches'] as const
+            const idx = tabs.indexOf(activeTab)
+            if (e.key === 'ArrowRight') setActiveTab(tabs[(idx + 1) % tabs.length])
+            else if (e.key === 'ArrowLeft') setActiveTab(tabs[(idx - 1 + tabs.length) % tabs.length])
+          }}
+        >
           {(['Messages', 'Tâches'] as const).map(tab => (
             <button
               key={tab}
               role="tab"
+              id={`tab-${tab}`}
               aria-selected={activeTab === tab}
+              aria-controls={`tabpanel-${tab}`}
+              tabIndex={activeTab === tab ? 0 : -1}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-sm transition ${
                 activeTab === tab
@@ -559,14 +572,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
         {/* Vue Tâches */}
         {activeTab === 'Tâches' && serverId && channelId && (
-          <div className="flex-1 overflow-hidden p-3">
+          <div id="tabpanel-Tâches" role="tabpanel" aria-labelledby="tab-Tâches" className="flex-1 overflow-hidden p-3">
             <KanbanBoard serverId={serverId} channelId={channelId} />
           </div>
         )}
 
         {/* Messages + Input (masqués en vue Tâches) */}
         {activeTab === 'Messages' && (
-          <>
+          <div id="tabpanel-Messages" role="tabpanel" aria-labelledby="tab-Messages" className="contents">
             {highlightMessageId && (
               <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
                 <span className="text-xs text-fc-accent">Affichage du contexte autour d'un message.</span>
@@ -657,7 +670,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           onCancelReply={() => setReplyTo(null)}
           sending={sendMsg.isPending || !!timeoutUntil}
         />}
-          </>
+          </div>
         )}
       </div>
 

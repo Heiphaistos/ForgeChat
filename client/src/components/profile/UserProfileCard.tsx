@@ -145,7 +145,7 @@ export default function UserProfileCard({
         </div>
       </div>
 
-      <div className="pt-12 px-4 pb-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+      <div className="pt-12 px-4 pb-4 overflow-y-auto" style={{ maxHeight: 'calc(100dvh - 200px)' }}>
         {user ? (
           <>
             {/* Identité */}

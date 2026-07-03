@@ -257,7 +257,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-bg flex-shrink-0">
-        <button onClick={onBack} aria-label="Retour" className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
+        <button onClick={onBack} aria-label="Retour" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
           <ArrowLeft size={18} aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
@@ -272,14 +272,14 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           <button
             onClick={() => togglePin.mutate()}
             title={localPost.pinned ? 'Désépingler' : 'Épingler'}
-            className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
+            className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
           >
             <Pin size={15} />
           </button>
           <button
             onClick={() => toggleLock.mutate()}
             title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
-            className={`p-1.5 rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
+            className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
           >
             <Lock size={15} />
           </button>
@@ -288,7 +288,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               onClick={async () => { if (await confirm({ message: 'Supprimer ce post et toutes ses réponses ?', danger: true, confirmLabel: 'Supprimer' })) deletePost.mutate() }}
               disabled={deletePost.isPending}
               title="Supprimer le post"
-              className="p-1.5 rounded hover:bg-fc-hover transition text-fc-muted hover:text-red-400 disabled:opacity-50"
+              className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition text-fc-muted hover:text-red-400 disabled:opacity-50"
             >
               <Trash2 size={15} />
             </button>
