@@ -89,7 +89,7 @@ export default function NotificationBell() {
             </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto overscroll-contain">
             {mentions.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell size={28} className="text-fc-muted mx-auto mb-2 opacity-50" />

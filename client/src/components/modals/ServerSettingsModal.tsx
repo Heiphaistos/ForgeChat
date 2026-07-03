@@ -313,7 +313,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     <div className="fixed inset-0 bg-black/80 flex z-[200]" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }} role="dialog" aria-modal="true" aria-labelledby="server-settings-modal-title">
       <div className="flex w-full h-full">
         {/* Sidebar nav — plein écran sur mobile, 220px sur desktop */}
-        <div className={`bg-fc-channel flex-shrink-0 p-4 overflow-y-auto w-full md:w-[220px] flex-col
+        <div className={`bg-fc-channel flex-shrink-0 p-4 overflow-y-auto overscroll-contain w-full md:w-[220px] flex-col
           ${mobileShowContent ? 'hidden md:flex' : 'flex'}`}>
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate flex items-center justify-between">
             <span>{server.name}</span>
@@ -352,7 +352,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
         </div>
 
         {/* Contenu — plein écran sur mobile quand sélectionné */}
-        <div className={`flex-1 bg-fc-chat overflow-y-auto ${!mobileShowContent ? 'hidden md:block' : 'block'}`}>
+        <div className={`flex-1 bg-fc-chat overflow-y-auto overscroll-contain ${!mobileShowContent ? 'hidden md:block' : 'block'}`}>
           <div className="max-w-2xl mx-auto p-4 md:p-8">
             <div className="flex items-center justify-between mb-6 md:mb-8">
               <div className="flex items-center gap-2">

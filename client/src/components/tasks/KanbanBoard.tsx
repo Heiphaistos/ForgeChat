@@ -260,7 +260,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
   }
 
   return (
-    <div className="flex gap-3 h-full overflow-x-auto pb-2 px-1">
+    <div className="flex gap-3 h-full overflow-x-auto overscroll-contain pb-2 px-1">
       {COLUMNS.map(col => {
         const colTasks = byCol(col.id)
         return (
@@ -302,7 +302,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
             )}
 
             {/* Cards */}
-            <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2 min-h-[80px]">
+            <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-2 space-y-2 min-h-[80px]">
               {colTasks.length === 0 && openCreateCol !== col.id && (
                 <p className="text-xs text-fc-muted/50 text-center pt-4 select-none">Aucune tâche</p>
               )}

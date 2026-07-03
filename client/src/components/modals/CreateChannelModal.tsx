@@ -127,6 +127,9 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
                 onBlur={e => setName(e.target.value.replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''))}
                 placeholder="nouveau-canal"
                 maxLength={100}
+                enterKeyHint="next"
+                autoCapitalize="none"
+                autoComplete="off"
                 className="w-full pl-8 pr-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
             </div>
@@ -141,6 +144,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               <input value={topic} onChange={e => setTopic(e.target.value)}
                 placeholder={type === 'forum' ? 'À quoi sert ce forum ?' : 'Description du canal...'}
                 maxLength={1024}
+                enterKeyHint="done"
+                autoCapitalize="sentences"
                 className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
             </div>

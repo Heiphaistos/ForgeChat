@@ -258,7 +258,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       </div>
 
       {/* Sound grid */}
-      <div className="min-h-[80px] max-h-64 overflow-y-auto">
+      <div className="min-h-[80px] max-h-64 overflow-y-auto overscroll-contain">
         {isLoading && (
           <div className="flex items-center justify-center h-16 text-xs text-fc-muted">
             Chargement...
