@@ -361,6 +361,8 @@ export default function ServerSidebar() {
           onDragStart={() => handleDragStart(s.id)}
           onDragOver={e => e.preventDefault()}
           onDrop={() => handleDropOnServer(s.id)}
+          aria-current={isActive ? 'page' : undefined}
+          aria-label={s.name}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
             ${isActive ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
             ${draggedServerId === s.id ? 'opacity-50' : ''}`}

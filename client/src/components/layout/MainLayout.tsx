@@ -45,6 +45,7 @@ export default function MainLayout() {
   const resizing = useRef(false)
   const startX = useRef(0)
   const startW = useRef(0)
+  const navSwipeX = useRef<number | null>(null)
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     resizing.current = true
@@ -136,13 +137,22 @@ export default function MainLayout() {
           )}
 
           {/* Sidebars — drawer fixe sur mobile, inline sur desktop */}
-          <nav aria-label="Navigation" className={[
-            'flex h-full flex-shrink-0',
-            'fixed inset-y-0 left-0 z-50',
-            'md:static md:inset-auto md:z-auto',
-            'transition-transform duration-300 ease-in-out will-change-transform',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-          ].join(' ')}>
+          <nav
+            aria-label="Navigation"
+            className={[
+              'flex h-full flex-shrink-0',
+              'fixed inset-y-0 left-0 z-50',
+              'md:static md:inset-auto md:z-auto',
+              'transition-transform duration-300 ease-in-out will-change-transform',
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+            ].join(' ')}
+            onTouchStart={e => { if (sidebarOpen) navSwipeX.current = e.touches[0].clientX }}
+            onTouchEnd={e => {
+              if (!sidebarOpen || navSwipeX.current === null) return
+              if (e.changedTouches[0].clientX - navSwipeX.current < -60) setSidebarOpen(false)
+              navSwipeX.current = null
+            }}
+          >
             <ServerSidebar />
             <div
               className="flex flex-col bg-fc-channel flex-shrink-0 h-full"

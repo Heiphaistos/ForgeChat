@@ -636,6 +636,7 @@ export default function ChannelSidebar() {
       >
         <button
           onClick={() => isVoiceCh ? handleVoiceChannelClick(ch) : nav(`/servers/${serverId}/channels/${ch.id}`)}
+          aria-current={channelId === ch.id ? 'page' : undefined}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
             ${isMeConnected
               ? 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
