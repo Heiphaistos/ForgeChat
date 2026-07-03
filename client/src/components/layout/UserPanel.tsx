@@ -79,6 +79,9 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   return (
     <div
       ref={ref}
+      role="dialog"
+      aria-label="Statut et profil rapide"
+      aria-modal="true"
       className="absolute bottom-full left-0 mb-2 w-72 bg-fc-sidebar border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
     >
       {/* Bannière + Avatar */}
@@ -96,7 +99,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
           </div>
           <div className={`w-3.5 h-3.5 rounded-full border-2 border-fc-sidebar mb-0.5 ${STATUS_COLORS[user?.status ?? 'offline']}`} />
         </div>
-        <button onClick={onClose} className="absolute top-2 right-2 p-0.5 rounded hover:bg-black/40 text-white/70 hover:text-white transition">
+        <button onClick={onClose} aria-label="Fermer" className="absolute top-2 right-2 p-0.5 rounded hover:bg-black/40 text-white/70 hover:text-white transition">
           <X size={14} />
         </button>
       </div>
@@ -244,6 +247,8 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
             user.focus_mode ? 'text-fc-accent' : 'text-fc-muted hover:text-white'
           }`}
           title={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer mode focus (muet notifications)'}
+          aria-label={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer le mode focus'}
+          aria-pressed={user.focus_mode}
         >
           <BellOff size={16} />
         </button>
@@ -275,6 +280,8 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
             onClick={onToggleActivity}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
             title="Activité récente (Ctrl+Shift+A)"
+            aria-label="Activité récente"
+            aria-pressed={activityOpen}
           >
             <Activity size={16} />
           </button>
@@ -283,6 +290,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           onClick={() => nav('/admin')}
           className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Dashboard Admin"
+          aria-label="Dashboard Admin"
         >
           <LayoutDashboard size={16} />
         </button>
@@ -290,6 +298,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           onClick={() => nav('/settings')}
           className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Paramètres (Ctrl+,)"
+          aria-label="Paramètres"
         >
           <Settings size={16} />
         </button>
