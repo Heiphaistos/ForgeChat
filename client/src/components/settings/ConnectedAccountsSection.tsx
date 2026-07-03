@@ -145,6 +145,8 @@ export default function ConnectedAccountsSection() {
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 placeholder={platformMeta.placeholder}
+                enterKeyHint="next"
+                autoCapitalize="none"
                 className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white placeholder-fc-muted focus:border-fc-accent outline-none"
               />
             </div>
@@ -155,6 +157,10 @@ export default function ConnectedAccountsSection() {
                 value={url}
                 onChange={e => setUrl(e.target.value)}
                 placeholder="https://..."
+                enterKeyHint="done"
+                inputMode="url"
+                autoCapitalize="none"
+                autoComplete="off"
                 className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white placeholder-fc-muted focus:border-fc-accent outline-none"
               />
             </div>

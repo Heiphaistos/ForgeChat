@@ -128,6 +128,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
           maxLength={190}
           rows={3}
           placeholder="Décrivez-vous en quelques mots..."
+          enterKeyHint="done"
+          autoCapitalize="sentences"
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted"
         />
       </Field>
@@ -138,6 +140,9 @@ export default function ProfileSection({ user, updateMe }: Props) {
           onChange={e => setPronouns(e.target.value)}
           maxLength={30}
           placeholder="il/lui"
+          enterKeyHint="done"
+          autoCapitalize="none"
+          autoComplete="off"
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted"
         />
       </Field>

@@ -77,6 +77,9 @@ export default function AdvancedSection({ user }: Props) {
               value={deleteInput}
               onChange={e => setDeleteInput(e.target.value)}
               placeholder="Nom d'utilisateur"
+              enterKeyHint="next"
+              autoCapitalize="none"
+              autoComplete="off"
               className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-red outline-none"
             />
             <div className="relative">
@@ -86,6 +89,7 @@ export default function AdvancedSection({ user }: Props) {
                 onChange={e => setDeletePassword(e.target.value)}
                 placeholder="Mot de passe"
                 autoComplete="current-password"
+                enterKeyHint="done"
                 className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-fc-red outline-none"
               />
               <button

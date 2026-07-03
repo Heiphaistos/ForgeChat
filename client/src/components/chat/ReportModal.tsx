@@ -85,6 +85,8 @@ export default function ReportModal({ messageId, onClose }: Props) {
           placeholder="Commentaire optionnel..."
           maxLength={500}
           rows={3}
+          enterKeyHint="done"
+          autoCapitalize="sentences"
           className="w-full fc-input text-sm resize-none mb-4"
         />
 

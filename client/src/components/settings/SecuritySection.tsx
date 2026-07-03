@@ -89,6 +89,9 @@ export default function SecuritySection() {
             onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
             placeholder="000000"
             maxLength={6}
+            enterKeyHint="done"
+            inputMode="numeric"
+            autoComplete="one-time-code"
             className="w-full bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-white font-mono tracking-widest text-center text-lg"
           />
           <button
