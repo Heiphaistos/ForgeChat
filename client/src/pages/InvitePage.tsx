@@ -30,15 +30,15 @@ export default function InvitePage() {
 
   if (loading || loadingInfo) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-fc-bg">
-        <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+      <div role="status" aria-label="Chargement de l'invitation" className="flex items-center justify-center min-h-screen bg-fc-bg">
+        <div aria-hidden className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   if (!serverInfo) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-fc-bg text-fc-muted px-4 text-center">
+      <div role="alert" className="flex flex-col items-center justify-center min-h-screen bg-fc-bg text-fc-muted px-4 text-center">
         <p className="text-xl font-semibold text-white mb-2">Invitation invalide</p>
         <p className="mb-4">Ce lien a expiré ou n'existe pas.</p>
         <button onClick={() => nav('/')} className="px-4 py-2 bg-fc-accent text-white rounded text-sm">
@@ -50,20 +50,29 @@ export default function InvitePage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
-      <div className="bg-fc-channel rounded-lg p-8 w-full max-w-sm shadow-2xl text-center">
-        <div className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4 overflow-hidden">
+      <div
+        role="main"
+        aria-labelledby="invite-server-name"
+        className="bg-fc-channel rounded-lg p-8 w-full max-w-sm shadow-2xl text-center"
+      >
+        <div
+          aria-label={serverInfo.server.name}
+          className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4 overflow-hidden"
+        >
           {serverInfo.server.icon
-            ? <img src={serverInfo.server.icon} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
-            : serverInfo.server.name.charAt(0)}
+            ? <img src={serverInfo.server.icon} alt={serverInfo.server.name} loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
+            : <span aria-hidden>{serverInfo.server.name.charAt(0)}</span>}
         </div>
         <p className="text-fc-muted text-sm mb-1">Tu as été invité(e) à rejoindre</p>
-        <h1 className="text-2xl font-bold text-white mb-1">{serverInfo.server.name}</h1>
+        <h1 id="invite-server-name" className="text-2xl font-bold text-white mb-1">{serverInfo.server.name}</h1>
         <p className="text-fc-muted text-sm mb-6">{serverInfo.server.member_count} membre(s)</p>
 
         {user ? (
           <button
             onClick={() => join.mutate()}
             disabled={join.isPending}
+            aria-busy={join.isPending}
+            aria-label={`Accepter l'invitation et rejoindre ${serverInfo.server.name}`}
             className="w-full py-2.5 bg-fc-green hover:bg-green-600 text-white font-semibold rounded-lg transition disabled:opacity-50"
           >
             {join.isPending ? 'Connexion...' : 'Accepter l\'invitation'}

@@ -76,8 +76,8 @@ export default function VerifyEmailPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md text-center">
-        <div className="w-16 h-16 bg-fc-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-fc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div aria-hidden className="w-16 h-16 bg-fc-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8 text-fc-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
@@ -97,7 +97,12 @@ export default function VerifyEmailPage() {
         )}
         <p className="text-fc-accent font-medium mb-6">{email}</p>
 
-        <div className="flex justify-center gap-3 mb-6" onPaste={handlePaste}>
+        <div
+          role="group"
+          aria-label="Code de vérification à 4 chiffres"
+          className="flex justify-center gap-3 mb-6"
+          onPaste={handlePaste}
+        >
           {digits.map((d, i) => (
             <input
               key={i}
@@ -109,6 +114,7 @@ export default function VerifyEmailPage() {
               onChange={e => handleDigit(i, e.target.value)}
               onKeyDown={e => handleKeyDown(i, e)}
               autoComplete={i === 0 ? 'one-time-code' : 'off'}
+              aria-label={`Chiffre ${i + 1} sur 4`}
               className="w-14 h-16 text-center text-2xl font-bold bg-fc-input text-white rounded-lg
                          outline-none focus:ring-2 focus:ring-fc-accent transition caret-transparent"
             />
@@ -118,6 +124,7 @@ export default function VerifyEmailPage() {
         <button
           onClick={submit}
           disabled={loading || digits.join('').length !== 4}
+          aria-busy={loading}
           className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded
                      transition disabled:opacity-50 mb-4"
         >

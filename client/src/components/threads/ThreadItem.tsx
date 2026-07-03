@@ -25,18 +25,27 @@ export default function ThreadItem({
     ? formatDistanceToNow(new Date(last_activity), { addSuffix: true, locale: fr })
     : null
 
+  const ariaLabel = [
+    title,
+    unread_count > 0 ? `${unread_count > 99 ? '99+' : unread_count} message${unread_count > 1 ? 's' : ''} non lu${unread_count > 1 ? 's' : ''}` : null,
+    `${message_count} message${message_count !== 1 ? 's' : ''}`,
+    creator_username ? `par ${creator_username}` : null,
+    relativeTime ? `— ${relativeTime}` : null,
+  ].filter(Boolean).join(', ')
+
   return (
     <button
       onClick={() => onSelect(id)}
+      aria-label={ariaLabel}
       className="w-full flex items-start gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition text-left group"
     >
       {/* Icône */}
-      <div className="w-8 h-8 rounded-lg bg-fc-accent/15 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-fc-accent/25 transition">
+      <div aria-hidden className="w-8 h-8 rounded-lg bg-fc-accent/15 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-fc-accent/25 transition">
         <MessagesSquare size={14} className="text-fc-accent" />
       </div>
 
       {/* Contenu */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0" aria-hidden>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-white truncate flex-1">{title}</span>
           {unread_count > 0 && (
