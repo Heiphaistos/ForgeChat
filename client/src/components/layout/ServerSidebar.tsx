@@ -140,6 +140,7 @@ export default function ServerSidebar() {
     }
   })
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const serverLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const me = useAuth(s => s.user)
   const isServerMuted = useChannelNotif(s => s.isServerMuted)
@@ -359,6 +360,17 @@ export default function ServerSidebar() {
           key={s.id}
           onClick={() => nav(`/servers/${s.id}`)}
           onContextMenu={e => handleContextMenu(e, s.id)}
+          onTouchStart={e => {
+            const { clientX, clientY } = e.touches[0]
+            serverLongPressRef.current = setTimeout(() => {
+              serverLongPressRef.current = null
+              if ('vibrate' in navigator) navigator.vibrate(20)
+              setContextMenu({ x: clientX, y: clientY, serverId: s.id })
+            }, 500)
+          }}
+          onTouchEnd={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
+          onTouchCancel={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
+          onTouchMove={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
           draggable
           onDragStart={() => handleDragStart(s.id)}
           onDragOver={e => e.preventDefault()}
