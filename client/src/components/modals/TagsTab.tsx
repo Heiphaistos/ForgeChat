@@ -66,6 +66,7 @@ export default function TagsTab({ serverId }: { serverId: string }) {
             onChange={e => setNewName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 16))}
             placeholder="NOM_DU_TAG"
             maxLength={16}
+            aria-label="Nom du tag (majuscules, chiffres, tiret bas)"
             className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent font-mono"
             onKeyDown={e => e.key === 'Enter' && newName.trim() && createTag.mutate()}
           />
@@ -74,28 +75,34 @@ export default function TagsTab({ serverId }: { serverId: string }) {
             value={newColor}
             onChange={e => setNewColor(e.target.value)}
             title="Couleur du tag"
+            aria-label="Couleur du tag"
             className="w-10 h-9 rounded cursor-pointer bg-fc-input border-0 p-0.5"
           />
           <button
             onClick={() => createTag.mutate()}
             disabled={!newName.trim() || createTag.isPending}
+            aria-busy={createTag.isPending}
             className="flex items-center gap-1.5 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
-            <Plus size={14} />
+            <Plus size={14} aria-hidden />
             {createTag.isPending ? 'Création...' : 'Créer'}
           </button>
         </div>
 
         {/* Liste des tags */}
         {tags.length === 0 ? (
-          <div className="text-center text-fc-muted py-10 text-sm">
+          <div role="status" className="text-center text-fc-muted py-10 text-sm">
             Aucun tag pour ce serveur. Crées-en un !
           </div>
         ) : (
           <div className="space-y-2">
             {tags.map(t => (
               <div key={t.id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colorIntToHex(t.color) }} />
+                <div
+                  aria-hidden
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: colorIntToHex(t.color) }}
+                />
                 <span
                   className="text-sm font-bold font-mono px-2 py-0.5 rounded border"
                   style={{ borderColor: colorIntToHex(t.color), color: colorIntToHex(t.color) }}
@@ -107,10 +114,10 @@ export default function TagsTab({ serverId }: { serverId: string }) {
                 </span>
                 <button
                   onClick={() => deleteTag.mutate(t.id)}
+                  aria-label={`Supprimer le tag ${t.name}`}
                   className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition"
-                  title="Supprimer"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={14} aria-hidden />
                 </button>
               </div>
             ))}

@@ -80,7 +80,7 @@ export default function WebhooksTab({ server, channels }: Props) {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-          <Link size={18} className="text-fc-accent" />
+          <Link size={18} className="text-fc-accent" aria-hidden />
           Webhooks
         </h3>
         <p className="text-sm text-fc-muted mb-5">
@@ -89,17 +89,19 @@ export default function WebhooksTab({ server, channels }: Props) {
 
         {/* Formulaire création */}
         <div className="p-4 bg-fc-channel rounded-lg mb-6 space-y-3">
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Nouveau webhook</div>
+          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2" aria-hidden>Nouveau webhook</div>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Nom du webhook"
             maxLength={80}
+            aria-label="Nom du webhook"
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
           <select
             value={channelId}
             onChange={e => setChannelId(e.target.value)}
+            aria-label="Canal cible du webhook"
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           >
             <option value="">Sélectionner un canal</option>
@@ -110,18 +112,19 @@ export default function WebhooksTab({ server, channels }: Props) {
           <button
             onClick={() => createWebhook.mutate()}
             disabled={!canCreate || createWebhook.isPending}
+            aria-busy={createWebhook.isPending}
             className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
-            <Plus size={14} />
+            <Plus size={14} aria-hidden />
             {createWebhook.isPending ? 'Création...' : 'Créer le webhook'}
           </button>
         </div>
 
         {/* Liste */}
         {isLoading ? (
-          <div className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
+          <div role="status" aria-label="Chargement des webhooks" className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
         ) : webhooks.length === 0 ? (
-          <div className="text-center text-fc-muted py-10 text-sm">Aucun webhook sur ce serveur.</div>
+          <div role="status" className="text-center text-fc-muted py-10 text-sm">Aucun webhook sur ce serveur.</div>
         ) : (
           <div className="space-y-3">
             {webhooks.map(wh => {
@@ -131,7 +134,7 @@ export default function WebhooksTab({ server, channels }: Props) {
                 <div key={wh.id} className="p-4 bg-fc-channel rounded-lg">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-fc-accent/20 flex items-center justify-center flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-fc-accent/20 flex items-center justify-center flex-shrink-0" aria-hidden>
                         {wh.avatar
                           ? <img src={wh.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
                           : <Link size={16} className="text-fc-accent" />}
@@ -143,10 +146,10 @@ export default function WebhooksTab({ server, channels }: Props) {
                     </div>
                     <button
                       onClick={() => deleteWebhook.mutate(wh.id)}
+                      aria-label={`Supprimer le webhook ${wh.name}`}
                       className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
-                      title="Supprimer"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={14} aria-hidden />
                     </button>
                   </div>
 
@@ -157,14 +160,14 @@ export default function WebhooksTab({ server, channels }: Props) {
                     </code>
                     <button
                       onClick={() => copyUrl(wh)}
+                      aria-label={isCopied ? 'URL copiée' : `Copier l'URL du webhook ${wh.name}`}
                       className={`p-1.5 rounded transition flex-shrink-0 ${isCopied ? 'bg-fc-green text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-                      title="Copier l'URL"
                     >
-                      {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                      {isCopied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
                     </button>
                   </div>
                   {isCopied && (
-                    <div className="text-xs text-fc-green mt-1">Copié !</div>
+                    <div aria-live="polite" aria-atomic="true" className="text-xs text-fc-green mt-1">Copié !</div>
                   )}
                 </div>
               )

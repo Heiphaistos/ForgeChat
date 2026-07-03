@@ -23,18 +23,21 @@ interface StatCardProps {
 
 function StatCard({ icon, iconColor, label, value, loading }: StatCardProps) {
   return (
-    <div className="flex flex-col gap-3 p-5 bg-fc-input rounded-xl">
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColor}`}>
+    <div
+      className="flex flex-col gap-3 p-5 bg-fc-input rounded-xl"
+      aria-label={`${label} : ${loading ? 'Chargement' : (value?.toLocaleString('fr-FR') ?? '—')}`}
+    >
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColor}`} aria-hidden>
         {icon}
       </div>
       {loading ? (
-        <Loader2 size={22} className="animate-spin text-fc-muted" />
+        <Loader2 size={22} aria-hidden className="animate-spin text-fc-muted" />
       ) : (
-        <div className="text-2xl font-bold text-white">
+        <div className="text-2xl font-bold text-white" aria-hidden>
           {value?.toLocaleString('fr-FR') ?? '—'}
         </div>
       )}
-      <div className="text-sm text-fc-muted">{label}</div>
+      <div className="text-sm text-fc-muted" aria-hidden>{label}</div>
     </div>
   )
 }
@@ -50,11 +53,15 @@ export default function StatsTab({ serverId }: Props) {
 
   if (error) {
     return (
-      <div className="text-center text-fc-muted py-10 text-sm">
+      <div role="alert" className="text-center text-fc-muted py-10 text-sm">
         Impossible de charger les statistiques.
       </div>
     )
   }
+
+  const onlinePct = data && data.member_count > 0
+    ? Math.min(100, Math.round((data.online_count / data.member_count) * 100))
+    : 0
 
   return (
     <div className="space-y-6">
@@ -96,22 +103,22 @@ export default function StatsTab({ serverId }: Props) {
 
       {data && (
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Taux d'activité</div>
+          <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3" aria-hidden>Taux d'activité</div>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-2 bg-fc-hover rounded-full overflow-hidden">
               <div
+                role="progressbar"
+                aria-label="Taux de membres en ligne"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={onlinePct}
+                aria-valuetext={`${onlinePct}% des membres en ligne`}
                 className="h-full bg-green-500 rounded-full transition-all duration-500"
-                style={{
-                  width: data.member_count > 0
-                    ? `${Math.min(100, Math.round((data.online_count / data.member_count) * 100))}%`
-                    : '0%'
-                }}
+                style={{ width: `${onlinePct}%` }}
               />
             </div>
-            <span className="text-xs text-fc-muted flex-shrink-0">
-              {data.member_count > 0
-                ? `${Math.round((data.online_count / data.member_count) * 100)}% en ligne`
-                : '0% en ligne'}
+            <span className="text-xs text-fc-muted flex-shrink-0" aria-hidden>
+              {onlinePct}% en ligne
             </span>
           </div>
         </div>
