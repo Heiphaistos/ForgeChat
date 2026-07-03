@@ -69,15 +69,22 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3" onClick={onClose}>
-      <div className="bg-fc-channel rounded-lg w-full max-w-[560px] max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-post-title"
+        className="bg-fc-channel rounded-lg w-full max-w-[560px] max-h-[90dvh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="p-6 border-b border-fc-bg flex items-start justify-between">
-          <h2 className="text-xl font-bold text-white">Nouveau post</h2>
-          <button onClick={onClose} className="text-fc-muted hover:text-white transition"><X size={20} /></button>
+          <h2 id="create-post-title" className="text-xl font-bold text-white">Nouveau post</h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition"><X size={20} aria-hidden /></button>
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Titre *</label>
+            <label htmlFor="fp-title" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Titre *</label>
             <input
+              id="fp-title"
               autoFocus
               value={title}
               onChange={e => setTitle(e.target.value)}
@@ -87,8 +94,9 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Contenu</label>
+            <label htmlFor="fp-content" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Contenu</label>
             <textarea
+              id="fp-content"
               value={content}
               onChange={e => setContent(e.target.value)}
               placeholder="Décrivez votre post..."
@@ -97,9 +105,10 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Tags</label>
+            <label htmlFor="fp-tag" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Tags</label>
             <div className="flex gap-2 mb-2">
               <input
+                id="fp-tag"
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
@@ -107,16 +116,16 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
                 maxLength={20}
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
-              <button onClick={addTag} className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
-                <Plus size={16} />
+              <button onClick={addTag} aria-label="Ajouter le tag" className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
+                <Plus size={16} aria-hidden />
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {tags.map(t => (
                 <span key={t} className="flex items-center gap-1 text-xs px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full">
                   #{t}
-                  <button onClick={() => setTags(tags.filter(x => x !== t))} className="hover:text-white">
-                    <X size={10} />
+                  <button onClick={() => setTags(tags.filter(x => x !== t))} aria-label={`Retirer le tag ${t}`} className="hover:text-white">
+                    <X size={10} aria-hidden />
                   </button>
                 </span>
               ))}

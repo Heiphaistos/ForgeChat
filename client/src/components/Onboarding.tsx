@@ -47,11 +47,25 @@ export default function Onboarding({ onDone }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-      <div className="bg-fc-sidebar rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col gap-6">
-        <div className="flex justify-center gap-2">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        className="bg-fc-sidebar rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col gap-6 mx-3"
+      >
+        {/* Progress dots */}
+        <div
+          role="progressbar"
+          aria-valuenow={step + 1}
+          aria-valuemin={1}
+          aria-valuemax={STEPS.length}
+          aria-label={`Étape ${step + 1} sur ${STEPS.length}`}
+          className="flex justify-center gap-2"
+        >
           {STEPS.map((_, i) => (
             <div
               key={i}
+              aria-hidden
               className={`w-2.5 h-2.5 rounded-full transition-colors ${
                 i <= step ? 'bg-fc-accent' : 'bg-fc-hover'
               }`}
@@ -59,9 +73,10 @@ export default function Onboarding({ onDone }: Props) {
           ))}
         </div>
 
-        <div className="flex flex-col items-center text-center gap-3">
-          <span className="text-5xl">{current.emoji}</span>
-          <h2 className="text-xl font-bold text-white">{current.title}</h2>
+        {/* Step content — aria-live so screen readers announce step changes */}
+        <div aria-live="polite" aria-atomic="true" className="flex flex-col items-center text-center gap-3">
+          <span aria-hidden className="text-5xl">{current.emoji}</span>
+          <h2 id="onboarding-title" className="text-xl font-bold text-white">{current.title}</h2>
           <p className="text-fc-muted text-sm leading-relaxed">{current.description}</p>
         </div>
 
@@ -74,6 +89,7 @@ export default function Onboarding({ onDone }: Props) {
           </button>
           <button
             onClick={finish}
+            aria-label="Passer l'introduction"
             className="text-fc-muted text-sm hover:text-white transition"
           >
             Passer

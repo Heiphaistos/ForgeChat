@@ -55,10 +55,12 @@ export default function LeaderboardPage() {
             </button>
             <h1 className="text-2xl font-bold text-white">Classement</h1>
           </div>
-          <div className="flex gap-1 bg-fc-channel rounded-lg p-1">
+          <div role="tablist" aria-label="Période du classement" className="flex gap-1 bg-fc-channel rounded-lg p-1">
             {PERIODS.map(p => (
               <button
                 key={p.value}
+                role="tab"
+                aria-selected={period === p.value}
                 onClick={() => setPeriod(p.value)}
                 className={`px-3 py-1.5 text-sm rounded-md transition ${
                   period === p.value
