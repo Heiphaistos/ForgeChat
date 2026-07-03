@@ -71,6 +71,7 @@ export default function ExplorePage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Rechercher un serveur..."
+            inputMode="search" autoComplete="off"
             className="w-full pl-9 pr-4 py-3 bg-fc-channel rounded-xl text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
         </div>

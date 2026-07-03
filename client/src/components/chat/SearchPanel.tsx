@@ -66,6 +66,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
               else if (e.key === 'Escape') onClose()
             }}
             placeholder="Rechercher dans #..."
+            inputMode="search" autoComplete="off"
             className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
             autoFocus
           />

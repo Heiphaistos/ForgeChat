@@ -169,6 +169,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
           <input
             ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey} placeholder="Rechercher ou saisir une commande..."
+            inputMode="search" autoComplete="off"
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
           {query && (

@@ -416,6 +416,7 @@ export default function FriendsPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Rechercher un ami..."
+                inputMode="search" autoComplete="off"
                 className="w-full pl-8 pr-3 py-1.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent placeholder:text-fc-muted"
               />
             </div>

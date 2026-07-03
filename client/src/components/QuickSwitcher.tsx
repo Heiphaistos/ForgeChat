@@ -158,6 +158,7 @@ export default function QuickSwitcher({ onClose }: Props) {
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') onClose() }}
               placeholder="? Rechercher messages, utilisateurs, canaux..."
+              inputMode="search" autoComplete="off"
               className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-fc-muted"
               autoFocus
             />
