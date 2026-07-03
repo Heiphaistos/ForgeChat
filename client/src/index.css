@@ -103,6 +103,15 @@ body {
   }
 }
 
+/* Empêche le zoom automatique iOS sur les champs (déclenché quand font-size < 16px) */
+@media screen and (max-width: 767px) {
+  input[type="text"], input[type="email"], input[type="password"],
+  input[type="search"], input[type="number"], input[type="tel"],
+  input[type="url"], textarea, select {
+    font-size: 16px;
+  }
+}
+
 .mention { color: #5865f2; background: rgba(88,101,242,0.15); border-radius: 3px; padding: 0 2px; cursor: pointer; }
 .mention-everyone { color: #f0b132; background: rgba(240,177,50,0.15); }
 .no-scrollbar::-webkit-scrollbar { display: none; }

@@ -95,7 +95,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
       onClick={onClose}
     >
       <div
-        className="bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh]"
+        className="bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[80dvh]"
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

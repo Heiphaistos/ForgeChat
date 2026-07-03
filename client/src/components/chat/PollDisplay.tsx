@@ -105,7 +105,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
 
   if (isLoading) {
     return (
-      <div className="mt-2 flex items-center gap-2 text-xs text-fc-muted border border-fc-hover rounded-lg p-3 max-w-sm">
+      <div className="mt-2 flex items-center gap-2 text-xs text-fc-muted border border-fc-hover rounded-lg p-3 max-w-full sm:max-w-sm">
         <Loader2 size={14} className="animate-spin" />
         <span>Chargement du sondage...</span>
       </div>
@@ -121,7 +121,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   const canClose = isCreator && !isExpired
 
   return (
-    <div className="mt-2 bg-fc-channel border border-fc-hover rounded-lg p-3 max-w-sm">
+    <div className="mt-2 bg-fc-channel border border-fc-hover rounded-lg p-3 max-w-full sm:max-w-sm">
       {/* Header */}
       <div className="flex items-start gap-2 mb-3">
         <div className="p-1 rounded bg-fc-accent/10 flex-shrink-0 mt-0.5">
