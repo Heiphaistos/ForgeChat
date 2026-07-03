@@ -111,7 +111,7 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
         </div>
 
         {/* Contenu */}
-        <div className="overflow-y-auto max-h-[70vh] p-5 grid gap-5">
+        <div className="overflow-y-auto overscroll-contain max-h-[70vh] p-5 grid gap-5">
           {GROUPS.map(group => (
             <div key={group.title}>
               <p className="text-[11px] font-semibold text-fc-muted uppercase tracking-widest mb-2">

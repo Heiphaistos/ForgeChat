@@ -164,7 +164,7 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
               {usernameCount > 0 && ` · ${usernameCount} usernames`}
               {emailCount > 0 && ` · ${emailCount} emails (non envoyés)`}
             </div>
-            <div className="overflow-y-auto flex-1 min-h-0 mb-4 rounded-lg border border-fc-hover divide-y divide-fc-hover/50">
+            <div className="overflow-y-auto overscroll-contain flex-1 min-h-0 mb-4 rounded-lg border border-fc-hover divide-y divide-fc-hover/50">
               {contacts.slice(0, 50).map((c, i) => (
                 <div key={i} className="flex items-center gap-2 px-3 py-2">
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0

@@ -90,6 +90,8 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
               onChange={e => setTitle(e.target.value)}
               placeholder="Titre du post..."
               maxLength={200}
+              enterKeyHint="next"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             />
           </div>
@@ -114,6 +116,8 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
                 placeholder="Ajouter un tag..."
                 maxLength={20}
+                enterKeyHint="done"
+                autoCapitalize="none"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
               <button onClick={addTag} aria-label="Ajouter le tag" className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
@@ -399,6 +403,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               }}
               placeholder="Écrire une réponse..."
               rows={2}
+              enterKeyHint="send"
               className="flex-1 px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
             />
             <button

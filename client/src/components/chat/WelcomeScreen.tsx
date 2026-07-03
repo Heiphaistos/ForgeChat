@@ -49,7 +49,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
     .toUpperCase()
 
   return (
-    <div className="flex flex-col items-center h-full overflow-y-auto">
+    <div className="flex flex-col items-center h-full overflow-y-auto overscroll-contain">
       {/* Banner */}
       {server.banner ? (
         <div className="w-full h-[250px] flex-shrink-0 overflow-hidden">

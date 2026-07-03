@@ -759,7 +759,7 @@ function CreateServerModal({
             {/* Templates publics / built-in */}
             <div className="mb-4">
               <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Templates publics</div>
-              <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto overscroll-contain pr-1">
                 {allPublicTemplates.map(t => (
                   <button
                     key={t.id}
@@ -780,7 +780,7 @@ function CreateServerModal({
             {myRemoteTemplates.length > 0 && (
               <div>
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Mes templates</div>
-                <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1">
+                <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto overscroll-contain pr-1">
                   {myRemoteTemplates.map(t => (
                     <button
                       key={t.id}

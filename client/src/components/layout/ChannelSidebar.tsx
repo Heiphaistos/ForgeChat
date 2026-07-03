@@ -99,7 +99,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div className="max-h-40 overflow-y-auto space-y-0.5 mb-3">
+        <div className="max-h-40 overflow-y-auto overscroll-contain space-y-0.5 mb-3">
           {(friends as any[]).map((f: any) => {
             const uid: string = f.id ?? f.user_id
             const uname: string = f.username

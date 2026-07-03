@@ -136,6 +136,8 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               onChange={set('name')}
               maxLength={100}
               placeholder="Nom de l'événement"
+              enterKeyHint="next"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               required
             />
@@ -151,6 +153,8 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               maxLength={1000}
               rows={3}
               placeholder="Décrivez l'événement..."
+              enterKeyHint="next"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
             />
           </div>

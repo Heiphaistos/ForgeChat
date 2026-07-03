@@ -759,7 +759,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
       {/* Dropdown slash commands */}
       {showSlash && filteredSlashCommands.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-64 overflow-y-auto">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-64 overflow-y-auto overscroll-contain">
           <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover flex items-center gap-1.5">
             <Slash size={10} />
             Commandes{slashQuery ? ` — /${slashQuery}` : ''}
@@ -793,7 +793,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
       {/* Dropdown mentions */}
       {showMentions && mentionResults.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto overscroll-contain">
           <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
             Membres — @{mentionQuery}
           </div>
@@ -818,7 +818,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
       {/* Dropdown channels # */}
       {showChannels && channelResults.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto overscroll-contain">
           <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
             Canaux — #{channelQuery}
           </div>
@@ -1172,7 +1172,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
                 {/* Liste des messages programmés */}
                 {scheduledMessages.length > 0 && (
-                  <div className="border-t border-fc-hover px-4 py-3 space-y-2 max-h-48 overflow-y-auto">
+                  <div className="border-t border-fc-hover px-4 py-3 space-y-2 max-h-48 overflow-y-auto overscroll-contain">
                     <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
                       En attente
                     </div>

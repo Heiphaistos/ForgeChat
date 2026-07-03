@@ -225,7 +225,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-fc-muted/30" /> Hérité</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+          <div className="flex-1 overflow-y-auto overscroll-contain space-y-1 pr-1">
             {CHANNEL_PERMISSION_BITS.map(p => {
               const state = getState(p.bit)
               return (
@@ -389,7 +389,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-5">
           {/* ─── GÉNÉRAL ─── */}
           {tab === 'general' && (
             <div className="space-y-5">
