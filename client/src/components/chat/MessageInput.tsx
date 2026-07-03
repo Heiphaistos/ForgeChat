@@ -736,7 +736,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           <Edit3 size={12} className="text-yellow-400 flex-shrink-0" />
           <span className="text-yellow-400 font-medium">Édition du message</span>
           <span className="text-fc-muted">· Echap pour annuler</span>
-          <button onClick={() => { setEditingMsgId(null); setContent('') }} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler l'édition">
+          <button onClick={() => { setEditingMsgId(null); setContent('') }} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler l'édition" aria-label="Annuler l'édition du message">
             <X size={12} />
           </button>
         </div>
@@ -751,7 +751,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           {replyTo.content && (
             <span className="text-fc-muted truncate max-w-xs">{replyTo.content.slice(0, 80)}</span>
           )}
-          <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler">
+          <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler" aria-label="Annuler la réponse">
             <X size={12} />
           </button>
         </div>
@@ -922,15 +922,15 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       <div className="bg-fc-input rounded-lg">
         {/* Barre Rich Text — masquée sur mobile */}
         <div className="hidden md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
-          <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
-          <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
-          <button onClick={() => applyFormat('~~')} title="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
+          <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" aria-label="Gras" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
+          <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" aria-label="Italique" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
+          <button onClick={() => applyFormat('~~')} title="Barré" aria-label="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
           <div className="w-px h-4 bg-fc-hover mx-0.5" />
-          <button onClick={() => applyFormat('`')} title="Code inline" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
-          <button onClick={() => applyFormat('```\n', '\n```')} title="Bloc de code" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
-          <button onClick={() => applyFormat('> ', '')} title="Citation" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
+          <button onClick={() => applyFormat('`')} title="Code inline" aria-label="Code inline" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
+          <button onClick={() => applyFormat('```\n', '\n```')} title="Bloc de code" aria-label="Bloc de code" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
+          <button onClick={() => applyFormat('> ', '')} title="Citation" aria-label="Citation" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
           <div className="w-px h-4 bg-fc-hover mx-0.5" />
-          <button onClick={insertLink} title="Lien (Ctrl+K)" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
+          <button onClick={insertLink} title="Lien (Ctrl+K)" aria-label="Insérer un lien" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
         </div>
 
         {/* Popup URL inline */}
@@ -960,6 +960,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           onClick={() => fileInputRef.current?.click()}
           className="p-2.5 md:p-1.5 text-fc-muted hover:text-white rounded transition flex-shrink-0"
           title="Joindre un fichier"
+          aria-label="Joindre un fichier"
         >
           <Plus size={20} />
         </button>
@@ -1018,6 +1019,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onClick={() => { closeAllPickers(); setShowEmojiPicker(p => !p) }}
               className={`p-2.5 md:p-1.5 rounded transition ${showEmojiPicker ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Emoji"
+              aria-label="Emoji"
+              aria-expanded={showEmojiPicker}
+              aria-pressed={showEmojiPicker}
             >
               <SmilePlus size={20} />
             </button>
@@ -1043,6 +1047,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               className={`px-2 py-1 rounded transition text-xs font-bold tracking-wide
                 ${showGifPicker ? 'text-fc-accent bg-fc-accent/10' : 'text-fc-muted hover:text-white'}`}
               title="GIF"
+              aria-label="GIF"
+              aria-expanded={showGifPicker}
+              aria-pressed={showGifPicker}
             >
               GIF
             </button>
@@ -1063,6 +1070,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               className={`p-2.5 md:p-1.5 rounded transition text-base leading-none
                 ${showStickerPicker ? 'opacity-100' : 'opacity-50 hover:opacity-100'}`}
               title="Stickers"
+              aria-label="Stickers"
+              aria-expanded={showStickerPicker}
+              aria-pressed={showStickerPicker}
             >
               🎭
             </button>
@@ -1083,6 +1093,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
               className={`p-2.5 md:p-1.5 rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Réponses rapides"
+              aria-label="Réponses rapides"
+              aria-expanded={showQuickReplies}
+              aria-pressed={showQuickReplies}
             >
               <Zap size={16} />
             </button>
@@ -1104,6 +1117,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
               className={`p-1.5 rounded transition ${showScheduled ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title="Programmer un message"
+              aria-label="Programmer un message"
+              aria-expanded={showScheduled}
+              aria-pressed={showScheduled}
             >
               <CalendarClock size={20} />
             </button>
@@ -1189,6 +1205,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onClick={() => { setShowTtlPicker(v => !v) }}
               className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
               title={msgTtl ? `Message éphémère : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
+              aria-label={msgTtl ? `Message éphémère actif : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
+              aria-pressed={!!msgTtl}
+              aria-expanded={showTtlPicker}
             >
               <Clock size={18} />
             </button>
@@ -1229,6 +1248,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               onClick={() => setShowVoiceRecorder(true)}
               className="p-2.5 md:p-1.5 text-fc-muted hover:text-fc-accent rounded transition"
               title="Message vocal"
+              aria-label="Enregistrer un message vocal"
             >
               <Mic size={18} />
             </button>
@@ -1239,6 +1259,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS || !!sending}
             className="p-2.5 md:p-1.5 text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
             title="Envoyer"
+            aria-label="Envoyer le message"
           >
             <Send size={20} />
           </button>

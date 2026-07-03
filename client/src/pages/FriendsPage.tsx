@@ -215,6 +215,8 @@ export default function FriendsPage() {
   // ── Tab button ─────────────────────────────────────────────────────────────
   const TabBtn = ({ t, label, count }: { t: FriendTab; label: string; count?: number }) => (
     <button
+      role="tab"
+      aria-selected={tab === t}
       onClick={() => setTab(t)}
       className={`px-3 py-1.5 rounded text-sm font-medium transition
         ${tab === t
@@ -223,8 +225,8 @@ export default function FriendsPage() {
     >
       {label}
       {count !== undefined && count > 0 && (
-        <span className="ml-1.5 bg-fc-red text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
-          {count}
+        <span aria-label={`${count} en attente`} className="ml-1.5 bg-fc-red text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
+          <span aria-hidden>{count}</span>
         </span>
       )}
     </button>
@@ -319,7 +321,7 @@ export default function FriendsPage() {
         <span className="font-semibold text-white flex-shrink-0">Amis</span>
         {/* Tabs scrollables horizontalement */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden no-scrollbar">
-          <div className="flex items-center gap-1 min-w-max px-1">
+          <div role="tablist" aria-label="Filtrer les amis" className="flex items-center gap-1 min-w-max px-1">
             <TabBtn t="online" label="En ligne" count={online.length} />
             <TabBtn t="all" label="Tous" />
             <TabBtn t="pending" label="En attente" count={pendingCount} />

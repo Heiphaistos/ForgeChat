@@ -38,6 +38,7 @@ export default function VoiceBar() {
         <button
           onClick={leave}
           title="Quitter le vocal"
+          aria-label="Quitter le salon vocal"
           className="p-2 md:p-1 rounded hover:bg-red-500/20 text-fc-muted hover:text-red-400 transition flex-shrink-0 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
         >
           <PhoneOff size={14} />
@@ -103,7 +104,7 @@ function VoiceBarBtn({
     : `${base} text-fc-muted/50 hover:bg-fc-hover hover:text-white`
 
   return (
-    <button className={cls} onClick={onClick} title={title}>
+    <button className={cls} onClick={onClick} title={title} aria-label={title} aria-pressed={active}>
       {active ? activeIcon : inactiveIcon}
     </button>
   )
