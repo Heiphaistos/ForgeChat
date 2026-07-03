@@ -362,6 +362,7 @@ export default function FriendsPage() {
                 value={addTag}
                 onChange={e => setAddTag(e.target.value)}
                 placeholder="username#0000"
+                enterKeyHint="send" autoCapitalize="none" autoCorrect="off"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono"
                 onKeyDown={e => e.key === 'Enter' && addTag.includes('#') && sendRequest.mutate(addTag)}
               />

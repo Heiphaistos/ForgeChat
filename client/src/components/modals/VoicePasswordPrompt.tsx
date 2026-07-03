@@ -46,6 +46,7 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
           onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
           placeholder="Mot de passe..."
+          enterKeyHint="go"
           autoFocus
           autoComplete="current-password"
           className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm mb-4"

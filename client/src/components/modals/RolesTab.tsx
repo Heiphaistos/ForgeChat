@@ -301,6 +301,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
           <input
             value={newName} onChange={e => setNewName(e.target.value)}
             placeholder="Nouveau rôle"
+            enterKeyHint="done" autoCapitalize="words"
             className="flex-1 px-2 py-1.5 bg-fc-input rounded text-white text-xs outline-none focus:ring-1 focus:ring-fc-accent"
             onKeyDown={e => e.key === 'Enter' && newName.trim() && createRole.mutate(newName.trim())}
           />

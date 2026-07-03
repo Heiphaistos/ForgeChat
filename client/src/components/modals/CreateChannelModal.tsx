@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useId } from 'react'
 import { Hash, Volume2, X, Video, Megaphone, MessagesSquare, Radio, ChevronDown, Settings } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -34,6 +34,7 @@ interface Props {
 
 export default function CreateChannelModal({ serverId, onClose, defaultCategoryId }: Props) {
   useEscapeKey(onClose)
+  const uid = useId()
   const [name, setName] = useState('')
   const [type, setType] = useState<ChannelType>('text')
   const [topic, setTopic] = useState('')
@@ -148,8 +149,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
           {/* Catégorie parente */}
           {categories.length > 0 && (
             <div>
-              <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Catégorie</label>
-              <select value={categoryId ?? ''} onChange={e => setCategoryId(e.target.value || null)}
+              <label htmlFor={`${uid}-cat`} className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Catégorie</label>
+              <select id={`${uid}-cat`} value={categoryId ?? ''} onChange={e => setCategoryId(e.target.value || null)}
                 className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
                 <option value="">Aucune catégorie</option>
                 {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -194,8 +195,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               {/* Slowmode (texte seulement) */}
               {isTextType && (
                 <div>
-                  <label className="block text-xs text-fc-muted mb-1">Mode lent</label>
-                  <select value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
+                  <label htmlFor={`${uid}-slow`} className="block text-xs text-fc-muted mb-1">Mode lent</label>
+                  <select id={`${uid}-slow`} value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
                     className="w-full px-3 py-1.5 bg-fc-input rounded-lg text-white outline-none text-sm">
                     {SLOWMODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
