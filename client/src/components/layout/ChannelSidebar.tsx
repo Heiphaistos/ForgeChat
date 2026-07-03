@@ -434,6 +434,20 @@ export default function ChannelSidebar() {
                     { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
                     { label: 'Quitter le groupe', onClick: leaveGroup },
                   ])}
+                  onTouchStart={e => {
+                    const { clientX, clientY } = e.touches[0]
+                    chLongPressRef.current = setTimeout(() => {
+                      chLongPressRef.current = null
+                      if ('vibrate' in navigator) navigator.vibrate(20)
+                      ctxMenu.openAt(clientX, clientY, [
+                        { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
+                        { label: 'Quitter le groupe', onClick: leaveGroup },
+                      ])
+                    }, 500)
+                  }}
+                  onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+                  onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+                  onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
                   aria-current={pathname === `/dms/groups/${dm.id}` ? 'page' : undefined}
                   className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
                 >
@@ -491,6 +505,21 @@ export default function ChannelSidebar() {
                 { label: 'Archiver la conversation', onClick: archiveDm },
                 { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
               ])}
+              onTouchStart={e => {
+                const { clientX, clientY } = e.touches[0]
+                chLongPressRef.current = setTimeout(() => {
+                  chLongPressRef.current = null
+                  if ('vibrate' in navigator) navigator.vibrate(20)
+                  ctxMenu.openAt(clientX, clientY, [
+                    { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
+                    { label: 'Archiver la conversation', onClick: archiveDm },
+                    { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
+                  ])
+                }, 500)
+              }}
+              onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+              onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+              onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
               aria-current={pathname === `/dms/${dm.id}` ? 'page' : undefined}
               className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
             >
