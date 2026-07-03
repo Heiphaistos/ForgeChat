@@ -290,7 +290,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4">
         {/* Post original */}
         {data?.post?.content && (
           <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover">
@@ -493,7 +493,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
       </div>
 
       {/* Liste posts */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
         {posts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessagesSquare size={48} className="text-fc-muted opacity-30 mb-4" />

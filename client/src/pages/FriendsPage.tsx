@@ -347,7 +347,7 @@ export default function FriendsPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-4">
 
         {/* ── TAB: Ajouter (form dans En attente) ─── */}
         {tab === 'pending' && (
@@ -419,6 +419,7 @@ export default function FriendsPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Rechercher un ami..."
+                aria-label="Rechercher un ami"
                 inputMode="search" autoComplete="off"
                 className="w-full pl-8 pr-3 py-1.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent placeholder:text-fc-muted"
               />
@@ -451,9 +452,10 @@ export default function FriendsPage() {
         {tab === 'pending' && (
           <div>
             {/* Sous-tabs */}
-            <div className="flex gap-1 mb-4">
+            <div role="group" aria-label="Demandes d'amis" className="flex gap-1 mb-4">
               <button
                 onClick={() => setPendingSubTab('received')}
+                aria-pressed={pendingSubTab === 'received'}
                 className={`px-3 py-1 rounded text-xs font-medium transition
                   ${pendingSubTab === 'received' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
               >
@@ -461,6 +463,7 @@ export default function FriendsPage() {
               </button>
               <button
                 onClick={() => setPendingSubTab('sent')}
+                aria-pressed={pendingSubTab === 'sent'}
                 className={`px-3 py-1 rounded text-xs font-medium transition
                   ${pendingSubTab === 'sent' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
               >
@@ -487,12 +490,16 @@ export default function FriendsPage() {
                           </div>
                         </div>
                         <button onClick={() => accept.mutate(f.id)}
-                          className="p-2 bg-fc-green/20 hover:bg-fc-green/30 text-fc-green rounded-full transition" title="Accepter">
-                          <Check size={16} />
+                          aria-label={`Accepter la demande de ${f.username}`}
+                          title="Accepter"
+                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-green/20 hover:bg-fc-green/30 text-fc-green rounded-full transition">
+                          <Check size={16} aria-hidden />
                         </button>
                         <button onClick={() => decline.mutate(f.id)}
-                          className="p-2 bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition" title="Refuser">
-                          <X size={16} />
+                          aria-label={`Refuser la demande de ${f.username}`}
+                          title="Refuser"
+                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
+                          <X size={16} aria-hidden />
                         </button>
                       </div>
                     ))}
@@ -515,8 +522,10 @@ export default function FriendsPage() {
                           </div>
                         </div>
                         <button onClick={() => decline.mutate(f.id)}
-                          className="p-2 bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition" title="Annuler">
-                          <X size={16} />
+                          aria-label={`Annuler la demande envoyée à ${f.username}`}
+                          title="Annuler"
+                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
+                          <X size={16} aria-hidden />
                         </button>
                       </div>
                     ))}
