@@ -500,6 +500,13 @@ export default function ChannelSidebar() {
             <button
               key={dm.id}
               onClick={() => { nav(`/dms/${dm.id}`); closeSidebar() }}
+              onMouseEnter={() => {
+                qc.prefetchQuery({
+                  queryKey: ['dm_messages', dm.id, null],
+                  queryFn: () => api.get(`/dms/${dm.id}/messages`).then(r => r.data),
+                  staleTime: 30_000,
+                })
+              }}
               onContextMenu={e => ctxMenu.open(e, [
                 { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
                 { label: 'Archiver la conversation', onClick: archiveDm },
@@ -628,6 +635,16 @@ export default function ChannelSidebar() {
     }
   }
 
+  // Prefetch des messages au survol d'un canal texte — navigation instantanée au clic
+  const prefetchChannelMessages = (chId: string) => {
+    if (!serverId) return
+    qc.prefetchQuery({
+      queryKey: ['messages', serverId, chId, null],
+      queryFn: () => api.get(`/servers/${serverId}/channels/${chId}/messages`).then(r => r.data),
+      staleTime: 30_000,
+    })
+  }
+
   const renderChannel = (ch: any, groupChannels: any[], extraClass = '', categoryKey = '') => {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
@@ -703,6 +720,7 @@ export default function ChannelSidebar() {
       >
         <button
           onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
+          onMouseEnter={() => { if (!isVoiceCh && channelId !== ch.id) prefetchChannelMessages(ch.id) }}
           aria-current={channelId === ch.id ? 'page' : undefined}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
             ${isMeConnected

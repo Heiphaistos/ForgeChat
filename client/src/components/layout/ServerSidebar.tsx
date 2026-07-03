@@ -399,7 +399,7 @@ export default function ServerSidebar() {
   }
 
   return (
-    <div className="flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative">
+    <div className="fc-server-rail flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative">
       {/* DMs */}
       <div className="relative w-full flex items-center justify-center">
         <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isDMs ? 'opacity-100' : 'opacity-0 h-0'}`} />

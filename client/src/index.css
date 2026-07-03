@@ -759,6 +759,17 @@ a:focus-visible,
   .fc-chat-input textarea {
     max-height: 4.5rem !important;
   }
+  /* Rail serveurs plus étroit + icônes réduites pour voir plus de serveurs */
+  .fc-server-rail {
+    width: 60px !important;
+    padding-top: 0.375rem !important;
+    padding-bottom: 0.375rem !important;
+    gap: 0.25rem !important;
+  }
+  .fc-server-rail .w-12 {
+    width: 40px !important;
+    height: 40px !important;
+  }
 }
 
 /* Animation "bounce subtil" pour le bouton scroll-to-bottom */
