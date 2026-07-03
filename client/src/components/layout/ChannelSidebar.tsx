@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
   Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff,
+  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -17,6 +17,7 @@ import { useChannelNotif } from '../../store/channelNotif'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
+import { useDraft } from '../../store/chat'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
@@ -212,6 +213,7 @@ export default function ChannelSidebar() {
   const setChannelMuted = useChannelNotif(s => s.setMuted)
   const effectiveMuted = (chId: string) => isChannelMuted(chId) || isServerMuted(serverId ?? '')
   const currentUser = useAuth(s => s.user)
+  const drafts = useDraft(s => s.drafts)
 
   const { data } = useQuery({
     queryKey: ['server', serverId],
@@ -747,6 +749,11 @@ export default function ChannelSidebar() {
             <ChannelIcon type={ch.type} size={16} />
           </span>
           <span className="text-sm truncate flex-1">{ch.name}</span>
+
+          {/* Indicateur brouillon en attente dans ce canal */}
+          {!isVoiceCh && !!drafts[ch.id] && channelId !== ch.id && (
+            <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+          )}
 
           {/* Badge LIVE si stream actif dans ce canal */}
           {hasLiveStream && (

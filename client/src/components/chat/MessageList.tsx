@@ -1059,6 +1059,21 @@ export default function MessageList({
           )
         })()}
 
+        {/* Skeleton pendant le chargement initial (avant que showEmpty ne s'affiche) */}
+        {messages.length === 0 && !showEmpty && !loadingMore && (
+          <div className="px-4 py-6 space-y-5 animate-pulse motion-reduce:animate-none" aria-hidden>
+            {[72, 45, 88, 60, 78].map((w, i) => (
+              <div key={i} className="flex gap-3 items-start">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-fc-hover flex-shrink-0" />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="h-3 rounded bg-fc-hover" style={{ width: `${25 + (i % 3) * 8}%` }} />
+                  <div className="h-3 rounded bg-fc-hover/60" style={{ width: `${w}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* État vide : canal sans messages */}
         {showEmpty && !loadingMore && (
           <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label="Aucun message">

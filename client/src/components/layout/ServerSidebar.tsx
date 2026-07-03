@@ -359,6 +359,13 @@ export default function ServerSidebar() {
         <button
           key={s.id}
           onClick={() => nav(`/servers/${s.id}`)}
+          onMouseEnter={() => {
+            if (!isActive) qc.prefetchQuery({
+              queryKey: ['server', s.id],
+              queryFn: () => api.get(`/servers/${s.id}`).then(r => r.data),
+              staleTime: 60_000,
+            })
+          }}
           onContextMenu={e => handleContextMenu(e, s.id)}
           onTouchStart={e => {
             const { clientX, clientY } = e.touches[0]
