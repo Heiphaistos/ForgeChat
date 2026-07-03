@@ -8,6 +8,8 @@ import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
+import { isToday, isYesterday, format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 interface Props {
   channel: { id: string; name: string; topic?: string }
@@ -312,8 +314,25 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         )}
 
         {/* Réponses */}
-        {replies.map((r) => (
-          <div key={r.id} className="flex gap-3 group">
+        {replies.map((r, ri) => {
+          const prev = replies[ri - 1]
+          const rDate = new Date(r.created_at)
+          const showDateDiv = !prev || new Date(prev.created_at).toDateString() !== rDate.toDateString()
+          const dateLabel = isToday(rDate) ? "Aujourd'hui"
+            : isYesterday(rDate) ? 'Hier'
+            : format(rDate, 'EEEE d MMMM yyyy', { locale: fr })
+          return (
+          <div key={r.id}>
+          {showDateDiv && (
+            <div className="flex items-center gap-3 my-3 select-none" role="separator" aria-label={dateLabel}>
+              <div className="flex-1 h-px bg-fc-hover/70" />
+              <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
+                {dateLabel}
+              </span>
+              <div className="flex-1 h-px bg-fc-hover/70" />
+            </div>
+          )}
+          <div className="flex gap-3 group">
             <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
               {r.author.avatar
                 ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -326,7 +345,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 </span>
                 <span className="text-xs text-fc-muted">{formatShortDate(r.created_at)}</span>
                 {r.user_id === user?.id && editingReplyId !== r.id && (
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
+                  <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
                     <button
                       onClick={() => { setEditingReplyId(r.id); setEditContent(r.content) }}
                       className="p-1 text-fc-muted hover:text-white rounded transition"
@@ -381,7 +400,9 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               )}
             </div>
           </div>
-        ))}
+          </div>
+          )
+        })}
 
         {replies.length === 0 && (
           <div className="text-center text-fc-muted py-8 text-sm">Aucune réponse. Soyez le premier !</div>
