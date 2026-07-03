@@ -398,6 +398,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Nom du serveur</label>
                   <input value={name} onChange={e => setName(e.target.value)} maxLength={100}
+                    enterKeyHint="done"
+                    autoCapitalize="sentences"
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
                   />
                 </div>
@@ -433,6 +435,10 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                       value={bannerUrl}
                       onChange={e => setBannerUrl(e.target.value)}
                       placeholder="https://... (URL de l'image)"
+                      enterKeyHint="done"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoComplete="off"
                       className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                     />
                     <input ref={bannerInputRef} type="file" accept="image/*" className="hidden"
@@ -542,6 +548,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     <input value={vanityUrl} onChange={e => setVanityUrl(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                       maxLength={30}
                       placeholder="mon-serveur"
+                      enterKeyHint="done"
+                      autoCapitalize="none"
+                      autoComplete="off"
                       className="w-full pl-24 pr-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-accent"
                     />
                   </div>
@@ -631,6 +640,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     <input value={emojiName} onChange={e => setEmojiName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                       placeholder="nom_emoji (alphanum + _)"
                       maxLength={32}
+                      enterKeyHint="done"
+                      autoCapitalize="none"
                       className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                     />
                     <button
@@ -696,6 +707,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     <input value={newBotName} onChange={e => setNewBotName(e.target.value)}
                       placeholder="Nom du bot"
                       maxLength={32}
+                      enterKeyHint="done"
+                      autoCapitalize="sentences"
                       className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                       onKeyDown={e => { if (e.key === 'Enter' && newBotName.trim()) createBot.mutate(newBotName.trim()) }}
                     />

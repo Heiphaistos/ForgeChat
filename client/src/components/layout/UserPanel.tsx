@@ -115,6 +115,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onClick={copyId}
             className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-fc-muted hover:text-white bg-fc-channel hover:bg-fc-hover rounded transition flex-shrink-0"
             title="Copier l'ID"
+            aria-label="Copier l'identifiant utilisateur"
           >
             ID
           </button>
@@ -154,6 +155,8 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onChange={e => setCustomEmoji(e.target.value)}
             placeholder="😊"
             maxLength={2}
+            enterKeyHint="next"
+            aria-label="Emoji du statut"
             className="w-10 fc-input text-center text-base py-1 flex-shrink-0"
           />
           <input
@@ -162,6 +165,10 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onChange={e => setCustomStatus(e.target.value)}
             placeholder="Ex : En réunion"
             maxLength={128}
+            enterKeyHint="send"
+            autoCapitalize="sentences"
+            autoComplete="off"
+            aria-label="Texte du statut personnalisé"
             className="flex-1 fc-input text-xs py-1"
             onKeyDown={e => { if (e.key === 'Enter') saveCustomStatus() }}
           />
