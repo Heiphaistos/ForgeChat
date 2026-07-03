@@ -57,7 +57,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
         {isLoading && (
           <div className="text-center text-fc-muted text-sm py-6">Chargement...</div>
         )}

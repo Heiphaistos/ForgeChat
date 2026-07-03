@@ -187,7 +187,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />

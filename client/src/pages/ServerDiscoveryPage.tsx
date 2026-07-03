@@ -203,7 +203,7 @@ export default function ServerDiscoveryPage() {
   }, [servers, query, sort])
 
   return (
-    <div className="flex-1 bg-fc-chat overflow-y-auto">
+    <div className="flex-1 bg-fc-chat overflow-y-auto overscroll-contain">
       {/* Bouton retour mobile */}
       <div className="flex items-center gap-2 px-4 py-2 md:hidden border-b border-fc-hover flex-shrink-0">
         <button

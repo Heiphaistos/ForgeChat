@@ -193,7 +193,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
           <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
         </div>
 
-        <div id="cp-listbox" role="listbox" aria-label="Résultats" ref={listRef} className="max-h-96 overflow-y-auto py-2">
+        <div id="cp-listbox" role="listbox" aria-label="Résultats" ref={listRef} className="max-h-96 overflow-y-auto overscroll-contain py-2">
           {allItems.length === 0 && <div role="status" className="px-4 py-8 text-center text-fc-muted text-sm">Aucun résultat</div>}
           {Object.entries(groups).map(([category, groupItems]) => (
             <div key={category} role="group" aria-label={category}>

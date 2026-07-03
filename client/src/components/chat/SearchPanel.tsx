@@ -98,7 +98,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-2">
         {!search && (
           <div className="text-center py-8">
             <Search size={28} className="mx-auto mb-2 text-fc-muted opacity-40" aria-hidden />

@@ -570,7 +570,7 @@ export default function DMPage() {
       {/* E2E mode: custom encrypted chat area */}
       {e2eMode ? (
         <>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3">
             {e2eMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-fc-muted gap-3 pt-12">
                 <Lock size={40} className="text-green-500/60" />

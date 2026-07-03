@@ -48,7 +48,7 @@ export default function AdminPage() {
   const maxMsgs = Math.max(1, ...(stats?.messages_per_day.map(d => d.count) ?? [1]))
 
   return (
-    <div className="flex-1 overflow-y-auto bg-fc-bg">
+    <div className="flex-1 overflow-y-auto overscroll-contain bg-fc-bg">
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px] sticky top-0 bg-fc-bg z-10">
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"

@@ -45,7 +45,7 @@ export default function ExplorePage() {
   })
 
   return (
-    <div className="flex-1 bg-fc-chat overflow-y-auto">
+    <div className="flex-1 bg-fc-chat overflow-y-auto overscroll-contain">
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-10">
         {/* Bouton retour mobile */}
         <button

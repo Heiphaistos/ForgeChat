@@ -135,7 +135,7 @@ export default function SettingsPage() {
         role="region"
         aria-label={currentLabel}
         className={`
-          flex-1 overflow-y-auto
+          flex-1 overflow-y-auto overscroll-contain
           ${!mobileShowContent ? 'hidden md:block' : 'block'}
         `}
       >

@@ -256,7 +256,7 @@ export default function ServerAdminPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         <TabErrorBoundary key={tab}>
           {tab === 'stats'      && <ServerStatsPage serverId={serverId} />}
           {tab === 'audit'      && <AuditLogPage serverId={serverId} />}

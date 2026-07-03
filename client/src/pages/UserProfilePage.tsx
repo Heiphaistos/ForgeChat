@@ -189,7 +189,7 @@ export default function UserProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="flex-1 bg-fc-chat overflow-y-auto p-6 max-w-2xl mx-auto w-full">
+      <div className="flex-1 bg-fc-chat overflow-y-auto overscroll-contain p-6 max-w-2xl mx-auto w-full">
         <ProfileSkeleton />
       </div>
     )
@@ -216,7 +216,7 @@ export default function UserProfilePage() {
   const isSelf = me?.id === user.id
 
   return (
-    <div className="flex-1 bg-fc-chat overflow-y-auto">
+    <div className="flex-1 bg-fc-chat overflow-y-auto overscroll-contain">
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Bouton retour */}
         <button
