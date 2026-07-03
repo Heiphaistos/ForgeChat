@@ -249,14 +249,16 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
                       <button
                         onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
-                        className="p-0.5 text-fc-muted hover:text-white rounded transition"
+                        className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
                         title="Modifier"
-                      ><Pencil size={11} /></button>
+                        aria-label="Modifier"
+                      ><Pencil size={12} /></button>
                       <button
                         onClick={() => deleteMessage.mutate(msg.id)}
-                        className="p-0.5 text-fc-muted hover:text-red-400 rounded transition"
+                        className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
                         title="Supprimer"
-                      ><Trash2 size={11} /></button>
+                        aria-label="Supprimer"
+                      ><Trash2 size={12} /></button>
                     </div>
                   )}
                 </div>

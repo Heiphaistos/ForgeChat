@@ -277,7 +277,7 @@ export default function FriendsPage() {
           <button
             onClick={e => { e.stopPropagation(); openDm(f.friend_id) }}
             title="Envoyer un message"
-            className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
+            className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
           >
             <MessageCircle size={16} />
           </button>
@@ -507,13 +507,13 @@ export default function FriendsPage() {
                         <button onClick={() => accept.mutate(f.id)}
                           aria-label={`Accepter la demande de ${f.username}`}
                           title="Accepter"
-                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-green/20 hover:bg-fc-green/30 text-fc-green rounded-full transition">
+                          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-green/20 hover:bg-fc-green/30 text-fc-green rounded-full transition">
                           <Check size={16} aria-hidden />
                         </button>
                         <button onClick={() => decline.mutate(f.id)}
                           aria-label={`Refuser la demande de ${f.username}`}
                           title="Refuser"
-                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
+                          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
                           <X size={16} aria-hidden />
                         </button>
                       </div>
@@ -539,7 +539,7 @@ export default function FriendsPage() {
                         <button onClick={() => decline.mutate(f.id)}
                           aria-label={`Annuler la demande envoyée à ${f.username}`}
                           title="Annuler"
-                          className="p-2.5 min-w-[40px] min-h-[40px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
+                          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
                           <X size={16} aria-hidden />
                         </button>
                       </div>
