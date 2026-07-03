@@ -115,6 +115,16 @@ export default function DMPage() {
   const partnerId = dmInfo?.other_user_id ?? ''
   const status = partnerId ? getStatus(partnerId) : 'offline'
 
+  useEffect(() => {
+    if (partnerName === 'Utilisateur') return
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}@${partnerName} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [partnerName])
+
   const {
     callState, callType, localStream, remoteStream, micMuted, camOff,
     startCall, acceptCall, hangup, toggleMic, toggleCam,

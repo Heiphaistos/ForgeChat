@@ -93,6 +93,16 @@ export default function GroupDMPage() {
     enabled: !!groupId,
   })
 
+  useEffect(() => {
+    if (!group?.name) return
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = `${prefix}${group.name} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [group?.name])
+
   const { data: initialMessages } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId, highlightMsgId ?? null],
     queryFn: async () => {
