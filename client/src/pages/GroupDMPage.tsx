@@ -690,7 +690,11 @@ export default function GroupDMPage() {
                                   <img
                                     src={att.url}
                                     alt={att.filename}
+                                    loading="lazy"
+                                    decoding="async"
                                     className="max-w-[200px] max-h-[200px] rounded-xl object-cover cursor-pointer hover:opacity-90 transition"
+                                    style={{ opacity: 0, transition: 'opacity 0.25s ease' }}
+                                    onLoad={e => { e.currentTarget.style.opacity = '1' }}
                                   />
                                 </a>
                               ) : (
