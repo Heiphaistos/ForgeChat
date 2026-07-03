@@ -55,6 +55,8 @@ export default function LoginPage() {
                   autoFocus
                   autoComplete="email"
                   placeholder="email@exemple.com"
+                  enterKeyHint="next"
+                  inputMode="email"
                   className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
                 />
               </div>
@@ -68,6 +70,7 @@ export default function LoginPage() {
                     required
                     autoComplete="current-password"
                     placeholder="••••••••"
+                    enterKeyHint="done"
                     className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
                   />
                   <button
@@ -98,6 +101,7 @@ export default function LoginPage() {
                 autoFocus
                 placeholder="000000"
                 autoComplete="one-time-code"
+                enterKeyHint="done"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-center text-xl tracking-widest"
               />
               <button

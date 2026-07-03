@@ -394,6 +394,7 @@ export default function ServerSidebar() {
         <button
           onClick={() => { nav('/friends'); closeSidebar() }}
           aria-current={isDMs ? 'page' : undefined}
+          aria-label="Messages directs"
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isDMs ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
           title="Messages directs"
         >
@@ -407,6 +408,7 @@ export default function ServerSidebar() {
         <button
           onClick={() => { nav('/saved'); closeSidebar() }}
           aria-current={isSaved ? 'page' : undefined}
+          aria-label="Messages sauvegardés"
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isSaved ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
           title="Messages sauvegardés"
         >
@@ -497,6 +499,7 @@ export default function ServerSidebar() {
         onClick={() => { nav('/explore'); closeSidebar() }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
         title="Explorer les serveurs"
+        aria-label="Explorer les serveurs"
       >
         <Compass size={20} />
       </button>
@@ -506,6 +509,7 @@ export default function ServerSidebar() {
         onClick={() => setShowCreate(true)}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-green rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-green hover:text-white"
         title="Créer un serveur"
+        aria-label="Créer un serveur"
       >
         <Plus size={24} />
       </button>
@@ -515,6 +519,7 @@ export default function ServerSidebar() {
         onClick={() => setShowTemplateModal(true)}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
         title="Utiliser un template"
+        aria-label="Créer depuis un template"
       >
         <LayoutTemplate size={20} />
       </button>

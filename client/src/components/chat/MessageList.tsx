@@ -893,6 +893,8 @@ export default function MessageList({
                     }}
                     className={`p-1.5 rounded hover:bg-fc-hover transition ${translations[msg.id] ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
                     title={translations[msg.id] ? 'Masquer la traduction' : 'Traduire en français'}
+                    aria-label={translations[msg.id] ? 'Masquer la traduction' : 'Traduire le message en français'}
+                    aria-pressed={!!translations[msg.id]}
                     disabled={translatingId === msg.id}
                   >
                     {translatingId === msg.id ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}

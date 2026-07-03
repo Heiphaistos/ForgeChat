@@ -66,6 +66,9 @@ export default function RegisterPage() {
               autoFocus
               autoComplete="username"
               placeholder="tonpseudo"
+              enterKeyHint="next"
+              autoCapitalize="none"
+              autoCorrect="off"
               className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
             />
           </div>
@@ -78,6 +81,8 @@ export default function RegisterPage() {
               required
               autoComplete="email"
               placeholder="email@exemple.com"
+              enterKeyHint="next"
+              inputMode="email"
               className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
             />
           </div>
@@ -101,6 +106,7 @@ export default function RegisterPage() {
                 minLength={8}
                 autoComplete="new-password"
                 placeholder="8 caractères minimum"
+                enterKeyHint="next"
                 className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
               />
               <button
@@ -136,6 +142,7 @@ export default function RegisterPage() {
               required
               autoComplete="new-password"
               placeholder="Répéter le mot de passe"
+              enterKeyHint="done"
               className={`w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 ${
                 passwordMismatch ? 'focus:ring-red-500 ring-1 ring-red-500/50' : 'focus:ring-fc-accent'
               }`}
