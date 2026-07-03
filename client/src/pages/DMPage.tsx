@@ -421,7 +421,7 @@ export default function DMPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={`flex items-center gap-3 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] transition-colors ${
+      <div className={`fc-chat-header flex items-center gap-3 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] transition-colors ${
         e2eMode ? 'border-green-600/40 bg-green-900/10' : 'border-fc-bg'
       }`}>
         <button

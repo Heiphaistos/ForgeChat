@@ -409,7 +409,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     <div className="relative flex h-full overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header canal */}
-        <div className={`flex items-center gap-2 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] ${
+        <div className={`fc-chat-header flex items-center gap-2 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] ${
           isSplit ? 'border-fc-accent/30 bg-fc-accent/5' : 'border-fc-bg'
         }`}>
           {/* Bouton "retour à la liste des canaux" sur mobile */}

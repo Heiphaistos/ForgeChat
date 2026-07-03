@@ -166,6 +166,26 @@ export default function MessageList({
     }
   }, [messages.length])
 
+  // Clavier virtuel mobile : quand le viewport rétrécit (clavier ouvert) et que
+  // l'utilisateur était en bas, rester collé en bas pour ne pas masquer les derniers messages
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    let lastHeight = vv.height
+    const onResize = () => {
+      const shrunk = vv.height < lastHeight - 50
+      lastHeight = vv.height
+      if (shrunk && isAtBottom.current) {
+        requestAnimationFrame(() => {
+          const el = containerRef.current
+          if (el) el.scrollTop = el.scrollHeight
+        })
+      }
+    }
+    vv.addEventListener('resize', onResize)
+    return () => vv.removeEventListener('resize', onResize)
+  }, [])
+
   useEffect(() => {
     if (!initialScrollDone.current) return
     if (isAtBottom.current) {

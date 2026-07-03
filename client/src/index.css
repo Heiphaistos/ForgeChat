@@ -745,6 +745,22 @@ a:focus-visible,
   .panel-slide-right { animation: none; }
 }
 
+/* Mode compact en paysage téléphone : hauteur écran très réduite (~360px),
+   on récupère de l'espace vertical sur le header et la zone d'input du tchat */
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
+  .fc-chat-header {
+    min-height: 38px !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+  .fc-chat-input {
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom)) !important;
+  }
+  .fc-chat-input textarea {
+    max-height: 4.5rem !important;
+  }
+}
+
 /* Animation "bounce subtil" pour le bouton scroll-to-bottom */
 @keyframes bounce-subtle {
   0%, 100% { transform: translateX(-50%) translateY(0); }

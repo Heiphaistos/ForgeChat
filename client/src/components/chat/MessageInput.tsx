@@ -731,7 +731,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const hasVideos = files.some(f => isVideo(f.file))
 
   return (
-    <div {...getRootProps()} className={`px-2 md:px-4 pb-2 md:pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`} style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+    <div {...getRootProps()} className={`fc-chat-input px-2 md:px-4 pb-2 md:pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`} style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       <input {...getInputProps()} />
 
       {/* Barre d'édition (↑ sur input vide) */}
