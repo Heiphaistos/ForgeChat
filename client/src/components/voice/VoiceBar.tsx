@@ -38,7 +38,7 @@ export default function VoiceBar() {
         <button
           onClick={leave}
           title="Quitter le vocal"
-          className="p-1 rounded hover:bg-red-500/20 text-fc-muted hover:text-red-400 transition flex-shrink-0"
+          className="p-2 md:p-1 rounded hover:bg-red-500/20 text-fc-muted hover:text-red-400 transition flex-shrink-0 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 flex items-center justify-center"
         >
           <PhoneOff size={14} />
         </button>
@@ -93,7 +93,7 @@ function VoiceBarBtn({
   accent?: boolean
   title?: string
 }) {
-  const base = 'flex-1 flex items-center justify-center p-1.5 rounded transition'
+  const base = 'flex-1 flex items-center justify-center p-2.5 md:p-1.5 min-h-[36px] md:min-h-0 rounded transition'
   const cls = danger
     ? `${base} text-red-400 hover:bg-red-500/20`
     : accent

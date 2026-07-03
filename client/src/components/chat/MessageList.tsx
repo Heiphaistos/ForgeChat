@@ -628,13 +628,13 @@ export default function MessageList({
                     {msg.attachments?.map((att: any) => (
                       <div key={att.id} className="mt-1.5">
                         {isImage(att.content_type) ? (
-                          <div className="relative inline-block group/img">
+                          <div className="relative inline-block group/img max-w-full">
                             <img
                               src={att.url}
                               alt={att.filename}
                               loading="lazy"
                               decoding="async"
-                              className="max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
+                              className="max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
                               onClick={() => {
                                 const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
                                 if (imgs.length > 0) setLightbox({ images: imgs, index: imgs.indexOf(att.url) })
@@ -650,7 +650,7 @@ export default function MessageList({
                             )}
                           </div>
                         ) : isVideo(att.content_type) ? (
-                          <div className="relative max-w-sm">
+                          <div className="relative max-w-full sm:max-w-sm">
                             <video
                               src={att.url}
                               controls
@@ -671,7 +671,7 @@ export default function MessageList({
                           <a
                             href={att.url}
                             download={att.filename}
-                            className="flex items-center gap-2 bg-fc-input px-3 py-2 rounded max-w-xs hover:bg-fc-hover transition"
+                            className="flex items-center gap-2 bg-fc-input px-3 py-2 rounded max-w-full sm:max-w-xs hover:bg-fc-hover transition"
                           >
                             <span className="text-fc-accent text-sm">{att.filename}</span>
                             <span className="text-xs text-fc-muted">{formatBytes(att.size)}</span>
