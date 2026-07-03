@@ -112,8 +112,8 @@ function EventPopover({ event, anchorRef, onClose }: EventPopoverProps) {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className="text-sm font-semibold text-white leading-snug">{event.title}</span>
-        <button onClick={onClose} className="text-fc-muted hover:text-white flex-shrink-0 p-0.5">
-          <X size={14} />
+        <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white flex-shrink-0 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-fc-hover transition">
+          <X size={14} aria-hidden />
         </button>
       </div>
       <div className="text-xs text-fc-muted space-y-1">
@@ -183,19 +183,21 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
   return (
     <div className="flex flex-col h-full select-none">
       {/* Navigation mois */}
-      <div className="flex items-center justify-between px-1 mb-3">
+      <div className="flex items-center justify-between px-1 mb-3" role="navigation" aria-label="Navigation du calendrier">
         <button
           onClick={prevMonth}
-          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+          aria-label="Mois précédent"
+          className="p-1.5 min-w-[44px] min-h-[44px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={16} aria-hidden />
         </button>
-        <span className="text-sm font-semibold text-white capitalize">{monthLabel}</span>
+        <span className="text-sm font-semibold text-white capitalize" aria-live="polite" aria-atomic="true">{monthLabel}</span>
         <button
           onClick={nextMonth}
-          className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+          aria-label="Mois suivant"
+          className="p-1.5 min-w-[44px] min-h-[44px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={16} aria-hidden />
         </button>
       </div>
 

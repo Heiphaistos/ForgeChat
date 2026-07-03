@@ -49,8 +49,14 @@ function TypingIndicator({ users }: { users: TypingUser[] }) {
       : `${users.map(u => u.username).join(', ')} sont en train d'écrire...`
 
   return (
-    <div className="px-4 py-1 text-xs text-fc-muted flex items-center gap-2 flex-shrink-0 h-5">
-      <span className="flex gap-0.5 items-center">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label={label}
+      className="px-4 py-1 text-xs text-fc-muted flex items-center gap-2 flex-shrink-0 h-5"
+    >
+      <span className="flex gap-0.5 items-center" aria-hidden>
         {[0, 1, 2].map(i => (
           <span
             key={i}
@@ -59,7 +65,7 @@ function TypingIndicator({ users }: { users: TypingUser[] }) {
           />
         ))}
       </span>
-      <span className="truncate">{label}</span>
+      <span className="truncate" aria-hidden>{label}</span>
     </div>
   )
 }

@@ -701,10 +701,13 @@ function CreateServerModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={onClose}>
       <div
-        className={`bg-fc-channel rounded-xl shadow-2xl overflow-hidden w-[calc(100vw-2rem)] ${step === 'template-grid' ? 'md:w-[560px]' : 'md:w-[400px]'}`}
+        className={`bg-fc-channel rounded-xl shadow-2xl w-full max-h-[90dvh] overflow-y-auto ${step === 'template-grid' ? 'md:w-[560px]' : 'md:w-[400px]'}`}
         onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Créer un serveur"
       >
         {/* ── Étape 1 : Choix ── */}
         {step === 'choice' && (
