@@ -714,7 +714,7 @@ export default function MessageList({
                               }}
                               onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
                               onMouseLeave={() => setReactionPopup(null)}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all duration-150
+                              className={`flex items-center gap-1 px-2 py-1 md:py-0.5 rounded-full text-xs border transition-all duration-150
                                 hover:scale-110 hover:shadow-md
                                 ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
                                 ${isPopping ? 'animate-bounce' : ''}`}
@@ -732,7 +732,7 @@ export default function MessageList({
                         <div className="relative">
                           <button
                             onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); setEmojiPickerFor(null) }}
-                            className="flex items-center justify-center w-7 h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
+                            className="flex items-center justify-center w-7 h-[28px] md:h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
                             title="Ajouter une réaction"
                           >
                             +

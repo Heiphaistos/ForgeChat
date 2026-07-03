@@ -981,6 +981,11 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           rows={1}
           className="flex-1 min-w-0 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
+          enterKeyHint="send"
+          spellCheck
+          autoComplete="off"
+          autoCorrect="on"
+          autoCapitalize="sentences"
         />
         </div>
 

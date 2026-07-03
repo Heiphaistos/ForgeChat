@@ -39,9 +39,19 @@
 
 * { box-sizing: border-box; }
 
-/* Empêche le double-tap zoom sur les éléments interactifs sans bloquer le scroll */
+/* Empêche le double-tap zoom + supprime le flash de tap iOS */
 button, a, [role="button"], label, select, summary {
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Feedback tactile sur pointer coarse (touch) — uniquement si pas de :hover disponible */
+@media (pointer: coarse) {
+  button:not(:disabled):active,
+  [role="button"]:not(:disabled):active {
+    opacity: 0.75;
+    transition: opacity 0.08s;
+  }
 }
 
 html {
