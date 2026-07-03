@@ -139,6 +139,13 @@ export default function MessageList({
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
+  // État vide affiché après 400ms pour éviter le flash au chargement initial
+  const [showEmpty, setShowEmpty] = useState(false)
+  useEffect(() => {
+    if (messages.length > 0) { setShowEmpty(false); return }
+    const t = setTimeout(() => setShowEmpty(true), 400)
+    return () => clearTimeout(t)
+  }, [messages.length])
   const loadingMoreRef = useRef(false)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupState | null>(null)
@@ -1010,6 +1017,17 @@ export default function MessageList({
             </div>
           )
         })()}
+
+        {/* État vide : canal sans messages */}
+        {showEmpty && !loadingMore && (
+          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label="Aucun message">
+            <div className="w-16 h-16 rounded-2xl bg-fc-accent/20 flex items-center justify-center text-3xl" aria-hidden>
+              💬
+            </div>
+            <p className="text-base font-semibold text-white">Aucun message ici… pour l'instant.</p>
+            <p className="text-sm text-fc-muted">Soyez le premier à envoyer un message !</p>
+          </div>
+        )}
 
         <div ref={bottomRef} />
       </div>

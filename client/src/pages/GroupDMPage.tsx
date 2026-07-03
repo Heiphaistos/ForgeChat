@@ -11,6 +11,8 @@ import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import MessageInput from '../components/chat/MessageInput'
 import { useFormatDate } from '../hooks/useFormatDate'
+import { isToday, isYesterday, format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
 interface GDMReaction {
   emoji: string
@@ -575,10 +577,26 @@ export default function GroupDMPage() {
             </div>
           )}
 
-          {allMessages.map(msg => {
+          {allMessages.map((msg, i) => {
             const isMe = msg.sender_id === user?.id
+            const prev = allMessages[i - 1]
+            const msgDate = new Date(msg.created_at)
+            const showDateDivider = !prev || new Date(prev.created_at).toDateString() !== msgDate.toDateString()
+            const dateLabel = isToday(msgDate) ? "Aujourd'hui"
+              : isYesterday(msgDate) ? 'Hier'
+              : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
             return (
-              <div key={msg.id} id={`gdm-msg-${msg.id}`} className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}>
+              <div key={msg.id}>
+              {showDateDivider && (
+                <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel}>
+                  <div className="flex-1 h-px bg-fc-hover/70" />
+                  <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
+                    {dateLabel}
+                  </span>
+                  <div className="flex-1 h-px bg-fc-hover/70" />
+                </div>
+              )}
+              <div id={`gdm-msg-${msg.id}`} className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}>
                 <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {msg.sender_avatar
                     ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -716,6 +734,7 @@ export default function GroupDMPage() {
                     {formatShortDate(msg.created_at)}
                   </span>
                 </div>
+              </div>
               </div>
             )
           })}
