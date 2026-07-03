@@ -95,11 +95,15 @@ export function useContextMenu() {
     setMenu({ x: e.clientX, y: e.clientY, items })
   }
 
+  const openAt = (x: number, y: number, items: ContextMenuEntry[]) => {
+    setMenu({ x, y, items })
+  }
+
   const close = () => setMenu(null)
 
   const node = menu ? (
     <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={close} />
   ) : null
 
-  return { open, close, node }
+  return { open, openAt, close, node }
 }

@@ -228,6 +228,7 @@ export default function ChannelSidebar() {
   })
 
   const ctxMenu = useContextMenu()
+  const chLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const roomParticipants = useVoice(s => s.roomParticipants)
   const activeStreams = useVoice(s => s.activeStreams)
@@ -644,6 +645,32 @@ export default function ChannelSidebar() {
             ] : []),
           ])
         }}
+        onTouchStart={e => {
+          const { clientX, clientY } = e.touches[0]
+          const channelMuted = isChannelMuted(ch.id)
+          chLongPressRef.current = setTimeout(() => {
+            chLongPressRef.current = null
+            if ('vibrate' in navigator) navigator.vibrate(20)
+            ctxMenu.openAt(clientX, clientY, [
+              { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
+              { label: channelMuted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
+                const next = !channelMuted
+                setChannelMuted(ch.id, next)
+                api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
+              }},
+              { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+              { separator: true },
+              { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
+              ...(isOwnerOrAdmin ? [
+                { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+                { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+              ] : []),
+            ])
+          }, 500)
+        }}
+        onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+        onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+        onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
       >
         <button
           onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
