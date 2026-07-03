@@ -86,21 +86,27 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
         onChange={e => setName(e.target.value)}
         placeholder="Nom du sticker"
         maxLength={50}
+        aria-label="Nom du sticker"
         className="w-full fc-input text-xs"
       />
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={file ? `Fichier sélectionné : ${file.name}` : 'Sélectionner un fichier image (PNG, WEBP ou GIF, max 512 Ko)'}
         onClick={() => fileRef.current?.click()}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click() }}
         className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-fc-hover
           text-fc-muted text-xs cursor-pointer hover:border-fc-accent hover:text-fc-accent transition"
       >
-        <Upload size={13} />
-        <span className="truncate">{file ? file.name : 'PNG / WEBP / GIF — max 512KB'}</span>
+        <Upload size={13} aria-hidden />
+        <span className="truncate" aria-hidden>{file ? file.name : 'PNG / WEBP / GIF — max 512KB'}</span>
         {file && (
           <button
             onClick={e => { e.stopPropagation(); setFile(null) }}
+            aria-label="Retirer le fichier sélectionné"
             className="ml-auto text-fc-muted hover:text-white"
           >
-            <X size={11} />
+            <X size={11} aria-hidden />
           </button>
         )}
       </div>
@@ -114,9 +120,10 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
       <button
         onClick={() => upload.mutate()}
         disabled={upload.isPending || !name.trim() || !file}
+        aria-busy={upload.isPending}
         className="w-full btn-primary text-xs disabled:opacity-40 flex items-center justify-center gap-1"
       >
-        {upload.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+        {upload.isPending ? <Loader2 size={12} aria-hidden className="animate-spin" /> : null}
         {upload.isPending ? 'Upload...' : 'Uploader'}
       </button>
     </div>
@@ -147,9 +154,11 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       onClick={e => e.stopPropagation()}
     >
       {/* Tabs */}
-      <div className="flex border-b border-fc-hover">
+      <div role="tablist" aria-label="Type de stickers" className="flex border-b border-fc-hover">
         {serverId && (
           <button
+            role="tab"
+            aria-selected={tab === 'server'}
             onClick={() => setTab('server')}
             className={`flex-1 py-2 text-xs font-semibold transition
               ${tab === 'server' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -158,6 +167,8 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           </button>
         )}
         <button
+          role="tab"
+          aria-selected={tab === 'global'}
           onClick={() => setTab('global')}
           className={`flex-1 py-2 text-xs font-semibold transition
             ${tab === 'global' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -170,11 +181,11 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       {tab === 'server' && serverId && (
         <>
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={18} className="animate-spin text-fc-muted" />
+            <div role="status" aria-label="Chargement des stickers" className="flex items-center justify-center py-8">
+              <Loader2 size={18} aria-hidden className="animate-spin text-fc-muted" />
             </div>
           ) : serverStickers.length === 0 ? (
-            <div className="py-6 text-center text-xs text-fc-muted px-4">
+            <div role="status" className="py-6 text-center text-xs text-fc-muted px-4">
               Aucun sticker — les admins peuvent en ajouter via le bouton ci-dessous.
             </div>
           ) : (
@@ -185,14 +196,14 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
                     onClick={() => pick({ id: ss.id, name: ss.name, url: ss.url, category: 'server' })}
                     onMouseEnter={() => setHovered(ss.id)}
                     onMouseLeave={() => setHovered(null)}
-                    title={ss.name}
+                    aria-label={ss.name}
                     className="w-14 h-14 rounded-xl border border-fc-hover bg-fc-bg overflow-hidden
                       hover:border-fc-accent hover:scale-105 active:scale-95 transition-transform"
                   >
                     <img src={ss.url} alt={ss.name} className="w-full h-full object-contain" loading="lazy" />
                   </button>
                   {hovered === ss.id && (
-                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-fc-bg border border-fc-hover
+                    <div aria-hidden className="absolute -top-7 left-1/2 -translate-x-1/2 bg-fc-bg border border-fc-hover
                       rounded px-2 py-0.5 text-xs text-white whitespace-nowrap pointer-events-none z-10 shadow">
                       {ss.name}
                     </div>
@@ -205,14 +216,15 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           <div className="border-t border-fc-hover px-2 py-1.5 flex items-center gap-2">
             <button
               onClick={() => setShowUpload(p => !p)}
+              aria-expanded={showUpload}
+              aria-label="Ajouter un sticker (admin/owner)"
               className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition
                 ${showUpload ? 'text-fc-accent bg-fc-accent/10' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-              title="Ajouter un sticker (admin/owner)"
             >
-              <Upload size={12} />
-              <span>Ajouter</span>
+              <Upload size={12} aria-hidden />
+              <span aria-hidden>Ajouter</span>
             </button>
-            <span className="text-xs text-fc-muted ml-auto">{serverStickers.length}/60</span>
+            <span className="text-xs text-fc-muted ml-auto" aria-hidden>{serverStickers.length}/60</span>
           </div>
 
           {showUpload && <UploadPanel serverId={serverId} onDone={() => setShowUpload(false)} />}
@@ -222,10 +234,12 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       {/* ── Global tab ── */}
       {tab === 'global' && (
         <>
-          <div className="flex border-b border-fc-hover overflow-x-auto">
+          <div role="tablist" aria-label="Catégorie de stickers" className="flex border-b border-fc-hover overflow-x-auto">
             {GLOBAL_CATEGORIES.map(cat => (
               <button
                 key={cat}
+                role="tab"
+                aria-selected={globalCat === cat}
                 onClick={() => setGlobalCat(cat)}
                 className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium transition
                   ${globalCat === cat ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -239,12 +253,12 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
               <button
                 key={sticker.id}
                 onClick={() => pick(sticker)}
-                title={sticker.name}
+                aria-label={sticker.name}
                 className="flex items-center justify-center w-12 h-12 rounded-xl border border-fc-hover
                   bg-gradient-to-br from-fc-hover/40 to-fc-hover/20
                   hover:scale-110 active:scale-95 transition-transform cursor-pointer"
               >
-                <span style={{ fontSize: '1.75rem', lineHeight: 1 }}>{sticker.emoji}</span>
+                <span aria-hidden style={{ fontSize: '1.75rem', lineHeight: 1 }}>{sticker.emoji}</span>
               </button>
             ))}
           </div>

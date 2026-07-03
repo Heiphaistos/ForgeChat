@@ -85,16 +85,26 @@ export default function MembersTab({ serverId }: { serverId: string }) {
 
   const nonEveryoneRoles = roles.filter((r: any) => !r.is_everyone)
 
+  const memberStatusLabel = (status: string) => {
+    switch (status) {
+      case 'online': return 'En ligne'
+      case 'idle': return 'Absent'
+      case 'dnd': return 'Ne pas déranger'
+      default: return 'Hors ligne'
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Rechercher un membre..."
+          aria-label="Rechercher un membre"
           inputMode="search" autoComplete="off"
           className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent"
         />
-        <span className="text-fc-muted text-sm">{filtered.length} membre(s)</span>
+        <span aria-live="polite" aria-atomic="true" className="text-fc-muted text-sm">{filtered.length} membre(s)</span>
       </div>
 
       <div className="space-y-1">
@@ -102,19 +112,27 @@ export default function MembersTab({ serverId }: { serverId: string }) {
           <div key={m.user_id} className="bg-fc-channel rounded-lg overflow-hidden">
             {/* Ligne principale */}
             <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={expandedId === m.user_id}
+              aria-label={`${m.username}${m.nickname ? ` (${m.nickname})` : ''}${m.is_owner ? ', propriétaire' : ''} — ${memberStatusLabel(m.status)}`}
               className="flex items-center gap-3 p-3 cursor-pointer hover:bg-fc-hover transition"
               onClick={() => setExpandedId(expandedId === m.user_id ? null : m.user_id)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === m.user_id ? null : m.user_id) } }}
             >
-              <div className="relative flex-shrink-0">
+              <div className="relative flex-shrink-0" aria-hidden>
                 <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-white font-bold text-sm overflow-hidden">
                   {m.avatar
                     ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                    : m.username.charAt(0).toUpperCase()}
+                    : <span aria-hidden>{m.username.charAt(0).toUpperCase()}</span>}
                 </div>
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel
+                <div
+                  aria-label={memberStatusLabel(m.status)}
+                  title={memberStatusLabel(m.status)}
+                  className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel
                   ${m.status === 'online' ? 'bg-green-500' : m.status === 'idle' ? 'bg-yellow-400' : m.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500'}`} />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0" aria-hidden>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-white text-sm font-medium">{m.username}</span>
                   {m.is_owner && (
@@ -139,10 +157,10 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               {!m.is_owner && (
                 <button
                   onClick={e => { e.stopPropagation(); kick.mutate(m.user_id) }}
+                  aria-label={`Expulser ${m.username}`}
                   className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
-                  title="Expulser"
                 >
-                  <UserMinus size={14} />
+                  <UserMinus size={14} aria-hidden />
                 </button>
               )}
             </div>
@@ -154,7 +172,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                 {nonEveryoneRoles.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 text-xs text-fc-muted uppercase font-semibold mb-1.5">
-                      <Shield size={11} /> Rôles
+                      <Shield size={11} aria-hidden /> Rôles
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {nonEveryoneRoles.map((r: any) => {
@@ -164,6 +182,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                             onClick={() => has
                               ? removeRole.mutate({ userId: m.user_id, roleId: r.id })
                               : assignRole.mutate({ userId: m.user_id, roleId: r.id })}
+                            aria-pressed={has}
                             className={`text-xs px-2 py-1 rounded transition font-medium border
                               ${has ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' : 'border-fc-hover text-fc-muted hover:border-indigo-500/50 hover:text-white'}`}
                           >
@@ -179,7 +198,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                 {tags.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 text-xs text-fc-muted uppercase font-semibold mb-1.5">
-                      <Tag size={11} /> Tags clan
+                      <Tag size={11} aria-hidden /> Tags clan
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {tags.map((t: any) => {
@@ -189,6 +208,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                             onClick={() => has
                               ? removeTagMutation.mutate({ userId: m.user_id, tagId: t.id })
                               : assignTag.mutate({ userId: m.user_id, tagId: t.id })}
+                            aria-pressed={has}
                             style={{ borderColor: colorIntToHex(t.color), color: has ? colorIntToHex(t.color) : undefined }}
                             className={`text-xs px-2 py-1 rounded transition font-medium border
                               ${has ? 'bg-white/5' : 'border-fc-hover text-fc-muted hover:text-white'}`}
