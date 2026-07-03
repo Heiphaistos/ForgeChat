@@ -422,7 +422,7 @@ export default function ChannelSidebar() {
               return (
                 <button
                   key={dm.id}
-                  onClick={() => nav(`/dms/groups/${dm.id}`)}
+                  onClick={() => { nav(`/dms/groups/${dm.id}`); closeSidebar() }}
                   onContextMenu={e => ctxMenu.open(e, [
                     { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
                     { label: 'Quitter le groupe', onClick: leaveGroup },
@@ -444,8 +444,8 @@ export default function ChannelSidebar() {
                     <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
                   )}
                   {unread > 0 && (
-                    <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                      {unread > 99 ? '99+' : unread}
+                    <span role="status" aria-label={`${unread > 99 ? '99+' : unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                      <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
                     </span>
                   )}
                 </button>
@@ -477,7 +477,7 @@ export default function ChannelSidebar() {
           return (
             <button
               key={dm.id}
-              onClick={() => nav(`/dms/${dm.id}`)}
+              onClick={() => { nav(`/dms/${dm.id}`); closeSidebar() }}
               onContextMenu={e => ctxMenu.open(e, [
                 { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
                 { label: 'Archiver la conversation', onClick: archiveDm },
@@ -511,8 +511,8 @@ export default function ChannelSidebar() {
               )}
               {/* Badge non-lus */}
               {unread > 0 && (
-                <span className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                  {unread > 99 ? '99+' : unread}
+                <span role="status" aria-label={`${unread > 99 ? '99+' : unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
                 </span>
               )}
             </button>

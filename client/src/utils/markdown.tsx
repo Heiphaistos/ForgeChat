@@ -264,11 +264,16 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
 
 function SpoilerText({ text }: { text: string }) {
   const [revealed, setRevealed] = useState(false)
+  const reveal = () => setRevealed(true)
   return (
     <span
-      onClick={() => setRevealed(true)}
+      onClick={reveal}
+      onKeyDown={e => { if (!revealed && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); reveal() } }}
+      role={revealed ? undefined : 'button'}
+      tabIndex={revealed ? undefined : 0}
+      aria-label={revealed ? undefined : 'Contenu masqué — cliquer pour révéler'}
       className={`rounded px-0.5 cursor-pointer transition-colors ${
-        revealed ? 'bg-transparent' : 'bg-fc-muted/40 text-transparent select-none hover:bg-fc-muted/60'
+        revealed ? 'bg-transparent cursor-default' : 'bg-fc-muted/40 text-transparent select-none hover:bg-fc-muted/60'
       }`}
     >
       {text}
