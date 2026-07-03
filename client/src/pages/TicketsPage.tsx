@@ -151,6 +151,7 @@ export default function TicketsPage() {
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
               placeholder="Titre du ticket..."
+              enterKeyHint="done" autoCapitalize="sentences"
               className="flex-1 bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
               onKeyDown={e => e.key === 'Enter' && newTitle.trim() && createMutation.mutate()}
             />

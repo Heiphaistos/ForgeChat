@@ -155,6 +155,7 @@ export default function AuditLogPage({ serverId }: Props) {
             value={userFilter}
             onChange={e => { setUserFilter(e.target.value); setPage(1) }}
             placeholder="Filtrer par utilisateur..."
+            inputMode="search" autoComplete="off"
             className="flex-1 min-w-[180px] px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
         </div>

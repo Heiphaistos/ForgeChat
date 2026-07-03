@@ -83,6 +83,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
         onChange={e => setTitle(e.target.value)}
         placeholder="Titre de la tâche..."
         maxLength={200}
+        enterKeyHint="next" autoCapitalize="sentences"
         className="w-full bg-transparent text-white text-sm outline-none placeholder:text-fc-muted"
       />
       <textarea
