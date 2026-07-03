@@ -49,15 +49,16 @@ export default function ExplorePage() {
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-10">
         {/* Bouton retour mobile */}
         <button
+          aria-label="Retour au menu principal"
           className="md:hidden flex items-center gap-2 text-fc-muted hover:text-white transition mb-4"
           onClick={openSidebar}
         >
-          <ChevronLeft size={20} />
+          <ChevronLeft size={20} aria-hidden />
           <span className="text-sm">Menu</span>
         </button>
         {/* En-tête */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-fc-accent/20 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-fc-accent/20 mb-4" aria-hidden>
             <Compass size={32} className="text-fc-accent" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-2">Explorer les serveurs</h1>
@@ -65,12 +66,13 @@ export default function ExplorePage() {
         </div>
 
         {/* Barre de recherche */}
-        <div className="relative max-w-lg mx-auto mb-10">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
+        <div role="search" aria-label="Rechercher un serveur" className="relative max-w-lg mx-auto mb-10">
+          <Search size={16} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted pointer-events-none" />
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Rechercher un serveur..."
+            aria-label="Rechercher un serveur public"
             inputMode="search" autoComplete="off"
             className="w-full pl-9 pr-4 py-3 bg-fc-channel rounded-xl text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
@@ -78,20 +80,20 @@ export default function ExplorePage() {
 
         {/* Grille */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div role="status" aria-label="Chargement des serveurs" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-48 bg-fc-channel rounded-xl animate-pulse" />
+              <div key={i} aria-hidden className="h-48 bg-fc-channel rounded-xl animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center text-fc-muted py-20">
-            <Compass size={48} className="mx-auto mb-4 opacity-30" />
+          <div role="status" className="text-center text-fc-muted py-20">
+            <Compass size={48} aria-hidden className="mx-auto mb-4 opacity-30" />
             <p className="text-base">
               {query ? `Aucun résultat pour "${query}"` : 'Aucun serveur public disponible.'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-label={`${filtered.length} serveur${filtered.length > 1 ? 's' : ''} trouvé${filtered.length > 1 ? 's' : ''}`}>
             {filtered.map(s => (
               <ServerCard
                 key={s.id}
@@ -138,12 +140,14 @@ function ServerCard({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-fc-muted text-xs">
-            <Users size={13} />
+            <Users size={13} aria-hidden />
             <span>{server.member_count.toLocaleString()} membre{server.member_count > 1 ? 's' : ''}</span>
           </div>
           <button
             onClick={onJoin}
             disabled={isJoining}
+            aria-label={`Rejoindre ${server.name}`}
+            aria-busy={isJoining}
             className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50"
           >
             {isJoining ? 'Rejoindre...' : 'Rejoindre'}

@@ -89,14 +89,14 @@ export default function SettingsPage() {
           <h1 className="text-sm font-semibold text-fc-muted uppercase tracking-wide">Paramètres</h1>
           <button
             onClick={() => nav(-1)}
+            aria-label="Fermer les paramètres"
             className="p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
-            title="Fermer (Échap)"
           >
-            <X size={16} />
+            <X size={16} aria-hidden />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-2">
+        <nav aria-label="Navigation des paramètres" className="flex-1 overflow-y-auto p-2">
           {NAV.map((item, idx) => (
             <div key={item.id}>
               {(idx === 0 || item.group) && (
@@ -106,53 +106,58 @@ export default function SettingsPage() {
               )}
               <button
                 onClick={() => handleSelectSection(item.id)}
+                aria-current={section === item.id ? 'page' : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition mb-0.5
                   ${section === item.id
                     ? 'bg-fc-hover text-white'
                     : 'text-fc-muted hover:bg-fc-hover hover:text-white'}`}
               >
-                {item.icon}
+                <span aria-hidden>{item.icon}</span>
                 {item.label}
               </button>
             </div>
           ))}
 
-          <div className="border-t border-fc-hover my-2" />
+          <div className="border-t border-fc-hover my-2" aria-hidden />
           <button
             onClick={async () => { await logout(); nav('/login') }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-fc-red hover:bg-fc-red/10 transition"
           >
-            <LogOut size={16} /> Déconnexion
+            <LogOut size={16} aria-hidden /> Déconnexion
           </button>
         </nav>
 
-        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center">ForgeChat v{__APP_VERSION__}</div>
+        <div className="p-3 border-t border-fc-hover text-xs text-fc-muted text-center" aria-hidden>ForgeChat v{__APP_VERSION__}</div>
       </div>
 
       {/* Content — masqué sur mobile tant que pas de section choisie */}
-      <div className={`
-        flex-1 overflow-y-auto
-        ${!mobileShowContent ? 'hidden md:block' : 'block'}
-      `}>
+      <div
+        role="region"
+        aria-label={currentLabel}
+        className={`
+          flex-1 overflow-y-auto
+          ${!mobileShowContent ? 'hidden md:block' : 'block'}
+        `}
+      >
         <div className="max-w-2xl mx-auto px-4 md:px-8 py-8 pb-20">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-2">
               {/* Retour mobile */}
               <button
                 onClick={() => setMobileShowContent(false)}
+                aria-label="Retour à la navigation des paramètres"
                 className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition -ml-1"
-                title="Retour"
               >
-                <ChevronLeft size={20} />
+                <ChevronLeft size={20} aria-hidden />
               </button>
               <h2 className="text-xl font-bold text-white">{currentLabel}</h2>
             </div>
             <button
               onClick={() => nav(-1)}
+              aria-label="Fermer les paramètres"
               className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
-              title="Fermer"
             >
-              <X size={20} />
+              <X size={20} aria-hidden />
             </button>
           </div>
 
