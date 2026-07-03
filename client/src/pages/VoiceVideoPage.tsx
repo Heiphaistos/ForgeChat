@@ -138,8 +138,8 @@ function PeerTile({
           <span className="text-xs text-white truncate max-w-[100px]">{isLocal ? `${peer.username} (Vous)` : peer.username}</span>
         </div>
         {onExpand && hasVideo && (
-          <button onClick={onExpand} className="p-0.5 rounded hover:bg-white/20 text-white/60 hover:text-white">
-            <Maximize2 size={11} />
+          <button onClick={onExpand} aria-label="Agrandir la vidéo" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <Maximize2 size={11} aria-hidden />
           </button>
         )}
       </div>
@@ -170,7 +170,7 @@ function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; lab
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 bg-black/60">
         <span className="text-white font-semibold text-sm">{label}</span>
-        <button onClick={onClose} className="p-1.5 rounded hover:bg-white/10 text-white"><X size={18} /></button>
+        <button onClick={onClose} aria-label="Fermer le plein écran" className="p-1.5 rounded hover:bg-white/10 text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><X size={18} aria-hidden /></button>
       </div>
       <video ref={ref} autoPlay playsInline className="flex-1 object-contain" />
     </div>
@@ -605,9 +605,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <button
             onClick={leave}
             title="Quitter l'appel"
+            aria-label="Quitter l'appel"
             className="p-2.5 md:px-5 md:py-2 bg-fc-red hover:bg-fc-red/80 text-white rounded-xl font-medium text-sm flex items-center gap-2 transition"
           >
-            <PhoneOff size={16} />
+            <PhoneOff size={16} aria-hidden />
             <span className="hidden md:inline">Quitter</span>
           </button>
         </div>
@@ -721,6 +722,7 @@ function CtrlBtn({
     <button
       onClick={onClick}
       title={label}
+      aria-label={label}
       className={`p-2.5 rounded-xl transition ${active ? activeClass : inactiveClass}`}
     >
       {active ? activeIcon : inactiveIcon}

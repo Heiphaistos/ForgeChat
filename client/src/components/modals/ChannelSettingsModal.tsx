@@ -400,6 +400,9 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                   <input value={name}
                     onChange={e => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
                     maxLength={100}
+                    enterKeyHint="done"
+                    autoCapitalize="none"
+                    autoComplete="off"
                     className="w-full pl-8 pr-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                   />
                 </div>
@@ -464,6 +467,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                         onKeyDown={e => e.key === 'Enter' && addForumTag()}
                         placeholder="Nouveau tag..."
                         maxLength={20}
+                        enterKeyHint="done"
+                        autoCapitalize="none"
                         className="flex-1 px-3 py-1.5 bg-fc-input rounded-lg text-white outline-none text-sm"
                       />
                       <button onClick={addForumTag}
@@ -530,6 +535,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                     {isAutoCreate && (
                       <input value={autoCreateName} onChange={e => setAutoCreateName(e.target.value)}
                         placeholder="{username}'s Channel"
+                        enterKeyHint="done"
+                        autoCapitalize="none"
                         className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-xs"
                       />
                     )}
