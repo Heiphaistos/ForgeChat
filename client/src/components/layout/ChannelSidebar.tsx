@@ -464,6 +464,9 @@ export default function ChannelSidebar() {
                     </div>
                     <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
                   </div>
+                  {!!drafts[dm.id] && pathname !== `/dms/groups/${dm.id}` && (
+                    <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+                  )}
                   {dm.is_muted && !unread && (
                     <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
                   )}
@@ -552,6 +555,10 @@ export default function ChannelSidebar() {
                     : 'Hors ligne'}
                 </div>
               </div>
+              {/* Indicateur brouillon en attente */}
+              {!!drafts[dm.id] && pathname !== `/dms/${dm.id}` && (
+                <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+              )}
               {/* Indicateur mute */}
               {dm.is_muted && !unread && (
                 <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />

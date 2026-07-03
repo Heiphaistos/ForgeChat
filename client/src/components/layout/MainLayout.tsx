@@ -95,6 +95,7 @@ export default function MainLayout() {
   }, [location.pathname, location.state])
 
   // Ctrl+Shift+S — toggle split (ouvre le canal courant ou ferme)
+  // Escape — ferme le split si aucune modale ouverte et focus hors input
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 's') {
@@ -105,6 +106,12 @@ export default function MainLayout() {
           const m = window.location.pathname.match(/\/servers\/[^/]+\/channels\/([^/]+)/)
           if (m) setSplitChannelId(m[1])
         }
+      }
+      if (e.key === 'Escape' && splitChannelId) {
+        const el = document.activeElement as HTMLElement | null
+        const inInput = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+        const modalOpen = !!document.querySelector('[role="dialog"]')
+        if (!inInput && !modalOpen) setSplitChannelId(null)
       }
     }
     window.addEventListener('keydown', handler)
