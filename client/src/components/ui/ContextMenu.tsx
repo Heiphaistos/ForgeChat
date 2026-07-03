@@ -52,6 +52,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return createPortal(
     <div
       ref={ref}
+      role="menu"
       style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 99999 }}
       className="min-w-[180px] bg-fc-bg border border-fc-hover rounded-lg shadow-2xl py-1 select-none"
       onMouseDown={e => e.stopPropagation()}
@@ -59,13 +60,15 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     >
       {items.map((item, i) => {
         if ('separator' in item && item.separator) {
-          return <div key={i} className="my-1 border-t border-fc-hover" />
+          return <div key={i} role="separator" className="my-1 border-t border-fc-hover" />
         }
         const it = item as ContextMenuItem
         return (
           <button
             key={i}
+            role="menuitem"
             disabled={it.disabled}
+            aria-disabled={it.disabled}
             onClick={() => { it.onClick(); onClose() }}
             className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition text-left
               ${it.danger
@@ -73,7 +76,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
                 : 'text-fc-text hover:bg-fc-hover hover:text-white'}
               ${it.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
           >
-            {it.icon && <span className="flex-shrink-0 opacity-70">{it.icon}</span>}
+            {it.icon && <span className="flex-shrink-0 opacity-70" aria-hidden>{it.icon}</span>}
             {it.label}
           </button>
         )

@@ -25,12 +25,12 @@ interface Props {
 
 function channelIcon(type: string) {
   switch (type) {
-    case 'voice': return <Volume2 size={16} className="flex-shrink-0 text-fc-muted" />
-    case 'video': return <Video size={16} className="flex-shrink-0 text-fc-muted" />
-    case 'announcement': return <Megaphone size={16} className="flex-shrink-0 text-fc-muted" />
-    case 'forum': return <MessagesSquare size={16} className="flex-shrink-0 text-fc-muted" />
-    case 'stage': return <Radio size={16} className="flex-shrink-0 text-fc-muted" />
-    default: return <Hash size={16} className="flex-shrink-0 text-fc-muted" />
+    case 'voice': return <Volume2 size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    case 'video': return <Video size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    case 'announcement': return <Megaphone size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    case 'forum': return <MessagesSquare size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    case 'stage': return <Radio size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    default: return <Hash size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
   }
 }
 
@@ -66,10 +66,13 @@ export default function WelcomeScreen({ server, channels }: Props) {
       {/* Contenu centré */}
       <div className="w-full max-w-2xl px-8 py-8 flex flex-col items-center">
         {/* Icône serveur */}
-        <div className="-mt-20 mb-4 w-[90px] h-[90px] rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden shadow-xl flex-shrink-0">
+        <div
+          aria-label={server.name}
+          className="-mt-20 mb-4 w-[90px] h-[90px] rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden shadow-xl flex-shrink-0"
+        >
           {server.icon
-            ? <img src={server.icon} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            : initials}
+            ? <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            : <span aria-hidden>{initials}</span>}
         </div>
 
         {/* Titre */}
@@ -86,7 +89,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
 
         {/* Compteur membres */}
         <div className="flex items-center gap-1.5 text-xs text-fc-muted mb-8">
-          <Users size={13} />
+          <Users size={13} aria-hidden />
           <span>{server.member_count} membre{server.member_count > 1 ? 's' : ''}</span>
         </div>
 
@@ -101,10 +104,11 @@ export default function WelcomeScreen({ server, channels }: Props) {
                 <button
                   key={ch.id}
                   onClick={() => nav(`/servers/${server.id}/channels/${ch.id}`)}
+                  aria-label={`Rejoindre #${ch.name}`}
                   className="flex items-center gap-2.5 px-4 py-3 bg-fc-channel hover:bg-fc-hover rounded-xl text-left transition group"
                 >
                   {channelIcon(ch.type)}
-                  <span className="text-sm text-fc-text group-hover:text-white transition truncate">
+                  <span className="text-sm text-fc-text group-hover:text-white transition truncate" aria-hidden>
                     {ch.name}
                   </span>
                 </button>

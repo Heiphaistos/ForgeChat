@@ -42,23 +42,32 @@ export function ConfirmModal() {
     _pending = null
   }
 
+  const labelId = req.title ? 'confirm-title' : 'confirm-msg'
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => resolve(false)} />
-      <div className="relative bg-fc-channel border border-white/10 rounded-xl shadow-2xl p-6 max-w-sm w-full">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => resolve(false)} aria-hidden />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={labelId}
+        aria-describedby="confirm-msg"
+        className="relative bg-fc-channel border border-white/10 rounded-xl shadow-2xl p-6 max-w-sm w-full"
+      >
         {req.danger && (
-          <div className="flex justify-center mb-3">
+          <div className="flex justify-center mb-3" aria-hidden>
             <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center">
               <AlertTriangle size={24} className="text-red-400" />
             </div>
           </div>
         )}
         {req.title && (
-          <h3 className="text-white font-semibold text-center mb-2">{req.title}</h3>
+          <h3 id="confirm-title" className="text-white font-semibold text-center mb-2">{req.title}</h3>
         )}
-        <p className="text-fc-muted text-sm text-center leading-relaxed mb-6">{req.message}</p>
+        <p id="confirm-msg" className="text-fc-muted text-sm text-center leading-relaxed mb-6">{req.message}</p>
         <div className="flex gap-3">
           <button
+            autoFocus
             onClick={() => resolve(false)}
             className="flex-1 px-4 py-2 rounded-lg bg-fc-hover hover:bg-fc-hover/70 text-fc-text text-sm font-medium transition"
           >
