@@ -116,6 +116,8 @@ export default function QuickReplies({ onPick, onClose }: Props) {
                     onChange={e => handleChange(reply.id, 'label', e.target.value)}
                     placeholder="Label"
                     aria-label="Libellé de la réponse rapide"
+                    enterKeyHint="next"
+                    autoCapitalize="sentences"
                     className="flex-1 bg-fc-input text-white text-xs rounded px-2 py-1 outline-none border border-fc-hover focus:border-fc-accent"
                   />
                   <button

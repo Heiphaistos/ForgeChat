@@ -57,7 +57,7 @@ export default function SpeakerStats({ participants, onClose }: Props) {
         </button>
       </div>
 
-      <div className="p-3 space-y-2 max-h-72 overflow-y-auto">
+      <div className="p-3 space-y-2 max-h-72 overflow-y-auto overscroll-contain">
         {sorted.length === 0 ? (
           <p role="status" className="text-center text-fc-muted text-sm py-4">Aucun participant</p>
         ) : sorted.map((p, idx) => {

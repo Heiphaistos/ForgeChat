@@ -125,6 +125,8 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
               onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher un serveur ou canal..."
               inputMode="search" autoComplete="off"
+              enterKeyHint="search"
+              autoCapitalize="none"
               className="flex-1 bg-transparent text-fc-text placeholder-fc-muted outline-none text-sm"
               autoFocus
             />

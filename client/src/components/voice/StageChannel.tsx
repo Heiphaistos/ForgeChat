@@ -149,7 +149,7 @@ export default function StageChannel({
       </section>
 
       {/* Section Audience */}
-      <section aria-label="Audience" className="flex-1 overflow-y-auto p-4 border-b border-fc-hover">
+      <section aria-label="Audience" className="flex-1 overflow-y-auto overscroll-contain p-4 border-b border-fc-hover">
         <div className="flex items-center gap-2 mb-3" aria-hidden>
           <Users size={14} className="text-fc-muted" />
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">

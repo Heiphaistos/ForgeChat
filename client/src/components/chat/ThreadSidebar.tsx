@@ -141,6 +141,8 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Ex: Question sur la config"
+                  enterKeyHint="next"
+                  autoCapitalize="sentences"
                   className="w-full px-3 py-2 bg-fc-input border border-fc-hover rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent placeholder-fc-muted"
                 />
               </div>
