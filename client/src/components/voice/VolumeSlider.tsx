@@ -40,6 +40,8 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
   return (
     <div
       ref={ref}
+      role="group"
+      aria-label={`Contrôle de volume : ${username}`}
       className="absolute z-50 bg-fc-channel border border-white/10 rounded-xl shadow-2xl p-3 w-48"
       style={{ left: '100%', top: 0, marginLeft: '8px' }}
     >
@@ -48,15 +50,16 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
         <span className="text-xs font-semibold text-white truncate max-w-[100px]">{username}</span>
         <button
           onClick={reset}
+          aria-label="Réinitialiser le volume à 100%"
           title="Réinitialiser à 100%"
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
         >
-          <RotateCcw size={12} />
+          <RotateCcw size={12} aria-hidden />
         </button>
       </div>
 
       {/* Label volume */}
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-1.5" aria-hidden>
         <span className="text-xs text-fc-muted">Volume</span>
         <span className="text-xs font-mono text-fc-text">{pct}%</span>
       </div>
@@ -68,12 +71,17 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
         max={200}
         step={1}
         value={volume}
+        aria-label={`Volume de ${username}`}
+        aria-valuemin={0}
+        aria-valuemax={200}
+        aria-valuenow={volume}
+        aria-valuetext={`${pct}%`}
         onChange={e => handleChange(Number(e.target.value))}
         className="w-full accent-fc-accent h-1.5 rounded cursor-pointer"
       />
 
       {/* Marqueurs */}
-      <div className="flex justify-between text-[10px] text-fc-muted mt-1">
+      <div className="flex justify-between text-[10px] text-fc-muted mt-1" aria-hidden>
         <span>0%</span>
         <span>100%</span>
         <span>200%</span>

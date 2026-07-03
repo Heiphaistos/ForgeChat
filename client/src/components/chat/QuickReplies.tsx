@@ -59,18 +59,21 @@ export default function QuickReplies({ onPick, onClose }: Props) {
 
   return (
     <div
+      role="group"
+      aria-label="Réponses rapides"
       className="absolute bottom-full right-0 mb-2 w-72 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50"
       onClick={e => e.stopPropagation()}
     >
       <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Zap size={14} className="text-fc-accent" />
+          <Zap size={14} className="text-fc-accent" aria-hidden />
           Réponses rapides
         </div>
         <div className="flex items-center gap-2">
           {!editing ? (
             <button
               onClick={() => setEditing(true)}
+              aria-label="Modifier les réponses rapides"
               className="text-xs text-fc-muted hover:text-white transition"
             >
               Modifier
@@ -78,13 +81,18 @@ export default function QuickReplies({ onPick, onClose }: Props) {
           ) : (
             <button
               onClick={handleSave}
+              aria-label="Sauvegarder les réponses rapides"
               className="text-xs text-fc-accent hover:text-white transition"
             >
               Sauvegarder
             </button>
           )}
-          <button onClick={onClose} className="text-fc-muted hover:text-white transition">
-            <span className="text-sm leading-none">✕</span>
+          <button
+            onClick={onClose}
+            aria-label="Fermer les réponses rapides"
+            className="text-fc-muted hover:text-white transition"
+          >
+            <span className="text-sm leading-none" aria-hidden>✕</span>
           </button>
         </div>
       </div>
@@ -95,6 +103,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
             {!editing ? (
               <button
                 onClick={() => handlePick(reply.content)}
+                aria-label={`Répondre : ${reply.label || reply.content || '(vide)'}`}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-fc-muted hover:text-white hover:bg-fc-hover transition truncate"
               >
                 {reply.label || reply.content || '(vide)'}
@@ -106,19 +115,22 @@ export default function QuickReplies({ onPick, onClose }: Props) {
                     value={reply.label}
                     onChange={e => handleChange(reply.id, 'label', e.target.value)}
                     placeholder="Label"
+                    aria-label="Libellé de la réponse rapide"
                     className="flex-1 bg-fc-input text-white text-xs rounded px-2 py-1 outline-none border border-fc-hover focus:border-fc-accent"
                   />
                   <button
                     onClick={() => handleDelete(reply.id)}
+                    aria-label="Supprimer cette réponse rapide"
                     className="p-1 text-fc-muted hover:text-red-400 transition flex-shrink-0"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={14} aria-hidden />
                   </button>
                 </div>
                 <textarea
                   value={reply.content}
                   onChange={e => handleChange(reply.id, 'content', e.target.value)}
                   placeholder="Contenu"
+                  aria-label="Contenu de la réponse rapide"
                   rows={2}
                   className="w-full bg-fc-input text-white text-xs rounded px-2 py-1 outline-none border border-fc-hover focus:border-fc-accent resize-none"
                 />
@@ -132,9 +144,10 @@ export default function QuickReplies({ onPick, onClose }: Props) {
         <div className="px-3 pb-3">
           <button
             onClick={handleAdd}
+            aria-label="Ajouter une réponse rapide"
             className="flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition w-full px-2 py-1.5 rounded-lg hover:bg-fc-hover"
           >
-            <Plus size={13} />
+            <Plus size={13} aria-hidden />
             Ajouter
           </button>
         </div>

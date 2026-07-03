@@ -74,27 +74,31 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
   }
 
   return (
-    <div className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0">
+    <div
+      role="complementary"
+      aria-label="Fils de discussion"
+      className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2">
-          <MessagesSquare size={16} className="text-fc-accent" />
+          <MessagesSquare size={16} className="text-fc-accent" aria-hidden />
           <span className="font-semibold text-white text-sm">Fils de discussion</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowNewModal(true)}
+            aria-label="Créer un nouveau fil de discussion"
             className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-            title="Nouveau fil"
           >
-            <Plus size={16} />
+            <Plus size={16} aria-hidden />
           </button>
           <button
             onClick={onClose}
+            aria-label="Fermer les fils de discussion"
             className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-            title="Fermer"
           >
-            <X size={16} />
+            <X size={16} aria-hidden />
           </button>
         </div>
       </div>
@@ -104,30 +108,36 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
         <div
           className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0"
           onClick={() => setShowNewModal(false)}
+          aria-hidden
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ts-new-thread-title"
             className="bg-fc-channel rounded-xl w-full max-w-[400px] max-h-[90dvh] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-fc-hover">
               <div className="flex items-center gap-2">
-                <MessagesSquare size={15} className="text-fc-accent" />
-                <h3 className="font-semibold text-white text-sm">Nouveau fil</h3>
+                <MessagesSquare size={15} className="text-fc-accent" aria-hidden />
+                <h3 id="ts-new-thread-title" className="font-semibold text-white text-sm">Nouveau fil</h3>
               </div>
               <button
                 onClick={() => setShowNewModal(false)}
+                aria-label="Fermer la fenêtre de création de fil"
                 className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
               >
-                <X size={15} />
+                <X size={15} aria-hidden />
               </button>
             </div>
 
             <div className="p-5 space-y-3">
               <div>
-                <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide block mb-1.5">
+                <label htmlFor="ts-thread-title" className="text-xs font-semibold text-fc-muted uppercase tracking-wide block mb-1.5">
                   Titre du fil
                 </label>
                 <input
+                  id="ts-thread-title"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                   placeholder="Ex: Question sur la config"
@@ -136,10 +146,12 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide block mb-1.5">
-                  Premier message <span className="text-fc-red">*</span>
+                <label htmlFor="ts-thread-msg" className="text-xs font-semibold text-fc-muted uppercase tracking-wide block mb-1.5">
+                  Premier message <span className="text-fc-red" aria-hidden>*</span>
+                  <span className="sr-only">(requis)</span>
                 </label>
                 <textarea
+                  id="ts-thread-msg"
                   value={form.firstMessage}
                   onChange={e => setForm(f => ({ ...f, firstMessage: e.target.value }))}
                   onKeyDown={e => {
@@ -163,6 +175,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
               <button
                 onClick={handleCreate}
                 disabled={createThread.isPending || !form.firstMessage.trim()}
+                aria-busy={createThread.isPending}
                 className="px-4 py-2 text-sm bg-fc-accent hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-40"
               >
                 {createThread.isPending ? 'Création...' : 'Créer le fil'}
@@ -175,14 +188,14 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       {/* Liste des threads */}
       <div className="flex-1 overflow-y-auto p-2">
         {isLoading && (
-          <div className="flex items-center justify-center py-10">
-            <div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+          <div role="status" aria-label="Chargement des fils de discussion" className="flex items-center justify-center py-10">
+            <div aria-hidden className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
         {!isLoading && threads.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-            <MessagesSquare size={36} className="text-fc-muted/30 mb-3" />
+          <div role="status" className="flex flex-col items-center justify-center py-12 text-center px-4">
+            <MessagesSquare size={36} className="text-fc-muted/30 mb-3" aria-hidden />
             <p className="text-sm text-fc-muted">Aucun fil de discussion</p>
             <p className="text-xs text-fc-muted/70 mt-1">
               Cliquez sur <strong className="text-fc-muted">+</strong> pour en créer un
@@ -208,9 +221,10 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       <div className="p-3 border-t border-fc-hover flex-shrink-0">
         <button
           onClick={() => setShowNewModal(true)}
+          aria-label="Créer un nouveau fil de discussion"
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-fc-hover hover:bg-fc-input text-sm text-fc-muted hover:text-white transition"
         >
-          <Plus size={14} />
+          <Plus size={14} aria-hidden />
           Nouveau fil
         </button>
       </div>
