@@ -10,7 +10,8 @@ function highlightCode(code: string, lang: string): string {
 }
 
 // Parser Markdown minimaliste compatible Discord
-export function renderMarkdown(text: string, customEmojis?: Record<string, string>): React.ReactNode {
+export function renderMarkdown(text: string | null | undefined, customEmojis?: Record<string, string>): React.ReactNode {
+  if (!text || typeof text !== 'string') return null
   const lines = text.split('\n')
   const elements: React.ReactNode[] = []
 

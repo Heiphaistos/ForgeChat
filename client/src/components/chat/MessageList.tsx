@@ -566,7 +566,7 @@ export default function MessageList({
                           <span className="font-semibold text-white/80">{msg.reply_to_username}</span>
                         )}
                         <span className="italic truncate max-w-xs">
-                          {msg.reply_to_content
+                          {typeof msg.reply_to_content === 'string' && msg.reply_to_content
                             ? msg.reply_to_content.slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
                             : 'Message original supprimé'}
                         </span>
@@ -700,7 +700,7 @@ export default function MessageList({
                     {/* Réactions — Super Reactions */}
                     {msg.reactions?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {msg.reactions.map((r: any) => {
+                        {msg.reactions?.map((r: any) => {
                           const reactionKey = `${msg.id}:${r.emoji}`
                           const isPopping = poppingReaction === reactionKey
                           return (

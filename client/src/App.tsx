@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, lazy, Suspense } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
@@ -887,12 +887,17 @@ function HomeRoute() {
   return <Navigate to={user ? '/friends' : '/login'} replace />
 }
 
+function LocationBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  return <ErrorBoundary resetKey={location.key}>{children}</ErrorBoundary>
+}
+
 export default function App() {
   return (
-    <ErrorBoundary>
-      <BrowserRouter>
+    <BrowserRouter>
+      <LocationBoundary>
         <AppInner />
-      </BrowserRouter>
-    </ErrorBoundary>
+      </LocationBoundary>
+    </BrowserRouter>
   )
 }
