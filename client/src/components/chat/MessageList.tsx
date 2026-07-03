@@ -308,6 +308,7 @@ export default function MessageList({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTarget = useRef<{ x: number; y: number; msg: any } | null>(null)
+  const swipeRef = useRef<{ startX: number; startY: number; msg: any; el: HTMLElement | null } | null>(null)
 
   // Cleanup à l'unmount
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
@@ -318,10 +319,40 @@ export default function MessageList({
     longPressTimer.current = setTimeout(() => {
       if (longPressTarget.current) setContextMenu(longPressTarget.current)
     }, 500)
+    swipeRef.current = { startX: t.clientX, startY: t.clientY, msg, el: e.currentTarget as HTMLElement }
   }
   const cancelLongPress = () => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
     longPressTarget.current = null
+  }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    cancelLongPress()
+    if (!swipeRef.current || e.touches.length !== 1 || !swipeRef.current.el) return
+    const dx = e.touches[0].clientX - swipeRef.current.startX
+    const dy = e.touches[0].clientY - swipeRef.current.startY
+    if (dx > 10 && Math.abs(dy) < Math.abs(dx) * 1.5) {
+      swipeRef.current.el.style.transform = `translateX(${Math.min(dx * 0.45, 56)}px)`
+      swipeRef.current.el.style.transition = 'none'
+    } else {
+      swipeRef.current.el.style.transform = ''
+    }
+  }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    cancelLongPress()
+    if (!swipeRef.current) return
+    const dx = e.changedTouches[0].clientX - swipeRef.current.startX
+    const dy = e.changedTouches[0].clientY - swipeRef.current.startY
+    const { msg, el } = swipeRef.current
+    swipeRef.current = null
+    if (el) {
+      el.style.transform = ''
+      el.style.transition = 'transform 0.2s ease'
+      setTimeout(() => { if (el) el.style.transition = '' }, 220)
+    }
+    if (onReply && dx > 60 && Math.abs(dy) < 80) {
+      if ('vibrate' in navigator) navigator.vibrate(30)
+      onReply(msg)
+    }
   }
 
   useEffect(() => {
@@ -420,9 +451,25 @@ export default function MessageList({
           const isFirstUnread = msgTs >= channelOpenTime.current && prevTs < channelOpenTime.current
           // Animer uniquement les messages qui arrivent en temps réel (après le chargement initial)
           const isLiveMsg = initialScrollDone.current && msgTs >= channelOpenTime.current
+          // Séparateur de date entre deux jours différents
+          const msgDate = new Date(msg.created_at)
+          const prevDateStr = prev ? new Date(prev.created_at).toDateString() : null
+          const showDateDivider = prevDateStr !== msgDate.toDateString()
+          const dateLabel = isToday(msgDate) ? "Aujourd'hui"
+            : isYesterday(msgDate) ? 'Hier'
+            : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
 
           return (
             <div key={msg.id} className={isLiveMsg ? 'msg-enter' : undefined}>
+            {showDateDivider && (
+              <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel}>
+                <div className="flex-1 h-px bg-fc-hover/70" />
+                <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
+                  {dateLabel}
+                </span>
+                <div className="flex-1 h-px bg-fc-hover/70" />
+              </div>
+            )}
             {isFirstUnread && (
               <div className="flex items-center gap-2 my-2 px-2 select-none">
                 <div className="flex-1 h-px bg-red-400/60" />
@@ -446,8 +493,8 @@ export default function MessageList({
                 setContextMenu({ x: e.clientX, y: e.clientY, msg })
               }}
               onTouchStart={e => startLongPress(e, msg)}
-              onTouchEnd={cancelLongPress}
-              onTouchMove={cancelLongPress}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
               {/* Avatar */}
               {!ultraCompact && (
