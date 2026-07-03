@@ -83,6 +83,8 @@ export default function GroupDMPage() {
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [newMsgCount, setNewMsgCount] = useState(0)
+  const isAtBottomRef = useRef(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
@@ -259,12 +261,29 @@ export default function GroupDMPage() {
     return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename() }
   }, [groupId, on, user?.id])
 
+  // Tracker si l'utilisateur est en bas du scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    const onScroll = () => {
+      const threshold = 80
+      isAtBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+      if (isAtBottomRef.current) setNewMsgCount(0)
+    }
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
+  }, [])
+
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
   const prevLen = useRef(0)
   useEffect(() => {
     const cur = allMessages.length
     if (cur > prevLen.current && cur - prevLen.current === 1) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      if (isAtBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      } else {
+        setNewMsgCount(n => n + 1)
+      }
     }
     prevLen.current = cur
   }, [allMessages.length])
@@ -754,6 +773,17 @@ export default function GroupDMPage() {
           })}
           <div ref={bottomRef} />
         </div>
+
+        {/* Bouton scroll to bottom */}
+        {newMsgCount > 0 && (
+          <button
+            onClick={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setNewMsgCount(0) }}
+            aria-label={`${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''} — défiler vers le bas`}
+            className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-fc-accent text-white text-xs font-semibold shadow-lg z-30 hover:bg-fc-accent/80 transition animate-bounce-subtle"
+          >
+            ↓ {newMsgCount} nouveau{newMsgCount > 1 ? 'x' : ''} message{newMsgCount > 1 ? 's' : ''}
+          </button>
+        )}
 
         {/* Typing indicator */}
         {Object.keys(typingUsers).length > 0 && (

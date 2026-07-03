@@ -485,6 +485,17 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
     return () => { offCreate(); offUpdate(); offDelete(); offReply() }
   }, [channelId, on, qc, selectedPost?.id])
 
+  useEffect(() => {
+    const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+    document.title = selectedPost
+      ? `${prefix}${selectedPost.title} | ForgeChat`
+      : `${prefix}#${channel.name} | ForgeChat`
+    return () => {
+      const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
+      document.title = `${p}ForgeChat`
+    }
+  }, [selectedPost?.title, channel.name])
+
   if (selectedPost) {
     return <PostView serverId={serverId} channelId={channelId} post={selectedPost} onBack={() => setSelectedPost(null)} />
   }
