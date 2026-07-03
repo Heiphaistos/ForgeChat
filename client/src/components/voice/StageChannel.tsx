@@ -169,7 +169,7 @@ export default function StageChannel({
                   <button
                     onClick={() => handleInviteToSpeak(a.user_id, a.username)}
                     aria-label={`Inviter ${a.username} à parler`}
-                    className="absolute -top-1 -right-1 bg-fc-accent rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition"
+                    className="absolute -top-1 -right-1 bg-fc-accent rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
                   >
                     <UserPlus size={8} className="text-white" aria-hidden />
                   </button>

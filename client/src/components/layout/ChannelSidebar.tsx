@@ -725,7 +725,7 @@ export default function ChannelSidebar() {
           {/* Bouton paramètres canal (visible au hover) */}
           <button
             onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
+            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
             title="Paramètres du canal"
             aria-label={`Paramètres du canal ${ch.name}`}
           >
@@ -734,7 +734,7 @@ export default function ChannelSidebar() {
           {isOwnerOrAdmin && (
             <button
               onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
               title="Archiver ce canal"
               aria-label={`Archiver le canal ${ch.name}`}
             >
@@ -743,7 +743,7 @@ export default function ChannelSidebar() {
           )}
           <button
             onClick={e => { e.stopPropagation(); ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) }}
-            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
+            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
             title={ch.hidden ? "Afficher ce canal" : "Masquer ce canal"}
             aria-label={ch.hidden ? `Afficher le canal ${ch.name}` : `Masquer le canal ${ch.name}`}
           >
@@ -914,7 +914,7 @@ export default function ChannelSidebar() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
-                    className="text-fc-muted opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
+                    className="text-fc-muted opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
                     title={`Créer un canal dans ${label}`}
                     aria-label={`Créer un canal dans ${label}`}
                   >
@@ -973,7 +973,7 @@ export default function ChannelSidebar() {
                   <span className="text-xs truncate flex-1 opacity-60">{ch.name}</span>
                   <button
                     onClick={() => archiveChannel.mutate(ch.id)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
                     title="Restaurer le canal"
                     aria-label={`Restaurer le canal ${ch.name}`}
                   >

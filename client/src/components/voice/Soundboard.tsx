@@ -186,7 +186,7 @@ function SoundButton({
 
       <button
         onClick={e => { e.stopPropagation(); onDelete(sound.id) }}
-        className="absolute top-1 right-1 p-0.5 rounded bg-fc-red/80 text-white opacity-0 group-hover:opacity-100 transition"
+        className="absolute top-1 right-1 p-0.5 rounded bg-fc-red/80 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
         title="Supprimer"
       >
         <Trash2 size={9} />
