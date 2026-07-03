@@ -178,6 +178,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
             ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey} placeholder="Rechercher ou saisir une commande..."
             inputMode="search" autoComplete="off"
+            enterKeyHint="search" autoCapitalize="none"
             role="combobox"
             aria-expanded={allItems.length > 0}
             aria-controls="cp-listbox"

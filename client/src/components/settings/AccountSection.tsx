@@ -49,6 +49,9 @@ export default function AccountSection({ user, updateMe }: Props) {
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
+          enterKeyHint="done"
+          autoCapitalize="none"
+          autoComplete="username"
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none"
         />
       </Field>
@@ -78,8 +81,8 @@ export default function AccountSection({ user, updateMe }: Props) {
         {showPwForm && (
           <div className="space-y-3">
             {[
-              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld), autoComplete: 'current-password' },
-              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew), autoComplete: 'new-password' },
+              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld), autoComplete: 'current-password', enterKeyHint: 'next' as const },
+              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew), autoComplete: 'new-password', enterKeyHint: 'done' as const },
             ].map(field => (
               <Field key={field.label} label={field.label}>
                 <div className="relative">
@@ -88,6 +91,7 @@ export default function AccountSection({ user, updateMe }: Props) {
                     value={field.value}
                     onChange={e => field.setValue(e.target.value)}
                     autoComplete={field.autoComplete}
+                    enterKeyHint={field.enterKeyHint}
                     className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 pr-10 text-sm text-white focus:border-fc-accent outline-none"
                   />
                   <button

@@ -70,6 +70,9 @@ export default function UserProfileModal({ onClose }: Props) {
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 maxLength={32}
+                enterKeyHint="next"
+                autoCapitalize="none"
+                autoComplete="username"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
             </div>
@@ -84,6 +87,8 @@ export default function UserProfileModal({ onClose }: Props) {
                 maxLength={190}
                 rows={3}
                 placeholder="Parle un peu de toi..."
+                enterKeyHint="next"
+                autoCapitalize="sentences"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
               />
             </div>
@@ -97,6 +102,8 @@ export default function UserProfileModal({ onClose }: Props) {
                 onChange={e => setCustomStatus(e.target.value)}
                 maxLength={128}
                 placeholder="Ce que tu fais..."
+                enterKeyHint="done"
+                autoCapitalize="sentences"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
             </div>

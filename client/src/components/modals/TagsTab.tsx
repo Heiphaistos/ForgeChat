@@ -67,6 +67,9 @@ export default function TagsTab({ serverId }: { serverId: string }) {
             placeholder="NOM_DU_TAG"
             maxLength={16}
             aria-label="Nom du tag (majuscules, chiffres, tiret bas)"
+            enterKeyHint="done"
+            autoCapitalize="characters"
+            autoComplete="off"
             className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent font-mono"
             onKeyDown={e => e.key === 'Enter' && newName.trim() && createTag.mutate()}
           />

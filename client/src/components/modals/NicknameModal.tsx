@@ -73,6 +73,8 @@ export default function NicknameModal({ serverId, currentNickname, onClose }: Pr
             onChange={e => setValue(e.target.value)}
             maxLength={32}
             placeholder="Entrez votre surnom..."
+            enterKeyHint="done"
+            autoCapitalize="sentences"
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
           <div className="text-xs text-fc-muted mt-1 text-right">{value.length}/32</div>

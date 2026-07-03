@@ -207,6 +207,8 @@ export default function ServerTemplateModal({ onClose }: Props) {
               onChange={e => setName(e.target.value)}
               placeholder={selected.name}
               maxLength={100}
+              enterKeyHint="done"
+              autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input border border-fc-hover rounded-lg text-white outline-none focus:border-fc-accent mb-4"
               onKeyDown={e => e.key === 'Enter' && name.trim() && handleCreate()}
             />

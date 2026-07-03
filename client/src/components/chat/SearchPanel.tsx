@@ -72,6 +72,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
             placeholder="Rechercher dans #..."
             aria-label={`Rechercher des messages dans #${channelName}`}
             inputMode="search" autoComplete="off"
+            enterKeyHint="search" autoCapitalize="none"
             className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
             autoFocus
           />

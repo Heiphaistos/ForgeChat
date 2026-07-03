@@ -96,6 +96,8 @@ export default function WebhooksTab({ server, channels }: Props) {
             placeholder="Nom du webhook"
             maxLength={80}
             aria-label="Nom du webhook"
+            enterKeyHint="done"
+            autoCapitalize="sentences"
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           />
           <select
