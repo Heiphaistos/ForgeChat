@@ -235,7 +235,7 @@ export default function SavedPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-4">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />

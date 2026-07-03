@@ -117,9 +117,10 @@ export default function TicketsPage() {
           </button>
           <h1 className="text-xl font-bold text-white">Tickets</h1>
           {categories.length > 0 && (
-            <div className="flex items-center gap-1.5">
+            <div role="group" aria-label="Filtrer par catégorie" className="flex items-center gap-1.5 flex-wrap">
               <button
                 onClick={() => setFilterCategoryId('')}
+                aria-pressed={!filterCategoryId}
                 className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${!filterCategoryId ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
               >
                 Tous
@@ -128,6 +129,7 @@ export default function TicketsPage() {
                 <button
                   key={cat.id}
                   onClick={() => setFilterCategoryId(f => f === cat.id ? '' : cat.id)}
+                  aria-pressed={filterCategoryId === cat.id}
                   className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filterCategoryId === cat.id ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
                 >
                   {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
@@ -197,7 +199,7 @@ export default function TicketsPage() {
                 {col.label}
                 <span className="ml-auto text-fc-muted font-normal">{byStatus(col.status).length}</span>
               </div>
-              <div className="flex flex-col gap-2 flex-1 overflow-y-auto">
+              <div className="flex flex-col gap-2 flex-1 overflow-y-auto overscroll-contain">
                 {byStatus(col.status).map(ticket => (
                   <div key={ticket.id} className="bg-fc-channel border border-fc-hover rounded-xl p-3 space-y-2">
                     <p className="text-sm text-white font-medium leading-snug">{ticket.title}</p>

@@ -613,10 +613,11 @@ export default function GroupDMPage() {
                         <div className="relative">
                           <button
                             onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}
-                            className="p-1 text-fc-muted hover:text-fc-accent rounded transition"
+                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition"
                             title="Réagir"
+                            aria-label="Ajouter une réaction"
                           >
-                            <SmilePlus size={12} />
+                            <SmilePlus size={12} aria-hidden />
                           </button>
                           {emojiPickerFor === msg.id && (
                             <div className={`absolute z-50 ${isMe ? 'right-0' : 'left-0'} bottom-7`}>
@@ -630,17 +631,19 @@ export default function GroupDMPage() {
                         {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}
-                            className="p-1 text-fc-muted hover:text-white rounded transition"
+                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
                             title="Modifier"
+                            aria-label="Modifier le message"
                           >
-                            <Pencil size={12} />
+                            <Pencil size={12} aria-hidden />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(msg.id)}
-                            className="p-1 text-fc-muted hover:text-red-400 rounded transition"
+                            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
                             title="Supprimer"
+                            aria-label="Supprimer le message"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={12} aria-hidden />
                           </button>
                         </>)}
                       </div>

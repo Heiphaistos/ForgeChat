@@ -211,7 +211,7 @@ export default function ActivityFeedPage() {
       </div>
 
       {/* Feed */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-fc-muted gap-3">
             <Zap size={40} className="opacity-20" />
