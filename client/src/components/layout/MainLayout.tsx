@@ -125,7 +125,7 @@ export default function MainLayout() {
           )}
 
           {/* Sidebars — drawer fixe sur mobile, inline sur desktop */}
-          <div className={[
+          <nav aria-label="Navigation" className={[
             'flex h-full flex-shrink-0',
             'fixed inset-y-0 left-0 z-50',
             'md:static md:inset-auto md:z-auto',
@@ -143,7 +143,7 @@ export default function MainLayout() {
               <VoiceBar />
               <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
             </div>
-          </div>
+          </nav>
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}
           <div
@@ -155,7 +155,7 @@ export default function MainLayout() {
           </div>
 
           {/* Zone principale */}
-          <div className="relative flex flex-1 overflow-hidden min-w-0">
+          <main className="relative flex flex-1 overflow-hidden min-w-0">
             <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               <Outlet />
             </div>
@@ -175,7 +175,7 @@ export default function MainLayout() {
 
             {/* Sidebar droite — Activité récente (overlay absolu sur mobile, colonne sur desktop) */}
             <RightSidebar visible={activityOpen} onClose={closeActivity} />
-          </div>
+          </main>
         </div>
       </SplitContext.Provider>
     </MobileContext.Provider>

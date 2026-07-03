@@ -424,6 +424,7 @@ export default function GroupDMPage() {
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') setSearchQuery(searchInput.trim()) }}
                 placeholder="Rechercher dans ce groupe..."
+                inputMode="search" autoComplete="off"
                 className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
                 autoFocus
               />
@@ -489,6 +490,7 @@ export default function GroupDMPage() {
                   value={addMemberInput}
                   onChange={e => setAddMemberInput(e.target.value)}
                   placeholder="Rechercher un utilisateur..."
+                  inputMode="search" autoComplete="off"
                   className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
                 />
               </div>
