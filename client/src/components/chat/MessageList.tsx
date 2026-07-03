@@ -336,6 +336,7 @@ export default function MessageList({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTarget = useRef<{ x: number; y: number; msg: any } | null>(null)
   const swipeRef = useRef<{ startX: number; startY: number; msg: any; el: HTMLElement | null } | null>(null)
+  const lastTapRef = useRef<{ time: number; msgId: string } | null>(null)
 
   // Cleanup à l'unmount
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
@@ -382,6 +383,21 @@ export default function MessageList({
     if (onReply && dx > 60 && Math.abs(dy) < 80) {
       if ('vibrate' in navigator) navigator.vibrate(30)
       onReply(msg)
+      return
+    }
+    // Double-tap → réaction rapide ❤️ (tap immobile, 2e tap sur le même message en <300ms)
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+      const now = Date.now()
+      const last = lastTapRef.current
+      if (last && last.msgId === msg.id && now - last.time < 300) {
+        lastTapRef.current = null
+        if ('vibrate' in navigator) navigator.vibrate(15)
+        toggleReaction(msg.id, '❤️')
+      } else {
+        lastTapRef.current = { time: now, msgId: msg.id }
+      }
+    } else {
+      lastTapRef.current = null
     }
   }
 

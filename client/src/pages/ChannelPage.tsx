@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useContext, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
 import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
@@ -526,14 +526,31 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 <Columns2 size={18} />
               </button>
             ) : (
-              <button
-                onClick={onClose}
-                className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-                title="Fermer le split (Ctrl+Shift+S)"
-                aria-label="Fermer la vue partagée"
-              >
-                <X size={18} />
-              </button>
+              <>
+                {params.channelId && params.channelId !== channelId && (
+                  <button
+                    onClick={() => {
+                      const mainCh = params.channelId
+                      if (!mainCh || !channelId) return
+                      setSplitChannelId(mainCh)
+                      nav(`/servers/${serverId}/channels/${channelId}`)
+                    }}
+                    className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                    title="Échanger avec le panneau principal"
+                    aria-label="Échanger les panneaux"
+                  >
+                    <ArrowLeftRight size={18} />
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+                  title="Fermer le split (Ctrl+Shift+S)"
+                  aria-label="Fermer la vue partagée"
+                >
+                  <X size={18} />
+                </button>
+              </>
             )}
           </div>
         </div>
