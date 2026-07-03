@@ -90,8 +90,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
                 </p>
               )}
             </div>
-            <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover">
-              <X size={20} />
+            <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover">
+              <X size={20} aria-hidden />
             </button>
           </div>
         </div>

@@ -101,8 +101,8 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
             <h2 id="invite-modal-title" className="text-lg font-bold text-white">Inviter sur <span className="text-fc-accent">{serverName}</span></h2>
             <p className="text-xs text-fc-muted mt-0.5">Partage un lien pour rejoindre le serveur</p>
           </div>
-          <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover">
-            <X size={18} />
+          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover">
+            <X size={18} aria-hidden />
           </button>
         </div>
 

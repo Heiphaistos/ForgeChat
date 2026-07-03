@@ -261,13 +261,16 @@ export default function QuickSwitcher({ onClose }: Props) {
             aria-controls="qs-listbox"
             aria-activedescendant={activeItemId}
             aria-label="Naviguer vers un canal ou un message direct"
+            enterKeyHint="go"
+            inputMode="search"
+            autoCapitalize="none"
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
           <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
         </div>
 
         {/* Résultats */}
-        <div id="qs-listbox" role="listbox" aria-label="Canaux et messages directs" className="max-h-80 overflow-y-auto py-2">
+        <div id="qs-listbox" role="listbox" aria-label="Canaux et messages directs" className="max-h-80 overflow-y-auto overscroll-contain py-2">
           {!query && history.length > 0 && (
             <div className="mb-1" role="group" aria-label="Recherches récentes">
               <div className="flex items-center justify-between px-3 py-1.5">

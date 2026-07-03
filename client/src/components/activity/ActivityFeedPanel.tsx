@@ -158,7 +158,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       </div>
 
       {/* Liste */}
-      <div className="flex-1 overflow-y-auto p-1">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-1">
         {isLoading && (
           <div className="space-y-1 p-1" aria-busy="true" aria-label="Chargement de l'activité">
             {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
