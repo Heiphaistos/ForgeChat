@@ -16,6 +16,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
   const touchStartX = useRef<number | null>(null)
   const pinchStartDist = useRef<number | null>(null)
   const pinchStartZoom = useRef(1)
+  const lastTapTime = useRef(0)
 
   const prev = useCallback(() => { setIndex(i => (i - 1 + images.length) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
   const next = useCallback(() => { setIndex(i => (i + 1) % images.length); setZoom(1); setPos({ x: 0, y: 0 }) }, [images.length])
@@ -100,10 +101,21 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         }}
         onTouchEnd={e => {
           if (pinchStartDist.current !== null) { pinchStartDist.current = null; return }
-          if (touchStartX.current === null || images.length <= 1) return
+          if (touchStartX.current === null) return
           const delta = e.changedTouches[0].clientX - touchStartX.current
-          if (Math.abs(delta) > 50) delta < 0 ? next() : prev()
           touchStartX.current = null
+          if (Math.abs(delta) > 50 && images.length > 1) { delta < 0 ? next() : prev(); return }
+          // Double-tap immobile → toggle zoom 1x ↔ 2x
+          if (Math.abs(delta) < 10) {
+            const now = Date.now()
+            if (now - lastTapTime.current < 300) {
+              lastTapTime.current = 0
+              setZoom(z => z > 1 ? 1 : 2)
+              setPos({ x: 0, y: 0 })
+            } else {
+              lastTapTime.current = now
+            }
+          }
         }}
       >
         <img

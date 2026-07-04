@@ -18,6 +18,8 @@ import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
 import { useDraft } from '../../store/chat'
+import { SplitContext } from '../../contexts/SplitContext'
+import { useContext } from 'react'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
@@ -214,6 +216,7 @@ export default function ChannelSidebar() {
   const effectiveMuted = (chId: string) => isChannelMuted(chId) || isServerMuted(serverId ?? '')
   const currentUser = useAuth(s => s.user)
   const drafts = useDraft(s => s.drafts)
+  const { setSplitChannelId } = useContext(SplitContext)
 
   const { data } = useQuery({
     queryKey: ['server', serverId],
@@ -729,6 +732,13 @@ export default function ChannelSidebar() {
       >
         <button
           onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
+          onAuxClick={e => {
+            // Clic molette → ouvrir le canal texte dans le panneau split (desktop)
+            if (e.button === 1 && !isVoiceCh && ch.type !== 'forum') {
+              e.preventDefault()
+              setSplitChannelId(ch.id)
+            }
+          }}
           onMouseEnter={() => { if (!isVoiceCh && channelId !== ch.id) prefetchChannelMessages(ch.id) }}
           aria-current={channelId === ch.id ? 'page' : undefined}
           className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
