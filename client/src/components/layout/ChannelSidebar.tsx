@@ -335,7 +335,7 @@ export default function ChannelSidebar() {
     return () => { offCreate(); offUpdate(); offDelete(); offMember() }
   }, [serverId])
 
-  const { data: dms = [] } = useQuery({
+  const { data: dms = [], isLoading: dmsLoading } = useQuery({
     queryKey: ['dms'],
     queryFn: () => api.get('/dms').then(r => r.data),
     enabled: !serverId,
@@ -442,6 +442,13 @@ export default function ChannelSidebar() {
   }, [dmFilter])
   const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
   const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
+  const archivedDms = useMemo(() => (dms as any[]).filter(d => d.is_archived && dmMatches(d)), [dms, dmMatches])
+  const [showArchivedDms, setShowArchivedDms] = useState(false)
+  const unarchiveDm = (dmId: string) => {
+    api.patch(`/dms/${dmId}/settings`, { archived: false })
+      .then(() => { qc.invalidateQueries({ queryKey: ['dms'] }); toast.success('Conversation désarchivée') })
+      .catch(() => toast.error('Erreur'))
+  }
 
   // ⚠️ Ces useMemo DOIVENT rester avant le `if (!serverId) return` :
   // les avoir après causait React #310/#300 (nombre de hooks variable) à
@@ -723,9 +730,56 @@ export default function ChannelSidebar() {
           )
         })}
 
+        {/* Skeleton au premier chargement de la liste */}
+        {dmsLoading && dms.length === 0 && (
+          <div className="space-y-2 px-2 py-2 animate-pulse motion-reduce:animate-none" aria-hidden>
+            {[70, 45, 60, 52].map((w, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-fc-hover flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-2.5 rounded bg-fc-hover" style={{ width: `${w}%` }} />
+                  <div className="h-2 rounded bg-fc-hover/60" style={{ width: `${w - 15}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Aucun résultat pour le filtre */}
         {dmFilter.trim() && groupDms.length === 0 && individualDms.length === 0 && (
           <div className="text-center text-fc-muted text-xs py-4">Aucune conversation trouvée</div>
+        )}
+
+        {/* Conversations archivées — repliées par défaut, désarchivage en un clic */}
+        {archivedDms.length > 0 && (
+          <div className="mt-3">
+            <button
+              onClick={() => setShowArchivedDms(v => !v)}
+              className="flex items-center gap-1 px-2 py-1.5 w-full text-[10px] font-semibold text-fc-muted uppercase tracking-wide hover:text-white transition"
+              aria-expanded={showArchivedDms}
+            >
+              <ChevronRight size={12} className={`transition-transform ${showArchivedDms ? 'rotate-90' : ''}`} />
+              Archivées ({archivedDms.length})
+            </button>
+            {showArchivedDms && archivedDms.map((dm: any) => (
+              <div key={dm.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover/50 transition group/arch">
+                <button
+                  onClick={() => { nav(dm.is_group ? `/dms/groups/${dm.id}` : `/dms/${dm.id}`); closeSidebar() }}
+                  className="flex-1 min-w-0 text-left text-sm text-fc-muted hover:text-white truncate transition"
+                >
+                  {dm.is_group ? (dm.name ?? 'Groupe') : dm.username}
+                </button>
+                <button
+                  onClick={() => unarchiveDm(dm.id)}
+                  title="Désarchiver"
+                  aria-label={`Désarchiver ${dm.is_group ? (dm.name ?? 'le groupe') : dm.username}`}
+                  className="opacity-100 md:opacity-0 md:group-hover/arch:opacity-100 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded transition flex-shrink-0"
+                >
+                  <Archive size={13} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Modal créer groupe */}
