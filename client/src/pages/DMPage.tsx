@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
-import { useChat } from '../store/chat'
+import { useChat, useDraft } from '../store/chat'
 import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
@@ -361,7 +361,11 @@ export default function DMPage() {
         }
       }
     },
-    onError: () => toast.error('Envoi impossible'),
+    onError: (_e, vars) => {
+      toast.error('Envoi impossible')
+      // Restaurer le texte comme brouillon pour ne pas le perdre
+      if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)
+    },
   })
 
   // Toggle E2E mode — generate keypair if needed, verify partner has one

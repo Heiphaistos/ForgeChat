@@ -611,6 +611,15 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }, [channelId])
 
+  // Restaurer le brouillon si le parent le remet après un échec d'envoi
+  // (le champ a été vidé optimistiquement au submit ; ne s'applique que
+  // champ vide pour ne jamais écraser une frappe en cours)
+  const restoredDraft = drafts[channelId]
+  useEffect(() => {
+    if (restoredDraft && !content) setContent(restoredDraft)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoredDraft])
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     const pos = e.target.selectionStart ?? 0

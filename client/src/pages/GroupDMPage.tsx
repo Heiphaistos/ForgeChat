@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
+import { useDraft } from '../store/chat'
 import api from '../api/client'
 import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -346,7 +347,11 @@ export default function GroupDMPage() {
         await api.post(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd).catch(() => null)
       }
     },
-    onError: () => toast.error("Erreur d'envoi"),
+    onError: (_e, vars) => {
+      toast.error("Erreur d'envoi")
+      // Restaurer le texte comme brouillon pour ne pas le perdre
+      if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)
+    },
   })
 
   const editMsg = useMutation({

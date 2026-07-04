@@ -6,7 +6,7 @@ import { SplitContext } from '../contexts/SplitContext'
 import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
-import { useChat } from '../store/chat'
+import { useChat, useDraft } from '../store/chat'
 import { useShallow } from 'zustand/react/shallow'
 import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
@@ -340,7 +340,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         await api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd)
       }
     } catch {
-      // erreur déjà gérée par sendMsg
+      // erreur déjà notifiée par sendMsg — restaurer le texte comme brouillon
+      // pour que l'utilisateur ne perde pas son message
+      if (content && channelId) useDraft.getState().setDraft(channelId, content)
     }
   }, [sendMsg, serverId, channelId])
 
