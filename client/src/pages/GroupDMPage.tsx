@@ -151,6 +151,21 @@ export default function GroupDMPage() {
     }
   }, [])
 
+  // Divider "Nouveaux messages" : capturer les non-lus AVANT le markRead
+  // ci-dessous (ordre de déclaration des effets) puis ancrer sur le premier
+  // message non lu une fois la liste chargée (même logique que MessageList)
+  const unreadAtOpenG = useRef(0)
+  const firstUnreadIdG = useRef<string | null>(null)
+  useEffect(() => {
+    unreadAtOpenG.current = useUnread.getState().counts[groupId ?? ''] ?? 0
+    firstUnreadIdG.current = null
+  }, [groupId])
+  useEffect(() => {
+    if (firstUnreadIdG.current || unreadAtOpenG.current <= 0 || allMessages.length === 0) return
+    const idx = Math.max(0, allMessages.length - unreadAtOpenG.current)
+    firstUnreadIdG.current = allMessages[idx]?.id ?? null
+  }, [allMessages.length])
+
   // Effacer le badge non-lu quand on ouvre le groupe (client + serveur)
   useEffect(() => {
     if (!groupId) return
@@ -650,6 +665,13 @@ export default function GroupDMPage() {
                     {dateLabel}
                   </span>
                   <div className="flex-1 h-px bg-fc-hover/70" />
+                </div>
+              )}
+              {firstUnreadIdG.current === msg.id && (
+                <div className="flex items-center gap-2 my-2 px-2 select-none" role="separator" aria-label="Nouveaux messages">
+                  <div className="flex-1 h-px bg-red-400/60" />
+                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">Nouveaux messages</span>
+                  <div className="flex-1 h-px bg-red-400/60" />
                 </div>
               )}
               <div
