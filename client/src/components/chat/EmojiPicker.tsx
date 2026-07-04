@@ -44,6 +44,23 @@ interface CustomEmoji {
   url: string
 }
 
+// Emojis récemment utilisés — persistés en localStorage, plus récent en premier
+const RECENT_KEY = 'fc_recent_emojis'
+const RECENT_MAX = 18
+export function getRecentEmojis(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr.filter(e => typeof e === 'string').slice(0, RECENT_MAX) : []
+  } catch { return [] }
+}
+function pushRecentEmoji(emoji: string) {
+  try {
+    const next = [emoji, ...getRecentEmojis().filter(e => e !== emoji)].slice(0, RECENT_MAX)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {}
+}
+
 interface Props {
   onPick: (emoji: string) => void
   onClose: () => void
@@ -54,6 +71,12 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState(0)
   const [tab, setTab] = useState<'standard' | 'server'>('standard')
+  const [recents] = useState<string[]>(getRecentEmojis)
+  const pick = (emoji: string) => {
+    pushRecentEmoji(emoji)
+    onPick(emoji)
+    onClose()
+  }
 
   const { data: serverEmojis = [] } = useQuery<CustomEmoji[]>({
     queryKey: ['custom_emojis', serverId],
@@ -165,6 +188,26 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
 
           {/* Grille emojis */}
           <div className="h-52 overflow-y-auto overscroll-contain p-2">
+            {/* Récemment utilisés */}
+            {!filtered && recents.length > 0 && (
+              <>
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-1" aria-hidden>
+                  Récents
+                </div>
+                <div className="grid grid-cols-9 gap-0.5 mb-2">
+                  {recents.map((emoji, i) => (
+                    <button
+                      key={`r-${i}`}
+                      onClick={() => pick(emoji)}
+                      aria-label={emoji}
+                      className="w-8 h-8 flex items-center justify-center text-xl rounded hover:bg-fc-hover transition hover:scale-110"
+                    >
+                      <span aria-hidden>{emoji}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             {!filtered && (
               <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-1" aria-hidden>
                 {CATEGORIES[activeCategory].label.split(' ').slice(1).join(' ')}
@@ -174,7 +217,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
               {displayed.map((emoji, i) => (
                 <button
                   key={i}
-                  onClick={() => { onPick(emoji); onClose() }}
+                  onClick={() => pick(emoji)}
                   aria-label={emoji}
                   className="w-8 h-8 flex items-center justify-center text-xl rounded hover:bg-fc-hover transition hover:scale-110"
                 >

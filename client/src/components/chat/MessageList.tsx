@@ -9,6 +9,7 @@ import { useAuth } from '../../store/auth'
 import { useContextMenu } from '../ui/ContextMenu'
 import { useChat } from '../../store/chat'
 import { useUnread } from '../../store/unread'
+import { getRecentEmojis } from './EmojiPicker'
 import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
@@ -38,6 +39,8 @@ interface Props {
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
+// Emojis rapides personnalisés : les récents d'abord, complétés par les défauts
+const quickEmojis = () => [...new Set([...getRecentEmojis(), ...QUICK_EMOJIS])].slice(0, 8)
 const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
 const DBLCLICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥']
 
@@ -949,7 +952,7 @@ export default function MessageList({
                         className="absolute bottom-full right-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex gap-1 z-50"
                         onClick={e => e.stopPropagation()}
                       >
-                        {QUICK_EMOJIS.map(emoji => (
+                        {quickEmojis().map(emoji => (
                           <button
                             key={emoji}
                             onClick={() => { onAddReaction?.(msg.id, emoji); setEmojiPickerFor(null) }}
@@ -1273,7 +1276,7 @@ export default function MessageList({
         >
           {/* Barre d'emojis rapides — particulièrement utile sur mobile */}
           <div className="flex items-center justify-around px-1 py-1.5 border-b border-fc-hover/50">
-            {QUICK_EMOJIS.map(emoji => (
+            {quickEmojis().map(emoji => (
               <button
                 key={emoji}
                 onClick={() => { toggleReaction(contextMenu.msg.id, emoji); setContextMenu(null) }}
