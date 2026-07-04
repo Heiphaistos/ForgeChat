@@ -247,6 +247,18 @@ export default function ChannelSidebar() {
   }, [])
   const typingMap = useChat(s => s.typing)
   const isTypingIn = (id: string) => Object.keys(typingMap[id] ?? {}).length > 0
+
+  // Canaux où l'utilisateur est mentionné (cache partagé avec NotificationBell)
+  const { data: mentions = [] } = useQuery<any[]>({
+    queryKey: ['user_mentions'],
+    queryFn: () => api.get('/user/mentions').then(r => r.data),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  })
+  const mentionChannels = useMemo(
+    () => new Set(mentions.map((m: any) => m.channel_id)),
+    [mentions]
+  )
   const { setSplitChannelId } = useContext(SplitContext)
 
   const { data } = useQuery({
@@ -898,6 +910,17 @@ export default function ChannelSidebar() {
           {effectiveMuted(ch.id) && (
             <span title="Notifications désactivées" className="flex-shrink-0">
               <BellOff size={11} className="text-fc-muted/50" />
+            </span>
+          )}
+          {/* Badge @ — l'utilisateur est mentionné dans ce canal */}
+          {mentionChannels.has(ch.id) && channelId !== ch.id && !isVoiceCh && (
+            <span
+              role="status"
+              aria-label="Vous êtes mentionné dans ce canal"
+              title="Vous êtes mentionné"
+              className="flex-shrink-0 min-w-[18px] h-[18px] bg-yellow-500 text-black text-[11px] font-bold rounded-full flex items-center justify-center px-1"
+            >
+              <span aria-hidden>@</span>
             </span>
           )}
           {unreadCounts[ch.id] > 0 && channelId !== ch.id && !isVoiceCh && !effectiveMuted(ch.id) && (

@@ -128,6 +128,17 @@ export default function ServerSidebar() {
     const srv = Object.values(s.serverCounts).reduce((a, b) => a + b, 0)
     return Math.max(0, total - srv)
   })
+  // Serveurs avec mentions non lues (cache partagé avec NotificationBell/ChannelSidebar)
+  const { data: mentionsData = [] } = useQuery<any[]>({
+    queryKey: ['user_mentions'],
+    queryFn: () => api.get('/user/mentions').then(r => r.data),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  })
+  const mentionServers = useMemo(
+    () => new Set(mentionsData.map((m: any) => m.server_id)),
+    [mentionsData]
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
@@ -401,6 +412,17 @@ export default function ServerSidebar() {
         </button>
         {hasUnread && (
           <span role="status" aria-label={`${serverCounts[s.id]} message${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} non lu${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} sur ${s.name}`} className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
+        )}
+        {/* Badge @ — mention non lue quelque part dans ce serveur */}
+        {mentionServers.has(s.id) && (
+          <span
+            role="status"
+            aria-label={`Vous êtes mentionné sur ${s.name}`}
+            title="Vous êtes mentionné"
+            className="absolute top-0 right-2 min-w-[15px] h-[15px] bg-yellow-500 text-black text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
+          >
+            <span aria-hidden>@</span>
+          </span>
         )}
         {muted && (
           <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
