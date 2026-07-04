@@ -543,7 +543,7 @@ export default function ChannelSidebar() {
                         {dm.name ?? dm.username ?? 'Groupe'}
                       </span>
                       {dm.last_message_at && (
-                        <span className="text-[10px] text-fc-muted flex-shrink-0">{timeAgoShort(dm.last_message_at)}</span>
+                        <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
                       )}
                     </div>
                     <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
@@ -639,7 +639,7 @@ export default function ChannelSidebar() {
                     {dm.username}
                   </span>
                   {dm.last_message_at && (
-                    <span className="text-[10px] text-fc-muted flex-shrink-0">{timeAgoShort(dm.last_message_at)}</span>
+                    <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
                   )}
                 </div>
                 {dm.last_message_content != null ? (

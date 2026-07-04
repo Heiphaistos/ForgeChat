@@ -347,7 +347,9 @@ function AppInner() {
       const content: string = msg.content ?? ''
       const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
-      if (mentionedMe || content.includes('@everyone') || content.includes('@here')) {
+      // Réponse à un de mes messages = notification aussi (comme Discord)
+      const repliedToMe = !!msg.reply_to && msg.reply_to_username === user.username
+      if (mentionedMe || repliedToMe || content.includes('@everyone') || content.includes('@here')) {
         // Invalidate notification bell so new mention shows immediately
         qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
         playMention()
@@ -357,7 +359,7 @@ function AppInner() {
         const activeChannelId = window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
         const isActiveChannel = activeChannelId === msg.channel_id
         if (document.hasFocus() && !isActiveChannel) {
-          toast(`🔔 ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
+          toast(`${repliedToMe && !mentionedMe ? '↩️' : '🔔'} ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
             duration: 5000,
             style: { cursor: 'pointer', maxWidth: '360px' },
             onClick: goToMsg,
