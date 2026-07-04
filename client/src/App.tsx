@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, lazy, Suspense, type ReactNode } from 'react'
+import { useEffect, useState, useRef, useCallback, lazy, Suspense, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
@@ -386,6 +386,16 @@ function AppInner() {
     else n.clearAppBadge?.()?.catch(() => {})
   }, [allUnread, allServerCounts, isServerMuted])
 
+  // Recharger tout ce qui a pu être manqué pendant une coupure/gel de connexion
+  const resyncAfterGap = useCallback(() => {
+    qcHook.invalidateQueries({ queryKey: ['messages'] })
+    qcHook.invalidateQueries({ queryKey: ['dm_messages'] })
+    qcHook.invalidateQueries({ queryKey: ['dms'] })
+    qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
+    qcHook.invalidateQueries({ queryKey: ['server'] })
+    useUnread.getState().fetchAll()
+  }, [qcHook])
+
   // Resync après une coupure WebSocket : recharger ce qui a pu être manqué
   // (les events MESSAGE_CREATE perdus pendant la coupure ne seront jamais rejoués)
   const wasDisconnected = useRef(false)
@@ -393,12 +403,27 @@ function AppInner() {
     if (!wsConnected) { wasDisconnected.current = true; return }
     if (!wasDisconnected.current) return
     wasDisconnected.current = false
-    qcHook.invalidateQueries({ queryKey: ['messages'] })
-    qcHook.invalidateQueries({ queryKey: ['dm_messages'] })
-    qcHook.invalidateQueries({ queryKey: ['dms'] })
-    qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
-    useUnread.getState().fetchAll()
-  }, [wsConnected])
+    resyncAfterGap()
+  }, [wsConnected, resyncAfterGap])
+
+  // Resync après un background prolongé (>60s) même si le socket semble OPEN :
+  // les OS mobiles gèlent le WebSocket sans le fermer, les events sont perdus
+  // silencieusement et le cas "reconnexion" ne se déclenche jamais
+  const hiddenAt = useRef<number | null>(null)
+  useEffect(() => {
+    if (!user) return
+    const handler = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt.current = Date.now(); return }
+      const gap = hiddenAt.current ? Date.now() - hiddenAt.current : 0
+      hiddenAt.current = null
+      const { socket } = useWs.getState()
+      const socketOpen = socket && socket.readyState === WebSocket.OPEN
+      if (gap > 60_000 && socketOpen) resyncAfterGap()
+      // Socket fermé : la reconnexion (autre handler) déclenchera le resync via wsConnected
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [user?.id, resyncAfterGap])
 
   // Notifications temps réel pour les demandes d'ami
   useEffect(() => {
