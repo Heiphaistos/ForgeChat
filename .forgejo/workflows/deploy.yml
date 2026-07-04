@@ -15,7 +15,9 @@ jobs:
           install -m 700 -d ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" | base64 --decode > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          echo "${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          # known_hosts généré au vol (le secret VPS_SSH_KNOWN_HOSTS a été perdu
+          # dans la migration Forgejo ; keyscan = TOFU, runner et cible sur le même hôte)
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} > ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy via SSH
         run: |
