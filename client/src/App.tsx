@@ -9,6 +9,7 @@ import { useVoice } from './store/voice'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useUpdateNotifier } from './hooks/useUpdateNotifier'
+import api from './api/client'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
@@ -382,6 +383,37 @@ function AppInner() {
     })
     return () => { offJoin(); offLeave(); offMsg() }
   }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, playJoin, playLeave, playMessage, playMention])
+
+  // Statut "Absent" automatique après 10 min d'inactivité — uniquement si le
+  // statut est "online" (ne jamais écraser un dnd/invisible choisi manuellement) ;
+  // retour "online" à la première activité seulement si c'est l'auto-idle qui l'a mis
+  const autoIdleRef = useRef(false)
+  useEffect(() => {
+    if (!user) return
+    const IDLE_AFTER = 10 * 60_000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const goIdle = () => {
+      if (useAuth.getState().user?.status !== 'online') return
+      autoIdleRef.current = true
+      api.patch('/users/me', { status: 'idle' })
+        .then(() => useAuth.getState().updateMe({ status: 'idle' }))
+        .catch(() => { autoIdleRef.current = false })
+    }
+    const arm = () => { clearTimeout(timer); timer = setTimeout(goIdle, IDLE_AFTER) }
+    const onActivity = () => {
+      if (autoIdleRef.current && useAuth.getState().user?.status === 'idle') {
+        autoIdleRef.current = false
+        api.patch('/users/me', { status: 'online' })
+          .then(() => useAuth.getState().updateMe({ status: 'online' }))
+          .catch(() => {})
+      }
+      arm()
+    }
+    const events: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'mousedown', 'touchstart']
+    events.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }))
+    arm()
+    return () => { clearTimeout(timer); events.forEach(ev => window.removeEventListener(ev, onActivity)) }
+  }, [user?.id])
 
   // Demander permission notifications au login
   useEffect(() => {

@@ -26,8 +26,18 @@ export function useUpdateNotifier() {
           notified.current = true
           toast(
             (t) => (
-              <span onClick={() => { toast.dismiss(t.id); window.location.reload() }} style={{ cursor: 'pointer' }}>
-                Nouvelle version disponible — <b>cliquer pour recharger</b>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span onClick={() => { toast.dismiss(t.id); window.location.reload() }} style={{ cursor: 'pointer' }}>
+                  Nouvelle version disponible — <b>cliquer pour recharger</b>
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); toast.dismiss(t.id) }}
+                  aria-label="Plus tard"
+                  title="Plus tard"
+                  style={{ background: 'none', border: 'none', color: '#72767d', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
+                >
+                  ✕
+                </button>
               </span>
             ),
             { duration: Infinity, icon: '🔄', id: 'app-update' }
