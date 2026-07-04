@@ -380,7 +380,25 @@ function AppInner() {
     const total = dmTotal + unmutedServerTotal
     const base = document.title.replace(/^\(\d+\)\s*/, '')
     document.title = total > 0 ? `(${total}) ${base}` : base
+    // Badging API — pastille sur l'icône de la PWA installée (Android/desktop)
+    const n = navigator as Navigator & { setAppBadge?: (c: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
+    if (total > 0) n.setAppBadge?.(total)?.catch(() => {})
+    else n.clearAppBadge?.()?.catch(() => {})
   }, [allUnread, allServerCounts, isServerMuted])
+
+  // Resync après une coupure WebSocket : recharger ce qui a pu être manqué
+  // (les events MESSAGE_CREATE perdus pendant la coupure ne seront jamais rejoués)
+  const wasDisconnected = useRef(false)
+  useEffect(() => {
+    if (!wsConnected) { wasDisconnected.current = true; return }
+    if (!wasDisconnected.current) return
+    wasDisconnected.current = false
+    qcHook.invalidateQueries({ queryKey: ['messages'] })
+    qcHook.invalidateQueries({ queryKey: ['dm_messages'] })
+    qcHook.invalidateQueries({ queryKey: ['dms'] })
+    qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
+    useUnread.getState().fetchAll()
+  }, [wsConnected])
 
   // Notifications temps réel pour les demandes d'ami
   useEffect(() => {
