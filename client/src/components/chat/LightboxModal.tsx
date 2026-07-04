@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
+import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 interface Props {
   images: string[]
@@ -40,6 +41,21 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
     a.click()
   }
 
+  // Web Share API (mobile) avec fallback copie du lien
+  const share = async () => {
+    const url = new URL(images[index], window.location.origin).href
+    if (navigator.share) {
+      try { await navigator.share({ url }) } catch { /* partage annulé */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(url)
+        toast.success('Lien de l\'image copié')
+      } catch {
+        toast.error('Impossible de copier le lien')
+      }
+    }
+  }
+
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     setZoom(z => e.deltaY < 0 ? Math.min(z + 0.25, 4) : Math.max(z - 0.25, 0.5))
@@ -53,6 +69,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} aria-label="Zoom avant" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} aria-hidden /></button>
         <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} aria-label="Zoom arrière" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} aria-hidden /></button>
+        <button onClick={share} aria-label="Partager l'image" title="Partager" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Share2 size={18} aria-hidden /></button>
         <button onClick={download} aria-label="Télécharger l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
         <button onClick={onClose} aria-label="Fermer" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
       </div>

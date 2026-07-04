@@ -126,6 +126,23 @@ function AppInner() {
     document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
+  // Synchroniser la barre de statut mobile (meta theme-color) avec le fond du
+  // thème actif — recalculé à chaque changement de data-theme, sans mapping manuel
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (!meta) return
+    const sync = () => {
+      requestAnimationFrame(() => {
+        const bg = getComputedStyle(document.body).backgroundColor
+        if (bg) meta.setAttribute('content', bg)
+      })
+    }
+    sync()
+    const obs = new MutationObserver(sync)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => obs.disconnect()
+  }, [])
+
   // Appliquer le zoom sauvegardé au démarrage
   useEffect(() => {
     const zoom = localStorage.getItem('fc_zoom')
