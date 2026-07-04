@@ -38,6 +38,41 @@ export default function MainLayout() {
     if (splitChannelId) sessionStorage.setItem('fc_split_channel', splitChannelId)
     else sessionStorage.removeItem('fc_split_channel')
   }, [splitChannelId])
+
+  // Largeur du panneau split (ratio 0.25–0.75, persisté)
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    const saved = parseFloat(localStorage.getItem('fc_split_ratio') ?? '')
+    return Number.isFinite(saved) ? clamp(saved, 0.25, 0.75) : 0.5
+  })
+  const splitResizing = useRef(false)
+  const onSplitResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    splitResizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!splitResizing.current) return
+      const main = document.getElementById('fc-main')
+      if (!main) return
+      const rect = main.getBoundingClientRect()
+      setSplitRatio(clamp((rect.right - e.clientX) / rect.width, 0.25, 0.75))
+    }
+    const onUp = () => {
+      if (!splitResizing.current) return
+      splitResizing.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setSplitRatio(r => { localStorage.setItem('fc_split_ratio', String(r)); return r })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isMobile = useIsMobile()
   const wsConnected = useWs(s => s.connected)
@@ -220,9 +255,23 @@ export default function MainLayout() {
               <Outlet />
             </div>
 
+            {/* Handle de redimensionnement du split — desktop uniquement */}
+            {splitChannelId && (
+              <div
+                className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group/split z-10"
+                onMouseDown={onSplitResizeStart}
+                title="Redimensionner le panneau split"
+              >
+                <div className="w-px h-full bg-fc-hover group-hover/split:bg-fc-accent/60 transition-colors" />
+              </div>
+            )}
+
             {/* Panneau split — second canal (desktop uniquement) */}
             {splitChannelId && (
-              <div className="hidden md:flex flex-1 border-l border-fc-hover overflow-hidden min-w-0">
+              <div
+                className="hidden md:flex overflow-hidden min-w-0"
+                style={{ flex: `0 0 ${splitRatio * 100}%` }}
+              >
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
                   <ChannelPage
                     forcedChannelId={splitChannelId}
