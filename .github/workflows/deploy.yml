@@ -18,6 +18,13 @@ jobs:
           # Config SYSTÈME (indépendante du HOME variable des steps act)
           printf 'Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel ERROR\n' >> /etc/ssh/ssh_config
 
+      - name: Debug SSH
+        run: |
+          echo "HOME=$HOME user=$(id -un)"
+          which ssh; ssh -V
+          tail -5 /etc/ssh/ssh_config
+          ssh -vv -i /tmp/dk -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'echo REMOTE-OK' 2>&1 | tail -25 || true
+
       - name: Deploy to VPS via SSH
         run: |
           ssh -i /tmp/dk -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} '
