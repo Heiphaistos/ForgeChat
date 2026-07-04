@@ -334,14 +334,14 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           )}
           <div className="flex gap-3 group">
             <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
-              {r.author.avatar
+              {r.author?.avatar
                 ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                : r.author.username.charAt(0).toUpperCase()}
+                : (r.author?.username ?? '?').charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 mb-1">
                 <span className={`text-sm font-medium ${r.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
-                  {r.author.username}
+                  {r.author?.username ?? 'Utilisateur supprimé'}
                 </span>
                 <span className="text-xs text-fc-muted">{formatShortDate(r.created_at)}</span>
                 {r.user_id === user?.id && editingReplyId !== r.id && (

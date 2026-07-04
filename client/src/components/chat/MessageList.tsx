@@ -36,6 +36,8 @@ interface Props {
   onLoadMore?: () => Promise<boolean>
   initialHighlightId?: string | null
   canManageMessages?: boolean
+  loadError?: boolean
+  onRetryLoad?: () => void
 }
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
@@ -94,6 +96,8 @@ export default function MessageList({
   onLoadMore,
   initialHighlightId,
   canManageMessages = false,
+  loadError = false,
+  onRetryLoad,
 }: Props) {
   const { user } = useAuth()
   const nav = useNavigate()
@@ -1151,8 +1155,27 @@ export default function MessageList({
           )
         })()}
 
+        {/* Échec du chargement : erreur honnête + retry (au lieu du faux "Aucun message") */}
+        {loadError && messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" role="alert">
+            <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-3xl" aria-hidden>
+              ⚠️
+            </div>
+            <p className="text-base font-semibold text-white">Impossible de charger les messages</p>
+            <p className="text-sm text-fc-muted">Problème réseau ou serveur.</p>
+            {onRetryLoad && (
+              <button
+                onClick={onRetryLoad}
+                className="mt-1 px-4 py-2 min-h-[44px] bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition"
+              >
+                Réessayer
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Skeleton pendant le chargement initial (avant que showEmpty ne s'affiche) */}
-        {messages.length === 0 && !showEmpty && !loadingMore && (
+        {!loadError && messages.length === 0 && !showEmpty && !loadingMore && (
           <div className="px-4 py-6 space-y-5 animate-pulse motion-reduce:animate-none" aria-hidden>
             {[72, 45, 88, 60, 78].map((w, i) => (
               <div key={i} className="flex gap-3 items-start">
@@ -1167,7 +1190,7 @@ export default function MessageList({
         )}
 
         {/* État vide : canal sans messages */}
-        {showEmpty && !loadingMore && (
+        {!loadError && showEmpty && !loadingMore && (
           <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label="Aucun message">
             <div className="w-16 h-16 rounded-2xl bg-fc-accent/20 flex items-center justify-center text-3xl" aria-hidden>
               💬

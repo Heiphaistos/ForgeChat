@@ -97,7 +97,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     staleTime: 60_000,
   })
 
-  const { data: messages = [] } = useQuery({
+  const { data: messages = [], isError: messagesError, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', serverId, channelId, highlightMessageId ?? null],
     queryFn: async () => {
       if (highlightMessageId) {
@@ -647,6 +647,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               key={channelId}
               channelId={channelId}
               serverId={serverId}
+              loadError={messagesError}
+              onRetryLoad={() => refetchMessages()}
               onDeleteMessage={(id) => deleteMsg.mutate(id)}
               onEditMessage={(id, content) => editMsg.mutate({ msgId: id, content })}
               onOpenThread={(msgId) => { setActiveThreadId(msgId); setShowPinned(false); setShowSearch(false) }}
