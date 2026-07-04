@@ -8,6 +8,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { useContextMenu } from '../ui/ContextMenu'
 import { useChat } from '../../store/chat'
+import { useUnread } from '../../store/unread'
 import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
@@ -56,6 +57,10 @@ function formatBytes(bytes: number) {
 const URL_REGEX = /https?:\/\/[^\s<>"]+/g
 
 const EMPTY_MESSAGES: any[] = []
+
+// Position de scroll mémorisée par canal (durée de vie de l'app, pas persistée)
+// pour reprendre la lecture où on l'avait laissée en revenant dans un canal
+const savedScrollPositions = new Map<string, number>()
 
 function EphemeralBadge({ expiresAt }: { expiresAt: string }) {
   const remaining = useCountdown(expiresAt)
@@ -155,12 +160,22 @@ export default function MessageList({
   const isAtBottom = useRef(true)
   const initialScrollDone = useRef(false)
 
-  // Scroll initial instantané au bas du canal (avant que smooth ne s'active)
+  // Scroll initial : restaurer la position mémorisée si on revient dans le canal
+  // (sauf highlight demandé ou messages non lus → aller en bas comme avant),
+  // sinon scroll instantané au bas du canal (avant que smooth ne s'active)
   useEffect(() => {
     if (!initialScrollDone.current && messages.length > 0) {
       const el = containerRef.current
       if (el) {
-        el.scrollTop = el.scrollHeight
+        const saved = savedScrollPositions.get(channelId)
+        const hasUnread = (useUnread.getState().counts[channelId] ?? 0) > 0
+        if (saved != null && !initialHighlightId && !hasUnread) {
+          el.scrollTop = saved
+          isAtBottom.current = false
+          setShowScrollBtn(true)
+        } else {
+          el.scrollTop = el.scrollHeight
+        }
         initialScrollDone.current = true
       }
     }
@@ -262,6 +277,12 @@ export default function MessageList({
     setShowScrollBtn(fromBottom > 200)
     if (fromBottom < 60) setNewMsgCount(0)
 
+    // Mémoriser la position de lecture (supprimée si on est revenu en bas)
+    if (initialScrollDone.current) {
+      if (fromBottom > 200) savedScrollPositions.set(channelId, el.scrollTop)
+      else savedScrollPositions.delete(channelId)
+    }
+
     // Load more quand on touche le haut (ref évite la closure stale)
     if (el.scrollTop < 80 && !loadingMoreRef.current && onLoadMore) {
       loadingMoreRef.current = true
@@ -277,7 +298,7 @@ export default function MessageList({
         })
       }
     }
-  }, [onLoadMore])
+  }, [onLoadMore, channelId])
 
   const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
