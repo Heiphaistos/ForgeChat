@@ -4,6 +4,7 @@ import {
   Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
+import { maybeCompressImage, formatBytes } from '../../utils/compressImage'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import { useDraft, useChat } from '../../store/chat'
@@ -306,7 +307,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     onDrop: (accepted) => addFiles(accepted),
   })
 
-  const addFiles = useCallback((newFiles: File[]) => {
+  const addFiles = useCallback(async (newFiles: File[]) => {
     const MAX_SIZE = 50 * 1024 * 1024
     const oversized = newFiles.filter(f => f.size > MAX_SIZE)
     if (oversized.length > 0) {
@@ -314,7 +315,14 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
     const valid = newFiles.filter(f => f.size <= MAX_SIZE)
     if (valid.length === 0) return
-    const wrapped: FileWithTtl[] = valid.map(f => ({
+    // Compression des photos JPEG volumineuses avant upload (mobile)
+    const processed = await Promise.all(valid.map(maybeCompressImage))
+    const before = valid.reduce((a, f) => a + f.size, 0)
+    const after = processed.reduce((a, f) => a + f.size, 0)
+    if (before - after > 500_000) {
+      toast.success(`Photo optimisée : ${formatBytes(before)} → ${formatBytes(after)}`, { duration: 3000 })
+    }
+    const wrapped: FileWithTtl[] = processed.map(f => ({
       file: f,
       ttlHours: isVideo(f) ? 24 : null,
       preview: isImage(f) ? URL.createObjectURL(f) : null,
