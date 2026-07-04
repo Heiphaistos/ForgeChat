@@ -7,7 +7,7 @@ import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -731,6 +731,16 @@ export default function GroupDMPage() {
                             </div>
                           )}
                         </div>
+                        {msg.content && (
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(msg.content ?? '').then(() => toast.success('Texte copié')).catch(() => toast.error('Impossible de copier')) }}
+                            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                            title="Copier le texte"
+                            aria-label="Copier le texte du message"
+                          >
+                            <Copy size={12} aria-hidden />
+                          </button>
+                        )}
                         {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}

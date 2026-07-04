@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload, X, Loader2 } from 'lucide-react'
 import api from '../../api/client'
@@ -135,6 +136,7 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StickerPicker({ serverId, onPick, onClose }: Props) {
+  useEscapeKey(onClose)
   const [tab, setTab] = useState<'server' | 'global'>(serverId ? 'server' : 'global')
   const [globalCat, setGlobalCat] = useState(GLOBAL_CATEGORIES[0])
   const [hovered, setHovered] = useState<string | null>(null)

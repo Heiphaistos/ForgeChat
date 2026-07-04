@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { Search, X, Loader2 } from 'lucide-react'
 
 const TENOR_KEY = import.meta.env?.VITE_TENOR_API_KEY || ''
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export default function GifPicker({ onPick, onClose }: Props) {
+  useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [gifs, setGifs] = useState<TenorGif[]>([])

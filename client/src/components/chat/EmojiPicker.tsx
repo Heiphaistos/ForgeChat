@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { Search, Smile } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -68,6 +69,7 @@ interface Props {
 }
 
 export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
+  useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState(0)
   const [tab, setTab] = useState<'standard' | 'server'>('standard')
