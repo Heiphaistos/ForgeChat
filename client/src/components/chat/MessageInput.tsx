@@ -325,7 +325,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     const wrapped: FileWithTtl[] = processed.map(f => ({
       file: f,
       ttlHours: isVideo(f) ? 24 : null,
-      preview: isImage(f) ? URL.createObjectURL(f) : null,
+      preview: (isImage(f) || isVideo(f)) ? URL.createObjectURL(f) : null,
     }))
     setFiles(prev => [...prev, ...wrapped])
   }, [])
@@ -890,10 +890,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         <div className="flex gap-2 mb-2 flex-wrap p-2 bg-fc-input/40 rounded-lg border border-fc-hover">
           {files.map((fw, i) => (
             <div key={i} className="relative group flex flex-col gap-1">
-              {/* Preview image */}
+              {/* Preview image / première frame vidéo */}
               {fw.preview ? (
                 <div className="w-20 h-20 rounded overflow-hidden border border-fc-hover flex-shrink-0">
-                  <img src={fw.preview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  {isVideo(fw.file)
+                    ? <video src={fw.preview} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                    : <img src={fw.preview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />}
                 </div>
               ) : (
                 <div className="w-20 h-20 rounded border border-fc-hover bg-fc-bg flex flex-col items-center justify-center gap-1 text-center">

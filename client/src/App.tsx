@@ -829,6 +829,21 @@ function AppInner() {
           window.dispatchEvent(new CustomEvent('forgechat:toggle-search'))
         }
       }
+      // Ctrl+Alt+Arrow — serveur précédent/suivant (l'auto-redirect ouvre le
+      // dernier canal visité du serveur cible)
+      if (e.altKey && (e.ctrlKey || e.metaKey) && !isInput &&
+          (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault()
+        const servers = (qcHook.getQueryData<any[]>(['servers']) ?? [])
+        if (servers.length === 0) return
+        const curId = window.location.pathname.match(/\/servers\/([^/]+)/)?.[1]
+        const idx = servers.findIndex((s: any) => s.id === curId)
+        const next = e.key === 'ArrowDown'
+          ? (idx + 1) % servers.length
+          : (idx - 1 + servers.length) % servers.length
+        nav(`/servers/${servers[next].id}`)
+        return
+      }
       // Alt+Arrow — navigation entre canaux non-lus (ou tous les canaux)
       if (e.altKey && !e.ctrlKey && !e.metaKey && !isInput &&
           (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
