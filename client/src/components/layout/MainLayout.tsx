@@ -30,7 +30,14 @@ function useIsMobile() {
 
 export default function MainLayout() {
   const { open: activityOpen, toggle: toggleActivity, close: closeActivity } = useRightSidebar()
-  const [splitChannelId, setSplitChannelId] = useState<string | null>(null)
+  // Split view restauré après refresh (sessionStorage — durée de vie de l'onglet)
+  const [splitChannelId, setSplitChannelId] = useState<string | null>(
+    () => sessionStorage.getItem('fc_split_channel')
+  )
+  useEffect(() => {
+    if (splitChannelId) sessionStorage.setItem('fc_split_channel', splitChannelId)
+    else sessionStorage.removeItem('fc_split_channel')
+  }, [splitChannelId])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isMobile = useIsMobile()
   const wsConnected = useWs(s => s.connected)
@@ -46,6 +53,7 @@ export default function MainLayout() {
   const startX = useRef(0)
   const startW = useRef(0)
   const navSwipeX = useRef<number | null>(null)
+  const edgeSwipe = useRef<{ x: number; y: number } | null>(null)
 
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     resizing.current = true
@@ -190,8 +198,24 @@ export default function MainLayout() {
             <div className="w-px h-full bg-fc-hover group-hover:bg-fc-accent/60 transition-colors" />
           </div>
 
-          {/* Zone principale */}
-          <main id="fc-main" className="relative flex flex-1 overflow-hidden min-w-0">
+          {/* Zone principale — edge-swipe depuis le bord gauche pour ouvrir la sidebar (mobile) */}
+          <main
+            id="fc-main"
+            className="relative flex flex-1 overflow-hidden min-w-0"
+            onTouchStart={e => {
+              const t = e.touches[0]
+              edgeSwipe.current = isMobile && !sidebarOpen && t.clientX <= 20
+                ? { x: t.clientX, y: t.clientY }
+                : null
+            }}
+            onTouchEnd={e => {
+              if (!edgeSwipe.current) return
+              const dx = e.changedTouches[0].clientX - edgeSwipe.current.x
+              const dy = Math.abs(e.changedTouches[0].clientY - edgeSwipe.current.y)
+              edgeSwipe.current = null
+              if (dx > 60 && dy < 80) setSidebarOpen(true)
+            }}
+          >
             <div className="flex flex-col flex-1 overflow-hidden min-w-0">
               <Outlet />
             </div>
