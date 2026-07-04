@@ -460,16 +460,32 @@ export default function MessageList({
   })
 
   const reactionHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fetchReactionUsers = async (messageId: string, emoji: string, x: number, y: number) => {
+    try {
+      const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
+      const users = res.data?.users ?? []
+      setReactionPopup({ messageId, emoji, x, y, users })
+    } catch {}
+  }
   const handleReactionHover = (e: React.MouseEvent, messageId: string, emoji: string) => {
     const { clientX, clientY } = e
     if (reactionHoverTimer.current) clearTimeout(reactionHoverTimer.current)
-    reactionHoverTimer.current = setTimeout(async () => {
-      try {
-        const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
-        const users = res.data?.users ?? []
-        setReactionPopup({ messageId, emoji, x: clientX, y: clientY, users })
-      } catch {}
-    }, 300)
+    reactionHoverTimer.current = setTimeout(() => fetchReactionUsers(messageId, emoji, clientX, clientY), 300)
+  }
+  // Long-press mobile sur une réaction → popup "qui a réagi" (hover indisponible)
+  const reactionLongPress = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reactionLongPressFired = useRef(false)
+  const startReactionLongPress = (e: React.TouchEvent, messageId: string, emoji: string) => {
+    const { clientX, clientY } = e.touches[0]
+    reactionLongPressFired.current = false
+    reactionLongPress.current = setTimeout(() => {
+      reactionLongPressFired.current = true
+      if ('vibrate' in navigator) navigator.vibrate(15)
+      fetchReactionUsers(messageId, emoji, clientX, clientY)
+    }, 450)
+  }
+  const cancelReactionLongPress = () => {
+    if (reactionLongPress.current) { clearTimeout(reactionLongPress.current); reactionLongPress.current = null }
   }
 
   const translateMessage = useCallback(async (messageId: string) => {
@@ -827,6 +843,8 @@ export default function MessageList({
                               key={r.emoji}
                               onClick={(e) => {
                                 e.stopPropagation()
+                                // Le long-press vient d'ouvrir le popup → ne pas toggler
+                                if (reactionLongPressFired.current) { reactionLongPressFired.current = false; return }
                                 toggleReaction(msg.id, r.emoji)
                                 if (!r.me) {
                                   setPoppingReaction(reactionKey)
@@ -835,6 +853,10 @@ export default function MessageList({
                               }}
                               onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
                               onMouseLeave={() => setReactionPopup(null)}
+                              onTouchStart={e => { e.stopPropagation(); startReactionLongPress(e, msg.id, r.emoji) }}
+                              onTouchEnd={cancelReactionLongPress}
+                              onTouchMove={cancelReactionLongPress}
+                              onTouchCancel={cancelReactionLongPress}
                               className={`flex items-center gap-1 px-2 py-1 md:py-0.5 rounded-full text-xs border transition-all duration-150
                                 hover:scale-110 hover:shadow-md
                                 ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
