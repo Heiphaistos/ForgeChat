@@ -398,10 +398,9 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                 <div className="relative">
                   <TypeIcon size={14} className={`absolute left-3 top-3 ${typeColor}`} />
                   <input value={name}
-                    onChange={e => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))}
+                    onChange={e => setName(e.target.value)}
                     maxLength={100}
                     enterKeyHint="done"
-                    autoCapitalize="none"
                     autoComplete="off"
                     className="w-full pl-8 pr-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                   />

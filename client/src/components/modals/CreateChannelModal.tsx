@@ -55,7 +55,7 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
 
   const create = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels`, {
-      name: name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, ''),
+      name: name.trim(),
       type,
       topic: topic.trim() || undefined,
       category_id: categoryId || undefined,
@@ -123,12 +123,10 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
                 <selectedType.icon size={16} />
               </span>
               <input autoFocus value={name}
-                onChange={e => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-_\s]/g, ''))}
-                onBlur={e => setName(e.target.value.replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''))}
-                placeholder="nouveau-canal"
+                onChange={e => setName(e.target.value)}
+                placeholder="Nouveau canal 🎮"
                 maxLength={100}
                 enterKeyHint="next"
-                autoCapitalize="none"
                 autoComplete="off"
                 className="w-full pl-8 pr-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
               />
