@@ -177,3 +177,54 @@ pub async fn upload_file(
 
     Ok(Json(uploaded))
 }
+
+/// Upload simple pour les forums : sauvegarde une image/vidéo et renvoie son
+/// URL, à insérer dans le contenu du post ou de la réponse (pas de table
+/// d'attachments dédiée pour les forums)
+pub async fn forum_upload(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    mut multipart: Multipart,
+) -> Result<Json<serde_json::Value>> {
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+
+    const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"];
+
+    let upload_dir = PathBuf::from(&state.config.upload_dir);
+    tokio::fs::create_dir_all(&upload_dir).await
+        .map_err(|e| AppError::Internal(e.into()))?;
+
+    while let Some(field) = multipart.next_field().await
+        .map_err(|e| AppError::BadRequest(e.to_string()))? {
+
+        let original_name = field.file_name().unwrap_or("fichier").to_string();
+        let data = field.bytes().await
+            .map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+        if data.len() as u64 > state.config.max_upload_size {
+            return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
+        }
+
+        let ext = std::path::Path::new(&original_name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if !FORUM_EXTENSIONS.contains(&ext.as_str()) {
+            return Err(AppError::BadRequest(
+                "Seules les images (jpg, png, gif, webp) et vidéos (mp4, webm, mov) sont autorisées".into()
+            ));
+        }
+
+        let filename = format!("{}.{}", Uuid::new_v4(), ext);
+        let file_path = upload_dir.join(&filename);
+        tokio::fs::write(&file_path, &data).await
+            .map_err(|e| AppError::Internal(e.into()))?;
+
+        return Ok(Json(serde_json::json!({ "url": format!("/uploads/{}", filename) })));
+    }
+
+    Err(AppError::BadRequest("Aucun fichier reçu".into()))
+}

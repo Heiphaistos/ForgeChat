@@ -552,6 +552,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/read", post(handlers::reads::mark_server_read))
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
         // Threads
+        .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload))
         .route("/servers/:server_id/channels/:channel_id/threads", get(handlers::threads::list_threads))
         .route("/servers/:server_id/channels/:channel_id/threads", post(handlers::threads::create_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))

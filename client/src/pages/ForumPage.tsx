@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2 } from 'lucide-react'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
@@ -40,12 +40,81 @@ interface ForumReply {
   author: { id: string; username: string; avatar?: string; discriminator: string }
 }
 
+// ─── Upload de médias forum (image/vidéo → URL insérée dans le contenu) ─────
+function useForumUpload(serverId: string, channelId: string) {
+  const [uploading, setUploading] = useState(false)
+  const pick = (onUrl: (url: string) => void) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setUploading(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const { data } = await api.post(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd)
+        if (data?.url) onUrl(data.url)
+      } catch (e: any) {
+        toast.error(e?.response?.data?.error ?? "Échec de l'envoi du fichier")
+      } finally {
+        setUploading(false)
+      }
+    }
+    input.click()
+  }
+  return { pick, uploading }
+}
+
+// Rendu du contenu forum avec médias inline : les URLs /uploads/*.{img,vid}
+// deviennent des images cliquables / lecteurs vidéo
+const FORUM_MEDIA_RE = /(\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov))/gi
+function ForumContent({ text, className }: { text: string; className?: string }) {
+  const parts = text.split(FORUM_MEDIA_RE)
+  return (
+    <div className={className ?? 'text-sm text-fc-text leading-relaxed whitespace-pre-wrap'}>
+      {parts.map((part, i) => {
+        if (part.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(part)) {
+          return (
+            <img
+              key={i} src={part} alt="" loading="lazy" decoding="async"
+              className="max-w-full md:max-w-sm rounded-lg my-1.5 block cursor-pointer hover:opacity-90 transition"
+              onClick={() => window.open(part, '_blank', 'noopener')}
+            />
+          )
+        }
+        if (part.startsWith('/uploads/') && /\.(mp4|webm|mov)$/i.test(part)) {
+          return <video key={i} src={part} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
+function AttachButton({ uploading, onClick }: { uploading: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={uploading}
+      title="Joindre une image ou vidéo"
+      aria-label="Joindre une image ou vidéo"
+      className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
+    >
+      {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Paperclip size={16} aria-hidden />}
+    </button>
+  )
+}
+
 function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; channelId: string; onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const qc = useQueryClient()
+  const postUpload = useForumUpload(serverId, channelId)
 
   const create = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/posts`, {
@@ -107,6 +176,10 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
               rows={5}
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
             />
+            <div className="flex items-center gap-1 mt-1">
+              <AttachButton uploading={postUpload.uploading} onClick={() => postUpload.pick(url => setContent(c => (c ? c + '\n' : '') + url))} />
+              <span className="text-xs text-fc-muted">Image ou vidéo — insérée dans le contenu, affichée en direct</span>
+            </div>
           </div>
           <div>
             <label htmlFor="fp-tag" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Tags</label>
@@ -155,6 +228,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 
 function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
   const [reply, setReply] = useState('')
+  const replyUpload = useForumUpload(serverId, channelId)
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -309,7 +383,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
               <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
             </div>
-            <p className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap">{data.post.content}</p>
+            <ForumContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
           </div>
         )}
 
@@ -396,7 +470,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-fc-text leading-relaxed whitespace-pre-wrap">{r.content}</p>
+                <ForumContent text={r.content} />
               )}
             </div>
           </div>
@@ -412,7 +486,8 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
       {/* Input réponse */}
       {!localPost.locked && (
         <div className="p-4 border-t border-fc-bg flex-shrink-0">
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
+            <AttachButton uploading={replyUpload.uploading} onClick={() => replyUpload.pick(url => setReply(c => (c ? c + '\n' : '') + url))} />
             <textarea
               value={reply}
               onChange={e => setReply(e.target.value)}
