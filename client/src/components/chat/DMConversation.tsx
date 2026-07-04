@@ -117,9 +117,11 @@ interface Props {
   onSend: (content: string | null, replyTo?: string, files?: FileWithTtl[]) => void
   onLoadMore?: () => Promise<boolean>
   initialHighlightId?: string | null
+  loadError?: boolean
+  onRetryLoad?: () => void
 }
 
-export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, initialHighlightId }: Props) {
+export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, initialHighlightId, loadError, onRetryLoad }: Props) {
   const { on, send } = useWs()
   const me = useAuth(s => s.user)
   const qc = useQueryClient()
@@ -286,6 +288,8 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
         onAddReaction={handleAddReaction}
         onLoadMore={onLoadMore}
         initialHighlightId={initialHighlightId}
+        loadError={loadError}
+        onRetryLoad={onRetryLoad}
       />
       <ReadReceiptBar channelId={dmId} receipts={receipts} />
       <TypingIndicator users={typingUsers} />

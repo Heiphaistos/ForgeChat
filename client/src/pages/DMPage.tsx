@@ -156,7 +156,7 @@ export default function DMPage() {
     }
   }, [remoteStream])
 
-  const { data: messages = [] } = useQuery({
+  const { data: messages = [], isError: dmMessagesError, refetch: refetchDmMessages } = useQuery({
     queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
     queryFn: async () => {
       if (highlightMessageId) {
@@ -668,6 +668,8 @@ export default function DMPage() {
             onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
             onLoadMore={loadMoreDM}
             initialHighlightId={highlightMessageId}
+            loadError={dmMessagesError}
+            onRetryLoad={() => refetchDmMessages()}
           />
         </>
       )}

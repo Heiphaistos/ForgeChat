@@ -110,7 +110,7 @@ export default function GroupDMPage() {
     }
   }, [group?.name])
 
-  const { data: initialMessages } = useQuery<GDMMessage[]>({
+  const { data: initialMessages, isError: gdmError, refetch: refetchGdm } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId, highlightMsgId ?? null],
     queryFn: async () => {
       if (highlightMsgId) {
@@ -599,6 +599,20 @@ export default function GroupDMPage() {
 
         {/* Messages */}
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-2 space-y-3">
+          {/* Échec du chargement initial : erreur honnête + retry */}
+          {gdmError && allMessages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" role="alert">
+              <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-3xl" aria-hidden>⚠️</div>
+              <p className="text-base font-semibold text-white">Impossible de charger les messages</p>
+              <p className="text-sm text-fc-muted">Problème réseau ou serveur.</p>
+              <button
+                onClick={() => refetchGdm()}
+                className="mt-1 px-4 py-2 min-h-[44px] bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition"
+              >
+                Réessayer
+              </button>
+            </div>
+          )}
           {/* Load more */}
           {hasMore && (
             <div className="flex justify-center py-2">
