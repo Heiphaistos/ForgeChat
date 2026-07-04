@@ -52,6 +52,28 @@ pub async fn mark_channel_read(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Marque tous les canaux d'un serveur comme lus (le JOIN server_members
+/// garantit que seuls les membres du serveur peuvent l'utiliser)
+pub async fn mark_server_read(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query(
+        "INSERT INTO last_read (user_id, channel_id, read_at)
+         SELECT $1, c.id, NOW()
+         FROM channels c
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+         WHERE c.server_id = $2
+         ON CONFLICT (user_id, channel_id) DO UPDATE SET read_at = NOW()"
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 pub async fn get_unread_counts(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

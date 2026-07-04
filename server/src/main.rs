@@ -549,6 +549,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/unread", get(handlers::reads::get_unread_counts))
         .route("/unread/mark-all", post(handlers::reads::mark_all_read))
         .route("/channels/:channel_id/read", post(handlers::reads::mark_channel_read))
+        .route("/servers/:server_id/read", post(handlers::reads::mark_server_read))
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
         // Threads
         .route("/servers/:server_id/channels/:channel_id/threads", get(handlers::threads::list_threads))

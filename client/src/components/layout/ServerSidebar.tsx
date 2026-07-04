@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell, CheckCheck } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -122,6 +122,12 @@ export default function ServerSidebar() {
   const isSaved = pathname.startsWith('/saved')
   const qc = useQueryClient()
   const serverCounts = useUnread(s => s.serverCounts)
+  // Non-lus DM = total des counts par canal moins la part attribuée aux serveurs
+  const dmUnread = useUnread(s => {
+    const total = Object.values(s.counts).reduce((a, b) => a + b, 0)
+    const srv = Object.values(s.serverCounts).reduce((a, b) => a + b, 0)
+    return Math.max(0, total - srv)
+  })
   const [showCreate, setShowCreate] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
@@ -419,6 +425,15 @@ export default function ServerSidebar() {
         >
           <MessageCircle size={20} className="text-fc-text" />
         </button>
+        {dmUnread > 0 && (
+          <span
+            role="status"
+            aria-label={`${dmUnread > 99 ? '99+' : dmUnread} message${dmUnread > 1 ? 's' : ''} direct${dmUnread > 1 ? 's' : ''} non lu${dmUnread > 1 ? 's' : ''}`}
+            className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
+          >
+            <span aria-hidden>{dmUnread > 99 ? '99+' : dmUnread}</span>
+          </span>
+        )}
       </div>
 
       {/* Messages sauvegardés */}
@@ -554,6 +569,24 @@ export default function ServerSidebar() {
             style={{ top: Math.min(contextMenu.y, window.innerHeight - 280), left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 210)) }}
           >
             {/* Actions serveur */}
+            {(serverCounts[contextMenu.serverId] ?? 0) > 0 && (
+              <button
+                className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+                onClick={async () => {
+                  const sId = contextMenu.serverId
+                  setContextMenu(null)
+                  try {
+                    await api.post(`/servers/${sId}/read`)
+                    await useUnread.getState().fetchAll()
+                    toast.success('Serveur marqué comme lu')
+                  } catch {
+                    toast.error('Impossible de marquer comme lu')
+                  }
+                }}
+              >
+                <CheckCheck size={12} /> Marquer comme lu
+              </button>
+            )}
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
               onClick={() => { nav(`/servers/${contextMenu.serverId}/settings`); setContextMenu(null) }}
