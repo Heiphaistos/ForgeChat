@@ -2,6 +2,7 @@ import { Mic, MicOff, Headphones, VolumeX, Video, VideoOff, Monitor, MonitorOff,
 import { useNavigate } from 'react-router-dom'
 import { useVoice } from '../../store/voice'
 import { useVoiceActivity } from '../../hooks/useVoiceActivity'
+import { useWakeLock } from '../../hooks/useWakeLock'
 
 export default function VoiceBar() {
   const nav = useNavigate()
@@ -12,6 +13,8 @@ export default function VoiceBar() {
   } = useVoice()
 
   const speaking = useVoiceActivity(joined ? localStream : null, !muted)
+  // Garder l'écran allumé pendant l'appel (mobile) — libéré au leave
+  useWakeLock(joined)
 
   if (!joined) return null
 
