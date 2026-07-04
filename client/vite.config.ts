@@ -25,10 +25,7 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             if (id.includes('react-router-dom') || id.includes('react-dom') || id.includes('use-sync-external-store') || (id.includes('/react/') && !id.includes('@tanstack'))) return 'vendor-react'
             if (id.includes('@tanstack/react-query')) return 'vendor-query'
-            if (id.includes('@radix-ui')) return 'vendor-ui'
-            if (id.includes('framer-motion')) return 'vendor-motion'
             if (id.includes('date-fns')) return 'vendor-dates'
-            if (id.includes('emoji-picker-react')) return 'vendor-emoji'
             if (id.includes('highlight.js')) return 'vendor-hljs'
             if (id.includes('zustand') || id.includes('immer') || id.includes('axios') || id.includes('react-hot-toast') || id.includes('react-dropzone')) return 'vendor-misc'
           }
