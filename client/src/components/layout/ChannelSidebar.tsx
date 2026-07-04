@@ -181,6 +181,19 @@ function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
 
 const UNCATEGORIZED_KEY = '__uncategorized__'
 
+// Horodatage relatif compact style Discord : 5m, 2h, 3j, 2sem, 4mois
+function timeAgoShort(dateStr: string): string {
+  const diffMin = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+  if (diffMin < 1) return 'now'
+  if (diffMin < 60) return `${diffMin}m`
+  const h = Math.floor(diffMin / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}j`
+  if (d < 30) return `${Math.floor(d / 7)}sem`
+  return `${Math.floor(d / 30)}mois`
+}
+
 function TypingDots() {
   return (
     <span className="flex gap-0.5 items-center flex-shrink-0" role="status" aria-label="Quelqu'un écrit">
@@ -474,10 +487,15 @@ export default function ChannelSidebar() {
                     </div>
                   </div>
                   <div className="min-w-0 text-left flex-1">
-                    <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
-                      {dm.name ?? dm.username ?? 'Groupe'}
+                    <div className="flex items-baseline justify-between gap-1.5">
+                      <span className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                        {dm.name ?? dm.username ?? 'Groupe'}
+                      </span>
+                      {dm.last_message_at && (
+                        <span className="text-[10px] text-fc-muted flex-shrink-0">{timeAgoShort(dm.last_message_at)}</span>
+                      )}
                     </div>
-                    <div className="text-xs text-fc-muted truncate">
+                    <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
                       {dm.last_message_content != null
                         ? (dm.last_message_content || '📎 Pièce jointe')
                         : `${dm.member_count ?? '?'} membres`}
@@ -565,11 +583,16 @@ export default function ChannelSidebar() {
                 <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${PRESENCE_COLOR[statusKey]}`} />
               </div>
               <div className="min-w-0 text-left flex-1">
-                <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
-                  {dm.username}
+                <div className="flex items-baseline justify-between gap-1.5">
+                  <span className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
+                    {dm.username}
+                  </span>
+                  {dm.last_message_at && (
+                    <span className="text-[10px] text-fc-muted flex-shrink-0">{timeAgoShort(dm.last_message_at)}</span>
+                  )}
                 </div>
                 {dm.last_message_content != null ? (
-                  <div className="text-xs text-fc-muted truncate">
+                  <div className={`text-xs truncate ${unread > 0 ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
                     {dm.last_message_content || '📎 Pièce jointe'}
                   </div>
                 ) : (
