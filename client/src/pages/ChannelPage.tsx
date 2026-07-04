@@ -70,7 +70,18 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [showSearch, setShowSearch] = useState(false)
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const [hasMore, setHasMore] = useState(true)
-  const [activeTab, setActiveTab] = useState<'Messages' | 'Tâches'>('Messages')
+  // Onglet actif mémorisé par canal (durée de vie de l'onglet navigateur)
+  const [activeTab, setActiveTabState] = useState<'Messages' | 'Tâches'>(
+    () => sessionStorage.getItem(`fc_tab:${channelId}`) === 'Tâches' ? 'Tâches' : 'Messages'
+  )
+  const setActiveTab = useCallback((tab: 'Messages' | 'Tâches') => {
+    setActiveTabState(tab)
+    if (channelId) sessionStorage.setItem(`fc_tab:${channelId}`, tab)
+  }, [channelId])
+  // Restaurer l'onglet quand on change de canal (le composant n'est pas remonté)
+  useEffect(() => {
+    setActiveTabState(sessionStorage.getItem(`fc_tab:${channelId}`) === 'Tâches' ? 'Tâches' : 'Messages')
+  }, [channelId])
   const [slowmodeCooldown, setSlowmodeCooldown] = useState(0)
   const slowmodeTimer = useRef<ReturnType<typeof setInterval>>()
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -121,7 +132,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   // Marquer comme lu + reset load-more quand on ouvre un nouveau canal ou focus
   useEffect(() => {
     if (!channelId) return
-    const doMark = () => markRead(channelId, serverId || undefined)
+    const doMark = async () => {
+      // Attendre le POST last_read avant d'invalider, sinon le refetch des
+      // mentions repart avant que le serveur ait enregistré la lecture
+      await markRead(channelId, serverId || undefined)
+      // Fait disparaître immédiatement le badge @ de la sidebar si ce canal
+      // contenait une mention (sinon il persiste jusqu'au refetch 30s)
+      qc.invalidateQueries({ queryKey: ['user_mentions'] })
+    }
     doMark()
     setHasMore(true)
     window.addEventListener('focus', doMark)
