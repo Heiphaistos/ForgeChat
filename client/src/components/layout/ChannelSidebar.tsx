@@ -419,8 +419,14 @@ export default function ChannelSidebar() {
     setDragOverChannelId(null)
   }, [])
 
-  const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived), [dms])
-  const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived), [dms])
+  const [dmFilter, setDmFilter] = useState('')
+  const dmMatches = useCallback((d: any) => {
+    if (!dmFilter.trim()) return true
+    const q = dmFilter.trim().toLowerCase()
+    return (d.username ?? d.name ?? '').toLowerCase().includes(q)
+  }, [dmFilter])
+  const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
+  const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
 
   if (!serverId) {
 
@@ -439,6 +445,30 @@ export default function ChannelSidebar() {
           >
             <Plus size={15} aria-hidden />
           </button>
+        </div>
+
+        {/* Filtre rapide des conversations — sticky pour rester accessible en scrollant */}
+        <div className="px-2 pb-2 sticky top-0 z-10 bg-fc-channel">
+          <div className="relative">
+            <input
+              value={dmFilter}
+              onChange={e => setDmFilter(e.target.value)}
+              placeholder="Filtrer les conversations…"
+              aria-label="Filtrer les conversations"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              className="w-full pl-2.5 pr-8 py-1.5 bg-fc-input rounded text-sm text-white placeholder:text-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
+            />
+            {dmFilter && (
+              <button
+                onClick={() => setDmFilter('')}
+                aria-label="Effacer le filtre"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-fc-muted hover:text-white transition"
+              >
+                <X size={13} aria-hidden />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Groupes DM */}
@@ -629,6 +659,11 @@ export default function ChannelSidebar() {
             </button>
           )
         })}
+
+        {/* Aucun résultat pour le filtre */}
+        {dmFilter.trim() && groupDms.length === 0 && individualDms.length === 0 && (
+          <div className="text-center text-fc-muted text-xs py-4">Aucune conversation trouvée</div>
+        )}
 
         {/* Modal créer groupe */}
         {showCreateGroup && (
