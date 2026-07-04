@@ -655,10 +655,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               onAddReaction={(msgId, emoji) =>
                 api.put(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
               }
-              onPinMessage={(msgId) =>
-                api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
-                  .then(() => toast.success('Message épinglé'))
-                  .catch(() => toast.error('Épinglage impossible'))
+              onPinMessage={(msgId, pinned) =>
+                (pinned
+                  ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
+                  : api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`))
+                  .then(() => toast.success(pinned ? 'Message désépinglé' : 'Message épinglé'))
+                  .catch(() => toast.error(pinned ? 'Désépinglage impossible' : 'Épinglage impossible'))
               }
               onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}

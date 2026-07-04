@@ -611,7 +611,13 @@ export default function ServerSidebar() {
             )}
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
-              onClick={() => { nav(`/servers/${contextMenu.serverId}/settings`); setContextMenu(null) }}
+              onClick={() => {
+                // Naviguer vers le serveur puis demander à ChannelSidebar d'ouvrir
+                // la modale de paramètres (la route /settings n'existe pas → écran noir)
+                nav(`/servers/${contextMenu.serverId}`)
+                setTimeout(() => window.dispatchEvent(new CustomEvent('forgechat:open-server-settings')), 350)
+                setContextMenu(null)
+              }}
             >
               <Settings size={12} /> Paramètres du serveur
             </button>

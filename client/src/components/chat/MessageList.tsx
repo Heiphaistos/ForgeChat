@@ -31,7 +31,7 @@ interface Props {
   onEditMessage: (msgId: string, content: string) => void
   onOpenThread?: (msgId: string) => void
   onAddReaction?: (msgId: string, emoji: string) => void
-  onPinMessage?: (msgId: string) => void
+  onPinMessage?: (msgId: string, pinned: boolean) => void
   onReply?: (msg: any) => void
   onLoadMore?: () => Promise<boolean>
   initialHighlightId?: string | null
@@ -1057,9 +1057,9 @@ export default function MessageList({
 
                   {onPinMessage && (
                     <button
-                      onClick={() => onPinMessage(msg.id)}
+                      onClick={() => onPinMessage(msg.id, !!msg.pinned)}
                       className={`p-1.5 rounded hover:bg-fc-hover transition ${msg.pinned ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                      title={msg.pinned ? 'Épinglé' : 'Épingler'}
+                      title={msg.pinned ? 'Désépingler' : 'Épingler'}
                       aria-label={msg.pinned ? 'Désépingler le message' : 'Épingler le message'}
                       aria-pressed={msg.pinned}
                     >
@@ -1384,7 +1384,7 @@ export default function MessageList({
 
           {onPinMessage && (
             <button
-              onClick={() => { onPinMessage(contextMenu.msg.id); setContextMenu(null) }}
+              onClick={() => { onPinMessage(contextMenu.msg.id, !!contextMenu.msg.pinned); setContextMenu(null) }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
               <Pin size={14} /> {contextMenu.msg.pinned ? 'Désépingler' : 'Épingler'}

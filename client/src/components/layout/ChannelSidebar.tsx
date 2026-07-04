@@ -212,6 +212,12 @@ export default function ChannelSidebar() {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
+  useEffect(() => {
+    const open = () => setShowSettings(true)
+    window.addEventListener('forgechat:open-server-settings', open)
+    return () => window.removeEventListener('forgechat:open-server-settings', open)
+  }, [])
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
@@ -1194,7 +1200,7 @@ export default function ChannelSidebar() {
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
                     { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
-                    ...(isOwnerOrAdmin && key !== UNCATEGORIZED_KEY ? [
+                    ...(isOwnerOrAdmin && categories.some((c: any) => c.id === key) ? [
                       { separator: true as const },
                       { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/categories/${key}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
                     ] : []),
@@ -1277,7 +1283,17 @@ export default function ChannelSidebar() {
                 </span>
               </div>
               {!collapsed['__archived__'] && archivedChannels.map((ch: any) => (
-                <div key={ch.id} className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition">
+                <div
+                  key={ch.id}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition"
+                  onContextMenu={e => ctxMenu.open(e, [
+                    { label: 'Restaurer le canal', onClick: () => archiveChannel.mutate(ch.id) },
+                    ...(isOwnerOrAdmin ? [
+                      { separator: true as const },
+                      { label: 'Supprimer définitivement', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer définitivement #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/channels/${ch.id}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
+                    ] : []),
+                  ])}
+                >
                   <ChannelIcon type={ch.type} size={14} />
                   <span className="text-xs truncate flex-1 opacity-60">{ch.name}</span>
                   <button
