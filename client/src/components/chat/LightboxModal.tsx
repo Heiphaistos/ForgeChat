@@ -15,6 +15,8 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+  const panStart = useRef<{ x: number; y: number } | null>(null)
   const pinchStartDist = useRef<number | null>(null)
   const pinchStartZoom = useRef(1)
   const lastTapTime = useRef(0)
@@ -101,8 +103,11 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
             pinchStartDist.current = Math.sqrt(dx * dx + dy * dy)
             pinchStartZoom.current = zoom
             touchStartX.current = null
+            touchStartY.current = null
           } else {
             touchStartX.current = e.touches[0].clientX
+            touchStartY.current = e.touches[0].clientY
+            panStart.current = { x: e.touches[0].clientX - pos.x, y: e.touches[0].clientY - pos.y }
             pinchStartDist.current = null
           }
         }}
@@ -114,16 +119,29 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
             const dist = Math.sqrt(dx * dx + dy * dy)
             const scale = dist / pinchStartDist.current
             setZoom(Math.max(0.5, Math.min(4, pinchStartZoom.current * scale)))
+            return
+          }
+          // Pan tactile à un doigt quand l'image est zoomée
+          if (e.touches.length === 1 && zoom > 1 && panStart.current) {
+            e.preventDefault()
+            setPos({ x: e.touches[0].clientX - panStart.current.x, y: e.touches[0].clientY - panStart.current.y })
           }
         }}
         onTouchEnd={e => {
           if (pinchStartDist.current !== null) { pinchStartDist.current = null; return }
-          if (touchStartX.current === null) return
-          const delta = e.changedTouches[0].clientX - touchStartX.current
+          if (touchStartX.current === null || touchStartY.current === null) return
+          const dx = e.changedTouches[0].clientX - touchStartX.current
+          const dy = e.changedTouches[0].clientY - touchStartY.current
           touchStartX.current = null
-          if (Math.abs(delta) > 50 && images.length > 1) { delta < 0 ? next() : prev(); return }
+          touchStartY.current = null
+          panStart.current = null
+          // Image zoomée : le geste était un pan, rien d'autre à interpréter
+          if (zoom > 1) return
+          // Swipe vertical vers le bas → fermer (geste standard)
+          if (dy > 90 && Math.abs(dx) < Math.abs(dy)) { onClose(); return }
+          if (Math.abs(dx) > 50 && images.length > 1) { dx < 0 ? next() : prev(); return }
           // Double-tap immobile → toggle zoom 1x ↔ 2x
-          if (Math.abs(delta) < 10) {
+          if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
             const now = Date.now()
             if (now - lastTapTime.current < 300) {
               lastTapTime.current = 0
