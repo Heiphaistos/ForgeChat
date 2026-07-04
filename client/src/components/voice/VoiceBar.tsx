@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Mic, MicOff, Headphones, VolumeX, Video, VideoOff, Monitor, MonitorOff, PhoneOff, Volume2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useVoice } from '../../store/voice'
@@ -16,6 +17,18 @@ export default function VoiceBar() {
   // Garder l'écran allumé pendant l'appel (mobile) — libéré au leave
   useWakeLock(joined)
 
+  // Durée de l'appel en cours (mm:ss, h:mm:ss au-delà d'une heure)
+  const [callSeconds, setCallSeconds] = useState(0)
+  useEffect(() => {
+    if (!joined) { setCallSeconds(0); return }
+    const start = Date.now()
+    const iv = setInterval(() => setCallSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(iv)
+  }, [joined])
+  const callDuration = callSeconds >= 3600
+    ? `${Math.floor(callSeconds / 3600)}:${String(Math.floor((callSeconds % 3600) / 60)).padStart(2, '0')}:${String(callSeconds % 60).padStart(2, '0')}`
+    : `${Math.floor(callSeconds / 60)}:${String(callSeconds % 60).padStart(2, '0')}`
+
   if (!joined) return null
 
   const goToChannel = () => {
@@ -28,7 +41,10 @@ export default function VoiceBar() {
       <div className="flex items-center gap-2 px-3 pt-2 pb-1">
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${speaking ? 'bg-green-400' : 'bg-green-600'}`} />
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold text-green-400 leading-tight">Vocal connecté</div>
+          <div className="text-xs font-semibold text-green-400 leading-tight">
+            Vocal connecté
+            <span className="text-fc-muted font-normal ml-1.5 tabular-nums" aria-label={`Durée de l'appel ${callDuration}`}>{callDuration}</span>
+          </div>
           <button
             onClick={goToChannel}
             className="text-[11px] text-fc-muted hover:text-white transition truncate block max-w-full text-left"

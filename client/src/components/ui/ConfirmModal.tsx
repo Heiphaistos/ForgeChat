@@ -34,6 +34,21 @@ export function ConfirmModal() {
     return () => { _listener = null }
   }, [])
 
+  // Escape = annuler (capture : prend le pas sur les autres handlers Escape)
+  useEffect(() => {
+    if (!req) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        req.resolve(false)
+        setReq(null)
+        _pending = null
+      }
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [req])
+
   if (!req) return null
 
   const resolve = (result: boolean) => {

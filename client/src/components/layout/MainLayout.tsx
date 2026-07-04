@@ -153,7 +153,7 @@ export default function MainLayout() {
       if (e.key === 'Escape' && splitChannelId) {
         const el = document.activeElement as HTMLElement | null
         const inInput = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
-        const modalOpen = !!document.querySelector('[role="dialog"]')
+        const modalOpen = !!document.querySelector('[role="dialog"], [role="alertdialog"]')
         if (!inInput && !modalOpen) setSplitChannelId(null)
       }
     }
