@@ -6,7 +6,21 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Émet /version.json à chaque build — le client le sonde pour détecter
+    // qu'une nouvelle version est déployée et proposer un rechargement
+    {
+      name: 'emit-version-json',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'version.json',
+          source: JSON.stringify({ version: pkg.version }),
+        })
+      },
+    },
+  ],
   resolve: {
     dedupe: ['react', 'react-dom'],
   },

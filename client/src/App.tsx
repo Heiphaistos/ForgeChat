@@ -8,6 +8,7 @@ import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
+import { useUpdateNotifier } from './hooks/useUpdateNotifier'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
@@ -68,6 +69,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function AppInner() {
   const { fetchMe, user, updateMe } = useAuth()
   const { connect, disconnect, on, onOpen } = useWs()
+  useUpdateNotifier()
   const wsConnected = useWs(s => s.connected)
   const setStatus = usePresence(s => s.setStatus)
   const setActivityGlobal = usePresence(s => s.setActivity)
