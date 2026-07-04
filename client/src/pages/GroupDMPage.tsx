@@ -87,6 +87,9 @@ export default function GroupDMPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const isAtBottomRef = useRef(true)
+  // Double-tap mobile → réaction ❤️ (même geste que MessageList)
+  const dblTapStart = useRef<{ x: number; y: number } | null>(null)
+  const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
@@ -632,7 +635,27 @@ export default function GroupDMPage() {
                   <div className="flex-1 h-px bg-fc-hover/70" />
                 </div>
               )}
-              <div id={`gdm-msg-${msg.id}`} className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}>
+              <div
+                id={`gdm-msg-${msg.id}`}
+                className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}
+                onTouchStart={e => { dblTapStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+                onTouchEnd={e => {
+                  const s = dblTapStart.current
+                  dblTapStart.current = null
+                  if (!s) return
+                  const dx = Math.abs(e.changedTouches[0].clientX - s.x)
+                  const dy = Math.abs(e.changedTouches[0].clientY - s.y)
+                  if (dx > 10 || dy > 10) { dblTapRef.current = null; return }
+                  const now = Date.now()
+                  if (dblTapRef.current?.msgId === msg.id && now - dblTapRef.current.time < 300) {
+                    dblTapRef.current = null
+                    if ('vibrate' in navigator) navigator.vibrate(15)
+                    toggleReaction(msg.id, '❤️')
+                  } else {
+                    dblTapRef.current = { msgId: msg.id, time: now }
+                  }
+                }}
+              >
                 <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {msg.sender_avatar
                     ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
