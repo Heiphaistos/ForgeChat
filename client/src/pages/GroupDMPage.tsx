@@ -5,6 +5,7 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
+import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
 import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -343,8 +344,9 @@ export default function GroupDMPage() {
     onSuccess: async (res, vars) => {
       if (vars.files.length > 0 && res.data?.id) {
         const fd = new FormData()
-        for (const f of vars.files) fd.append('files', f)
-        await api.post(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd).catch(() => null)
+        let totalBytes = 0
+        for (const f of vars.files) { fd.append('files', f); totalBytes += f.size }
+        await postWithUploadProgress(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd, totalBytes).catch(() => null)
       }
     },
     onError: (_e, vars) => {

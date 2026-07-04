@@ -7,6 +7,7 @@ import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat, useDraft } from '../store/chat'
+import { postWithUploadProgress } from '../utils/uploadProgress'
 import { useShallow } from 'zustand/react/shallow'
 import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
@@ -333,11 +334,13 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       const msgId = res.data?.id
       if (files && files.length > 0 && msgId) {
         const fd = new FormData()
+        let totalBytes = 0
         for (const fw of files) {
           fd.append('files', fw.file)
+          totalBytes += fw.file.size
           if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
         }
-        await api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd)
+        await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd, totalBytes)
       }
     } catch {
       // erreur déjà notifiée par sendMsg — restaurer le texte comme brouillon

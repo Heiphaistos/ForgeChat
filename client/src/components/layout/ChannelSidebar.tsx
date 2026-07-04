@@ -239,6 +239,12 @@ export default function ChannelSidebar() {
   const effectiveMuted = (chId: string) => isChannelMuted(chId) || isServerMuted(serverId ?? '')
   const currentUser = useAuth(s => s.user)
   const drafts = useDraft(s => s.drafts)
+  // Tick minute pour rafraîchir les horodatages relatifs (5m → 6m) sans event
+  const [, setTimeTick] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => setTimeTick(t => t + 1), 60_000)
+    return () => clearInterval(iv)
+  }, [])
   const typingMap = useChat(s => s.typing)
   const isTypingIn = (id: string) => Object.keys(typingMap[id] ?? {}).length > 0
   const { setSplitChannelId } = useContext(SplitContext)

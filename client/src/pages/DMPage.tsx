@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
 import { useChat, useDraft } from '../store/chat'
+import { postWithUploadProgress } from '../utils/uploadProgress'
 import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
@@ -353,11 +354,13 @@ export default function DMPage() {
         })
         if (vars.files && vars.files.length > 0 && msg.id) {
           const fd = new FormData()
+          let totalBytes = 0
           for (const fw of vars.files) {
             fd.append('files', fw.file)
+            totalBytes += fw.file.size
             if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
           }
-          await api.post(`/dms/${dmId}/messages/${msg.id}/attachments`, fd).catch(() => null)
+          await postWithUploadProgress(`/dms/${dmId}/messages/${msg.id}/attachments`, fd, totalBytes).catch(() => null)
         }
       }
     },
