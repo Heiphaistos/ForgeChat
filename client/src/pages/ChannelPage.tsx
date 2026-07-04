@@ -275,14 +275,26 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [channelId, serverId, hasMore])
 
-  // Auto-redirect vers le premier canal texte — DOIT être avant tout return conditionnel
+  // Auto-redirect vers le dernier canal visité (sinon premier canal texte)
+  // — DOIT être avant tout return conditionnel
   useEffect(() => {
     if (!channelId && !isSplit && serverId && serverData) {
       const chans: any[] = serverData?.channels ?? []
-      const firstText = chans.find((c: any) => c.type === 'text' || c.type === 'announcement')
-      if (firstText) nav(`/servers/${serverId}/channels/${firstText.id}`, { replace: true, state: { autoNav: true } })
+      const navigable = (c: any) => !c.archived && !c.hidden &&
+        (c.type === 'text' || c.type === 'announcement' || c.type === 'forum')
+      const lastId = localStorage.getItem(`fc_last_channel:${serverId}`)
+      const last = lastId ? chans.find((c: any) => c.id === lastId && navigable(c)) : undefined
+      const target = last ?? chans.find((c: any) => c.type === 'text' || c.type === 'announcement')
+      if (target) nav(`/servers/${serverId}/channels/${target.id}`, { replace: true, state: { autoNav: true } })
     }
   }, [channelId, serverData, serverId, isSplit])
+
+  // Mémoriser le canal courant comme dernier visité pour ce serveur
+  useEffect(() => {
+    if (channelId && serverId && !isSplit) {
+      localStorage.setItem(`fc_last_channel:${serverId}`, channelId)
+    }
+  }, [channelId, serverId, isSplit])
 
   // Tous les hooks doivent être AVANT tout return conditionnel (React Rules of Hooks)
   const { canPost, canManageMessages } = useMemo(() => {

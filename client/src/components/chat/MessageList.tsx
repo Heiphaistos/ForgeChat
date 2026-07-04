@@ -1092,17 +1092,23 @@ export default function MessageList({
       {showScrollBtn && (
         <button
           onClick={() => { scrollToBottom(); setNewMsgCount(0) }}
-          className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white text-xs font-medium rounded-full shadow-lg transition"
+          aria-label={newMsgCount > 0 ? `Aller en bas — ${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''}` : 'Aller en bas'}
+          className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] bg-fc-accent hover:bg-indigo-500 text-white text-xs font-medium rounded-full shadow-lg transition"
         >
           {newMsgCount > 0 && (
-            <span className="bg-white text-fc-accent font-bold rounded-full px-1.5 text-[10px] leading-4 min-w-[18px] text-center">
+            <span aria-hidden className="bg-white text-fc-accent font-bold rounded-full px-1.5 text-[10px] leading-4 min-w-[18px] text-center">
               {newMsgCount > 99 ? '99+' : newMsgCount}
             </span>
           )}
-          <ChevronDown size={14} />
+          <ChevronDown size={14} aria-hidden />
           Aller en bas
         </button>
       )}
+
+      {/* Annonce discrète des nouveaux messages pour les lecteurs d'écran */}
+      <div aria-live="polite" className="sr-only">
+        {newMsgCount > 0 ? `${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''} non lu${newMsgCount > 1 ? 's' : ''}` : ''}
+      </div>
 
       {/* Reaction popup */}
       {reactionPopup && (
