@@ -477,7 +477,11 @@ export default function ChannelSidebar() {
                     <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
                       {dm.name ?? dm.username ?? 'Groupe'}
                     </div>
-                    <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
+                    <div className="text-xs text-fc-muted truncate">
+                      {dm.last_message_content != null
+                        ? (dm.last_message_content || '📎 Pièce jointe')
+                        : `${dm.member_count ?? '?'} membres`}
+                    </div>
                   </div>
                   {pathname !== `/dms/groups/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
                   {!!drafts[dm.id] && pathname !== `/dms/groups/${dm.id}` && (
@@ -564,12 +568,18 @@ export default function ChannelSidebar() {
                 <div className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
                   {dm.username}
                 </div>
-                <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
-                  {statusKey === 'online' ? 'En ligne'
-                    : statusKey === 'idle' ? 'Absent'
-                    : statusKey === 'dnd' ? 'Ne pas déranger'
-                    : 'Hors ligne'}
-                </div>
+                {dm.last_message_content != null ? (
+                  <div className="text-xs text-fc-muted truncate">
+                    {dm.last_message_content || '📎 Pièce jointe'}
+                  </div>
+                ) : (
+                  <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
+                    {statusKey === 'online' ? 'En ligne'
+                      : statusKey === 'idle' ? 'Absent'
+                      : statusKey === 'dnd' ? 'Ne pas déranger'
+                      : 'Hors ligne'}
+                  </div>
+                )}
               </div>
               {/* Quelqu'un écrit dans ce DM */}
               {pathname !== `/dms/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}

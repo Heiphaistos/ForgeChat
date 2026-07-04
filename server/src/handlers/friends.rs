@@ -180,14 +180,15 @@ pub async fn get_dms(
     let (dms, group_dms) = tokio::try_join!(
         sqlx::query(
             "WITH last_msg AS (
-               SELECT dm_channel_id, MAX(created_at) AS last_message_at
+               SELECT DISTINCT ON (dm_channel_id)
+                 dm_channel_id, created_at AS last_message_at, LEFT(content, 80) AS last_message_content
                FROM dm_messages
-               GROUP BY dm_channel_id
+               ORDER BY dm_channel_id, created_at DESC
              )
              SELECT dc.id,
                CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
                u.username, u.discriminator, u.avatar, u.status,
-               lm.last_message_at,
+               lm.last_message_at, lm.last_message_content,
                COALESCE(dus.muted, FALSE) AS is_muted,
                COALESCE(dus.archived, FALSE) AS is_archived
              FROM dm_channels dc
@@ -201,14 +202,15 @@ pub async fn get_dms(
         .fetch_all(&state.db),
         sqlx::query(
             "WITH last_gdm AS (
-               SELECT dm_id, MAX(created_at) AS last_message_at
+               SELECT DISTINCT ON (dm_id)
+                 dm_id, created_at AS last_message_at, LEFT(content, 80) AS last_message_content
                FROM group_dm_messages
-               GROUP BY dm_id
+               ORDER BY dm_id, created_at DESC
              ),
              member_counts AS (
                SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
              )
-             SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at,
+             SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at, lgm.last_message_content,
                     COALESCE(dus.muted, FALSE) AS is_muted,
                     COALESCE(dus.archived, FALSE) AS is_archived
              FROM group_dm_channels g
@@ -230,6 +232,7 @@ pub async fn get_dms(
         "avatar": r.get::<Option<String>, _>("avatar"),
         "status": r.get::<String, _>("status"),
         "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+        "last_message_content": r.get::<Option<String>, _>("last_message_content"),
         "is_muted": r.get::<bool, _>("is_muted"),
         "is_archived": r.get::<bool, _>("is_archived"),
         "is_group": false,
@@ -241,6 +244,7 @@ pub async fn get_dms(
             "name": r.get::<String, _>("name"),
             "member_count": r.get::<Option<i64>, _>("member_count").unwrap_or(0),
             "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
+            "last_message_content": r.get::<Option<String>, _>("last_message_content"),
             "is_muted": r.get::<bool, _>("is_muted"),
             "is_archived": r.get::<bool, _>("is_archived"),
             "is_group": true,
