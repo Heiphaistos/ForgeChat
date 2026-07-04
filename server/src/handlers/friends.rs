@@ -202,15 +202,18 @@ pub async fn get_dms(
         .fetch_all(&state.db),
         sqlx::query(
             "WITH last_gdm AS (
-               SELECT DISTINCT ON (dm_id)
-                 dm_id, created_at AS last_message_at, LEFT(content, 80) AS last_message_content
-               FROM group_dm_messages
-               ORDER BY dm_id, created_at DESC
+               SELECT DISTINCT ON (m.dm_id)
+                 m.dm_id, m.created_at AS last_message_at,
+                 LEFT(m.content, 80) AS last_message_content,
+                 u.username AS last_message_author
+               FROM group_dm_messages m
+               LEFT JOIN users u ON u.id = m.sender_id
+               ORDER BY m.dm_id, m.created_at DESC
              ),
              member_counts AS (
                SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
              )
-             SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at, lgm.last_message_content,
+             SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at, lgm.last_message_content, lgm.last_message_author,
                     COALESCE(dus.muted, FALSE) AS is_muted,
                     COALESCE(dus.archived, FALSE) AS is_archived
              FROM group_dm_channels g
@@ -245,6 +248,7 @@ pub async fn get_dms(
             "member_count": r.get::<Option<i64>, _>("member_count").unwrap_or(0),
             "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
             "last_message_content": r.get::<Option<String>, _>("last_message_content"),
+            "last_message_author": r.get::<Option<String>, _>("last_message_author"),
             "is_muted": r.get::<bool, _>("is_muted"),
             "is_archived": r.get::<bool, _>("is_archived"),
             "is_group": true,

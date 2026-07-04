@@ -503,7 +503,7 @@ export default function ChannelSidebar() {
                     </div>
                     <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
                       {dm.last_message_content != null
-                        ? (dm.last_message_content || '📎 Pièce jointe')
+                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${dm.last_message_content || '📎 Pièce jointe'}`
                         : `${dm.member_count ?? '?'} membres`}
                     </div>
                   </div>
@@ -1041,7 +1041,7 @@ export default function ChannelSidebar() {
                 <div
                   role="button"
                   tabIndex={0}
-                  className="flex items-center justify-between px-2 py-1 group cursor-pointer"
+                  className="flex items-center justify-between px-2 py-1 group cursor-pointer sticky top-0 z-10 bg-fc-channel"
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
