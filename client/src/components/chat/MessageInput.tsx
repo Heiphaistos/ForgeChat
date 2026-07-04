@@ -335,9 +335,11 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items
       if (!items) return
-      const imageItems = Array.from(items).filter(i => i.type.startsWith('image/'))
-      if (imageItems.length === 0) return
-      const filesFromClipboard = imageItems.map(i => i.getAsFile()).filter(Boolean) as File[]
+      // Tout fichier collé (image, PDF, zip... copié depuis l'explorateur),
+      // en ignorant les items texte pour laisser le collage de texte normal
+      const fileItems = Array.from(items).filter(i => i.kind === 'file')
+      if (fileItems.length === 0) return
+      const filesFromClipboard = fileItems.map(i => i.getAsFile()).filter(Boolean) as File[]
       if (filesFromClipboard.length > 0) {
         e.preventDefault()
         addFiles(filesFromClipboard)
@@ -898,9 +900,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     : <img src={fw.preview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />}
                 </div>
               ) : (
-                <div className="w-20 h-20 rounded border border-fc-hover bg-fc-bg flex flex-col items-center justify-center gap-1 text-center">
+                <div className="w-20 h-20 rounded border border-fc-hover bg-fc-bg flex flex-col items-center justify-center gap-0.5 text-center" title={fw.file.name}>
                   <FileIcon file={fw.file} />
                   <span className="text-xs text-fc-muted truncate w-16 text-center px-1">{fw.file.name}</span>
+                  <span className="text-[10px] text-fc-muted/70">{formatBytes(fw.file.size)}</span>
                 </div>
               )}
 
