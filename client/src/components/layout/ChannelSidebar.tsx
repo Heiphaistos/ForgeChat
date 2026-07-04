@@ -420,6 +420,9 @@ export default function ChannelSidebar() {
   }, [])
 
   const [dmFilter, setDmFilter] = useState('')
+  const [chFilter, setChFilter] = useState('')
+  // Reset du filtre canaux quand on change de serveur
+  useEffect(() => { setChFilter('') }, [serverId])
   const dmMatches = useCallback((d: any) => {
     if (!dmFilter.trim()) return true
     const q = dmFilter.trim().toLowerCase()
@@ -1067,9 +1070,39 @@ export default function ChannelSidebar() {
           )}
         </div>
 
+        {/* Filtre rapide des canaux — sticky au-dessus des headers de catégorie */}
+        <div className="px-2 pt-2 sticky top-0 z-20 bg-fc-channel">
+          <div className="relative">
+            <input
+              value={chFilter}
+              onChange={e => setChFilter(e.target.value)}
+              placeholder="Filtrer les canaux…"
+              aria-label="Filtrer les canaux"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              className="w-full pl-2.5 pr-8 py-1.5 bg-fc-input rounded text-sm text-white placeholder:text-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
+            />
+            {chFilter && (
+              <button
+                onClick={() => setChFilter('')}
+                aria-label="Effacer le filtre"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-fc-muted hover:text-white transition"
+              >
+                <X size={13} aria-hidden />
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="p-2 space-y-0.5 mt-2 flex-1">
           {categoryGroups.map(({ key, label, channels: groupChannels }) => {
-            const isCollapsed = collapsed[key]
+            const filterQ = chFilter.trim().toLowerCase()
+            const visibleChannels = filterQ
+              ? groupChannels.filter((c: any) => (c.name ?? '').toLowerCase().includes(filterQ))
+              : groupChannels
+            if (filterQ && visibleChannels.length === 0) return null
+            // Filtre actif → déplier de force pour montrer les résultats
+            const isCollapsed = filterQ ? false : collapsed[key]
 
             return (
               <div key={key} className="mb-2">
@@ -1113,8 +1146,8 @@ export default function ChannelSidebar() {
                 </div>
 
                 {!isCollapsed
-                  ? groupChannels.map(ch => renderChannel(ch, groupChannels, '', key))
-                  : groupChannels
+                  ? visibleChannels.map(ch => renderChannel(ch, groupChannels, '', key))
+                  : visibleChannels
                       .filter(c => (unreadCounts[c.id] ?? 0) > 0)
                       .map(ch => renderChannel(ch, groupChannels, '', key))
                 }
@@ -1126,6 +1159,12 @@ export default function ChannelSidebar() {
             <div className="text-center text-fc-muted text-xs py-4">
               Aucun canal — crée-en un !
             </div>
+          )}
+
+          {/* Aucun canal ne correspond au filtre */}
+          {chFilter.trim() && channels.length > 0 &&
+            !channels.some((c: any) => (c.name ?? '').toLowerCase().includes(chFilter.trim().toLowerCase())) && (
+            <div className="text-center text-fc-muted text-xs py-4">Aucun canal trouvé</div>
           )}
 
           {/* Canaux masqués */}
