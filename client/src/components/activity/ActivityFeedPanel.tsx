@@ -72,21 +72,24 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     addSuffix: true,
     locale: fr,
   })
+  // Certains types d'items (pins, achievements, RSVP...) peuvent arriver sans user
+  const username = item.user?.username ?? 'Utilisateur'
+  const avatar = item.user?.avatar ?? null
 
   return (
     <div role="listitem" className="flex gap-2 px-2 py-2 rounded-lg hover:bg-fc-hover/50 transition group cursor-default">
       {/* Avatar */}
       <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-xs text-white overflow-hidden flex-shrink-0" aria-hidden>
-        {item.user.avatar
-          ? <img src={item.user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
-          : item.user.username.charAt(0).toUpperCase()}
+        {avatar
+          ? <img src={avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+          : username.charAt(0).toUpperCase()}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-semibold text-white truncate max-w-[90px]">
-            {item.user.username}
+            {username}
           </span>
           <ActivityTypeBadge type={item.type} />
           <span className="text-[10px] text-fc-muted">#{item.channel_name}</span>

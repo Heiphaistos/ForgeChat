@@ -443,6 +443,54 @@ export default function ChannelSidebar() {
   const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
   const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
 
+  // ⚠️ Ces useMemo DOIVENT rester avant le `if (!serverId) return` :
+  // les avoir après causait React #310/#300 (nombre de hooks variable) à
+  // chaque navigation DM ↔ serveur — LE bug historique de crash navigation
+  const server = data?.server
+  const allChannels: any[] = data?.channels ?? []
+
+  const { channels, hiddenChannels, archivedChannels, isOwnerOrAdmin } = useMemo(() => {
+    const ch = allChannels.filter((c: any) => !c.archived && !c.hidden)
+    const hidden = allChannels.filter((c: any) => c.hidden && !c.archived)
+    const archived = allChannels.filter((c: any) => c.archived)
+    const MANAGE_CHANNELS_BIT = 1 << 4
+    const ADMINISTRATOR_BIT = 1 << 31
+    const myRoleIds: string[] = data?.my_role_ids ?? []
+    const myRoles = (data?.roles ?? []).filter((r: any) => myRoleIds.includes(r.id))
+    const isAdmin = !!server && !!currentUser && (
+      server.owner_id === currentUser.id ||
+      myRoles.some((r: any) => {
+        const p = Number(r.permissions ?? 0)
+        return (p & ADMINISTRATOR_BIT) !== 0 || (p & MANAGE_CHANNELS_BIT) !== 0
+      })
+    )
+    return { channels: ch, hiddenChannels: hidden, archivedChannels: archived, isOwnerOrAdmin: isAdmin }
+  }, [allChannels, data, server, currentUser?.id])
+
+  // Construire les groupes dynamiques basés sur les catégories DB
+  const categoryGroups = useMemo(() => {
+    const groups: Array<{ key: string; label: string; channels: any[] }> = []
+    for (const cat of categories) {
+      const catChannels = channels.filter((c: any) => c.category_id === cat.id)
+      if (catChannels.length > 0) {
+        groups.push({ key: cat.id, label: cat.name, channels: catChannels })
+      }
+    }
+    const knownCatIds = new Set(categories.map((c: any) => c.id))
+    const uncategorized = channels.filter(
+      (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
+    )
+    if (categories.length === 0 && channels.length > 0) {
+      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
+      const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
+      if (textChannels.length > 0) groups.push({ key: 'texte', label: 'Texte', channels: textChannels })
+      if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
+    } else if (uncategorized.length > 0) {
+      groups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
+    }
+    return groups
+  }, [channels, categories])
+
   if (!serverId) {
 
     return (
@@ -688,27 +736,6 @@ export default function ChannelSidebar() {
     )
   }
 
-  const server = data?.server
-  const allChannels: any[] = data?.channels ?? []
-
-  const { channels, hiddenChannels, archivedChannels, isOwnerOrAdmin } = useMemo(() => {
-    const ch = allChannels.filter((c: any) => !c.archived && !c.hidden)
-    const hidden = allChannels.filter((c: any) => c.hidden && !c.archived)
-    const archived = allChannels.filter((c: any) => c.archived)
-    const MANAGE_CHANNELS_BIT = 1 << 4
-    const ADMINISTRATOR_BIT = 1 << 31
-    const myRoleIds: string[] = data?.my_role_ids ?? []
-    const myRoles = (data?.roles ?? []).filter((r: any) => myRoleIds.includes(r.id))
-    const isAdmin = !!server && !!currentUser && (
-      server.owner_id === currentUser.id ||
-      myRoles.some((r: any) => {
-        const p = Number(r.permissions ?? 0)
-        return (p & ADMINISTRATOR_BIT) !== 0 || (p & MANAGE_CHANNELS_BIT) !== 0
-      })
-    )
-    return { channels: ch, hiddenChannels: hidden, archivedChannels: archived, isOwnerOrAdmin: isAdmin }
-  }, [allChannels, data, server, currentUser?.id])
-
   const toggleGroup = (key: string) => {
     setCollapsed(prev => {
       const next = { ...prev, [key]: !prev[key] }
@@ -716,30 +743,6 @@ export default function ChannelSidebar() {
       return next
     })
   }
-
-  // Construire les groupes dynamiques basés sur les catégories DB
-  const categoryGroups = useMemo(() => {
-    const groups: Array<{ key: string; label: string; channels: any[] }> = []
-    for (const cat of categories) {
-      const catChannels = channels.filter((c: any) => c.category_id === cat.id)
-      if (catChannels.length > 0) {
-        groups.push({ key: cat.id, label: cat.name, channels: catChannels })
-      }
-    }
-    const knownCatIds = new Set(categories.map((c: any) => c.id))
-    const uncategorized = channels.filter(
-      (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
-    )
-    if (categories.length === 0 && channels.length > 0) {
-      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
-      const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
-      if (textChannels.length > 0) groups.push({ key: 'texte', label: 'Texte', channels: textChannels })
-      if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
-    } else if (uncategorized.length > 0) {
-      groups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
-    }
-    return groups
-  }, [channels, categories])
 
   const handleVoiceChannelClick = (ch: any) => {
     if (ch.voice_password_hash) {
