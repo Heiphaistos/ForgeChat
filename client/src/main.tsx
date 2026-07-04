@@ -11,6 +11,14 @@ const queryClient = new QueryClient({
   },
 })
 
+// Service worker : cache-first des assets hashés (chargements suivants instantanés)
+// — prod uniquement pour ne pas gêner le HMR de dev
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
