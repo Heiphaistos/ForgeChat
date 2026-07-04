@@ -464,7 +464,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </span>
           )}
           <span className="text-fc-muted flex-shrink-0">{channelIcon(currentChannel?.type ?? 'text')}</span>
-          <span className="font-semibold text-white truncate min-w-0 max-w-[140px] sm:max-w-[240px] md:max-w-none">{currentChannel?.name ?? '...'}</span>
+          <span className="font-semibold text-white truncate min-w-0 max-w-[140px] sm:max-w-[240px] md:max-w-none" title={currentChannel?.name}>{currentChannel?.name ?? '...'}</span>
           {currentChannel?.type === 'announcement' && (
             <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">Annonces</span>
           )}

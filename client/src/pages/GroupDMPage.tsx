@@ -12,6 +12,7 @@ import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import MessageInput from '../components/chat/MessageInput'
+import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -90,6 +91,8 @@ export default function GroupDMPage() {
   // Double-tap mobile → réaction ❤️ (même geste que MessageList)
   const dblTapStart = useRef<{ x: number; y: number } | null>(null)
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
+  // Popup profil au clic sur un avatar (harmonisation avec les canaux)
+  const [userPopup, setUserPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
@@ -670,12 +673,16 @@ export default function GroupDMPage() {
                   }
                 }}
               >
-                <div className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+                <button
+                  onClick={e => { e.stopPropagation(); setUserPopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY }) }}
+                  aria-label={`Voir le profil de ${msg.sender_username}`}
+                  className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
+                >
                   {msg.sender_avatar
                     ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : msg.sender_username.charAt(0).toUpperCase()
                   }
-                </div>
+                </button>
                 <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isMe && (
                     <span className="text-xs text-fc-muted mb-0.5 ml-1">{msg.sender_username}</span>
@@ -904,6 +911,16 @@ export default function GroupDMPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Popup profil utilisateur */}
+      {userPopup && (
+        <UserPopup
+          userId={userPopup.userId}
+          anchorX={userPopup.x}
+          anchorY={userPopup.y}
+          onClose={() => setUserPopup(null)}
+        />
       )}
     </div>
   )
