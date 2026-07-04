@@ -15,10 +15,13 @@ jobs:
         run: |
           echo "${{ secrets.VPS_SSH_KEY }}" | base64 --decode --ignore-garbage > /tmp/dk
           chmod 600 /tmp/dk
+          mkdir -p ~/.ssh
+          printf 'Host *\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  LogLevel ERROR\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Deploy to VPS via SSH
         run: |
-          ssh -i /tmp/dk -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} '
+          ssh -i /tmp/dk ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} '
             set -e
             cd /opt/forgechat
             git fetch origin
