@@ -136,7 +136,16 @@ export default function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null)
   // Timestamp d'entrée dans le canal = base pour le divider "Nouveaux messages"
   const channelOpenTime = useRef<number>(Date.now())
-  useEffect(() => { channelOpenTime.current = Date.now(); initialScrollDone.current = false }, [channelId])
+  // Non-lus au moment de l'ouverture (capturé AVANT le markRead de ChannelPage —
+  // les effets des enfants s'exécutent avant ceux du parent) + ancre du premier non-lu
+  const unreadAtOpen = useRef(0)
+  const firstUnreadId = useRef<string | null>(null)
+  useEffect(() => {
+    channelOpenTime.current = Date.now()
+    initialScrollDone.current = false
+    unreadAtOpen.current = useUnread.getState().counts[channelId] ?? 0
+    firstUnreadId.current = null
+  }, [channelId])
   const msgRefs = useRef<Record<string, HTMLDivElement>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -160,16 +169,29 @@ export default function MessageList({
   const isAtBottom = useRef(true)
   const initialScrollDone = useRef(false)
 
-  // Scroll initial : restaurer la position mémorisée si on revient dans le canal
-  // (sauf highlight demandé ou messages non lus → aller en bas comme avant),
-  // sinon scroll instantané au bas du canal (avant que smooth ne s'active)
+  // Ancrer le divider "Nouveaux messages" sur le premier message non lu du
+  // chargement initial (par id, pour rester stable malgré prepend/append)
+  useEffect(() => {
+    if (firstUnreadId.current || unreadAtOpen.current <= 0 || messages.length === 0) return
+    const idx = Math.max(0, messages.length - unreadAtOpen.current)
+    firstUnreadId.current = messages[idx]?.id ?? null
+  }, [messages.length])
+
+  // Scroll initial : vers le premier non-lu s'il y en a, sinon position mémorisée
+  // (retour dans le canal), sinon scroll instantané au bas du canal
   useEffect(() => {
     if (!initialScrollDone.current && messages.length > 0) {
       const el = containerRef.current
       if (el) {
         const saved = savedScrollPositions.get(channelId)
-        const hasUnread = (useUnread.getState().counts[channelId] ?? 0) > 0
-        if (saved != null && !initialHighlightId && !hasUnread) {
+        const anchorEl = firstUnreadId.current ? msgRefs.current[firstUnreadId.current] : null
+        if (anchorEl && !initialHighlightId) {
+          // Aller au divider "Nouveaux messages" (comportement Discord)
+          anchorEl.scrollIntoView({ behavior: 'auto', block: 'center' })
+          const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+          isAtBottom.current = fromBottom < 60
+          setShowScrollBtn(fromBottom > 200)
+        } else if (saved != null && !initialHighlightId && unreadAtOpen.current === 0) {
           el.scrollTop = saved
           isAtBottom.current = false
           setShowScrollBtn(true)
@@ -531,7 +553,11 @@ export default function MessageList({
           const isHighlighted = highlightId === msg.id
           const msgTs = new Date(msg.created_at).getTime()
           const prevTs = prev ? new Date(prev.created_at).getTime() : 0
-          const isFirstUnread = msgTs >= channelOpenTime.current && prevTs < channelOpenTime.current
+          // Divider : ancré sur le premier non-lu du chargement initial si présent,
+          // sinon sur le premier message arrivé après l'ouverture (live)
+          const isFirstUnread = firstUnreadId.current
+            ? msg.id === firstUnreadId.current
+            : msgTs >= channelOpenTime.current && prevTs < channelOpenTime.current
           // Animer uniquement les messages qui arrivent en temps réel (après le chargement initial)
           const isLiveMsg = initialScrollDone.current && msgTs >= channelOpenTime.current
           // Séparateur de date entre deux jours différents
