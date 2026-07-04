@@ -292,6 +292,28 @@ function AppInner() {
     return off
   }, [user?.id])
 
+  // Typing global — alimente useChat.typing pour TOUS les canaux/DMs/groupes
+  // afin que la sidebar puisse afficher un indicateur "écrit..." (les pages
+  // gèrent en plus leur propre indicateur local pour le canal ouvert)
+  useEffect(() => {
+    if (!user) return
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
+    const track = (key: string, uid: string, username: string) => {
+      if (!key || !uid || uid === user.id) return
+      useChat.getState().setTyping(key, uid, username)
+      const tk = `${key}:${uid}`
+      const old = timers.get(tk)
+      if (old) clearTimeout(old)
+      timers.set(tk, setTimeout(() => {
+        timers.delete(tk)
+        useChat.getState().clearTyping(key, uid)
+      }, 5000))
+    }
+    const offCh = on('TYPING_START', (d: any) => track(d.channel_id, d.user_id, d.username ?? 'Utilisateur'))
+    const offDm = on('TYPING', (d: any) => track(d.conversation_id, d.user_id, d.username ?? 'Utilisateur'))
+    return () => { offCh(); offDm(); timers.forEach(t => clearTimeout(t)) }
+  }, [user?.id])
+
   // Sons sur events vocaux et mentions
   useEffect(() => {
     if (!user) return

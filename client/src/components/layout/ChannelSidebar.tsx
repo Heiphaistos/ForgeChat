@@ -17,7 +17,7 @@ import { useChannelNotif } from '../../store/channelNotif'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
-import { useDraft } from '../../store/chat'
+import { useDraft, useChat } from '../../store/chat'
 import { SplitContext } from '../../contexts/SplitContext'
 import { useContext } from 'react'
 import CreateChannelModal from '../modals/CreateChannelModal'
@@ -181,6 +181,16 @@ function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
 
 const UNCATEGORIZED_KEY = '__uncategorized__'
 
+function TypingDots() {
+  return (
+    <span className="flex gap-0.5 items-center flex-shrink-0" role="status" aria-label="Quelqu'un écrit">
+      {[0, 150, 300].map(d => (
+        <span key={d} aria-hidden className="w-1 h-1 bg-fc-accent rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+      ))}
+    </span>
+  )
+}
+
 export default function ChannelSidebar() {
   const { serverId, channelId } = useParams()
   const nav = useNavigate()
@@ -216,6 +226,8 @@ export default function ChannelSidebar() {
   const effectiveMuted = (chId: string) => isChannelMuted(chId) || isServerMuted(serverId ?? '')
   const currentUser = useAuth(s => s.user)
   const drafts = useDraft(s => s.drafts)
+  const typingMap = useChat(s => s.typing)
+  const isTypingIn = (id: string) => Object.keys(typingMap[id] ?? {}).length > 0
   const { setSplitChannelId } = useContext(SplitContext)
 
   const { data } = useQuery({
@@ -467,6 +479,7 @@ export default function ChannelSidebar() {
                     </div>
                     <div className="text-xs text-fc-muted">{dm.member_count ?? '?'} membres</div>
                   </div>
+                  {pathname !== `/dms/groups/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
                   {!!drafts[dm.id] && pathname !== `/dms/groups/${dm.id}` && (
                     <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
                   )}
@@ -558,6 +571,8 @@ export default function ChannelSidebar() {
                     : 'Hors ligne'}
                 </div>
               </div>
+              {/* Quelqu'un écrit dans ce DM */}
+              {pathname !== `/dms/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
               {/* Indicateur brouillon en attente */}
               {!!drafts[dm.id] && pathname !== `/dms/${dm.id}` && (
                 <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
@@ -766,6 +781,9 @@ export default function ChannelSidebar() {
             <ChannelIcon type={ch.type} size={16} />
           </span>
           <span className="text-sm truncate flex-1">{ch.name}</span>
+
+          {/* Quelqu'un écrit dans ce canal */}
+          {!isVoiceCh && channelId !== ch.id && isTypingIn(ch.id) && <TypingDots />}
 
           {/* Indicateur brouillon en attente dans ce canal */}
           {!isVoiceCh && !!drafts[ch.id] && channelId !== ch.id && (
