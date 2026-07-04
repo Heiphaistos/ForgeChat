@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bell, X, AtSign, Hash } from 'lucide-react'
+import { Bell, X, AtSign, Hash, CheckCheck } from 'lucide-react'
+import { useUnread } from '../../store/unread'
+import toast from 'react-hot-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -84,9 +86,24 @@ export default function NotificationBell() {
               <AtSign size={14} className="text-fc-accent" aria-hidden />
               <span className="text-sm font-semibold text-white">Mentions récentes</span>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Fermer les mentions" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
-              <X size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  useUnread.getState().markAllRead()
+                  qc.invalidateQueries({ queryKey: ['user_mentions'] })
+                  toast.success('Tout marqué comme lu')
+                  setOpen(false)
+                }}
+                aria-label="Tout marquer comme lu"
+                title="Tout marquer comme lu (serveurs, DMs, mentions)"
+                className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
+              >
+                <CheckCheck size={14} />
+              </button>
+              <button onClick={() => setOpen(false)} aria-label="Fermer les mentions" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+                <X size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="max-h-96 overflow-y-auto overscroll-contain">

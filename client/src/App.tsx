@@ -745,6 +745,8 @@ function AppInner() {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault()
         useUnread.getState().markAllRead()
+        qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
+        toast.success('Tout marqué comme lu')
       }
       // Ctrl+Shift+M — couper/réactiver le micro (vocal)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
