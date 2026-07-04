@@ -329,6 +329,25 @@ export default function MessageList({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  // Home/End (hors champ de saisie) : haut de l'historique chargé / bas du canal
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      const el = document.activeElement as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (e.key === 'End') {
+        e.preventDefault()
+        scrollToBottom()
+        setNewMsgCount(0)
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   const jumpToMessage = (msgId: string) => {
     const el = msgRefs.current[msgId]
     if (el) {
@@ -533,14 +552,15 @@ export default function MessageList({
         role="log"
         aria-label="Historique des messages"
         aria-live="polite"
+        aria-busy={loadingMore}
         className="flex-1 overflow-y-auto overscroll-contain px-2 md:px-4 py-2 space-y-0.5 message-list-container"
         onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
       >
         {/* Loader "plus de messages" */}
         {loadingMore && (
-          <div className="flex justify-center py-3">
-            <Loader2 size={18} className="animate-spin text-fc-muted" />
+          <div className="flex justify-center py-3" role="status" aria-label="Chargement des messages précédents">
+            <Loader2 size={18} className="animate-spin text-fc-muted" aria-hidden />
           </div>
         )}
 
