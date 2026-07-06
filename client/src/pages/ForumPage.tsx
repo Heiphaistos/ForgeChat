@@ -183,11 +183,25 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   const replyUpload = useMediaUpload(serverId, channelId)
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
+  // Édition du contenu du post original (réservée au créateur, backend déjà prêt)
+  const [editingPost, setEditingPost] = useState(false)
+  const [editPostContent, setEditPostContent] = useState('')
   const [editContent, setEditContent] = useState('')
   const qc = useQueryClient()
   const { user } = useAuth()
   const { on } = useWs()
   const { formatShortDate, formatDate } = useFormatDate()
+
+  const savePost = useMutation({
+    mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { content: editPostContent.trim() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+      qc.invalidateQueries({ queryKey: ['forum', channelId] })
+      setEditingPost(false)
+      toast.success('Post modifié')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible de modifier le post'),
+  })
 
   const togglePin = useMutation({
     mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { pinned: !localPost.pinned }),
@@ -325,7 +339,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4">
         {/* Post original */}
         {data?.post?.content && (
-          <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover">
+          <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover group">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                 {post.creator_avatar
@@ -334,8 +348,45 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               </div>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
               <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
+              {user?.id === post.creator_id && !editingPost && (
+                <button
+                  onClick={() => { setEditPostContent(data.post.content ?? ''); setEditingPost(true) }}
+                  className="ml-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 text-fc-muted hover:text-white rounded transition"
+                  title="Modifier le post"
+                  aria-label="Modifier le post"
+                >
+                  <Pencil size={13} aria-hidden />
+                </button>
+              )}
             </div>
-            <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
+            {editingPost ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editPostContent}
+                  onChange={e => setEditPostContent(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') setEditingPost(false)
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && editPostContent.trim()) savePost.mutate()
+                  }}
+                  rows={5}
+                  autoFocus
+                  className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
+                />
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    onClick={() => editPostContent.trim() && savePost.mutate()}
+                    disabled={!editPostContent.trim() || savePost.isPending}
+                    className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded font-medium transition disabled:opacity-50"
+                  >
+                    {savePost.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                  <button onClick={() => setEditingPost(false)} className="px-3 py-1.5 text-fc-muted hover:text-white transition">Annuler</button>
+                  <span className="text-fc-muted hidden md:inline">Échap pour annuler · Ctrl+Entrée pour enregistrer</span>
+                </div>
+              </div>
+            ) : (
+              <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
+            )}
           </div>
         )}
 
