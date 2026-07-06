@@ -34,7 +34,17 @@ export function useMediaUpload(serverId: string, channelId: string) {
     const f = img.getAsFile()
     if (f) uploadFile(f, onUrl)
   }
-  return { pick, onPaste, uploading }
+  // Glisser-déposer un média sur le composer (image ou vidéo)
+  const onDrop = (e: React.DragEvent, onUrl: (url: string) => void) => {
+    const f = Array.from(e.dataTransfer?.files ?? []).find(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+    if (!f) return
+    e.preventDefault()
+    uploadFile(f, onUrl)
+  }
+  const onDragOver = (e: React.DragEvent) => {
+    if (Array.from(e.dataTransfer?.items ?? []).some(i => i.kind === 'file')) e.preventDefault()
+  }
+  return { pick, onPaste, onDrop, onDragOver, uploading }
 }
 
 // Rendu de texte avec médias inline : les URLs /uploads/*.{img} deviennent des

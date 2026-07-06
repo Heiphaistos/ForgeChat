@@ -121,7 +121,10 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
               value={content}
               onChange={e => setContent(e.target.value)}
               onPaste={e => postUpload.onPaste(e, url => setContent(c => (c ? c + '\n' : '') + url))}
-              placeholder="Décrivez votre post..."
+              onDrop={e => postUpload.onDrop(e, url => setContent(c => (c ? c + '\n' : '') + url))}
+              onDragOver={postUpload.onDragOver}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && title.trim() && !create.isPending) create.mutate() }}
+              placeholder="Décrivez votre post... (Ctrl+Entrée pour publier)"
               rows={5}
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
             />
@@ -441,6 +444,8 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               value={reply}
               onChange={e => setReply(e.target.value)}
               onPaste={e => replyUpload.onPaste(e, url => setReply(c => (c ? c + '\n' : '') + url))}
+              onDrop={e => replyUpload.onDrop(e, url => setReply(c => (c ? c + '\n' : '') + url))}
+              onDragOver={replyUpload.onDragOver}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()

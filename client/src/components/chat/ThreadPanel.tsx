@@ -324,6 +324,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
               }
             }}
             onPaste={e => mediaUpload.onPaste(e, url => setInput(c => (c ? c + '\n' : '') + url))}
+            onDrop={e => mediaUpload.onDrop(e, url => setInput(c => (c ? c + '\n' : '') + url))}
+            onDragOver={mediaUpload.onDragOver}
             placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
             enterKeyHint="send"
             autoCapitalize="sentences"
