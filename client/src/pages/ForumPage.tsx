@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2 } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search } from 'lucide-react'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
@@ -484,11 +484,33 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
   const { openSidebar } = useMobile()
   const { formatShortDate, formatDate } = useFormatDate()
 
-  const { data: posts = [] } = useQuery<ForumPost[]>({
+  const { data: allPosts = [] } = useQuery<ForumPost[]>({
     queryKey: ['forum', channelId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/posts`).then(r => r.data),
     enabled: !!channelId,
   })
+
+  // Recherche titre/contenu, filtre par tag (clic sur un tag) et tri —
+  // les posts épinglés restent toujours en tête
+  const [search, setSearch] = useState('')
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<'recent' | 'active'>('recent')
+  const posts = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = allPosts.filter(p =>
+      (!q || p.title.toLowerCase().includes(q) || (p.content ?? '').toLowerCase().includes(q)) &&
+      (!tagFilter || p.tags.includes(tagFilter))
+    )
+    return [...filtered].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      if (sortBy === 'active') {
+        const la = a.last_reply_at ?? a.created_at
+        const lb = b.last_reply_at ?? b.created_at
+        return lb.localeCompare(la)
+      }
+      return b.created_at.localeCompare(a.created_at)
+    })
+  }, [allPosts, search, tagFilter, sortBy])
 
   useEffect(() => {
     const offCreate = on('FORUM_POST_CREATE', (d: any) => {
@@ -559,9 +581,57 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
         </div>
       </div>
 
+      {/* Barre recherche + tri */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-fc-bg flex-shrink-0">
+        <div className="flex items-center gap-2 bg-fc-input rounded-lg px-2.5 py-1.5 flex-1 min-w-0">
+          <Search size={14} className="text-fc-muted flex-shrink-0" aria-hidden />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher un post..."
+            aria-label="Rechercher un post"
+            enterKeyHint="search"
+            inputMode="search"
+            autoComplete="off"
+            className="bg-transparent text-sm text-white outline-none flex-1 min-w-0 placeholder-fc-muted"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} aria-label="Effacer la recherche" className="text-fc-muted hover:text-white transition"><X size={12} aria-hidden /></button>
+          )}
+        </div>
+        {tagFilter && (
+          <button
+            onClick={() => setTagFilter(null)}
+            className="flex items-center gap-1 px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full text-xs whitespace-nowrap hover:bg-fc-accent/30 transition"
+            title="Retirer le filtre"
+          >
+            #{tagFilter} <X size={10} aria-hidden />
+          </button>
+        )}
+        <div className="flex rounded-lg overflow-hidden border border-fc-hover flex-shrink-0" role="group" aria-label="Trier les posts">
+          <button
+            onClick={() => setSortBy('recent')}
+            aria-pressed={sortBy === 'recent'}
+            className={`px-2.5 py-1.5 text-xs font-medium transition ${sortBy === 'recent' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
+          >
+            Récents
+          </button>
+          <button
+            onClick={() => setSortBy('active')}
+            aria-pressed={sortBy === 'active'}
+            className={`px-2.5 py-1.5 text-xs font-medium transition ${sortBy === 'active' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
+          >
+            Actifs
+          </button>
+        </div>
+      </div>
+
       {/* Liste posts */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
-        {posts.length === 0 && (
+        {posts.length === 0 && (search || tagFilter) && allPosts.length > 0 && (
+          <div className="text-center text-fc-muted py-16 text-sm">Aucun post ne correspond à la recherche.</div>
+        )}
+        {allPosts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessagesSquare size={48} className="text-fc-muted opacity-30 mb-4" />
             <p className="text-fc-text font-semibold mb-1">Aucun post pour l'instant</p>
@@ -612,7 +682,12 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
                     <div className="flex items-center gap-1">
                       <Tag size={11} />
                       {post.tags.slice(0, 3).map(t => (
-                        <span key={t} className="px-1.5 py-0.5 bg-fc-accent/15 text-fc-accent rounded-full">#{t}</span>
+                        <span
+                          key={t}
+                          onClick={e => { e.stopPropagation(); setTagFilter(cur => cur === t ? null : t) }}
+                          title={`Filtrer par #${t}`}
+                          className={`px-1.5 py-0.5 rounded-full cursor-pointer transition ${tagFilter === t ? 'bg-fc-accent text-white' : 'bg-fc-accent/15 text-fc-accent hover:bg-fc-accent/30'}`}
+                        >#{t}</span>
                       ))}
                     </div>
                   )}
