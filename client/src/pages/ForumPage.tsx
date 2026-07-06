@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
@@ -310,6 +311,17 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
+            onClick={() => {
+              const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?post=${post.id}`
+              navigator.clipboard.writeText(url).then(() => toast.success('Lien du post copié')).catch(() => toast.error('Impossible de copier'))
+            }}
+            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+            title="Copier le lien du post"
+            aria-label="Copier le lien du post"
+          >
+            <Link2 size={15} aria-hidden />
+          </button>
+          <button
             onClick={() => togglePin.mutate()}
             title={localPost.pinned ? 'Désépingler' : 'Épingler'}
             className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
@@ -529,7 +541,8 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
 
 export default function ForumPage({ channel, serverId, channelId }: Props) {
   const [showCreate, setShowCreate] = useState(false)
-  const [selectedPost, setSelectedPost] = useState<ForumPost | null>(null)
+  const [selectedPost, setSelectedPostState] = useState<ForumPost | null>(null)
+  const [urlParams, setUrlParams] = useSearchParams()
   const qc = useQueryClient()
   const { on } = useWs()
   const { openSidebar } = useMobile()
@@ -540,6 +553,25 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/posts`).then(r => r.data),
     enabled: !!channelId,
   })
+
+  // Deep-link : ?post=<id> ouvre le post directement (lien partageable),
+  // et l'ouverture/fermeture maintient l'URL à jour
+  const setSelectedPost = (p: ForumPost | null) => {
+    setSelectedPostState(p)
+    setUrlParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (p) next.set('post', p.id); else next.delete('post')
+      return next
+    }, { replace: true })
+  }
+  const urlPostId = urlParams.get('post')
+  useEffect(() => {
+    if (urlPostId && !selectedPost && allPosts.length > 0) {
+      const found = allPosts.find(p => p.id === urlPostId)
+      if (found) setSelectedPostState(found)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlPostId, allPosts.length])
 
   // Recherche titre/contenu, filtre par tag (clic sur un tag) et tri —
   // les posts épinglés restent toujours en tête
