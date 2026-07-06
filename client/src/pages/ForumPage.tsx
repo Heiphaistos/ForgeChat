@@ -8,7 +8,7 @@ import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
-import LightboxModal from '../components/chat/LightboxModal'
+import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -41,72 +41,6 @@ interface ForumReply {
   author: { id: string; username: string; avatar?: string; discriminator: string }
 }
 
-// ─── Upload de médias forum (image/vidéo → URL insérée dans le contenu) ─────
-function useForumUpload(serverId: string, channelId: string) {
-  const [uploading, setUploading] = useState(false)
-  const uploadFile = async (f: File, onUrl: (url: string) => void) => {
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', f)
-      const { data } = await api.post(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd)
-      if (data?.url) onUrl(data.url)
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? "Échec de l'envoi du fichier")
-    } finally {
-      setUploading(false)
-    }
-  }
-  const pick = (onUrl: (url: string) => void) => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime'
-    input.onchange = () => { const f = input.files?.[0]; if (f) uploadFile(f, onUrl) }
-    input.click()
-  }
-  // Coller une image directement dans un textarea de forum
-  const onPaste = (e: React.ClipboardEvent, onUrl: (url: string) => void) => {
-    const img = Array.from(e.clipboardData?.items ?? []).find(i => i.kind === 'file' && i.type.startsWith('image/'))
-    if (!img) return
-    e.preventDefault()
-    const f = img.getAsFile()
-    if (f) uploadFile(f, onUrl)
-  }
-  return { pick, onPaste, uploading }
-}
-
-// Rendu du contenu forum avec médias inline : les URLs /uploads/*.{img,vid}
-// deviennent des images cliquables / lecteurs vidéo
-const FORUM_MEDIA_RE = /(\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov))/gi
-function ForumContent({ text, className }: { text: string; className?: string }) {
-  const parts = text.split(FORUM_MEDIA_RE)
-  const [lightbox, setLightbox] = useState<number | null>(null)
-  const images = parts.filter(p => p.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(p))
-  return (
-    <div className={className ?? 'text-sm text-fc-text leading-relaxed whitespace-pre-wrap'}>
-      {parts.map((part, i) => {
-        if (part.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(part)) {
-          const imgIdx = images.indexOf(part)
-          return (
-            <img
-              key={i} src={part} alt="" loading="lazy" decoding="async"
-              className="max-w-full md:max-w-sm rounded-lg my-1.5 block cursor-pointer hover:opacity-90 transition"
-              onClick={() => setLightbox(imgIdx)}
-            />
-          )
-        }
-        if (part.startsWith('/uploads/') && /\.(mp4|webm|mov)$/i.test(part)) {
-          return <video key={i} src={part} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
-        }
-        return <span key={i}>{part}</span>
-      })}
-      {lightbox !== null && (
-        <LightboxModal images={images} initialIndex={lightbox} onClose={() => setLightbox(null)} />
-      )}
-    </div>
-  )
-}
-
 function AttachButton({ uploading, onClick }: { uploading: boolean; onClick: () => void }) {
   return (
     <button
@@ -128,7 +62,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const qc = useQueryClient()
-  const postUpload = useForumUpload(serverId, channelId)
+  const postUpload = useMediaUpload(serverId, channelId)
 
   const create = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/posts`, {
@@ -243,7 +177,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 
 function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
   const [reply, setReply] = useState('')
-  const replyUpload = useForumUpload(serverId, channelId)
+  const replyUpload = useMediaUpload(serverId, channelId)
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -398,7 +332,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
               <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
             </div>
-            <ForumContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
+            <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
           </div>
         )}
 
@@ -485,7 +419,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   </div>
                 </div>
               ) : (
-                <ForumContent text={r.content} />
+                <MediaContent text={r.content} />
               )}
             </div>
           </div>

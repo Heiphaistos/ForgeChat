@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check } from 'lucide-react'
+import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
+import MediaContent, { useMediaUpload } from './MediaContent'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -21,6 +22,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const { on } = useWs()
   const { formatShort } = useFormatDate()
   const [input, setInput] = useState('')
+  const mediaUpload = useMediaUpload(serverId, channelId)
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -292,7 +294,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-fc-text leading-relaxed break-words">{msg.content}</p>
+                  <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words whitespace-pre-wrap" />
                 )}
               </div>
             </div>
@@ -321,12 +323,23 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 handleSend()
               }
             }}
+            onPaste={e => mediaUpload.onPaste(e, url => setInput(c => (c ? c + '\n' : '') + url))}
             placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
             enterKeyHint="send"
             autoCapitalize="sentences"
             rows={2}
             className="flex-1 px-2.5 py-2 bg-fc-input rounded-lg text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
           />
+          <button
+            type="button"
+            onClick={() => mediaUpload.pick(url => setInput(c => (c ? c + '\n' : '') + url))}
+            disabled={mediaUpload.uploading}
+            title="Joindre une image ou vidéo"
+            aria-label="Joindre une image ou vidéo"
+            className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
+          >
+            {mediaUpload.uploading ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Paperclip size={16} aria-hidden />}
+          </button>
           <button
             onClick={handleSend}
             disabled={!input.trim() || createThread.isPending || sendMessage.isPending}
