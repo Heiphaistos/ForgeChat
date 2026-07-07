@@ -255,6 +255,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                   <span className="text-xs text-fc-muted">
                     {formatShort(msg.created_at)}
                   </span>
+                  {msg.edited_at && (
+                    <span className="text-[9px] text-fc-muted/60" title="Message modifié">(modifié)</span>
+                  )}
                   {isMe && editingMsgId !== msg.id && (
                     <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
                       <button

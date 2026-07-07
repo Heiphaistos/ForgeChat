@@ -446,6 +446,9 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   {r.author?.username ?? 'Utilisateur supprimé'}
                 </span>
                 <span className="text-xs text-fc-muted">{formatShortDate(r.created_at)}</span>
+                {(r as any).edited_at && (
+                  <span className="text-[9px] text-fc-muted/60" title="Réponse modifiée">(modifié)</span>
+                )}
                 {r.user_id === user?.id && editingReplyId !== r.id && (
                   <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
                     <button
