@@ -13,6 +13,9 @@ import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
+// Brouillons de réponse par post — module-level, survivent à la navigation
+const forumDrafts = new Map<string, string>()
+
 interface Props {
   channel: { id: string; name: string; topic?: string }
   serverId: string
@@ -180,7 +183,12 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
 }
 
 function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
-  const [reply, setReply] = useState('')
+  const [reply, setReply] = useState(() => forumDrafts.get(post.id) ?? '')
+  // Sauvegarder le brouillon en continu (purgé à l'envoi)
+  useEffect(() => {
+    if (reply.trim()) forumDrafts.set(post.id, reply)
+    else forumDrafts.delete(post.id)
+  }, [reply, post.id])
   const replyUpload = useMediaUpload(serverId, channelId)
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)

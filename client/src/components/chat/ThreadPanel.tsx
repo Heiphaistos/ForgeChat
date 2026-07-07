@@ -17,11 +17,19 @@ interface Props {
   onClose: () => void
 }
 
+// Brouillons par message parent — module-level, survivent à la fermeture du fil
+const threadDrafts = new Map<string, string>()
+
 export default function ThreadPanel({ serverId, channelId, parentMessageId, onClose }: Props) {
   const { user } = useAuth()
   const { on } = useWs()
   const { formatShort } = useFormatDate()
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => threadDrafts.get(parentMessageId) ?? '')
+  // Brouillon conservé si on ferme/rouvre le fil (purgé à l'envoi via setInput(''))
+  useEffect(() => {
+    if (input.trim()) threadDrafts.set(parentMessageId, input)
+    else threadDrafts.delete(parentMessageId)
+  }, [input, parentMessageId])
   const mediaUpload = useMediaUpload(serverId, channelId)
   const [threadId, setThreadId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
