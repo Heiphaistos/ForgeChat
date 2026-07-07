@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell, CheckCheck } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -549,6 +549,16 @@ export default function ServerSidebar() {
           </div>
         )
       })}
+
+      {/* Recherche rapide (QuickSwitcher) — indispensable sur mobile où Ctrl+K n'existe pas */}
+      <button
+        onClick={() => { window.dispatchEvent(new CustomEvent('forgechat:open-quick-switcher')); closeSidebar() }}
+        className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
+        title="Recherche rapide (Ctrl+K)"
+        aria-label="Recherche rapide"
+      >
+        <SearchIcon size={20} />
+      </button>
 
       {/* Explorer */}
       <button

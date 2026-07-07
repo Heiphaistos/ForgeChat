@@ -899,8 +899,14 @@ function AppInner() {
         nav(`/servers/${svId}/channels/${list[next].id}`)
       }
     }
+    // Ouverture du QuickSwitcher depuis le bouton loupe du rail (mobile sans Ctrl+K)
+    const openQs = () => setShowQuickSwitcher(true)
+    window.addEventListener('forgechat:open-quick-switcher', openQs)
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    return () => {
+      window.removeEventListener('forgechat:open-quick-switcher', openQs)
+      window.removeEventListener('keydown', handler)
+    }
   }, [nav, qcHook, toggleMute, toggleDeafen])
 
   return (

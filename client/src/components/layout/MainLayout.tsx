@@ -254,7 +254,8 @@ export default function MainLayout() {
               <div
                 className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group/split z-10"
                 onMouseDown={onSplitResizeStart}
-                title="Redimensionner le panneau split"
+                onDoubleClick={() => { setSplitRatio(0.5); localStorage.setItem('fc_split_ratio', '0.5') }}
+                title="Redimensionner le panneau split (double-clic : 50/50)"
               >
                 <div className="w-px h-full bg-fc-hover group-hover/split:bg-fc-accent/60 transition-colors" />
               </div>
