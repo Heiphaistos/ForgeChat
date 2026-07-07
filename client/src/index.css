@@ -745,6 +745,19 @@ a:focus-visible,
   .panel-slide-right { animation: none; }
 }
 
+/* Bottom-sheet mobile (menu contextuel des messages) */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.sheet-slide-up {
+  animation: sheet-up 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-slide-up { animation: none; }
+}
+
 /* Mode compact en paysage téléphone : hauteur écran très réduite (~360px),
    on récupère de l'espace vertical sur le header et la zone d'input du tchat */
 @media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {

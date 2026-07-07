@@ -1306,17 +1306,26 @@ export default function MessageList({
         />
       )}
 
-      {/* Context menu clic droit */}
+      {/* Context menu : bottom-sheet sur mobile, menu positionné sur desktop */}
+      {contextMenu && window.innerWidth < 768 && (
+        <div className="fixed inset-0 z-[199] bg-black/50" aria-hidden onClick={() => setContextMenu(null)} />
+      )}
       {contextMenu && (
         <div
-          className="fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm overflow-y-auto"
-          style={{
-            left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 220)),
-            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 440)),
-            maxHeight: Math.min(440, window.innerHeight - 16),
-          }}
+          className={window.innerWidth < 768
+            ? 'fixed z-[200] bottom-0 inset-x-0 bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl pt-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] text-sm overflow-y-auto overscroll-contain sheet-slide-up'
+            : 'fixed z-[200] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl py-1 w-52 text-sm overflow-y-auto'}
+          style={window.innerWidth < 768
+            ? { maxHeight: '70dvh' }
+            : {
+                left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 220)),
+                top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 440)),
+                maxHeight: Math.min(440, window.innerHeight - 16),
+              }}
           onClick={e => e.stopPropagation()}
         >
+          {/* Poignée du bottom-sheet mobile */}
+          <div className="md:hidden mx-auto mt-1 mb-1.5 w-10 h-1 rounded-full bg-fc-hover" aria-hidden />
           {/* Barre d'emojis rapides — particulièrement utile sur mobile */}
           <div className="flex items-center justify-around px-1 py-1.5 border-b border-fc-hover/50">
             {quickEmojis().map(emoji => (
