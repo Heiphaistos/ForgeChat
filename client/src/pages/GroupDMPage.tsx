@@ -31,6 +31,10 @@ interface GDMAttachment {
   size: number
 }
 
+// Position de scroll par groupe — module-level pour survivre aux démontages
+// (même pattern que MessageList : restaurée au retour dans le groupe)
+const savedGdmScroll = new Map<string, number>()
+
 interface GDMMessage {
   id: string
   content: string | null
@@ -290,12 +294,18 @@ export default function GroupDMPage() {
     if (!container) return
     const onScroll = () => {
       const threshold = 80
-      isAtBottomRef.current = container.scrollHeight - container.scrollTop - container.clientHeight < threshold
+      const fromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+      isAtBottomRef.current = fromBottom < threshold
       if (isAtBottomRef.current) setNewMsgCount(0)
+      // Mémoriser la position si on est remonté dans l'historique
+      if (groupId) {
+        if (fromBottom > 200) savedGdmScroll.set(groupId, container.scrollTop)
+        else savedGdmScroll.delete(groupId)
+      }
     }
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => container.removeEventListener('scroll', onScroll)
-  }, [])
+  }, [groupId])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
   const prevLen = useRef(0)
@@ -322,7 +332,14 @@ export default function GroupDMPage() {
           setTimeout(() => el?.classList.remove('bg-fc-accent/10'), 2000)
         }, 300)
       } else {
-        bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+        // Position mémorisée (retour dans le groupe) sauf si des non-lus attendent
+        const saved = groupId ? savedGdmScroll.get(groupId) : undefined
+        if (saved != null && unreadAtOpenG.current === 0 && messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = saved
+          isAtBottomRef.current = false
+        } else {
+          bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+        }
       }
     }
   }, [allMessages.length, highlightMsgId])
