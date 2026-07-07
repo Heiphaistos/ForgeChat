@@ -5,9 +5,9 @@ import ChannelSidebar from './ChannelSidebar'
 import UserPanel from './UserPanel'
 import VoiceBar from '../voice/VoiceBar'
 import RightSidebar, { useRightSidebar } from './RightSidebar'
+import ConnectionBanner from './ConnectionBanner'
 import { SplitContext } from '../../contexts/SplitContext'
 import { MobileContext } from '../../contexts/MobileContext'
-import { useWs } from '../../store/ws'
 
 const ChannelPage = lazy(() => import('../../pages/ChannelPage'))
 
@@ -75,8 +75,6 @@ export default function MainLayout() {
   }, [])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isMobile = useIsMobile()
-  const wsConnected = useWs(s => s.connected)
-  const wsAttempts = useWs(s => s._reconnectAttempts)
   const location = useLocation()
 
   // Sidebar resize
@@ -178,13 +176,8 @@ export default function MainLayout() {
             Passer au contenu principal
           </a>
 
-          {/* Bannière reconnexion WebSocket */}
-          {!wsConnected && wsAttempts > 0 && (
-            <div role="status" aria-live="polite" className="fixed top-0 inset-x-0 z-[9999] bg-yellow-600/95 text-white text-xs text-center py-1.5 flex items-center justify-center gap-2 backdrop-blur-sm">
-              <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-              Reconnexion en cours...
-            </div>
-          )}
+          {/* Bannière d'état de connexion (WS + réseau navigateur) */}
+          <ConnectionBanner />
 
           {/* Mobile backdrop */}
           {sidebarOpen && (
