@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Copy, Check, X, Link, RefreshCw, Clock, Users, ChevronDown } from 'lucide-react'
+import { Copy, Check, X, Link, RefreshCw, Clock, Users, ChevronDown, Share2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -176,6 +176,16 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                 >
                   {copied ? <><Check size={14} /> Copié</> : <><Copy size={14} /></>}
                 </button>
+                {!!navigator.share && (
+                  <button
+                    onClick={() => navigator.share({ title: `Rejoins ${serverName} sur ForgeChat`, url: inviteUrl }).catch(() => {})}
+                    className="px-3 py-2 rounded bg-fc-hover hover:bg-fc-hover/70 text-fc-muted hover:text-white transition"
+                    title="Partager"
+                    aria-label="Partager le lien d'invitation"
+                  >
+                    <Share2 size={14} aria-hidden />
+                  </button>
+                )}
                 <button
                   onClick={() => { setInviteUrl(''); generate.mutate() }}
                   disabled={generate.isPending}

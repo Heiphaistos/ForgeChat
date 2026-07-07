@@ -321,11 +321,16 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           <button
             onClick={() => {
               const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?post=${post.id}`
-              navigator.clipboard.writeText(url).then(() => toast.success('Lien du post copié')).catch(() => toast.error('Impossible de copier'))
+              // Partage natif sur mobile, copie presse-papier sinon
+              if (navigator.share) {
+                navigator.share({ title: post.title, url }).catch(() => {})
+              } else {
+                navigator.clipboard.writeText(url).then(() => toast.success('Lien du post copié')).catch(() => toast.error('Impossible de copier'))
+              }
             }}
             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-            title="Copier le lien du post"
-            aria-label="Copier le lien du post"
+            title="Partager le lien du post"
+            aria-label="Partager le lien du post"
           >
             <Link2 size={15} aria-hidden />
           </button>
