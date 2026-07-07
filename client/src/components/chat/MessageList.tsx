@@ -346,6 +346,12 @@ export default function MessageList({
       } else if (e.key === 'Home') {
         e.preventDefault()
         containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      } else if (e.key === 'PageUp' || e.key === 'PageDown') {
+        const el = containerRef.current
+        if (!el) return
+        e.preventDefault()
+        const delta = (el.clientHeight - 60) * (e.key === 'PageUp' ? -1 : 1)
+        el.scrollBy({ top: delta, behavior: 'smooth' })
       }
     }
     window.addEventListener('keydown', handler)

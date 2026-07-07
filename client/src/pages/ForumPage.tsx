@@ -514,6 +514,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
             <textarea
               value={reply}
               onChange={e => setReply(e.target.value)}
+              autoFocus={window.innerWidth >= 768}
               onPaste={e => replyUpload.onPaste(e, url => setReply(c => (c ? c + '\n' : '') + url))}
               onDrop={e => replyUpload.onDrop(e, url => setReply(c => (c ? c + '\n' : '') + url))}
               onDragOver={replyUpload.onDragOver}
@@ -679,6 +680,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setTagFilter(null); (e.target as HTMLInputElement).blur() } }}
             placeholder="Rechercher un post..."
             aria-label="Rechercher un post"
             enterKeyHint="search"
