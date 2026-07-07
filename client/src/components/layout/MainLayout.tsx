@@ -228,7 +228,8 @@ export default function MainLayout() {
           <div
             className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
             onMouseDown={onResizeStart}
-            title="Redimensionner la barre latérale"
+            onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('fc_sidebar_width', String(SIDEBAR_DEFAULT)) }}
+            title="Redimensionner la barre latérale (double-clic : largeur par défaut)"
           >
             <div className="w-px h-full bg-fc-hover group-hover:bg-fc-accent/60 transition-colors" />
           </div>

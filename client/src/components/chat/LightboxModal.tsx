@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2 } from 'lucide-react'
+import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -58,6 +58,28 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
     }
   }
 
+  // Copier l'image dans le presse-papier — le Clipboard API n'accepte que le
+  // PNG, on repasse donc par un canvas quel que soit le format d'origine
+  const copyImage = async () => {
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = images[index]
+      await img.decode()
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d')!.drawImage(img, 0, 0)
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'))
+      if (!blob) throw new Error('toBlob failed')
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      toast.success('Image copiée')
+    } catch {
+      toast.error("Impossible de copier l'image")
+    }
+  }
+  const canCopyImage = typeof ClipboardItem !== 'undefined' && !!navigator.clipboard?.write
+
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     setZoom(z => e.deltaY < 0 ? Math.min(z + 0.25, 4) : Math.max(z - 0.25, 0.5))
@@ -71,6 +93,9 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} aria-label="Zoom avant" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} aria-hidden /></button>
         <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} aria-label="Zoom arrière" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} aria-hidden /></button>
+        {canCopyImage && (
+          <button onClick={copyImage} aria-label="Copier l'image" title="Copier l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Copy size={18} aria-hidden /></button>
+        )}
         <button onClick={share} aria-label="Partager l'image" title="Partager" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Share2 size={18} aria-hidden /></button>
         <button onClick={download} aria-label="Télécharger l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
         <button onClick={onClose} aria-label="Fermer" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
