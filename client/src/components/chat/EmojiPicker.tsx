@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import PickerShell from '../ui/PickerShell'
 import { Search, Smile } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -94,9 +95,9 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
   const displayed = filtered ?? CATEGORIES[activeCategory].emojis
 
   return (
-    <div
-      className="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-80 z-50 overflow-hidden"
-      onClick={e => e.stopPropagation()}
+    <PickerShell
+      onClose={onClose}
+      desktopClassName="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-80 z-50 overflow-hidden"
     >
       {/* Barre de recherche */}
       <div role="search" aria-label="Rechercher un emoji" className="p-2 border-b border-fc-hover">
@@ -233,6 +234,6 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
           </div>
         </>
       )}
-    </div>
+    </PickerShell>
   )
 }

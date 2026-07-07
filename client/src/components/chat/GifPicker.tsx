@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import PickerShell from '../ui/PickerShell'
 import { Search, X, Loader2 } from 'lucide-react'
 
 const TENOR_KEY = import.meta.env?.VITE_TENOR_API_KEY || ''
@@ -143,10 +144,10 @@ export default function GifPicker({ onPick, onClose }: Props) {
   }
 
   return (
-    <div
-      className="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-80 z-50 overflow-hidden flex flex-col"
-      style={{ maxHeight: '420px' }}
-      onClick={e => e.stopPropagation()}
+    <PickerShell
+      onClose={onClose}
+      desktopClassName="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-80 z-50 overflow-hidden flex flex-col"
+      desktopStyle={{ maxHeight: '420px' }}
     >
       {/* Header */}
       <div role="search" aria-label="Chercher un GIF" className="p-2 border-b border-fc-hover flex-shrink-0">
@@ -259,6 +260,6 @@ export default function GifPicker({ onPick, onClose }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </PickerShell>
   )
 }

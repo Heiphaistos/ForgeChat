@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import PickerShell from '../ui/PickerShell'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload, X, Loader2 } from 'lucide-react'
 import api from '../../api/client'
@@ -152,10 +153,9 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
   const pick = (sticker: Sticker) => { onPick(sticker); onClose() }
 
   return (
-    <div
-      className="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover
-        rounded-xl shadow-2xl w-72 z-50 overflow-hidden"
-      onClick={e => e.stopPropagation()}
+    <PickerShell
+      onClose={onClose}
+      desktopClassName="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-72 z-50 overflow-hidden"
     >
       {/* Tabs */}
       <div role="tablist" aria-label="Type de stickers" className="flex border-b border-fc-hover">
@@ -268,6 +268,6 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           </div>
         </>
       )}
-    </div>
+    </PickerShell>
   )
 }
