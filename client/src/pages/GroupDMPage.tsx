@@ -7,7 +7,7 @@ import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -780,6 +780,17 @@ export default function GroupDMPage() {
                             <Copy size={12} aria-hidden />
                           </button>
                         )}
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/dms/groups/${groupId}?highlight=${msg.id}`
+                            navigator.clipboard.writeText(url).then(() => toast.success('Lien du message copié')).catch(() => toast.error('Impossible de copier'))
+                          }}
+                          className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                          title="Copier le lien"
+                          aria-label="Copier le lien du message"
+                        >
+                          <Link2 size={12} aria-hidden />
+                        </button>
                         {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}

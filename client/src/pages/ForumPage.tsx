@@ -556,7 +556,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
   const { openSidebar } = useMobile()
   const { formatShortDate, formatDate } = useFormatDate()
 
-  const { data: allPosts = [] } = useQuery<ForumPost[]>({
+  const { data: allPosts = [], isLoading: postsLoading } = useQuery<ForumPost[]>({
     queryKey: ['forum', channelId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/posts`).then(r => r.data),
     enabled: !!channelId,
@@ -719,10 +719,27 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
 
       {/* Liste posts */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
+        {/* Skeleton au premier chargement (évite le faux « Aucun post ») */}
+        {postsLoading && (
+          <div role="status" aria-label="Chargement des posts" className="space-y-3">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="bg-fc-hover/20 rounded-lg p-4 border border-fc-hover/30 animate-pulse">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-fc-hover/50 flex-shrink-0" />
+                  <div className="flex-1 space-y-2 py-1">
+                    <div className="h-3.5 bg-fc-hover/50 rounded w-1/3" />
+                    <div className="h-2.5 bg-fc-hover/40 rounded w-1/4" />
+                    <div className="h-2.5 bg-fc-hover/30 rounded w-2/3" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {posts.length === 0 && (search || tagFilter) && allPosts.length > 0 && (
           <div className="text-center text-fc-muted py-16 text-sm">Aucun post ne correspond à la recherche.</div>
         )}
-        {allPosts.length === 0 && (
+        {!postsLoading && allPosts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessagesSquare size={48} className="text-fc-muted opacity-30 mb-4" />
             <p className="text-fc-text font-semibold mb-1">Aucun post pour l'instant</p>
