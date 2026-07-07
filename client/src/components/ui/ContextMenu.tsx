@@ -49,15 +49,33 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
     }
   }, [onClose])
 
+  // Bottom-sheet sur mobile (cohérent avec le menu des messages),
+  // menu positionné au pointeur sur desktop
+  const isSheet = window.innerWidth < 768
+
   return createPortal(
-    <div
+    <>
+      {isSheet && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
+          className="bg-black/50"
+          aria-hidden
+          onMouseDown={onClose}
+        />
+      )}
+      <div
       ref={ref}
       role="menu"
-      style={{ position: 'fixed', top: pos.y, left: pos.x, zIndex: 99999 }}
-      className="min-w-[180px] bg-fc-bg border border-fc-hover rounded-lg shadow-2xl py-1 select-none"
+      style={isSheet
+        ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99999, maxHeight: '70dvh' }
+        : { position: 'fixed', top: pos.y, left: pos.x, zIndex: 99999 }}
+      className={isSheet
+        ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl pt-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] select-none overflow-y-auto overscroll-contain sheet-slide-up'
+        : 'min-w-[180px] bg-fc-bg border border-fc-hover rounded-lg shadow-2xl py-1 select-none'}
       onMouseDown={e => e.stopPropagation()}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation() }}
     >
+      {isSheet && <div className="mx-auto mt-1 mb-1.5 w-10 h-1 rounded-full bg-fc-hover" aria-hidden />}
       {items.map((item, i) => {
         if ('separator' in item && item.separator) {
           return <div key={i} role="separator" className="my-1 border-t border-fc-hover" />
@@ -81,7 +99,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
           </button>
         )
       })}
-    </div>,
+    </div>
+    </>,
     document.body
   )
 }
