@@ -90,22 +90,32 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler) }
   }, [])
 
-  // Positionner la popup pour qu'elle reste dans l'écran (bords gauche+haut inclus)
-  const style: React.CSSProperties = {
-    position: 'fixed',
-    left: Math.max(8, Math.min(anchorX, window.innerWidth - 280)),
-    top: Math.max(8, Math.min(anchorY, window.innerHeight - 300)),
-    zIndex: 9999,
-  }
+  // Bottom-sheet sur mobile (cohérent avec les menus contextuels),
+  // popup positionnée à l'ancre sur desktop, clampée dans l'écran
+  const isSheet = window.innerWidth < 768
+  const style: React.CSSProperties = isSheet
+    ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, maxHeight: '80dvh' }
+    : {
+        position: 'fixed',
+        left: Math.max(8, Math.min(anchorX, window.innerWidth - 280)),
+        top: Math.max(8, Math.min(anchorY, window.innerHeight - 300)),
+        zIndex: 9999,
+      }
 
   return (
+    <>
+    {isSheet && (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} className="bg-black/50" aria-hidden onMouseDown={onClose} />
+    )}
     <div
       ref={ref}
       role="dialog"
       aria-modal="false"
       aria-label={user ? `Profil de ${user.username}` : 'Profil utilisateur'}
       style={style}
-      className="w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
+      className={isSheet
+        ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
+        : 'w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden'}
     >
       {/* Banner */}
       <div className="h-16 relative overflow-hidden" aria-hidden>
@@ -216,5 +226,6 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
         )}
       </div>
     </div>
+    </>
   )
 }
