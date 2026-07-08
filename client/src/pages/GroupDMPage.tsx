@@ -7,7 +7,7 @@ import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin, Share2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -104,6 +104,8 @@ export default function GroupDMPage() {
   // Double-tap mobile → réaction ❤️ (même geste que MessageList)
   const dblTapStart = useRef<{ x: number; y: number } | null>(null)
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
+  // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
+  const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
   // Popup profil au clic sur un avatar (harmonisation avec les canaux)
   const [userPopup, setUserPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -675,7 +677,23 @@ export default function GroupDMPage() {
         )}
 
         {/* Messages */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overscroll-contain px-4 py-2 space-y-3">
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto overscroll-contain px-4 py-2 space-y-3"
+          onTouchStart={e => { kbDismissRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+          onTouchMove={e => {
+            const s = kbDismissRef.current
+            if (!s) return
+            const dx = Math.abs(e.touches[0].clientX - s.x)
+            const dy = Math.abs(e.touches[0].clientY - s.y)
+            // Scroll vertical franc (pas un swipe-reply horizontal) → blur du composer
+            if (dy > 24 && dy > dx * 1.5) {
+              kbDismissRef.current = null
+              const el = document.activeElement as HTMLElement | null
+              if (el && el.tagName === 'TEXTAREA') el.blur()
+            }
+          }}
+        >
           {/* Échec du chargement initial : erreur honnête + retry */}
           {gdmError && allMessages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" role="alert">
@@ -858,6 +876,23 @@ export default function GroupDMPage() {
                         >
                           <Link2 size={12} aria-hidden />
                         </button>
+                        {typeof navigator.share === 'function' && (
+                          <button
+                            onClick={() => {
+                              const url = `${window.location.origin}/dms/groups/${groupId}?highlight=${msg.id}`
+                              navigator.share({
+                                title: 'Message ForgeChat',
+                                text: msg.content ? stripMarkdown(msg.content).slice(0, 200) : undefined,
+                                url,
+                              }).catch(() => { /* partage annulé par l'utilisateur */ })
+                            }}
+                            className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                            title="Partager"
+                            aria-label="Partager le message"
+                          >
+                            <Share2 size={12} aria-hidden />
+                          </button>
+                        )}
                         {isMe && (<>
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}

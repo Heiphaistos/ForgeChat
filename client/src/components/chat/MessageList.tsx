@@ -416,6 +416,8 @@ export default function MessageList({
   const longPressTarget = useRef<{ x: number; y: number; msg: any } | null>(null)
   const swipeRef = useRef<{ startX: number; startY: number; msg: any; el: HTMLElement | null } | null>(null)
   const lastTapRef = useRef<{ time: number; msgId: string } | null>(null)
+  // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
+  const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
 
   // Cleanup à l'unmount
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
@@ -570,6 +572,19 @@ export default function MessageList({
         className="flex-1 overflow-y-auto overscroll-contain px-2 md:px-4 py-2 space-y-0.5 message-list-container"
         onClick={() => { setEmojiPickerFor(null); setPopup(null); setReactionPickerFor(null); setDblClickPopover(null) }}
         onScroll={handleScroll}
+        onTouchStart={e => { kbDismissRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+        onTouchMove={e => {
+          const s = kbDismissRef.current
+          if (!s) return
+          const dx = Math.abs(e.touches[0].clientX - s.x)
+          const dy = Math.abs(e.touches[0].clientY - s.y)
+          // Scroll vertical franc (pas un swipe-reply horizontal) → blur du composer
+          if (dy > 24 && dy > dx * 1.5) {
+            kbDismissRef.current = null
+            const el = document.activeElement as HTMLElement | null
+            if (el && el.tagName === 'TEXTAREA') el.blur()
+          }
+        }}
       >
         {/* Loader "plus de messages" */}
         {loadingMore && (

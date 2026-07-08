@@ -42,6 +42,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
+  const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
   const qc = useQueryClient()
   useEscapePanel(onClose)
 
@@ -259,7 +261,21 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3"
+        onTouchStart={e => { kbDismissRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+        onTouchMove={e => {
+          const s = kbDismissRef.current
+          if (!s) return
+          const dx = Math.abs(e.touches[0].clientX - s.x)
+          const dy = Math.abs(e.touches[0].clientY - s.y)
+          if (dy > 24 && dy > dx * 1.5) {
+            kbDismissRef.current = null
+            const el = document.activeElement as HTMLElement | null
+            if (el && el.tagName === 'TEXTAREA') el.blur()
+          }
+        }}
+      >
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
