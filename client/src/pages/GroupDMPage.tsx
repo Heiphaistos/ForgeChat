@@ -16,6 +16,7 @@ import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
+import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -745,6 +746,7 @@ export default function GroupDMPage() {
                         autoFocus
                         enterKeyHint="send"
                         onKeyDown={e => {
+                          if (handleMarkdownShortcut(e, editContent, setEditContent)) return
                           if (e.key === 'Escape') setEditingMsgId(null)
                           if (e.key === 'Enter') {
                             e.preventDefault()

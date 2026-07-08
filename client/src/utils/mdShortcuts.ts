@@ -2,7 +2,7 @@
 // Ctrl+B gras, Ctrl+I italique, Ctrl+U souligné, Ctrl+Shift+X barré.
 // Retourne true si le raccourci a été traité (l'appelant peut alors return).
 export function handleMarkdownShortcut(
-  e: React.KeyboardEvent<HTMLTextAreaElement>,
+  e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>,
   value: string,
   setValue: (v: string) => void,
 ): boolean {
@@ -16,8 +16,8 @@ export function handleMarkdownShortcut(
   if (!marker) return false
   e.preventDefault()
   const ta = e.currentTarget
-  const start = ta.selectionStart
-  const end = ta.selectionEnd
+  const start = ta.selectionStart ?? value.length
+  const end = ta.selectionEnd ?? value.length
   const selected = value.slice(start, end)
   const inner = selected || 'texte'
   setValue(value.slice(0, start) + marker + inner + marker + value.slice(end))

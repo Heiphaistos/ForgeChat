@@ -21,6 +21,7 @@ import ReportModal from './ReportModal'
 import LightboxModal from './LightboxModal'
 import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
+import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 
@@ -383,6 +384,7 @@ export default function MessageList({
   const cancelEdit = () => { setEditingId(null); setEditContent('') }
 
   const handleEditKey = (e: KeyboardEvent<HTMLTextAreaElement>, msgId: string) => {
+    if (handleMarkdownShortcut(e, editContent, setEditContent)) return
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); confirmEdit(msgId) }
     if (e.key === 'Escape') cancelEdit()
   }

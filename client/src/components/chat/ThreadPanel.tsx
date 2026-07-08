@@ -300,6 +300,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                       autoFocus
                       enterKeyHint="done"
                       onKeyDown={e => {
+                        if (handleMarkdownShortcut(e, editContent, setEditContent)) return
                         if (e.key === 'Escape') setEditingMsgId(null)
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault()
