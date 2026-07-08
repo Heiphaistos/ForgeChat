@@ -1,7 +1,7 @@
 ﻿import { useRef, useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { maybeCompressImage, formatBytes } from '../../utils/compressImage'
@@ -348,6 +348,25 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
   }, [addFiles])
+
+  // Drop de fichiers n'importe où sur la page (pas seulement le composer) :
+  // overlay plein écran qui capte le drop et alimente les pièces jointes
+  const [winDragging, setWinDragging] = useState(false)
+  const dragDepth = useRef(0)
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')
+    const onEnter = (e: DragEvent) => { if (!hasFiles(e)) return; dragDepth.current++; setWinDragging(true) }
+    const onLeave = () => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setWinDragging(false) }
+    const onDropWin = () => { dragDepth.current = 0; setWinDragging(false) }
+    window.addEventListener('dragenter', onEnter)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDropWin)
+    return () => {
+      window.removeEventListener('dragenter', onEnter)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDropWin)
+    }
+  }, [])
 
   // Libérer les URLs de preview — utilise une ref pour capturer l'état courant au démontage
   useEffect(() => () => filesRef.current.forEach(f => { if (f.preview) URL.revokeObjectURL(f.preview) }), [])
@@ -754,6 +773,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   return (
     <div {...getRootProps()} className={`fc-chat-input px-2 md:px-4 pb-2 md:pb-4 relative ${isDragActive ? 'ring-2 ring-fc-accent ring-inset rounded-lg' : ''}`} style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       <input {...getInputProps()} />
+
+      {/* Overlay drop plein écran */}
+      {winDragging && (
+        <div
+          className="fixed inset-0 z-[300] bg-black/60 flex items-center justify-center"
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); addFiles(Array.from(e.dataTransfer.files)) }}
+        >
+          <div className="border-4 border-dashed border-fc-accent rounded-2xl px-10 py-8 bg-fc-bg/90 text-center pointer-events-none">
+            <Paperclip size={36} className="mx-auto mb-3 text-fc-accent" aria-hidden />
+            <p className="text-white font-semibold">Déposez vos fichiers ici</p>
+            <p className="text-fc-muted text-sm mt-1">Ils seront ajoutés en pièces jointes</p>
+          </div>
+        </div>
+      )}
 
       {/* Barre d'édition (↑ sur input vide) */}
       {editingMsgId && (
