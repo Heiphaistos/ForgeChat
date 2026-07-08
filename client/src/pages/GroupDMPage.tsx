@@ -15,6 +15,7 @@ import MessageInput from '../components/chat/MessageInput'
 import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
+import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -117,6 +118,14 @@ export default function GroupDMPage() {
       document.title = `${p}ForgeChat`
     }
   }, [group?.name])
+
+  // Respecter le paramètre utilisateur "aperçus de liens" (comme MessageList)
+  const { data: userSettings } = useQuery<Record<string, unknown>>({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
 
   const { data: initialMessages, isError: gdmError, refetch: refetchGdm } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId, highlightMsgId ?? null],
@@ -822,6 +831,11 @@ export default function GroupDMPage() {
                             {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
                           </div>
                         )}
+                        {/* Aperçu de lien (1 seul, pas si pièces jointes) */}
+                        {linkPreviewEnabled && msg.content && !msg.attachments?.length && (() => {
+                          const url = extractFirstUrl(msg.content ?? '')
+                          return url ? <LinkPreview url={url} /> : null
+                        })()}
                         {msg.attachments && msg.attachments.length > 0 && (
                           <div className="flex flex-col gap-1 mt-1">
                             {msg.attachments.map(att => {

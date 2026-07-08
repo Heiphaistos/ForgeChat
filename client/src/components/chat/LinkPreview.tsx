@@ -14,6 +14,12 @@ interface Props {
   url: string
 }
 
+// Première URL http(s) d'un contenu — partagé entre les surfaces qui affichent une preview
+const URL_REGEX = /https?:\/\/[^\s<>"]+/g
+export function extractFirstUrl(content: string): string | null {
+  return content.match(URL_REGEX)?.[0] ?? null
+}
+
 function isSafeUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
