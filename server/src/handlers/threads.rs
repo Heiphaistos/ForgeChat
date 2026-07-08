@@ -175,6 +175,28 @@ pub async fn get_thread_messages(
     .fetch_all(&state.db)
     .await?;
 
+    // Reactions groupees par message
+    let msg_ids: Vec<Uuid> = { use sqlx::Row; rows.iter().map(|r| r.get::<Uuid, _>("id")).collect() };
+    let reaction_rows = if msg_ids.is_empty() { vec![] } else {
+        sqlx::query(
+            "SELECT thread_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
+             FROM thread_message_reactions WHERE thread_message_id = ANY($1)
+             GROUP BY thread_message_id, emoji"
+        )
+        .bind(&msg_ids).bind(claims.sub)
+        .fetch_all(&state.db).await.unwrap_or_default()
+    };
+    let mut react_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in &reaction_rows {
+        use sqlx::Row;
+        let mid = r.get::<Uuid, _>("thread_message_id");
+        react_map.entry(mid).or_default().push(serde_json::json!({
+            "emoji": r.get::<String, _>("emoji"),
+            "count": r.get::<i64, _>("count"),
+            "me": r.get::<bool, _>("me"),
+        }));
+    }
+
     let result: Vec<serde_json::Value> = rows.iter().map(|r| {
         use sqlx::Row;
         serde_json::json!({
@@ -189,11 +211,66 @@ pub async fn get_thread_messages(
                 "username": r.get::<String, _>("username"),
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "discriminator": r.get::<String, _>("discriminator"),
-            }
+            },
+            "reactions": react_map.get(&r.get::<Uuid, _>("id")).cloned().unwrap_or_default(),
         })
     }).collect();
 
     Ok(Json(result))
+}
+
+// Toggle d une reaction sur un message de thread (meme pattern que les groupes)
+pub async fn toggle_thread_reaction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, thread_id, msg_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+
+    let msg_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM thread_messages tm JOIN threads t ON t.id = tm.thread_id
+         WHERE tm.id=$1 AND tm.thread_id=$2 AND t.channel_id=$3)"
+    ).bind(msg_id).bind(thread_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !msg_ok { return Err(AppError::NotFound("Message introuvable".into())); }
+
+    let emoji = emoji.trim().to_string();
+    if emoji.is_empty() || emoji.chars().count() > 16 {
+        return Err(AppError::BadRequest("Emoji invalide".into()));
+    }
+
+    let existing: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM thread_message_reactions WHERE thread_message_id=$1 AND user_id=$2 AND emoji=$3)"
+    ).bind(msg_id).bind(claims.sub).bind(&emoji).fetch_one(&state.db).await?;
+
+    let added = if existing {
+        sqlx::query(
+            "DELETE FROM thread_message_reactions WHERE thread_message_id=$1 AND user_id=$2 AND emoji=$3"
+        ).bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        false
+    } else {
+        sqlx::query(
+            "INSERT INTO thread_message_reactions (thread_message_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING"
+        ).bind(msg_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        true
+    };
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM thread_message_reactions WHERE thread_message_id=$1 AND emoji=$2"
+    ).bind(msg_id).bind(&emoji).fetch_one(&state.db).await?;
+
+    let event = serde_json::json!({
+        "type": "THREAD_REACTION_TOGGLE",
+        "thread_id": thread_id,
+        "channel_id": channel_id,
+        "message_id": msg_id,
+        "emoji": emoji,
+        "added": added,
+        "count": count,
+        "user_id": claims.sub,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "added": added, "count": count })))
 }
 
 pub async fn send_thread_message(

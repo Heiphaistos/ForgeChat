@@ -558,6 +558,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", post(handlers::threads::send_thread_message))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", patch(handlers::threads::edit_thread_message))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/reactions/:emoji", put(handlers::threads::toggle_thread_reaction))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", delete(handlers::threads::delete_thread_message))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id", patch(handlers::threads::archive_thread))
         // Forum

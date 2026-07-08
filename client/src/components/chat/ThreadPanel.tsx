@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2 } from 'lucide-react'
+import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import MediaContent, { useMediaUpload } from './MediaContent'
+import EmojiPicker from './EmojiPicker'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
 import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
@@ -92,8 +93,21 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
-    return () => { offMsg(); offUpdate(); offEdit(); offDelete() }
+    const offReact = on('THREAD_REACTION_TOGGLE', (d: any) => {
+      if (d.thread_id === threadId) {
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
+    })
+    return () => { offMsg(); offUpdate(); offEdit(); offDelete(); offReact() }
   }, [threadId, parentMessageId, channelId, on, qc])
+
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  const toggleReaction = useMutation({
+    mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
+      api.put(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['thread-messages', threadId] }),
+    onError: () => toast.error('Impossible de réagir'),
+  })
 
   const editMessage = useMutation({
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
@@ -277,8 +291,16 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                   {msg.edited_at && (
                     <span className="text-[9px] text-fc-muted/60" title="Message modifié">(modifié)</span>
                   )}
+                  {editingMsgId !== msg.id && (
+                    <button
+                      onClick={() => setReactionPickerFor(cur => cur === msg.id ? null : msg.id)}
+                      className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${isMe ? '' : 'ml-auto'} ${reactionPickerFor === msg.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                      title="Réagir"
+                      aria-label="Réagir au message"
+                    ><SmilePlus size={12} aria-hidden /></button>
+                  )}
                   {isMe && editingMsgId !== msg.id && (
-                    <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 ml-auto transition">
+                    <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 transition">
                       <button
                         onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
                         className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
@@ -331,6 +353,32 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
                     })()}
+                    {/* Réactions */}
+                    {(msg.reactions?.length > 0 || reactionPickerFor === msg.id) && (
+                      <div className="flex flex-wrap items-center gap-1 mt-1 relative">
+                        {(msg.reactions ?? []).map((r: any) => (
+                          <button
+                            key={r.emoji}
+                            onClick={() => toggleReaction.mutate({ msgId: msg.id, emoji: r.emoji })}
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition ${
+                              r.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
+                            }`}
+                            aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}`}
+                            aria-pressed={r.me}
+                          >
+                            <span aria-hidden>{r.emoji}</span>
+                            <span>{r.count}</span>
+                          </button>
+                        ))}
+                        {reactionPickerFor === msg.id && (
+                          <EmojiPicker
+                            serverId={serverId}
+                            onPick={emoji => toggleReaction.mutate({ msgId: msg.id, emoji })}
+                            onClose={() => setReactionPickerFor(null)}
+                          />
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
