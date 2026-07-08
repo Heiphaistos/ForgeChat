@@ -13,6 +13,8 @@ import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
+import { useTypeToFocus } from '../hooks/useTypeToFocus'
+import UserPopup from '../components/UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -281,6 +283,11 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
   // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
   const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
+  // Popup profil au clic sur un avatar (parité canaux/groupes/threads)
+  const [userPopup, setUserPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
+  // Type-to-focus (desktop) : taper hors de tout champ focus le composer de réponse
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null)
+  useTypeToFocus(replyTextareaRef)
   const toggleReplyReaction = useMutation({
     mutationFn: ({ replyId, emoji }: { replyId: string; emoji: string }) =>
       api.put(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/reactions/${encodeURIComponent(emoji)}`),
@@ -422,11 +429,15 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         {data?.post?.content && (
           <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover group">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+              <button
+                onClick={e => { e.stopPropagation(); setUserPopup({ userId: post.creator_id, x: e.clientX, y: e.clientY }) }}
+                aria-label={`Voir le profil de ${post.creator_username}`}
+                className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
+              >
                 {post.creator_avatar
                   ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : post.creator_username.charAt(0).toUpperCase()}
-              </div>
+              </button>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
               <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
               {user?.id === post.creator_id && !editingPost && (
@@ -517,11 +528,15 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               }
             }}
           >
-            <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
+            <button
+              onClick={e => { e.stopPropagation(); setUserPopup({ userId: r.user_id, x: e.clientX, y: e.clientY }) }}
+              aria-label={`Voir le profil de ${r.author?.username ?? 'l\'auteur'}`}
+              className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
+            >
               {r.author?.avatar
                 ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 : (r.author?.username ?? '?').charAt(0).toUpperCase()}
-            </div>
+            </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 mb-1">
                 <span className={`text-sm font-medium ${r.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
@@ -643,6 +658,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           <div className="flex gap-2 items-end">
             <AttachButton uploading={replyUpload.uploading} onClick={() => replyUpload.pick(url => setReply(c => (c ? c + '\n' : '') + url))} />
             <textarea
+              ref={replyTextareaRef}
               value={reply}
               onChange={e => setReply(e.target.value)}
               autoFocus={window.innerWidth >= 768}
@@ -675,6 +691,15 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         <div className="p-3 bg-red-500/10 border-t border-red-500/20 text-center text-xs text-red-400 flex items-center justify-center gap-1 flex-shrink-0">
           <Lock size={12} /> Ce post est verrouillé
         </div>
+      )}
+
+      {userPopup && (
+        <UserPopup
+          userId={userPopup.userId}
+          anchorX={userPopup.x}
+          anchorY={userPopup.y}
+          onClose={() => setUserPopup(null)}
+        />
       )}
     </div>
   )

@@ -19,6 +19,7 @@ import EmojiPicker from './EmojiPicker'
 const GifPicker = lazy(() => import('./GifPicker'))
 const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
+import { useTypeToFocus } from '../../hooks/useTypeToFocus'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 import PickerShell, { PickerFallback } from '../ui/PickerShell'
@@ -643,24 +644,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }, [channelId])
 
-  // Type-to-focus (desktop) : taper un caractère imprimable hors de tout champ
-  // focus le composer — le caractère est inséré nativement par le navigateur.
-  // Exclusions : ' ' (scroll / push-to-talk) et '?' (modal des raccourcis).
-  useEffect(() => {
-    if (!window.matchMedia('(pointer: fine)').matches) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key.length !== 1 || e.key === ' ' || e.key === '?') return
-      const el = document.activeElement as HTMLElement | null
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
-      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
-      // Un fil de discussion ouvert a la priorité : on tape dedans, pas dans le canal
-      const threadComposer = document.querySelector<HTMLTextAreaElement>('textarea[data-composer="thread"]')
-      ;(threadComposer ?? textareaRef.current)?.focus()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+  // Type-to-focus (desktop) : taper hors de tout champ focus le composer
+  useTypeToFocus(textareaRef)
 
   // Restaurer le brouillon si le parent le remet après un échec d'envoi
   // (le champ a été vidé optimistiquement au submit ; ne s'applique que
