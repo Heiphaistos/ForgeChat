@@ -3,6 +3,7 @@ import { Bell, X, AtSign, Hash, CheckCheck } from 'lucide-react'
 import { useUnread } from '../../store/unread'
 import toast from 'react-hot-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import PickerShell from '../ui/PickerShell'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 
@@ -51,6 +52,9 @@ export default function NotificationBell() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
+      // En mode bottom-sheet (mobile), le contenu est dans un portal hors de
+      // la ref : la fermeture est gérée par le backdrop de PickerShell
+      if (window.innerWidth < 768) return
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
@@ -80,7 +84,10 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div role="dialog" aria-modal="false" aria-label="Mentions récentes" className="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <PickerShell
+          onClose={() => setOpen(false)}
+          desktopClassName="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div className="flex items-center gap-2">
               <AtSign size={14} className="text-fc-accent" aria-hidden />
@@ -163,7 +170,7 @@ export default function NotificationBell() {
               </button>
             </div>
           )}
-        </div>
+        </PickerShell>
       )}
     </div>
   )
