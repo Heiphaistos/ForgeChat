@@ -17,6 +17,7 @@ import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
 import { renderMarkdown } from '../utils/markdown'
+import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { useMobile } from '../contexts/MobileContext'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -633,11 +634,13 @@ export default function DMPage() {
                 value={e2eInput}
                 onChange={e => setE2eInput(e.target.value)}
                 onKeyDown={e => {
+                  if (handleMarkdownShortcut(e, e2eInput, setE2eInput)) return
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     sendE2e()
                   }
                 }}
+                enterKeyHint="send"
                 disabled={e2eSending}
               />
               <button
