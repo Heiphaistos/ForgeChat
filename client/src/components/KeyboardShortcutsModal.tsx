@@ -19,7 +19,8 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: 'Navigation',
     shortcuts: [
-      { keys: ['Ctrl', 'K'], description: 'Quick Switcher' },
+      { keys: ['Ctrl', 'K'], description: 'Palette de commandes' },
+      { keys: ['Ctrl', 'Shift', 'K'], description: 'Quick Switcher (canaux, DMs)' },
       { keys: ['Ctrl', '/'], description: 'Raccourcis clavier' },
       { keys: ['Ctrl', ','], description: 'Paramètres' },
       { keys: ['Escape'], description: 'Fermer / Annuler' },
@@ -31,6 +32,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['↑'], description: 'Modifier le dernier message' },
       { keys: ['Ctrl', 'Enter'], description: 'Envoyer le message' },
       { keys: ['Shift', 'Enter'], description: 'Saut de ligne' },
+      { keys: ['PgUp', '/', 'PgDn'], description: "Défiler d'un écran" },
+      { keys: ['Home', '/', 'End'], description: 'Haut / bas de la conversation' },
     ],
   },
   {
@@ -62,6 +65,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['Ctrl', 'B'], description: 'Gras (**texte**)' },
       { keys: ['Ctrl', 'I'], description: 'Italique (*texte*)' },
       { keys: ['Ctrl', 'U'], description: 'Souligné (__texte__)' },
+      { keys: ['Ctrl', 'Shift', 'X'], description: 'Barré (~~texte~~)' },
+      { keys: ['Ctrl', 'K'], description: 'Insérer un lien (dans le composer)' },
     ],
   },
   {
