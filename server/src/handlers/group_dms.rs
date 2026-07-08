@@ -199,9 +199,12 @@ pub async fn get_group_messages(
 
         let mut before_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar
+                    u.username as sender_username, u.avatar as sender_avatar,
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
+             LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id=$1 AND m.created_at < $2
              ORDER BY m.created_at DESC LIMIT $3"
         )
@@ -210,9 +213,12 @@ pub async fn get_group_messages(
 
         let after_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar
+                    u.username as sender_username, u.avatar as sender_avatar,
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
+             LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id=$1 AND m.created_at >= $2
              ORDER BY m.created_at ASC LIMIT $3"
         )
@@ -225,9 +231,12 @@ pub async fn get_group_messages(
     } else if let Some(before_id) = before {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar
+                    u.username as sender_username, u.avatar as sender_avatar,
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
+             LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
                AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
              ORDER BY m.created_at DESC LIMIT $2"
@@ -237,9 +246,12 @@ pub async fn get_group_messages(
     } else {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar
+                    u.username as sender_username, u.avatar as sender_avatar,
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
+             LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
+             LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
              ORDER BY m.created_at DESC LIMIT $2"
         )
@@ -304,6 +316,9 @@ pub async fn get_group_messages(
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("sender_username"),
             "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
+            "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
+            "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
+            "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
             "reactions": react_map.get(&id).cloned().unwrap_or_default(),
             "attachments": att_map.get(&id).cloned().unwrap_or_default(),
         })
@@ -316,6 +331,7 @@ pub async fn get_group_messages(
 pub struct SendGroupDmInput {
     pub content: Option<String>,
     pub has_attachments: Option<bool>,
+    pub reply_to: Option<Uuid>,
 }
 
 pub async fn send_group_message(
@@ -354,11 +370,29 @@ pub async fn send_group_message(
         }
     }
 
+    // Valider que le message cite appartient bien a ce groupe
+    let reply_to = if let Some(rid) = body.reply_to {
+        let ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM group_dm_messages WHERE id=$1 AND dm_id=$2)"
+        )
+        .bind(rid).bind(group_id).fetch_one(&state.db).await?;
+        if !ok { return Err(AppError::BadRequest("Message cite introuvable".into())); }
+        Some(rid)
+    } else { None };
+
     let msg = sqlx::query(
-        "INSERT INTO group_dm_messages (dm_id, sender_id, content) VALUES ($1, $2, $3) RETURNING id, created_at"
+        "INSERT INTO group_dm_messages (dm_id, sender_id, content, reply_to) VALUES ($1, $2, $3, $4) RETURNING id, created_at"
     )
-    .bind(group_id).bind(claims.sub).bind(&content)
+    .bind(group_id).bind(claims.sub).bind(&content).bind(reply_to)
     .fetch_one(&state.db).await?;
+
+    // Infos du message cite pour l affichage immediat cote clients
+    let reply_info = if let Some(rid) = reply_to {
+        sqlx::query(
+            "SELECT u.username, m.content FROM group_dm_messages m JOIN users u ON u.id = m.sender_id WHERE m.id=$1"
+        )
+        .bind(rid).fetch_optional(&state.db).await?
+    } else { None };
 
     let user = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
         .bind(claims.sub).fetch_one(&state.db).await?;
@@ -371,6 +405,9 @@ pub async fn send_group_message(
         "sender_id": claims.sub,
         "sender_username": user.get::<String, _>("username"),
         "sender_avatar": user.get::<Option<String>, _>("avatar"),
+        "reply_to": reply_to,
+        "reply_to_username": reply_info.as_ref().map(|r| r.get::<String, _>("username")),
+        "reply_to_content": reply_info.as_ref().and_then(|r| r.get::<Option<String>, _>("content")),
         "attachments": serde_json::json!([]),
     });
 

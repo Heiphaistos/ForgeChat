@@ -7,7 +7,7 @@ import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2 } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -16,7 +16,7 @@ import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
-import { handleMarkdownShortcut } from '../utils/mdShortcuts'
+import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -46,6 +46,9 @@ interface GDMMessage {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  reply_to?: string | null
+  reply_to_username?: string | null
+  reply_to_content?: string | null
   reactions?: GDMReaction[]
   attachments?: GDMAttachment[]
 }
@@ -84,6 +87,7 @@ export default function GroupDMPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
+  const [replyTo, setReplyTo] = useState<{ id: string; author_username: string; content: string | null } | null>(null)
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
@@ -385,10 +389,11 @@ export default function GroupDMPage() {
   }, [loadingMore, hasMore, allMessages, groupId])
 
   const sendMsg = useMutation({
-    mutationFn: ({ text, files }: { text: string; files: File[] }) =>
+    mutationFn: ({ text, files, replyToId }: { text: string; files: File[]; replyToId?: string }) =>
       api.post(`/dms/groups/${groupId}/messages`, {
         content: text || null,
         has_attachments: files.length > 0,
+        reply_to: replyToId ?? null,
       }),
     onSuccess: async (res, vars) => {
       if (vars.files.length > 0 && res.data?.id) {
@@ -782,6 +787,14 @@ export default function GroupDMPage() {
                             </div>
                           )}
                         </div>
+                        <button
+                          onClick={() => setReplyTo({ id: msg.id, author_username: msg.sender_username, content: msg.content })}
+                          className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                          title="Répondre"
+                          aria-label="Répondre au message"
+                        >
+                          <CornerUpLeft size={12} aria-hidden />
+                        </button>
                         {msg.content && (
                           <button
                             onClick={() => { navigator.clipboard.writeText(msg.content ?? '').then(() => toast.success('Texte copié')).catch(() => toast.error('Impossible de copier')) }}
@@ -823,6 +836,22 @@ export default function GroupDMPage() {
                         </>)}
                       </div>
                       <div className="flex flex-col">
+                        {/* Citation du message auquel on répond */}
+                        {msg.reply_to && (
+                          <button
+                            onClick={() => {
+                              const el = document.getElementById(`gdm-msg-${msg.reply_to}`)
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            }}
+                            className="flex items-center gap-1.5 mb-0.5 pl-2 border-l-2 border-fc-accent/40 text-xs text-fc-muted hover:text-white transition text-left max-w-xs"
+                          >
+                            <CornerUpLeft size={10} className="text-fc-accent flex-shrink-0" aria-hidden />
+                            {msg.reply_to_username && <span className="font-semibold text-white/80 flex-shrink-0">{msg.reply_to_username}</span>}
+                            <span className="italic truncate">
+                              {msg.reply_to_content ? stripMarkdown(msg.reply_to_content).slice(0, 60) : 'Message supprimé'}
+                            </span>
+                          </button>
+                        )}
                         {msg.content && (
                           <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
                             isMe
@@ -926,10 +955,13 @@ export default function GroupDMPage() {
           channelId={groupId!}
           placeholder={`Message dans ${group.name}...`}
           sending={sendMsg.isPending}
-          onSend={async (content, _replyToId, files) => {
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onSend={async (content, replyToId, files) => {
             const t = content?.trim() ?? ''
             if (!t && (!files || files.length === 0)) return
-            sendMsg.mutate({ text: t, files: files?.map(f => f.file) ?? [] })
+            sendMsg.mutate({ text: t, files: files?.map(f => f.file) ?? [], replyToId })
+            setReplyTo(null)
           }}
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
         />
