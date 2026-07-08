@@ -85,6 +85,13 @@ body {
   .pt-safe { padding-top: env(safe-area-inset-top); }
 }
 
+/* iOS Safari zoome automatiquement au focus d'un champ dont la police < 16px.
+   Forcer 16px sur mobile évite ce zoom intempestif (le layout reste inchangé
+   sur desktop où le breakpoint md reprend les tailles Tailwind). */
+@media (max-width: 767px) {
+  input, textarea, select { font-size: 16px; }
+}
+
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2c2f33; border-radius: 99px; }
