@@ -8,6 +8,7 @@ import { isToday, isThisWeek, isThisMonth } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
+import { renderMarkdown } from '../utils/markdown'
 import toast from 'react-hot-toast'
 
 interface SavedMessage {
@@ -322,7 +323,7 @@ export default function SavedPage() {
                             {/* Content */}
                             {content && (
                               <div className="text-sm text-fc-text break-words leading-relaxed">
-                                <span>{displayContent}</span>
+                                <span>{renderMarkdown(displayContent)}</span>
                                 {isLong && (
                                   <button
                                     onClick={() => toggleExpanded(item.id)}

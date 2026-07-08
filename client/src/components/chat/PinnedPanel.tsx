@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
+import { renderMarkdown } from '../../utils/markdown'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -96,7 +97,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
                 {formatShortDate(msg.created_at)}
               </span>
             </div>
-            <p className="text-xs text-fc-text leading-relaxed line-clamp-4">{msg.content}</p>
+            <div className="text-xs text-fc-text leading-relaxed line-clamp-4">{renderMarkdown(msg.content)}</div>
 
             <button
               onClick={e => { e.stopPropagation(); unpin.mutate(msg.id) }}
