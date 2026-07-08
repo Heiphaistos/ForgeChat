@@ -779,6 +779,10 @@ a:focus-visible,
   .fc-chat-input textarea {
     max-height: 4.5rem !important;
   }
+  /* Sous-titres du header (statut, nombre de membres) : masqués pour tenir en 38px */
+  .fc-chat-header p {
+    display: none !important;
+  }
   /* Rail serveurs plus étroit + icônes réduites pour voir plus de serveurs */
   .fc-server-rail {
     width: 60px !important;
