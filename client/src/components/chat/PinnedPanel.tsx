@@ -1,4 +1,5 @@
 import { X, Pin, Trash2 } from 'lucide-react'
+import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function PinnedPanel({ serverId, channelId, channelName, onClose }: Props) {
+  useEscapePanel(onClose)
   const qc = useQueryClient()
   const nav = useNavigate()
   const { formatShortDate } = useFormatDate()

@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function SearchPanel({ serverId, channelId, channelName, onClose }: Props) {
+  useEscapePanel(onClose)
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)

@@ -8,6 +8,7 @@ import { useFormatDate } from '../../hooks/useFormatDate'
 import MediaContent, { useMediaUpload } from './MediaContent'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
 import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
+import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -40,6 +41,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const qc = useQueryClient()
+  useEscapePanel(onClose)
 
   // Paramètre utilisateur "aperçus de liens" (cache partagé avec MessageList)
   const { data: userSettings } = useQuery<Record<string, unknown>>({

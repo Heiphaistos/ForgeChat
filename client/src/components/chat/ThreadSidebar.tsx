@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, MessagesSquare, Plus } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -29,6 +30,7 @@ interface NewThreadForm {
 }
 
 export default function ThreadSidebar({ serverId, channelId, onSelectThread, onClose }: Props) {
+  useEscapePanel(onClose)
   const [showNewModal, setShowNewModal] = useState(false)
   const [form, setForm] = useState<NewThreadForm>({ title: '', firstMessage: '' })
   const qc = useQueryClient()
