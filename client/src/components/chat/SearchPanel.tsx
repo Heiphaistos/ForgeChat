@@ -5,6 +5,7 @@ import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
+import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
 
 interface Props {
@@ -141,7 +142,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
                   </span>
                 </div>
                 <p className="text-xs text-fc-text leading-relaxed">
-                  {highlightQuery(msg.content ?? '', search)}
+                  {highlightQuery(stripMarkdown(msg.content ?? ''), search)}
                 </p>
               </div>
             ))}

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../api/client'
 import { useUnread } from '../store/unread'
+import { stripMarkdown } from '../utils/mdShortcuts'
 import toast from 'react-hot-toast'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
@@ -136,7 +137,8 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       })
     }
     for (const msg of (searchResults.messages ?? []).slice(0, 3)) {
-      const preview = msg.content.length > 60 ? `${msg.content.slice(0, 60)}…` : msg.content
+      const clean = stripMarkdown(msg.content ?? '')
+      const preview = clean.length > 60 ? `${clean.slice(0, 60)}…` : clean
       items.push({
         id: `msg-${msg.id}`, category: 'Messages', label: preview, sublabel: `par @${msg.author_username}`,
         icon: <MessageCircle size={14} className="text-fc-muted" />,
