@@ -155,8 +155,21 @@ export default function MainLayout() {
         if (!inInput && !modalOpen) setSplitChannelId(null)
       }
     }
+    // Toggle du split depuis la palette de commandes
+    const toggleSplit = () => {
+      if (splitChannelId) {
+        setSplitChannelId(null)
+      } else {
+        const m = window.location.pathname.match(/\/servers\/[^/]+\/channels\/([^/]+)/)
+        if (m) setSplitChannelId(m[1])
+      }
+    }
+    window.addEventListener('forgechat:toggle-split', toggleSplit)
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    return () => {
+      window.removeEventListener('forgechat:toggle-split', toggleSplit)
+      window.removeEventListener('keydown', handler)
+    }
   }, [splitChannelId])
 
   return (

@@ -901,10 +901,14 @@ function AppInner() {
     }
     // Ouverture du QuickSwitcher depuis le bouton loupe du rail (mobile sans Ctrl+K)
     const openQs = () => setShowQuickSwitcher(true)
+    // Modale des raccourcis depuis la palette de commandes
+    const openShortcuts = () => setShowKeyboardShortcuts(true)
     window.addEventListener('forgechat:open-quick-switcher', openQs)
+    window.addEventListener('forgechat:open-shortcuts', openShortcuts)
     window.addEventListener('keydown', handler)
     return () => {
       window.removeEventListener('forgechat:open-quick-switcher', openQs)
+      window.removeEventListener('forgechat:open-shortcuts', openShortcuts)
       window.removeEventListener('keydown', handler)
     }
   }, [nav, qcHook, toggleMute, toggleDeafen])

@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, Hash, User, Settings, MessageCircle, Plus,
-  Compass, Clock, ChevronRight, X,
+  Compass, Clock, ChevronRight, X, Users, Bookmark, CheckCheck, Columns2, Keyboard,
 } from 'lucide-react'
 import api from '../api/client'
+import { useUnread } from '../store/unread'
+import toast from 'react-hot-toast'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
 interface CommandPaletteProps {
@@ -129,8 +131,25 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   const quickActions: PaletteItem[] = [
     { id: 'action-settings', category: 'Actions', label: 'Paramètres', icon: <Settings size={14} className="text-fc-muted" />, action: () => navigate('/settings') },
     { id: 'action-dm', category: 'Actions', label: 'Nouveau message direct', icon: <MessageCircle size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
+    { id: 'action-friends', category: 'Actions', label: 'Amis', icon: <Users size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
+    { id: 'action-saved', category: 'Actions', label: 'Messages sauvegardés', icon: <Bookmark size={14} className="text-fc-muted" />, action: () => navigate('/saved') },
     { id: 'action-explore', category: 'Actions', label: 'Découvrir des serveurs', icon: <Compass size={14} className="text-fc-muted" />, action: () => navigate('/discovery') },
     { id: 'action-create', category: 'Actions', label: 'Créer un serveur', icon: <Plus size={14} className="text-fc-muted" />, action: () => navigate('/explore') },
+    {
+      id: 'action-mark-read', category: 'Actions', label: 'Tout marquer comme lu',
+      icon: <CheckCheck size={14} className="text-fc-muted" />,
+      action: () => { useUnread.getState().markAllRead(); toast.success('Tout est marqué comme lu') },
+    },
+    {
+      id: 'action-split', category: 'Actions', label: 'Vue en split (canal courant)',
+      icon: <Columns2 size={14} className="text-fc-muted" />,
+      action: () => window.dispatchEvent(new CustomEvent('forgechat:toggle-split')),
+    },
+    {
+      id: 'action-shortcuts', category: 'Actions', label: 'Raccourcis clavier',
+      icon: <Keyboard size={14} className="text-fc-muted" />,
+      action: () => window.dispatchEvent(new CustomEvent('forgechat:open-shortcuts')),
+    },
   ].filter(a => !debouncedQuery || a.label.toLowerCase().includes(debouncedQuery.toLowerCase()))
 
   const allItems = [...items, ...quickActions]
