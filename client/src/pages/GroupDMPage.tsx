@@ -715,8 +715,16 @@ export default function GroupDMPage() {
                   const s = dblTapStart.current
                   dblTapStart.current = null
                   if (!s) return
-                  const dx = Math.abs(e.changedTouches[0].clientX - s.x)
+                  const rawDx = e.changedTouches[0].clientX - s.x
+                  const dx = Math.abs(rawDx)
                   const dy = Math.abs(e.changedTouches[0].clientY - s.y)
+                  // Swipe vers la droite → répondre (même geste que les canaux)
+                  if (rawDx > 60 && dy < 50) {
+                    dblTapRef.current = null
+                    if ('vibrate' in navigator) navigator.vibrate(10)
+                    setReplyTo({ id: msg.id, author_username: msg.sender_username, content: msg.content })
+                    return
+                  }
                   if (dx > 10 || dy > 10) { dblTapRef.current = null; return }
                   const now = Date.now()
                   if (dblTapRef.current?.msgId === msg.id && now - dblTapRef.current.time < 300) {
@@ -842,6 +850,8 @@ export default function GroupDMPage() {
                             onClick={() => {
                               const el = document.getElementById(`gdm-msg-${msg.reply_to}`)
                               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                              // Message cité hors de la fenêtre chargée → recharger autour de lui
+                              else navigate(`/dms/groups/${groupId}?highlight=${msg.reply_to}`)
                             }}
                             className="flex items-center gap-1.5 mb-0.5 pl-2 border-l-2 border-fc-accent/40 text-xs text-fc-muted hover:text-white transition text-left max-w-xs"
                           >
