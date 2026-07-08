@@ -11,6 +11,7 @@ import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
 import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
+import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -128,7 +129,10 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
               onPaste={e => postUpload.onPaste(e, url => setContent(c => (c ? c + '\n' : '') + url))}
               onDrop={e => postUpload.onDrop(e, url => setContent(c => (c ? c + '\n' : '') + url))}
               onDragOver={postUpload.onDragOver}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && title.trim() && !create.isPending) create.mutate() }}
+              onKeyDown={e => {
+                if (handleMarkdownShortcut(e, content, setContent)) return
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && title.trim() && !create.isPending) create.mutate()
+              }}
               placeholder="Décrivez votre post... (Ctrl+Entrée pour publier)"
               rows={5}
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
@@ -557,6 +561,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               onDrop={e => replyUpload.onDrop(e, url => setReply(c => (c ? c + '\n' : '') + url))}
               onDragOver={replyUpload.onDragOver}
               onKeyDown={e => {
+                if (handleMarkdownShortcut(e, reply, setReply)) return
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   trySendReply()

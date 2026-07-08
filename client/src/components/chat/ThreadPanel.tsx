@@ -7,6 +7,7 @@ import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import MediaContent, { useMediaUpload } from './MediaContent'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
+import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -343,6 +344,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
+              if (handleMarkdownShortcut(e, input, setInput)) return
               if (e.key === 'ArrowUp' && !input && threadId) {
                 const last = [...(messages as any[])].reverse().find((m: any) =>
                   m.author_id === user?.id || m.user_id === user?.id
