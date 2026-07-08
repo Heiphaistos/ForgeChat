@@ -7,7 +7,7 @@ import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -88,6 +88,7 @@ export default function GroupDMPage() {
   const [searchInput, setSearchInput] = useState('')
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [replyTo, setReplyTo] = useState<{ id: string; author_username: string; content: string | null } | null>(null)
+  const [showPins, setShowPins] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
@@ -131,6 +132,21 @@ export default function GroupDMPage() {
     staleTime: 60_000,
   })
   const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+
+  // Messages épinglés du groupe
+  const { data: groupPins = [] } = useQuery<{ id: string; content: string | null; created_at: string; sender_username: string }[]>({
+    queryKey: ['group-dm-pins', groupId],
+    queryFn: () => api.get(`/dms/groups/${groupId}/pins`).then(r => r.data),
+    enabled: !!groupId && showPins,
+  })
+  const togglePin = useMutation({
+    mutationFn: (msgId: string) => api.put(`/dms/groups/${groupId}/messages/${msgId}/pin`),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['group-dm-pins', groupId] })
+      toast.success(res.data?.pinned ? 'Message épinglé' : 'Message désépinglé')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
 
   const { data: initialMessages, isError: gdmError, refetch: refetchGdm } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-messages', groupId, highlightMsgId ?? null],
@@ -494,6 +510,15 @@ export default function GroupDMPage() {
             <Search size={18} />
           </button>
           <button
+            onClick={() => setShowPins(v => !v)}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showPins ? 'text-white' : 'text-fc-muted'}`}
+            title="Messages épinglés"
+            aria-label="Messages épinglés"
+            aria-pressed={showPins}
+          >
+            <Pin size={18} />
+          </button>
+          <button
             onClick={() => setShowSettings(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSettings ? 'text-white' : 'text-fc-muted'}`}
             title="Paramètres du groupe"
@@ -803,6 +828,14 @@ export default function GroupDMPage() {
                         >
                           <CornerUpLeft size={12} aria-hidden />
                         </button>
+                        <button
+                          onClick={() => togglePin.mutate(msg.id)}
+                          className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
+                          title="Épingler / désépingler"
+                          aria-label="Épingler ou désépingler le message"
+                        >
+                          <Pin size={12} aria-hidden />
+                        </button>
                         {msg.content && (
                           <button
                             onClick={() => { navigator.clipboard.writeText(msg.content ?? '').then(() => toast.success('Texte copié')).catch(() => toast.error('Impossible de copier')) }}
@@ -976,6 +1009,55 @@ export default function GroupDMPage() {
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
         />
       </div>
+
+      {/* Panneau des messages épinglés */}
+      {showPins && (
+        <div className="absolute right-0 inset-y-0 z-20 w-full md:relative md:inset-auto md:z-auto md:w-64 border-l border-fc-hover bg-fc-channel flex-shrink-0 flex flex-col panel-slide-right">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
+            <div className="flex items-center gap-2">
+              <Pin size={16} className="text-fc-accent" aria-hidden />
+              <span className="font-semibold text-white text-sm">Messages épinglés</span>
+            </div>
+            <button
+              onClick={() => setShowPins(false)}
+              aria-label="Fermer les messages épinglés"
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+            >
+              <X size={16} aria-hidden />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
+            {groupPins.length === 0 && (
+              <p className="text-center text-fc-muted text-sm py-8">Aucun message épinglé.<br/>Utilisez l'épingle sur un message.</p>
+            )}
+            {groupPins.map(pin => (
+              <div key={pin.id} className="relative group/pin bg-fc-bg/50 rounded-lg p-3 border border-fc-hover/40 hover:border-fc-hover transition">
+                <button
+                  onClick={() => { setShowPins(false); navigate(`/dms/groups/${groupId}?highlight=${pin.id}`) }}
+                  className="text-left w-full"
+                  aria-label={`Aller au message de ${pin.sender_username}`}
+                >
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span className="text-xs font-semibold text-white">{pin.sender_username}</span>
+                    <span className="text-[10px] text-fc-muted">{formatShortDate(pin.created_at)}</span>
+                  </div>
+                  <div className="text-xs text-fc-text leading-relaxed line-clamp-3">
+                    {pin.content ? stripMarkdown(pin.content) : '📎 Pièce jointe'}
+                  </div>
+                </button>
+                <button
+                  onClick={() => togglePin.mutate(pin.id)}
+                  className="absolute top-1.5 right-1.5 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 p-1.5 text-fc-muted hover:text-fc-red rounded transition"
+                  title="Désépingler"
+                  aria-label="Désépingler ce message"
+                >
+                  <X size={12} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Panneau membres */}
       {showMembers && (

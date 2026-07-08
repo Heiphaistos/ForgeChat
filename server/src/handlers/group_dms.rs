@@ -922,3 +922,86 @@ pub async fn rename_group_dm(
 
     Ok(Json(serde_json::json!({ "ok": true, "name": name })))
 }
+
+// ── Messages epingles dans les groupes DM ────────────────────────────────────
+
+pub async fn toggle_group_dm_pin(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((group_id, msg_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let msg_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_messages WHERE id=$1 AND dm_id=$2)"
+    ).bind(msg_id).bind(group_id).fetch_one(&state.db).await?;
+    if !msg_ok { return Err(AppError::NotFound("Message introuvable".into())); }
+
+    let existing: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_pins WHERE message_id=$1)"
+    ).bind(msg_id).fetch_one(&state.db).await?;
+
+    let pinned = if existing {
+        sqlx::query("DELETE FROM group_dm_pins WHERE message_id=$1")
+            .bind(msg_id).execute(&state.db).await?;
+        false
+    } else {
+        // Limite raisonnable : 50 pins par groupe
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM group_dm_pins WHERE dm_id=$1")
+            .bind(group_id).fetch_one(&state.db).await?;
+        if count >= 50 { return Err(AppError::BadRequest("Limite de 50 messages epingles atteinte".into())); }
+        sqlx::query("INSERT INTO group_dm_pins (dm_id, message_id, pinned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
+            .bind(group_id).bind(msg_id).bind(claims.sub).execute(&state.db).await?;
+        true
+    };
+
+    let members: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+    let event = serde_json::json!({
+        "type": "GROUP_DM_PIN_TOGGLE",
+        "group_id": group_id,
+        "message_id": msg_id,
+        "pinned": pinned,
+        "user_id": claims.sub,
+    }).to_string();
+    for uid in members {
+        state.broadcast_to_user(uid, event.clone()).await;
+    }
+
+    Ok(Json(serde_json::json!({ "pinned": pinned })))
+}
+
+pub async fn list_group_dm_pins(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if !is_member { return Err(AppError::Forbidden); }
+
+    let rows = sqlx::query(
+        "SELECT m.id, m.content, m.created_at, m.sender_id, u.username as sender_username
+         FROM group_dm_pins p
+         JOIN group_dm_messages m ON m.id = p.message_id
+         JOIN users u ON u.id = m.sender_id
+         WHERE p.dm_id = $1
+         ORDER BY p.created_at DESC"
+    ).bind(group_id).fetch_all(&state.db).await?;
+
+    let result = rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "content": r.get::<Option<String>, _>("content"),
+        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "sender_id": r.get::<Uuid, _>("sender_id"),
+        "sender_username": r.get::<String, _>("sender_username"),
+    })).collect();
+
+    Ok(Json(result))
+}
