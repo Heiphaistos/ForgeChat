@@ -643,6 +643,23 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }, [channelId])
 
+  // Type-to-focus (desktop) : taper un caractère imprimable hors de tout champ
+  // focus le composer — le caractère est inséré nativement par le navigateur.
+  // Exclusions : ' ' (scroll / push-to-talk) et '?' (modal des raccourcis).
+  useEffect(() => {
+    if (!window.matchMedia('(pointer: fine)').matches) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (e.key.length !== 1 || e.key === ' ' || e.key === '?') return
+      const el = document.activeElement as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
+      textareaRef.current?.focus()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   // Restaurer le brouillon si le parent le remet après un échec d'envoi
   // (le champ a été vidé optimistiquement au submit ; ne s'applique que
   // champ vide pour ne jamais écraser une frappe en cours)

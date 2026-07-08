@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from
 import { useCountdown } from '../../hooks/useCountdown'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Share2 } from 'lucide-react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
@@ -1388,6 +1388,22 @@ export default function MessageList({
           >
             <Link size={14} /> Copier le lien
           </button>
+          {typeof navigator.share === 'function' && (
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${contextMenu.msg.id}`
+                navigator.share({
+                  title: 'Message ForgeChat',
+                  text: contextMenu.msg.content ? stripMarkdown(contextMenu.msg.content).slice(0, 200) : undefined,
+                  url: link,
+                }).catch(() => { /* partage annulé par l'utilisateur */ })
+                setContextMenu(null)
+              }}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
+            >
+              <Share2 size={14} /> Partager
+            </button>
+          )}
           <button
             onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-muted text-xs"

@@ -29,6 +29,7 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: 'Messages',
     shortcuts: [
+      { keys: ['a–z'], description: 'Écrire directement (focus le composer)' },
       { keys: ['↑'], description: 'Modifier le dernier message' },
       { keys: ['Ctrl', 'Enter'], description: 'Envoyer le message' },
       { keys: ['Shift', 'Enter'], description: 'Saut de ligne' },
