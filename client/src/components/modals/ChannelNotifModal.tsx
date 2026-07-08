@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell, BellOff, BellRing, X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -55,14 +56,21 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
     }
   }
 
-  return (
+  // Bottom-sheet sur mobile (popover ancré au bouton inadapté au petit écran)
+  const isSheet = window.innerWidth < 768
+
+  const body = (
     <div
       ref={modalRef}
       role="dialog"
       aria-modal="false"
       aria-labelledby="cn-title"
-      className="absolute top-10 right-0 z-50 bg-fc-bg border border-fc-hover rounded-lg shadow-xl w-72 p-3"
+      className={isSheet
+        ? 'fixed bottom-0 inset-x-0 z-[9999] bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] overflow-y-auto overscroll-contain sheet-slide-up'
+        : 'absolute top-10 right-0 z-50 bg-fc-bg border border-fc-hover rounded-lg shadow-xl w-72 p-3'}
+      style={isSheet ? { maxHeight: '70dvh' } : undefined}
     >
+      {isSheet && <div className="mx-auto mb-2 w-10 h-1 rounded-full bg-fc-hover" aria-hidden />}
       <div className="flex items-center justify-between mb-3">
         <span id="cn-title" className="text-white text-sm font-semibold truncate">#{channelName}</span>
         <button onClick={onClose} aria-label="Fermer les notifications" className="text-fc-muted hover:text-white transition">
@@ -115,4 +123,15 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
       </button>
     </div>
   )
+
+  if (isSheet) {
+    return createPortal(
+      <>
+        <div className="fixed inset-0 z-[9998] bg-black/50" aria-hidden onClick={onClose} />
+        {body}
+      </>,
+      document.body
+    )
+  }
+  return body
 }

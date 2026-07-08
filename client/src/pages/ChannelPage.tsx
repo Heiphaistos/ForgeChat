@@ -524,7 +524,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               <button
                 ref={bellRef}
                 onClick={() => setShowNotifModal(v => !v)}
-                className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+                className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
                 title="Notifications"
                 aria-label="Paramètres de notifications"
                 aria-pressed={showNotifModal}
