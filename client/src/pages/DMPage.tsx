@@ -11,6 +11,7 @@ import { useAuth } from '../store/auth'
 import { useUnread } from '../store/unread'
 import { useE2E } from '../hooks/useE2E'
 import { useDmCall } from '../hooks/useDmCall'
+import { useWakeLock } from '../hooks/useWakeLock'
 import { useCallStore } from '../store/call'
 import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
@@ -134,6 +135,21 @@ export default function DMPage() {
   } = useDmCall(dmId, partnerId || undefined)
 
   const { pendingAccept, setPendingAccept } = useCallStore()
+
+  // Garder l'écran allumé pendant un appel DM (mobile) — libéré au raccrochage
+  useWakeLock(callState !== 'idle')
+
+  // Durée de l'appel connecté (mm:ss, h:mm:ss au-delà d'une heure)
+  const [callSeconds, setCallSeconds] = useState(0)
+  useEffect(() => {
+    if (callState !== 'connected') { setCallSeconds(0); return }
+    const start = Date.now()
+    const iv = setInterval(() => setCallSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(iv)
+  }, [callState])
+  const callDuration = callSeconds >= 3600
+    ? `${Math.floor(callSeconds / 3600)}:${String(Math.floor((callSeconds % 3600) / 60)).padStart(2, '0')}:${String(callSeconds % 60).padStart(2, '0')}`
+    : `${Math.floor(callSeconds / 60)}:${String(callSeconds % 60).padStart(2, '0')}`
 
   // Auto-accept call if navigated here from incoming call modal
   // dmInfo must be loaded (so dmId is confirmed valid) before accepting
@@ -523,14 +539,22 @@ export default function DMPage() {
             <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center">
               <video ref={remoteVideoRef} autoPlay playsInline className="w-full max-h-56 object-contain" />
               <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
+              {callState === 'connected' && remoteStream && (
+                <span
+                  className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-xs font-medium tabular-nums select-none"
+                  aria-label={`Durée de l'appel ${callDuration}`}
+                >
+                  {callDuration}
+                </span>
+              )}
               {!remoteStream && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
                   <div className="w-14 h-14 rounded-full bg-fc-accent flex items-center justify-center text-xl font-bold text-white overflow-hidden">
                     {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
                   </div>
                   <p className="text-white font-semibold text-sm">{partnerName}</p>
-                  <p className="text-xs text-fc-muted animate-pulse">
-                    {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : 'Connecté'}
+                  <p className={`text-xs ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`}>
+                    {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : `Connecté — ${callDuration}`}
                   </p>
                 </div>
               )}
@@ -541,8 +565,8 @@ export default function DMPage() {
                 {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>
               <p className="text-white font-semibold">{partnerName}</p>
-              <p className={`text-sm ${callState === 'connected' ? 'text-fc-green' : 'text-fc-muted animate-pulse'}`}>
-                {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : '● Connecté'}
+              <p className={`text-sm ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`} aria-label={callState === 'connected' ? `Appel connecté, durée ${callDuration}` : undefined}>
+                {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : `● Connecté — ${callDuration}`}
               </p>
             </div>
           )}

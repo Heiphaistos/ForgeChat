@@ -162,6 +162,10 @@ export default function MessageList({
   const [fullEmojiFor, setFullEmojiFor] = useState<string | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
+  // Pastille de date flottante affichée pendant le scroll (style Telegram)
+  const [floatingDate, setFloatingDate] = useState<string | null>(null)
+  const floatingDateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current) }, [])
   const [loadingMore, setLoadingMore] = useState(false)
   // État vide affiché après 400ms pour éviter le flash au chargement initial
   const [showEmpty, setShowEmpty] = useState(false)
@@ -313,6 +317,21 @@ export default function MessageList({
     if (initialScrollDone.current) {
       if (fromBottom > 200) savedScrollPositions.set(channelId, el.scrollTop)
       else savedScrollPositions.delete(channelId)
+    }
+
+    // Pastille de date flottante : jour du dernier séparateur passé au-dessus
+    // du haut du viewport, masquée peu après la fin du scroll
+    if (initialScrollDone.current) {
+      const topEdge = el.getBoundingClientRect().top + 8
+      let label: string | null = null
+      el.querySelectorAll<HTMLElement>('[data-date-label]').forEach(d => {
+        if (d.getBoundingClientRect().top < topEdge) label = d.dataset.dateLabel ?? null
+      })
+      if (label) {
+        setFloatingDate(label)
+        if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current)
+        floatingDateTimer.current = setTimeout(() => setFloatingDate(null), 1200)
+      }
     }
 
     // Load more quand on touche le haut (ref évite la closure stale)
@@ -633,7 +652,7 @@ export default function MessageList({
           return (
             <div key={msg.id} className={isLiveMsg ? 'msg-enter' : undefined}>
             {showDateDivider && (
-              <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel}>
+              <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel} data-date-label={dateLabel}>
                 <div className="flex-1 h-px bg-fc-hover/70" />
                 <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
                   {dateLabel}
@@ -1236,6 +1255,16 @@ export default function MessageList({
 
         <div ref={bottomRef} />
       </div>
+
+      {/* Pastille de date flottante pendant le scroll */}
+      {floatingDate && (
+        <div
+          aria-hidden
+          className="floating-date-pill absolute top-2 left-1/2 -translate-x-1/2 z-10 pointer-events-none px-3 py-1 rounded-full bg-fc-channel/90 border border-fc-hover shadow-lg text-[11px] font-semibold text-fc-text capitalize whitespace-nowrap backdrop-blur-sm"
+        >
+          {floatingDate}
+        </div>
+      )}
 
       {/* Bouton scroll to bottom */}
       {showScrollBtn && (
