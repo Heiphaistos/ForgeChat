@@ -654,7 +654,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       const el = document.activeElement as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) return
-      textareaRef.current?.focus()
+      // Un fil de discussion ouvert a la priorité : on tape dedans, pas dans le canal
+      const threadComposer = document.querySelector<HTMLTextAreaElement>('textarea[data-composer="thread"]')
+      ;(threadComposer ?? textareaRef.current)?.focus()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)

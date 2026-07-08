@@ -11,6 +11,7 @@ import EmojiPicker from './EmojiPicker'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
 import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
+import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -47,6 +48,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   // Double-tap sur un message → réaction ❤️ (parité canaux/groupes)
   const dblTapStart = useRef<{ x: number; y: number } | null>(null)
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
+  // Popup profil au clic sur un avatar (parité canaux/groupes)
+  const [userPopup, setUserPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
   const qc = useQueryClient()
   useEscapePanel(onClose)
 
@@ -339,11 +342,19 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 }
               }}
             >
-              <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
+              <button
+                onClick={e => {
+                  e.stopPropagation()
+                  const uid = msg.author_id ?? msg.user_id
+                  if (uid) setUserPopup({ userId: uid, x: e.clientX, y: e.clientY })
+                }}
+                aria-label={`Voir le profil de ${msg.author?.username ?? msg.author_username ?? 'l\'auteur'}`}
+                className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
+              >
                 {msg.author?.avatar
                   ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : msg.author?.username?.charAt(0).toUpperCase()}
-              </div>
+              </button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-1.5 mb-0.5">
                   <span className={`text-xs font-semibold ${isMe ? 'text-fc-accent' : 'text-white'}`}>
@@ -464,6 +475,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         )}
         <div className="flex gap-2 items-end">
           <textarea
+            data-composer="thread"
             value={input}
             onChange={e => { setInput(e.target.value); emitTyping() }}
             onKeyDown={e => {
@@ -508,6 +520,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           </button>
         </div>
       </div>
+
+      {userPopup && (
+        <UserPopup
+          userId={userPopup.userId}
+          anchorX={userPopup.x}
+          anchorY={userPopup.y}
+          onClose={() => setUserPopup(null)}
+        />
+      )}
     </div>
   )
 }
