@@ -115,6 +115,8 @@ function AppInner() {
         toast(`💬 ${notifs.length} messages de ${label}`, {
           duration: 6000,
           style: { cursor: 'pointer', maxWidth: '360px' },
+          // Naviguer vers la conversation la plus récente (le curseur pointer le suggérait déjà)
+          onClick: () => nav(notifs[notifs.length - 1].path),
         } as any)
       }
     }
