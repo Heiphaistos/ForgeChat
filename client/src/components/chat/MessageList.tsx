@@ -492,9 +492,18 @@ export default function MessageList({
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
+  // En DM (serverId vide), channelId est l'id de conversation : autres routes
+  // API (PUT toggle au lieu de DELETE) et autres URLs de lien
+  const messageLink = (msgId: string) =>
+    serverId
+      ? `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${msgId}`
+      : `${window.location.origin}/dms/${channelId}?highlight=${msgId}`
+
   const removeReactionMut = useMutation({
     mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
-      api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
+      serverId
+        ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+        : api.put(`/dms/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
     onError: () => toast.error('Impossible de retirer la réaction'),
   })
 
@@ -513,7 +522,8 @@ export default function MessageList({
   }
 
   const saveMessage = useMutation({
-    mutationFn: ({ message_id, channel_id, server_id }: { message_id: string; channel_id: string; server_id: string }) =>
+    // server_id: null en DM — le backend attend Option<Uuid>, "" échoue en 422
+    mutationFn: ({ message_id, channel_id, server_id }: { message_id: string; channel_id: string; server_id: string | null }) =>
       api.post('/saved', { message_id, channel_id, server_id }),
     onSuccess: () => toast.success('Message sauvegardé'),
     onError: () => toast.error('Erreur lors de la sauvegarde'),
@@ -1015,7 +1025,7 @@ export default function MessageList({
                   </div>
 
                   <button
-                    onClick={() => saveMessage.mutate({ message_id: msg.id, channel_id: channelId, server_id: serverId })}
+                    onClick={() => saveMessage.mutate({ message_id: msg.id, channel_id: channelId, server_id: serverId || null })}
                     className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
                     title="Sauvegarder"
                     aria-label="Sauvegarder le message"
@@ -1038,8 +1048,7 @@ export default function MessageList({
 
                   <button
                     onClick={() => {
-                      const url = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${msg.id}`
-                      navigator.clipboard.writeText(url)
+                      navigator.clipboard.writeText(messageLink(msg.id))
                       toast.success('Lien copié !')
                     }}
                     className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
@@ -1394,8 +1403,7 @@ export default function MessageList({
           )}
           <button
             onClick={() => {
-              const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${contextMenu.msg.id}`
-              navigator.clipboard.writeText(link)
+              navigator.clipboard.writeText(messageLink(contextMenu.msg.id))
               toast.success('Lien copié')
               setContextMenu(null)
             }}
@@ -1406,11 +1414,10 @@ export default function MessageList({
           {typeof navigator.share === 'function' && (
             <button
               onClick={() => {
-                const link = `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${contextMenu.msg.id}`
                 navigator.share({
                   title: 'Message ForgeChat',
                   text: contextMenu.msg.content ? stripMarkdown(contextMenu.msg.content).slice(0, 200) : undefined,
-                  url: link,
+                  url: messageLink(contextMenu.msg.id),
                 }).catch(() => { /* partage annulé par l'utilisateur */ })
                 setContextMenu(null)
               }}
