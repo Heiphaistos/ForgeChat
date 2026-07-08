@@ -673,6 +673,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     if (sending) return
     const trimmed = content.trim()
 
+    // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
+    if (trimmed.length > MAX_CHARS) {
+      toast.error(`Message trop long : ${trimmed.length}/${MAX_CHARS} caractères`)
+      return
+    }
+
     // Mode édition (↑ sur input vide)
     if (editingMsgId) {
       if (trimmed && onEdit) onEdit(editingMsgId, trimmed)

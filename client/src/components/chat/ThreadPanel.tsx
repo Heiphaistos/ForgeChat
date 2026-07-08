@@ -139,6 +139,11 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
 
   const handleSend = () => {
     if (!input.trim()) return
+    // Limite serveur : 4000 caractères
+    if (input.trim().length > 4000) {
+      toast.error(`Message trop long : ${input.trim().length}/4000 caractères`)
+      return
+    }
     if (!threadId) {
       createThread.mutate()
     } else {

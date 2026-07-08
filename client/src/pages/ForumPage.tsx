@@ -303,6 +303,16 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
+  // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
+  const trySendReply = () => {
+    if (!reply.trim() || sendReply.isPending) return
+    if (reply.trim().length > 4000) {
+      toast.error(`Réponse trop longue : ${reply.trim().length}/4000 caractères`)
+      return
+    }
+    sendReply.mutate()
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-bg flex-shrink-0">
@@ -529,7 +539,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  if (reply.trim()) sendReply.mutate()
+                  trySendReply()
                 }
               }}
               placeholder="Écrire une réponse..."
@@ -538,7 +548,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               className="flex-1 px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
             />
             <button
-              onClick={() => reply.trim() && sendReply.mutate()}
+              onClick={trySendReply}
               disabled={!reply.trim() || sendReply.isPending}
               className="px-4 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
             >
