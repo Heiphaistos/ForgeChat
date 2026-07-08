@@ -1,4 +1,5 @@
 import { X, Pin, Trash2 } from 'lucide-react'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -41,6 +42,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
   return (
     <div
+      {...useSwipeRightToClose(onClose)}
       role="complementary"
       aria-label={`Messages épinglés — #${channelName}`}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"

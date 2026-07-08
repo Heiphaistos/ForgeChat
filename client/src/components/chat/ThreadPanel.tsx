@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
@@ -165,6 +166,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
 
   return (
     <div
+      {...useSwipeRightToClose(onClose)}
       role="complementary"
       aria-label="Fil de discussion"
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"

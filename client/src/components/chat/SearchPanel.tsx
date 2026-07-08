@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -47,6 +48,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
 
   return (
     <div
+      {...useSwipeRightToClose(onClose)}
       role="search"
       aria-label={`Rechercher dans #${channelName}`}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-72 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"

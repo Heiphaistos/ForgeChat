@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, MessagesSquare, Plus } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -77,6 +78,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
 
   return (
     <div
+      {...useSwipeRightToClose(onClose)}
       role="complementary"
       aria-label="Fils de discussion"
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0"
