@@ -6,6 +6,7 @@ import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import MediaContent, { useMediaUpload } from './MediaContent'
+import LinkPreview, { extractFirstUrl } from './LinkPreview'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -38,6 +39,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const qc = useQueryClient()
+
+  // Paramètre utilisateur "aperçus de liens" (cache partagé avec MessageList)
+  const { data: userSettings } = useQuery<Record<string, unknown>>({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
 
   const { data: threads = [], isLoading } = useQuery<any[]>({
     queryKey: ['threads', channelId],
@@ -310,7 +319,13 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     </div>
                   </div>
                 ) : (
-                  <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
+                  <>
+                    <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
+                    {linkPreviewEnabled && msg.content && (() => {
+                      const url = extractFirstUrl(msg.content)
+                      return url ? <LinkPreview url={url} /> : null
+                    })()}
+                  </>
                 )}
               </div>
             </div>

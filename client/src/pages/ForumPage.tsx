@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
 import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
+import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -190,6 +191,13 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
     else forumDrafts.delete(post.id)
   }, [reply, post.id])
   const replyUpload = useMediaUpload(serverId, channelId)
+  // Paramètre utilisateur "aperçus de liens" (cache partagé avec MessageList)
+  const { data: userSettings } = useQuery<Record<string, unknown>>({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   // Édition du contenu du post original (réservée au créateur, backend déjà prêt)
@@ -420,7 +428,13 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 </div>
               </div>
             ) : (
-              <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed" />
+              <>
+                <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed" />
+                {linkPreviewEnabled && (() => {
+                  const url = extractFirstUrl(data.post.content)
+                  return url ? <LinkPreview url={url} /> : null
+                })()}
+              </>
             )}
           </div>
         )}
@@ -511,7 +525,13 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   </div>
                 </div>
               ) : (
-                <MediaContent text={r.content} />
+                <>
+                  <MediaContent text={r.content} />
+                  {linkPreviewEnabled && (() => {
+                    const url = extractFirstUrl(r.content)
+                    return url ? <LinkPreview url={url} /> : null
+                  })()}
+                </>
               )}
             </div>
           </div>
