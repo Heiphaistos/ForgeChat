@@ -14,6 +14,7 @@ import EmojiPicker from '../components/chat/EmojiPicker'
 import MessageInput from '../components/chat/MessageInput'
 import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
+import { renderMarkdown } from '../utils/markdown'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -817,7 +818,7 @@ export default function GroupDMPage() {
                               ? 'bg-fc-accent text-white rounded-tr-sm'
                               : 'bg-fc-channel text-fc-text rounded-tl-sm'
                           }`}>
-                            {msg.content}
+                            {renderMarkdown(msg.content)}
                             {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
                           </div>
                         )}

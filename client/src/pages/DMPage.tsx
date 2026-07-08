@@ -16,6 +16,7 @@ import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
+import { renderMarkdown } from '../utils/markdown'
 import { useMobile } from '../contexts/MobileContext'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -613,7 +614,7 @@ export default function DMPage() {
                       </span>
                       <Lock size={9} className="text-green-500/70 mb-0.5" />
                     </div>
-                    <p className="text-sm text-fc-text mt-0.5 break-words leading-relaxed">{msg.content}</p>
+                    <div className="text-sm text-fc-text mt-0.5 break-words leading-relaxed">{renderMarkdown(msg.content)}</div>
                   </div>
                 </div>
               ))
