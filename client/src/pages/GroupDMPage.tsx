@@ -101,6 +101,12 @@ export default function GroupDMPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const isAtBottomRef = useRef(true)
+  // Nombre de messages au rendu précédent (0 = chargement initial pas encore fait)
+  const prevLen = useRef(0)
+  // Pastille de date flottante affichée pendant le scroll (parité MessageList)
+  const [floatingDate, setFloatingDate] = useState<string | null>(null)
+  const floatingDateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current) }, [])
   // Double-tap mobile → réaction ❤️ (même geste que MessageList)
   const dblTapStart = useRef<{ x: number; y: number } | null>(null)
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
@@ -336,13 +342,26 @@ export default function GroupDMPage() {
         if (fromBottom > 200) savedGdmScroll.set(groupId, container.scrollTop)
         else savedGdmScroll.delete(groupId)
       }
+      // Pastille de date flottante : jour du dernier séparateur passé au-dessus
+      // du haut du viewport, masquée peu après la fin du scroll
+      if (prevLen.current > 0) {
+        const topEdge = container.getBoundingClientRect().top + 8
+        let label: string | null = null
+        container.querySelectorAll<HTMLElement>('[data-date-label]').forEach(d => {
+          if (d.getBoundingClientRect().top < topEdge) label = d.dataset.dateLabel ?? null
+        })
+        if (label) {
+          setFloatingDate(label)
+          if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current)
+          floatingDateTimer.current = setTimeout(() => setFloatingDate(null), 1200)
+        }
+      }
     }
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => container.removeEventListener('scroll', onScroll)
   }, [groupId])
 
   // Scroll to bottom quand nouveaux messages arrivent (pas au load-more)
-  const prevLen = useRef(0)
   useEffect(() => {
     const cur = allMessages.length
     if (cur > prevLen.current && cur - prevLen.current === 1) {
@@ -694,6 +713,15 @@ export default function GroupDMPage() {
             }
           }}
         >
+          {/* Pastille de date flottante pendant le scroll — sticky dans le conteneur,
+              h-0 + marge négative pour ne pas décaler le flux space-y-3 */}
+          {floatingDate && (
+            <div className="sticky top-1 z-20 h-0 -mb-3 flex justify-center pointer-events-none" aria-hidden>
+              <span className="channel-fade-in px-3 py-1 rounded-full bg-fc-channel/90 border border-fc-hover shadow-lg text-[11px] font-semibold text-fc-text capitalize whitespace-nowrap backdrop-blur-sm">
+                {floatingDate}
+              </span>
+            </div>
+          )}
           {/* Échec du chargement initial : erreur honnête + retry */}
           {gdmError && allMessages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" role="alert">
@@ -736,7 +764,7 @@ export default function GroupDMPage() {
             return (
               <div key={msg.id}>
               {showDateDivider && (
-                <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel}>
+                <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel} data-date-label={dateLabel}>
                   <div className="flex-1 h-px bg-fc-hover/70" />
                   <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
                     {dateLabel}

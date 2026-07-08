@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
@@ -19,6 +19,9 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   useEscapePanel(onClose)
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
+  // Navigation clavier dans les résultats (↑/↓ depuis le champ, Entrée pour ouvrir)
+  const [selIdx, setSelIdx] = useState(-1)
+  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const inputRef = useRef<HTMLInputElement>(null)
   const nav = useNavigate()
   const { formatShortDate } = useFormatDate()
@@ -42,6 +45,14 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
       api.get(`${searchUrl}?q=${encodeURIComponent(search)}`).then(r => r.data),
     enabled: search.trim().length >= 2,
   })
+
+  // Réinitialiser la sélection à chaque nouvelle liste de résultats
+  useEffect(() => { setSelIdx(-1) }, [results])
+
+  // Garder le résultat sélectionné visible
+  useEffect(() => {
+    if (selIdx >= 0) itemRefs.current[selIdx]?.scrollIntoView({ block: 'nearest' })
+  }, [selIdx])
 
   const handleSearch = () => {
     if (query.trim().length >= 2) setSearch(query.trim())
@@ -71,9 +82,18 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter') handleSearch()
-              else if (e.key === 'Escape') onClose()
+              if (e.key === 'ArrowDown' && results.length > 0) {
+                e.preventDefault()
+                setSelIdx(i => Math.min(i + 1, results.length - 1))
+              } else if (e.key === 'ArrowUp' && results.length > 0) {
+                e.preventDefault()
+                setSelIdx(i => Math.max(i - 1, -1))
+              } else if (e.key === 'Enter') {
+                if (selIdx >= 0 && results[selIdx]) jumpToMessage(results[selIdx].id)
+                else handleSearch()
+              } else if (e.key === 'Escape') onClose()
             }}
+            aria-activedescendant={selIdx >= 0 && results[selIdx] ? `search-result-${results[selIdx].id}` : undefined}
             placeholder="Rechercher dans #..."
             aria-label={`Rechercher des messages dans #${channelName}`}
             inputMode="search" autoComplete="off"
@@ -120,14 +140,26 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
         )}
 
         {results.length > 0 && (
-          <div role="list" aria-label="Résultats de recherche" className="space-y-2">
-            {results.map((msg: any) => (
+          <div role="listbox" aria-label="Résultats de recherche" className="space-y-2">
+            {results.map((msg: any, idx: number) => (
               <div
                 key={msg.id}
-                role="listitem"
+                id={`search-result-${msg.id}`}
+                ref={el => { itemRefs.current[idx] = el }}
+                role="option"
+                aria-selected={idx === selIdx}
+                tabIndex={0}
                 onClick={() => jumpToMessage(msg.id)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    jumpToMessage(msg.id)
+                  }
+                }}
                 aria-label={`Message de ${msg.author_username}`}
-                className="bg-fc-bg rounded-lg p-3 border border-fc-hover cursor-pointer hover:border-fc-accent/50 transition-colors"
+                className={`bg-fc-bg rounded-lg p-3 border cursor-pointer transition-colors focus:outline-none focus:border-fc-accent/70 ${
+                  idx === selIdx ? 'border-fc-accent bg-fc-hover/30' : 'border-fc-hover hover:border-fc-accent/50'
+                }`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   {msg.author_avatar
