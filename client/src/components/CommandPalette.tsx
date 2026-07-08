@@ -84,7 +84,24 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
 
   const navigate = useCallback((path: string) => { nav(path); onClose() }, [nav, onClose])
 
+  // Serveurs de l'utilisateur (cache partagé avec le rail) — filtrés localement
+  const { data: myServers = [] } = useQuery<any[]>({
+    queryKey: ['servers'],
+    queryFn: () => api.get('/servers').then(r => r.data),
+    staleTime: 30_000,
+  })
+
   const items: PaletteItem[] = []
+
+  if (debouncedQuery.trim().length >= 2) {
+    for (const srv of myServers.filter((s: any) => s.name?.toLowerCase().includes(debouncedQuery.toLowerCase())).slice(0, 5)) {
+      items.push({
+        id: `srv-${srv.id}`, category: 'Serveurs', label: srv.name,
+        icon: <Compass size={14} className="text-fc-muted" />,
+        action: () => navigate(`/servers/${srv.id}`),
+      })
+    }
+  }
 
   if (!debouncedQuery) {
     for (const ch of getRecentChannels()) {
@@ -140,11 +157,12 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       icon: <CheckCheck size={14} className="text-fc-muted" />,
       action: () => { useUnread.getState().markAllRead(); toast.success('Tout est marqué comme lu') },
     },
-    {
+    // Le split est desktop-only (hidden md:flex) : ne pas proposer l'action sur mobile
+    ...(window.innerWidth >= 768 ? [{
       id: 'action-split', category: 'Actions', label: 'Vue en split (canal courant)',
       icon: <Columns2 size={14} className="text-fc-muted" />,
       action: () => window.dispatchEvent(new CustomEvent('forgechat:toggle-split')),
-    },
+    }] : []),
     {
       id: 'action-shortcuts', category: 'Actions', label: 'Raccourcis clavier',
       icon: <Keyboard size={14} className="text-fc-muted" />,
