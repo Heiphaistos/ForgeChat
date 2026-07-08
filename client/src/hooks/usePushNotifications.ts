@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { stripMarkdown } from '../utils/mdShortcuts'
 
 export function usePushNotifications() {
   const supported = typeof window !== 'undefined' && 'Notification' in window
@@ -34,6 +35,11 @@ export function sendNativeNotification(
 
   try {
     const { onClick, ...notifOptions } = options ?? {}
+    // Le corps est toujours du contenu de message : aplatir le markdown
+    // (**gras** littéral illisible dans une notification système)
+    if (typeof notifOptions.body === 'string') {
+      notifOptions.body = stripMarkdown(notifOptions.body)
+    }
     const notif = new Notification(title, {
       icon: '/icon.svg',
       badge: '/icon.svg',

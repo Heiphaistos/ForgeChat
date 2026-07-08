@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
+import { stripMarkdown } from './utils/mdShortcuts'
 
 function hexToRgb(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -346,6 +347,7 @@ function AppInner() {
       if (msg.channel_id && isChannelMuted(msg.channel_id)) return
       if (d.server_id && isServerMuted(d.server_id)) return
       const content: string = msg.content ?? ''
+      const contentClean = stripMarkdown(content)
       const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       // Réponse à un de mes messages = notification aussi (comme Discord)
@@ -360,20 +362,20 @@ function AppInner() {
         const activeChannelId = window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
         const isActiveChannel = activeChannelId === msg.channel_id
         if (document.hasFocus() && !isActiveChannel) {
-          toast(`${repliedToMe && !mentionedMe ? '↩️' : '🔔'} ${msg.author_username ?? 'Quelqu\'un'}: ${content.slice(0, 60)}`, {
+          toast(`${repliedToMe && !mentionedMe ? '↩️' : '🔔'} ${msg.author_username ?? 'Quelqu\'un'}: ${contentClean.slice(0, 60)}`, {
             duration: 5000,
             style: { cursor: 'pointer', maxWidth: '360px' },
             onClick: goToMsg,
           } as any)
         } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           sendNativeNotification(msg.author_username ?? 'Quelqu\'un', {
-            body: content.slice(0, 80),
+            body: contentClean.slice(0, 80),
             onClick: goToMsg,
           })
         } else if (d.server_id && d.message?.channel_id) {
           pendingNotifs.current.push({
             title: msg.author_username ?? 'Mention',
-            body: `🔔 ${content.slice(0, 60)}`,
+            body: `🔔 ${contentClean.slice(0, 60)}`,
             path: `/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`,
           })
         }
@@ -554,7 +556,7 @@ function AppInner() {
         } else {
           // Fenêtre non focusée → native si permission, sinon mettre en file pour afficher au focus
           const title = msg.sender_username ?? 'Message privé'
-          const body = msg.content ? msg.content.slice(0, 100) : '📎 Pièce jointe'
+          const body = msg.content ? stripMarkdown(msg.content).slice(0, 100) : '📎 Pièce jointe'
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             sendNativeNotification(title, { body, onClick: () => nav(`/dms/${d.dm_id}`) })
           } else {
@@ -574,6 +576,7 @@ function AppInner() {
         incrUnread(d.group_id)
         const isGroupMuted = qcHook.getQueryData<any[]>(['dms'])?.find(dm => dm.id === d.group_id)?.is_muted ?? false
         const content: string = msg.content ?? ''
+        const contentClean = stripMarkdown(content)
         const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const mentionedMe = !user.focus_mode && (
           new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content) ||
@@ -585,7 +588,7 @@ function AppInner() {
           else playMessage()
         }
         const goTo = () => nav(`/dms/groups/${d.group_id}`)
-        const preview = content ? content.slice(0, 60) : '📎 Pièce jointe'
+        const preview = content ? contentClean.slice(0, 60) : '📎 Pièce jointe'
         if (document.hasFocus()) {
           toast(`${msg.sender_username ?? 'Groupe'}: ${preview}`, {
             duration: mentionedMe ? 7000 : 4000,
@@ -594,7 +597,7 @@ function AppInner() {
           } as any)
         } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           sendNativeNotification(msg.sender_username ?? 'Groupe', {
-            body: content ? content.slice(0, 100) : '📎 Pièce jointe',
+            body: content ? contentClean.slice(0, 100) : '📎 Pièce jointe',
             onClick: goTo,
           })
         } else {
