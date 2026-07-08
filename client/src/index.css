@@ -175,6 +175,9 @@ a:focus-visible,
 .reaction-pop {
   animation: reaction-pop 0.3s ease-out;
 }
+@media (prefers-reduced-motion: reduce) {
+  .reaction-pop { animation: none; }
+}
 
 /* Thème clair */
 [data-theme="light"] body { background: #f2f3f5; color: #060607; }

@@ -412,6 +412,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                   value={editPostContent}
                   onChange={e => setEditPostContent(e.target.value)}
                   onKeyDown={e => {
+                    if (handleMarkdownShortcut(e, editPostContent, setEditPostContent)) return
                     if (e.key === 'Escape') setEditingPost(false)
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && editPostContent.trim()) savePost.mutate()
                   }}
@@ -505,6 +506,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                     rows={2}
                     autoFocus
                     onKeyDown={e => {
+                      if (handleMarkdownShortcut(e, editContent, setEditContent)) return
                       if (e.key === 'Escape') setEditingReplyId(null)
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
