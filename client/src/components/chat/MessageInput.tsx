@@ -988,8 +988,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       )}
 
       <div className="bg-fc-input rounded-lg">
-        {/* Barre Rich Text — masquée sur mobile */}
-        <div className="hidden md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover">
+        {/* Barre Rich Text — toujours sur desktop ; sur mobile dès qu'on tape
+            (seul moyen de formater au tactile, masquée composer vide pour l'espace) */}
+        <div className={`${content.trim() ? 'flex' : 'hidden'} md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover overflow-x-auto`}>
           <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" aria-label="Gras" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
           <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" aria-label="Italique" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
           <button onClick={() => applyFormat('~~')} title="Barré" aria-label="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
