@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, Zap } from 'lucide-react'
+import PickerShell from '../ui/PickerShell'
 
 const STORAGE_KEY = 'fc_quick_replies'
 
@@ -58,11 +59,9 @@ export default function QuickReplies({ onPick, onClose }: Props) {
   }
 
   return (
-    <div
-      role="group"
-      aria-label="Réponses rapides"
-      className="absolute bottom-full right-0 mb-2 w-72 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50"
-      onClick={e => e.stopPropagation()}
+    <PickerShell
+      onClose={onClose}
+      desktopClassName="absolute bottom-full right-0 mb-2 w-72 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50"
     >
       <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -154,6 +153,6 @@ export default function QuickReplies({ onPick, onClose }: Props) {
           </button>
         </div>
       )}
-    </div>
+    </PickerShell>
   )
 }
