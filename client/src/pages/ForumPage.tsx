@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
@@ -276,6 +276,11 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   }, [post.id, on, qc])
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  // Double-tap sur une réponse → réaction ❤️ (parité canaux/groupes/threads)
+  const dblTapStart = useRef<{ x: number; y: number } | null>(null)
+  const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
+  // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
+  const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
   const toggleReplyReaction = useMutation({
     mutationFn: ({ replyId, emoji }: { replyId: string; emoji: string }) =>
       api.put(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/reactions/${encodeURIComponent(emoji)}`),
@@ -397,7 +402,22 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4">
+      <div
+        className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4"
+        onTouchStart={e => { kbDismissRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+        onTouchMove={e => {
+          const s = kbDismissRef.current
+          if (!s) return
+          const dx = Math.abs(e.touches[0].clientX - s.x)
+          const dy = Math.abs(e.touches[0].clientY - s.y)
+          // Scroll vertical franc → fermer le clavier virtuel (mobile)
+          if (dy > 24 && dy > dx * 1.5) {
+            kbDismissRef.current = null
+            const el = document.activeElement as HTMLElement | null
+            if (el && el.tagName === 'TEXTAREA') el.blur()
+          }
+        }}
+      >
         {/* Post original */}
         {data?.post?.content && (
           <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover group">
@@ -477,7 +497,26 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
               <div className="flex-1 h-px bg-fc-hover/70" />
             </div>
           )}
-          <div className="flex gap-3 group">
+          <div
+            className="flex gap-3 group"
+            onTouchStart={e => { dblTapStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+            onTouchEnd={e => {
+              const s = dblTapStart.current
+              dblTapStart.current = null
+              if (!s) return
+              const dx = Math.abs(e.changedTouches[0].clientX - s.x)
+              const dy = Math.abs(e.changedTouches[0].clientY - s.y)
+              if (dx > 10 || dy > 10) { dblTapRef.current = null; return }
+              const now = Date.now()
+              if (dblTapRef.current?.msgId === r.id && now - dblTapRef.current.time < 300) {
+                dblTapRef.current = null
+                if ('vibrate' in navigator) navigator.vibrate(15)
+                toggleReplyReaction.mutate({ replyId: r.id, emoji: '❤️' })
+              } else {
+                dblTapRef.current = { msgId: r.id, time: now }
+              }
+            }}
+          >
             <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
               {r.author?.avatar
                 ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />

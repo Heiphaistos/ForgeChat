@@ -44,6 +44,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const bottomRef = useRef<HTMLDivElement>(null)
   // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
   const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
+  // Double-tap sur un message → réaction ❤️ (parité canaux/groupes)
+  const dblTapStart = useRef<{ x: number; y: number } | null>(null)
+  const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
   const qc = useQueryClient()
   useEscapePanel(onClose)
 
@@ -315,7 +318,27 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 <div className="flex-1 h-px bg-fc-hover/70" />
               </div>
             )}
-            <div className="flex gap-2 group">
+            <div
+              className="flex gap-2 group"
+              onTouchStart={e => { dblTapStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
+              onTouchEnd={e => {
+                const s = dblTapStart.current
+                dblTapStart.current = null
+                if (!s) return
+                const dx = Math.abs(e.changedTouches[0].clientX - s.x)
+                const dy = Math.abs(e.changedTouches[0].clientY - s.y)
+                if (dx > 10 || dy > 10) { dblTapRef.current = null; return }
+                const now = Date.now()
+                const last = dblTapRef.current
+                if (last && last.msgId === msg.id && now - last.time < 300) {
+                  dblTapRef.current = null
+                  if ('vibrate' in navigator) navigator.vibrate(15)
+                  toggleReaction.mutate({ msgId: msg.id, emoji: '❤️' })
+                } else {
+                  dblTapRef.current = { msgId: msg.id, time: now }
+                }
+              }}
+            >
               <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden">
                 {msg.author?.avatar
                   ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
