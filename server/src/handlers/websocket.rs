@@ -556,6 +556,28 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             }
         }
 
+        // Typing indicator pour les threads (broadcast aux membres du serveur)
+        Some("THREAD_TYPING") => {
+            let thread_id = msg["thread_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
+            let server_id = msg["server_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
+            if let (Some(tid), Some(sid)) = (thread_id, server_id) {
+                let is_member: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+                )
+                .bind(sid).bind(user_id)
+                .fetch_one(&state.db).await.unwrap_or(false);
+                if is_member {
+                    let event = serde_json::json!({
+                        "type": "THREAD_TYPING",
+                        "thread_id": tid,
+                        "user_id": user_id,
+                        "username": cached_username,
+                    });
+                    state.broadcast_to_server_members(sid, event.to_string()).await;
+                }
+            }
+        }
+
         // ────────── Vocal / Vidéo (WebRTC signaling) ──────────
         Some("VOICE_JOIN") => {
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {

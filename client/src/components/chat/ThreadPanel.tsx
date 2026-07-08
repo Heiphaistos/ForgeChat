@@ -27,7 +27,7 @@ const threadDrafts = new Map<string, string>()
 
 export default function ThreadPanel({ serverId, channelId, parentMessageId, onClose }: Props) {
   const { user } = useAuth()
-  const { on } = useWs()
+  const { on, send } = useWs()
   const { formatShort } = useFormatDate()
   const [input, setInput] = useState(() => threadDrafts.get(parentMessageId) ?? '')
   // Brouillon conservé si on ferme/rouvre le fil (purgé à l'envoi via setInput(''))
@@ -98,10 +98,35 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
-    return () => { offMsg(); offUpdate(); offEdit(); offDelete(); offReact() }
+    const offTyping = on('THREAD_TYPING', (d: any) => {
+      if (d.thread_id !== threadId || d.user_id === user?.id) return
+      setTypingUsers(prev => {
+        const entry = prev[d.user_id]
+        if (entry) clearTimeout(entry.timer)
+        const timer = setTimeout(() => {
+          setTypingUsers(p => { const { [d.user_id]: _, ...rest } = p; return rest })
+        }, 3000)
+        return { ...prev, [d.user_id]: { username: d.username, timer } }
+      })
+    })
+    return () => { offMsg(); offUpdate(); offEdit(); offDelete(); offReact(); offTyping() }
   }, [threadId, parentMessageId, channelId, on, qc])
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+
+  // Indicateur de frappe du thread (émission throttlée + réception WS)
+  const [typingUsers, setTypingUsers] = useState<Record<string, { username: string; timer: ReturnType<typeof setTimeout> }>>({})
+  const typingThrottle = useRef<number>(0)
+  const emitTyping = () => {
+    if (!threadId) return
+    const now = Date.now()
+    if (now - typingThrottle.current < 2000) return
+    typingThrottle.current = now
+    send({ type: 'THREAD_TYPING', thread_id: threadId, server_id: serverId })
+  }
+  useEffect(() => () => {
+    setTypingUsers(prev => { Object.values(prev).forEach(e => clearTimeout(e.timer)); return {} })
+  }, [threadId])
   const toggleReaction = useMutation({
     mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
       api.put(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
@@ -393,10 +418,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
 
       {/* Input */}
       <div className="p-3 border-t border-fc-bg flex-shrink-0">
+        {Object.keys(typingUsers).length > 0 && (
+          <div role="status" aria-live="polite" className="text-[11px] text-fc-muted italic mb-1 px-1 truncate">
+            {Object.values(typingUsers).map(t => t.username).join(', ')} {Object.keys(typingUsers).length > 1 ? 'écrivent' : 'écrit'}…
+          </div>
+        )}
         <div className="flex gap-2 items-end">
           <textarea
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => { setInput(e.target.value); emitTyping() }}
             onKeyDown={e => {
               if (handleMarkdownShortcut(e, input, setInput)) return
               if (e.key === 'ArrowUp' && !input && threadId) {
