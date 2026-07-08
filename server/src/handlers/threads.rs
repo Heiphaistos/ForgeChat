@@ -179,9 +179,11 @@ pub async fn get_thread_messages(
     let msg_ids: Vec<Uuid> = { use sqlx::Row; rows.iter().map(|r| r.get::<Uuid, _>("id")).collect() };
     let reaction_rows = if msg_ids.is_empty() { vec![] } else {
         sqlx::query(
-            "SELECT thread_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
-             FROM thread_message_reactions WHERE thread_message_id = ANY($1)
-             GROUP BY thread_message_id, emoji"
+            "SELECT r.thread_message_id, r.emoji, COUNT(*) as count, bool_or(r.user_id=$2) as me,
+                    array_agg(u.username ORDER BY r.created_at) as users
+             FROM thread_message_reactions r JOIN users u ON u.id = r.user_id
+             WHERE r.thread_message_id = ANY($1)
+             GROUP BY r.thread_message_id, r.emoji"
         )
         .bind(&msg_ids).bind(claims.sub)
         .fetch_all(&state.db).await.unwrap_or_default()
@@ -194,6 +196,7 @@ pub async fn get_thread_messages(
             "emoji": r.get::<String, _>("emoji"),
             "count": r.get::<i64, _>("count"),
             "me": r.get::<bool, _>("me"),
+            "users": r.get::<Vec<String>, _>("users"),
         }));
     }
 

@@ -266,9 +266,11 @@ pub async fn get_group_messages(
     } else {
         let (react, att) = tokio::join!(
             sqlx::query(
-                "SELECT group_dm_message_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
-                 FROM group_dm_reactions WHERE group_dm_message_id = ANY($1)
-                 GROUP BY group_dm_message_id, emoji"
+                "SELECT r.group_dm_message_id, r.emoji, COUNT(*) as count, bool_or(r.user_id=$2) as me,
+                        array_agg(u.username ORDER BY r.created_at) as users
+                 FROM group_dm_reactions r JOIN users u ON u.id = r.user_id
+                 WHERE r.group_dm_message_id = ANY($1)
+                 GROUP BY r.group_dm_message_id, r.emoji"
             )
             .bind(&msg_ids)
             .bind(claims.sub)
@@ -290,6 +292,7 @@ pub async fn get_group_messages(
             "emoji": r.get::<String, _>("emoji"),
             "count": r.get::<i64, _>("count"),
             "me": r.get::<bool, _>("me"),
+            "users": r.get::<Vec<String>, _>("users"),
         }));
     }
 

@@ -46,7 +46,7 @@ interface ForumReply {
   content: string
   created_at: string
   author: { id: string; username: string; avatar?: string; discriminator: string }
-  reactions?: { emoji: string; count: number; me: boolean }[]
+  reactions?: { emoji: string; count: number; me: boolean; users?: string[] }[]
 }
 
 function AttachButton({ uploading, onClick }: { uploading: boolean; onClick: () => void }) {
@@ -568,7 +568,8 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition ${
                             rc.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
                           }`}
-                          aria-label={`${rc.emoji} ${rc.count} réaction${rc.count > 1 ? 's' : ''}`}
+                          title={(rc.users ?? []).join(', ')}
+                          aria-label={`${rc.emoji} ${rc.count} réaction${rc.count > 1 ? 's' : ''}${rc.users?.length ? ' — ' + rc.users.join(', ') : ''}`}
                           aria-pressed={rc.me}
                         >
                           <span aria-hidden>{rc.emoji}</span>

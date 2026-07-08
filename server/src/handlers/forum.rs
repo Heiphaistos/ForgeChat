@@ -171,9 +171,11 @@ pub async fn get_post(
     let reply_ids: Vec<Uuid> = reply_rows.iter().map(|r| r.get::<Uuid, _>("id")).collect();
     let reaction_rows = if reply_ids.is_empty() { vec![] } else {
         sqlx::query(
-            "SELECT forum_reply_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
-             FROM forum_reply_reactions WHERE forum_reply_id = ANY($1)
-             GROUP BY forum_reply_id, emoji"
+            "SELECT r.forum_reply_id, r.emoji, COUNT(*) as count, bool_or(r.user_id=$2) as me,
+                    array_agg(u.username ORDER BY r.created_at) as users
+             FROM forum_reply_reactions r JOIN users u ON u.id = r.user_id
+             WHERE r.forum_reply_id = ANY($1)
+             GROUP BY r.forum_reply_id, r.emoji"
         )
         .bind(&reply_ids).bind(claims.sub)
         .fetch_all(&state.db).await.unwrap_or_default()
@@ -185,6 +187,7 @@ pub async fn get_post(
             "emoji": r.get::<String, _>("emoji"),
             "count": r.get::<i64, _>("count"),
             "me": r.get::<bool, _>("me"),
+            "users": r.get::<Vec<String>, _>("users"),
         }));
     }
 

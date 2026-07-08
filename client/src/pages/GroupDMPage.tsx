@@ -24,6 +24,7 @@ interface GDMReaction {
   emoji: string
   count: number
   me: boolean
+  users?: string[]
 }
 
 interface GDMAttachment {
@@ -944,10 +945,12 @@ export default function GroupDMPage() {
                         {/* Réactions */}
                         {msg.reactions && msg.reactions.length > 0 && (
                           <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            {msg.reactions.map((r: { emoji: string; count: number; me: boolean }) => (
+                            {msg.reactions.map((r: GDMReaction) => (
                               <button
                                 key={r.emoji}
                                 onClick={() => toggleReaction(msg.id, r.emoji)}
+                                title={(r.users ?? []).join(', ')}
+                                aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
                                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition ${
                                   r.me
                                     ? 'bg-fc-accent/20 border-fc-accent/50 text-white'

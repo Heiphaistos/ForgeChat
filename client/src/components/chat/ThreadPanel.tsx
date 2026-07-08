@@ -363,7 +363,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition ${
                               r.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
                             }`}
-                            aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}`}
+                            title={(r.users ?? []).join(', ')}
+                            aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
                             aria-pressed={r.me}
                           >
                             <span aria-hidden>{r.emoji}</span>
