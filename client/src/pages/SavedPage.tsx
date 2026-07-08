@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File, ChevronLeft } from 'lucide-react'
@@ -139,6 +140,7 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function SavedPage() {
+  usePageTitle('Messages sauvegardés')
   const nav = useNavigate()
   const qc = useQueryClient()
   const { openSidebar } = useMobile()

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
@@ -16,6 +17,7 @@ interface PublicServer {
 }
 
 export default function ExplorePage() {
+  usePageTitle('Explorer')
   const [query, setQuery] = useState('')
   const nav = useNavigate()
   const { openSidebar } = useMobile()

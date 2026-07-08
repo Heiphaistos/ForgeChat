@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   UserPlus, MessageCircle, Check, X, Link, Copy, Search,
@@ -79,6 +80,7 @@ function SkeletonCard() {
 }
 
 export default function FriendsPage() {
+  usePageTitle('Amis')
   const { openSidebar } = useMobile()
   const [tab, setTab] = useState<FriendTab>('all')
   const [pendingSubTab, setPendingSubTab] = useState<PendingSubTab>('received')

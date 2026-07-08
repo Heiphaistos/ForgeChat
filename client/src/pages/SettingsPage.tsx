@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useNavigate } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X, ChevronLeft,
@@ -56,6 +57,7 @@ const NAV: { id: Section; label: string; icon: React.ReactNode; group?: string }
 import React from 'react'
 
 export default function SettingsPage() {
+  usePageTitle('Paramètres')
   const { user, updateMe, logout } = useAuth()
   const nav = useNavigate()
   const [section, setSection] = useState<Section>('account')

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
@@ -22,6 +23,7 @@ const PERIODS = [
 ]
 
 export default function LeaderboardPage() {
+  usePageTitle('Classement')
   const { serverId } = useParams<{ serverId: string }>()
   const { user } = useAuth()
   const { openSidebar } = useMobile()

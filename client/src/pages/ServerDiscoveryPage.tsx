@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, Tag, ChevronLeft } from 'lucide-react'
 import api from '../api/client'
@@ -153,6 +154,7 @@ function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function ServerDiscoveryPage() {
+  usePageTitle('Découvrir')
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<Category>('all')
   const [sort, setSort] = useState<SortMode>('popular')
