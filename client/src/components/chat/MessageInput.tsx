@@ -21,7 +21,7 @@ const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
-import { PickerFallback } from '../ui/PickerShell'
+import PickerShell, { PickerFallback } from '../ui/PickerShell'
 
 // ─── Emoji shortcodes ────────────────────────────────────────────────────────
 
@@ -1197,10 +1197,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             </button>
 
             {showScheduled && (
-              <div
-                className="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
-                onClick={e => e.stopPropagation()}
-                onKeyDown={e => { if (e.key === 'Escape') setShowScheduled(false) }}
+              <PickerShell
+                onClose={() => setShowScheduled(false)}
+                desktopClassName="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 <div className="px-4 py-3 border-b border-fc-hover">
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
@@ -1267,7 +1266,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     ))}
                   </div>
                 )}
-              </div>
+              </PickerShell>
             )}
           </div>
 
@@ -1284,9 +1283,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               <Clock size={18} />
             </button>
             {showTtlPicker && (
-              <div
-                className="absolute bottom-full right-0 mb-2 w-48 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
-                onKeyDown={e => { if (e.key === 'Escape') setShowTtlPicker(false) }}
+              <PickerShell
+                onClose={() => setShowTtlPicker(false)}
+                desktopClassName="absolute bottom-full right-0 mb-2 w-48 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 <div className="px-3 py-2 border-b border-fc-hover text-xs font-semibold text-fc-muted uppercase">
                   Expiration du message
@@ -1295,7 +1294,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   <button
                     key={String(opt.value)}
                     onClick={() => { setMsgTtl(opt.value); setShowTtlPicker(false) }}
-                    className={`w-full text-left px-3 py-2 text-sm transition hover:bg-fc-hover ${
+                    className={`w-full text-left px-3 py-2 min-h-[40px] text-sm transition hover:bg-fc-hover ${
                       msgTtl === opt.value ? 'text-fc-accent' : 'text-fc-text'
                     }`}
                   >
@@ -1303,7 +1302,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     {msgTtl === opt.value && ' ✓'}
                   </button>
                 ))}
-              </div>
+              </PickerShell>
             )}
           </div>
 
