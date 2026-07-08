@@ -219,6 +219,13 @@ export default function ServerSidebar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [contextMenu])
 
+  // Ouverture de la modale de création depuis la palette de commandes
+  useEffect(() => {
+    const openCreate = () => setShowCreate(true)
+    window.addEventListener('forgechat:create-server', openCreate)
+    return () => window.removeEventListener('forgechat:create-server', openCreate)
+  }, [])
+
   const persistFolders = useCallback((next: FoldersMap) => {
     setFolders(next)
     saveFolders(next)

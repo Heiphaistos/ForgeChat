@@ -151,7 +151,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
     { id: 'action-friends', category: 'Actions', label: 'Amis', icon: <Users size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
     { id: 'action-saved', category: 'Actions', label: 'Messages sauvegardés', icon: <Bookmark size={14} className="text-fc-muted" />, action: () => navigate('/saved') },
     { id: 'action-explore', category: 'Actions', label: 'Découvrir des serveurs', icon: <Compass size={14} className="text-fc-muted" />, action: () => navigate('/discovery') },
-    { id: 'action-create', category: 'Actions', label: 'Créer un serveur', icon: <Plus size={14} className="text-fc-muted" />, action: () => navigate('/explore') },
+    { id: 'action-create', category: 'Actions', label: 'Créer un serveur', icon: <Plus size={14} className="text-fc-muted" />, action: () => { window.dispatchEvent(new CustomEvent('forgechat:create-server')); onClose() } },
     {
       id: 'action-mark-read', category: 'Actions', label: 'Tout marquer comme lu',
       icon: <CheckCheck size={14} className="text-fc-muted" />,
