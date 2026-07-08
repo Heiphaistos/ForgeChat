@@ -9,7 +9,7 @@ import { useAuth } from '../../store/auth'
 import { useContextMenu } from '../ui/ContextMenu'
 import { useChat } from '../../store/chat'
 import { useUnread } from '../../store/unread'
-import { getRecentEmojis } from './EmojiPicker'
+import EmojiPicker, { getRecentEmojis } from './EmojiPicker'
 import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
@@ -158,6 +158,8 @@ export default function MessageList({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
+  // Picker complet ouvert depuis « Plus de réactions » du menu contextuel
+  const [fullEmojiFor, setFullEmojiFor] = useState<string | null>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -1314,6 +1316,17 @@ export default function MessageList({
         />
       )}
 
+      {/* Picker complet « Plus de réactions » (bottom-sheet mobile via PickerShell) */}
+      {fullEmojiFor && (
+        <div className="relative">
+          <EmojiPicker
+            serverId={serverId}
+            onPick={emoji => toggleReaction(fullEmojiFor, emoji)}
+            onClose={() => setFullEmojiFor(null)}
+          />
+        </div>
+      )}
+
       {/* Context menu : bottom-sheet sur mobile, menu positionné sur desktop */}
       {contextMenu && window.innerWidth < 768 && (
         <div className="fixed inset-0 z-[199] bg-black/50" aria-hidden onClick={() => setContextMenu(null)} />
@@ -1347,6 +1360,14 @@ export default function MessageList({
                 {emoji}
               </button>
             ))}
+            <button
+              onClick={() => { setFullEmojiFor(contextMenu.msg.id); setContextMenu(null) }}
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-fc-hover text-fc-muted hover:text-white transition"
+              title="Plus de réactions"
+              aria-label="Choisir une autre réaction"
+            >
+              <SmilePlus size={20} aria-hidden />
+            </button>
           </div>
           {contextMenu.msg.content && (
             <button
