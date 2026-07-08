@@ -21,7 +21,7 @@ import ReportModal from './ReportModal'
 import LightboxModal from './LightboxModal'
 import PollDisplay from './PollDisplay'
 import { parseStickerMessage } from './StickerPicker'
-import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
+import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 
@@ -763,7 +763,7 @@ export default function MessageList({
                         )}
                         <span className="italic truncate max-w-xs">
                           {typeof msg.reply_to_content === 'string' && msg.reply_to_content
-                            ? msg.reply_to_content.slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
+                            ? stripMarkdown(msg.reply_to_content).slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
                             : 'Message original supprimé'}
                         </span>
                       </button>

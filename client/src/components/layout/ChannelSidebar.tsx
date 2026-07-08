@@ -27,6 +27,7 @@ import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
+import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
 
 // Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
@@ -609,7 +610,7 @@ export default function ChannelSidebar() {
                     </div>
                     <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
                       {dm.last_message_content != null
-                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${dm.last_message_content || '📎 Pièce jointe'}`
+                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${stripMarkdown(dm.last_message_content) || '📎 Pièce jointe'}`
                         : `${dm.member_count ?? '?'} membres`}
                     </div>
                   </div>
@@ -705,7 +706,7 @@ export default function ChannelSidebar() {
                 </div>
                 {dm.last_message_content != null ? (
                   <div className={`text-xs truncate ${unread > 0 ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
-                    {dm.last_message_content || '📎 Pièce jointe'}
+                    {stripMarkdown(dm.last_message_content) || '📎 Pièce jointe'}
                   </div>
                 ) : (
                   <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>

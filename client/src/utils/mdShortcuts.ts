@@ -28,3 +28,18 @@ export function handleMarkdownShortcut(
   }, 0)
   return true
 }
+
+// Aplatir le markdown pour les aperçus une-ligne (sidebar, citations) :
+// retire les marqueurs sans rendre — plus lisible que **gras** littéral
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, '[code]')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1')
+}
