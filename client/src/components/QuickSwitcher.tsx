@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight } from 'lucide-react'
+import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight, Users } from 'lucide-react'
 import api from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
@@ -26,7 +26,7 @@ interface Props {
 }
 
 interface Result {
-  type: 'channel' | 'dm'
+  type: 'channel' | 'dm' | 'group'
   id: string
   name: string
   serverId?: string
@@ -90,11 +90,14 @@ export default function QuickSwitcher({ onClose }: Props) {
   }
 
   for (const dm of dms) {
-    if (!query || dm.username.toLowerCase().includes(query.toLowerCase())) {
+    // /dms mélange DMs 1:1 (username) et groupes (is_group + name)
+    const label: string = dm.is_group ? (dm.name ?? 'Groupe') : (dm.username ?? '')
+    if (!label) continue
+    if (!query || label.toLowerCase().includes(query.toLowerCase())) {
       results.push({
-        type: 'dm',
+        type: dm.is_group ? 'group' : 'dm',
         id: dm.id,
-        name: dm.username,
+        name: label,
       })
     }
   }
@@ -108,6 +111,8 @@ export default function QuickSwitcher({ onClose }: Props) {
     }
     if (r.type === 'channel') {
       nav(`/servers/${r.serverId}/channels/${r.id}`)
+    } else if (r.type === 'group') {
+      nav(`/dms/groups/${r.id}`)
     } else {
       nav(`/dms/${r.id}`)
     }
@@ -305,6 +310,8 @@ export default function QuickSwitcher({ onClose }: Props) {
               <div className="flex-shrink-0" aria-hidden>
                 {r.type === 'dm'
                   ? <MessageCircle size={14} className="text-fc-green" />
+                  : r.type === 'group'
+                  ? <Users size={14} className="text-fc-accent" />
                   : <ChannelIcon type={r.channelType ?? 'text'} />}
               </div>
               <div className="flex-1 min-w-0">
