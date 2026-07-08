@@ -6,7 +6,14 @@ const PROGRESS_THRESHOLD = 512 * 1024
 
 /** POST multipart avec toast de progression pour les gros fichiers (mobile / connexions lentes). */
 export async function postWithUploadProgress(url: string, fd: FormData, totalBytes: number) {
-  if (totalBytes < PROGRESS_THRESHOLD) return api.post(url, fd)
+  if (totalBytes < PROGRESS_THRESHOLD) {
+    try {
+      return await api.post(url, fd)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error ?? "Échec de l'envoi du fichier")
+      throw err
+    }
+  }
   const tid = toast.loading('Envoi du fichier… 0%')
   try {
     const res = await api.post(url, fd, {
@@ -19,8 +26,9 @@ export async function postWithUploadProgress(url: string, fd: FormData, totalByt
     })
     toast.success('Fichier envoyé', { id: tid })
     return res
-  } catch (err) {
-    toast.error("Échec de l'envoi du fichier", { id: tid })
+  } catch (err: any) {
+    // Message serveur si disponible (type refusé, taille, permission...)
+    toast.error(err?.response?.data?.error ?? "Échec de l'envoi du fichier", { id: tid })
     throw err
   }
 }

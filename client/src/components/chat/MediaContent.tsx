@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import LightboxModal from './LightboxModal'
-import api from '../../api/client'
-import toast from 'react-hot-toast'
+import { postWithUploadProgress } from '../../utils/uploadProgress'
 
 // Hook d'upload de média (image/vidéo) vers l'endpoint forum-uploads du canal,
 // partagé entre forums et threads : picker fichier + collage presse-papier
@@ -12,10 +11,12 @@ export function useMediaUpload(serverId: string, channelId: string) {
     try {
       const fd = new FormData()
       fd.append('file', f)
-      const { data } = await api.post(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd)
+      // Toast de progression pour les gros médias (vidéos jusqu'à 50 Mo) ; le
+      // toast d'erreur (message serveur inclus) est géré par l'utilitaire
+      const { data } = await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd, f.size)
       if (data?.url) onUrl(data.url)
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? "Échec de l'envoi du fichier")
+    } catch {
+      // déjà notifié par postWithUploadProgress
     } finally {
       setUploading(false)
     }
