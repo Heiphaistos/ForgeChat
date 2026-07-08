@@ -495,7 +495,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             )}
             <button
               onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
-              className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Fils de discussion"
               aria-label="Fils de discussion"
               aria-pressed={showThreadSidebar}
@@ -513,7 +513,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </button>
             <button
               onClick={() => { setShowPinned(!showPinned); setShowSearch(false); setActiveThreadId(null) }}
-              className={`hidden md:flex p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Messages épinglés"
               aria-label="Messages épinglés"
               aria-pressed={showPinned}
