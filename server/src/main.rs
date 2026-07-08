@@ -568,6 +568,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id", patch(handlers::forum::update_post))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id", delete(handlers::forum::delete_post))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies", post(handlers::forum::reply_to_post))
+        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/reactions/:emoji", put(handlers::forum::toggle_reply_reaction))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", patch(handlers::forum::edit_reply))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", delete(handlers::forum::delete_reply))
         // Custom Emojis

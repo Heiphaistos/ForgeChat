@@ -166,6 +166,28 @@ pub async fn get_post(
     .await?;
 
     use sqlx::Row;
+
+    // Reactions groupees par reponse
+    let reply_ids: Vec<Uuid> = reply_rows.iter().map(|r| r.get::<Uuid, _>("id")).collect();
+    let reaction_rows = if reply_ids.is_empty() { vec![] } else {
+        sqlx::query(
+            "SELECT forum_reply_id, emoji, COUNT(*) as count, bool_or(user_id=$2) as me
+             FROM forum_reply_reactions WHERE forum_reply_id = ANY($1)
+             GROUP BY forum_reply_id, emoji"
+        )
+        .bind(&reply_ids).bind(claims.sub)
+        .fetch_all(&state.db).await.unwrap_or_default()
+    };
+    let mut react_map: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in &reaction_rows {
+        let mid = r.get::<Uuid, _>("forum_reply_id");
+        react_map.entry(mid).or_default().push(serde_json::json!({
+            "emoji": r.get::<String, _>("emoji"),
+            "count": r.get::<i64, _>("count"),
+            "me": r.get::<bool, _>("me"),
+        }));
+    }
+
     let post = serde_json::json!({
         "id": post_row.get::<Uuid, _>("id"),
         "channel_id": post_row.get::<Uuid, _>("channel_id"),
@@ -194,11 +216,66 @@ pub async fn get_post(
                 "username": r.get::<String, _>("username"),
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "discriminator": r.get::<String, _>("discriminator"),
-            }
+            },
+            "reactions": react_map.get(&r.get::<Uuid, _>("id")).cloned().unwrap_or_default(),
         })
     }).collect();
 
     Ok(Json(serde_json::json!({ "post": post, "replies": replies })))
+}
+
+// Toggle d une reaction sur une reponse de forum (meme pattern que les threads)
+pub async fn toggle_reply_reaction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, post_id, reply_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+
+    let reply_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM forum_replies fr JOIN forum_posts fp ON fp.id = fr.post_id
+         WHERE fr.id=$1 AND fr.post_id=$2 AND fp.channel_id=$3)"
+    ).bind(reply_id).bind(post_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !reply_ok { return Err(AppError::NotFound("Reponse introuvable".into())); }
+
+    let emoji = emoji.trim().to_string();
+    if emoji.is_empty() || emoji.chars().count() > 16 {
+        return Err(AppError::BadRequest("Emoji invalide".into()));
+    }
+
+    let existing: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM forum_reply_reactions WHERE forum_reply_id=$1 AND user_id=$2 AND emoji=$3)"
+    ).bind(reply_id).bind(claims.sub).bind(&emoji).fetch_one(&state.db).await?;
+
+    let added = if existing {
+        sqlx::query(
+            "DELETE FROM forum_reply_reactions WHERE forum_reply_id=$1 AND user_id=$2 AND emoji=$3"
+        ).bind(reply_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        false
+    } else {
+        sqlx::query(
+            "INSERT INTO forum_reply_reactions (forum_reply_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING"
+        ).bind(reply_id).bind(claims.sub).bind(&emoji).execute(&state.db).await?;
+        true
+    };
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM forum_reply_reactions WHERE forum_reply_id=$1 AND emoji=$2"
+    ).bind(reply_id).bind(&emoji).fetch_one(&state.db).await?;
+
+    let event = serde_json::json!({
+        "type": "FORUM_REPLY_REACTION",
+        "post_id": post_id,
+        "channel_id": channel_id,
+        "reply_id": reply_id,
+        "emoji": emoji,
+        "added": added,
+        "count": count,
+        "user_id": claims.sub,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "added": added, "count": count })))
 }
 
 pub async fn reply_to_post(

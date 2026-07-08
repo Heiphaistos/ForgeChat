@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2 } from 'lucide-react'
+import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
 import MediaContent, { useMediaUpload } from '../components/chat/MediaContent'
+import EmojiPicker from '../components/chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
@@ -45,6 +46,7 @@ interface ForumReply {
   content: string
   created_at: string
   author: { id: string; username: string; avatar?: string; discriminator: string }
+  reactions?: { emoji: string; count: number; me: boolean }[]
 }
 
 function AttachButton({ uploading, onClick }: { uploading: boolean; onClick: () => void }) {
@@ -266,8 +268,20 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
       if (d.post_id !== post.id) return
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
     })
-    return () => { offEdit(); offDelete() }
+    const offReact = on('FORUM_REPLY_REACTION', (d: any) => {
+      if (d.post_id !== post.id) return
+      qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+    })
+    return () => { offEdit(); offDelete(); offReact() }
   }, [post.id, on, qc])
+
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  const toggleReplyReaction = useMutation({
+    mutationFn: ({ replyId, emoji }: { replyId: string; emoji: string }) =>
+      api.put(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/reactions/${encodeURIComponent(emoji)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['forum-post', post.id] }),
+    onError: () => toast.error('Impossible de réagir'),
+  })
 
   const editReply = useMutation({
     mutationFn: ({ replyId, content }: { replyId: string; content: string }) =>
@@ -478,8 +492,16 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 {(r as any).edited_at && (
                   <span className="text-[9px] text-fc-muted/60" title="Réponse modifiée">(modifié)</span>
                 )}
+                {editingReplyId !== r.id && (
+                  <button
+                    onClick={() => setReactionPickerFor(cur => cur === r.id ? null : r.id)}
+                    className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${r.user_id === user?.id ? '' : 'ml-auto'} ${reactionPickerFor === r.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                    title="Réagir"
+                    aria-label="Réagir à la réponse"
+                  ><SmilePlus size={13} aria-hidden /></button>
+                )}
                 {r.user_id === user?.id && editingReplyId !== r.id && (
-                  <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 ml-auto transition">
+                  <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 transition">
                     <button
                       onClick={() => { setEditingReplyId(r.id); setEditContent(r.content) }}
                       className="p-1 text-fc-muted hover:text-white rounded transition"
@@ -537,6 +559,31 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                     const url = extractFirstUrl(r.content)
                     return url ? <LinkPreview url={url} /> : null
                   })()}
+                  {((r.reactions?.length ?? 0) > 0 || reactionPickerFor === r.id) && (
+                    <div className="flex flex-wrap items-center gap-1 mt-1.5 relative">
+                      {(r.reactions ?? []).map(rc => (
+                        <button
+                          key={rc.emoji}
+                          onClick={() => toggleReplyReaction.mutate({ replyId: r.id, emoji: rc.emoji })}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition ${
+                            rc.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
+                          }`}
+                          aria-label={`${rc.emoji} ${rc.count} réaction${rc.count > 1 ? 's' : ''}`}
+                          aria-pressed={rc.me}
+                        >
+                          <span aria-hidden>{rc.emoji}</span>
+                          <span>{rc.count}</span>
+                        </button>
+                      ))}
+                      {reactionPickerFor === r.id && (
+                        <EmojiPicker
+                          serverId={serverId}
+                          onPick={emoji => toggleReplyReaction.mutate({ replyId: r.id, emoji })}
+                          onClose={() => setReactionPickerFor(null)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
