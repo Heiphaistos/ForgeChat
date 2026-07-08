@@ -8,6 +8,22 @@ interface Props {
   children: React.ReactNode
 }
 
+// Fallback Suspense des pickers lazy : même position que le picker final
+// (sheet en bas sur mobile, popup ancrée sur desktop) pour éviter le flash
+export function PickerFallback({ desktopClassName }: { desktopClassName: string }) {
+  const isSheet = window.innerWidth < 768
+  return (
+    <div
+      style={isSheet ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, height: '12rem' } : undefined}
+      className={isSheet
+        ? 'bg-fc-channel border-t border-fc-hover rounded-t-2xl flex items-center justify-center'
+        : desktopClassName}
+    >
+      <div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
 // Coquille commune des pickers (emoji, GIF, stickers) : bottom-sheet en
 // portal sur mobile (échappe aux parents transformés/animés), popup
 // absolute ancrée au bouton sur desktop

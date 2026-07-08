@@ -21,6 +21,7 @@ const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
+import { PickerFallback } from '../ui/PickerShell'
 
 // ─── Emoji shortcodes ────────────────────────────────────────────────────────
 
@@ -1125,7 +1126,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               GIF
             </button>
             {showGifPicker && (
-              <Suspense fallback={<div className="absolute bottom-full right-0 mb-2 w-80 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center"><div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+              <Suspense fallback={<PickerFallback desktopClassName="absolute bottom-full right-0 mb-2 w-80 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center" />}>
                 <GifPicker
                   onPick={handleSendGif}
                   onClose={() => setShowGifPicker(false)}
@@ -1148,7 +1149,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               🎭
             </button>
             {showStickerPicker && (
-              <Suspense fallback={<div className="absolute bottom-full right-0 mb-2 w-72 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center"><div className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" /></div>}>
+              <Suspense fallback={<PickerFallback desktopClassName="absolute bottom-full right-0 mb-2 w-72 h-64 bg-fc-channel border border-fc-hover rounded-xl flex items-center justify-center" />}>
                 <StickerPicker
                   serverId={serverId || undefined}
                   onPick={handleSendSticker}
