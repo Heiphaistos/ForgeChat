@@ -420,7 +420,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
                 </div>
               </div>
             ) : (
-              <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed whitespace-pre-wrap" />
+              <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed" />
             )}
           </div>
         )}

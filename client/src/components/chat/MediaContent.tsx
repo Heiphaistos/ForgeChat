@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import LightboxModal from './LightboxModal'
+import { renderMarkdown } from '../../utils/markdown'
 import { postWithUploadProgress } from '../../utils/uploadProgress'
 
 // Hook d'upload de média (image/vidéo) vers l'endpoint forum-uploads du canal,
@@ -59,7 +60,7 @@ export default function MediaContent({ text, className }: { text: string; classN
   const [lightbox, setLightbox] = useState<number | null>(null)
   const images = parts.filter(p => p.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(p))
   return (
-    <div className={className ?? 'text-sm text-fc-text leading-relaxed whitespace-pre-wrap'}>
+    <div className={className ?? 'text-sm text-fc-text leading-relaxed'}>
       {parts.map((part, i) => {
         if (part.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(part)) {
           const imgIdx = images.indexOf(part)
@@ -74,7 +75,9 @@ export default function MediaContent({ text, className }: { text: string; classN
         if (part.startsWith('/uploads/') && /\.(mp4|webm|mov)$/i.test(part)) {
           return <video key={i} src={part} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
         }
-        return <span key={i}>{part}</span>
+        // Segment texte : markdown complet (gras, code, liens...) — renderMarkdown
+        // gère lui-même les sauts de ligne, pas de whitespace-pre-wrap ici
+        return part ? <span key={i}>{renderMarkdown(part)}</span> : null
       })}
       {lightbox !== null && (
         <LightboxModal images={images} initialIndex={lightbox} onClose={() => setLightbox(null)} />

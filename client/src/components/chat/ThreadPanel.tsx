@@ -310,7 +310,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                     </div>
                   </div>
                 ) : (
-                  <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words whitespace-pre-wrap" />
+                  <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
                 )}
               </div>
             </div>
