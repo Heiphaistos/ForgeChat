@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
@@ -9,6 +11,7 @@ import { useAuth } from '../../store/auth'
 
 interface Props {
   serverId: string
+  onClose?: () => void
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -83,7 +86,7 @@ function MemberRow({ m, onContextMenu, onLongPress }: { m: any; onContextMenu: (
   )
 }
 
-export default function MemberList({ serverId }: Props) {
+export default function MemberList({ serverId, onClose }: Props) {
   const { data: members = [] } = useQuery({
     queryKey: ['members', serverId],
     queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
@@ -149,16 +152,29 @@ export default function MemberList({ serverId }: Props) {
   ]
 
   const [search, setSearch] = useState('')
+  const swipe = useSwipeRightToClose(() => onClose?.())
   const query = search.trim().toLowerCase()
   const filteredOnline = query ? online.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : online
   const filteredOffline = query ? offline.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : offline
 
   return (
     <div
+      {...swipe}
       role="complementary"
       aria-label="Liste des membres"
-      className="w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 hidden lg:block"
+      className="absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
     >
+      {/* Header mobile avec fermeture (la liste est un overlay plein écran) */}
+      <div className="lg:hidden flex items-center justify-between px-2 py-2 border-b border-fc-bg mb-2">
+        <span className="font-semibold text-white text-sm">Membres</span>
+        <button
+          onClick={onClose}
+          aria-label="Fermer la liste des membres"
+          className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+        >
+          <X size={16} aria-hidden />
+        </button>
+      </div>
       <div className="px-1 pb-2">
         <input
           type="search"

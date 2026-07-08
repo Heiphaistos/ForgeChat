@@ -542,7 +542,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </div>
             <button
               onClick={() => setShowMembers(!showMembers)}
-              className={`hidden lg:flex p-1.5 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
+              className={`flex p-1.5 min-w-[36px] min-h-[36px] items-center justify-center rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
               title="Liste des membres"
               aria-label="Liste des membres"
               aria-pressed={showMembers}
@@ -784,7 +784,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       )}
 
       {/* Liste membres */}
-      {showMembers && !activeThreadId && !activeDirectThreadId && !showPinned && !showSearch && !showThreadSidebar && <MemberList serverId={serverId} />}
+      {showMembers && !activeThreadId && !activeDirectThreadId && !showPinned && !showSearch && !showThreadSidebar && <MemberList serverId={serverId} onClose={() => setShowMembers(false)} />}
     </div>
   )
 }

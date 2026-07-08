@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ActivityFeedPanel from '../activity/ActivityFeedPanel'
+import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 
 interface Props {
   visible: boolean
@@ -7,10 +8,13 @@ interface Props {
 }
 
 export default function RightSidebar({ visible, onClose }: Props) {
+  // Hook avant le return conditionnel (règle des hooks)
+  const swipe = useSwipeRightToClose(onClose)
   if (!visible) return null
 
   return (
     <div
+      {...swipe}
       role="complementary"
       aria-label="Activité récente"
       className="absolute inset-0 z-20 md:relative md:inset-auto md:z-auto md:w-[260px] bg-fc-channel flex-shrink-0 border-l border-fc-bg flex flex-col panel-slide-right"
