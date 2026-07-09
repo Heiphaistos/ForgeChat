@@ -43,6 +43,12 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Pastille de date flottante affichée pendant le scroll (parité canaux/groupes)
+  const [floatingDate, setFloatingDate] = useState<string | null>(null)
+  const floatingDateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openTime = useRef(Date.now())
+  useEffect(() => { openTime.current = Date.now() }, [parentMessageId])
+  useEffect(() => () => { if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current) }, [])
   // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
   const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
   // Double-tap sur un message → réaction ❤️ (parité canaux/groupes)
@@ -269,6 +275,22 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       {/* Messages */}
       <div
         className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3"
+        onScroll={e => {
+          // Pastille de date flottante : jour du dernier séparateur passé au-dessus
+          // du viewport (ignoré pendant le scroll initial programmatique)
+          if (Date.now() - openTime.current < 800) return
+          const el = e.currentTarget
+          const topEdge = el.getBoundingClientRect().top + 8
+          let label: string | null = null
+          el.querySelectorAll<HTMLElement>('[data-date-label]').forEach(d => {
+            if (d.getBoundingClientRect().top < topEdge) label = d.dataset.dateLabel ?? null
+          })
+          if (label) {
+            setFloatingDate(label)
+            if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current)
+            floatingDateTimer.current = setTimeout(() => setFloatingDate(null), 1200)
+          }
+        }}
         onTouchStart={e => { kbDismissRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
         onTouchMove={e => {
           const s = kbDismissRef.current
@@ -282,6 +304,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           }
         }}
       >
+        {/* Pastille de date flottante pendant le scroll — sticky, h-0 + marge
+            négative pour ne pas décaler le flux space-y-3 */}
+        {floatingDate && (
+          <div className="sticky top-1 z-20 h-0 -mb-3 flex justify-center pointer-events-none" aria-hidden>
+            <span className="channel-fade-in px-3 py-1 rounded-full bg-fc-channel/90 border border-fc-hover shadow-lg text-[10px] font-semibold text-fc-text capitalize whitespace-nowrap backdrop-blur-sm">
+              {floatingDate}
+            </span>
+          </div>
+        )}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
@@ -313,7 +344,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           return (
             <div key={msg.id}>
             {showDateDivider && (
-              <div className="flex items-center gap-3 my-2 px-1 select-none" role="separator" aria-label={dateLabel}>
+              <div className="flex items-center gap-3 my-2 px-1 select-none" role="separator" aria-label={dateLabel} data-date-label={dateLabel}>
                 <div className="flex-1 h-px bg-fc-hover/70" />
                 <span className="text-[10px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
                   {dateLabel}
