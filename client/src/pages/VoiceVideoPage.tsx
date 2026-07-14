@@ -94,29 +94,23 @@ function PeerTile({
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
   handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
   const hasVideo = peer.videoEnabled && stream && stream.getVideoTracks().some(t => t.readyState === 'live')
 
-  useEffect(() => {
-    if (videoRef.current && stream) videoRef.current.srcObject = stream
-  }, [stream])
-
-  // Audio séparé pour les peers sans vidéo (évite le silence quand <video> n'est pas rendu)
-  useEffect(() => {
-    if (audioRef.current && stream && !isLocal) {
-      audioRef.current.srcObject = stream
-    }
-  }, [stream, isLocal])
+  // Ref callback plutôt qu'useEffect([stream]) : quand la vidéo arrive en cours d'appel
+  // (caméra/partage d'écran), la référence du stream ne change pas — un effet ne se
+  // rejouerait pas au montage tardif du <video> et le flux ne serait jamais attaché.
+  const attachStream = (el: HTMLVideoElement | HTMLAudioElement | null) => {
+    if (el && stream && el.srcObject !== stream) el.srcObject = stream
+  }
 
   return (
     <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
       {/* Audio peers distants — toujours séparé du <video> pour éviter le double son */}
-      {!isLocal && <audio ref={audioRef} autoPlay />}
+      {!isLocal && <audio ref={attachStream} autoPlay />}
       {hasVideo ? (
-        <video ref={videoRef} autoPlay playsInline
+        <video ref={attachStream} autoPlay playsInline
           muted={isLocal ? muted : true}
           className="w-full h-full object-cover"
           style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
