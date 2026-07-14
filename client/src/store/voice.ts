@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
+import { useAuth } from './auth'
 import api from '../api/client'
 
 export interface VoicePeer {
@@ -551,11 +552,29 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       if (!pc) return
       try {
         if (payload.type === 'offer') {
+          // Glare (offers croisées quand les deux pairs renégocient en même temps) :
+          // le pair "poli" (id lexicographiquement inférieur) abandonne son offer
+          // locale (rollback) et répond ; l'autre ignore l'offer entrante — la sienne
+          // gagne, et le poli re-proposera sa modification une fois stable.
+          let rolledBack = false
+          if (pc.signalingState === 'have-local-offer') {
+            const myId = useAuth.getState().user?.id ?? ''
+            const polite = myId < from
+            if (!polite) return
+            await pc.setLocalDescription({ type: 'rollback' })
+            rolledBack = true
+          }
           await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
           await _drainIce(from)
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
           ws.send({ type: 'VOICE_SIGNAL', to: from, payload: { type: 'answer', data: { type: answer.type, sdp: answer.sdp } } })
+          // Re-proposer la modification abandonnée par le rollback (ex: notre caméra)
+          if (rolledBack && pc.signalingState === 'stable') {
+            const offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            ws.send({ type: 'VOICE_SIGNAL', to: from, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
+          }
         } else if (payload.type === 'answer') {
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
