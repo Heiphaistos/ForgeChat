@@ -71,6 +71,16 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Landing page : réactive le scroll du document (l'app chat, elle, scrolle dans
+   ses conteneurs internes). Libérer body seul ne suffit pas : html { overflow:
+   hidden } bloque tout défilement tactile sur mobile. */
+html.landing-scroll,
+html.landing-scroll body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Scroll tactile fluide + isolation overscroll sur tous les conteneurs scrollables */
 [class*="overflow-y-auto"], [class*="overflow-y-scroll"],
 [class*="overflow-auto"], [class*="overflow-scroll"] {

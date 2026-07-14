@@ -147,9 +147,10 @@ function AppPreview() {
 
 export default function LandingPage() {
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'auto'
-    return () => { document.body.style.overflow = prev }
+    // Classe sur <html> : html ET body sont en overflow:hidden globalement (app chat),
+    // et libérer body seul ne débloque pas le défilement tactile mobile
+    document.documentElement.classList.add('landing-scroll')
+    return () => { document.documentElement.classList.remove('landing-scroll') }
   }, [])
 
   return (
