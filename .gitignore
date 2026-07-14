@@ -22,3 +22,4 @@ server/uploads/
 
 # Claude Code internals
 .claude/
+dist-desktop/
