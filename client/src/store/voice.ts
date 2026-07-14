@@ -73,6 +73,12 @@ interface VoiceStore {
   setWhisperTargets(targets: string[] | null): void
 }
 
+// Trace des échecs de signaling — les deux vrais bugs WebRTC de 2026-07-14 se
+// cachaient derrière des catch muets ; ne jamais avaler ces erreurs en silence.
+function _warn(ctx: string, e: unknown) {
+  console.warn(`[voice] ${ctx}`, e)
+}
+
 // ── Singletons non-réactifs ──────────────────────────────────────────────────
 const _pcs = new Map<string, RTCPeerConnection>()
 export const getPeerConnections = () => _pcs
@@ -521,7 +527,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
           const offer = await pc.createOffer()
           await pc.setLocalDescription(offer)
           ws.send({ type: 'VOICE_SIGNAL', to: peer.user_id, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-        } catch {}
+        } catch (e) { _warn(`offer initiale vers ${peer.user_id}`, e) }
       }
     })
 
@@ -591,7 +597,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
             }
           }
         }
-      } catch {}
+      } catch (e) { _warn(`signal ${payload?.type} de ${from} (état ${pc.signalingState})`, e) }
     })
 
     _offFns = [offExisting, offJoined, offLeft, offSignal]
@@ -695,7 +701,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
               const offer = await pc.createOffer()
               await pc.setLocalDescription(offer)
               useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-            } catch {}
+            } catch (e) { _warn(`renégociation caméra vers ${peerId}`, e) }
           }
         }
         set({ videoEnabled: true })
@@ -732,7 +738,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
             const offer = await pc.createOffer()
             await pc.setLocalDescription(offer)
             useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-          } catch {}
+          } catch (e) { _warn(`renégociation partage d'écran vers ${peerId}`, e) }
         }
       }
 
@@ -765,7 +771,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
               await pc.setLocalDescription(offer)
               useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
             }
-          } catch {}
+          } catch (e) { _warn(`audio système du partage vers ${peerId}`, e) }
         }
       }
 

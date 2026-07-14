@@ -192,8 +192,10 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
             pendingCandidates.current.push(payload.candidate)
           }
         }
-      } catch {
-        // Silently ignore stale signal errors
+      } catch (e) {
+        // Signaux périmés fréquents, mais jamais muets : les bugs WebRTC du
+        // 2026-07-14 se cachaient derrière des catch silencieux
+        console.warn(`[dm-call] signal ${payload.type} de ${d.from} (état ${pc.signalingState})`, e)
       }
     })
 
