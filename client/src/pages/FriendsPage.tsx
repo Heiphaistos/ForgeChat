@@ -5,15 +5,17 @@ import {
   UserPlus, MessageCircle, Check, X, Link, Copy, Search,
   MoreHorizontal, UserX, Shield, User, Wifi, WifiOff,
   Clock, MinusCircle, Upload, Menu, ChevronLeft,
+  Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed,
 } from 'lucide-react'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
+import { useFormatDate } from '../hooks/useFormatDate'
 import ImportContactsModal from '../components/modals/ImportContactsModal'
 import { useMobile } from '../contexts/MobileContext'
 
-type FriendTab = 'online' | 'all' | 'pending' | 'blocked'
+type FriendTab = 'online' | 'all' | 'pending' | 'blocked' | 'calls'
 type PendingSubTab = 'received' | 'sent'
 
 interface FriendRow {
@@ -33,6 +35,17 @@ interface BlockedRow {
   username: string
   discriminator: string
   avatar: string | null
+}
+
+interface CallRow {
+  id: string
+  call_type: 'voice' | 'video'
+  status: 'ringing' | 'answered' | 'ended' | 'missed' | 'declined'
+  direction: 'incoming' | 'outgoing'
+  started_at: string
+  duration_s: number | null
+  dm_id: string | null
+  other_user: { id: string; username: string; avatar: string | null }
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -82,6 +95,7 @@ function SkeletonCard() {
 export default function FriendsPage() {
   usePageTitle('Amis')
   const { openSidebar } = useMobile()
+  const { formatShort } = useFormatDate()
   const [tab, setTab] = useState<FriendTab>('all')
   const [pendingSubTab, setPendingSubTab] = useState<PendingSubTab>('received')
 
@@ -90,6 +104,7 @@ export default function FriendsPage() {
     all: 'Tous les amis',
     pending: 'Demandes d\'amis',
     blocked: 'Bloqués',
+    calls: 'Appels récents',
   }
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
@@ -121,6 +136,13 @@ export default function FriendsPage() {
     queryKey: ['friends_blocked'],
     queryFn: () => api.get('/friends/blocked').then(r => r.data),
     enabled: tab === 'blocked',
+  })
+
+  const { data: calls = [], isLoading: callsLoading } = useQuery<CallRow[]>({
+    queryKey: ['call_history'],
+    queryFn: () => api.get('/friends/calls').then(r => r.data),
+    enabled: tab === 'calls',
+    staleTime: 30_000,
   })
 
   // ── Derived lists ──────────────────────────────────────────────────────────
@@ -343,6 +365,7 @@ export default function FriendsPage() {
             <TabBtn t="all" label="Tous" />
             <TabBtn t="pending" label="En attente" count={pendingCount} />
             <TabBtn t="blocked" label="Bloqués" />
+            <TabBtn t="calls" label="Appels" />
           </div>
         </div>
         {/* Actions — icône sur mobile, texte sur desktop */}
@@ -585,6 +608,62 @@ export default function FriendsPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* ── TAB: Appels (historique) ─── */}
+        {tab === 'calls' && (
+          <div>
+            <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
+              Appels récents — {calls.length}
+            </div>
+            {callsLoading ? (
+              <div className="flex justify-center py-16">
+                <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : calls.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-fc-muted gap-3">
+                <Phone size={36} className="opacity-40" />
+                <p className="text-sm">Aucun appel pour le moment</p>
+                <p className="text-xs opacity-70">Lance un appel vocal ou vidéo depuis une conversation privée</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {calls.map(c => {
+                  const missed = c.status === 'missed' || c.status === 'declined'
+                  const statusLabel = c.status === 'ended'
+                    ? (c.duration_s != null ? `${Math.floor(c.duration_s / 60)}:${String(c.duration_s % 60).padStart(2, '0')}` : 'Terminé')
+                    : c.status === 'missed' ? 'Manqué'
+                    : c.status === 'declined' ? 'Refusé'
+                    : 'En cours'
+                  const DirIcon = missed ? PhoneMissed : c.direction === 'outgoing' ? PhoneOutgoing : PhoneIncoming
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => c.dm_id && nav(`/dms/${c.dm_id}`)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition w-full text-left"
+                      title={c.dm_id ? 'Ouvrir la conversation' : undefined}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0">
+                        {c.other_user.avatar
+                          ? <img src={c.other_user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          : c.other_user.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-white text-sm truncate">{c.other_user.username}</div>
+                        <div className={`flex items-center gap-1.5 text-xs ${missed ? 'text-fc-red' : 'text-fc-muted'}`}>
+                          <DirIcon size={12} aria-hidden />
+                          {c.direction === 'outgoing' ? 'Sortant' : 'Entrant'} · {statusLabel}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-fc-muted">
+                        {c.call_type === 'video' ? <Video size={15} aria-label="Appel vidéo" /> : <Phone size={15} aria-label="Appel vocal" />}
+                        <span className="text-xs">{formatShort(c.started_at)}</span>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
