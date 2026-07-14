@@ -37,6 +37,15 @@ interface BlockedRow {
   avatar: string | null
 }
 
+interface SuggestionRow {
+  id: string
+  username: string
+  discriminator: string
+  avatar: string | null
+  mutual_friends: number
+  mutual_servers: number
+}
+
 interface CallRow {
   id: string
   call_type: 'voice' | 'video'
@@ -145,6 +154,13 @@ export default function FriendsPage() {
     staleTime: 30_000,
   })
 
+  const { data: suggestions = [] } = useQuery<SuggestionRow[]>({
+    queryKey: ['friend_suggestions'],
+    queryFn: () => api.get('/friends/suggestions').then(r => r.data),
+    enabled: tab === 'pending',
+    staleTime: 60_000,
+  })
+
   // ── Derived lists ──────────────────────────────────────────────────────────
   const accepted = useMemo(
     () => friends.filter(f => f.status === 'accepted'),
@@ -187,6 +203,7 @@ export default function FriendsPage() {
     mutationFn: (tag: string) => api.post('/friends/by-name', { name: tag }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
+      qc.invalidateQueries({ queryKey: ['friend_suggestions'] })
       setAddTag('')
       toast.success('Demande envoyée !')
     },
@@ -446,6 +463,45 @@ export default function FriendsPage() {
                 </button>
               )}
             </div>
+
+            {/* Suggestions — amis d'amis et serveurs en commun */}
+            {suggestions.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-fc-hover">
+                <p className="text-xs text-fc-muted mb-2 flex items-center gap-1.5">
+                  <UserPlus size={12} className="text-fc-accent" />
+                  Suggestions — des personnes que tu connais peut-être
+                </p>
+                <div className="space-y-1">
+                  {suggestions.slice(0, 6).map(s => (
+                    <div key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-fc-hover transition group">
+                      <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden flex-shrink-0">
+                        {s.avatar
+                          ? <img src={s.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          : s.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-white truncate">
+                          {s.username}<span className="text-fc-muted text-xs ml-0.5">#{s.discriminator}</span>
+                        </div>
+                        <div className="text-xs text-fc-muted truncate">
+                          {[
+                            s.mutual_friends > 0 && `${s.mutual_friends} ami${s.mutual_friends > 1 ? 's' : ''} en commun`,
+                            s.mutual_servers > 0 && `${s.mutual_servers} serveur${s.mutual_servers > 1 ? 's' : ''} en commun`,
+                          ].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => sendRequest.mutate(`${s.username}#${s.discriminator}`)}
+                        disabled={sendRequest.isPending}
+                        className="flex-shrink-0 px-2.5 py-1 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition disabled:opacity-40 opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                      >
+                        Ajouter
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
