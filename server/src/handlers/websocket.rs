@@ -771,11 +771,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let video = msg["video"].as_bool().unwrap_or(false);
             let screen = msg["screen"].as_bool().unwrap_or(false);
 
-            // Vérifier que l'utilisateur est dans ce canal vocal (voice_states)
+            // Vérifier que l'utilisateur est dans ce canal vocal.
+            // IMPORTANT : lire user_voice (peuplé par voice_join), PAS voice_states —
+            // voice_states n'est rempli que par ce handler, donc le premier VOICE_STATE
+            // échouerait toujours et aucun VOICE_STATE_UPDATE ne serait jamais broadcasté
+            // (mute/caméra/partage d'écran invisibles pour les autres).
             {
-                let states = state.voice_states.read().await;
-                let in_channel = states.get(&user_id)
-                    .map(|s| s.channel_id == channel_id)
+                let uv = state.user_voice.read().await;
+                let in_channel = uv.get(&user_id)
+                    .map(|c| *c == channel_id)
                     .unwrap_or(false);
                 if !in_channel { return; }
             }
