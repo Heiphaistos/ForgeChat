@@ -12,6 +12,7 @@ import { useUnread } from '../store/unread'
 import { useE2E } from '../hooks/useE2E'
 import { useDmCall } from '../hooks/useDmCall'
 import { useWakeLock } from '../hooks/useWakeLock'
+import { useAudioNotifications } from '../hooks/useAudioNotifications'
 import { useCallStore } from '../store/call'
 import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
@@ -170,6 +171,15 @@ export default function DMPage() {
 
   // Garder l'écran allumé pendant un appel DM (mobile) — libéré au raccrochage
   useWakeLock(callState !== 'idle')
+
+  // Tonalité de retour pendant que ça sonne chez le correspondant
+  const { playRingback } = useAudioNotifications()
+  useEffect(() => {
+    if (callState !== 'calling') return
+    playRingback()
+    const iv = setInterval(playRingback, 3000)
+    return () => clearInterval(iv)
+  }, [callState, playRingback])
 
   // Durée de l'appel connecté (mm:ss, h:mm:ss au-delà d'une heure)
   const [callSeconds, setCallSeconds] = useState(0)

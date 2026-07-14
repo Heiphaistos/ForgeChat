@@ -124,5 +124,11 @@ export function useAudioNotifications() {
     schedule(0); schedule(0.25); schedule(0.5)
   }, [])
 
-  return { playJoin, playLeave, playMessage, playMention, playRing, enabled, setEnabled: handleSetEnabled }
+  // Tonalité de retour d'appel côté appelant (style tonalité française : 440 Hz doux)
+  const playRingback = useCallback(() => {
+    if (!isEnabled()) return
+    playTone(440, 440, 0.8, 0.08)
+  }, [])
+
+  return { playJoin, playLeave, playMessage, playMention, playRing, playRingback, enabled, setEnabled: handleSetEnabled }
 }
