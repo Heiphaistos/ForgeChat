@@ -518,8 +518,23 @@ function AppInner() {
       })
       playRing()
     })
-    const offEnded = on('DM_CALL_ENDED', () => setIncomingCall(null))
-    const offDeclined = on('DM_CALL_DECLINED', () => setIncomingCall(null))
+    const offEnded = on('DM_CALL_ENDED', () => {
+      // Modal encore affiché = l'appel a sonné ici sans être décroché → manqué
+      const ringing = useCallStore.getState().incomingCall
+      if (ringing) {
+        toast(`📵 Appel manqué de ${ringing.fromUsername}`, {
+          duration: 8000,
+          style: { cursor: 'pointer' },
+          onClick: () => nav(`/dms/${ringing.dmId}`),
+        } as any)
+      }
+      setIncomingCall(null)
+      qcHook.invalidateQueries({ queryKey: ['call_history'] })
+    })
+    const offDeclined = on('DM_CALL_DECLINED', () => {
+      setIncomingCall(null)
+      qcHook.invalidateQueries({ queryKey: ['call_history'] })
+    })
     const offCallError = on('DM_CALL_ERROR', (d: any) => {
       if (d.reason === 'offline') {
         toast('Votre contact est hors ligne', { icon: '📵', duration: 4000 })
