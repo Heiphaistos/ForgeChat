@@ -228,6 +228,31 @@ async fn handle_socket(
             .await;
         broadcast_presence(&state, user_id, "offline").await;
         cleanup_voice(&state, user_id).await;
+
+        // Appels DM encore en sonnerie : l'appelant a disparu sans HANGUP (crash,
+        // fermeture d'onglet) → résoudre en 'missed' et prévenir le destinataire
+        // tout de suite (sinon son modal attend le timeout 50s). Les appels
+        // 'answered' ne sont pas touchés : le média P2P survit à une coupure WS.
+        if let Ok(rows) = sqlx::query(
+            "UPDATE call_history SET status='missed', ended_at=NOW()
+             WHERE caller_id=$1 AND status='ringing'
+             RETURNING callee_id, dm_id"
+        )
+        .bind(user_id)
+        .fetch_all(&state.db)
+        .await
+        {
+            use sqlx::Row;
+            for row in rows {
+                let callee: Uuid = row.get("callee_id");
+                let event = serde_json::json!({
+                    "type": "DM_CALL_ENDED",
+                    "from": user_id,
+                    "dm_id": row.get::<Option<Uuid>, _>("dm_id"),
+                });
+                state.broadcast_to_user(callee, event.to_string()).await;
+            }
+        }
     }
 
     tracing::info!("WS déconnecté: {}", user_id);
