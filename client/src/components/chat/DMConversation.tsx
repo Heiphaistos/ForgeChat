@@ -119,9 +119,10 @@ interface Props {
   initialHighlightId?: string | null
   loadError?: boolean
   onRetryLoad?: () => void
+  onPinMessage?: (msgId: string, pinned: boolean) => void
 }
 
-export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, initialHighlightId, loadError, onRetryLoad }: Props) {
+export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, initialHighlightId, loadError, onRetryLoad, onPinMessage }: Props) {
   const { on, send } = useWs()
   const me = useAuth(s => s.user)
   const qc = useQueryClient()
@@ -290,6 +291,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
         initialHighlightId={initialHighlightId}
         loadError={loadError}
         onRetryLoad={onRetryLoad}
+        onPinMessage={onPinMessage}
       />
       <ReadReceiptBar channelId={dmId} receipts={receipts} />
       <TypingIndicator users={typingUsers} />

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
 import api from '../api/client'
 import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
@@ -52,7 +52,8 @@ export default function DMPage() {
   const highlightMessageId = searchParams.get('highlight')
   const nav = useNavigate()
   const { openSidebar } = useMobile()
-  const { addMessages, addMessage, clearChannel } = useChat()
+  const { addMessages, addMessage, clearChannel, updateMessage } = useChat()
+  const qc = useQueryClient()
   const { on } = useWs()
   const presenceStatuses = usePresence(s => s.statuses)
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
@@ -137,6 +138,36 @@ export default function DMPage() {
 
   const { pendingAccept, setPendingAccept } = useCallStore()
 
+  // ── Messages épinglés du DM ─────────────────────────────────────────────────
+  interface DmPin {
+    id: string
+    message_id: string
+    pinned_at: string
+    pinned_by: string
+    message: { content: string | null; sender_name: string; created_at: string }
+  }
+  const [showPins, setShowPins] = useState(false)
+  const { data: dmPins = [] } = useQuery<DmPin[]>({
+    queryKey: ['dm_pins', dmId],
+    queryFn: () => api.get(`/dms/${dmId}/pins`).then(r => r.data),
+    enabled: !!dmId && !e2eMode,
+    staleTime: 30_000,
+  })
+
+
+  const togglePin = useMutation({
+    mutationFn: ({ msgId, pinned }: { msgId: string; pinned: boolean }) =>
+      pinned ? api.delete(`/dms/${dmId}/pins/${msgId}`) : api.post(`/dms/${dmId}/pins/${msgId}`),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: ['dm_pins', dmId] })
+      toast.success(vars.pinned ? 'Message désépinglé' : 'Message épinglé')
+    },
+    onError: (e: unknown) => {
+      const err = e as { response?: { data?: { error?: string } } }
+      toast.error(err.response?.data?.error ?? 'Erreur')
+    },
+  })
+
   // Garder l'écran allumé pendant un appel DM (mobile) — libéré au raccrochage
   useWakeLock(callState !== 'idle')
 
@@ -203,6 +234,16 @@ export default function DMPage() {
     queryFn: () => api.get(`/dms/${dmId}/e2e`).then(r => r.data),
     enabled: !!dmId && e2eMode,
   })
+
+  // Refléter l'état épinglé sur les messages du store (chargés avant/après les pins)
+  useEffect(() => {
+    if (!dmId) return
+    const pinnedIds = new Set(dmPins.map(p => p.message_id))
+    const msgs = useChat.getState().messagesByChannel[dmId] ?? []
+    msgs.forEach(m => {
+      if (!!m.pinned !== pinnedIds.has(m.id)) updateMessage(dmId, m.id, { pinned: pinnedIds.has(m.id) })
+    })
+  }, [dmPins, dmId, messages])
 
   // Populate chat store with normal messages
   useEffect(() => {
@@ -538,6 +579,17 @@ export default function DMPage() {
           >
             <Search size={18} />
           </button>
+          {!e2eMode && (
+            <button
+              onClick={() => setShowPins(p => !p)}
+              className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showPins ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+              title="Messages épinglés"
+              aria-label="Messages épinglés"
+              aria-pressed={showPins}
+            >
+              <Pin size={18} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -617,6 +669,55 @@ export default function DMPage() {
       {showSearch && dmId && (
         <div className="border-b border-fc-bg">
           <SearchPanel channelId={dmId} serverId="" channelName="Messages directs" onClose={() => setShowSearch(false)} />
+        </div>
+      )}
+
+      {/* Panneau des messages épinglés */}
+      {showPins && dmId && (
+        <div className="border-b border-fc-bg bg-fc-channel">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-fc-bg">
+            <div className="flex items-center gap-2">
+              <Pin size={15} className="text-fc-accent" aria-hidden />
+              <span className="font-semibold text-white text-sm">Messages épinglés — {dmPins.length}</span>
+            </div>
+            <button
+              onClick={() => setShowPins(false)}
+              aria-label="Fermer les messages épinglés"
+              className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+            >
+              <X size={15} aria-hidden />
+            </button>
+          </div>
+          <div className="max-h-56 overflow-y-auto overscroll-contain p-3 space-y-2">
+            {dmPins.length === 0 && (
+              <p className="text-center text-fc-muted text-sm py-4">Aucun message épinglé.<br />Utilise l'épingle sur un message.</p>
+            )}
+            {dmPins.map(pin => (
+              <div key={pin.id} className="relative group/pin bg-fc-bg/50 rounded-lg p-2.5 border border-fc-hover/40 hover:border-fc-hover transition">
+                <button
+                  onClick={() => { setShowPins(false); nav(`/dms/${dmId}?highlight=${pin.message_id}`) }}
+                  className="text-left w-full"
+                  aria-label={`Aller au message de ${pin.message.sender_name}`}
+                >
+                  <div className="flex items-baseline gap-2 mb-0.5">
+                    <span className="text-xs font-semibold text-white">{pin.message.sender_name}</span>
+                    <span className="text-[10px] text-fc-muted">{formatShort(pin.message.created_at)}</span>
+                  </div>
+                  <div className="text-xs text-fc-text leading-relaxed line-clamp-2">
+                    {pin.message.content ?? '📎 Pièce jointe'}
+                  </div>
+                </button>
+                <button
+                  onClick={() => togglePin.mutate({ msgId: pin.message_id, pinned: true })}
+                  aria-label="Désépingler"
+                  title="Désépingler"
+                  className="absolute top-1.5 right-1.5 p-1 rounded text-fc-muted hover:text-fc-red hover:bg-fc-hover transition opacity-100 md:opacity-0 md:group-hover/pin:opacity-100"
+                >
+                  <X size={12} aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -708,6 +809,7 @@ export default function DMPage() {
             initialHighlightId={highlightMessageId}
             loadError={dmMessagesError}
             onRetryLoad={() => refetchDmMessages()}
+            onPinMessage={(msgId, pinned) => togglePin.mutate({ msgId, pinned })}
           />
         </>
       )}
