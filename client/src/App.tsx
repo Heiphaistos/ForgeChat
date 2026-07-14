@@ -510,13 +510,22 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offIncoming = on('DM_CALL_INCOMING', (d: any) => {
+      const fromUsername = d.from_username ?? 'Utilisateur'
+      const callType = d.call_type === 'video' ? 'video' : 'voice'
       setIncomingCall({
         fromUserId: String(d.from),
-        fromUsername: d.from_username ?? 'Utilisateur',
+        fromUsername,
         dmId: String(d.dm_id),
-        callType: d.call_type === 'video' ? 'video' : 'voice',
+        callType,
       })
       playRing()
+      // Fenêtre en arrière-plan : notification native (sinon l'appel est invisible)
+      if (!document.hasFocus() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        sendNativeNotification(`${callType === 'video' ? '📹' : '📞'} Appel ${callType === 'video' ? 'vidéo' : 'vocal'} entrant`, {
+          body: `${fromUsername} t'appelle`,
+          onClick: () => nav(`/dms/${d.dm_id}`),
+        })
+      }
     })
     const offEnded = on('DM_CALL_ENDED', () => {
       // Modal encore affiché = l'appel a sonné ici sans être décroché → manqué
