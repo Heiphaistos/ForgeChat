@@ -956,12 +956,23 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 state.broadcast_to_user(user_id, err.to_string()).await;
                 return;
             }
+            // Historique d'appels : nouvelle entrée en sonnerie
+            let dm_uuid = msg["dm_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
+            let call_type = msg["call_type"].as_str().unwrap_or("voice");
+            let _ = sqlx::query(
+                "INSERT INTO call_history (caller_id, callee_id, dm_id, call_type, status)
+                 VALUES ($1, $2, $3, $4, 'ringing')"
+            )
+            .bind(user_id).bind(to).bind(dm_uuid)
+            .bind(if call_type == "video" { "video" } else { "voice" })
+            .execute(&state.db).await;
+
             let event = serde_json::json!({
                 "type": "DM_CALL_INCOMING",
                 "from": user_id,
                 "from_username": cached_username,
                 "dm_id": msg["dm_id"],
-                "call_type": msg["call_type"].as_str().unwrap_or("voice"),
+                "call_type": call_type,
             });
             state.broadcast_to_user(to, event.to_string()).await;
         }
@@ -971,6 +982,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 return;
             };
             if !users_share_dm(state, user_id, to).await { return; }
+            // Historique : appel décroché — started_at repart pour mesurer le temps de parole
+            let _ = sqlx::query(
+                "UPDATE call_history SET status='answered', started_at=NOW()
+                 WHERE id = (SELECT id FROM call_history
+                             WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
+                             ORDER BY started_at DESC LIMIT 1)"
+            )
+            .bind(to).bind(user_id)
+            .execute(&state.db).await;
             let event = serde_json::json!({
                 "type": "DM_CALL_ACCEPTED",
                 "from": user_id,
@@ -984,6 +1004,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 return;
             };
             if !users_share_dm(state, user_id, to).await { return; }
+            // Historique : appel refusé
+            let _ = sqlx::query(
+                "UPDATE call_history SET status='declined', ended_at=NOW()
+                 WHERE id = (SELECT id FROM call_history
+                             WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
+                             ORDER BY started_at DESC LIMIT 1)"
+            )
+            .bind(to).bind(user_id)
+            .execute(&state.db).await;
             let event = serde_json::json!({
                 "type": "DM_CALL_DECLINED",
                 "from": user_id,
@@ -997,6 +1026,21 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 return;
             };
             if !users_share_dm(state, user_id, to).await { return; }
+            // Historique : raccrochage — sonnerie sans réponse => missed,
+            // conversation en cours => ended + durée de parole
+            let _ = sqlx::query(
+                "UPDATE call_history SET
+                    ended_at = NOW(),
+                    duration_s = CASE WHEN status='answered'
+                        THEN EXTRACT(EPOCH FROM (NOW() - started_at))::INT ELSE NULL END,
+                    status = CASE WHEN status='answered' THEN 'ended' ELSE 'missed' END
+                 WHERE id = (SELECT id FROM call_history
+                             WHERE ((caller_id=$1 AND callee_id=$2) OR (caller_id=$2 AND callee_id=$1))
+                               AND status IN ('ringing','answered')
+                             ORDER BY started_at DESC LIMIT 1)"
+            )
+            .bind(user_id).bind(to)
+            .execute(&state.db).await;
             let event = serde_json::json!({
                 "type": "DM_CALL_ENDED",
                 "from": user_id,
