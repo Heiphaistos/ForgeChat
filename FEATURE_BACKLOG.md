@@ -62,9 +62,9 @@
 
 ## CYCLE 10
 
-- [ ] 🟢 Frontend — Export conversation en PDF/TXT — ExportConversationButton.tsx déjà intégré dans ChannelPage ✅
-- [ ] 🟢 Frontend — Import contacts (CSV) pour invitations en masse
-- [ ] 🟢 Backend — Webhook entrant (POST URL → message dans canal) — POST /api/webhook/:id/:token déjà implémenté ✅
+- [x] 🟢 Frontend — Export conversation en PDF/TXT — ExportConversationButton.tsx intégré dans ChannelPage — vérifié 2026-07-14
+- [x] 🟢 Frontend — Import contacts (CSV) pour invitations en masse — ImportContactsModal + POST /friends/invite-bulk, testé en prod (sent:1/not_found OK) 2026-07-14
+- [x] 🟢 Backend — Webhook entrant (POST URL → message dans canal) — POST /api/webhook/:id/:token (webhooks.rs) — vérifié 2026-07-14
 
 ---
 
