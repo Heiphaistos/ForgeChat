@@ -231,7 +231,14 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       cleanup()
     })
 
-    return () => { offSignal(); offAccepted(); offEnded(); offDeclined() }
+    // Erreur d'initiation (ex: destinataire hors ligne) : arrêter de sonner
+    // immédiatement au lieu de laisser tourner la tonalité jusqu'au timeout 45s
+    const offError = on('DM_CALL_ERROR', (d: any) => {
+      if (d.dm_id && dmId && String(d.dm_id) !== dmId) return
+      cleanup()
+    })
+
+    return () => { offSignal(); offAccepted(); offEnded(); offDeclined(); offError() }
   }, [dmId, partnerId, on, send, cleanup])
 
   // Keep refs current for unmount cleanup
