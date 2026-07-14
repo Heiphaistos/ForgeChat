@@ -71,6 +71,7 @@ export default function DMPage() {
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement>(null)
 
   const loadMoreDM = useCallback(async (): Promise<boolean> => {
     if (!dmId || !hasMoreDM) return false
@@ -172,7 +173,15 @@ export default function DMPage() {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream
     }
-  }, [remoteStream])
+    // Appel vocal : le flux distant est joué par un <audio> dédié (aucun <video> n'est rendu)
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream
+      const savedOut = localStorage.getItem('fc_audio_output')
+      if (savedOut && 'setSinkId' in remoteAudioRef.current) {
+        (remoteAudioRef.current as any).setSinkId(savedOut).catch(() => {})
+      }
+    }
+  }, [remoteStream, callType, callState])
 
   const { data: messages = [], isError: dmMessagesError, refetch: refetchDmMessages } = useQuery({
     queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
@@ -561,6 +570,7 @@ export default function DMPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
+              <audio ref={remoteAudioRef} autoPlay />
               <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
                 {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>

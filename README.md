@@ -144,7 +144,9 @@ npm install && npm run dev
 | `SMTP_HOST` | Serveur SMTP |
 | `SMTP_USER` | Email expéditeur |
 | `SMTP_PASSWORD` | Mot de passe SMTP |
-| `TURN_SECRET` | Secret TURN WebRTC |
+| `TURN_URL` | URL du serveur TURN WebRTC (ex: `turn:forgechat.heiphaistos.org:3478`) — sans TURN, les appels échouent entre réseaux à NAT strict |
+| `TURN_USERNAME` | Utilisateur TURN |
+| `TURN_PASSWORD` | Mot de passe TURN |
 
 ---
 

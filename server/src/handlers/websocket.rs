@@ -349,6 +349,18 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
     }
 }
 
+/// Vérifie qu'un canal DM existe entre deux utilisateurs (autorisation des événements d'appel).
+async fn users_share_dm(state: &AppState, a: Uuid, b: Uuid) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+            SELECT 1 FROM dm_channels
+            WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1)
+        )"
+    )
+    .bind(a).bind(b)
+    .fetch_one(&state.db).await.unwrap_or(false)
+}
+
 async fn broadcast_to_all(state: &AppState, exclude: Uuid, event: String) {
     let clients = state.clients.read().await;
     for (uid, tx) in clients.iter() {
@@ -923,12 +935,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 if count > 3 { return; }
             }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
-            let has_dm = sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1))"
-            )
-            .bind(user_id).bind(to)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !has_dm { return; }
+            if !users_share_dm(state, user_id, to).await { return; }
             // Vérifier que le destinataire n'a pas bloqué l'appelant
             let is_blocked: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
@@ -959,6 +966,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            if !users_share_dm(state, user_id, to).await { return; }
             let event = serde_json::json!({
                 "type": "DM_CALL_ACCEPTED",
                 "from": user_id,
@@ -971,6 +979,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            if !users_share_dm(state, user_id, to).await { return; }
             let event = serde_json::json!({
                 "type": "DM_CALL_DECLINED",
                 "from": user_id,
@@ -983,6 +992,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
+            if !users_share_dm(state, user_id, to).await { return; }
             let event = serde_json::json!({
                 "type": "DM_CALL_ENDED",
                 "from": user_id,

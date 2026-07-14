@@ -528,6 +528,14 @@ function AppInner() {
     return () => { offIncoming(); offEnded(); offDeclined(); offCallError() }
   }, [user?.id, playRing])
 
+  // Expiration du modal d'appel entrant si l'appelant a disparu sans envoyer HANGUP
+  // (crash, perte réseau) — aligné sur le timeout appelant de 45s + marge
+  useEffect(() => {
+    if (!incomingCall) return
+    const t = setTimeout(() => setIncomingCall(null), 50_000)
+    return () => clearTimeout(t)
+  }, [incomingCall, setIncomingCall])
+
   // Notifications push pour les messages privés
   useEffect(() => {
     if (!user) return

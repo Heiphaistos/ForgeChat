@@ -216,6 +216,10 @@ async function _createPC(
 
   pc.ontrack = (e) => {
     const stream = e.streams[0] ?? new MediaStream([e.track])
+    // Respecter le deafen actif : couper l'audio des flux arrivés après activation
+    if (get().deafened) {
+      stream.getAudioTracks().forEach(t => { t.enabled = false })
+    }
     set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, stream } : p) }))
   }
 
@@ -536,6 +540,9 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
     const offSignal = ws.on('VOICE_SIGNAL', async (d: any) => {
       const { from, payload } = d
+      // Ignorer les signaux d'appel DM (format payload.sdp/candidate) — seul le format
+      // vocal de serveur (payload.data) concerne ce store
+      if (!payload || payload.data === undefined) return
       // Si on reçoit une offer pour un peer inconnu, créer le PC
       if (payload.type === 'offer' && !_pcs.has(from)) {
         await _createPC(from, { username: from }, get, set)

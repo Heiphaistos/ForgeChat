@@ -31,6 +31,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
   const [micMuted, setMicMuted] = useState(false)
   const [camOff, setCamOff] = useState(false)
   const pcRef = useRef<RTCPeerConnection | null>(null)
+  const pcPeerRef = useRef<string | null>(null)
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([])
   const callTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const callStateRef = useRef<CallState>('idle')
@@ -44,6 +45,7 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
     }
     pcRef.current?.close()
     pcRef.current = null
+    pcPeerRef.current = null
     setLocalStream(prev => {
       prev?.getTracks().forEach(t => t.stop())
       return null
@@ -71,15 +73,28 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) cleanup()
     }
     pcRef.current = pc
+    pcPeerRef.current = pid
     return pc
   }, [send, cleanup])
+
+  // getUserMedia avec repli audio seul si la caméra est indisponible
+  const getCallMedia = useCallback(async (type: 'voice' | 'video'): Promise<MediaStream> => {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+    } catch (err) {
+      if (type !== 'video') throw err
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      toast('Caméra indisponible — appel en audio seul', { icon: '🎤', duration: 4000 })
+      return stream
+    }
+  }, [])
 
   // Initiate outgoing call
   const startCall = useCallback(async (type: 'voice' | 'video') => {
     if (!partnerId || !dmId) return
     setCallType(type)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+      const stream = await getCallMedia(type)
       setLocalStream(stream)
       const pc = await buildPc(partnerId)
       stream.getTracks().forEach(t => pc.addTrack(t, stream))
@@ -95,22 +110,25 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       cleanup()
       throw new Error('Accès micro/caméra refusé')
     }
-  }, [partnerId, dmId, buildPc, send, cleanup])
+  }, [partnerId, dmId, buildPc, send, cleanup, getCallMedia])
 
   // Accept incoming call (partner accepts, they are the callee)
   const acceptCall = useCallback(async (fromUserId: string, type: 'voice' | 'video') => {
     setCallType(type)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+      const stream = await getCallMedia(type)
       setLocalStream(stream)
       const pc = await buildPc(fromUserId)
       stream.getTracks().forEach(t => pc.addTrack(t, stream))
       if (dmId) send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
       setCallState('ringing')
     } catch {
+      // Micro inaccessible : décliner proprement pour que l'appelant ne sonne pas dans le vide
+      if (dmId) send({ type: 'DM_CALL_DECLINE', to: fromUserId, dm_id: dmId })
+      toast.error('Impossible d\'accéder au microphone — appel refusé')
       cleanup()
     }
-  }, [dmId, buildPc, send, cleanup])
+  }, [dmId, buildPc, send, cleanup, getCallMedia])
 
   const declineCall = useCallback((fromUserId: string) => {
     if (dmId) send({ type: 'DM_CALL_DECLINE', to: fromUserId, dm_id: dmId })
@@ -146,6 +164,11 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
       if (!pc) return
       const payload = d.payload
       if (!payload?.type) return
+      // Ignorer les signaux du vocal de serveur (format payload.data) — seul le format DM
+      // (payload.sdp / payload.candidate) concerne ce hook
+      if (payload.data !== undefined && payload.sdp === undefined && payload.candidate === undefined) return
+      // Ignorer les signaux d'un autre utilisateur que le pair de l'appel en cours
+      if (d.from && pcPeerRef.current && String(d.from) !== pcPeerRef.current) return
 
       try {
         if (payload.type === 'offer') {
