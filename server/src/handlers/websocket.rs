@@ -927,7 +927,9 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            // Rate limit : max 3 appels par minute par paire d'utilisateurs
+            // Rate limit : max 5 appels par minute par paire d'utilisateurs.
+            // IMPORTANT : répondre DM_CALL_ERROR, jamais un drop muet — l'appelant
+            // sonnerait dans le vide sans aucun feedback (flaky E2E du 2026-07-14).
             {
                 use redis::AsyncCommands;
                 let rate_key = format!("call_rate:{}:{}", user_id, to);
@@ -936,7 +938,15 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 if count == 1 {
                     let _: () = redis.expire(&rate_key, 60).await.unwrap_or(());
                 }
-                if count > 3 { return; }
+                if count > 5 {
+                    let err = serde_json::json!({
+                        "type": "DM_CALL_ERROR",
+                        "reason": "rate_limited",
+                        "dm_id": msg["dm_id"],
+                    });
+                    state.broadcast_to_user(user_id, err.to_string()).await;
+                    return;
+                }
             }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
             if !users_share_dm(state, user_id, to).await { return; }

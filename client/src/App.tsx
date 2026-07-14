@@ -547,6 +547,8 @@ function AppInner() {
     const offCallError = on('DM_CALL_ERROR', (d: any) => {
       if (d.reason === 'offline') {
         toast('Votre contact est hors ligne', { icon: '📵', duration: 4000 })
+      } else if (d.reason === 'rate_limited') {
+        toast('Trop d\'appels rapprochés — réessaie dans une minute', { icon: '⏳', duration: 5000 })
       }
     })
     return () => { offIncoming(); offEnded(); offDeclined(); offCallError() }
