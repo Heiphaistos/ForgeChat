@@ -1,6 +1,6 @@
 # ForgeChat
 
-> Clone Discord self-hosted — messagerie temps réel complète avec serveurs, channels, DM, WebRTC vocal/vidéo, réactions, sondages, fils de discussion et bots.
+> Application dans le style de discord — messagerie temps réel complète avec serveurs, channels, DM, WebRTC vocal/vidéo, réactions, sondages, fils de discussion et bots.
 
 [![Server](https://img.shields.io/badge/Backend-Rust%20%2B%20axum%20v2.4-orange)](#)
 [![Client](https://img.shields.io/badge/Frontend-React%2018%20%2B%20TypeScript%20v3.2-blue)](#)
