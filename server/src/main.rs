@@ -162,7 +162,12 @@ async fn main() -> anyhow::Result<()> {
     let mut allowed_origins = vec![
         config.frontend_url.parse::<HeaderValue>()?,
     ];
-    for origin in &["tauri://localhost", "https://tauri.localhost"] {
+    // Tauri v2 : origine http://tauri.localhost sur Windows (schéma https/custom sur macOS/Linux)
+    for origin in &[
+        "tauri://localhost",
+        "https://tauri.localhost",
+        "http://tauri.localhost",
+    ] {
         if let Ok(v) = origin.parse::<HeaderValue>() {
             allowed_origins.push(v);
         }
