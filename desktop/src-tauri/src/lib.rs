@@ -6,12 +6,17 @@ use tauri::{
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Enable WebRTC, camera and microphone access in WebView2
-    std::env::set_var(
-        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--use-fake-ui-for-media-stream=false \
+    // WebRTC dans WebView2 : accorde micro/caméra/écran sans prompt de permission
+    // (--use-fake-ui-for-media-stream auto-accepte le prompt ; les périphériques restent réels)
+    let mut browser_args = String::from(
+        "--use-fake-ui-for-media-stream \
          --enable-features=WebRTC-H264WithOpenH264FFmpeg",
     );
+    // Harnais de test (VM sans micro/caméra) : périphériques média factices
+    if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
+        browser_args.push_str(" --use-fake-device-for-media-stream");
+    }
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
