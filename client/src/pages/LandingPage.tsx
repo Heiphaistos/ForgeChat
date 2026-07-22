@@ -5,7 +5,7 @@ import {
   ChevronRight, Lock, Mic, Monitor, Check,
 } from 'lucide-react'
 
-const RELEASE = 'v3.8.1'
+const RELEASE = 'v3.8.2'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
 const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${RELEASE}.exe`
 const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${RELEASE}.exe`
