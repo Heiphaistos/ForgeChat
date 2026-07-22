@@ -1,6 +1,16 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code, 1/2 sans trouvaille) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+## Statut : ACTIVE (code, compteur remis à 0) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+
+**Itération 17 (2026-07-22 16:26, commit 9d68796, server 3.170.0)** : dernière chance
+avant arrêt auto (it.16 = 1/2 sans trouvaille) -> BUG RÉEL trouvé dans tickets.rs
+update_ticket. Gate d'ownership "créateur OU MANAGE_SERVER" couvrait toute la fonction
+sans re-vérifier pour les champs assigned_to/priority spécifiquement -- un créateur de
+ticket normal (non-mod) pouvait assigner son ticket à n'importe quel membre ou
+s'auto-escalader en urgent. Fix : check MANAGE_SERVER supplémentaire ciblé sur ces 2
+champs si le requérant n'est que créateur. status reste éditable par le créateur seul
+(légitime). Compteur "itérations sans trouvaille" remis à 0. events.rs audité en
+passant (race RSVP bénigne, pas touchée).
 
 **Itération 16 (2026-07-22 16:03) : AUCUNE trouvaille sûre malgré recherche étendue.**
 grep mojibake élargi (autres signatures Windows-1252, NBSP isolé) sur tout le repo ->
