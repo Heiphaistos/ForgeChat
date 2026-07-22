@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::{require_member, require_channel_in_server, require_member_and_channel};
+use super::servers::require_member_and_channel;
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct Thread {

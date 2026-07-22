@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, handlers::servers::{require_member, require_channel_in_server, require_member_and_channel}, middleware::auth::Claims, state::AppState};
+use crate::{error::AppError, handlers::servers::require_member_and_channel, middleware::auth::Claims, state::AppState};
 
 #[derive(Deserialize)]
 pub struct SaveMessageBody {

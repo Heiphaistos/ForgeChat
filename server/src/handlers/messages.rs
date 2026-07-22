@@ -9,7 +9,7 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_channel_in_server, require_member_and_channel, require_permission, require_permission_and_channel},
+    handlers::servers::{require_member, require_member_and_channel, require_permission, require_permission_and_channel},
     models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
