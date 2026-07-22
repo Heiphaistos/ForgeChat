@@ -2,6 +2,22 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
 
+**Itération 13 (2026-07-22 14:50, commit ed4a725, server 3.168.0)** : dernière trouvaille
+de la veine `let _ =`/`.ok()` sur audit_log — `channels.rs:612` (PURGE_MESSAGES,
+suppression en masse) insérait dans audit_log en inline en contournant le helper
+log_event() corrigé it.11, même `.ok()` silencieux. Fixé (tracing::error!). Audité et
+laissé tel quel : call_history.rs (best-effort, log d'affichage, la vraie
+signalisation d'appel n'en dépend pas) et scheduled.rs last_message_id (déjà protégé
+par transaction pour la partie critique). **VEINE `let _ =`/`.ok()` SERVEUR MAINTENANT
+ÉPUISÉE** — tous les sites du fichier ont été revus sur 3 itérations (11, 12, 13) :
+websocket.rs (presence/tx.send, benins), users.rs/friends.rs/emojis.rs/stickers.rs
+(cleanup fichiers, benins), main.rs (2 tâches idempotentes laissées, 1 fixée). Prochaine
+itération : NE PAS re-grep ce pattern, pivoter vers une autre piste GOAL.md (a11y,
+IDOR/ownership sur endpoints récents, robustesse frontend, ou nouvelle relecture ciblée
+d'un fichier pas encore audité).
+
+## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
+
 **Itération 12 (2026-07-22 14:27, commit ea82420, server 3.167.0)** : suite de l'audit
 `let _ =` serveur commencé it.11 (feeds.rs, main.rs). 2 vrais bugs même famille que
 group_dms (it.11) : échec UPDATE silencieux -> spam de doublons en boucle. (1)
