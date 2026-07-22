@@ -468,7 +468,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         </div>
 
         {/* View mode switcher — masqué sur mobile */}
-        <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1">
+        <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1" role="group" aria-label="Disposition d'affichage">
           {([
             { mode: 'grid' as ViewMode, icon: <Grid2x2 size={14} />, label: 'Grille' },
             { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'Spotlight' },
@@ -481,6 +481,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               key={mode}
               onClick={() => setViewMode(mode)}
               title={label}
+              aria-label={label}
+              aria-pressed={viewMode === mode}
               className={`p-1.5 rounded transition ${viewMode === mode ? 'bg-fc-accent text-white' : 'text-fc-muted hover:text-white'}`}
             >
               {icon}
