@@ -6,30 +6,30 @@ CYCLE 11 (demande explicite Momo) entièrement traité : 6 layouts, noise gate, 
 simultanés, mix audio système. Bascule maintenant en loop d'amélioration continue nocturne
 (voir GOAL.md) — Momo est en veille, pas de supervision jusqu'à demain.
 
-Prochaine action : itération 5 de la loop nocturne — choisir UNE piste dans GOAL.md
+Prochaine action : itération 6 de la loop nocturne — choisir UNE piste dans GOAL.md
 ("Pistes candidates"), l'implémenter, vérifier, déployer (push suffit, CI Forgejo auto-déploie),
 checkpoint, ScheduleWakeup suivant.
 
 Itération CYCLE 11 : terminée (3/3 features + 1 fix limitation + 2 bugfix latents)
-Itération loop nocturne : 4/8
+Itération loop nocturne : 5/8
   - it.1 : a11y switcher de disposition (commit 4b5055c, déployé confirmé)
   - it.2 : bug réel — mix audio non propagé aux peers rejoignant en cours de partage (commit 062f612, déployé confirmé)
   - it.3 : bug réel — mark_all_read (server) ignorait les échecs DB, renvoyait faux succès (commit f41549f, déployé confirmé, conteneur server rebuild+healthy)
   - it.4 : nettoyage — 7 imports inutilisés retirés (cargo fix), cargo check 0 warning (commit f211f3e, déployé confirmé, conteneur server rebuild+healthy)
+  - it.5 : a11y Whiteboard (dialog role, 5 boutons outils, Escape) + Soundboard (bouton fermer, slider volume) (commit e895ea8, déployé confirmé)
 
 Note déploiement serveur : un changement server/ déclenche un vrai rebuild Docker (cargo build),
 ~1-2 min, contrairement au client (quasi instantané). Pour confirmer sans deviner : capturer
 `docker compose ps -q server` AVANT push, puis poller après jusqu'à ce que l'ID change (nouveau
 conteneur) + health=healthy. Utiliser Bash run_in_background DIRECTEMENT sur la boucle de poll
-(pas de nohup+& imbriqué — un nohup lancé puis backgroundé DANS un wrapper bash perd le tracking
-du harness, le wrapper se termine instantanément et plus aucune notification n'arrive).
+(pas de nohup+& imbriqué). Pour un changement CLIENT seul, `git rev-parse --short HEAD` sur le
+VPS suffit tout de suite (pas de rebuild Docker, juste npm ci+build côté CI).
 
-Pistes restantes non explorées : bugs UX voix/vidéo supplémentaires (glare WebRTC edge cases),
-perf re-renders MessageList/VoiceVideoPage (mémoisation manquante), audit accessibilité plus
-large (autres pages que voix/vidéo). Attention : cargo check est maintenant à 0 warning et les
-3 bugs réels trouvés (it.2/it.3) étaient tous liés au CYCLE 11 lui-même (code neuf) — les
-itérations suivantes risquent de rapporter moins de trouvailles ; si 2 itérations de suite ne
-trouvent rien de sûr à corriger, s'arrêter par GOAL.md.
+Pistes restantes : encore d'autres modales/panneaux à auditer pour l'a11y (KeyboardShortcutsModal,
+CommandPalette, StickerPicker, GifPicker — mêmes patterns probables : bouton fermer icône-seule,
+pas de focus trap). Perf MessageList (1562 lignes, composant monolithique) explicitement écarté
+cette nuit — trop risqué sans supervision, à proposer à Momo pour une session dédiée avec plan.
+Rappel : si itération 6 OU 7 ne trouve rien de sûr, s'arrêter par GOAL.md plutôt que de forcer.
 
 Contexte minimal pour reprendre à froid :
 - Repo : C:\Users\Momo\ForgeChat (client React/Vite/TS, server Rust/Axum, VPS 212.227.140.45)
