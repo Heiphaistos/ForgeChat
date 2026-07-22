@@ -4,7 +4,11 @@ use serde_json::json;
 pub async fn check_update(
     Path((_target, _arch, version)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    let latest_version = "3.2.0";
+    // NB: v3.7.0 a été buildée (release GitHub) mais jamais copiée sur
+    // /opt/forgechat/downloads/ (étape scp manuelle documentée non faite) --
+    // pointer vers la version réellement téléchargeable publiquement, pas
+    // la dernière buildée, sinon l'updater renvoie un lien mort.
+    let latest_version = "3.6.0";
 
     // Retourner null si déjà à jour (format attendu par Tauri updater)
     if version == latest_version {
