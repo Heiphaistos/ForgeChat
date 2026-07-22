@@ -1,15 +1,23 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE — itération 8 faite (bug réel trouvé+fixé), en attente d'itération 9
+## Statut : ACTIVE — itérations 8+9 faites, en attente d'itération 10
 
-**Itération 8 (2026-07-22 13:10)** : spot-check du refactor MessageList->MessageRow
-(b44fd8d) toujours NON CONFIRMÉ par Momo — pas de retour dans cette session ni trace
-en mémoire globale. Ne PAS supposer cassé faute de réponse, juste non validé. Relecture
-fraîche du refactor -> bug réel de mémoïsation trouvé (voir LESSONS.md, entrée React.memo) :
-onReply/onOpenThread/onPinMessage/onAddReaction/onEditMessage arrivaient de ChannelPage en
-fonctions inline instables, cassant React.memo(MessageRow) pour toute la liste à chaque tick
-(countdown slowmode, typing). Fixé dans MessageList.tsx (pattern ref + wrappers stables),
-tsc/eslint/build/cargo check tous clean. client 3.511.0 -> 3.512.0, commit à pousser.
+**Itération 8 (2026-07-22 13:10, commit 6273451, client 3.512.0)** : spot-check du
+refactor MessageList->MessageRow (b44fd8d) toujours NON CONFIRMÉ par Momo — pas de
+retour dans cette session ni trace en mémoire globale. Ne PAS supposer cassé faute de
+réponse, juste non validé. Relecture fraîche du refactor -> bug réel de mémoïsation
+trouvé (voir LESSONS.md, entrée React.memo) : onReply/onOpenThread/onPinMessage/
+onAddReaction/onEditMessage arrivaient de ChannelPage en fonctions inline instables,
+cassant React.memo(MessageRow) pour toute la liste à chaque tick (countdown slowmode,
+typing). Fixé dans MessageList.tsx (pattern ref + wrappers stables). Déployé + vérifié
+prod (version.json 3.512.0, VPS HEAD).
+
+**Itération 9 (2026-07-22 13:25, commit eeb7bfd)** : push it.8 a révélé une alerte
+GitHub Dependabot HIGH ouverte (#9, brace-expansion <1.1.16, DoS exponentiel, CWE-400/407)
+— transitive via eslint->minimatch@3.1.5, scope development seul (pas dans le bundle
+runtime, mais checklist CLAUDE.md exige 0 vuln). `npm audit fix` -> brace-expansion
+1.1.16, 0 vulnérabilité. tsc/eslint/build clean. Déployé + vérifié prod (version.json
+3.512.0 inchangé côté client fonctionnel, HEAD VPS = eeb7bfd, /health 200).
 
 ## Statut précédent : ACTIVE — Momo présent a demandé un refactor perf hors-loop (traité), puis
 "enregistre en mémoire, clear, reprends la loop" (2026-07-22, après-midi)
