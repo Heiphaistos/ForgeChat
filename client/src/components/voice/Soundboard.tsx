@@ -237,9 +237,10 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
         </div>
         <button
           onClick={onClose}
+          aria-label="Fermer le soundboard"
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
         >
-          <X size={14} />
+          <X size={14} aria-hidden />
         </button>
       </div>
 
@@ -252,6 +253,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
           max={100}
           value={volume}
           onChange={e => handleVolumeChange(Number(e.target.value))}
+          aria-label="Volume du soundboard"
           className="flex-1 h-1 accent-fc-accent cursor-pointer"
         />
         <span className="text-[10px] text-fc-muted w-8 text-right">{volume}%</span>

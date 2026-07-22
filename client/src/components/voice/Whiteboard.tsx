@@ -62,6 +62,12 @@ export default function Whiteboard({ channelId, onClose }: Props) {
   }, [])
 
   useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  useEffect(() => {
     const off = on('WHITEBOARD_DRAW', (d: unknown) => {
       const data = d as DrawEvent
       if (data.channel_id !== channelId) return
@@ -140,11 +146,15 @@ export default function Whiteboard({ channelId, onClose }: Props) {
     a.click()
   }
 
+  const toolLabels: Record<Tool, string> = {
+    pen: 'Crayon', eraser: 'Gomme', line: 'Ligne', rect: 'Rectangle', circle: 'Cercle',
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col" role="dialog" aria-modal="true" aria-label="Tableau blanc">
       <div className="flex items-center gap-3 px-4 py-2 bg-fc-sidebar border-b border-fc-hover">
         <span className="text-white font-semibold text-sm">Tableau blanc</span>
-        <div className="flex items-center gap-1 flex-1">
+        <div className="flex items-center gap-1 flex-1" role="group" aria-label="Outils de dessin">
           {([
             ['pen', <Pencil size={14} />],
             ['eraser', <Eraser size={14} />],
@@ -155,6 +165,9 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             <button
               key={t}
               onClick={() => setTool(t)}
+              title={toolLabels[t]}
+              aria-label={toolLabels[t]}
+              aria-pressed={tool === t}
               className={`p-1.5 rounded ${tool === t ? 'bg-fc-accent text-white' : 'text-fc-muted hover:bg-fc-hover'}`}
             >
               {icon}
@@ -164,6 +177,7 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             type="color"
             value={color}
             onChange={e => setColor(e.target.value)}
+            aria-label="Couleur du trait"
             className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent"
           />
           <input
@@ -172,6 +186,7 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             max={20}
             value={size}
             onChange={e => setSize(+e.target.value)}
+            aria-label="Épaisseur du trait"
             className="w-20"
           />
           <button onClick={clear} aria-label="Effacer le tableau" className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-red hover:bg-fc-red/10 rounded">
