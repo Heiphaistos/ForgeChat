@@ -1,3 +1,5 @@
 # LESSONS
 
-(vide — cycle 11 démarre)
+- Déploiement client ForgeChat : `scp -r dist/* vps:.../dist/` n'efface PAS les anciens chunks hashés (pas de --delete comme rsync, indisponible dans ce shell). Toujours `rm -rf dist/assets/*` sur le VPS avant re-copie, sinon accumulation infinie de bundles obsolètes (30+ fichiers fantômes trouvés ce cycle).
+- WebRTC : un sender vidéo désactivé via `replaceTrack(null)` a `sender.track === null` ensuite — un `find(s => s.track?.kind === 'video')` ne le retrouve JAMAIS (kind d'un track null = undefined). Toujours prévoir un fallback `track === null` dans la recherche de sender à réutiliser, sinon chaque cycle off/on crée un nouveau sender (accumulation silencieuse de m-lines).
+- Pour distinguer 2 pistes vidéo du même type (caméra vs écran) sans signalisation applicative supplémentaire : leur donner un `stream` (2e argument de `pc.addTrack`) différent à l'émission — le récepteur reçoit alors des `e.streams[0]` avec des `id` (msid) différents dans `ontrack`, suffisant pour les trier.

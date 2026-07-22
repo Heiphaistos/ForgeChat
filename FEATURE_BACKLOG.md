@@ -75,8 +75,8 @@
 - [x] 🔴 Frontend — Caméra + partage d'écran simultanés (2 senders vidéo distincts, msid séparé) — voice.ts shareScreen/stopScreenShare/_createPC/ontrack réécrits ; VoicePeer.screenStream + Tile system (allTiles) dans VoiceVideoPage.tsx, ScreenTile component ; toutes les 6 dispositions affichent caméra+écran séparément
 - [x] 🟠 Bugfix — VoiceBar.tsx cachait l'icône caméra pendant le partage d'écran (`videoEnabled && !screenSharing`) — plus pertinent, caméra indépendante désormais
 - [x] 🟡 Bugfix latent — toggleVideo() re-créait un 2e sender vidéo à chaque cycle off/on (le sender existant avait `track:null` après disable, jamais retrouvé) — camSender() cherche aussi `track === null`
-- [ ] 🟠 Frontend — Partage écran/app robuste (n'importe quelle fenêtre) — vérifié via getDisplayMedia existant, pas de changement supplémentaire nécessaire ce cycle
-- [ ] 🟡 Connu/limité — audio système du partage d'écran remplace toujours le micro (pas de mix) — hors scope, cycle suivant si demandé
+- [x] 🟠 Frontend — Partage écran/app robuste (n'importe quelle fenêtre) — vérifié via getDisplayMedia existant, pas de changement supplémentaire nécessaire ce cycle
+- [x] 🟡 Audio système du partage d'écran mixé au micro (Web Audio, 2 MediaStreamAudioSourceNode → 1 MediaStreamAudioDestinationNode) au lieu de remplacer/perdre le micro — voice.ts _mixSystemAudioWithMic/_pushMicTrackToSenders, robuste au toggle NS pendant un partage
 
 ## Déjà implémenté (ne pas redéployer)
 

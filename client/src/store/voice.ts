@@ -92,7 +92,10 @@ let _rawAudioTrack: MediaStreamTrack | null = null  // piste audio brute (avant 
 let _processedStream: MediaStream | null = null     // stream après traitement noise suppression
 let _noiseAudioCtx: AudioContext | null = null       // AudioContext dédié noise suppression
 let _screenTrack: MediaStreamTrack | null = null
+let _screenAudioTrack: MediaStreamTrack | null = null // audio système capturé pendant le partage (mixé au micro)
 let _localScreenStream: MediaStream | null = null
+let _micMixCtx: AudioContext | null = null
+let _micTrackBeforeMix: MediaStreamTrack | null = null // piste micro à restaurer sur le sender après le partage
 // Stream dédié (sans piste locale) utilisé uniquement pour donner à la piste écran un
 // msid distinct de _localStream — permet au récepteur de séparer caméra vs écran sans
 // signalisation additionnelle (cf. _createPC/ontrack : 1er stream vu = groupe caméra,
@@ -228,6 +231,47 @@ function _cleanupNoiseSuppression() {
     _noiseAudioCtx = null
   }
   _processedStream = null
+}
+
+// ── Mixage audio système + micro pendant le partage d'écran ──────────────────
+// Un seul sender audio existe par PC (le micro) — on y remplace la piste par ce
+// mix plutôt que d'ouvrir un 2e sender, pour rester compatible avec le reste du
+// code qui suppose un seul flux audio par peer.
+function _mixSystemAudioWithMic(systemTrack: MediaStreamTrack, micTrack: MediaStreamTrack): MediaStreamTrack {
+  try {
+    if (!_micMixCtx || _micMixCtx.state === 'closed') _micMixCtx = new AudioContext()
+    const ctx = _micMixCtx
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+    const dest = ctx.createMediaStreamDestination()
+    ctx.createMediaStreamSource(new MediaStream([micTrack])).connect(dest)
+    ctx.createMediaStreamSource(new MediaStream([systemTrack])).connect(dest)
+    return dest.stream.getAudioTracks()[0]
+  } catch (e) {
+    _warn('mixage audio système+micro', e)
+    return micTrack
+  }
+}
+
+function _cleanupMicMix() {
+  if (_micMixCtx && _micMixCtx.state !== 'closed') {
+    _micMixCtx.close()
+    _micMixCtx = null
+  }
+}
+
+// Pousse une piste micro (brute ou traitée NS) vers tous les senders audio — si un
+// partage d'écran avec audio système est en cours, re-mixe d'abord avec cette
+// nouvelle piste au lieu d'écraser le mix (cf. toggle NS pendant un partage).
+function _pushMicTrackToSenders(micTrack: MediaStreamTrack) {
+  let outTrack = micTrack
+  if (_screenAudioTrack) {
+    _micTrackBeforeMix = micTrack
+    outTrack = _mixSystemAudioWithMic(_screenAudioTrack, micTrack)
+  }
+  _pcs.forEach(async (pc) => {
+    const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
+    if (sender) try { await sender.replaceTrack(outTrack) } catch (e) { _warn('mise à jour piste audio', e) }
+  })
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -704,6 +748,10 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _rawAudioTrack = null
     _screenTrack?.stop()
     _screenTrack = null
+    _screenAudioTrack?.stop()
+    _screenAudioTrack = null
+    _micTrackBeforeMix = null
+    _cleanupMicMix()
     _localScreenStream = null
     _localScreenGroupStream = null
 
@@ -806,10 +854,20 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
       const svt = screenStream.getVideoTracks()[0]
       _screenTrack = svt
-      // Audio système capturé mais non envoyé (mixage avec le micro non géré ce cycle) —
-      // arrêter la piste pour ne pas laisser une capture audio active inutilement
-      screenStream.getAudioTracks().forEach((t: MediaStreamTrack) => t.stop())
       if (!_localScreenGroupStream) _localScreenGroupStream = new MediaStream()
+
+      // Audio système capturé (ex: onglet avec du son) — mixé au micro sur le même
+      // sender audio, le micro n'est plus jamais coupé pendant un partage avec son
+      const sat = screenStream.getAudioTracks()[0]
+      if (sat) {
+        const micTrack = _localStream.getAudioTracks()[0]
+        if (micTrack) {
+          _screenAudioTrack = sat
+          _pushMicTrackToSenders(micTrack)
+        } else {
+          sat.stop()
+        }
+      }
 
       // Ajouter/remplacer la piste écran dans tous les PC — sender dédié, séparé de la caméra
       for (const [peerId, pc] of _pcs) {
@@ -845,6 +903,19 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _screenTrack?.stop()
     _screenTrack = null
     _localScreenStream = null
+
+    // Restaurer le micro seul sur le sender audio (retire le mix avec l'audio système)
+    _screenAudioTrack?.stop()
+    _screenAudioTrack = null
+    if (_micTrackBeforeMix) {
+      const micTrack = _micTrackBeforeMix
+      _micTrackBeforeMix = null
+      for (const [, pc] of _pcs) {
+        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
+        if (audioSender) try { await audioSender.replaceTrack(micTrack) } catch (e) { _warn('restauration micro post-partage', e) }
+      }
+      _cleanupMicMix()
+    }
 
     for (const [peerId, pc] of _pcs) {
       const sender = _screenSenders.get(peerId)
@@ -933,22 +1004,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       _localStream = processed
       // Remplacer la piste audio dans tous les PC existants
       const audioTrack = processed.getAudioTracks()[0]
-      if (audioTrack) {
-        _pcs.forEach(async (pc) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
-          if (sender) try { await sender.replaceTrack(audioTrack) } catch {}
-        })
-      }
+      if (audioTrack) _pushMicTrackToSenders(audioTrack)
       set(() => ({ localStream: new MediaStream(processed.getTracks()) }))
     } else if (!enabled && _noiseGain) {
       // Désactiver : revenir à la piste audio BRUTE (pas la piste du stream traité)
       const rawTrack = _rawAudioTrack
-      if (rawTrack) {
-        _pcs.forEach(async (pc) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
-          if (sender) try { await sender.replaceTrack(rawTrack) } catch {}
-        })
-      }
+      if (rawTrack) _pushMicTrackToSenders(rawTrack)
       const videoTracks = _localStream?.getVideoTracks() ?? []
       _cleanupNoiseSuppression()
       // Reconstruire le stream local avec la piste brute + pistes vidéo originales
