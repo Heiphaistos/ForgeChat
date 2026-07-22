@@ -1,6 +1,21 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code) / DÉPLOIEMENT CONFIRMÉ CASSÉ depuis it.9 — Momo doit investiguer
+## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
+
+**Itération 12 (2026-07-22 14:27, commit ea82420, server 3.167.0)** : suite de l'audit
+`let _ =` serveur commencé it.11 (feeds.rs, main.rs). 2 vrais bugs même famille que
+group_dms (it.11) : échec UPDATE silencieux -> spam de doublons en boucle. (1)
+feeds.rs process_feed : UPDATE last_item_guid avalé -> item RSS re-posté en boucle
+toutes les 5min si l'update échoue une fois ; propagé via `?` (fonction retourne déjà
+anyhow::Result, l'appelant logue déjà). (2) main.rs tâche rappels : UPDATE sent=TRUE
+avalé -> rappel rebroadcasté à CHAQUE tick (30s) indéfiniment ; pas de Result ici
+(boucle tokio::spawn nue), loggé via tracing::error! à la place. Les 2 autres tâches
+main.rs (unban, cleanup éphémères) vérifiées idempotentes, laissées telles quelles.
+cargo check clean. Poussé (déploiement toujours bloqué côté VPS, pas re-vérifié ce
+tour — pas de nouvelle info depuis it.11, pas de valeur à re-poller sans action de
+Momo entre-temps).
+
+## Statut précédent : ACTIVE (code) / DÉPLOIEMENT CONFIRMÉ CASSÉ depuis it.9 — Momo doit investiguer
 
 **Preuve définitive (itération 11, 2026-07-22 14:05)** : commit 4deeb49 touche le
 SERVEUR (server/src/handlers/*.rs) — un rebuild Docker/cargo est donc obligatoire,
