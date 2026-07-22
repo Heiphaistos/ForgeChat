@@ -67,14 +67,18 @@ pub async fn create_group_dm(
 
     let allowed: Vec<Uuid> = members.iter().filter(|u| !blockers.contains(u)).copied().collect();
     if !allowed.is_empty() {
-        let _ = sqlx::query(
+        // Propager l'échec (comme les inserts group/creator juste au-dessus) : avaler
+        // silencieusement laissait la requête renvoyer 200 + broadcaster GROUP_DM_CREATE
+        // à des membres jamais réellement insérés dans group_dm_members -- groupe fantôme
+        // que le créateur croit créé avec succès mais où les autres n'ont jamais accès.
+        sqlx::query(
             "INSERT INTO group_dm_members (dm_id, user_id)
              SELECT $1, UNNEST($2::uuid[]) ON CONFLICT DO NOTHING"
         )
         .bind(group_id)
         .bind(&allowed)
         .execute(&state.db)
-        .await;
+        .await?;
     }
 
     // Notifier tous les membres de la création du groupe

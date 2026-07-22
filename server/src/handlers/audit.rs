@@ -80,7 +80,7 @@ pub async fn log_event(
     target_name: Option<&str>,
     details: Option<serde_json::Value>,
 ) {
-    let _ = sqlx::query(
+    let result = sqlx::query(
         "INSERT INTO audit_log (server_id, action, user_id, username, target_id, target_name, details)
          VALUES ($1,$2,$3,$4,$5,$6,$7)"
     )
@@ -93,6 +93,12 @@ pub async fn log_event(
     .bind(details)
     .execute(&state.db)
     .await;
+    // Fire-and-forget pour les appelants (log d'audit, pas critique pour la requête en
+    // cours) mais une perte silencieuse ici est un vrai trou de traçabilité — au moins
+    // la faire apparaître dans les logs serveur au lieu de disparaître sans trace.
+    if let Err(e) = result {
+        tracing::error!("Échec écriture audit_log (server={}, action={}): {}", server_id, action, e);
+    }
 }
 
 // AutoMod
