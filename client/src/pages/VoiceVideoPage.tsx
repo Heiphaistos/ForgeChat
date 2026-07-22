@@ -569,15 +569,20 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           const screenTile = allTiles.find(t => t.kind === 'screen')
           const activeSpeakerTile = allTiles.find(t => t.kind === 'camera' && !t.peer.isLocal && (speakingMap[t.peer.userId] ?? 0) > 0.05)
           const focusTile = screenTile ?? activeSpeakerTile ?? spotlightTile
+          // PiP : d'abord la caméra du MÊME pair que la cible du focus (ex: A partage écran+caméra,
+          // le focus prend l'écran de A — sans ça la caméra de A disparaissait entièrement, elle
+          // n'était affichée nulle part). Sinon repli sur sa propre caméra locale pour se voir.
+          const companionCamTile = allTiles.find(t => t.kind === 'camera' && t.peer.userId === focusTile.peer.userId && t.key !== focusTile.key)
           const localCamTile = allTiles.find(t => t.kind === 'camera' && t.peer.isLocal)
+          const pipTile = companionCamTile ?? (localCamTile && localCamTile.key !== focusTile.key ? localCamTile : undefined)
           return (
             <div className="relative h-full p-3">
               <div className="w-full h-full rounded-xl overflow-hidden">
                 {renderTile(focusTile)}
               </div>
-              {localCamTile && localCamTile.key !== focusTile.key && (
+              {pipTile && (
                 <div className="absolute bottom-4 right-4 w-40 aspect-video shadow-xl rounded-lg overflow-hidden ring-2 ring-black/40">
-                  {renderTile(localCamTile)}
+                  {renderTile(pipTile)}
                 </div>
               )}
             </div>
