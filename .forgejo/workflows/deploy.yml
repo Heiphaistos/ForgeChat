@@ -29,6 +29,7 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           cd client && npm ci --prefer-offline && npm run build && cd ..
+          export GIT_SHA=$(git rev-parse HEAD)
           docker compose up -d --build --remove-orphans
           docker image prune -f
           echo "Deployed $(git rev-parse --short HEAD) at $(date -u)"

@@ -29,3 +29,13 @@
   que ça ne devrait pas l'être, forcer `docker compose build --no-cache server`
   puis `docker compose up -d`.
 - React.memo(MessageRow) peut être cassé silencieusement par des props qui viennent d'AU-DESSUS de MessageList (ChannelPage/DMConversation) : si ces parents passent des fonctions inline (`onReply={(msg) => ...}`), une nouvelle référence est créée à chaque render du parent (countdown, indicateur de frappe, etc.), et si MessageList les relaie brutes à MessageRow (ou les utilise comme dépendance d'un `useCallback` local), la mémoïsation de TOUTE la liste saute. Fix sans toucher le parent : stocker la prop dans une `ref` mise à jour par `useEffect`, exposer un wrapper `useCallback(..., [])` qui lit `ref.current` — référence garantie stable quelle que soit l'instabilité du parent. Toujours vérifier ce pattern après un refactor perf par memoization : auditer TOUTES les props de fonction transmises au composant memoïsé, pas seulement celles définies localement.
+- **Fix durable du cache Docker menteur (2026-07-22)** : ajout d'un ARG `GIT_SHA` dans
+  `server/Dockerfile`, référencé dans la commande du RUN `cargo build --release` (pas
+  juste déclaré) -- Docker doit recalculer le cache key de cette layer à chaque fois
+  que GIT_SHA change, indépendamment de ce qu'il décide (parfois à tort) pour la layer
+  COPY src juste avant. `docker-compose.yml` passe `GIT_SHA: ${GIT_SHA:-unknown}` en
+  build arg au service server ; `.forgejo/workflows/deploy.yml` exporte
+  `GIT_SHA=$(git rev-parse HEAD)` juste avant `docker compose up -d --build`. Sans ça,
+  un `docker compose build --no-cache server` manuel était nécessaire à CHAQUE déploiement
+  touchant le serveur pour être sûr que le binaire tournant reflète vraiment le code —
+  ce correctif rend l'invalidation fiable sans intervention manuelle.
