@@ -63,7 +63,20 @@ export function useCaptions() {
       }
     }
 
-    rec.onerror = () => { setIsActive(false) }
+    // 'no-speech' (et 'aborted') sont fréquents et bénins en reconnaissance continue --
+    // chaque pause de parole déclenche cette erreur, suivie d'un onend qui redémarre
+    // automatiquement (recognitionRef.current === rec toujours vrai). Marquer isActive
+    // à false ici pour CES erreurs faisait clignoter l'indicateur "inactif" alors que la
+    // reconnaissance continuait réellement en arrière-plan. Seules les erreurs fatales
+    // (permission refusée, micro indisponible, réseau) doivent vraiment arrêter et
+    // empêcher le redémarrage automatique.
+    rec.onerror = (event: any) => {
+      const fatal = ['not-allowed', 'audio-capture', 'network', 'service-not-allowed'].includes(event?.error)
+      if (fatal) {
+        recognitionRef.current = null
+        setIsActive(false)
+      }
+    }
     rec.onend = () => {
       // Redémarrer automatiquement si toujours actif
       if (recognitionRef.current === rec) {
