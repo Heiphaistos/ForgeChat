@@ -2,6 +2,15 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
 
+**Itération 14 (2026-07-22 15:13, commit f572560, client 3.514.0)** : pivot demandé
+(veine let-_-swallow épuisée). Audit IDOR/ownership complet de group_dms.rs (16
+handlers), whiteboard WS handler, VOICE_STATE handler -> tous propres, rien trouvé.
+Pivot a11y -> trouvé : sélecteurs de tuile spotlight (vues Spotlight+Sidebar,
+VoiceVideoPage.tsx) en `<div onClick>` nu sans clavier ni aria-label. Fix role="button"
++ tabIndex + Enter/Space + aria-label nominatif. tsc/eslint/build clean.
+
+## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
+
 **Itération 13 (2026-07-22 14:50, commit ed4a725, server 3.168.0)** : dernière trouvaille
 de la veine `let _ =`/`.ok()` sur audit_log — `channels.rs:612` (PURGE_MESSAGES,
 suppression en masse) insérait dans audit_log en inline en contournant le helper
