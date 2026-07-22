@@ -1,6 +1,21 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
+## Statut : ACTIVE (code, 1/2 sans trouvaille) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+
+**Itération 16 (2026-07-22 16:03) : AUCUNE trouvaille sûre malgré recherche étendue.**
+grep mojibake élargi (autres signatures Windows-1252, NBSP isolé) sur tout le repo ->
+rien de plus que it.15. Migrations SQL vérifiées -> accents légitimes, pas mojibake
+(et de toute façon on ne retouche jamais une migration appliquée). Audit complet de
+4 fichiers jamais touchés cette session : polls.rs (vote/close, IDOR sur option_ids déjà
+protégé, transaction anti-double-vote déjà en place), reports.rs (rate limit, self-report
+bloqué, permissions BAN_MEMBERS), moderation.rs (notes/timeouts/tâches, ownership
+créateur-ou-modérateur partout), uploads.rs (whitelist extensions, path traversal
+protégé, MIME dérivé serveur pas client) -- tout déjà solide, rien à corriger sans risque.
+Aucun commit ce tour (lecture seule, `git status` confirmé propre). **1/2 itérations
+sans trouvaille — si la PROCHAINE itération ne trouve rien non plus, S'ARRÊTER et
+rapporter à Momo conformément à la règle GOAL.md, ne pas forcer une 3e recherche.**
+
+## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
 
 **Itération 15 (2026-07-22 15:37, commit ef49ea2, server 3.169.0)** : nouvelle piste
 (threads.rs, jamais audité) -> trouvé corruption d'encodage réelle (mojibake double
