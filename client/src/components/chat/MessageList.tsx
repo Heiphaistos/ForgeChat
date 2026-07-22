@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState, useCallback, KeyboardEvent, useMemo } from 'react'
-import { useCountdown } from '../../hooks/useCountdown'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, ChevronDown, Loader2, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Share2 } from 'lucide-react'
+import { ChevronDown, Loader2, SmilePlus, Copy, Link, Share2, CornerUpLeft, MessagesSquare, Forward, Pin, Pencil, Trash2, Flag } from 'lucide-react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
@@ -10,20 +9,17 @@ import { useContextMenu } from '../ui/ContextMenu'
 import { useChat } from '../../store/chat'
 import { useUnread } from '../../store/unread'
 import EmojiPicker, { getRecentEmojis } from './EmojiPicker'
-import { renderMarkdown } from '../../utils/markdown'
 import UserPopup from '../UserPopup'
 import ReactionPopup from './ReactionPopup'
-import LinkPreview from './LinkPreview'
 import EditHistoryModal from './EditHistoryModal'
 import ForwardModal from './ForwardModal'
-import ReminderModal from './ReminderModal'
 import ReportModal from './ReportModal'
 import LightboxModal from './LightboxModal'
-import PollDisplay from './PollDisplay'
-import { parseStickerMessage } from './StickerPicker'
-import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
+import { stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import MessageRow from './MessageRow'
+import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
 
 interface Props {
   channelId: string
@@ -41,46 +37,15 @@ interface Props {
   onRetryLoad?: () => void
 }
 
-const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀']
 // Emojis rapides personnalisés : les récents d'abord, complétés par les défauts
-const quickEmojis = () => [...new Set([...getRecentEmojis(), ...QUICK_EMOJIS])].slice(0, 8)
-const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
-const DBLCLICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥']
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr)
-  if (isToday(d)) return `Aujourd'hui à ${format(d, 'HH:mm')}`
-  if (isYesterday(d)) return `Hier à ${format(d, 'HH:mm')}`
-  return format(d, 'dd/MM/yyyy HH:mm', { locale: fr })
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-const URL_REGEX = /https?:\/\/[^\s<>"]+/g
+const quickEmojisList = () => [...new Set([...getRecentEmojis(), ...QUICK_EMOJIS])].slice(0, 8)
 
 const EMPTY_MESSAGES: any[] = []
+const EMPTY_ARR: string[] = []
 
 // Position de scroll mémorisée par canal (durée de vie de l'app, pas persistée)
 // pour reprendre la lecture où on l'avait laissée en revenant dans un canal
 const savedScrollPositions = new Map<string, number>()
-
-function EphemeralBadge({ expiresAt }: { expiresAt: string }) {
-  const remaining = useCountdown(expiresAt)
-  return (
-    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fc-red/20 text-fc-red font-medium">
-      ⏱ {remaining}
-    </span>
-  )
-}
-
-function extractFirstUrl(content: string): string | null {
-  const matches = content.match(URL_REGEX)
-  return matches?.[0] ?? null
-}
 
 interface PopupState { userId: string; x: number; y: number }
 interface ReactionPopupState { messageId: string; emoji: string; x: number; y: number; users: { user_id: string; username: string; avatar?: string }[] }
@@ -154,9 +119,7 @@ export default function MessageList({
     unreadAtOpen.current = useUnread.getState().counts[channelId] ?? 0
     firstUnreadId.current = null
   }, [channelId])
-  const msgRefs = useRef<Record<string, HTMLDivElement>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editContent, setEditContent] = useState('')
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
   // Picker complet ouvert depuis « Plus de réactions » du menu contextuel
   const [fullEmojiFor, setFullEmojiFor] = useState<string | null>(null)
@@ -179,7 +142,6 @@ export default function MessageList({
   const [popup, setPopup] = useState<PopupState | null>(null)
   const [editHistoryMsg, setEditHistoryMsg] = useState<{ id: string } | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
-  const editRef = useRef<HTMLTextAreaElement>(null)
   const isAtBottom = useRef(true)
   const initialScrollDone = useRef(false)
 
@@ -198,7 +160,7 @@ export default function MessageList({
       const el = containerRef.current
       if (el) {
         const saved = savedScrollPositions.get(channelId)
-        const anchorEl = firstUnreadId.current ? msgRefs.current[firstUnreadId.current] : null
+        const anchorEl = firstUnreadId.current ? document.getElementById(`msg-${firstUnreadId.current}`) : null
         if (anchorEl && !initialHighlightId) {
           // Aller au divider "Nouveaux messages" (comportement Discord)
           anchorEl.scrollIntoView({ behavior: 'auto', block: 'center' })
@@ -298,13 +260,6 @@ export default function MessageList({
     return () => clearTimeout(timer)
   }, [targetMsgId, messages.length])
 
-  useEffect(() => {
-    if (editingId && editRef.current) {
-      editRef.current.focus()
-      editRef.current.selectionStart = editContent.length
-    }
-  }, [editingId])
-
   const handleScroll = useCallback(async () => {
     const el = containerRef.current
     if (!el) return
@@ -380,40 +335,34 @@ export default function MessageList({
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  const jumpToMessage = (msgId: string) => {
-    const el = msgRefs.current[msgId]
+  const jumpToMessage = useCallback((msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`)
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       setHighlightId(msgId)
       setTimeout(() => setHighlightId(null), 2000)
     }
-  }
+  }, [])
 
-  const startEdit = (msgId: string, content: string) => {
+  const startEdit = useCallback((msgId: string) => {
     setEditingId(msgId)
-    setEditContent(content)
     setEmojiPickerFor(null)
-  }
+  }, [])
 
-  const confirmEdit = (msgId: string) => {
-    if (editContent.trim() && editContent !== messages.find(m => m.id === msgId)?.content) {
-      onEditMessage(msgId, editContent.trim())
-    }
+  // Le brouillon d'édition vit désormais dans MessageRow (état local) — le parent ne
+  // reçoit que le texte final à la confirmation, ce qui évite de re-render toute la
+  // liste à chaque frappe (avant : editContent était un état partagé ici).
+  const confirmEdit = useCallback((msgId: string, newContent: string, originalContent: string) => {
+    if (newContent !== originalContent) onEditMessage(msgId, newContent)
     setEditingId(null)
-  }
+  }, [onEditMessage])
 
-  const cancelEdit = () => { setEditingId(null); setEditContent('') }
+  const cancelEdit = useCallback(() => setEditingId(null), [])
 
-  const handleEditKey = (e: KeyboardEvent<HTMLTextAreaElement>, msgId: string) => {
-    if (handleMarkdownShortcut(e, editContent, setEditContent)) return
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); confirmEdit(msgId) }
-    if (e.key === 'Escape') cancelEdit()
-  }
-
-  const openUserPopup = (e: React.MouseEvent, userId: string) => {
+  const openUserPopup = useCallback((e: React.MouseEvent, userId: string) => {
     e.stopPropagation()
     setPopup({ userId, x: e.clientX + 12, y: e.clientY - 40 })
-  }
+  }, [])
 
   const [reactionPopup, setReactionPopup] = useState<ReactionPopupState | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
@@ -441,7 +390,46 @@ export default function MessageList({
   // Cleanup à l'unmount
   useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
 
-  const startLongPress = (e: React.TouchEvent, msg: any) => {
+  useEffect(() => {
+    if (!contextMenu) return
+    const close = () => setContextMenu(null)
+    document.addEventListener('click', close)
+    document.addEventListener('contextmenu', close)
+    return () => { document.removeEventListener('click', close); document.removeEventListener('contextmenu', close) }
+  }, [!!contextMenu])
+
+  // En DM (serverId vide), channelId est l'id de conversation : autres routes
+  // API (PUT toggle au lieu de DELETE) et autres URLs de lien
+  const messageLink = useCallback((msgId: string) =>
+    serverId
+      ? `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${msgId}`
+      : `${window.location.origin}/dms/${channelId}?highlight=${msgId}`,
+  [serverId, channelId])
+
+  const removeReactionMut = useMutation({
+    mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
+      serverId
+        ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
+        : api.put(`/dms/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
+    onError: () => toast.error('Impossible de retirer la réaction'),
+  })
+
+  // Lit l'état frais via useChat.getState() plutôt que de fermer sur `messages` —
+  // garde ce callback stable (seule dépendance réelle : channelId) pour React.memo(MessageRow)
+  const toggleReaction = useCallback((msgId: string, emoji: string) => {
+    const msgs = useChat.getState().messagesByChannel[channelId] ?? []
+    const msg = msgs.find(m => m.id === msgId)
+    const reaction = msg?.reactions?.find(r => r.emoji === emoji)
+    if (reaction?.me) {
+      removeReactionMut.mutate({ msgId, emoji })
+    } else {
+      onAddReaction?.(msgId, emoji)
+    }
+    setPoppingReaction(`${msgId}:${emoji}`)
+    setTimeout(() => setPoppingReaction(null), 300)
+  }, [channelId, onAddReaction])
+
+  const startLongPress = useCallback((e: React.TouchEvent, msg: any) => {
     const t = e.touches[0]
     longPressTarget.current = { x: t.clientX, y: t.clientY, msg }
     longPressTimer.current = setTimeout(() => {
@@ -451,12 +439,12 @@ export default function MessageList({
       }
     }, 500)
     swipeRef.current = { startX: t.clientX, startY: t.clientY, msg, el: e.currentTarget as HTMLElement }
-  }
-  const cancelLongPress = () => {
+  }, [])
+  const cancelLongPress = useCallback(() => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
     longPressTarget.current = null
-  }
-  const handleTouchMove = (e: React.TouchEvent) => {
+  }, [])
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
     cancelLongPress()
     if (!swipeRef.current || e.touches.length !== 1 || !swipeRef.current.el) return
     const dx = e.touches[0].clientX - swipeRef.current.startX
@@ -467,8 +455,8 @@ export default function MessageList({
     } else {
       swipeRef.current.el.style.transform = ''
     }
-  }
-  const handleTouchEnd = (e: React.TouchEvent) => {
+  }, [cancelLongPress])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     cancelLongPress()
     if (!swipeRef.current) return
     const dx = e.changedTouches[0].clientX - swipeRef.current.startX
@@ -499,46 +487,7 @@ export default function MessageList({
     } else {
       lastTapRef.current = null
     }
-  }
-
-  useEffect(() => {
-    if (!contextMenu) return
-    const close = () => setContextMenu(null)
-    document.addEventListener('click', close)
-    document.addEventListener('contextmenu', close)
-    return () => { document.removeEventListener('click', close); document.removeEventListener('contextmenu', close) }
-  }, [!!contextMenu])
-  const isImage = (ct: string) => ct.startsWith('image/')
-  const isVideo = (ct: string) => ct.startsWith('video/')
-
-  // En DM (serverId vide), channelId est l'id de conversation : autres routes
-  // API (PUT toggle au lieu de DELETE) et autres URLs de lien
-  const messageLink = (msgId: string) =>
-    serverId
-      ? `${window.location.origin}/servers/${serverId}/channels/${channelId}?highlight=${msgId}`
-      : `${window.location.origin}/dms/${channelId}?highlight=${msgId}`
-
-  const removeReactionMut = useMutation({
-    mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
-      serverId
-        ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
-        : api.put(`/dms/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
-    onError: () => toast.error('Impossible de retirer la réaction'),
-  })
-
-  const toggleReaction = (msgId: string, emoji: string) => {
-    const msgs = useChat.getState().messagesByChannel[channelId] ?? []
-    const msg = msgs.find(m => m.id === msgId)
-    const reaction = msg?.reactions?.find(r => r.emoji === emoji)
-    if (reaction?.me) {
-      removeReactionMut.mutate({ msgId, emoji })
-    } else {
-      onAddReaction?.(msgId, emoji)
-    }
-    const reactionKey = `${msgId}:${emoji}`
-    setPoppingReaction(reactionKey)
-    setTimeout(() => setPoppingReaction(null), 300)
-  }
+  }, [cancelLongPress, onReply, toggleReaction])
 
   const saveMessage = useMutation({
     // server_id: null en DM — le backend attend Option<Uuid>, "" échoue en 422
@@ -549,22 +498,24 @@ export default function MessageList({
   })
 
   const reactionHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fetchReactionUsers = async (messageId: string, emoji: string, x: number, y: number) => {
+  const fetchReactionUsers = useCallback(async (messageId: string, emoji: string, x: number, y: number) => {
     try {
       const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
       const users = res.data?.users ?? []
       setReactionPopup({ messageId, emoji, x, y, users })
     } catch {}
-  }
-  const handleReactionHover = (e: React.MouseEvent, messageId: string, emoji: string) => {
+  }, [])
+  const handleReactionHover = useCallback((e: React.MouseEvent, messageId: string, emoji: string) => {
     const { clientX, clientY } = e
     if (reactionHoverTimer.current) clearTimeout(reactionHoverTimer.current)
     reactionHoverTimer.current = setTimeout(() => fetchReactionUsers(messageId, emoji, clientX, clientY), 300)
-  }
+  }, [fetchReactionUsers])
+  const handleReactionHoverEnd = useCallback(() => setReactionPopup(null), [])
+
   // Long-press mobile sur une réaction → popup "qui a réagi" (hover indisponible)
   const reactionLongPress = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reactionLongPressFired = useRef(false)
-  const startReactionLongPress = (e: React.TouchEvent, messageId: string, emoji: string) => {
+  const startReactionLongPress = useCallback((e: React.TouchEvent, messageId: string, emoji: string) => {
     const { clientX, clientY } = e.touches[0]
     reactionLongPressFired.current = false
     reactionLongPress.current = setTimeout(() => {
@@ -572,13 +523,24 @@ export default function MessageList({
       if ('vibrate' in navigator) navigator.vibrate(15)
       fetchReactionUsers(messageId, emoji, clientX, clientY)
     }, 450)
-  }
-  const cancelReactionLongPress = () => {
+  }, [fetchReactionUsers])
+  const cancelReactionLongPress = useCallback(() => {
     if (reactionLongPress.current) { clearTimeout(reactionLongPress.current); reactionLongPress.current = null }
-  }
+  }, [])
+  // Clic sur une pastille de réaction existante : suppression après un long-press
+  // mobile (qui vient juste d'ouvrir le popup "qui a réagi") — ne concerne QUE ce
+  // point d'entrée, pas le double-tap ❤️ ni les pickers d'ajout.
+  const handleReactionClick = useCallback((msgId: string, emoji: string) => {
+    if (reactionLongPressFired.current) { reactionLongPressFired.current = false; return }
+    toggleReaction(msgId, emoji)
+  }, [toggleReaction])
 
+  // Lu via ref (pas de dépendance sur translatingId) pour que translateMessage — et donc
+  // handleToggleTranslation qui l'appelle — restent des références stables entre renders.
+  const translatingIdRef = useRef<string | null>(null)
+  useEffect(() => { translatingIdRef.current = translatingId }, [translatingId])
   const translateMessage = useCallback(async (messageId: string) => {
-    if (translatingId === messageId) return
+    if (translatingIdRef.current === messageId) return
     setTranslatingId(messageId)
     try {
       const { data } = await api.post(`/messages/${messageId}/translate`, { target_lang: 'fr' })
@@ -588,7 +550,83 @@ export default function MessageList({
     } finally {
       setTranslatingId(null)
     }
-  }, [translatingId])
+  }, [])
+  // Bouton traduction : masquer si déjà traduit, sinon lancer la traduction — lu via
+  // ref pour garder ce handler stable (pas de dépendance sur `translations`)
+  const translationsRef = useRef<Record<string, string>>({})
+  useEffect(() => { translationsRef.current = translations }, [translations])
+  const handleToggleTranslation = useCallback((msgId: string) => {
+    if (translationsRef.current[msgId]) {
+      setTranslations(prev => { const n = { ...prev }; delete n[msgId]; return n })
+    } else {
+      translateMessage(msgId)
+    }
+  }, [translateMessage])
+
+  // -- Handlers stables passés à MessageRow (React.memo) — fonctionnels/sans état
+  // fermé pour ne jamais changer de référence et casser la mémoïsation par ligne --
+  const handleAvatarContextMenu = useCallback((e: React.MouseEvent, msg: any) => {
+    e.preventDefault()
+    e.stopPropagation()
+    avatarCtxMenu.open(e, [
+      { label: 'Voir le profil', onClick: () => nav(`/users/${msg.author_id}`) },
+      { label: 'Envoyer un message', onClick: () => {
+        api.post('/dms', { user_id: msg.author_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
+      }, disabled: msg.author_id === user?.id },
+      { label: `Mentionner @${msg.author_username}`, onClick: () => {
+        const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
+        if (el) {
+          const pos = el.selectionStart ?? el.value.length
+          const mention = `@${msg.author_username} `
+          const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
+          el.focus()
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+          setter?.call(el, newVal)
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          const newPos = pos + mention.length
+          setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
+        }
+      }},
+      { separator: true },
+      { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(msg.author_id) },
+    ])
+  }, [nav, user?.id])
+
+  const handleRowDoubleClick = useCallback((msgId: string, x: number, y: number) => setDblClickPopover({ msgId, x, y }), [])
+  const handleRowContextMenu = useCallback((x: number, y: number, msg: any) => setContextMenu({ x, y, msg }), [])
+  const handleOpenEditHistory = useCallback((msgId: string) => setEditHistoryMsg({ id: msgId }), [])
+  const handleOpenLightbox = useCallback((images: string[], index: number) => setLightbox({ images, index }), [])
+  const handleToggleEmojiPicker = useCallback((msgId: string) => setEmojiPickerFor(cur => cur === msgId ? null : msgId), [])
+  const handleToggleReactionPicker = useCallback((msgId: string) => setReactionPickerFor(cur => cur === msgId ? null : msgId), [])
+  const handleToggleReminder = useCallback((msgId: string) => setReminderFor(cur => cur === msgId ? null : msgId), [])
+  const handleAddQuickReaction = useCallback((msgId: string, emoji: string) => {
+    onAddReaction?.(msgId, emoji)
+    setEmojiPickerFor(null)
+  }, [onAddReaction])
+  const handlePickReaction = useCallback((msgId: string, emoji: string) => {
+    toggleReaction(msgId, emoji)
+    setReactionPickerFor(null)
+  }, [toggleReaction])
+  const handleSaveMessage = useCallback((msgId: string) =>
+    saveMessage.mutate({ message_id: msgId, channel_id: channelId, server_id: serverId || null }),
+  [saveMessage, channelId, serverId])
+  const handleCopyMarkdown = useCallback((content: string) => {
+    navigator.clipboard.writeText(content)
+    toast.success('Copié en Markdown !')
+  }, [])
+  const handleCopyLink = useCallback((msgId: string) => {
+    navigator.clipboard.writeText(messageLink(msgId))
+    toast.success('Lien copié !')
+  }, [messageLink])
+  const handleForward = useCallback((msgId: string) => setForwardingMsg({ id: msgId }), [])
+  const handleReport = useCallback((msgId: string) => setReportingMsg(msgId), [])
+  const handleDeleteRequest = useCallback((msgId: string) => setDeleteConfirmId(msgId), [])
+
+  const formatTsCb = useCallback((dateStr: string) => formatTs(dateStr), [timeFormat, dateFormat])
+  const formatShortTsCb = useCallback((dateStr: string) => formatShortTs(dateStr), [timeFormat])
+  // Recalculé seulement après une utilisation du picker complet (seul endroit qui peut
+  // faire évoluer les "récents") — reste une référence stable pour tous les autres renders
+  const quickEmojisArr = useMemo(() => quickEmojisList(), [fullEmojiFor])
 
   return (
     <div className="flex-1 relative flex flex-col overflow-hidden channel-fade-in">
@@ -629,9 +667,6 @@ export default function MessageList({
             prev.author_id === msg.author_id &&
             new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < groupingMs
 
-          const isOwn = msg.author_id === user?.id
-          const isEditing = editingId === msg.id
-          const isHighlighted = highlightId === msg.id
           const msgTs = new Date(msg.created_at).getTime()
           const prevTs = prev ? new Date(prev.created_at).getTime() : 0
           // Divider : ancré sur le premier non-lu du chargement initial si présent,
@@ -649,544 +684,79 @@ export default function MessageList({
             : isYesterday(msgDate) ? 'Hier'
             : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
 
+          // Props scindées par message : dérivées ici d'un état partagé ("quel message
+          // a X ouvert") en valeurs primitives par ligne, pour que React.memo(MessageRow)
+          // ne re-rende QUE la ligne concernée plutôt que toute la liste à chaque toggle.
+          const isPoppingHere = poppingReaction?.startsWith(msg.id + ':') ?? false
+          const poppingEmoji = isPoppingHere ? poppingReaction!.slice(msg.id.length + 1) : null
+          const bumpedEmojis = Object.keys(bumped).length === 0
+            ? EMPTY_ARR
+            : Object.keys(bumped).filter(k => k.startsWith(msg.id + ':')).map(k => k.slice(msg.id.length + 1))
+
           return (
-            <div key={msg.id} className={isLiveMsg ? 'msg-enter' : undefined}>
-            {showDateDivider && (
-              <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel} data-date-label={dateLabel}>
-                <div className="flex-1 h-px bg-fc-hover/70" />
-                <span className="text-[11px] font-semibold text-fc-muted capitalize whitespace-nowrap px-2 py-0.5 rounded-full bg-fc-hover/50">
-                  {dateLabel}
-                </span>
-                <div className="flex-1 h-px bg-fc-hover/70" />
-              </div>
-            )}
-            {isFirstUnread && (
-              <div className="flex items-center gap-2 my-2 px-2 select-none">
-                <div className="flex-1 h-px bg-red-400/60" />
-                <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">Nouveaux messages</span>
-                <div className="flex-1 h-px bg-red-400/60" />
-              </div>
-            )}
-            <div
-              id={`msg-${msg.id}`}
-              ref={el => { if (el) msgRefs.current[msg.id] = el }}
-              className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
-                ${compact ? 'py-0.5' : 'py-1'}
-                ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : msg.expires_at ? 'bg-red-500/5 border-l-2 border-red-500/30 hover:bg-red-500/8' : 'hover:bg-fc-hover/30'}`}
-              onDoubleClick={e => {
-                e.stopPropagation()
-                setDblClickPopover({ msgId: msg.id, x: e.clientX, y: e.clientY })
-              }}
-              onContextMenu={e => {
-                e.preventDefault()
-                e.stopPropagation()
-                setContextMenu({ x: e.clientX, y: e.clientY, msg })
-              }}
-              onTouchStart={e => startLongPress(e, msg)}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-            >
-              {/* Avatar */}
-              {!ultraCompact && (
-                <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-8 md:w-10'}`}>
-                  {/* Heure au survol pour les messages de continuation */}
-                  {isGrouped && showTimestamps !== 'never' && (
-                    <span className="opacity-0 group-hover:opacity-100 transition text-[9px] text-fc-muted font-mono select-none flex items-center justify-center h-full">
-                      <time dateTime={msg.created_at} title={formatTs(msg.created_at)}>{formatShortTs(msg.created_at)}</time>
-                    </span>
-                  )}
-                  {!isGrouped && (
-                    <button
-                      className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
-                      onClick={e => openUserPopup(e, msg.author_id)}
-                      onContextMenu={e => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        avatarCtxMenu.open(e, [
-                          { label: 'Voir le profil', onClick: () => nav(`/users/${msg.author_id}`) },
-                          { label: 'Envoyer un message', onClick: () => {
-                            api.post('/dms', { user_id: msg.author_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
-                          }, disabled: msg.author_id === user?.id },
-                          { label: `Mentionner @${msg.author_username}`, onClick: () => {
-                            const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-                            if (el) {
-                              const pos = el.selectionStart ?? el.value.length
-                              const mention = `@${msg.author_username} `
-                              const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
-                              el.focus()
-                              const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-                              setter?.call(el, newVal)
-                              el.dispatchEvent(new Event('input', { bubbles: true }))
-                              const newPos = pos + mention.length
-                              setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
-                            }
-                          }},
-                          { separator: true },
-                          { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(msg.author_id) },
-                        ])
-                      }}
-                      title={`Profil de ${msg.author_username}`}
-                    >
-                      {msg.author_avatar
-                        ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                        : msg.author_username.charAt(0).toUpperCase()}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Contenu */}
-              <div className="flex-1 min-w-0">
-                {!isGrouped && !ultraCompact && (
-                  <div className="flex items-baseline gap-2 mb-0.5">
-                    <button
-                      className="font-semibold text-white text-sm hover:underline cursor-pointer"
-                      onClick={e => openUserPopup(e, msg.author_id)}
-                    >
-                      {msg.author_username}
-                    </button>
-                    {msg.author_verified && (
-                      <span
-                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-fc-accent text-white text-[10px] font-bold ml-0.5 flex-shrink-0"
-                        title="Utilisateur vérifié"
-                      >✓</span>
-                    )}
-                    {msg.author_is_bot && (
-                      <span className="inline-flex items-center gap-0.5 bg-indigo-500/20 text-indigo-300 text-xs px-1.5 py-0.5 rounded font-medium">
-                        <Bot size={10} />
-                        BOT
-                      </span>
-                    )}
-                    {showTimestamps !== 'never' && (
-                      <time dateTime={msg.created_at} className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</time>
-                    )}
-                    {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
-                  </div>
-                )}
-
-                {isEditing ? (
-                  <div className="mt-1">
-                    <textarea
-                      ref={editRef}
-                      value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      onKeyDown={e => handleEditKey(e, msg.id)}
-                      rows={Math.min(editContent.split('\n').length + 1, 6)}
-                      enterKeyHint="done"
-                      className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent resize-none"
-                    />
-                    <div className="flex items-center gap-2 mt-1 text-xs text-fc-muted">
-                      <span>Entrée pour confirmer · Échap pour annuler</span>
-                      <div className="ml-auto flex gap-1">
-                        <button onClick={() => confirmEdit(msg.id)} className="flex items-center gap-1 px-2 py-1 bg-fc-green hover:bg-green-500 text-white rounded transition">
-                          <Check size={12} /> Enregistrer
-                        </button>
-                        <button onClick={cancelEdit} className="flex items-center gap-1 px-2 py-1 bg-fc-hover hover:bg-fc-hover/80 text-fc-muted rounded transition">
-                          <X size={12} /> Annuler
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {msg.pinned && (
-                      <div className="flex items-center gap-1 mb-1 text-xs text-amber-400/80">
-                        <Pin size={10} />
-                        <span>Épinglé</span>
-                      </div>
-                    )}
-                    {/* Indicateur de réponse */}
-                    {msg.reply_to && (
-                      <button
-                        className="flex items-center gap-1.5 mb-1 pl-2 border-l-2 border-fc-accent/40 text-xs text-fc-muted hover:text-white transition text-left w-full"
-                        onClick={() => jumpToMessage(msg.reply_to!)}
-                      >
-                        <CornerUpLeft size={10} className="text-fc-accent flex-shrink-0" />
-                        {msg.reply_to_username && (
-                          <span className="font-semibold text-white/80">{msg.reply_to_username}</span>
-                        )}
-                        <span className="italic truncate max-w-xs">
-                          {typeof msg.reply_to_content === 'string' && msg.reply_to_content
-                            ? stripMarkdown(msg.reply_to_content).slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
-                            : 'Message original supprimé'}
-                        </span>
-                      </button>
-                    )}
-
-                    {/* Indicateur de message forwardé */}
-                    {msg.forward_from_id && (
-                      <div className="mb-1 pl-3 border-l-2 border-indigo-400/40 bg-indigo-500/5 rounded-r py-1 pr-2">
-                        <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-0.5">
-                          <Forward size={10} className="flex-shrink-0" />
-                          <span>Transféré de <span className="font-semibold">@{msg.forward_from_username ?? 'inconnu'}</span></span>
-                        </div>
-                      </div>
-                    )}
-
-                    {msg.content && (() => {
-                      const sticker = parseStickerMessage(msg.content)
-                      if (sticker) {
-                        return (
-                          <div className="mt-1 inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-fc-accent/10 to-indigo-500/10 border border-fc-accent/20 shadow-sm">
-                            <span style={{ fontSize: '4rem', lineHeight: 1 }}>{sticker.emoji}</span>
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="text-fc-text text-sm break-words leading-relaxed">
-                          {renderMarkdown(msg.content, customEmojiMap)}
-                          {msg.edited_at && (
-                            <button
-                              onClick={() => setEditHistoryMsg({ id: msg.id })}
-                              className="text-xs text-fc-muted ml-1.5 hover:text-fc-accent hover:underline transition"
-                              title="Voir l'historique des modifications"
-                            >
-                              (modifié)
-                            </button>
-                          )}
-                          {msg.expires_at && (
-                            <span className="ml-2">
-                              <EphemeralBadge expiresAt={msg.expires_at} />
-                            </span>
-                          )}
-                          {translations[msg.id] && (
-                            <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
-                              <span className="text-xs text-fc-accent font-medium mr-1.5">Traduction :</span>
-                              {translations[msg.id]}
-                              <button
-                                onClick={() => setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })}
-                                className="ml-2 text-fc-muted hover:text-white text-xs"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Pièces jointes */}
-                    {msg.attachments?.map((att: any) => (
-                      <div key={att.id} className="mt-1.5">
-                        {isImage(att.content_type) ? (
-                          <div className="relative inline-block group/img max-w-full">
-                            <img
-                              src={att.url}
-                              alt={att.filename}
-                              loading="lazy"
-                              decoding="async"
-                              className="max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
-                              style={{ opacity: 0, transition: 'opacity 0.25s ease' }}
-                              onLoad={e => { e.currentTarget.style.opacity = '1' }}
-                              onClick={() => {
-                                const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
-                                if (imgs.length > 0) setLightbox({ images: imgs, index: imgs.indexOf(att.url) })
-                              }}
-                            />
-                            {att.expires_at && (
-                              <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
-                                <Clock size={9} />
-                                {new Date(att.expires_at) > new Date()
-                                  ? `Expire ${format(new Date(att.expires_at), 'dd/MM HH:mm')}`
-                                  : 'Expiré'}
-                              </div>
-                            )}
-                          </div>
-                        ) : isVideo(att.content_type) ? (
-                          <div className="relative max-w-full sm:max-w-sm">
-                            <video
-                              src={att.url}
-                              controls
-                              playsInline
-                              preload="metadata"
-                              className="max-w-full max-h-72 rounded shadow"
-                              style={{ background: '#111' }}
-                            />
-                            {att.expires_at && (
-                              <div className="mt-0.5 text-xs text-fc-muted flex items-center gap-1">
-                                <Clock size={10} />
-                                {new Date(att.expires_at) > new Date()
-                                  ? `Expire le ${format(new Date(att.expires_at), 'dd/MM/yyyy HH:mm')}`
-                                  : 'Vidéo expirée'}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <a
-                            href={att.url}
-                            download={att.filename}
-                            className="flex items-center gap-2 bg-fc-input px-3 py-2 rounded max-w-full sm:max-w-xs hover:bg-fc-hover transition"
-                          >
-                            <span className="text-fc-accent text-sm">{att.filename}</span>
-                            <span className="text-xs text-fc-muted">{formatBytes(att.size)}</span>
-                          </a>
-                        )}
-                      </div>
-                    ))}
-
-                    {/* Sondage attaché au message */}
-                    {msg.poll_id && (
-                      <PollDisplay
-                        pollId={msg.poll_id}
-                        serverId={serverId}
-                        channelId={channelId}
-                      />
-                    )}
-
-                    {/* Link preview (1 seule, pas si attachments, pas si sondage, respecte le paramètre utilisateur) */}
-                    {linkPreviewEnabled && msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
-                      const url = extractFirstUrl(msg.content)
-                      return url ? <LinkPreview url={url} /> : null
-                    })()}
-
-                    {/* Réactions — Super Reactions */}
-                    {msg.reactions?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1.5">
-                        {msg.reactions?.map((r: any) => {
-                          const reactionKey = `${msg.id}:${r.emoji}`
-                          const isPopping = poppingReaction === reactionKey
-                          return (
-                            <button
-                              key={r.emoji}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Le long-press vient d'ouvrir le popup → ne pas toggler
-                                if (reactionLongPressFired.current) { reactionLongPressFired.current = false; return }
-                                toggleReaction(msg.id, r.emoji)
-                                if (!r.me) {
-                                  setPoppingReaction(reactionKey)
-                                  setTimeout(() => setPoppingReaction(null), 500)
-                                }
-                              }}
-                              onMouseEnter={e => handleReactionHover(e, msg.id, r.emoji)}
-                              onMouseLeave={() => setReactionPopup(null)}
-                              onTouchStart={e => { e.stopPropagation(); startReactionLongPress(e, msg.id, r.emoji) }}
-                              onTouchEnd={cancelReactionLongPress}
-                              onTouchMove={cancelReactionLongPress}
-                              onTouchCancel={cancelReactionLongPress}
-                              className={`flex items-center gap-1 px-2 py-1 md:py-0.5 rounded-full text-xs border transition-all duration-150
-                                hover:scale-110 hover:shadow-md
-                                ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
-                                ${isPopping ? 'animate-bounce' : ''}`}
-                              title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
-                            >
-                              {customEmojiMap[r.emoji]
-                                ? <img src={customEmojiMap[r.emoji]} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
-                                : <span>{r.emoji}</span>
-                              }
-                              <span className={`transition-transform duration-150 inline-block ${isPopping || bumped[`${msg.id}:${r.emoji}`] ? 'scale-110' : 'scale-100'}`}>{r.count}</span>
-                            </button>
-                          )
-                        })}
-                        {/* Bouton "+" pour ajouter une réaction */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id); setEmojiPickerFor(null) }}
-                            className="flex items-center justify-center w-7 h-[28px] md:h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
-                            title="Ajouter une réaction"
-                          >
-                            +
-                          </button>
-                          {reactionPickerFor === msg.id && (
-                            <div
-                              className="absolute bottom-full left-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex flex-wrap gap-1 z-50 w-52"
-                              onClick={e => e.stopPropagation()}
-                            >
-                              {REACTION_PICKER_EMOJIS.map(emoji => (
-                                <button
-                                  key={emoji}
-                                  onClick={() => { toggleReaction(msg.id, emoji); setReactionPickerFor(null) }}
-                                  className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Barre d'actions au survol */}
-              {!isEditing && (
-                <div className="absolute right-2 top-0 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition
-                  flex items-center bg-fc-channel border border-fc-hover rounded shadow-lg px-1 py-0.5 z-10">
-                  {/* Emoji picker rapide */}
-                  <div className="relative">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEmojiPickerFor(emojiPickerFor === msg.id ? null : msg.id) }}
-                      className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                      title="Réagir"
-                      aria-label="Ajouter une réaction"
-                      aria-expanded={emojiPickerFor === msg.id}
-                    >
-                      <SmilePlus size={14} />
-                    </button>
-                    {emojiPickerFor === msg.id && (
-                      <div
-                        className="absolute bottom-full right-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex gap-1 z-50"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {quickEmojis().map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={() => { onAddReaction?.(msg.id, emoji); setEmojiPickerFor(null) }}
-                            className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => saveMessage.mutate({ message_id: msg.id, channel_id: channelId, server_id: serverId || null })}
-                    className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-                    title="Sauvegarder"
-                    aria-label="Sauvegarder le message"
-                  >
-                    <Bookmark size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      const md = msg.content ?? ''
-                      navigator.clipboard.writeText(md)
-                      toast.success('Copié en Markdown !')
-                    }}
-                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                    title="Copier en Markdown"
-                    aria-label="Copier le message en Markdown"
-                  >
-                    <Copy size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(messageLink(msg.id))
-                      toast.success('Lien copié !')
-                    }}
-                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                    title="Copier le lien"
-                    aria-label="Copier le lien du message"
-                  >
-                    <Link size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => setForwardingMsg({ id: msg.id })}
-                    className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                    title="Transférer"
-                    aria-label="Transférer le message"
-                  >
-                    <Forward size={14} />
-                  </button>
-
-                  {onReply && (
-                    <button
-                      onClick={() => onReply(msg)}
-                      className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                      title="Répondre"
-                      aria-label="Répondre au message"
-                    >
-                      <CornerUpLeft size={14} />
-                    </button>
-                  )}
-
-                  {onOpenThread && (
-                    <button
-                      onClick={() => { onOpenThread(msg.id); setEmojiPickerFor(null) }}
-                      className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                      title="Ouvrir thread"
-                      aria-label="Ouvrir le fil de discussion"
-                    >
-                      <MessagesSquare size={14} />
-                    </button>
-                  )}
-
-                  {onPinMessage && (
-                    <button
-                      onClick={() => onPinMessage(msg.id, !!msg.pinned)}
-                      className={`p-1.5 rounded hover:bg-fc-hover transition ${msg.pinned ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                      title={msg.pinned ? 'Désépingler' : 'Épingler'}
-                      aria-label={msg.pinned ? 'Désépingler le message' : 'Épingler le message'}
-                      aria-pressed={msg.pinned}
-                    >
-                      <Pin size={14} />
-                    </button>
-                  )}
-
-                  {isOwn && (
-                    <button
-                      onClick={() => startEdit(msg.id, msg.content ?? '')}
-                      className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                      title="Modifier"
-                      aria-label="Modifier le message"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      if (translations[msg.id]) {
-                        setTranslations(prev => { const n = { ...prev }; delete n[msg.id]; return n })
-                      } else {
-                        translateMessage(msg.id)
-                      }
-                    }}
-                    className={`p-1.5 rounded hover:bg-fc-hover transition ${translations[msg.id] ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                    title={translations[msg.id] ? 'Masquer la traduction' : 'Traduire en français'}
-                    aria-label={translations[msg.id] ? 'Masquer la traduction' : 'Traduire le message en français'}
-                    aria-pressed={!!translations[msg.id]}
-                    disabled={translatingId === msg.id}
-                  >
-                    {translatingId === msg.id ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
-                  </button>
-
-                  <div className="relative">
-                    <button
-                      onClick={() => setReminderFor(reminderFor === msg.id ? null : msg.id)}
-                      className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-                      title="Me rappeler"
-                    >
-                      <Bell size={14} />
-                    </button>
-                    {reminderFor === msg.id && (
-                      <ReminderModal
-                        messageId={msg.id}
-                        onClose={() => setReminderFor(null)}
-                      />
-                    )}
-                  </div>
-
-                  {!isOwn && (
-                    <button
-                      onClick={() => setReportingMsg(msg.id)}
-                      className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
-                      title="Signaler ce message"
-                      aria-label="Signaler ce message"
-                    >
-                      <Flag size={14} />
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setDeleteConfirmId(msg.id)}
-                    className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
-                    title="Supprimer"
-                    aria-label="Supprimer le message"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              )}
-            </div>
-            </div>
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              isOwn={msg.author_id === user?.id}
+              isGrouped={!!isGrouped}
+              isFirstUnread={isFirstUnread}
+              isLiveMsg={isLiveMsg}
+              showDateDivider={showDateDivider}
+              dateLabel={dateLabel}
+              isHighlighted={highlightId === msg.id}
+              isEditing={editingId === msg.id}
+              compact={compact}
+              ultraCompact={ultraCompact}
+              showTimestamps={showTimestamps}
+              formatTs={formatTsCb}
+              formatShortTs={formatShortTsCb}
+              customEmojiMap={customEmojiMap}
+              linkPreviewEnabled={linkPreviewEnabled}
+              serverId={serverId}
+              channelId={channelId}
+              canManageMessages={canManageMessages}
+              quickEmojis={quickEmojisArr}
+              showEmojiPicker={emojiPickerFor === msg.id}
+              showReactionPicker={reactionPickerFor === msg.id}
+              isReminderOpen={reminderFor === msg.id}
+              translation={translations[msg.id]}
+              isTranslating={translatingId === msg.id}
+              poppingEmoji={poppingEmoji}
+              bumpedEmojis={bumpedEmojis}
+              onStartEdit={startEdit}
+              onConfirmEdit={confirmEdit}
+              onCancelEdit={cancelEdit}
+              onOpenUserPopup={openUserPopup}
+              onAvatarContextMenu={handleAvatarContextMenu}
+              onDoubleClick={handleRowDoubleClick}
+              onContextMenu={handleRowContextMenu}
+              onTouchStartRow={startLongPress}
+              onTouchMoveRow={handleTouchMove}
+              onTouchEndRow={handleTouchEnd}
+              onJumpToMessage={jumpToMessage}
+              onOpenEditHistory={handleOpenEditHistory}
+              onOpenLightbox={handleOpenLightbox}
+              onToggleReaction={handleReactionClick}
+              onToggleEmojiPicker={handleToggleEmojiPicker}
+              onAddQuickReaction={handleAddQuickReaction}
+              onPickReaction={handlePickReaction}
+              onToggleReactionPicker={handleToggleReactionPicker}
+              onReactionHover={handleReactionHover}
+              onReactionHoverEnd={handleReactionHoverEnd}
+              onReactionTouchStart={startReactionLongPress}
+              onReactionTouchEnd={cancelReactionLongPress}
+              onSaveMessage={handleSaveMessage}
+              onCopyMarkdown={handleCopyMarkdown}
+              onCopyLink={handleCopyLink}
+              onForward={handleForward}
+              onReply={onReply}
+              onOpenThread={onOpenThread}
+              onPinMessage={onPinMessage}
+              onToggleTranslation={handleToggleTranslation}
+              onToggleReminder={handleToggleReminder}
+              onReport={handleReport}
+              onDeleteRequest={handleDeleteRequest}
+            />
           )
         })}
 
@@ -1402,7 +972,7 @@ export default function MessageList({
           <div className="md:hidden mx-auto mt-1 mb-1.5 w-10 h-1 rounded-full bg-fc-hover" aria-hidden />
           {/* Barre d'emojis rapides — particulièrement utile sur mobile */}
           <div className="flex items-center justify-around px-1 py-1.5 border-b border-fc-hover/50">
-            {quickEmojis().map(emoji => (
+            {quickEmojisArr.map(emoji => (
               <button
                 key={emoji}
                 onClick={() => { toggleReaction(contextMenu.msg.id, emoji); setContextMenu(null) }}
@@ -1501,7 +1071,7 @@ export default function MessageList({
               <div className="border-t border-fc-hover my-1" />
               {contextMenu.msg.author_id === user?.id && (
                 <button
-                  onClick={() => { startEdit(contextMenu.msg.id, contextMenu.msg.content ?? ''); setContextMenu(null) }}
+                  onClick={() => { startEdit(contextMenu.msg.id); setContextMenu(null) }}
                   className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
                 >
                   <Pencil size={14} /> Modifier
