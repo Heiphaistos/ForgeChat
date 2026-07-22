@@ -1,4 +1,23 @@
-# CHECKPOINT — LOOP NOCTURNE TERMINÉE (7/8, arrêt propre)
+# CHECKPOINT — LOOP REPRISE (post refactor MessageList)
+
+## Statut : ACTIVE — Momo présent a demandé un refactor perf hors-loop (traité), puis
+"enregistre en mémoire, clear, reprends la loop" (2026-07-22, après-midi)
+
+Depuis l'arrêt à 7/8 : Momo a choisi de traiter le finding "refactor perf MessageList"
+(proposé via AskUserQuestion) plutôt que le mutex WebRTC. Fait sur branche
+`refactor/messagelist-memo`, vérifié statiquement (tsc/eslint/build clean), mergé,
+poussé, déployé (commit b44fd8d, VPS HEAD confirmé). Demande de spot-check humain
+envoyée à Momo (réactions/édition/réponse/suppression) — PAS ENCORE CONFIRMÉE en
+retour au moment de cette reprise. Détail complet dans project_forgechat.md (mémoire
+globale) section "CYCLE 11".
+
+Prochaine itération (8) : d'abord vérifier si Momo a confirmé/infirmé le refactor
+MessageList (si aucun retour, ne pas supposer que c'est cassé — c'est juste non
+confirmé). Puis chercher une nouvelle piste sûre : le refactor vient de changer 3
+fichiers chat/ substantiels, ça vaut une relecture fraîche pour un bug qu'une 1ère
+passe aurait raté. Sinon revenir aux pistes GOAL.md non encore épuisées.
+
+## Historique complet (7 itérations nocturnes, avant ce message)
 
 ## Statut : ARRÊTÉE — rapport prêt pour Momo au réveil
 
