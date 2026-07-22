@@ -155,10 +155,22 @@ pub async fn execute_webhook(
     }
 
     use sqlx::Row;
-    let row = sqlx::query("SELECT channel_id, name, created_by FROM webhooks WHERE id=$1 AND token=$2")
-        .bind(webhook_id).bind(&token)
+    // Comparaison du token en temps constant, comme verify_github_token_get plus bas
+    // dans ce même fichier -- filtrer par `WHERE token=$2` en SQL laisse Postgres
+    // faire une comparaison memcmp classique (short-circuit au 1er octet différent),
+    // un canal auxiliaire théorique que ce fichier corrige déjà pour le token GitHub
+    // mais pas pour celui-ci. Fetch par id seul, comparaison XOR-fold en Rust.
+    let row = sqlx::query("SELECT channel_id, name, created_by, token FROM webhooks WHERE id=$1")
+        .bind(webhook_id)
         .fetch_optional(&state.db).await?
         .ok_or(AppError::Unauthorized)?;
+
+    let stored_token: String = row.get("token");
+    let valid = stored_token.len() == token.len()
+        && stored_token.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
+    if !valid {
+        return Err(AppError::Unauthorized);
+    }
 
     let channel_id: Uuid = row.get("channel_id");
     let created_by: Uuid = row.get("created_by");
