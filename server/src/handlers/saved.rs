@@ -35,9 +35,23 @@ pub async fn save_message(
     Extension(claims): Extension<Claims>,
     Json(body): Json<SaveMessageBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Vérifier que l'utilisateur a accès au canal/serveur référencé
+    // Vérifier que l'utilisateur a accès au canal/serveur référencé. Sans server_id,
+    // channel_id désigne un DM 1-à-1 (dm_channels) -- ce cas n'était PAS vérifié du
+    // tout : n'importe quel utilisateur authentifié pouvait fournir un channel_id de
+    // DM arbitraire (dont il n'a jamais été membre) sans jamais être rejeté.
     if let Some(sid) = body.server_id {
         require_member_and_channel(&state, claims.sub, sid, body.channel_id).await?;
+    } else {
+        let is_dm_member: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
+        )
+        .bind(body.channel_id)
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+        if !is_dm_member {
+            return Err(AppError::Forbidden);
+        }
     }
     sqlx::query(
         "INSERT INTO saved_messages (user_id, message_id, channel_id, server_id, content, author_username, author_avatar)
