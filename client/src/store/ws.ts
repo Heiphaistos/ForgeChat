@@ -73,11 +73,20 @@ export const useWs = create<WsState>((set, get) => ({
     set({ _connecting: false })
 
     ws.onmessage = (e) => {
+      let msg: any
       try {
-        const msg = JSON.parse(e.data)
-        const handlers = get().handlers.get(msg.type) ?? []
-        handlers.forEach(h => h(msg))
-      } catch {}
+        msg = JSON.parse(e.data)
+      } catch (err) {
+        console.error('[ws] message JSON invalide', err)
+        return
+      }
+      // Chaque handler isolé dans son propre try/catch : un handler qui plante ne doit
+      // ni bloquer silencieusement les suivants (forEach s'arrêterait net) ni disparaître
+      // sans trace — avant, tout le dispatch était dans un seul catch {} muet.
+      const handlers = get().handlers.get(msg.type) ?? []
+      handlers.forEach(h => {
+        try { h(msg) } catch (err) { console.error(`[ws] handler "${msg.type}" a levé`, err) }
+      })
     }
 
     ws.onerror = () => {
