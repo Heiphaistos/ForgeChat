@@ -1,57 +1,64 @@
-# CHECKPOINT
+# CHECKPOINT — LOOP NOCTURNE TERMINÉE (7/8, arrêt propre)
 
-Dernière étape réussie : audio système du partage d'écran mixé au micro (commit 8337d59),
-déployé automatiquement par CI Forgejo (confirmé : VPS HEAD = 8337d59), smoke test prod OK.
-CYCLE 11 (demande explicite Momo) entièrement traité : 6 layouts, noise gate, caméra+écran
-simultanés, mix audio système. Bascule maintenant en loop d'amélioration continue nocturne
-(voir GOAL.md) — Momo est en veille, pas de supervision jusqu'à demain.
+## Statut : ARRÊTÉE — rapport prêt pour Momo au réveil
 
-Prochaine action : itération 7 de la loop nocturne — choisir UNE piste dans GOAL.md
-("Pistes candidates"), l'implémenter, vérifier, déployer (push suffit, CI Forgejo auto-déploie),
-checkpoint, ScheduleWakeup suivant.
+CYCLE 11 (demande explicite) entièrement traité + loop d'amélioration continue tournée
+7 itérations cette nuit, arrêtée proprement à l'itération 7 après 2 itérations consécutives
+(6 et 7) sans trouvaille sûre supplémentaire, conformément au critère de fin de GOAL.md.
 
-Itération CYCLE 11 : terminée (3/3 features + 1 fix limitation + 2 bugfix latents)
-Itération loop nocturne : 6/8
-  - it.1 : a11y switcher de disposition (commit 4b5055c, déployé confirmé)
-  - it.2 : bug réel — mix audio non propagé aux peers rejoignant en cours de partage (commit 062f612, déployé confirmé)
-  - it.3 : bug réel — mark_all_read (server) ignorait les échecs DB, renvoyait faux succès (commit f41549f, déployé confirmé, conteneur server rebuild+healthy)
-  - it.4 : nettoyage — 7 imports inutilisés retirés (cargo fix), cargo check 0 warning (commit f211f3e, déployé confirmé, conteneur server rebuild+healthy)
-  - it.5 : a11y Whiteboard (dialog role, 5 boutons outils, Escape) + Soundboard (bouton fermer, slider volume) (commit e895ea8, déployé confirmé)
-  - it.6 : audit modales a11y (rien à faire, déjà couvert) + audit tokio::join! serveur (rien à faire, bug isolé déjà fixé) + 2 eslint-disable morts supprimés, eslint 0 problème (commit 9ac230d, déployé confirmé)
+## Résumé complet de la nuit
 
-Note déploiement serveur : un changement server/ déclenche un vrai rebuild Docker (cargo build),
-~1-2 min, contrairement au client (quasi instantané). Pour confirmer sans deviner : capturer
-`docker compose ps -q server` AVANT push, puis poller après jusqu'à ce que l'ID change (nouveau
-conteneur) + health=healthy. Utiliser Bash run_in_background DIRECTEMENT sur la boucle de poll
-(pas de nohup+& imbriqué). Pour un changement CLIENT seul, `git rev-parse --short HEAD` sur le
-VPS suffit tout de suite (pas de rebuild Docker, juste npm ci+build côté CI).
+**CYCLE 11 (demande explicite Momo) :**
+1. 6 dispositions d'appel (grid/spotlight/sidebar/presentation/focus/filmstrip)
+2. Noise gate AudioWorklet en plus des filtres statiques
+3. Caméra + écran simultanés et visibles par tous (2 senders vidéo distincts)
+4. Audio système du partage d'écran mixé au micro (plus perdu/remplacé)
 
-FINDING NON CORRIGÉ (à signaler à Momo, pas fait cette nuit — trop risqué sans supervision) :
-race potentielle de renégociation WebRTC dans voice.ts. toggleVideo/shareScreen/stopScreenShare
-appellent chacun createOffer()+setLocalDescription() de façon ad-hoc sans mutex/queue. Si
-l'utilisateur déclenche 2 actions coup sur coup (ex: activer caméra PUIS partager écran très
-vite), un 2e createOffer() pourrait survenir avant que le 1er ait atteint signalingState
-"stable", ce qui casserait la négociation pour cette paire de pairs (état WebRTC invalide).
-Fix propre = file d'attente de renégociation par pc (sérialiser tous les createOffer/
-setLocalDescription d'un même RTCPeerConnection). Pas reproduit ni testé en conditions réelles
-cette nuit (nécessite 2 pairs + clics rapides) — juste une lecture de code qui identifie le
-risque théorique. Ne PAS le corriger sans validation humaine (touche tous les points de
-renégociation, risque de casser la voix/vidéo si mal fait).
+**Loop nocturne (7 itérations) :**
+- it.1 : a11y switcher de disposition (commit 4b5055c)
+- it.2 : BUG RÉEL — mix audio non propagé aux peers rejoignant en cours de partage (commit 062f612)
+- it.3 : BUG RÉEL — mark_all_read (server) ignorait les échecs DB, renvoyait faux succès (commit f41549f)
+- it.4 : nettoyage — 7 imports inutilisés retirés, cargo check 0 warning (commit f211f3e)
+- it.5 : a11y Whiteboard (dialog, 5 outils, Escape) + Soundboard (commit e895ea8)
+- it.6 : audits (modales a11y, tokio::join! serveur) → rien à corriger, + 2 eslint-disable morts supprimés, eslint 0 problème (commit 9ac230d)
+- it.7 : audit sécurité (XSS markdown, injection liens, rate limiting auth) → tout déjà solide, rien à corriger. **Arrêt de la loop ici.**
 
-Pistes restantes : perf MessageList (1562 lignes, composant monolithique) explicitement écarté
-cette nuit — trop risqué sans supervision, à proposer à Momo pour une session dédiée avec plan.
-Modales/erreurs serveur/lint : audités, rien de plus à trouver sans risque. La loop nocturne a
-maintenant traité la quasi-totalité des pistes sûres et bornées listées dans GOAL.md.
-Si itération 7 ne trouve rien de nouveau et sûr → s'arrêter à 7/8 plutôt que forcer une 8e
-itération cosmétique sans valeur.
+Tous les commits poussés (forgejo + github), tous déployés et vérifiés en prod
+(dernier commit vérifié sur VPS : 9ac230d, healthy).
 
-Contexte minimal pour reprendre à froid :
+## Finding NON corrigé — à faire valider par Momo avant d'y toucher
+
+**Race potentielle de renégociation WebRTC dans `client/src/store/voice.ts`.**
+`toggleVideo`/`shareScreen`/`stopScreenShare` appellent chacun `createOffer()` +
+`setLocalDescription()` de façon ad-hoc, sans mutex/queue par `RTCPeerConnection`.
+Si l'utilisateur déclenche 2 actions coup sur coup (ex: activer caméra PUIS partager
+écran très vite), un 2e `createOffer()` pourrait survenir avant que le 1er ait atteint
+`signalingState: "stable"`, cassant la négociation pour cette paire de pairs.
+
+- Pas reproduit ni testé en conditions réelles (nécessite 2 pairs + clics rapides) —
+  identifié par lecture de code, pas par un bug observé en prod.
+- Fix propre = file d'attente de renégociation par `RTCPeerConnection` (sérialiser tous
+  les `createOffer`/`setLocalDescription` d'un même pc).
+- **Ne pas corriger sans validation humaine** — touche tous les points de renégociation
+  de voice.ts, risque de casser la voix/vidéo en prod si mal fait.
+
+## Piste écartée délibérément — à proposer pour une session dédiée
+
+**Perf `MessageList.tsx`** (1562 lignes) : composant monolithique, aucun `React.memo`,
+tous les messages re-rendent à chaque changement d'état local (hover, edit, etc.).
+Extraction en sous-composant memoïsé par message = amélioration perf réelle sur les
+canaux à beaucoup de messages, mais refactor multi-points dans un fichier énorme,
+trop risqué à faire sans supervision/tests visuels. Bon candidat pour une session
+normale avec `writing-plans` + vérification visuelle avant/après.
+
+## Contexte pour reprendre (prochaine session normale, pas une loop)
+
 - Repo : C:\Users\Momo\ForgeChat (client React/Vite/TS, server Rust/Axum, VPS 212.227.140.45)
 - Déploiement : push vers `main` (forgejo + github) → CI Forgejo Actions déploie automatiquement
-  (.forgejo/workflows/deploy.yml, ~1-2 min). NE PAS scp manuellement (redondant, cf. LESSONS.md).
-  Vérifier déploiement : `ssh root@212.227.140.45 "cd /opt/forgechat && git rev-parse --short HEAD"`
-  doit matcher le dernier commit pushé.
-- Build : client → `cd client && npx tsc --noEmit && npm run build` ; server → `cd server && cargo check`
-- Fichiers voix/vidéo touchés ce cycle : client/src/store/voice.ts, client/src/pages/VoiceVideoPage.tsx,
-  client/src/components/voice/VoiceBar.tsx, client/public/noise-gate-worklet.js
-- FEATURE_BACKLOG.md tient l'historique complet des cycles précédents + règles du loop
+  (.forgejo/workflows/deploy.yml). NE PAS scp manuellement (redondant). Un changement server/
+  déclenche un vrai rebuild Docker (~1-2 min) ; un changement client seul est quasi instantané.
+  Vérifier : `ssh root@212.227.140.45 "cd /opt/forgechat && git rev-parse --short HEAD"`.
+- Build : client → `cd client && npx eslint src && npx tsc --noEmit && npm run build` ;
+  server → `cd server && cargo check`
+- `.loop/JOURNAL.md` a le détail complet de chaque itération, `.loop/LESSONS.md` les leçons
+  opérationnelles (déploiement, WebRTC, CI)
