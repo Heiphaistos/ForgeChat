@@ -37,8 +37,14 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
   const callStateRef = useRef<CallState>('idle')
   const partnerIdRef = useRef<string | undefined>(partnerId)
   const dmIdRef = useRef<string | undefined>(dmId)
+  // Flag synchrone anti-double-appel : callState (state React) ne se met à jour
+  // qu'APRÈS l'await getUserMedia/buildPc dans startCall/acceptCall, donc un 2e clic
+  // pendant cette fenêtre async verrait encore 'idle' même via callStateRef. Ce flag
+  // est posé en tout premier, avant tout await, et effectivement synchrone.
+  const callInFlightRef = useRef(false)
 
   const cleanup = useCallback(() => {
+    callInFlightRef.current = false
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current)
       callTimeoutRef.current = null
@@ -92,6 +98,13 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
   // Initiate outgoing call
   const startCall = useCallback(async (type: 'voice' | 'video') => {
     if (!partnerId || !dmId) return
+    // Garde anti-double-appel (voir callInFlightRef) : un double-clic/double-tap rapide
+    // sur le bouton d'appel, avant que callState ne quitte 'idle' (après l'await
+    // getUserMedia/buildPc ci-dessous), écraserait pcRef/localStream du 1er appel sans
+    // jamais le fermer ni couper le flux média (micro/caméra restent actifs, connexion
+    // WebRTC orpheline).
+    if (callInFlightRef.current) return
+    callInFlightRef.current = true
     setCallType(type)
     try {
       const stream = await getCallMedia(type)
@@ -114,6 +127,8 @@ export function useDmCall(dmId: string | undefined, partnerId: string | undefine
 
   // Accept incoming call (partner accepts, they are the callee)
   const acceptCall = useCallback(async (fromUserId: string, type: 'voice' | 'video') => {
+    if (callInFlightRef.current) return
+    callInFlightRef.current = true
     setCallType(type)
     try {
       const stream = await getCallMedia(type)
