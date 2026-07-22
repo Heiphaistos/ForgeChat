@@ -27,6 +27,9 @@ function hexToRgb(hex: string): string {
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import MainLayout from './components/layout/MainLayout'
+import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
+import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
+import FloatingCallPiP from './components/voice/FloatingCallPiP'
 
 // Lazy loading pour les pages non-critiques au premier affichage
 const LandingPage = lazy(() => import('./pages/LandingPage'))
@@ -989,6 +992,13 @@ function AppInner() {
             <Route path="admin" element={<AdminPage />} />
           </Route>
         </Routes>
+        {/* Montés ici (racine, hors de <Routes>) et non dans MainLayout : /settings est une
+            route de premier niveau, structurellement HORS de MainLayout (plein écran sans
+            sidebars, voulu) — un appel en cours doit rester audible/visible même là, pas
+            seulement sur les routes wrappées par MainLayout. */}
+        {user && <PersistentVoiceAudio />}
+        {user && <PersistentDmCallAudio />}
+        {user && <FloatingCallPiP />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
         <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}
