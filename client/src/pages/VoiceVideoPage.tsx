@@ -516,7 +516,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
               {allTiles.filter(t => t.key !== spotlightTile.key).map(t => (
-                <div key={t.key} className="w-32 flex-shrink-0 cursor-pointer" onClick={() => setSpotlightTileKey(t.key)}>
+                <div
+                  key={t.key}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Mettre en avant ${t.peer.username}${t.kind === 'screen' ? ' (écran partagé)' : ''}`}
+                  className="w-32 flex-shrink-0 cursor-pointer"
+                  onClick={() => setSpotlightTileKey(t.key)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSpotlightTileKey(t.key) } }}
+                >
                   {renderTile(t)}
                 </div>
               ))}
@@ -532,7 +540,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             </div>
             <div className="w-48 flex flex-col gap-2 p-2 overflow-y-auto overscroll-contain border-l border-fc-hover bg-fc-sidebar/50">
               {allTiles.map(t => (
-                <div key={t.key} className="cursor-pointer" onClick={() => setSpotlightTileKey(t.key)}>
+                <div
+                  key={t.key}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Mettre en avant ${t.peer.username}${t.kind === 'screen' ? ' (écran partagé)' : ''}`}
+                  className="cursor-pointer"
+                  onClick={() => setSpotlightTileKey(t.key)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSpotlightTileKey(t.key) } }}
+                >
                   {renderTile(t)}
                 </div>
               ))}
