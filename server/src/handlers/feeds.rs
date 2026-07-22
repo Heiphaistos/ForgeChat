@@ -264,12 +264,12 @@ async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String
         // Si même guid que le dernier connu → pas de nouveau contenu
         if last_guid.as_deref() == Some(guid.as_str()) {
             // Mise à jour last_checked_at uniquement
-            let _ = sqlx::query(
+            sqlx::query(
                 "UPDATE channel_feeds SET last_checked_at = NOW() WHERE id = $1"
             )
             .bind(feed.id)
             .execute(&state.db)
-            .await;
+            .await?;
             return Ok(());
         }
 
@@ -277,22 +277,25 @@ async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String
         let content = format!("🔔 **{}** — {}\n{}", feed.name, title, link);
         post_feed_message(state, feed, &content).await;
 
-        // Mettre à jour last_item_guid + last_checked_at
-        let _ = sqlx::query(
+        // Mettre à jour last_item_guid + last_checked_at — propager l'échec (au lieu de
+        // `let _ =`) : si ce UPDATE échoue silencieusement, le prochain poll (5 min) revoit
+        // le même guid comme "nouveau" et re-poste le même item en boucle jusqu'à ce que le
+        // UPDATE finisse par réussir. L'appelant (poll_all_feeds) logue déjà les erreurs.
+        sqlx::query(
             "UPDATE channel_feeds SET last_item_guid = $1, last_checked_at = NOW() WHERE id = $2"
         )
         .bind(&guid)
         .bind(feed.id)
         .execute(&state.db)
-        .await;
+        .await?;
     } else {
         // Pas d'item parsé — on met juste à jour le timestamp
-        let _ = sqlx::query(
+        sqlx::query(
             "UPDATE channel_feeds SET last_checked_at = NOW() WHERE id = $1"
         )
         .bind(feed.id)
         .execute(&state.db)
-        .await;
+        .await?;
     }
 
     Ok(())

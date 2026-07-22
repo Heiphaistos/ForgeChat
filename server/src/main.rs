@@ -104,9 +104,15 @@ async fn main() -> anyhow::Result<()> {
                     "content": r.get::<Option<String>, _>("content"),
                 });
                 reminder_state.broadcast_to_user(r.get::<uuid::Uuid, _>("user_id"), event.to_string()).await;
-                let _ = sqlx::query("UPDATE message_reminders SET sent = TRUE WHERE id = $1")
+                // Si ce UPDATE échoue silencieusement, `sent` reste FALSE -> le prochain
+                // tick (30s) reprend ce même rappel dans la requête SELECT ci-dessus et le
+                // rebroadcast en boucle indéfiniment (spam de rappels dupliqués côté client).
+                if let Err(e) = sqlx::query("UPDATE message_reminders SET sent = TRUE WHERE id = $1")
                     .bind(r.get::<uuid::Uuid, _>("id"))
-                    .execute(&reminder_state.db).await;
+                    .execute(&reminder_state.db).await
+                {
+                    tracing::error!("Échec marquage rappel comme envoyé: {}", e);
+                }
             }
         }
     });
