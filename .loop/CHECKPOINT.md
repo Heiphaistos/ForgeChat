@@ -1,6 +1,31 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : EN PAUSE — itérations 8+9+10 codées, DÉPLOIEMENT CASSÉ depuis it.9, à investiguer par Momo
+## Statut : ACTIVE (code) / DÉPLOIEMENT CONFIRMÉ CASSÉ depuis it.9 — Momo doit investiguer
+
+**Preuve définitive (itération 11, 2026-07-22 14:05)** : commit 4deeb49 touche le
+SERVEUR (server/src/handlers/*.rs) — un rebuild Docker/cargo est donc obligatoire,
+aucun cache ne peut l'éviter. Poussé, CI Forgejo montre le job comme lancé, HEAD VPS
+passe bien à 4deeb49 (git reset fonctionne), MAIS `forgechat-server-1` n'a PAS été
+recréé (CreatedAt toujours 11:43:04 UTC, identique à avant ce push). Donc : le `git
+reset --hard` de l'étape SSH tourne, mais tout ce qui suit (npm ci/build, docker
+compose up --build) ne s'exécute plus RÉELLEMENT, tout en faisant remonter un exit 0
+("status":"success" côté API Forgejo Actions, ~15s). Confirme et durcit le diagnostic
+de l'itération 10 (qui portait sur un changement client, où on pouvait encore
+suspecter un souci spécifique au build client) : le problème est dans l'étape SSH
+elle-même ou l'environnement du runner, pas dans le code des commits poussés.
+
+**Hypothèses non vérifiables sans accès plus profond (bloqué par le classifier de
+permissions, ne PAS forcer)** : script SSH qui échoue silencieusement après le
+`git reset` sans faire remonter d'erreur (peu probable avec `set -e` + ssh qui devrait
+propager l'exit code) ; ou VPS_HOST/VPS_USER pointe ailleurs que ce que j'atteins en
+SSH direct depuis mon environnement ; ou un état corrompu côté runner (cache npm,
+docker) qui fait sortir `npm ci`/`docker compose` en 0 sans rien faire. Recommandation
+concrète pour Momo : ouvrir l'UI Forgejo Actions (Heiphaistos/ForgeChat → Actions →
+run le plus récent) et lire le log complet étape par étape — c'est la seule vue que
+je n'ai pas pu obtenir (auth basic bloquée sur les routes web, classifier bloque le
+SSH mutation/exploration profonde).
+
+## Statut précédent : EN PAUSE — itérations 8+9+10 codées, DÉPLOIEMENT CASSÉ depuis it.9, à investiguer par Momo
 
 **Anomalie déploiement découverte pendant it.10** : commits eeb7bfd (it.9) et 35d7d18
 (it.10) montrent tous les deux "status":"success" via l'API Forgejo Actions
