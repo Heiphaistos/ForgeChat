@@ -4,7 +4,15 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-22 19h, après
 22 itérations — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-07-22 19:05)
+## Statut actuel (2026-07-22 19:33)
+
+**Itération post-réparation** : webhooks.rs audité (jamais touché avant). list/create/
+delete_webhook propres. BUG RÉEL trouvé : execute_webhook comparait le token webhook
+via `WHERE token=$2` en SQL (memcmp non temps-constant), alors que
+verify_github_token_get (même fichier) utilise déjà une comparaison XOR-fold temps
+constant pour SON token — incohérence corrigée (fetch par id seul + comparaison Rust
+temps constant, même pattern). Commit 5d38da7, server 3.174.0. Déploiement auto
+confirmé fonctionnel (HEAD VPS + /health 200 sans intervention manuelle).
 
 **Déploiement RÉPARÉ** — CI Forgejo Actions déploie de nouveau automatiquement à
 chaque push (git reset + npm ci + build + docker compose up --build). Vérifié
