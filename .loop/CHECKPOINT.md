@@ -2,6 +2,15 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
 
+**Itération 20 (2026-07-22 17:37, commit 24e2291, client 3.515.0)** : pivot client
+(hooks/store/api, jamais audités). auth.ts propre. BUG RÉEL trouvé dans
+api/client.ts : l'intercepteur refresh-and-retry (401) n'avait aucune garde
+anti-boucle -- une requête rejouée qui échoue ENCORE en 401 relance un nouveau cycle
+refresh+retry indéfiniment (spam /auth/refresh sans fin). Fix : flag
+`err.config._retried` posé après le 1er retry, vérifié avant d'en déclencher un
+nouveau. Le semaphore refreshPromise (anti-refresh-concurrent) était déjà correct.
+tsc/eslint/build clean.
+
 **Itération 19 (2026-07-22 17:12, commit 0e4f202, server 3.172.0)** : search.rs,
 user_settings.rs, templates.rs audités -- propres. BUG RÉEL trouvé dans desktop.rs
 check_update : latest_version codée en dur à "3.2.0" alors que le desktop est en 3.7.0
