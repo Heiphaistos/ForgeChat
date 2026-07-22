@@ -608,7 +608,10 @@ pub async fn purge_messages(
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?
         .get("n");
 
-    sqlx::query(
+    // PURGE_MESSAGES est une action destructive (suppression en masse) -- une perte
+    // silencieuse de son entrée d'audit est un vrai trou de traçabilité, comme pour
+    // log_event() (audit.rs, déjà corrigé) que cet insert inline contourne.
+    if let Err(e) = sqlx::query(
         "INSERT INTO audit_log (server_id, action, user_id, target_id, details) VALUES ($1,'PURGE_MESSAGES',$2,$3,$4)"
     )
     .bind(server_id)
@@ -617,7 +620,9 @@ pub async fn purge_messages(
     .bind(serde_json::json!({ "deleted": count, "channel_id": channel_id }))
     .execute(&state.db)
     .await
-    .ok();
+    {
+        tracing::error!("Échec écriture audit_log PURGE_MESSAGES (channel={}): {}", channel_id, e);
+    }
 
     let event = serde_json::json!({
         "type": "CHANNEL_PURGE",
