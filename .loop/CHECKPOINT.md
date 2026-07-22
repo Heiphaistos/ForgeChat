@@ -1,6 +1,26 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE — itérations 8+9 faites, en attente d'itération 10
+## Statut : EN PAUSE — itérations 8+9+10 codées, DÉPLOIEMENT CASSÉ depuis it.9, à investiguer par Momo
+
+**Anomalie déploiement découverte pendant it.10** : commits eeb7bfd (it.9) et 35d7d18
+(it.10) montrent tous les deux "status":"success" via l'API Forgejo Actions
+(`/actions/runs/832` et `/833`, durée ~15s chacun) MAIS `/opt/forgechat/client/dist/`
+sur le VPS (version.json ET index.html) a un mtime figé à 11:23:12 UTC — le build de
+l'itération 8 (commit 6273451), PAS des suivants. Le site prod sert toujours 3.512.0
+au lieu de 3.513.0. Donc soit le job SSH ne fait plus réellement le `npm run build`
+malgré un exit 0, soit il déploie ailleurs. Pas creusé plus loin : investigation SSH
+manuelle (git reset/npm ci en direct) bloquée par le classifier de permissions
+(action prod à risque, correctement bloquée). NE PAS forcer — Momo doit soit
+regarder lui-même (workflow_dispatch manuel + logs Forgejo Actions UI), soit
+autoriser une investigation SSH plus poussée.
+
+**Ce qui EST confirmé sain** : itérations 8 (memo fix MessageList/MessageRow) et 9
+(brace-expansion) déployées et vérifiées en prod avant que l'anomalie n'apparaisse
+(version.json 3.512.0, VPS HEAD eeb7bfd, /health 200). Le code de l'itération 10
+(ws.ts) est correct et testé localement (tsc/eslint/build/cargo check clean), juste
+pas confirmé live.
+
+## Statut précédent : ACTIVE — itérations 8+9 faites, en attente d'itération 10
 
 **Itération 8 (2026-07-22 13:10, commit 6273451, client 3.512.0)** : spot-check du
 refactor MessageList->MessageRow (b44fd8d) toujours NON CONFIRMÉ par Momo — pas de
