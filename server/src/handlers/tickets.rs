@@ -171,7 +171,16 @@ pub async fn update_ticket(
     .ok_or_else(|| AppError::NotFound("Ticket introuvable".into()))?;
 
     let creator_id: Uuid = creator_row.get("creator_id");
-    if creator_id != claims.sub {
+    let is_creator = creator_id == claims.sub;
+    if !is_creator {
+        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
+    }
+    // assigned_to/priority sont des actions de triage (qui traite le ticket, urgence de
+    // la file) -- le créateur ne doit pouvoir modifier que le statut de SON ticket (ex:
+    // le refermer), pas se les auto-attribuer ni s'auto-escalader en urgent. Le check
+    // ci-dessus laissait passer le créateur sans jamais vérifier MANAGE_SERVER pour CES
+    // champs précis.
+    if is_creator && (input.assigned_to.is_some() || input.priority.is_some()) {
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
     }
 
