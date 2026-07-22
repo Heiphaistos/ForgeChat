@@ -653,7 +653,6 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const restoredDraft = drafts[channelId]
   useEffect(() => {
     if (restoredDraft && !content) setContent(restoredDraft)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restoredDraft])
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

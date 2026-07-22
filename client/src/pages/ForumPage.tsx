@@ -736,7 +736,6 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
       const found = allPosts.find(p => p.id === urlPostId)
       if (found) setSelectedPostState(found)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlPostId, allPosts.length])
 
   // Recherche titre/contenu, filtre par tag (clic sur un tag) et tri —
