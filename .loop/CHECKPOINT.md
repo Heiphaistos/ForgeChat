@@ -2,6 +2,17 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
 
+**Itération 15 (2026-07-22 15:37, commit ef49ea2, server 3.169.0)** : nouvelle piste
+(threads.rs, jamais audité) -> trouvé corruption d'encodage réelle (mojibake double
+UTF-8/Latin-1) dans threads.rs ET forum.rs, touchant des messages d'erreur RENVOYÉS
+AU CLIENT ("caractÃ¨res" au lieu de "caractères", etc) -- bug visible utilisateur.
+grep global confirme : seuls ces 2 fichiers touchés dans tout le repo. Fixé (piège :
+certaines occurrences avaient un espace insécable invisible en plus du mojibake,
+résolu via round-trip Python latin1/utf8 plutôt que remplacement texte manuel).
+Texte uniquement, aucune logique changée. cargo check clean.
+
+## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
+
 **Itération 14 (2026-07-22 15:13, commit f572560, client 3.514.0)** : pivot demandé
 (veine let-_-swallow épuisée). Audit IDOR/ownership complet de group_dms.rs (16
 handlers), whiteboard WS handler, VOICE_STATE handler -> tous propres, rien trouvé.
