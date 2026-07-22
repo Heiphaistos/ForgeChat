@@ -102,7 +102,7 @@ pub async fn create_thread(
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if body.first_message.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 caractÃ¨res)".into()));
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let first_msg = body.first_message.clone();
 
@@ -289,10 +289,10 @@ pub async fn send_thread_message(
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if content_trimmed.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Message trop long (max 4000 caractÃ¨res)".into()));
+        return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
-    // VÃ©rifier le timeout (sourdine)
+    // Vérifier le timeout (sourdine)
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
     )
@@ -332,7 +332,7 @@ pub async fn send_thread_message(
     .execute(&state.db)
     .await?;
 
-    // Broadcast en temps rÃ©el aux membres du serveur
+    // Broadcast en temps réel aux membres du serveur
     let event = serde_json::json!({
         "type": "THREAD_MESSAGE",
         "thread_id": thread_id,
@@ -352,7 +352,7 @@ pub async fn archive_thread(
 ) -> Result<Json<Thread>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    // VÃ©rifier que l'utilisateur est le crÃ©ateur du thread OU a la permission MANAGE_MESSAGES
+    // Vérifier que l'utilisateur est le créateur du thread OU a la permission MANAGE_MESSAGES
     let thread_row = sqlx::query(
         "SELECT creator_id FROM threads WHERE id = $1 AND channel_id = $2"
     )
@@ -367,8 +367,8 @@ pub async fn archive_thread(
     let archived = body["archived"].as_bool().unwrap_or(true);
     let locked = body["locked"].as_bool();
 
-    // Locker un thread nÃ©cessite toujours MANAGE_MESSAGES (pas juste Ãªtre crÃ©ateur)
-    // Archiver : crÃ©ateur OU modÃ©rateur
+    // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
+    // Archiver : créateur OU modérateur
     if locked.is_some() {
         use super::servers::require_permission;
         use crate::models::role::Permissions;
@@ -425,7 +425,7 @@ pub async fn edit_thread_message(
 
     let content = body.content.trim().to_string();
     if content.is_empty() || content.chars().count() > 4000 {
-        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractÃ¨res)".into()));
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
 
     let rows = sqlx::query(
