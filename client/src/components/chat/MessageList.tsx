@@ -349,13 +349,30 @@ export default function MessageList({
     setEmojiPickerFor(null)
   }, [])
 
+  // Callers (ChannelPage/DMConversation) passent souvent ces handlers en fonctions
+  // inline recréées à chaque render — les lire via ref garde les callbacks de
+  // MessageList (et donc les props de MessageRow) référentiellement stables même
+  // quand le parent re-render pour une raison sans rapport (countdown slowmode,
+  // indicateur de frappe, etc.), sinon React.memo(MessageRow) se déclenche pour
+  // TOUS les messages à chaque tick — exactement ce que ce refactor devait éviter.
+  const onAddReactionRef = useRef(onAddReaction)
+  useEffect(() => { onAddReactionRef.current = onAddReaction }, [onAddReaction])
+  const onEditMessageRef = useRef(onEditMessage)
+  useEffect(() => { onEditMessageRef.current = onEditMessage }, [onEditMessage])
+  const onReplyRef = useRef(onReply)
+  useEffect(() => { onReplyRef.current = onReply }, [onReply])
+  const onOpenThreadRef = useRef(onOpenThread)
+  useEffect(() => { onOpenThreadRef.current = onOpenThread }, [onOpenThread])
+  const onPinMessageRef = useRef(onPinMessage)
+  useEffect(() => { onPinMessageRef.current = onPinMessage }, [onPinMessage])
+
   // Le brouillon d'édition vit désormais dans MessageRow (état local) — le parent ne
   // reçoit que le texte final à la confirmation, ce qui évite de re-render toute la
   // liste à chaque frappe (avant : editContent était un état partagé ici).
   const confirmEdit = useCallback((msgId: string, newContent: string, originalContent: string) => {
-    if (newContent !== originalContent) onEditMessage(msgId, newContent)
+    if (newContent !== originalContent) onEditMessageRef.current(msgId, newContent)
     setEditingId(null)
-  }, [onEditMessage])
+  }, [])
 
   const cancelEdit = useCallback(() => setEditingId(null), [])
 
@@ -423,11 +440,11 @@ export default function MessageList({
     if (reaction?.me) {
       removeReactionMut.mutate({ msgId, emoji })
     } else {
-      onAddReaction?.(msgId, emoji)
+      onAddReactionRef.current?.(msgId, emoji)
     }
     setPoppingReaction(`${msgId}:${emoji}`)
     setTimeout(() => setPoppingReaction(null), 300)
-  }, [channelId, onAddReaction])
+  }, [channelId])
 
   const startLongPress = useCallback((e: React.TouchEvent, msg: any) => {
     const t = e.touches[0]
@@ -600,9 +617,17 @@ export default function MessageList({
   const handleToggleReactionPicker = useCallback((msgId: string) => setReactionPickerFor(cur => cur === msgId ? null : msgId), [])
   const handleToggleReminder = useCallback((msgId: string) => setReminderFor(cur => cur === msgId ? null : msgId), [])
   const handleAddQuickReaction = useCallback((msgId: string, emoji: string) => {
-    onAddReaction?.(msgId, emoji)
+    onAddReactionRef.current?.(msgId, emoji)
     setEmojiPickerFor(null)
-  }, [onAddReaction])
+  }, [])
+
+  // Wrappers stables pour onReply/onOpenThread/onPinMessage — passés bruts à
+  // MessageRow, l'identité changerait sinon à chaque re-render du parent (voir
+  // commentaire des refs ci-dessus). Le ternaire préserve l'optionalité (MessageRow
+  // affiche le bouton seulement si la prop est définie) sans recréer de fonction.
+  const stableOnReply = useCallback((msg: any) => { onReplyRef.current?.(msg) }, [])
+  const stableOnOpenThread = useCallback((msgId: string) => { onOpenThreadRef.current?.(msgId) }, [])
+  const stableOnPinMessage = useCallback((msgId: string, pinned: boolean) => { onPinMessageRef.current?.(msgId, pinned) }, [])
   const handlePickReaction = useCallback((msgId: string, emoji: string) => {
     toggleReaction(msgId, emoji)
     setReactionPickerFor(null)
@@ -749,9 +774,9 @@ export default function MessageList({
               onCopyMarkdown={handleCopyMarkdown}
               onCopyLink={handleCopyLink}
               onForward={handleForward}
-              onReply={onReply}
-              onOpenThread={onOpenThread}
-              onPinMessage={onPinMessage}
+              onReply={onReply ? stableOnReply : undefined}
+              onOpenThread={onOpenThread ? stableOnOpenThread : undefined}
+              onPinMessage={onPinMessage ? stableOnPinMessage : undefined}
               onToggleTranslation={handleToggleTranslation}
               onToggleReminder={handleToggleReminder}
               onReport={handleReport}

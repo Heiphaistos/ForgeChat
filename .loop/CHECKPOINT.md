@@ -1,6 +1,17 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE — Momo présent a demandé un refactor perf hors-loop (traité), puis
+## Statut : ACTIVE — itération 8 faite (bug réel trouvé+fixé), en attente d'itération 9
+
+**Itération 8 (2026-07-22 13:10)** : spot-check du refactor MessageList->MessageRow
+(b44fd8d) toujours NON CONFIRMÉ par Momo — pas de retour dans cette session ni trace
+en mémoire globale. Ne PAS supposer cassé faute de réponse, juste non validé. Relecture
+fraîche du refactor -> bug réel de mémoïsation trouvé (voir LESSONS.md, entrée React.memo) :
+onReply/onOpenThread/onPinMessage/onAddReaction/onEditMessage arrivaient de ChannelPage en
+fonctions inline instables, cassant React.memo(MessageRow) pour toute la liste à chaque tick
+(countdown slowmode, typing). Fixé dans MessageList.tsx (pattern ref + wrappers stables),
+tsc/eslint/build/cargo check tous clean. client 3.511.0 -> 3.512.0, commit à pousser.
+
+## Statut précédent : ACTIVE — Momo présent a demandé un refactor perf hors-loop (traité), puis
 "enregistre en mémoire, clear, reprends la loop" (2026-07-22, après-midi)
 
 Depuis l'arrêt à 7/8 : Momo a choisi de traiter le finding "refactor perf MessageList"
