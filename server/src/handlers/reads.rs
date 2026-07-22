@@ -199,7 +199,7 @@ pub async fn mark_all_read(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>> {
-    tokio::join!(
+    let (channels_result, dms_result) = tokio::join!(
         sqlx::query(
             "INSERT INTO last_read (user_id, channel_id, read_at)
              SELECT $1, c.id, NOW()
@@ -222,6 +222,10 @@ pub async fn mark_all_read(
         .bind(claims.sub)
         .execute(&state.db),
     );
+    // Les deux Result étaient ignorés — un échec (DB down, contrainte violée) renvoyait
+    // quand même "ok: true" au client, qui croyait tout marqué lu à tort.
+    channels_result?;
+    dms_result?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
