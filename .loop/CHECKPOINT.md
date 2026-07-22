@@ -1,6 +1,46 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 (13+ commits en file)
+## Statut : DÉPLOIEMENT RÉPARÉ (2026-07-22 19:05) — tous les commits de la loop live en prod
+
+**Résolution complète, sur demande explicite de Momo** ("push toutes les nouveaux
+commit et cree la release .exe et setup et redploie sur le vps") :
+
+1. **Cause racine #1 trouvée** : `npm ci` échouait réellement sur le VPS depuis
+   eeb7bfd (~11:25 UTC) — le lockfile régénéré EN LOCAL (Windows, npm 11.6.2) par
+   `npm audit fix` résolvait les `optionalDependencies` différemment de npm 10.8.2
+   (VPS), omettant `@emnapi/core`/`@emnapi/runtime` (fallback WASM natif rollup)
+   que `npm ci` strict exige. `git reset --hard` réussissait toujours (avant `npm
+   ci` dans le script), donnant l'illusion CI "success" alors que rien ne se
+   reconstruisait derrière. Fix : lockfile régénéré DEPUIS le VPS (`npm install`
+   là-bas, copié en retour) — commit 1bd202e.
+2. **Cause racine #2 trouvée** : même après le fix #1, le cache Docker mentait
+   encore — `docker compose up -d --build` affichait tout `CACHED` (y compris
+   `cargo build --release`) malgré du code serveur réellement modifié. Contourné
+   une fois manuellement (`docker compose build --no-cache server`), puis fixé
+   durablement : ARG `GIT_SHA` dans le Dockerfile référencé dans la commande du
+   RUN cargo build, passé par docker-compose.yml + exporté dans deploy.yml avant
+   le build — commit 133a48a. **Vérifié fonctionnel** : le déploiement automatique
+   suivant (133a48a) a correctement reconstruit le binaire serveur sans aucune
+   intervention manuelle (confirmé via l'endpoint desktop.rs reflétant le vrai
+   code).
+3. **Desktop v3.7.0 publiée** : les 2 exe (déjà buildés/publiés sur GitHub
+   Releases plus tôt dans la journée) copiés vers `/opt/forgechat/downloads/`,
+   intégrité vérifiée (re-download + cmp), LandingPage.tsx + desktop.rs updater
+   pointés vers v3.7.0 — commit f78943c.
+
+**Vérification finale** : `/health` 200, `version.json` 3.518.0, VPS HEAD=133a48a,
+conteneur serveur recréé et sain (17:05:16 UTC), exe v3.7.0 téléchargeables (200).
+**Les 17+ commits accumulés durant toute la loop (itérations 8 à 22) sont
+maintenant en production**, y compris tous les vrais bugs trouvés : mémoïsation
+MessageList/MessageRow, focus PiP caméra, brace-expansion, ws.ts dispatch errors,
+group_dms ghost bug, feeds.rs/reminders spam loops, PURGE_MESSAGES audit log,
+mojibake threads.rs/forum.rs, tickets.rs permission gap, saved.rs DM access gap,
+desktop updater stale version, refresh token infinite loop, useDmCall double-appel,
+useCaptions faux indicateur inactif.
+
+**Prochaine itération de la loop** : peut reprendre normalement, le déploiement
+fonctionne à nouveau automatiquement à chaque push. Plus besoin de flag "en attente
+de Momo" sur le statut déploiement.
 
 **Itération 22 (2026-07-22 18:26, commit 03e6375, client 3.517.0)** : presence.ts,
 channelNotif.ts, useVoiceActivity.ts audités -- propres. BUG RÉEL trouvé dans
