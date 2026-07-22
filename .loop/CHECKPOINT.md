@@ -6,11 +6,12 @@ CYCLE 11 (demande explicite Momo) entièrement traité : 6 layouts, noise gate, 
 simultanés, mix audio système. Bascule maintenant en loop d'amélioration continue nocturne
 (voir GOAL.md) — Momo est en veille, pas de supervision jusqu'à demain.
 
-Prochaine action : itération 1 de la loop nocturne — choisir UNE piste dans GOAL.md
-("Pistes candidates"), l'implémenter, vérifier, déployer, checkpoint, ScheduleWakeup suivant.
+Prochaine action : itération 2 de la loop nocturne — choisir UNE piste dans GOAL.md
+("Pistes candidates"), l'implémenter, vérifier, déployer (push suffit, CI Forgejo auto-déploie),
+checkpoint, ScheduleWakeup suivant.
 
 Itération CYCLE 11 : terminée (3/3 features + 1 fix limitation + 2 bugfix latents)
-Itération loop nocturne : 0/8
+Itération loop nocturne : 1/8 (a11y switcher de disposition, commit 4b5055c, déployé confirmé)
 
 Contexte minimal pour reprendre à froid :
 - Repo : C:\Users\Momo\ForgeChat (client React/Vite/TS, server Rust/Axum, VPS 212.227.140.45)
