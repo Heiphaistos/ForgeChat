@@ -2,6 +2,20 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
 
+**Itération 19 (2026-07-22 17:12, commit 0e4f202, server 3.172.0)** : search.rs,
+user_settings.rs, templates.rs audités -- propres. BUG RÉEL trouvé dans desktop.rs
+check_update : latest_version codée en dur à "3.2.0" alors que le desktop est en 3.7.0
+-- updater Tauri annonçait une "mise à jour" vers 3.2.0 à TOUS les clients desktop,
+lien probablement mort. Vérifié sur VPS (readonly) : seuls v3.5.0/v3.6.0 existent
+réellement dans /opt/forgechat/downloads/ -- v3.7.0 buildée+publiée sur GitHub
+Releases mais jamais scp vers le dossier public (étape manuelle documentée non faite,
+PAS corrigée ici -- nécessiterait soit de builder+publier v3.7.0 correctement soit
+que Momo le fasse). Fix appliqué : latest_version -> "3.6.0" (réellement
+téléchargeable), pas "3.7.0" (aurait juste déplacé le lien mort).
+**À signaler à Momo : desktop v3.7.0 existe sur GitHub Releases mais n'est pas encore
+publiquement téléchargeable depuis forgechat.heiphaistos.org — scp manuel requis
+quand déploiement possible.**
+
 **Itération 18 (2026-07-22 16:49, commit 18f04b5, server 3.171.0)** : privacy.rs et
 dm_extras.rs audités, propres. BUG RÉEL trouvé dans saved.rs save_message : check
 d'accès (require_member_and_channel) fait UNIQUEMENT si server_id fourni -- pour une
