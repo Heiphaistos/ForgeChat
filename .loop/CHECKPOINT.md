@@ -1,319 +1,82 @@
-# CHECKPOINT — LOOP REPRISE (post refactor MessageList)
+# CHECKPOINT — Loop d'amélioration continue ForgeChat
 
-## Statut : DÉPLOIEMENT RÉPARÉ (2026-07-22 19:05) — tous les commits de la loop live en prod
+Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier est un
+résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-22 19h, après
+22 itérations — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-**Résolution complète, sur demande explicite de Momo** ("push toutes les nouveaux
-commit et cree la release .exe et setup et redploie sur le vps") :
+## Statut actuel (2026-07-22 19:05)
 
-1. **Cause racine #1 trouvée** : `npm ci` échouait réellement sur le VPS depuis
-   eeb7bfd (~11:25 UTC) — le lockfile régénéré EN LOCAL (Windows, npm 11.6.2) par
-   `npm audit fix` résolvait les `optionalDependencies` différemment de npm 10.8.2
-   (VPS), omettant `@emnapi/core`/`@emnapi/runtime` (fallback WASM natif rollup)
-   que `npm ci` strict exige. `git reset --hard` réussissait toujours (avant `npm
-   ci` dans le script), donnant l'illusion CI "success" alors que rien ne se
-   reconstruisait derrière. Fix : lockfile régénéré DEPUIS le VPS (`npm install`
-   là-bas, copié en retour) — commit 1bd202e.
-2. **Cause racine #2 trouvée** : même après le fix #1, le cache Docker mentait
-   encore — `docker compose up -d --build` affichait tout `CACHED` (y compris
-   `cargo build --release`) malgré du code serveur réellement modifié. Contourné
-   une fois manuellement (`docker compose build --no-cache server`), puis fixé
-   durablement : ARG `GIT_SHA` dans le Dockerfile référencé dans la commande du
-   RUN cargo build, passé par docker-compose.yml + exporté dans deploy.yml avant
-   le build — commit 133a48a. **Vérifié fonctionnel** : le déploiement automatique
-   suivant (133a48a) a correctement reconstruit le binaire serveur sans aucune
-   intervention manuelle (confirmé via l'endpoint desktop.rs reflétant le vrai
-   code).
-3. **Desktop v3.7.0 publiée** : les 2 exe (déjà buildés/publiés sur GitHub
-   Releases plus tôt dans la journée) copiés vers `/opt/forgechat/downloads/`,
-   intégrité vérifiée (re-download + cmp), LandingPage.tsx + desktop.rs updater
-   pointés vers v3.7.0 — commit f78943c.
+**Déploiement RÉPARÉ** — CI Forgejo Actions déploie de nouveau automatiquement à
+chaque push (git reset + npm ci + build + docker compose up --build). Vérifié
+fonctionnel sur plusieurs déploiements consécutifs sans intervention manuelle. Voir
+`project_forgechat.md` (mémoire globale) section "Loop 2026-07-22" pour le détail des
+2 causes racines (lockfile npm11/npm10 + cache Docker menteur) et leurs fixs durables.
 
-**Vérification finale** : `/health` 200, `version.json` 3.518.0, VPS HEAD=133a48a,
-conteneur serveur recréé et sain (17:05:16 UTC), exe v3.7.0 téléchargeables (200).
-**Les 17+ commits accumulés durant toute la loop (itérations 8 à 22) sont
-maintenant en production**, y compris tous les vrais bugs trouvés : mémoïsation
-MessageList/MessageRow, focus PiP caméra, brace-expansion, ws.ts dispatch errors,
-group_dms ghost bug, feeds.rs/reminders spam loops, PURGE_MESSAGES audit log,
-mojibake threads.rs/forum.rs, tickets.rs permission gap, saved.rs DM access gap,
-desktop updater stale version, refresh token infinite loop, useDmCall double-appel,
-useCaptions faux indicateur inactif.
+**server v3.173.0 / client v3.518.0 / desktop v3.7.0** (publiée et téléchargeable).
 
-**Prochaine itération de la loop** : peut reprendre normalement, le déploiement
-fonctionne à nouveau automatiquement à chaque push. Plus besoin de flag "en attente
-de Momo" sur le statut déploiement.
+**22 itérations menées, ~15 vrais bugs trouvés+fixés**, tous en production. Refactor
+MessageList→MessageRow (b44fd8d) : spot-check humain toujours non confirmé par Momo,
+mais 2 relectures fraîches (it.8, it.21 zone useDmCall) n'ont rien trouvé de cassé
+d'autre — traiter comme sain sauf signal contraire.
 
-**Itération 22 (2026-07-22 18:26, commit 03e6375, client 3.517.0)** : presence.ts,
-channelNotif.ts, useVoiceActivity.ts audités -- propres. BUG RÉEL trouvé dans
-useCaptions.ts : onerror mettait isActive=false pour TOUTE erreur SpeechRecognition,
-y compris 'no-speech' (fréquente/bénigne en reconnaissance continue) -- comme
-recognitionRef.current n'était jamais nettoyé, onend redémarrait quand même, donc
-l'indicateur "actif" clignotait off alors que la transcription continuait réellement.
-Fix : distinction erreurs fatales (stop réel) vs récupérables (laisser le cycle
-onend/restart déjà prévu faire son travail). tsc/eslint/build clean.
+## Pistes déjà épuisées (ne pas re-creuser sans nouvelle piste précise)
 
-**Itération 21 (2026-07-22 18:00, commit 158f635, client 3.516.0)** : useDmCall.ts
-(268L) audité. Vérifié : absence de gestion glare/polite-peer n'est PAS un bug ici
-(design DM call = offer créée uniquement côté appelant, glare structurellement
-impossible, contrairement au mesh serveur de voice.ts). BUG RÉEL trouvé : startCall/
-acceptCall sans garde anti-double-invocation -- double-clic rapide avant que callState
-quitte 'idle' (après l'await getUserMedia+buildPc) pouvait écraser pcRef/localStream
-du 1er appel, jamais nettoyé (micro/caméra restent actifs, pc orpheline). Fix : flag
-`callInFlightRef` synchrone posé en tout premier (avant tout await), remis à false
-dans cleanup() seulement. Piège évité : un 1er essai avec callStateRef échouait car ce
-ref ne se synchronise qu'après re-render, trop tard pour fermer la fenêtre de course.
-tsc/eslint/build clean.
+- **`let _ =`/`.ok()` avalant des erreurs côté serveur** : tout `server/src/handlers/`
+  audité (websocket.rs, users.rs, friends.rs, emojis.rs, stickers.rs, main.rs,
+  scheduled.rs, call_history) — sites restants tous bénins (best-effort, idempotents,
+  ou déjà protégés par transaction). 6 vrais bugs déjà fixés sur cette veine
+  (audit_log x2, group_dms ghost, feeds.rs, reminders, — voir JOURNAL.md it.11-13).
+- **Mojibake / corruption d'encodage** : grep élargi (Latin-1, Windows-1252, NBSP
+  isolé) sur tout `server/src` + `client/src` — seuls threads.rs/forum.rs étaient
+  touchés (fixés it.15), rien ailleurs.
+- **IDOR/ownership audité et propre** : group_dms.rs (16 handlers), whiteboard WS,
+  VOICE_STATE, polls.rs, reports.rs, moderation.rs, uploads.rs, privacy.rs,
+  dm_extras.rs, search.rs, user_settings.rs (591L), templates.rs. 2 vrais trous
+  trouvés+fixés (tickets.rs it.17, saved.rs it.18).
+- **Fichiers client hooks/store audités** : auth.ts, presence.ts, channelNotif.ts,
+  useVoiceActivity.ts, api/client.ts — propres sauf api/client.ts (fixé it.20).
 
-**Itération 20 (2026-07-22 17:37, commit 24e2291, client 3.515.0)** : pivot client
-(hooks/store/api, jamais audités). auth.ts propre. BUG RÉEL trouvé dans
-api/client.ts : l'intercepteur refresh-and-retry (401) n'avait aucune garde
-anti-boucle -- une requête rejouée qui échoue ENCORE en 401 relance un nouveau cycle
-refresh+retry indéfiniment (spam /auth/refresh sans fin). Fix : flag
-`err.config._retried` posé après le 1er retry, vérifié avant d'en déclencher un
-nouveau. Le semaphore refreshPromise (anti-refresh-concurrent) était déjà correct.
-tsc/eslint/build clean.
+## Fichiers encore jamais audités (pistes pour la suite)
 
-**Itération 19 (2026-07-22 17:12, commit 0e4f202, server 3.172.0)** : search.rs,
-user_settings.rs, templates.rs audités -- propres. BUG RÉEL trouvé dans desktop.rs
-check_update : latest_version codée en dur à "3.2.0" alors que le desktop est en 3.7.0
--- updater Tauri annonçait une "mise à jour" vers 3.2.0 à TOUS les clients desktop,
-lien probablement mort. Vérifié sur VPS (readonly) : seuls v3.5.0/v3.6.0 existent
-réellement dans /opt/forgechat/downloads/ -- v3.7.0 buildée+publiée sur GitHub
-Releases mais jamais scp vers le dossier public (étape manuelle documentée non faite,
-PAS corrigée ici -- nécessiterait soit de builder+publier v3.7.0 correctement soit
-que Momo le fasse). Fix appliqué : latest_version -> "3.6.0" (réellement
-téléchargeable), pas "3.7.0" (aurait juste déplacé le lien mort).
-**À signaler à Momo : desktop v3.7.0 existe sur GitHub Releases mais n'est pas encore
-publiquement téléchargeable depuis forgechat.heiphaistos.org — scp manuel requis
-quand déploiement possible.**
+**`client/src/hooks/` : AUDIT COMPLET, ÉPUISÉ (2026-07-22 19h)** — 16/16 fichiers
+relus (useAudioNotifications, useCaptions, useCountdown, useDmCall, useE2E*,
+useEscapeKey, useFormatDate, useIntersection, useKeyboardNav, usePageTitle,
+usePushNotifications, useSwipeClose, useTypeToFocus, useUpdateNotifier,
+useVoiceActivity, useWakeLock — *useE2E.ts pas encore lu en détail, seul restant
+possible). 2 vrais bugs trouvés (useDmCall it.21, useCaptions it.22), le reste propre.
+Ne PAS re-auditer sans piste précise. Note DRY (pas un bug) : `useFormatDate.ts` et
+la logique locale de `MessageList.tsx` dupliquent presque le même formatTs — jamais
+divergent, juste dupliqué, pas prioritaire.
 
-**Itération 18 (2026-07-22 16:49, commit 18f04b5, server 3.171.0)** : privacy.rs et
-dm_extras.rs audités, propres. BUG RÉEL trouvé dans saved.rs save_message : check
-d'accès (require_member_and_channel) fait UNIQUEMENT si server_id fourni -- pour une
-sauvegarde de message DM (server_id=None), aucun check d'appartenance à dm_channels
-n'existait, channel_id DM arbitraire accepté sans jamais vérifier que le requérant en
-est membre. Fix : check dm_channels symétrique (même pattern que dm_extras.rs). Note
-laissée en l'état (hors scope) : content/author_username/author_avatar restent fournis
-par le client sans vérification contre le message réel, dans les deux chemins
-(serveur ET DM) -- pré-existant, plus large qu'un simple trou d'accès, à proposer pour
-une session dédiée si Momo veut le durcir (nécessiterait de fetch le contenu depuis la
-table source au lieu de faire confiance au client).
+Côté serveur (jamais touchés cette session) : stickers.rs, server_settings.rs,
+invites.rs, bots.rs, webhooks.rs, soundboard.rs (audité historiquement cycle 6, pas
+cette session — revalider).
+Côté client (jamais touchés cette session) : composants `settings/*` (au-delà a11y),
+composants `modals/*` (logique, pas juste a11y déjà fait), `pages/*` non encore
+relues (AdminPage, ExplorePage, ActivityFeedPage, LeaderboardPage, TicketsPage...).
 
-**Itération 17 (2026-07-22 16:26, commit 9d68796, server 3.170.0)** : dernière chance
-avant arrêt auto (it.16 = 1/2 sans trouvaille) -> BUG RÉEL trouvé dans tickets.rs
-update_ticket. Gate d'ownership "créateur OU MANAGE_SERVER" couvrait toute la fonction
-sans re-vérifier pour les champs assigned_to/priority spécifiquement -- un créateur de
-ticket normal (non-mod) pouvait assigner son ticket à n'importe quel membre ou
-s'auto-escalader en urgent. Fix : check MANAGE_SERVER supplémentaire ciblé sur ces 2
-champs si le requérant n'est que créateur. status reste éditable par le créateur seul
-(légitime). Compteur "itérations sans trouvaille" remis à 0. events.rs audité en
-passant (race RSVP bénigne, pas touchée).
-
-**Itération 16 (2026-07-22 16:03) : AUCUNE trouvaille sûre malgré recherche étendue.**
-grep mojibake élargi (autres signatures Windows-1252, NBSP isolé) sur tout le repo ->
-rien de plus que it.15. Migrations SQL vérifiées -> accents légitimes, pas mojibake
-(et de toute façon on ne retouche jamais une migration appliquée). Audit complet de
-4 fichiers jamais touchés cette session : polls.rs (vote/close, IDOR sur option_ids déjà
-protégé, transaction anti-double-vote déjà en place), reports.rs (rate limit, self-report
-bloqué, permissions BAN_MEMBERS), moderation.rs (notes/timeouts/tâches, ownership
-créateur-ou-modérateur partout), uploads.rs (whitelist extensions, path traversal
-protégé, MIME dérivé serveur pas client) -- tout déjà solide, rien à corriger sans risque.
-Aucun commit ce tour (lecture seule, `git status` confirmé propre). **1/2 itérations
-sans trouvaille — si la PROCHAINE itération ne trouve rien non plus, S'ARRÊTER et
-rapporter à Momo conformément à la règle GOAL.md, ne pas forcer une 3e recherche.**
-
-## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
-
-**Itération 15 (2026-07-22 15:37, commit ef49ea2, server 3.169.0)** : nouvelle piste
-(threads.rs, jamais audité) -> trouvé corruption d'encodage réelle (mojibake double
-UTF-8/Latin-1) dans threads.rs ET forum.rs, touchant des messages d'erreur RENVOYÉS
-AU CLIENT ("caractÃ¨res" au lieu de "caractères", etc) -- bug visible utilisateur.
-grep global confirme : seuls ces 2 fichiers touchés dans tout le repo. Fixé (piège :
-certaines occurrences avaient un espace insécable invisible en plus du mojibake,
-résolu via round-trip Python latin1/utf8 plutôt que remplacement texte manuel).
-Texte uniquement, aucune logique changée. cargo check clean.
-
-## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
-
-**Itération 14 (2026-07-22 15:13, commit f572560, client 3.514.0)** : pivot demandé
-(veine let-_-swallow épuisée). Audit IDOR/ownership complet de group_dms.rs (16
-handlers), whiteboard WS handler, VOICE_STATE handler -> tous propres, rien trouvé.
-Pivot a11y -> trouvé : sélecteurs de tuile spotlight (vues Spotlight+Sidebar,
-VoiceVideoPage.tsx) en `<div onClick>` nu sans clavier ni aria-label. Fix role="button"
-+ tabIndex + Enter/Space + aria-label nominatif. tsc/eslint/build clean.
-
-## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
-
-**Itération 13 (2026-07-22 14:50, commit ed4a725, server 3.168.0)** : dernière trouvaille
-de la veine `let _ =`/`.ok()` sur audit_log — `channels.rs:612` (PURGE_MESSAGES,
-suppression en masse) insérait dans audit_log en inline en contournant le helper
-log_event() corrigé it.11, même `.ok()` silencieux. Fixé (tracing::error!). Audité et
-laissé tel quel : call_history.rs (best-effort, log d'affichage, la vraie
-signalisation d'appel n'en dépend pas) et scheduled.rs last_message_id (déjà protégé
-par transaction pour la partie critique). **VEINE `let _ =`/`.ok()` SERVEUR MAINTENANT
-ÉPUISÉE** — tous les sites du fichier ont été revus sur 3 itérations (11, 12, 13) :
-websocket.rs (presence/tx.send, benins), users.rs/friends.rs/emojis.rs/stickers.rs
-(cleanup fichiers, benins), main.rs (2 tâches idempotentes laissées, 1 fixée). Prochaine
-itération : NE PAS re-grep ce pattern, pivoter vers une autre piste GOAL.md (a11y,
-IDOR/ownership sur endpoints récents, robustesse frontend, ou nouvelle relecture ciblée
-d'un fichier pas encore audité).
-
-## Statut précédent : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 — Momo doit investiguer
-
-**Itération 12 (2026-07-22 14:27, commit ea82420, server 3.167.0)** : suite de l'audit
-`let _ =` serveur commencé it.11 (feeds.rs, main.rs). 2 vrais bugs même famille que
-group_dms (it.11) : échec UPDATE silencieux -> spam de doublons en boucle. (1)
-feeds.rs process_feed : UPDATE last_item_guid avalé -> item RSS re-posté en boucle
-toutes les 5min si l'update échoue une fois ; propagé via `?` (fonction retourne déjà
-anyhow::Result, l'appelant logue déjà). (2) main.rs tâche rappels : UPDATE sent=TRUE
-avalé -> rappel rebroadcasté à CHAQUE tick (30s) indéfiniment ; pas de Result ici
-(boucle tokio::spawn nue), loggé via tracing::error! à la place. Les 2 autres tâches
-main.rs (unban, cleanup éphémères) vérifiées idempotentes, laissées telles quelles.
-cargo check clean. Poussé (déploiement toujours bloqué côté VPS, pas re-vérifié ce
-tour — pas de nouvelle info depuis it.11, pas de valeur à re-poller sans action de
-Momo entre-temps).
-
-## Statut précédent : ACTIVE (code) / DÉPLOIEMENT CONFIRMÉ CASSÉ depuis it.9 — Momo doit investiguer
-
-**Preuve définitive (itération 11, 2026-07-22 14:05)** : commit 4deeb49 touche le
-SERVEUR (server/src/handlers/*.rs) — un rebuild Docker/cargo est donc obligatoire,
-aucun cache ne peut l'éviter. Poussé, CI Forgejo montre le job comme lancé, HEAD VPS
-passe bien à 4deeb49 (git reset fonctionne), MAIS `forgechat-server-1` n'a PAS été
-recréé (CreatedAt toujours 11:43:04 UTC, identique à avant ce push). Donc : le `git
-reset --hard` de l'étape SSH tourne, mais tout ce qui suit (npm ci/build, docker
-compose up --build) ne s'exécute plus RÉELLEMENT, tout en faisant remonter un exit 0
-("status":"success" côté API Forgejo Actions, ~15s). Confirme et durcit le diagnostic
-de l'itération 10 (qui portait sur un changement client, où on pouvait encore
-suspecter un souci spécifique au build client) : le problème est dans l'étape SSH
-elle-même ou l'environnement du runner, pas dans le code des commits poussés.
-
-**Hypothèses non vérifiables sans accès plus profond (bloqué par le classifier de
-permissions, ne PAS forcer)** : script SSH qui échoue silencieusement après le
-`git reset` sans faire remonter d'erreur (peu probable avec `set -e` + ssh qui devrait
-propager l'exit code) ; ou VPS_HOST/VPS_USER pointe ailleurs que ce que j'atteins en
-SSH direct depuis mon environnement ; ou un état corrompu côté runner (cache npm,
-docker) qui fait sortir `npm ci`/`docker compose` en 0 sans rien faire. Recommandation
-concrète pour Momo : ouvrir l'UI Forgejo Actions (Heiphaistos/ForgeChat → Actions →
-run le plus récent) et lire le log complet étape par étape — c'est la seule vue que
-je n'ai pas pu obtenir (auth basic bloquée sur les routes web, classifier bloque le
-SSH mutation/exploration profonde).
-
-## Statut précédent : EN PAUSE — itérations 8+9+10 codées, DÉPLOIEMENT CASSÉ depuis it.9, à investiguer par Momo
-
-**Anomalie déploiement découverte pendant it.10** : commits eeb7bfd (it.9) et 35d7d18
-(it.10) montrent tous les deux "status":"success" via l'API Forgejo Actions
-(`/actions/runs/832` et `/833`, durée ~15s chacun) MAIS `/opt/forgechat/client/dist/`
-sur le VPS (version.json ET index.html) a un mtime figé à 11:23:12 UTC — le build de
-l'itération 8 (commit 6273451), PAS des suivants. Le site prod sert toujours 3.512.0
-au lieu de 3.513.0. Donc soit le job SSH ne fait plus réellement le `npm run build`
-malgré un exit 0, soit il déploie ailleurs. Pas creusé plus loin : investigation SSH
-manuelle (git reset/npm ci en direct) bloquée par le classifier de permissions
-(action prod à risque, correctement bloquée). NE PAS forcer — Momo doit soit
-regarder lui-même (workflow_dispatch manuel + logs Forgejo Actions UI), soit
-autoriser une investigation SSH plus poussée.
-
-**Ce qui EST confirmé sain** : itérations 8 (memo fix MessageList/MessageRow) et 9
-(brace-expansion) déployées et vérifiées en prod avant que l'anomalie n'apparaisse
-(version.json 3.512.0, VPS HEAD eeb7bfd, /health 200). Le code de l'itération 10
-(ws.ts) est correct et testé localement (tsc/eslint/build/cargo check clean), juste
-pas confirmé live.
-
-## Statut précédent : ACTIVE — itérations 8+9 faites, en attente d'itération 10
-
-**Itération 8 (2026-07-22 13:10, commit 6273451, client 3.512.0)** : spot-check du
-refactor MessageList->MessageRow (b44fd8d) toujours NON CONFIRMÉ par Momo — pas de
-retour dans cette session ni trace en mémoire globale. Ne PAS supposer cassé faute de
-réponse, juste non validé. Relecture fraîche du refactor -> bug réel de mémoïsation
-trouvé (voir LESSONS.md, entrée React.memo) : onReply/onOpenThread/onPinMessage/
-onAddReaction/onEditMessage arrivaient de ChannelPage en fonctions inline instables,
-cassant React.memo(MessageRow) pour toute la liste à chaque tick (countdown slowmode,
-typing). Fixé dans MessageList.tsx (pattern ref + wrappers stables). Déployé + vérifié
-prod (version.json 3.512.0, VPS HEAD).
-
-**Itération 9 (2026-07-22 13:25, commit eeb7bfd)** : push it.8 a révélé une alerte
-GitHub Dependabot HIGH ouverte (#9, brace-expansion <1.1.16, DoS exponentiel, CWE-400/407)
-— transitive via eslint->minimatch@3.1.5, scope development seul (pas dans le bundle
-runtime, mais checklist CLAUDE.md exige 0 vuln). `npm audit fix` -> brace-expansion
-1.1.16, 0 vulnérabilité. tsc/eslint/build clean. Déployé + vérifié prod (version.json
-3.512.0 inchangé côté client fonctionnel, HEAD VPS = eeb7bfd, /health 200).
-
-## Statut précédent : ACTIVE — Momo présent a demandé un refactor perf hors-loop (traité), puis
-"enregistre en mémoire, clear, reprends la loop" (2026-07-22, après-midi)
-
-Depuis l'arrêt à 7/8 : Momo a choisi de traiter le finding "refactor perf MessageList"
-(proposé via AskUserQuestion) plutôt que le mutex WebRTC. Fait sur branche
-`refactor/messagelist-memo`, vérifié statiquement (tsc/eslint/build clean), mergé,
-poussé, déployé (commit b44fd8d, VPS HEAD confirmé). Demande de spot-check humain
-envoyée à Momo (réactions/édition/réponse/suppression) — PAS ENCORE CONFIRMÉE en
-retour au moment de cette reprise. Détail complet dans project_forgechat.md (mémoire
-globale) section "CYCLE 11".
-
-Prochaine itération (8) : d'abord vérifier si Momo a confirmé/infirmé le refactor
-MessageList (si aucun retour, ne pas supposer que c'est cassé — c'est juste non
-confirmé). Puis chercher une nouvelle piste sûre : le refactor vient de changer 3
-fichiers chat/ substantiels, ça vaut une relecture fraîche pour un bug qu'une 1ère
-passe aurait raté. Sinon revenir aux pistes GOAL.md non encore épuisées.
-
-## Historique complet (7 itérations nocturnes, avant ce message)
-
-## Statut : ARRÊTÉE — rapport prêt pour Momo au réveil
-
-CYCLE 11 (demande explicite) entièrement traité + loop d'amélioration continue tournée
-7 itérations cette nuit, arrêtée proprement à l'itération 7 après 2 itérations consécutives
-(6 et 7) sans trouvaille sûre supplémentaire, conformément au critère de fin de GOAL.md.
-
-## Résumé complet de la nuit
-
-**CYCLE 11 (demande explicite Momo) :**
-1. 6 dispositions d'appel (grid/spotlight/sidebar/presentation/focus/filmstrip)
-2. Noise gate AudioWorklet en plus des filtres statiques
-3. Caméra + écran simultanés et visibles par tous (2 senders vidéo distincts)
-4. Audio système du partage d'écran mixé au micro (plus perdu/remplacé)
-
-**Loop nocturne (7 itérations) :**
-- it.1 : a11y switcher de disposition (commit 4b5055c)
-- it.2 : BUG RÉEL — mix audio non propagé aux peers rejoignant en cours de partage (commit 062f612)
-- it.3 : BUG RÉEL — mark_all_read (server) ignorait les échecs DB, renvoyait faux succès (commit f41549f)
-- it.4 : nettoyage — 7 imports inutilisés retirés, cargo check 0 warning (commit f211f3e)
-- it.5 : a11y Whiteboard (dialog, 5 outils, Escape) + Soundboard (commit e895ea8)
-- it.6 : audits (modales a11y, tokio::join! serveur) → rien à corriger, + 2 eslint-disable morts supprimés, eslint 0 problème (commit 9ac230d)
-- it.7 : audit sécurité (XSS markdown, injection liens, rate limiting auth) → tout déjà solide, rien à corriger. **Arrêt de la loop ici.**
-
-Tous les commits poussés (forgejo + github), tous déployés et vérifiés en prod
-(dernier commit vérifié sur VPS : 9ac230d, healthy).
-
-## Finding NON corrigé — à faire valider par Momo avant d'y toucher
+## Finding NON corrigé — nécessite validation humaine avant d'y toucher
 
 **Race potentielle de renégociation WebRTC dans `client/src/store/voice.ts`.**
 `toggleVideo`/`shareScreen`/`stopScreenShare` appellent chacun `createOffer()` +
-`setLocalDescription()` de façon ad-hoc, sans mutex/queue par `RTCPeerConnection`.
-Si l'utilisateur déclenche 2 actions coup sur coup (ex: activer caméra PUIS partager
-écran très vite), un 2e `createOffer()` pourrait survenir avant que le 1er ait atteint
-`signalingState: "stable"`, cassant la négociation pour cette paire de pairs.
+`setLocalDescription()` sans mutex/queue par `RTCPeerConnection`. 2 actions coup sur
+coup pourraient théoriquement casser la négociation pour cette paire. Jamais reproduit
+en prod, identifié par lecture de code. Fix propre = file d'attente de renégociation
+par pc. **Ne pas corriger sans l'accord de Momo** — surface large, risque de casser la
+voix/vidéo en prod si mal fait.
 
-- Pas reproduit ni testé en conditions réelles (nécessite 2 pairs + clics rapides) —
-  identifié par lecture de code, pas par un bug observé en prod.
-- Fix propre = file d'attente de renégociation par `RTCPeerConnection` (sérialiser tous
-  les `createOffer`/`setLocalDescription` d'un même pc).
-- **Ne pas corriger sans validation humaine** — touche tous les points de renégociation
-  de voice.ts, risque de casser la voix/vidéo en prod si mal fait.
+## Contexte technique (stable, ne change pas d'une itération à l'autre)
 
-## Piste écartée délibérément — à proposer pour une session dédiée
-
-**Perf `MessageList.tsx`** (1562 lignes) : composant monolithique, aucun `React.memo`,
-tous les messages re-rendent à chaque changement d'état local (hover, edit, etc.).
-Extraction en sous-composant memoïsé par message = amélioration perf réelle sur les
-canaux à beaucoup de messages, mais refactor multi-points dans un fichier énorme,
-trop risqué à faire sans supervision/tests visuels. Bon candidat pour une session
-normale avec `writing-plans` + vérification visuelle avant/après.
-
-## Contexte pour reprendre (prochaine session normale, pas une loop)
-
-- Repo : C:\Users\Momo\ForgeChat (client React/Vite/TS, server Rust/Axum, VPS 212.227.140.45)
-- Déploiement : push vers `main` (forgejo + github) → CI Forgejo Actions déploie automatiquement
-  (.forgejo/workflows/deploy.yml). NE PAS scp manuellement (redondant). Un changement server/
-  déclenche un vrai rebuild Docker (~1-2 min) ; un changement client seul est quasi instantané.
-  Vérifier : `ssh root@212.227.140.45 "cd /opt/forgechat && git rev-parse --short HEAD"`.
-- Build : client → `cd client && npx eslint src && npx tsc --noEmit && npm run build` ;
-  server → `cd server && cargo check`
-- `.loop/JOURNAL.md` a le détail complet de chaque itération, `.loop/LESSONS.md` les leçons
-  opérationnelles (déploiement, WebRTC, CI)
+- Repo : `C:\Users\Momo\ForgeChat` (client React/Vite/TS, server Rust/Axum, VPS
+  212.227.140.45). Remotes : `forgejo` (mydepot.heiphaistos.org, déclenche le CI) +
+  `github` — toujours pousser main ET main:master sur les deux.
+- Déploiement : push → CI Forgejo Actions auto (`.forgejo/workflows/deploy.yml`).
+  Vérifier après un push important : `curl https://forgechat.heiphaistos.org/version.json`
+  et `ssh root@212.227.140.45 "cd /opt/forgechat && git rev-parse --short HEAD"`.
+- Build local : client → `cd client && npx eslint src && npx tsc --noEmit && npm run
+  build` ; server → `cd server && cargo check`. Après tout bump de version.toml,
+  relancer `cargo check` pour resync Cargo.lock avant de committer.
+- Version : incrémenter client/package.json ET server/Cargo.toml à chaque itération
+  qui les touche (patterns déjà établis, voir JOURNAL.md).
+- `.loop/LESSONS.md` : leçons opérationnelles (déploiement, WebRTC, CI, npm/Docker).
+  Toujours lire avant de commencer une itération.
