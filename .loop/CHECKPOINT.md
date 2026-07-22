@@ -1,6 +1,15 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9 (13+ commits en file)
+
+**Itération 22 (2026-07-22 18:26, commit 03e6375, client 3.517.0)** : presence.ts,
+channelNotif.ts, useVoiceActivity.ts audités -- propres. BUG RÉEL trouvé dans
+useCaptions.ts : onerror mettait isActive=false pour TOUTE erreur SpeechRecognition,
+y compris 'no-speech' (fréquente/bénigne en reconnaissance continue) -- comme
+recognitionRef.current n'était jamais nettoyé, onend redémarrait quand même, donc
+l'indicateur "actif" clignotait off alors que la transcription continuait réellement.
+Fix : distinction erreurs fatales (stop réel) vs récupérables (laisser le cycle
+onend/restart déjà prévu faire son travail). tsc/eslint/build clean.
 
 **Itération 21 (2026-07-22 18:00, commit 158f635, client 3.516.0)** : useDmCall.ts
 (268L) audité. Vérifié : absence de gestion glare/polite-peer n'est PAS un bug ici
