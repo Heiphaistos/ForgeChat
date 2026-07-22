@@ -125,7 +125,6 @@ function PeerTile({
             : <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white">
                 {peer.username.charAt(0).toUpperCase()}
               </div>}
-          <span className="text-sm text-white font-medium">{isLocal ? `${peer.username} (Vous)` : peer.username}</span>
         </div>
       )}
 
