@@ -85,8 +85,6 @@ function _warn(ctx: string, e: unknown) {
 const _pcs = new Map<string, RTCPeerConnection>()
 export const getPeerConnections = () => _pcs
 const _iceQueues = new Map<string, RTCIceCandidateInit[]>()
-const _gainNodes = new Map<string, GainNode>()
-let _audioCtx: AudioContext | null = null
 let _localStream: MediaStream | null = null
 let _rawAudioTrack: MediaStreamTrack | null = null  // piste audio brute (avant noise suppression)
 let _processedStream: MediaStream | null = null     // stream après traitement noise suppression
@@ -110,12 +108,6 @@ let _pttMuted = false // état mute "réel" avant PTT
 // Cache de la config ICE — fetchée une seule fois par session
 let _iceConfigCache: RTCConfiguration | null = null
 
-function _getAudioCtx(): AudioContext {
-  if (!_audioCtx || _audioCtx.state === 'closed') {
-    _audioCtx = new AudioContext()
-  }
-  return _audioCtx
-}
 
 // Fallback ICE config (STUN seulement) utilisé si le fetch échoue
 const ICE_FALLBACK: RTCConfiguration = {
@@ -483,7 +475,6 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
       set(s => {
         const current = s.roomParticipants[d.channel_id] ?? []
-        const prevPriority = s.activePrioritySpeaker
 
         // Mise à jour du priority speaker actif
         let newActivePriority = s.activePrioritySpeaker
@@ -493,30 +484,12 @@ export const useVoice = create<VoiceStore>((set, get) => ({
           newActivePriority = null
         }
 
-        // Duck audio : si un priority speaker vient de commencer à parler
-        const duckStarted = newActivePriority !== null && prevPriority === null
-        const duckEnded = newActivePriority === null && prevPriority !== null
-
-        if (duckStarted || duckEnded) {
-          // Appliquer/retirer l'atténuation sur tous les peers sauf le priority speaker
-          const ctx = _getAudioCtx()
-          s.peers.forEach(peer => {
-            if (peer.userId === d.user_id) return
-            let gainNode = _gainNodes.get(peer.userId)
-            if (!gainNode && peer.stream) {
-              const source = ctx.createMediaStreamSource(peer.stream)
-              gainNode = ctx.createGain()
-              const dest = ctx.createMediaStreamDestination()
-              source.connect(gainNode)
-              gainNode.connect(dest)
-              _gainNodes.set(peer.userId, gainNode)
-            }
-            if (gainNode) {
-              const targetGain = duckStarted ? 0.3 : (s.userVolumes[peer.userId] ?? 100) / 100
-              gainNode.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.05)
-            }
-          })
-        }
+        // Le duck (atténuation des autres pairs pendant qu'un priority speaker parle) est
+        // appliqué réactivement par PersistentVoiceAudio à partir de activePrioritySpeaker
+        // ci-dessous (HTMLMediaElement.volume) — pas ici. Avant ce fix, le duck créait son
+        // propre gain node Web Audio connecté à ctx.createMediaStreamDestination() (un flux
+        // qui ne joue nulle part), donc l'atténuation n'avait jamais d'effet audible ; le
+        // volume réel venait toujours du <audio> natif de PeerTile, inchangé.
 
         return {
           activePrioritySpeaker: newActivePriority,
@@ -741,9 +714,6 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _iceQueues.clear()
     _camStreamId.clear()
     _screenSenders.clear()
-    // Déconnecter tous les GainNodes avant de les supprimer
-    _gainNodes.forEach(g => { try { g.disconnect() } catch {} })
-    _gainNodes.clear()
 
     // Stopper toutes les pistes des deux streams (raw + processed)
     const allTracks = new Set<MediaStreamTrack>()
@@ -973,24 +943,10 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   },
 
   // ── Volume par utilisateur ─────────────────────────────────────────────────
+  // Le volume réel est appliqué réactivement par PersistentVoiceAudio (HTMLMediaElement.volume)
+  // à partir de userVolumes ci-dessous — pas de Web Audio ici.
   setUserVolume: (userId, volume) => {
     set(s => ({ userVolumes: { ...s.userVolumes, [userId]: volume } }))
-
-    const peer = get().peers.find(p => p.userId === userId)
-    if (!peer?.stream) return
-
-    const ctx = _getAudioCtx()
-    let gainNode = _gainNodes.get(userId)
-
-    if (!gainNode) {
-      const source = ctx.createMediaStreamSource(peer.stream)
-      gainNode = ctx.createGain()
-      source.connect(gainNode)
-      gainNode.connect(ctx.destination)
-      _gainNodes.set(userId, gainNode)
-    }
-
-    gainNode.gain.setTargetAtTime(volume / 100, ctx.currentTime, 0.01)
   },
 
   // ── Noise suppression toggle — appliqué en temps réel si en appel ───────────

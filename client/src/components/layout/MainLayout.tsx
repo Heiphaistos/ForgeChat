@@ -4,6 +4,9 @@ import ServerSidebar from './ServerSidebar'
 import ChannelSidebar from './ChannelSidebar'
 import UserPanel from './UserPanel'
 import VoiceBar from '../voice/VoiceBar'
+import PersistentVoiceAudio from '../voice/PersistentVoiceAudio'
+import PersistentDmCallAudio from '../voice/PersistentDmCallAudio'
+import FloatingCallPiP from '../voice/FloatingCallPiP'
 import RightSidebar, { useRightSidebar } from './RightSidebar'
 import ConnectionBanner from './ConnectionBanner'
 import { SplitContext } from '../../contexts/SplitContext'
@@ -225,6 +228,8 @@ export default function MainLayout() {
               <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                 <ChannelSidebar />
               </div>
+              <PersistentVoiceAudio />
+              <PersistentDmCallAudio />
               <VoiceBar />
               <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
             </div>
@@ -293,6 +298,8 @@ export default function MainLayout() {
             {/* Sidebar droite — Activité récente (overlay absolu sur mobile, colonne sur desktop) */}
             <RightSidebar visible={activityOpen} onClose={closeActivity} />
           </main>
+
+          <FloatingCallPiP />
         </div>
       </SplitContext.Provider>
     </MobileContext.Provider>

@@ -10,9 +10,7 @@ import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
 import { useUnread } from '../store/unread'
 import { useE2E } from '../hooks/useE2E'
-import { useDmCall } from '../hooks/useDmCall'
 import { useWakeLock } from '../hooks/useWakeLock'
-import { useAudioNotifications } from '../hooks/useAudioNotifications'
 import { useCallStore } from '../store/call'
 import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
@@ -73,7 +71,6 @@ export default function DMPage() {
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteAudioRef = useRef<HTMLAudioElement>(null)
 
   const loadMoreDM = useCallback(async (): Promise<boolean> => {
     if (!dmId || !hasMoreDM) return false
@@ -132,12 +129,18 @@ export default function DMPage() {
     }
   }, [partnerName])
 
+  // État d'appel global (store/call.ts) — persiste hors du cycle de vie de cette page,
+  // donc l'appel ne raccroche/ne coupe plus le son si on navigue ailleurs (Paramètres,
+  // autre conversation...). isThisCallActive distingue "un appel tourne, et c'est CELUI
+  // de cette conversation" de "un appel tourne ailleurs" (ne pas afficher/permettre de
+  // raccrocher le mauvais appel depuis une autre page de DM).
   const {
-    callState, callType, localStream, remoteStream, micMuted, camOff,
+    dmId: activeCallDmId, callState, callType, localStream, remoteStream, micMuted, camOff,
     startCall, acceptCall, hangup, toggleMic, toggleCam,
-  } = useDmCall(dmId, partnerId || undefined)
-
-  const { pendingAccept, setPendingAccept } = useCallStore()
+    pendingAccept, setPendingAccept,
+  } = useCallStore()
+  const isThisCallActive = callState !== 'idle' && activeCallDmId === dmId
+  const callBusyElsewhere = callState !== 'idle' && activeCallDmId !== dmId
 
   // ── Messages épinglés du DM ─────────────────────────────────────────────────
   interface DmPin {
@@ -169,26 +172,25 @@ export default function DMPage() {
     },
   })
 
-  // Garder l'écran allumé pendant un appel DM (mobile) — libéré au raccrochage
+  // Garder l'écran allumé pendant un appel DM (mobile), quelle que soit la conversation
+  // affichée — l'appel peut être actif alors qu'on navigue ailleurs
   useWakeLock(callState !== 'idle')
 
-  // Tonalité de retour pendant que ça sonne chez le correspondant
-  const { playRingback } = useAudioNotifications()
-  useEffect(() => {
-    if (callState !== 'calling') return
-    playRingback()
-    const iv = setInterval(playRingback, 3000)
-    return () => clearInterval(iv)
-  }, [callState, playRingback])
+  // Tonalité de retour pendant que ça sonne chez le correspondant — gérée globalement
+  // dans PersistentDmCallAudio (survit à la navigation), pas ici.
 
-  // Durée de l'appel connecté (mm:ss, h:mm:ss au-delà d'une heure)
+  // Durée de l'appel connecté (mm:ss, h:mm:ss au-delà d'une heure) — dérivée de
+  // connectedAt (persisté dans le store), pas d'un timer local à la page : revenir sur
+  // la conversation après avoir navigué ailleurs affiche la vraie durée, pas 0.
+  const connectedAt = useCallStore(s => s.connectedAt)
   const [callSeconds, setCallSeconds] = useState(0)
   useEffect(() => {
-    if (callState !== 'connected') { setCallSeconds(0); return }
-    const start = Date.now()
-    const iv = setInterval(() => setCallSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    if (!isThisCallActive || callState !== 'connected' || !connectedAt) { setCallSeconds(0); return }
+    const update = () => setCallSeconds(Math.floor((Date.now() - connectedAt) / 1000))
+    update()
+    const iv = setInterval(update, 1000)
     return () => clearInterval(iv)
-  }, [callState])
+  }, [isThisCallActive, callState, connectedAt])
   const callDuration = callSeconds >= 3600
     ? `${Math.floor(callSeconds / 3600)}:${String(Math.floor((callSeconds % 3600) / 60)).padStart(2, '0')}:${String(callSeconds % 60).padStart(2, '0')}`
     : `${Math.floor(callSeconds / 60)}:${String(callSeconds % 60).padStart(2, '0')}`
@@ -199,30 +201,24 @@ export default function DMPage() {
     if (pendingAccept && dmId && dmInfo) {
       const { fromUserId, callType: ct } = pendingAccept
       setPendingAccept(null)
-      acceptCall(fromUserId, ct)
+      acceptCall(dmId, fromUserId, ct)
     }
   }, [pendingAccept, dmId, dmInfo])
 
-  // Attach streams to video elements
+  // Attacher les flux aux <video> de CETTE page — seulement si l'appel actif est bien
+  // celui de la conversation affichée (isThisCallActive). L'audio distant est géré par
+  // PersistentDmCallAudio (composant global), plus par un <audio> local ici.
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
+    if (localVideoRef.current && localStream && isThisCallActive) {
       localVideoRef.current.srcObject = localStream
     }
-  }, [localStream])
+  }, [localStream, isThisCallActive])
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
+    if (remoteVideoRef.current && remoteStream && isThisCallActive) {
       remoteVideoRef.current.srcObject = remoteStream
     }
-    // Appel vocal : le flux distant est joué par un <audio> dédié (aucun <video> n'est rendu)
-    if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream
-      const savedOut = localStorage.getItem('fc_audio_output')
-      if (savedOut && 'setSinkId' in remoteAudioRef.current) {
-        (remoteAudioRef.current as any).setSinkId(savedOut).catch(() => {})
-      }
-    }
-  }, [remoteStream, callType, callState])
+  }, [remoteStream, isThisCallActive])
 
   const { data: messages = [], isError: dmMessagesError, refetch: refetchDmMessages } = useQuery({
     queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
@@ -556,27 +552,29 @@ export default function DMPage() {
           </button>
           <button
             onClick={() => {
-              if (callState !== 'idle') { hangup(); return }
-              if (!partnerId) { toast.error('Informations du contact non chargées'); return }
-              startCall('voice').catch(() => toast.error('Accès au micro refusé'))
+              if (isThisCallActive) { hangup(); return }
+              if (callBusyElsewhere) { toast.error('Un appel est déjà en cours ailleurs'); return }
+              if (!partnerId || !dmId) { toast.error('Informations du contact non chargées'); return }
+              startCall(dmId, partnerId, 'voice').catch(() => toast.error('Accès au micro refusé'))
             }}
-            disabled={!partnerId && callState === 'idle'}
-            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
-            title={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
-            aria-label={callState !== 'idle' && callType === 'voice' ? 'Raccrocher' : 'Démarrer un appel vocal'}
+            disabled={(!partnerId && callState === 'idle') || callBusyElsewhere}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${isThisCallActive && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
+            title={isThisCallActive && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
+            aria-label={isThisCallActive && callType === 'voice' ? 'Raccrocher' : 'Démarrer un appel vocal'}
           >
             <Phone size={18} />
           </button>
           <button
             onClick={() => {
-              if (callState !== 'idle') { hangup(); return }
-              if (!partnerId) { toast.error('Informations du contact non chargées'); return }
-              startCall('video').catch(() => toast.error('Accès caméra refusé'))
+              if (isThisCallActive) { hangup(); return }
+              if (callBusyElsewhere) { toast.error('Un appel est déjà en cours ailleurs'); return }
+              if (!partnerId || !dmId) { toast.error('Informations du contact non chargées'); return }
+              startCall(dmId, partnerId, 'video').catch(() => toast.error('Accès caméra refusé'))
             }}
-            disabled={!partnerId && callState === 'idle'}
-            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${callState !== 'idle' && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
-            title={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
-            aria-label={callState !== 'idle' && callType === 'video' ? 'Terminer l\'appel vidéo' : 'Démarrer un appel vidéo'}
+            disabled={(!partnerId && callState === 'idle') || callBusyElsewhere}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${isThisCallActive && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
+            title={isThisCallActive && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
+            aria-label={isThisCallActive && callType === 'video' ? 'Terminer l\'appel vidéo' : 'Démarrer un appel vidéo'}
           >
             <Video size={18} />
           </button>
@@ -603,8 +601,10 @@ export default function DMPage() {
         </div>
       </div>
 
-      {/* Panneau d'appel DM vocal/vidéo */}
-      {callState !== 'idle' && (
+      {/* Panneau d'appel DM vocal/vidéo — uniquement si l'appel actif est celui de CETTE
+          conversation (isThisCallActive) ; s'il tourne ailleurs, aucune UI ici (la
+          VoiceBar globale ou une future pastille flottante s'en charge) */}
+      {isThisCallActive && (
         <div className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
           {callType === 'video' ? (
             <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center">
@@ -632,7 +632,7 @@ export default function DMPage() {
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <audio ref={remoteAudioRef} autoPlay />
+              {/* Audio distant : PersistentDmCallAudio (global), pas un <audio> ici */}
               <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
                 {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>

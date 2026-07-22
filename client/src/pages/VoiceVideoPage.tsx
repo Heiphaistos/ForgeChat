@@ -100,16 +100,19 @@ function PeerTile({
   // Ref callback plutôt qu'useEffect([stream]) : quand la vidéo arrive en cours d'appel
   // (caméra/partage d'écran), la référence du stream ne change pas — un effet ne se
   // rejouerait pas au montage tardif du <video> et le flux ne serait jamais attaché.
-  const attachStream = (el: HTMLVideoElement | HTMLAudioElement | null) => {
+  const attachStream = (el: HTMLVideoElement | null) => {
     if (el && stream && el.srcObject !== stream) el.srcObject = stream
   }
 
+  // L'audio des pairs distants ne passe plus par un <audio> ici : il est routé une fois
+  // pour toutes via Web Audio dans voice.ts (_ensurePeerAudioRouted), indépendamment de
+  // cette page — sinon le son coupait dès qu'on quittait le canal (Paramètres, autre
+  // salon...) même si l'appel restait connecté. Le <video> ci-dessous reste muted pour
+  // les pairs distants (son géré ailleurs), affichage uniquement.
   return (
     <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
-      {/* Audio peers distants — toujours séparé du <video> pour éviter le double son */}
-      {!isLocal && <audio ref={attachStream} autoPlay />}
       {hasVideo ? (
         <video ref={attachStream} autoPlay playsInline
           muted={isLocal ? muted : true}
@@ -310,15 +313,6 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     })
     return unsub
   }, [channel.id, on, user?.id])
-
-  // Apply audio output device to all audio/video elements
-  useEffect(() => {
-    const savedOut = localStorage.getItem('fc_audio_output')
-    if (!savedOut) return
-    document.querySelectorAll('audio, video').forEach(el => {
-      if ('setSinkId' in el) (el as any).setSinkId(savedOut).catch(() => {})
-    })
-  }, [peers])
 
   const toggleHandRaise = () => {
     const newVal = !handRaised

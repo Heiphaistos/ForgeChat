@@ -77,6 +77,7 @@ function AppInner() {
   const setActivityGlobal = usePresence(s => s.setActivity)
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
+  const initDmCallListeners = useCallStore(s => s.initGlobalListeners)
   const toggleMute = useVoice(s => s.toggleMute)
   const toggleDeafen = useVoice(s => s.toggleDeafen)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
@@ -267,6 +268,14 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const off = initVoiceListeners()
+    return off
+  }, [user?.id])
+
+  // Listeners globaux appel DM (signalisation WebRTC) — enregistrés une seule fois ici,
+  // plus par DMPage à chaque montage, pour que l'appel survive à la navigation
+  useEffect(() => {
+    if (!user) return
+    const off = initDmCallListeners()
     return off
   }, [user?.id])
 
