@@ -2,6 +2,18 @@
 
 ## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
 
+**Itération 21 (2026-07-22 18:00, commit 158f635, client 3.516.0)** : useDmCall.ts
+(268L) audité. Vérifié : absence de gestion glare/polite-peer n'est PAS un bug ici
+(design DM call = offer créée uniquement côté appelant, glare structurellement
+impossible, contrairement au mesh serveur de voice.ts). BUG RÉEL trouvé : startCall/
+acceptCall sans garde anti-double-invocation -- double-clic rapide avant que callState
+quitte 'idle' (après l'await getUserMedia+buildPc) pouvait écraser pcRef/localStream
+du 1er appel, jamais nettoyé (micro/caméra restent actifs, pc orpheline). Fix : flag
+`callInFlightRef` synchrone posé en tout premier (avant tout await), remis à false
+dans cleanup() seulement. Piège évité : un 1er essai avec callStateRef échouait car ce
+ref ne se synchronise qu'après re-render, trop tard pour fermer la fenêtre de course.
+tsc/eslint/build clean.
+
 **Itération 20 (2026-07-22 17:37, commit 24e2291, client 3.515.0)** : pivot client
 (hooks/store/api, jamais audités). auth.ts propre. BUG RÉEL trouvé dans
 api/client.ts : l'intercepteur refresh-and-retry (401) n'avait aucune garde
