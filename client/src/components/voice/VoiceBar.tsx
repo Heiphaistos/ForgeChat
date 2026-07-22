@@ -83,7 +83,7 @@ export default function VoiceBar() {
           title={deafened ? 'Réactiver le son' : 'Couper le son'}
         />
         <VoiceBarBtn
-          active={videoEnabled && !screenSharing}
+          active={videoEnabled}
           activeIcon={<Video size={14} />}
           inactiveIcon={<VideoOff size={14} />}
           onClick={() => toggleVideo()}

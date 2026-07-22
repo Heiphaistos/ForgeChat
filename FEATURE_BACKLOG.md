@@ -68,6 +68,16 @@
 
 ---
 
+## CYCLE 11 (2026-07-22 — voix/vidéo, demande Momo)
+
+- [x] 🔴 Frontend — 2 nouvelles dispositions d'appel (Focus, Filmstrip) — VoiceVideoPage.tsx (total 6 : grid/spotlight/sidebar/presentation/focus/filmstrip)
+- [x] 🔴 Frontend — Noise gate/expander (au-delà highpass/lowpass/compressor) — voice.ts _buildNoiseChain + public/noise-gate-worklet.js (AudioWorklet natif, attack/release lissés)
+- [x] 🔴 Frontend — Caméra + partage d'écran simultanés (2 senders vidéo distincts, msid séparé) — voice.ts shareScreen/stopScreenShare/_createPC/ontrack réécrits ; VoicePeer.screenStream + Tile system (allTiles) dans VoiceVideoPage.tsx, ScreenTile component ; toutes les 6 dispositions affichent caméra+écran séparément
+- [x] 🟠 Bugfix — VoiceBar.tsx cachait l'icône caméra pendant le partage d'écran (`videoEnabled && !screenSharing`) — plus pertinent, caméra indépendante désormais
+- [x] 🟡 Bugfix latent — toggleVideo() re-créait un 2e sender vidéo à chaque cycle off/on (le sender existant avait `track:null` après disable, jamais retrouvé) — camSender() cherche aussi `track === null`
+- [ ] 🟠 Frontend — Partage écran/app robuste (n'importe quelle fenêtre) — vérifié via getDisplayMedia existant, pas de changement supplémentaire nécessaire ce cycle
+- [ ] 🟡 Connu/limité — audio système du partage d'écran remplace toujours le micro (pas de mix) — hors scope, cycle suivant si demandé
+
 ## Déjà implémenté (ne pas redéployer)
 
 - [x] PollDisplay (frontend, pas de backend — CYCLE 1 doit créer le backend)

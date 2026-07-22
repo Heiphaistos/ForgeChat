@@ -4,6 +4,7 @@ import {
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
   LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
+  Focus, GalleryHorizontal,
 } from 'lucide-react'
 import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
@@ -20,7 +21,7 @@ import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 import { MobileContext } from '../contexts/MobileContext'
 
-type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation'
+type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation' | 'focus' | 'filmstrip'
 
 interface Props {
   channel: { id: string; name: string; type: string }
@@ -146,6 +147,29 @@ function PeerTile({
   )
 }
 
+// ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
+function ScreenTile({ stream, label, onExpand }: { stream: MediaStream; label: string; onExpand?: () => void }) {
+  const attachStream = (el: HTMLVideoElement | null) => {
+    if (el && el.srcObject !== stream) el.srcObject = stream
+  }
+  return (
+    <div className="relative rounded-xl overflow-hidden bg-black flex items-center justify-center aspect-video ring-1 ring-fc-green/40">
+      <video ref={attachStream} autoPlay playsInline className="w-full h-full object-contain" />
+      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
+        <div className="flex items-center gap-1">
+          <Monitor size={11} className="text-fc-green" />
+          <span className="text-xs text-white truncate max-w-[140px]">Écran de {label}</span>
+        </div>
+        {onExpand && (
+          <button onClick={onExpand} aria-label="Agrandir l'écran partagé" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <Maximize2 size={11} aria-hidden />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Grid Layout ──────────────────────────────────────────────────────────────
 function getGridClass(n: number) {
   if (n <= 1) return 'grid-cols-1'
@@ -248,7 +272,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const location = useLocation()
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
-    peers, localStream, muted, deafened, videoEnabled, screenSharing,
+    peers, localStream, localScreenStream, muted, deafened, videoEnabled, screenSharing,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, joined, channelId: activeChannelId,
     roomParticipants, pttMode, activatePtt, deactivatePtt,
@@ -262,7 +286,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  const [spotlightUser, setSpotlightUser] = useState<string | null>(null)
+  const [spotlightTileKey, setSpotlightTileKey] = useState<string | null>(null)
   const [fullscreenStream, setFullscreenStream] = useState<{ stream: MediaStream; label: string } | null>(null)
   const [handRaised, setHandRaised] = useState(false)
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({})
@@ -390,9 +414,19 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   }
 
   const allPeers = [
-    { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
+    { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, screenStream: screenSharing ? localScreenStream : null, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
     ...peers.map(p => ({ ...p, avatar: p.avatar ?? undefined, isLocal: false })),
   ]
+
+  // Chaque participant contribue une tuile caméra + une tuile écran séparée s'il partage —
+  // ainsi caméra et écran sont visibles simultanément dans TOUTES les dispositions, pas
+  // seulement en mode Présentation/Focus.
+  type Tile = { key: string; kind: 'camera' | 'screen'; peer: typeof allPeers[number]; stream: MediaStream | null }
+  const allTiles: Tile[] = allPeers.flatMap(p => {
+    const tiles: Tile[] = [{ key: `${p.userId}-cam`, kind: 'camera', peer: p, stream: p.stream }]
+    if (p.screenStream) tiles.push({ key: `${p.userId}-screen`, kind: 'screen', peer: p, stream: p.screenStream })
+    return tiles
+  })
 
   const statsParticipants = allPeers.map(p => ({
     userId: p.userId,
@@ -404,7 +438,23 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     totalSpeakingMs: 0,
   }))
 
-  const spotlightPeer = allPeers.find(p => p.userId === spotlightUser) ?? allPeers[0]
+  const spotlightTile = allTiles.find(t => t.key === spotlightTileKey) ?? allTiles[0]
+
+  const renderTile = (t: Tile, onExpand?: boolean) => {
+    if (t.kind === 'screen' && t.stream) {
+      return (
+        <ScreenTile stream={t.stream} label={t.peer.username}
+          onExpand={onExpand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${t.peer.username}` }) : undefined} />
+      )
+    }
+    const p = t.peer
+    return (
+      <PeerTile peer={p} stream={t.stream} muted={p.isLocal}
+        isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
+        handRaised={raisedHands[p.userId]} blurEnabled={blurBackground}
+        onExpand={onExpand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
+    )
+  }
 
   return (
     <div className="flex flex-col h-full bg-fc-bg relative">
@@ -424,6 +474,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'Spotlight' },
             { mode: 'sidebar' as ViewMode, icon: <Layout size={14} />, label: 'Barre latérale' },
             { mode: 'presentation' as ViewMode, icon: <LayoutTemplate size={14} />, label: 'Présentation' },
+            { mode: 'focus' as ViewMode, icon: <Focus size={14} />, label: 'Focus (suit l\'orateur)' },
+            { mode: 'filmstrip' as ViewMode, icon: <GalleryHorizontal size={14} />, label: 'Bandeau' },
           ] as const).map(({ mode, icon, label }) => (
             <button
               key={mode}
@@ -447,12 +499,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       <div className="flex-1 overflow-hidden relative">
         {/* Grid view */}
         {viewMode === 'grid' && (
-          <div className={`grid ${getGridClass(allPeers.length)} gap-2 p-3 h-full auto-rows-fr`}>
-            {allPeers.map(p => (
-              <PeerTile key={p.userId} peer={p} stream={p.stream} muted={p.isLocal}
-                isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
-                handRaised={raisedHands[p.userId]} blurEnabled={blurBackground}
-                onExpand={p.stream ? () => setFullscreenStream({ stream: p.stream!, label: p.username }) : undefined} />
+          <div className={`grid ${getGridClass(allTiles.length)} gap-2 p-3 h-full auto-rows-fr`}>
+            {allTiles.map(t => (
+              <div key={t.key} className="contents">{renderTile(t, true)}</div>
             ))}
           </div>
         )}
@@ -461,16 +510,12 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         {viewMode === 'spotlight' && (
           <div className="flex flex-col h-full p-3 gap-3">
             <div className="flex-1 rounded-xl overflow-hidden">
-              <PeerTile peer={spotlightPeer} stream={spotlightPeer.stream} muted={spotlightPeer.isLocal}
-                isLocal={spotlightPeer.isLocal} speaking={(speakingMap[spotlightPeer.userId] ?? 0) > 0.05}
-                handRaised={raisedHands[spotlightPeer.userId]} blurEnabled={blurBackground} />
+              {renderTile(spotlightTile)}
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {allPeers.filter(p => p.userId !== spotlightPeer.userId).map(p => (
-                <div key={p.userId} className="w-32 flex-shrink-0 cursor-pointer" onClick={() => setSpotlightUser(p.userId)}>
-                  <PeerTile peer={p} stream={p.stream} muted={p.isLocal}
-                    isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
-                    handRaised={raisedHands[p.userId]} blurEnabled={blurBackground} />
+              {allTiles.filter(t => t.key !== spotlightTile.key).map(t => (
+                <div key={t.key} className="w-32 flex-shrink-0 cursor-pointer" onClick={() => setSpotlightTileKey(t.key)}>
+                  {renderTile(t)}
                 </div>
               ))}
             </div>
@@ -481,47 +526,72 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         {viewMode === 'sidebar' && (
           <div className="flex h-full">
             <div className="flex-1 p-3">
-              <PeerTile peer={spotlightPeer} stream={spotlightPeer.stream} muted={spotlightPeer.isLocal}
-                isLocal={spotlightPeer.isLocal} speaking={(speakingMap[spotlightPeer.userId] ?? 0) > 0.05}
-                handRaised={raisedHands[spotlightPeer.userId]} blurEnabled={blurBackground} />
+              {renderTile(spotlightTile)}
             </div>
             <div className="w-48 flex flex-col gap-2 p-2 overflow-y-auto overscroll-contain border-l border-fc-hover bg-fc-sidebar/50">
-              {allPeers.map(p => (
-                <div key={p.userId} className="cursor-pointer" onClick={() => setSpotlightUser(p.userId)}>
-                  <PeerTile peer={p} stream={p.stream} muted={p.isLocal}
-                    isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
-                    handRaised={raisedHands[p.userId]} blurEnabled={blurBackground} />
+              {allTiles.map(t => (
+                <div key={t.key} className="cursor-pointer" onClick={() => setSpotlightTileKey(t.key)}>
+                  {renderTile(t)}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Presentation view: screen shares first */}
+        {/* Presentation view: écran partagé en grand, caméras en bandeau */}
         {viewMode === 'presentation' && (() => {
-          const screensharing = allPeers.find(p => p.screenSharing && p.stream)
-          const presenter = screensharing ?? spotlightPeer
+          const screenTile = allTiles.find(t => t.kind === 'screen')
+          const presenter = screenTile ?? spotlightTile
           return (
             <div className="flex flex-col h-full p-3 gap-3">
               <div className="flex-1 flex items-center justify-center bg-black rounded-xl overflow-hidden">
                 {presenter.stream
-                  ? <video autoPlay playsInline muted={presenter.isLocal}
-                      ref={el => { if (el && presenter.stream) el.srcObject = presenter.stream }}
+                  ? <video autoPlay playsInline muted={presenter.kind === 'camera' && presenter.peer.isLocal}
+                      ref={el => { if (el && presenter.stream && el.srcObject !== presenter.stream) el.srcObject = presenter.stream }}
                       className="max-h-full max-w-full object-contain" />
                   : <div className="text-fc-muted text-sm">Aucun partage d'écran actif</div>}
               </div>
               <div className="flex gap-2 overflow-x-auto">
-                {allPeers.filter(p => !p.screenSharing).map(p => (
-                  <div key={p.userId} className="w-28 flex-shrink-0">
-                    <PeerTile peer={p} stream={p.stream} muted={p.isLocal}
-                      isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
-                      handRaised={raisedHands[p.userId]} blurEnabled={blurBackground} />
+                {allTiles.filter(t => t.kind === 'camera').map(t => (
+                  <div key={t.key} className="w-28 flex-shrink-0">
+                    {renderTile(t)}
                   </div>
                 ))}
               </div>
             </div>
           )
         })()}
+
+        {/* Focus view: suit automatiquement l'écran partagé ou l'orateur actif, soi-même en PiP */}
+        {viewMode === 'focus' && (() => {
+          const screenTile = allTiles.find(t => t.kind === 'screen')
+          const activeSpeakerTile = allTiles.find(t => t.kind === 'camera' && !t.peer.isLocal && (speakingMap[t.peer.userId] ?? 0) > 0.05)
+          const focusTile = screenTile ?? activeSpeakerTile ?? spotlightTile
+          const localCamTile = allTiles.find(t => t.kind === 'camera' && t.peer.isLocal)
+          return (
+            <div className="relative h-full p-3">
+              <div className="w-full h-full rounded-xl overflow-hidden">
+                {renderTile(focusTile)}
+              </div>
+              {localCamTile && localCamTile.key !== focusTile.key && (
+                <div className="absolute bottom-4 right-4 w-40 aspect-video shadow-xl rounded-lg overflow-hidden ring-2 ring-black/40">
+                  {renderTile(localCamTile)}
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {/* Filmstrip view: bandeau unique défilant horizontal, tuiles taille fixe */}
+        {viewMode === 'filmstrip' && (
+          <div className="flex gap-2 p-3 h-full overflow-x-auto overscroll-contain">
+            {allTiles.map(t => (
+              <div key={t.key} className="h-full aspect-video flex-shrink-0">
+                {renderTile(t, true)}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Captions overlay */}
         {showCaptions && captions.length > 0 && (
