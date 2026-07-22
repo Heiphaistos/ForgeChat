@@ -96,6 +96,7 @@ let _screenAudioTrack: MediaStreamTrack | null = null // audio système capturé
 let _localScreenStream: MediaStream | null = null
 let _micMixCtx: AudioContext | null = null
 let _micTrackBeforeMix: MediaStreamTrack | null = null // piste micro à restaurer sur le sender après le partage
+let _mixedAudioTrack: MediaStreamTrack | null = null // piste mixée courante (micro+audio système), si un mix est actif
 // Stream dédié (sans piste locale) utilisé uniquement pour donner à la piste écran un
 // msid distinct de _localStream — permet au récepteur de séparer caméra vs écran sans
 // signalisation additionnelle (cf. _createPC/ontrack : 1er stream vu = groupe caméra,
@@ -268,6 +269,7 @@ function _pushMicTrackToSenders(micTrack: MediaStreamTrack) {
     _micTrackBeforeMix = micTrack
     outTrack = _mixSystemAudioWithMic(_screenAudioTrack, micTrack)
   }
+  _mixedAudioTrack = _screenAudioTrack ? outTrack : null
   _pcs.forEach(async (pc) => {
     const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
     if (sender) try { await sender.replaceTrack(outTrack) } catch (e) { _warn('mise à jour piste audio', e) }
@@ -296,6 +298,13 @@ async function _createPC(
   if (_screenTrack && _localScreenGroupStream) {
     const sender = pc.addTrack(_screenTrack, _localScreenGroupStream)
     _screenSenders.set(peerId, sender)
+  }
+  // Si un mix micro+audio système est déjà actif, ce peer doit recevoir le mix — pas
+  // juste le micro brut ajouté par la boucle ci-dessus (sinon il n'entend jamais le
+  // son du partage d'écran, contrairement aux peers déjà connectés)
+  if (_mixedAudioTrack) {
+    const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
+    if (audioSender) audioSender.replaceTrack(_mixedAudioTrack).catch(() => {})
   }
 
   pc.onicecandidate = (e) => {
@@ -751,6 +760,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _screenAudioTrack?.stop()
     _screenAudioTrack = null
     _micTrackBeforeMix = null
+    _mixedAudioTrack = null
     _cleanupMicMix()
     _localScreenStream = null
     _localScreenGroupStream = null
@@ -907,6 +917,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     // Restaurer le micro seul sur le sender audio (retire le mix avec l'audio système)
     _screenAudioTrack?.stop()
     _screenAudioTrack = null
+    _mixedAudioTrack = null
     if (_micTrackBeforeMix) {
       const micTrack = _micTrackBeforeMix
       _micTrackBeforeMix = null
