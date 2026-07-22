@@ -1,6 +1,18 @@
 # CHECKPOINT — LOOP REPRISE (post refactor MessageList)
 
-## Statut : ACTIVE (code, compteur remis à 0) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+## Statut : ACTIVE (code) / DÉPLOIEMENT TOUJOURS CASSÉ depuis it.9
+
+**Itération 18 (2026-07-22 16:49, commit 18f04b5, server 3.171.0)** : privacy.rs et
+dm_extras.rs audités, propres. BUG RÉEL trouvé dans saved.rs save_message : check
+d'accès (require_member_and_channel) fait UNIQUEMENT si server_id fourni -- pour une
+sauvegarde de message DM (server_id=None), aucun check d'appartenance à dm_channels
+n'existait, channel_id DM arbitraire accepté sans jamais vérifier que le requérant en
+est membre. Fix : check dm_channels symétrique (même pattern que dm_extras.rs). Note
+laissée en l'état (hors scope) : content/author_username/author_avatar restent fournis
+par le client sans vérification contre le message réel, dans les deux chemins
+(serveur ET DM) -- pré-existant, plus large qu'un simple trou d'accès, à proposer pour
+une session dédiée si Momo veut le durcir (nécessiterait de fetch le contenu depuis la
+table source au lieu de faire confiance au client).
 
 **Itération 17 (2026-07-22 16:26, commit 9d68796, server 3.170.0)** : dernière chance
 avant arrêt auto (it.16 = 1/2 sans trouvaille) -> BUG RÉEL trouvé dans tickets.rs
