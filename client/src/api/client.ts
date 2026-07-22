@@ -31,7 +31,11 @@ api.interceptors.response.use(
     const publicPaths = ['/', '/login', '/register', '/verify-email']
     const onPublicPage = typeof window !== 'undefined' && publicPaths.includes(window.location.pathname)
 
-    if (err.response?.status === 401 && !isAuthEndpoint && !onPublicPage) {
+    // Garde anti-boucle : si la requête déjà rejouée après un refresh échoue ENCORE en
+    // 401 (bug serveur qui rejette un token pourtant valide, edge case), ne pas
+    // redéclencher un refresh indéfiniment — laisser l'échec remonter. Sans ce flag,
+    // chaque retry qui échoue relance un nouveau cycle refresh+retry pour toujours.
+    if (err.response?.status === 401 && !isAuthEndpoint && !onPublicPage && !err.config?._retried) {
       try {
         if (!refreshPromise) {
           refreshPromise = (async () => {
@@ -51,6 +55,7 @@ api.interceptors.response.use(
           const token = localStorage.getItem('access_token')
           if (token) err.config.headers.Authorization = `Bearer ${token}`
         }
+        err.config._retried = true
         return api(err.config)
       } catch {
         if (isTauri) localStorage.clear()
