@@ -4,7 +4,7 @@ use serde_json::json;
 pub async fn check_update(
     Path((_target, _arch, version)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    let latest_version = "3.8.2";
+    let latest_version = "3.8.3";
 
     // Retourner null si déjà à jour (format attendu par Tauri updater)
     if version == latest_version {
@@ -15,7 +15,7 @@ pub async fn check_update(
     Json(json!({
         "version": latest_version,
         "notes": format!("ForgeChat {} est disponible. Téléchargez depuis https://forgechat.heiphaistos.org", latest_version),
-        "pub_date": "2026-07-22T23:15:00Z",
+        "pub_date": "2026-07-24T21:00:00Z",
         "platforms": {
             "windows-x86_64": {
                 "signature": "",
