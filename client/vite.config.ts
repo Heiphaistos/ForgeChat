@@ -41,6 +41,7 @@ export default defineConfig({
             if (id.includes('@tanstack/react-query')) return 'vendor-query'
             if (id.includes('date-fns')) return 'vendor-dates'
             if (id.includes('highlight.js')) return 'vendor-hljs'
+            if (id.includes('/three/')) return 'vendor-three'
             if (id.includes('zustand') || id.includes('immer') || id.includes('axios') || id.includes('react-hot-toast') || id.includes('react-dropzone')) return 'vendor-misc'
           }
         },

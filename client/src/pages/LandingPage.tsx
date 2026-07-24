@@ -4,6 +4,7 @@ import {
   Shield, Palette, Video, Server, Download, MessageSquare,
   ChevronRight, Lock, Mic, Monitor, Check,
 } from 'lucide-react'
+import Logo3D from '../components/Logo3D'
 
 const RELEASE = 'v3.8.2'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
@@ -159,7 +160,7 @@ export default function LandingPage() {
       {/* ── Navigation ──────────────────────────────────────────────── */}
       <nav aria-label="Navigation principale" className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-2 px-3 sm:px-6 py-3 sm:py-4 bg-[#0e1117]/80 backdrop-blur-md border-b border-white/5">
         <div className="flex items-center gap-2 min-w-0">
-          <img src="/icon.svg" alt="ForgeChat" className="w-8 h-8 rounded-lg flex-shrink-0" />
+          <Logo3D size={32} className="rounded-lg" />
           <span className="font-bold text-white text-base sm:text-lg truncate" aria-hidden>ForgeChat</span>
           <span className="hidden sm:inline text-xs text-white/30 ml-1" aria-hidden>{RELEASE}</span>
         </div>
@@ -297,7 +298,7 @@ export default function LandingPage() {
       <footer className="border-t border-white/5 px-4 sm:px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/icon.svg" alt="" className="w-6 h-6 rounded" />
+            <Logo3D size={24} className="rounded" />
             <span className="text-white/40 text-sm">ForgeChat {RELEASE} · Heiphaistos</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-white/30">

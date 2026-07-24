@@ -1,6 +1,6 @@
 {
   "name": "forgechat-client",
-  "version": "3.525.0",
+  "version": "3.526.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -22,12 +22,14 @@
     "react-dropzone": "^14.2.3",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.24.0",
+    "three": "^0.185.1",
     "zustand": "^4.5.4"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.39.4",

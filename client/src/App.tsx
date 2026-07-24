@@ -23,9 +23,7 @@ function hexToRgb(hex: string): string {
   return `${r} ${g} ${b}`
 }
 
-// Imports statiques pour le chemin critique (login/register sont légers)
-import LoginPage from './pages/LoginPage'
-import RegisterPage from './pages/RegisterPage'
+// Imports statiques pour le chemin critique
 import MainLayout from './components/layout/MainLayout'
 import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
@@ -33,6 +31,10 @@ import FloatingCallPiP from './components/voice/FloatingCallPiP'
 
 // Lazy loading pour les pages non-critiques au premier affichage
 const LandingPage = lazy(() => import('./pages/LandingPage'))
+// Login/Register embarquent Logo3D (three.js, vendor-three ~150KB gzip) --
+// plus "légers" depuis son ajout, donc plus question de les charger en eager.
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
 const InvitePage = lazy(() => import('./pages/InvitePage'))
 const FriendInvitePage = lazy(() => import('./pages/FriendInvitePage'))

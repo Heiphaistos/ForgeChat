@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
+import Logo3D from '../components/Logo3D'
 
 function getPasswordStrength(pwd: string): { score: number; label: string; color: string } {
   if (pwd.length === 0) return { score: 0, label: '', color: '' }
@@ -50,6 +51,9 @@ export default function RegisterPage() {
   return (
     <div className="flex items-center justify-center min-h-screen overflow-y-auto bg-fc-bg px-4 py-8">
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md">
+        <div className="flex justify-center mb-4">
+          <Logo3D size={56} />
+        </div>
         <h1 className="text-2xl font-bold text-white text-center mb-2">Créer un compte</h1>
         <p className="text-fc-muted text-center mb-6">Rejoins ForgeChat gratuitement</p>
 

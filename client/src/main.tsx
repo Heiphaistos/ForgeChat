@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
 import './index.css'
+import { initFaviconAnimation } from './faviconAnimator'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,6 +19,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
 }
+
+initFaviconAnimation()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
