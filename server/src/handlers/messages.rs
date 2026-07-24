@@ -376,6 +376,21 @@ pub async fn send_message(
     });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 
+    // Bot slash commands : "/cmd args" est envoyé comme un message normal par le
+    // client (voir MessageInput.tsx) — c'est ici qu'on détecte et dispatch aux bots.
+    if let Some(content) = full_msg.content.as_deref() {
+        if let Some(rest) = content.strip_prefix('/') {
+            let mut parts = rest.splitn(2, ' ');
+            let cmd_name = parts.next().unwrap_or("").to_lowercase();
+            let args = parts.next().unwrap_or("");
+            if !cmd_name.is_empty() {
+                crate::handlers::bots::dispatch_slash_command(
+                    &state, channel_id, server_id, claims.sub, &cmd_name, args,
+                ).await;
+            }
+        }
+    }
+
     Ok(Json(full_msg))
 }
 

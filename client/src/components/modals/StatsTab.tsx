@@ -9,7 +9,7 @@ interface Props {
 interface Stats {
   member_count: number
   online_count: number
-  message_count: number
+  message_count_week: number
   channel_count: number
 }
 
@@ -87,8 +87,8 @@ export default function StatsTab({ serverId }: Props) {
           <StatCard
             icon={<MessageSquare size={18} className="text-white" />}
             iconColor="bg-purple-500/40"
-            label="Messages envoyés"
-            value={data?.message_count}
+            label="Messages (7j)"
+            value={data?.message_count_week}
             loading={isLoading}
           />
           <StatCard

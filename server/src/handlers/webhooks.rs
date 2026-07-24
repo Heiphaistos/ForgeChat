@@ -15,8 +15,10 @@ pub struct WebhookRow {
     pub channel_id: Uuid,
     pub name: String,
     pub avatar: Option<String>,
-    // Token masqué dans la liste — retourné uniquement à la création
     pub token_preview: String,
+    // Token complet — présent uniquement dans la réponse de create_webhook
+    // (revu jamais nulle part ailleurs, même pattern que bots.rs create_bot)
+    pub token: Option<String>,
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
 }
@@ -38,7 +40,7 @@ pub async fn list_webhooks(
 
     let webhooks = rows.iter().map(|r| {
         let token: String = r.get("token");
-        // Masquer le token — afficher uniquement les 8 premiers chars + "..."
+        // Masquer le token — affiché en clair uniquement à la création (create_webhook)
         let token_preview = format!("{}...", &token[..token.len().min(8)]);
         WebhookRow {
             id: r.get("id"),
@@ -47,6 +49,7 @@ pub async fn list_webhooks(
             name: r.get("name"),
             avatar: r.get("avatar"),
             token_preview,
+            token: None,
             created_by: r.get("created_by"),
             created_at: r.get("created_at"),
         }
@@ -86,13 +89,15 @@ pub async fn create_webhook(
     .fetch_one(&state.db)
     .await?;
 
+    let raw_token: String = row.get("token");
     Ok(Json(WebhookRow {
         id: row.get("id"),
         server_id: row.get("server_id"),
         channel_id: row.get("channel_id"),
         name: row.get("name"),
         avatar: row.get("avatar"),
-        token_preview: { let t: String = row.get("token"); format!("{}...", &t[..t.len().min(8)]) },
+        token_preview: format!("{}...", &raw_token[..raw_token.len().min(8)]),
+        token: Some(raw_token),
         created_by: row.get("created_by"),
         created_at: row.get("created_at"),
     }))

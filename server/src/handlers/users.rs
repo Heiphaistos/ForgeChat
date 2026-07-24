@@ -735,7 +735,8 @@ pub async fn get_activity_feed(
     let limit: i64 = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(20);
     let offset: i64 = params.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
 
-    // Nouvelles arrivées dans les serveurs communs
+    // Nouvelles arrivées dans les serveurs communs (amis exclus — couverts par friend_join_rows
+    // ci-dessous avec un rendu dédié, sinon le même événement apparaîtrait deux fois dans "Tout")
     let join_rows = sqlx::query(
         "SELECT sm.joined_at as ts, u.id as user_id, u.username, u.avatar,
                 s.id as server_id, s.name as server_name
@@ -743,6 +744,32 @@ pub async fn get_activity_feed(
          JOIN users u ON u.id = sm.user_id
          JOIN servers s ON s.id = sm.server_id
          JOIN server_members my_sm ON my_sm.server_id = s.id AND my_sm.user_id = $1
+         WHERE sm.user_id != $1
+           AND sm.joined_at > NOW() - INTERVAL '48 hours'
+           AND NOT EXISTS (
+               SELECT 1 FROM friendships f
+               WHERE f.status = 'accepted'
+                 AND ((f.user_id = $1 AND f.friend_id = sm.user_id)
+                   OR (f.friend_id = $1 AND f.user_id = sm.user_id))
+           )
+         ORDER BY sm.joined_at DESC
+         LIMIT 30"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+
+    // Arrivées d'amis dans des serveurs communs (sous-ensemble de join_rows, filtré amitié acceptée)
+    let friend_join_rows = sqlx::query(
+        "SELECT sm.joined_at as ts, u.id as user_id, u.username, u.avatar,
+                s.id as server_id, s.name as server_name
+         FROM server_members sm
+         JOIN users u ON u.id = sm.user_id
+         JOIN servers s ON s.id = sm.server_id
+         JOIN server_members my_sm ON my_sm.server_id = s.id AND my_sm.user_id = $1
+         JOIN friendships f ON f.status = 'accepted'
+             AND ((f.user_id = $1 AND f.friend_id = sm.user_id)
+               OR (f.friend_id = $1 AND f.user_id = sm.user_id))
          WHERE sm.user_id != $1
            AND sm.joined_at > NOW() - INTERVAL '48 hours'
          ORDER BY sm.joined_at DESC
@@ -776,6 +803,23 @@ pub async fn get_activity_feed(
         items.push(serde_json::json!({
             "id": Uuid::new_v4(),
             "type": "server_join",
+            "actor": {
+                "id":       r.get::<Uuid, _>("user_id"),
+                "username": r.get::<String, _>("username"),
+                "avatar":   r.get::<Option<String>, _>("avatar"),
+            },
+            "server": {
+                "id":   r.get::<Uuid, _>("server_id"),
+                "name": r.get::<String, _>("server_name"),
+            },
+            "timestamp": r.get::<chrono::DateTime<chrono::Utc>, _>("ts"),
+        }));
+    }
+
+    for r in &friend_join_rows {
+        items.push(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "type": "friend_join_server",
             "actor": {
                 "id":       r.get::<Uuid, _>("user_id"),
                 "username": r.get::<String, _>("username"),

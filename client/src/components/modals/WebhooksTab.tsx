@@ -19,7 +19,9 @@ interface Webhook {
   id: string
   name: string
   channel_id: string
-  token: string
+  // Token complet — présent uniquement dans la réponse de création, jamais dans la liste
+  token: string | null
+  token_preview: string
   avatar: string | null
   created_at: string
 }
@@ -36,6 +38,9 @@ export default function WebhooksTab({ server, channels }: Props) {
   const [name, setName] = useState('')
   const [channelId, setChannelId] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  // URL complète révélée une seule fois, juste après la création (le serveur ne
+  // renvoie plus jamais le token en clair ensuite — même pattern que les bots)
+  const [createdUrl, setCreatedUrl] = useState<{ name: string; url: string } | null>(null)
 
   const textChannels = channels.filter(c => c.type === 'text')
 
@@ -46,9 +51,10 @@ export default function WebhooksTab({ server, channels }: Props) {
   })
 
   const createWebhook = useMutation({
-    mutationFn: () => api.post(`/servers/${server.id}/webhooks`, { name: name.trim(), channel_id: channelId }),
-    onSuccess: () => {
+    mutationFn: () => api.post<Webhook>(`/servers/${server.id}/webhooks`, { name: name.trim(), channel_id: channelId }),
+    onSuccess: ({ data }) => {
       qc.invalidateQueries({ queryKey: ['webhooks', server.id] })
+      setCreatedUrl({ name: data.name, url: `${WEBHOOK_BASE}/${data.id}/${data.token}` })
       setName('')
       setChannelId('')
       toast.success('Webhook créé')
@@ -65,10 +71,10 @@ export default function WebhooksTab({ server, channels }: Props) {
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
   })
 
-  const copyUrl = (webhook: Webhook) => {
-    const url = `${WEBHOOK_BASE}/${webhook.id}/${webhook.token}`
-    navigator.clipboard.writeText(url)
-    setCopiedId(webhook.id)
+  const copyCreatedUrl = () => {
+    if (!createdUrl) return
+    navigator.clipboard.writeText(createdUrl.url)
+    setCopiedId('__created__')
     setTimeout(() => setCopiedId(null), 2000)
   }
 
@@ -122,6 +128,30 @@ export default function WebhooksTab({ server, channels }: Props) {
           </button>
         </div>
 
+        {/* URL révélée à la création — plus jamais affichée en clair ensuite */}
+        {createdUrl && (
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <div className="text-yellow-400 font-semibold text-sm mb-2">
+              ⚠️ URL de {createdUrl.name} — Copiez-la maintenant !
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 min-w-0 bg-fc-input px-3 py-2 rounded text-xs text-white font-mono break-all">
+                {createdUrl.url}
+              </code>
+              <button
+                onClick={copyCreatedUrl}
+                aria-label={copiedId === '__created__' ? 'URL copiée' : "Copier l'URL du webhook"}
+                className={`p-2 rounded transition flex-shrink-0 ${copiedId === '__created__' ? 'bg-fc-green text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+              >
+                {copiedId === '__created__' ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
+              </button>
+            </div>
+            <button onClick={() => setCreatedUrl(null)} className="text-xs text-fc-muted mt-2 hover:text-white transition">
+              Fermer
+            </button>
+          </div>
+        )}
+
         {/* Liste */}
         {isLoading ? (
           <div role="status" aria-label="Chargement des webhooks" className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
@@ -129,51 +159,37 @@ export default function WebhooksTab({ server, channels }: Props) {
           <div role="status" className="text-center text-fc-muted py-10 text-sm">Aucun webhook sur ce serveur.</div>
         ) : (
           <div className="space-y-3">
-            {webhooks.map(wh => {
-              const url = `${WEBHOOK_BASE}/${wh.id}/${wh.token}`
-              const isCopied = copiedId === wh.id
-              return (
-                <div key={wh.id} className="p-4 bg-fc-channel rounded-lg">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-fc-accent/20 flex items-center justify-center flex-shrink-0" aria-hidden>
-                        {wh.avatar
-                          ? <img src={wh.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
-                          : <Link size={16} className="text-fc-accent" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-white font-medium text-sm">{wh.name}</div>
-                        <div className="text-xs text-fc-muted">#{getChannelName(wh.channel_id)}</div>
-                      </div>
+            {webhooks.map(wh => (
+              <div key={wh.id} className="p-4 bg-fc-channel rounded-lg">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-fc-accent/20 flex items-center justify-center flex-shrink-0" aria-hidden>
+                      {wh.avatar
+                        ? <img src={wh.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+                        : <Link size={16} className="text-fc-accent" />}
                     </div>
-                    <button
-                      onClick={() => deleteWebhook.mutate(wh.id)}
-                      aria-label={`Supprimer le webhook ${wh.name}`}
-                      className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
-                    >
-                      <Trash2 size={14} aria-hidden />
-                    </button>
+                    <div className="min-w-0">
+                      <div className="text-white font-medium text-sm">{wh.name}</div>
+                      <div className="text-xs text-fc-muted">#{getChannelName(wh.channel_id)}</div>
+                    </div>
                   </div>
-
-                  {/* URL */}
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 min-w-0 bg-fc-input px-3 py-1.5 rounded text-xs text-fc-muted font-mono truncate">
-                      {url}
-                    </code>
-                    <button
-                      onClick={() => copyUrl(wh)}
-                      aria-label={isCopied ? 'URL copiée' : `Copier l'URL du webhook ${wh.name}`}
-                      className={`p-1.5 rounded transition flex-shrink-0 ${isCopied ? 'bg-fc-green text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-                    >
-                      {isCopied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-                    </button>
-                  </div>
-                  {isCopied && (
-                    <div aria-live="polite" aria-atomic="true" className="text-xs text-fc-green mt-1">Copié !</div>
-                  )}
+                  <button
+                    onClick={() => deleteWebhook.mutate(wh.id)}
+                    aria-label={`Supprimer le webhook ${wh.name}`}
+                    className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </button>
                 </div>
-              )
-            })}
+
+                {/* Token masqué — l'URL complète n'est révélée qu'à la création */}
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 bg-fc-input px-3 py-1.5 rounded text-xs text-fc-muted font-mono truncate">
+                    {WEBHOOK_BASE}/{wh.id}/{wh.token_preview}
+                  </code>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

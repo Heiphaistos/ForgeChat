@@ -633,6 +633,10 @@ pub async fn get_server_stats(
         "SELECT COUNT(*) FROM server_members WHERE server_id=$1 AND joined_at > NOW() - INTERVAL '7 days'"
     ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
 
+    let channel_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM channels WHERE server_id=$1"
+    ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
+
     // Top 5 canaux par volume de messages (7 derniers jours)
     let top_rows = sqlx::query(
         "SELECT c.id, c.name, COUNT(m.id) AS messages
@@ -673,6 +677,7 @@ pub async fn get_server_stats(
         "message_count_week": message_count_week,
         "new_members_today": new_members_today,
         "new_members_week": new_members_week,
+        "channel_count": channel_count,
         "top_channels": top_channels,
         "active_hours": active_hours,
     })))
@@ -958,7 +963,7 @@ pub async fn get_admin_stats(
     .unwrap_or_default();
 
     Ok(Json(serde_json::json!({
-        "total_members": total_members,
+        "total_users": total_members,
         "total_messages": total_messages,
         "messages_today": messages_today,
         "total_servers": total_servers,
