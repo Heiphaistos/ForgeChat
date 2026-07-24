@@ -124,7 +124,7 @@ export default function Logo3D({ size = 40, className }: Props) {
     sparks.position.set(0.55, 0.55, 0.15)
     scene.add(sparks)
 
-    const clock = new THREE.Clock()
+    const timer = new THREE.Timer()
     let frameId = 0
     let running = true
     const handleVisibility = () => { running = document.visibilityState === 'visible' }
@@ -138,7 +138,8 @@ export default function Logo3D({ size = 40, className }: Props) {
       frameId = requestAnimationFrame(tick)
       if (!running) return
 
-      const t = clock.getElapsedTime()
+      timer.update()
+      const t = timer.getElapsed()
       // Oscillation bornée (pas un tour complet) : l'enclume garde toujours son profil
       // 3/4 reconnaissable (corne + table + corps visibles) -- une rotation Y continue
       // traverse des angles où la silhouette s'aplatit en simple bloc méconnaissable.
