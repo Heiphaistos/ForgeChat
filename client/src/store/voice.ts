@@ -101,6 +101,12 @@ let _mixedAudioTrack: MediaStreamTrack | null = null // piste mixée courante (m
 // tout stream avec un id différent = écran).
 let _localScreenGroupStream: MediaStream | null = null
 const _screenSenders = new Map<string, RTCRtpSender>()
+// Sender de NOTRE caméra par pair — sans ceci, camSender() retombait sur n'importe quel
+// sender track===null, y compris le sender recvonly auto-créé par le navigateur quand le
+// pair distant active sa propre caméra en premier. replaceTrack() sur ce sender-là marche
+// (aperçu local OK) mais ne renégocie jamais et le pair ne reçoit jamais rien : caméra
+// bidirectionnelle silencieusement cassée si le distant a activé la sienne avant nous.
+const _camSenders = new Map<string, RTCRtpSender>()
 const _camStreamId = new Map<string, string>() // peerId -> id du MediaStream distant groupant micro+caméra
 let _offFns: Array<() => void> = []
 let _pttMuted = false // état mute "réel" avant PTT
@@ -281,9 +287,12 @@ async function _createPC(
   _pcs.set(peerId, pc)
   _iceQueues.set(peerId, [])
 
-  // Ajouter toutes les pistes locales
+  // Ajouter toutes les pistes locales (peer qui rejoint après coup avec caméra déjà active)
   if (_localStream) {
-    _localStream.getTracks().forEach(t => pc.addTrack(t, _localStream!))
+    _localStream.getTracks().forEach(t => {
+      const sender = pc.addTrack(t, _localStream!)
+      if (t.kind === 'video') _camSenders.set(peerId, sender)
+    })
   }
   // Si un partage d'écran est déjà en cours (peer rejoint après coup), lui envoyer
   // aussi la piste écran — sender séparé, groupé sous _localScreenGroupStream
@@ -634,6 +643,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
       _iceQueues.delete(d.user_id)
       _camStreamId.delete(d.user_id)
       _screenSenders.delete(d.user_id)
+      _camSenders.delete(d.user_id)
       set(s => ({ peers: s.peers.filter(p => p.userId !== d.user_id) }))
     })
 
@@ -714,6 +724,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _iceQueues.clear()
     _camStreamId.clear()
     _screenSenders.clear()
+    _camSenders.clear()
 
     // Stopper toutes les pistes des deux streams (raw + processed)
     const allTracks = new Set<MediaStreamTrack>()
@@ -767,12 +778,14 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     const { videoEnabled, joined } = get()
     if (!joined || !_localStream) return
 
-    // Sender caméra = sender vidéo qui n'est PAS le sender écran dédié (cf. shareScreen) —
-    // les deux pistes vidéo coexistent, il faut cibler la bonne.
+    // Sender caméra = NOTRE sender vidéo suivi explicitement (cf. _camSenders) — un simple
+    // `track === null` matcherait aussi le sender recvonly auto-créé par le navigateur en
+    // recevant la caméra du pair distant, cassant la renégociation (voir commentaire _camSenders).
     const camSender = (pc: RTCPeerConnection, peerId: string) => {
+      const tracked = _camSenders.get(peerId)
+      if (tracked && pc.getSenders().includes(tracked)) return tracked
       const screenSender = _screenSenders.get(peerId)
-      return pc.getSenders().find(s => s.track?.kind === 'video' && s !== screenSender) ??
-        pc.getSenders().find(s => s.track === null && s !== screenSender)
+      return pc.getSenders().find(s => s.track?.kind === 'video' && s !== screenSender)
     }
 
     if (videoEnabled) {
@@ -801,7 +814,8 @@ export const useVoice = create<VoiceStore>((set, get) => ({
           if (sender) {
             await sender.replaceTrack(vt)
           } else {
-            pc.addTrack(vt, _localStream)
+            const newSender = pc.addTrack(vt, _localStream)
+            _camSenders.set(peerId, newSender)
             try {
               const offer = await pc.createOffer()
               await pc.setLocalDescription(offer)
