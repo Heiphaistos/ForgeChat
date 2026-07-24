@@ -1,10 +1,57 @@
 # CHECKPOINT — Loop d'amélioration continue ForgeChat
 
 Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier est un
-résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-22 19h, après
-22 itérations — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
+résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
+audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-07-22 19:33)
+## Statut actuel (2026-07-24 15:20) — server 3.178.0 / client 3.525.0 / desktop 3.8.2 (inchangé)
+
+Audit complet web (server handlers jamais touchés + pages/modals client jamais relues).
+**6 bugs réels trouvés et corrigés, tous déployés+vérifiés en prod** :
+1. `bots.rs`/`messages.rs` — `dispatch_slash_command` jamais appelé depuis `send_message` :
+   les slash commands de bot enregistrées ne faisaient jamais rien. Fix : appel ajouté
+   après le broadcast MESSAGE_CREATE. Commit 6463887.
+2. `servers.rs` `get_admin_stats` renvoyait `total_members`, `AdminPage.tsx` attendait
+   `total_users` → carte "Utilisateurs" toujours à 0. Vérifié live (`total_users:1`).
+3. Activity feed (`users.rs get_activity_feed`) ne générait jamais `friend_join_server` →
+   filtre "Amis" de `ActivityFeedPage` en permanence vide. Ajouté (exclut les doublons de
+   la requête générique server_join).
+4. **Webhooks 100% cassés depuis leur création (v2.3.0)** : `create_webhook` masquait le
+   token même dans SA PROPRE réponse → l'URL webhook n'était jamais récupérable via l'UI,
+   ni à la création ni après. Fix : token complet renvoyé une fois à la création (pattern
+   reveal-once déjà utilisé pour les bots), masqué partout ailleurs. Vérifié live end-to-end.
+5. `get_server_stats` ne renvoyait pas `channel_count` et renvoyait
+   `message_count_today`/`week` au lieu de `message_count` → 2 cartes sur 4 de l'onglet
+   Stats (ServerSettingsModal) toujours à "—". Fix serveur (ajout channel_count) + client
+   (câblé sur les vrais champs). Vérifié live.
+6. **Régression réelle trouvée par la suite E2E, pas par l'audit statique** :
+   `client/src/store/voice.ts` `camSender()` — le fallback `track === null` pour réutiliser
+   un sender caméra matchait AUSSI le sender recvonly auto-créé par le navigateur quand on
+   reçoit la caméra du pair AVANT d'avoir activé la sienne. `replaceTrack()` dessus ne
+   renégocie jamais et un transceiver recvonly n'envoie jamais → caméra bidirectionnelle
+   cassée en silence (aperçu local OK des deux côtés, mais le pair ne reçoit rien). Confirmé
+   par wrapper RTCPeerConnection (zéro event côté receveur). Fix : `_camSenders` map dédiée
+   (même pattern que `_screenSenders` déjà existant) au lieu de deviner par track===null.
+   Commit f4ef443, client 3.525.0. **Suite E2E complète re-passée 6/6 après ce fix**
+   (dmcall, screenshare, camera, glare, missedcall, camscreen).
+
+**Non corrigé, signalé, pas un bug de cette session** : 3 alertes Dependabot modérées sur
+GitHub — react-router 6.30.4 (dernière 6.x) reste vulnérable (CVE-2025-68470 + GHSA-337j),
+fix seulement via bump majeur 6→7 (breaking, React Router v7 change beaucoup — à faire en
+session dédiée avec accord explicite, pas dans cette loop).
+
+**VM Hyper-V** : redémarrée à froid ce jour (l'état sauvegardé refusait de reprendre —
+disque système à ~9.5 Go libres, le fichier mémoire de reprise (.VMRS) en demandait 16-18
+Go). Mémoire de démarrage réduite 16→4 Go (dynamique, min 512 Mo, fonctionne) pour tenir
+dans l'espace dispo — VM tourne. Momo reprend les tests manuellement (repro bug #4 image
+OBS fantôme + validation du fix caméra bidirectionnelle en conditions réelles desktop) ;
+pas de nouveau build desktop nécessaire, aucun changement natif cette session (desktop
+= webview pointant sur forgechat.heiphaistos.org, hérite des fixes web automatiquement).
+
+⚠️ **Espace disque système bas (~9.5 Go libres avant réduction mémoire VM)** — à surveiller,
+pourrait re-bloquer d'autres VM ou opérations disque bientôt.
+
+## Statut précédent (2026-07-22 19:33) — pour référence
 
 **Itération post-réparation** : webhooks.rs audité (jamais touché avant). list/create/
 delete_webhook propres. BUG RÉEL trouvé : execute_webhook comparait le token webhook
@@ -44,7 +91,21 @@ d'autre — traiter comme sain sauf signal contraire.
 - **Fichiers client hooks/store audités** : auth.ts, presence.ts, channelNotif.ts,
   useVoiceActivity.ts, api/client.ts — propres sauf api/client.ts (fixé it.20).
 
-## Fichiers encore jamais audités (pistes pour la suite)
+## Audité 2026-07-24 (à ne pas re-creuser sans piste précise)
+
+Serveur : stickers.rs, server_settings.rs (bans/tags/membres détaillés), invites.rs,
+bots.rs, webhooks.rs (revalidé), soundboard.rs — tous propres sauf les 5 bugs listés
+au-dessus. Client : AdminPage, ExplorePage, ActivityFeedPage, LeaderboardPage,
+TicketsPage, WebhooksTab, TagsTab, BansTab, StatsTab, AuditLogTab.
+
+**Encore jamais audités niveau logique (modals volumineux, pistes pour la suite)** :
+ChannelSettingsModal.tsx (632L), ServerSettingsModal.tsx (804L, au-delà des sections
+bots/stats déjà vérifiées par ce passage), RolesTab.tsx (529L), InviteModal.tsx,
+FeedsTab.tsx, AutoModTab.tsx, CreateChannelModal.tsx, ImportContactsModal.tsx,
+ServerTemplateModal.tsx, MembersTab.tsx, NicknameModal.tsx, ChannelNotifModal.tsx,
+UserProfileModal.tsx, VerificationGateModal.tsx, VoicePasswordPrompt.tsx.
+
+## Fichiers encore jamais audités (pistes pour la suite, historique pré-2026-07-24)
 
 **`client/src/hooks/` : AUDIT COMPLET, ÉPUISÉ (2026-07-22 19h)** — 16/16 fichiers
 relus (useAudioNotifications, useCaptions, useCountdown, useDmCall, useE2E*,
