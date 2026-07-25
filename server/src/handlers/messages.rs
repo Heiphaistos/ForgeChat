@@ -165,7 +165,7 @@ pub async fn get_messages(
             edited_at: row.get("edited_at"),
             created_at: row.get("created_at"),
             author_id: row.get("user_id"),
-            author_username: row.get("username"),
+            author_username: row.try_get("webhook_display_name").ok().flatten().unwrap_or_else(|| row.get("username")),
             author_discriminator: row.get("discriminator"),
             author_avatar: row.get("avatar"),
             author_is_bot: row.get("is_bot"),
@@ -704,7 +704,7 @@ pub async fn search_messages(
         edited_at: r.get("edited_at"),
         created_at: r.get("created_at"),
         author_id: r.get("user_id"),
-        author_username: r.get("username"),
+        author_username: r.try_get("webhook_display_name").ok().flatten().unwrap_or_else(|| r.get("username")),
         author_discriminator: r.get("discriminator"),
         author_avatar: r.get("avatar"),
         author_is_bot: r.try_get("is_bot").unwrap_or(false),
@@ -760,7 +760,7 @@ pub async fn forward_message(
 
     // Vérifier que le message source existe dans le canal source
     let src = sqlx::query(
-        "SELECT m.content, m.type, u.username as author_username
+        "SELECT m.content, m.type, COALESCE(m.webhook_display_name, u.username) as author_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
          WHERE m.id=$1 AND m.channel_id=$2"

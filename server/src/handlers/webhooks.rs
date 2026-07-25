@@ -163,8 +163,7 @@ pub async fn execute_webhook(
     // Comparaison du token en temps constant, comme verify_github_token_get plus bas
     // dans ce même fichier -- filtrer par `WHERE token=$2` en SQL laisse Postgres
     // faire une comparaison memcmp classique (short-circuit au 1er octet différent),
-    // un canal auxiliaire théorique que ce fichier corrige déjà pour le token GitHub
-    // mais pas pour celui-ci. Fetch par id seul, comparaison XOR-fold en Rust.
+    // un canal auxiliaire théorique. Fetch par id seul, comparaison XOR-fold en Rust.
     let row = sqlx::query("SELECT channel_id, name, created_by, token FROM webhooks WHERE id=$1")
         .bind(webhook_id)
         .fetch_optional(&state.db).await?
@@ -195,10 +194,10 @@ pub async fn execute_webhook(
 
     let msg_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO messages (id, channel_id, user_id, content, type)
-         VALUES ($1, $2, $3, $4, 'webhook')"
+        "INSERT INTO messages (id, channel_id, user_id, content, type, webhook_display_name)
+         VALUES ($1, $2, $3, $4, 'webhook', $5)"
     )
-    .bind(msg_id).bind(channel_id).bind(created_by).bind(&content)
+    .bind(msg_id).bind(channel_id).bind(created_by).bind(&content).bind(&webhook_name)
     .execute(&state.db).await?;
 
     let event = serde_json::json!({
@@ -310,7 +309,7 @@ pub async fn receive_github_webhook(
     let msg_id = Uuid::new_v4();
 
     sqlx::query(
-        "INSERT INTO messages (id, channel_id, user_id, content, type) VALUES ($1, $2, $3, $4, 'webhook')"
+        "INSERT INTO messages (id, channel_id, user_id, content, type, webhook_display_name) VALUES ($1, $2, $3, $4, 'webhook', 'GitHub')"
     )
     .bind(msg_id)
     .bind(channel_id)

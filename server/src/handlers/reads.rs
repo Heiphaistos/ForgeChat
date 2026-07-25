@@ -257,7 +257,7 @@ pub async fn get_user_mentions(
             c.server_id,
             s.name as server_name,
             u.id as author_id,
-            u.username as author_username,
+            COALESCE(m.webhook_display_name, u.username) as author_username,
             u.avatar as author_avatar,
             m.content,
             m.created_at

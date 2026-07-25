@@ -109,7 +109,6 @@ const _screenSenders = new Map<string, RTCRtpSender>()
 const _camSenders = new Map<string, RTCRtpSender>()
 const _camStreamId = new Map<string, string>() // peerId -> id du MediaStream distant groupant micro+caméra
 let _offFns: Array<() => void> = []
-let _pttMuted = false // état mute "réel" avant PTT
 
 // Cache de la config ICE — fetchée une seule fois par session
 let _iceConfigCache: RTCConfiguration | null = null
@@ -356,6 +355,7 @@ async function _createPC(
           _iceQueues.delete(peerId)
           _camStreamId.delete(peerId)
           _screenSenders.delete(peerId)
+          _camSenders.delete(peerId)
           set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
         }
       }, 4000)
@@ -373,6 +373,9 @@ async function _createPC(
             pc.close()
             _pcs.delete(peerId)
             _iceQueues.delete(peerId)
+            _camStreamId.delete(peerId)
+            _screenSenders.delete(peerId)
+            _camSenders.delete(peerId)
             set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
           }
         }

@@ -68,7 +68,7 @@ export const useAuth = create<AuthState>()(
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
-      useUnread.setState({ counts: {} })
+      useUnread.setState({ counts: {}, serverCounts: {} })
       set(s => { s.user = null })
     },
 

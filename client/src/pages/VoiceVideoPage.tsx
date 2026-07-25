@@ -10,7 +10,7 @@ import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useLocation } from 'react-router-dom'
-import { useVoiceActivity } from '../hooks/useVoiceActivity'
+import { useVoiceActivity, usePeersVoiceActivity } from '../hooks/useVoiceActivity'
 import { useCaptions } from '../hooks/useCaptions'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
@@ -104,11 +104,11 @@ function PeerTile({
     if (el && stream && el.srcObject !== stream) el.srcObject = stream
   }
 
-  // L'audio des pairs distants ne passe plus par un <audio> ici : il est routé une fois
-  // pour toutes via Web Audio dans voice.ts (_ensurePeerAudioRouted), indépendamment de
-  // cette page — sinon le son coupait dès qu'on quittait le canal (Paramètres, autre
-  // salon...) même si l'appel restait connecté. Le <video> ci-dessous reste muted pour
-  // les pairs distants (son géré ailleurs), affichage uniquement.
+  // L'audio des pairs distants ne passe pas par ce <video> (toujours muted pour eux,
+  // affichage uniquement) : il est joué par des <audio> natifs dédiés dans
+  // PersistentVoiceAudio.tsx, montés indépendamment de cette page — sinon le son
+  // coupait dès qu'on quittait le canal (Paramètres, autre salon...) même si l'appel
+  // restait connecté.
   return (
     <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
@@ -280,9 +280,14 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     roomParticipants, pttMode, activatePtt, deactivatePtt,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
+  const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
   const { isActive: captionsOn, isSupported: captionsSupported, captions, toggle: toggleCaptions } = useCaptions()
-  // Map userId → speaking (local only — peers tracked via WS SPEAKING events)
-  const speakingMap: Record<string, number> = user ? { [user.id]: isLocalSpeaking ? 1 : 0 } : {}
+  // Map userId → speaking : local via AnalyserNode direct sur localStream, pairs
+  // distants via un AnalyserNode par flux distant (usePeersVoiceActivity)
+  const speakingMap: Record<string, number> = {
+    ...(user ? { [user.id]: isLocalSpeaking ? 1 : 0 } : {}),
+    ...remoteSpeaking,
+  }
 
   const isInThisChannel = joined && activeChannelId === channel.id
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length

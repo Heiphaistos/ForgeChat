@@ -33,7 +33,7 @@ pub async fn global_search(
     let (messages, users, channels) = tokio::try_join!(
         sqlx::query(
             "SELECT m.id, m.content, m.created_at,
-                    u.username as author_username, u.avatar as author_avatar,
+                    COALESCE(m.webhook_display_name, u.username) as author_username, u.avatar as author_avatar,
                     c.name as channel_name, c.id as channel_id, c.server_id
              FROM messages m
              JOIN users u ON u.id = m.user_id

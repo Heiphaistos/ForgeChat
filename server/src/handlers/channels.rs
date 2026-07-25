@@ -307,7 +307,7 @@ pub async fn get_pinned(
             "id": r.get::<Uuid, _>("id"),
             "content": r.get::<Option<String>, _>("content"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-            "author_username": r.get::<String, _>("username"),
+            "author_username": r.try_get::<Option<String>, _>("webhook_display_name").ok().flatten().unwrap_or_else(|| r.get::<String, _>("username")),
             "author_avatar": r.get::<Option<String>, _>("avatar"),
         })
     }).collect();

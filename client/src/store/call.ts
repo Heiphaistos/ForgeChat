@@ -70,10 +70,12 @@ let _pcPeer: string | null = null
 let _pendingCandidates: RTCIceCandidateInit[] = []
 let _callTimeout: ReturnType<typeof setTimeout> | null = null
 let _callInFlight = false
+let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 function _cleanup(set: (fn: (s: CallStore) => Partial<CallStore>) => void) {
   _callInFlight = false
   if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
+  if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
   _pc?.close()
   _pc = null
   _pcPeer = null
@@ -103,10 +105,36 @@ async function _buildPc(
     if (e.streams[0]) set(() => ({ remoteStream: e.streams[0] }))
   }
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'connected') {
+    const state_ = pc.connectionState
+    if (state_ === 'connected') {
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
       set(s => ({ callState: 'connected', connectedAt: s.connectedAt ?? Date.now() }))
+    } else if (state_ === 'disconnected') {
+      // Attendre 4s avant de raccrocher -- les coupures réseau temporaires récupèrent
+      // souvent (même logique que store/voice.ts, absente ici jusqu'à présent : un DM
+      // call raccrochait immédiatement au moindre aléa réseau alors qu'un vocal de
+      // serveur survivait au même incident)
+      _reconnectTimer = setTimeout(() => {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') _cleanup(set)
+      }, 4000)
+    } else if (state_ === 'failed') {
+      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
+      // Tentative de renegotiation ICE restart avant de raccrocher
+      pc.restartIce()
+      setTimeout(async () => {
+        if (pc.connectionState === 'failed') {
+          try {
+            const offer = await pc.createOffer({ iceRestart: true })
+            await pc.setLocalDescription(offer)
+            if (_pcPeer) useWs.getState().send({ type: 'VOICE_SIGNAL', to: _pcPeer, payload: { type: 'offer', sdp: offer } })
+          } catch {
+            _cleanup(set)
+          }
+        }
+      }, 2000)
+    } else if (state_ === 'closed') {
+      _cleanup(set)
     }
-    if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) _cleanup(set)
   }
   _pc = pc
   _pcPeer = pid
