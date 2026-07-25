@@ -39,6 +39,10 @@ services:
       UPLOAD_DIR: /app/uploads
       FRONTEND_URL: ${FRONTEND_URL:-https://forgechat.heiphaistos.org}
       RUST_LOG: forgechat=info,tower_http=warn
+      JWT_ISSUER: ${JWT_ISSUER:-forgechat}
+      TURN_URL: ${TURN_URL:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_PASSWORD: ${TURN_PASSWORD:-}
     volumes:
       - uploads:/app/uploads
     depends_on:
