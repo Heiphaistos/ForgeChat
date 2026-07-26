@@ -27,18 +27,25 @@ interface Props {
 
 type ActionFilter = 'all' | string
 
+// Les clés DOIVENT matcher exactement les chaînes passées à log_event() côté backend
+// (server/src/handlers/*.rs) -- toutes en MAJUSCULES_SNAKE_CASE. Un mismatch de casse
+// ici faisait que le journal entier retombait silencieusement sur l'icône/label
+// générique pour CHAQUE entrée, jamais un seul match réel.
 const ACTION_CONFIG: Record<string, { label: string; color: string; Icon: any }> = {
-  member_join:    { label: 'Membre rejoint',        color: 'text-fc-green',   Icon: UserPlus },
-  member_leave:   { label: 'Membre parti',          color: 'text-fc-muted',   Icon: UserMinus },
-  member_kick:    { label: 'Membre expulsé',        color: 'text-orange-400', Icon: UserX },
-  member_ban:     { label: 'Membre banni',          color: 'text-fc-red',     Icon: ShieldOff },
-  member_unban:   { label: 'Membre débanni',        color: 'text-fc-green',   Icon: ShieldCheck },
-  channel_create: { label: 'Canal créé',            color: 'text-blue-400',   Icon: Hash },
-  channel_delete: { label: 'Canal supprimé',        color: 'text-orange-400', Icon: Trash2 },
-  role_create:    { label: 'Rôle créé',             color: 'text-blue-400',   Icon: Crown },
-  role_delete:    { label: 'Rôle supprimé',         color: 'text-orange-400', Icon: Trash2 },
-  message_delete: { label: 'Message supprimé',      color: 'text-fc-red',     Icon: MessageSquareX },
-  server_update:  { label: 'Serveur modifié',       color: 'text-blue-400',   Icon: Settings },
+  MEMBER_JOIN:     { label: 'Membre rejoint',        color: 'text-fc-green',   Icon: UserPlus },
+  MEMBER_LEAVE:    { label: 'Membre parti',          color: 'text-fc-muted',   Icon: UserMinus },
+  MEMBER_KICK:     { label: 'Membre expulsé',        color: 'text-orange-400', Icon: UserX },
+  MEMBER_BAN:      { label: 'Membre banni',          color: 'text-fc-red',     Icon: ShieldOff },
+  MEMBER_UNBAN:    { label: 'Membre débanni',        color: 'text-fc-green',   Icon: ShieldCheck },
+  CHANNEL_CREATE:  { label: 'Canal créé',            color: 'text-blue-400',   Icon: Hash },
+  CHANNEL_DELETE:  { label: 'Canal supprimé',        color: 'text-orange-400', Icon: Trash2 },
+  ROLE_CREATE:     { label: 'Rôle créé',             color: 'text-blue-400',   Icon: Crown },
+  ROLE_UPDATE:     { label: 'Rôle modifié',          color: 'text-blue-400',   Icon: Crown },
+  ROLE_DELETE:     { label: 'Rôle supprimé',         color: 'text-orange-400', Icon: Trash2 },
+  MESSAGE_DELETE:  { label: 'Message supprimé',      color: 'text-fc-red',     Icon: MessageSquareX },
+  MESSAGE_PIN:     { label: 'Message épinglé',       color: 'text-blue-400',   Icon: Hash },
+  MESSAGE_UNPIN:   { label: 'Message désépinglé',    color: 'text-fc-muted',   Icon: Hash },
+  SERVER_UPDATE:   { label: 'Serveur modifié',       color: 'text-blue-400',   Icon: Settings },
 }
 
 const ACTION_OPTIONS = [

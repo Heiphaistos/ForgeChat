@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::require_permission,
+    handlers::{audit::log_event, servers::require_permission},
     middleware::auth::Claims,
     models::role::Permissions,
     state::AppState,
@@ -62,6 +62,7 @@ pub async fn unban_member(
         .await?;
 
     if result.rows_affected() > 0 {
+        log_event(&state, server_id, "MEMBER_UNBAN", Some(claims.sub), None, Some(user_id), None, None).await;
         state.broadcast_to_server_members(server_id, serde_json::json!({
             "type": "MEMBER_UNBAN",
             "server_id": server_id,

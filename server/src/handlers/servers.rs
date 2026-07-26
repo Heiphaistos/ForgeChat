@@ -196,6 +196,7 @@ pub async fn update_server(
     .fetch_one(&state.db)
     .await?;
 
+    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None, None).await;
     let event = serde_json::json!({ "type": "SERVER_UPDATE", "server_id": server_id, "server": server });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 
@@ -330,6 +331,7 @@ pub async fn join_server(
         .fetch_optional(&state.db)
         .await?;
     if let Some(u) = user {
+        log_event(&state, invite.server_id, "MEMBER_JOIN", Some(claims.sub), Some(&u.username), None, None, None).await;
         state.broadcast_to_server_members(invite.server_id, serde_json::json!({
             "type": "MEMBER_JOIN",
             "server_id": invite.server_id,
@@ -375,6 +377,7 @@ pub async fn leave_server(
         .execute(&state.db)
         .await?;
 
+    log_event(&state, server_id, "MEMBER_LEAVE", Some(claims.sub), None, None, None, None).await;
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "MEMBER_LEAVE",
         "server_id": server_id,
