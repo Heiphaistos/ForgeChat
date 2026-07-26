@@ -744,18 +744,24 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   }
 
   const handleVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
-    if (!serverId) return
     try {
       const mins = Math.floor(duration / 60)
       const secs = duration % 60
       const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
-      const res = await api.post(`/servers/${serverId}/channels/${channelId}/messages`, {
-        content: `🎤 Message vocal (${durationStr})`,
-      })
+      const content = `🎤 Message vocal (${durationStr})`
+      // En DM (serverId="") : POST /dms/:id/messages + /dms/:id/messages/:id/attachments
+      // -- même contrat (id renvoyé, endpoint d'attachment équivalent) que côté serveur,
+      // ce chemin retournait juste tôt avant sans jamais appeler l'API en DM.
+      const res = serverId
+        ? await api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content })
+        : await api.post(`/dms/${channelId}/messages`, { content })
       const formData = new FormData()
       const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
       formData.append('file', blob, `voice-${Date.now()}.${ext}`)
-      await api.post(`/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`, formData)
+      const uploadUrl = serverId
+        ? `/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`
+        : `/dms/${channelId}/messages/${res.data.id}/attachments`
+      await api.post(uploadUrl, formData)
       setShowVoiceRecorder(false)
     } catch {
       toast.error("Erreur lors de l'envoi du message vocal")
@@ -1186,7 +1192,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Bouton Messages programmés — masqué sur petits écrans */}
+          {/* Bouton Messages programmés — masqué sur petits écrans ET en DM :
+              scheduled_messages.channel_id référence `channels` (serveur), il
+              n'existe aucun équivalent DM sans nouvelle table/migration --
+              affiché sans garde jusqu'ici, le clic en DM échouait silencieusement
+              (URL /servers//channels/.../scheduled malformée). */}
+          {serverId && (
           <div className="relative hidden sm:block">
             <button
               onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
@@ -1272,6 +1283,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               </PickerShell>
             )}
           </div>
+          )}
 
           {/* TTL message éphémère — masqué sur petits écrans */}
           <div className="relative hidden sm:block">
@@ -1309,8 +1321,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
 
-          {/* Voice message — serveur requis */}
-          {serverId && (showVoiceRecorder ? (
+          {/* Voice message — disponible aussi en DM, cf. handleVoiceMessage */}
+          {showVoiceRecorder ? (
             <div className="absolute bottom-full left-0 right-0 mb-2 px-2">
               <VoiceMessageRecorder
                 onSend={handleVoiceMessage}
@@ -1326,7 +1338,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             >
               <Mic size={18} />
             </button>
-          ))}
+          )}
 
           <button
             onClick={submit}
