@@ -608,6 +608,22 @@ pub async fn accept_friend_invite(
         }
     }
 
+    // Un lien d'invitation d'ami est un code public partageable (URL) -- contrairement
+    // à send_friend_request (envoyée à une personne précise), l'inviteur ne choisit pas
+    // QUI clique dessus. Sans ce check, un utilisateur bloqué par l'inviteur pouvait
+    // quand même forcer l'amitié en visitant le lien (blocks n'était jamais consulté ici).
+    let blocked = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
+         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    )
+    .bind(inviter_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if blocked {
+        return Err(AppError::Forbidden);
+    }
+
     let already = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM friendships WHERE
          (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))",
