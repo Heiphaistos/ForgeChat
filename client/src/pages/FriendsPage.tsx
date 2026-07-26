@@ -225,6 +225,19 @@ export default function FriendsPage() {
     onError: () => toast.error('Erreur lors du refus'),
   })
 
+  // Annuler une demande qu'on a SOI-MÊME envoyée -- endpoint distinct de
+  // /decline (qui ne supprime que côté destinataire : DELETE ... WHERE
+  // friend_id=$claims.sub, jamais vrai pour l'expéditeur, donc /decline
+  // renvoyait 200 sans jamais rien supprimer si on l'utilisait ici).
+  const cancelRequest = useMutation({
+    mutationFn: (id: string) => api.delete(`/friends/${id}/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['friends'] })
+      toast.success('Demande annulée')
+    },
+    onError: () => toast.error('Erreur lors de l\'annulation'),
+  })
+
   const remove = useMutation({
     mutationFn: (friendId: string) => api.delete(`/friends/${friendId}`),
     onSuccess: () => {
@@ -617,7 +630,7 @@ export default function FriendsPage() {
                             <Clock size={11} /> En attente d'acceptation
                           </div>
                         </div>
-                        <button onClick={() => decline.mutate(f.id)}
+                        <button onClick={() => cancelRequest.mutate(f.id)}
                           aria-label={`Annuler la demande envoyée à ${f.username}`}
                           title="Annuler"
                           className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
