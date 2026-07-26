@@ -535,7 +535,14 @@ function MessageRow({
               )}
             </div>
 
-            {!isOwn && (
+            {/* Signaler = modération SERVEUR (message_reports.server_id NOT NULL,
+                consulté par les admins via ServerAdminPage) -- aucun équivalent
+                n'existe pour les DM (pas d'équipe de modération sur une conv 1-à-1,
+                le mécanisme de sécurité DM est le blocage). Sans ce garde-fou sur
+                serverId, le bouton s'affichait aussi en DM et échouait toujours en
+                404 côté backend (create_report ne connaît que `messages`+`channels`
+                de serveur), même piège que celui déjà corrigé sur les rappels. */}
+            {!isOwn && serverId && (
               <button
                 onClick={() => onReport(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
