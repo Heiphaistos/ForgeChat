@@ -286,15 +286,28 @@ pub struct PublicServer {
     pub invite_code: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct DiscoverQuery {
+    pub category: Option<String>,
+}
+
 pub async fn discover_servers(
     State(state): State<AppState>,
     _claims: Extension<Claims>,
+    Query(q): Query<DiscoverQuery>,
 ) -> Result<Json<Vec<PublicServer>>, AppError> {
     use sqlx::Row;
+    // ServerDiscoveryPage.tsx envoie ?category=<key> pour chaque bouton de
+    // filtre sauf "all" -- jamais lu ici avant ce fix, donc les 7 catégories
+    // n'avaient strictement aucun effet sur les résultats affichés.
+    let category = q.category.filter(|c| c != "all");
     let rows = sqlx::query(
         "SELECT id, name, icon, description, member_count, invite_code
-         FROM servers WHERE is_public=true ORDER BY member_count DESC LIMIT 100"
+         FROM servers
+         WHERE is_public=true AND ($1::TEXT IS NULL OR server_category = $1)
+         ORDER BY member_count DESC LIMIT 100"
     )
+    .bind(category)
     .fetch_all(&state.db)
     .await?;
 

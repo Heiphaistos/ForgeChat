@@ -54,6 +54,7 @@ pub struct UpdateServerRequest {
     pub rules_channel_id: Option<Uuid>,
     pub vanity_url: Option<String>,
     pub content_filter: Option<String>,
+    pub server_category: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

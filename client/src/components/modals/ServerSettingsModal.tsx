@@ -115,6 +115,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   const [rulesChannelId, setRulesChannelId] = useState<string>(server.rules_channel_id ?? '')
   const [vanityUrl, setVanityUrl] = useState(server.vanity_url ?? '')
   const [explicitFilter, setExplicitFilter] = useState<string>(server.content_filter ?? 'none')
+  const [serverCategory, setServerCategory] = useState<string>(server.server_category ?? '')
   const [iconPreview, setIconPreview] = useState<string | null>(server.icon ?? null)
   const bannerInputRef = useRef<HTMLInputElement>(null)
   const [newBotName, setNewBotName] = useState('')
@@ -166,6 +167,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       rules_channel_id: rulesChannelId || null,
       vanity_url: vanityUrl.trim() || null,
       content_filter: explicitFilter,
+      server_category: serverCategory || null,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
@@ -474,6 +476,22 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   >
                     <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isPublic ? 'left-6' : 'left-1'}`} />
                   </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Catégorie</label>
+                  <p className="text-xs text-fc-muted mb-2">Utilisée pour le filtre de la page Découvrir (serveurs publics)</p>
+                  <select value={serverCategory} onChange={e => setServerCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
+                    <option value="">Aucune</option>
+                    <option value="gaming">Gaming</option>
+                    <option value="community">Communauté</option>
+                    <option value="tech">Tech</option>
+                    <option value="music">Musique</option>
+                    <option value="education">Éducation</option>
+                    <option value="arts">Arts</option>
+                    <option value="18plus">18+</option>
+                  </select>
                 </div>
 
                 {/* Canaux système */}

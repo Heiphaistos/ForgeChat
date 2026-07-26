@@ -166,6 +166,26 @@ pub async fn update_server(
 ) -> Result<Json<Server>> {
     require_owner(&state, claims.sub, server_id).await?;
 
+    const VALID_CATEGORIES: &[&str] = &["gaming", "community", "tech", "music", "education", "arts", "18plus"];
+    if let Some(cat_val) = &body.server_category {
+        if !cat_val.is_null() {
+            let cat_str = cat_val.as_str().ok_or_else(|| AppError::BadRequest("server_category doit être une chaîne ou null".into()))?;
+            if !VALID_CATEGORIES.contains(&cat_str) {
+                return Err(AppError::BadRequest(format!("Catégorie invalide (attendu: {})", VALID_CATEGORIES.join(", "))));
+            }
+        }
+    }
+    // server_category : Option<Value> plutôt que Option<String> pour distinguer
+    // "champ absent" (ne pas toucher) de "explicitement mis à null" (vider) --
+    // un COALESCE comme les autres champs ci-dessous ne permettrait jamais de
+    // retirer une catégorie déjà définie (même bug déjà corrigé une fois sur
+    // verification_rules, itération 9).
+    let category_provided = body.server_category.is_some();
+    let category_value: Option<String> = body.server_category
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     let server = sqlx::query_as::<_, Server>(
         "UPDATE servers SET
             name = COALESCE($2, name),
@@ -178,7 +198,8 @@ pub async fn update_server(
             afk_timeout_minutes = COALESCE($9, afk_timeout_minutes),
             rules_channel_id = COALESCE($10, rules_channel_id),
             vanity_url = COALESCE($11, vanity_url),
-            content_filter = COALESCE($12, content_filter)
+            content_filter = COALESCE($12, content_filter),
+            server_category = CASE WHEN $13 THEN $14 ELSE server_category END
          WHERE id=$1 RETURNING *"
     )
     .bind(server_id)
@@ -193,6 +214,8 @@ pub async fn update_server(
     .bind(body.rules_channel_id)
     .bind(body.vanity_url)
     .bind(body.content_filter)
+    .bind(category_provided)
+    .bind(category_value)
     .fetch_one(&state.db)
     .await?;
 
