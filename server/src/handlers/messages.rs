@@ -959,22 +959,33 @@ pub async fn translate_message(
         return Err(AppError::BadRequest("Langue invalide".into()));
     }
 
-    // Vérifier membership via messages→channels→server_members
-    let has_access: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1 FROM messages m
-            JOIN channels c ON c.id = m.channel_id
-            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
-            WHERE m.id = $1
-         )"
-    ).bind(message_id).bind(_claims.sub).fetch_one(&state.db).await?;
-    if !has_access { return Err(AppError::Forbidden); }
+    // Le bouton "Traduire" (MessageRow.tsx) est rendu sans condition de contexte,
+    // comme les rappels/transferts/historique déjà corrigés -- vérifier membership
+    // via messages+server_members OU dm_messages+dm_channels selon où le message existe.
+    use sqlx::Row;
+    let server_row = sqlx::query(
+        "SELECT m.content FROM messages m
+         JOIN channels c ON c.id = m.channel_id
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+         WHERE m.id = $1"
+    ).bind(message_id).bind(_claims.sub).fetch_optional(&state.db).await?;
 
-    let msg = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT content FROM messages WHERE id = $1"
-    ).bind(message_id).fetch_one(&state.db).await?;
+    let content: Option<String> = if let Some(row) = server_row {
+        row.try_get("content").ok().flatten()
+    } else {
+        let dm_row = sqlx::query(
+            "SELECT dm.content FROM dm_messages dm
+             JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+             WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)"
+        ).bind(message_id).bind(_claims.sub).fetch_optional(&state.db).await?;
 
-    let content = msg.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
+        match dm_row {
+            Some(row) => row.try_get("content").ok().flatten(),
+            None => return Err(AppError::Forbidden),
+        }
+    };
+
+    let content = content.ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
 
     if content.trim().is_empty() {
         return Ok(Json(serde_json::json!({ "translated": content })));
