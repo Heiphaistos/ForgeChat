@@ -1,0 +1,11 @@
+-- ReminderModal.tsx (MessageRow.tsx) unconditionally offers "Me rappeler" on
+-- EVERY message row, including in DM conversations (DMConversation.tsx passes
+-- serverId="" but reuses the same MessageList/MessageRow, msg.id there is a
+-- dm_messages.id, not a messages.id). set_reminder()'s ownership check only
+-- ever looked at the `messages` table (server channels), so any reminder on a
+-- DM message returned 404 "Message introuvable" -- 100% failure rate for DMs.
+--
+-- message_id can point to either `messages` or `dm_messages` (disjoint UUID
+-- spaces), so a single-table FK is structurally wrong here -- same reasoning
+-- already applied to saved_messages (no FK on its message_id either).
+ALTER TABLE message_reminders DROP CONSTRAINT IF EXISTS message_reminders_message_id_fkey;

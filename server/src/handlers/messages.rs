@@ -861,8 +861,11 @@ pub async fn set_reminder(
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     Json(input): Json<ReminderInput>,
 ) -> Result<Json<serde_json::Value>> {
-    // Vérifier que le message existe ET que l'user est membre du serveur contenant ce canal
-    let exists: bool = sqlx::query_scalar(
+    // MessageRow.tsx offre "Me rappeler" sur tout message, y compris en DM
+    // (DMConversation réutilise MessageList/MessageRow, msg.id y est un
+    // dm_messages.id) -- vérifier les deux tables, pas seulement les canaux
+    // de serveur, sinon 100% des rappels DM échouent en 404.
+    let channel_ok: bool = sqlx::query_scalar(
         "SELECT EXISTS(
             SELECT 1 FROM messages m
             JOIN channels c ON c.id = m.channel_id
@@ -870,7 +873,20 @@ pub async fn set_reminder(
             WHERE m.id = $1
          )"
     ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if !exists {
+
+    let dm_ok: bool = if channel_ok {
+        false
+    } else {
+        sqlx::query_scalar(
+            "SELECT EXISTS(
+                SELECT 1 FROM dm_messages dm
+                JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+                WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)
+             )"
+        ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?
+    };
+
+    if !channel_ok && !dm_ok {
         return Err(AppError::NotFound("Message introuvable".into()));
     }
 

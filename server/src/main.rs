@@ -88,10 +88,15 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
+            // LEFT JOIN les deux tables possibles (message_id peut être un id de
+            // messages OU de dm_messages, cf. set_reminder) -- un INNER JOIN sur
+            // `messages` seul excluait silencieusement tout rappel DM ici, même
+            // ceux insérés avec succès après le fix de l'ownership check.
             let due = sqlx::query(
-                "SELECT r.id, r.user_id, r.message_id, m.content \
+                "SELECT r.id, r.user_id, r.message_id, COALESCE(m.content, dm.content) as content \
                  FROM message_reminders r \
-                 JOIN messages m ON m.id = r.message_id \
+                 LEFT JOIN messages m ON m.id = r.message_id \
+                 LEFT JOIN dm_messages dm ON dm.id = r.message_id \
                  WHERE r.remind_at <= NOW() AND r.sent = FALSE \
                  LIMIT 50"
             ).fetch_all(&reminder_state.db).await.unwrap_or_default();
