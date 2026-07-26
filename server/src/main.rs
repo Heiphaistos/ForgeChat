@@ -195,6 +195,10 @@ async fn main() -> anyhow::Result<()> {
         .allow_credentials(true);
 
     let app = Router::new()
+        // Healthcheck réel du backend -- accessible via nginx location /api/ existante
+        // (contrairement à /health qui n'a pas de route nginx dédiée et retombe
+        // silencieusement sur le SPA React, 200 même backend down)
+        .route("/api/health", get(|| async { "ok" }))
         // Auth publique
         .route("/api/auth/register", post(handlers::auth::register))
         .route("/api/auth/verify-email", post(handlers::auth::verify_email))
