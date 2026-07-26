@@ -130,11 +130,11 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     mutationFn: async (file: File) => {
       const form = new FormData()
       form.append('icon', file)
-      const { data } = await api.post(`/servers/${server.id}/icon`, form)
+      const { data } = await api.post(`/servers/${server.id}/banner`, form)
       return data
     },
     onSuccess: (data) => {
-      setBannerUrl(data.icon)
+      setBannerUrl(data.banner)
       qc.invalidateQueries({ queryKey: ['server', server.id] })
       toast.success('Bannière mise à jour')
     },
