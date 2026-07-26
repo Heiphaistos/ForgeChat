@@ -40,7 +40,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "deb", "appimage"],
-    "category": "Network",
+    "category": "SocialNetworking",
     "shortDescription": "Client de chat communautaire auto-hébergé",
     "icon": [
       "icons/32x32.png",
