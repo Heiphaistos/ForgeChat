@@ -74,6 +74,14 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
   const qc = useQueryClient()
   const postUpload = useMediaUpload(serverId, channelId)
 
+  // Tags officiels définis par l'admin (ChannelSettingsModal) -- s'il y en a,
+  // le backend n'accepte plus que ceux-là (cf. create_post) : on les propose
+  // en suggestions cliquables au lieu de laisser un champ libre qui échouerait.
+  const { data: officialTags = [] } = useQuery<string[]>({
+    queryKey: ['forum-tags', channelId],
+    queryFn: () => api.get(`/channels/${channelId}/tags`).then(r => r.data),
+  })
+
   const create = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/posts`, {
       title: title.trim(),
@@ -148,22 +156,38 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
           </div>
           <div>
             <label htmlFor="fp-tag" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Tags</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                id="fp-tag"
-                value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                placeholder="Ajouter un tag..."
-                maxLength={20}
-                enterKeyHint="done"
-                autoCapitalize="none"
-                className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
-              />
-              <button onClick={addTag} aria-label="Ajouter le tag" className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
-                <Plus size={16} aria-hidden />
-              </button>
-            </div>
+            {officialTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {officialTags.map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    disabled={tags.includes(t) || tags.length >= 5}
+                    onClick={() => setTags([...tags, t])}
+                    className="px-2 py-1 rounded-full text-xs bg-fc-accent/15 text-fc-accent hover:bg-fc-accent/30 transition disabled:opacity-40"
+                  >
+                    #{t}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex gap-2 mb-2">
+                <input
+                  id="fp-tag"
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                  placeholder="Ajouter un tag..."
+                  maxLength={20}
+                  enterKeyHint="done"
+                  autoCapitalize="none"
+                  className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
+                />
+                <button onClick={addTag} aria-label="Ajouter le tag" className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
+                  <Plus size={16} aria-hidden />
+                </button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {tags.map(t => (
                 <span key={t} className="flex items-center gap-1 text-xs px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full">

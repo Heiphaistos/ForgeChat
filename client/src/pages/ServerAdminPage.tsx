@@ -33,6 +33,7 @@ interface Report {
   id: string
   reporter_username: string
   message_id: string
+  message_content: string | null
   reason: string
   comment: string | null
   status: string
@@ -168,6 +169,9 @@ function ReportsTab({ serverId }: { serverId: string }) {
               <span className="text-xs text-fc-muted">par {r.reporter_username}</span>
               <span className="text-xs text-fc-muted">{new Date(r.created_at).toLocaleDateString('fr-FR')}</span>
             </div>
+            <p className="text-xs text-fc-muted mt-1 truncate italic">
+              {r.message_content ? `"${r.message_content}"` : 'Message supprimé depuis'}
+            </p>
             {r.comment && (
               <p className="text-xs text-fc-muted mt-1 truncate">{r.comment}</p>
             )}

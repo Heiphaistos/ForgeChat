@@ -58,14 +58,27 @@ pub async fn list_posts(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    let rows = sqlx::query(
+    let default_sort: String = sqlx::query_scalar(
+        "SELECT default_sort FROM channels WHERE id = $1"
+    )
+    .bind(channel_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    let order_by = if default_sort == "creation_date" {
+        "fp.pinned DESC, fp.created_at DESC"
+    } else {
+        "fp.pinned DESC, COALESCE(fp.last_reply_at, fp.created_at) DESC"
+    };
+
+    let rows = sqlx::query(&format!(
         "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
          FROM forum_posts fp
          JOIN users u ON u.id = fp.creator_id
          WHERE fp.channel_id = $1
-         ORDER BY fp.pinned DESC, COALESCE(fp.last_reply_at, fp.created_at) DESC
+         ORDER BY {order_by}
          LIMIT 50"
-    )
+    ))
     .bind(channel_id)
     .fetch_all(&state.db)
     .await?;
@@ -116,6 +129,30 @@ pub async fn create_post(
     });
 
     let tags = body.tags.unwrap_or_default();
+
+    let require_tag: bool = sqlx::query_scalar(
+        "SELECT require_tag FROM channels WHERE id = $1"
+    )
+    .bind(channel_id)
+    .fetch_one(&state.db)
+    .await?;
+    if require_tag && tags.is_empty() {
+        return Err(AppError::BadRequest("Ce canal exige au moins un tag".into()));
+    }
+
+    // Si l'admin a défini une liste de tags officiels pour ce canal, un post ne
+    // peut plus utiliser de tag arbitraire -- seulement ceux de cette liste.
+    let official_tags: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM forum_tags WHERE channel_id = $1"
+    )
+    .bind(channel_id)
+    .fetch_all(&state.db)
+    .await?;
+    if !official_tags.is_empty() && tags.iter().any(|t| !official_tags.contains(t)) {
+        return Err(AppError::BadRequest(
+            "Seuls les tags officiels de ce canal sont autorisés".into(),
+        ));
+    }
 
     let post = sqlx::query_as::<_, ForumPost>(
         "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags)
