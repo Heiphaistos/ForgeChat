@@ -629,7 +629,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "forgechat-server"
-version = "3.208.0"
+version = "3.209.0"
 dependencies = [
  "anyhow",
  "axum",
