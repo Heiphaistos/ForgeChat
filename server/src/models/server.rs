@@ -57,18 +57,6 @@ pub struct UpdateServerRequest {
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
-#[allow(dead_code)]
-pub struct ServerMember {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub server_id: Uuid,
-    pub nickname: Option<String>,
-    pub joined_at: DateTime<Utc>,
-    pub is_owner: bool,
-    pub timed_out_until: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct Invite {
     pub code: String,
     pub server_id: Uuid,

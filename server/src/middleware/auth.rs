@@ -100,26 +100,3 @@ pub async fn require_auth(
     req.extensions_mut().insert(RawToken(token));
     Ok(next.run(req).await)
 }
-
-/// Middleware optionnel : extrait les claims si présents (routes publiques qui bénéficient de l'auth)
-#[allow(dead_code)]
-pub async fn optional_auth(
-    State(state): State<AppState>,
-    req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let token = token_from_cookie(&req).or_else(|| {
-        req.headers()
-            .get("Authorization")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer ").map(|t| t.to_string()))
-    });
-
-    let mut req = req;
-    if let Some(t) = token {
-        if let Some(claims) = verify_token(&t, &state.config.jwt_secret, &state.config.jwt_issuer) {
-            req.extensions_mut().insert(claims);
-        }
-    }
-    Ok(next.run(req).await)
-}
