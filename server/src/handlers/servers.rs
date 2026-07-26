@@ -167,24 +167,21 @@ pub async fn update_server(
     require_owner(&state, claims.sub, server_id).await?;
 
     const VALID_CATEGORIES: &[&str] = &["gaming", "community", "tech", "music", "education", "arts", "18plus"];
-    if let Some(cat_val) = &body.server_category {
-        if !cat_val.is_null() {
-            let cat_str = cat_val.as_str().ok_or_else(|| AppError::BadRequest("server_category doit être une chaîne ou null".into()))?;
-            if !VALID_CATEGORIES.contains(&cat_str) {
-                return Err(AppError::BadRequest(format!("Catégorie invalide (attendu: {})", VALID_CATEGORIES.join(", "))));
-            }
+    if let Some(Some(cat_str)) = &body.server_category {
+        if !VALID_CATEGORIES.contains(&cat_str.as_str()) {
+            return Err(AppError::BadRequest(format!("Catégorie invalide (attendu: {})", VALID_CATEGORIES.join(", "))));
         }
     }
-    // server_category : Option<Value> plutôt que Option<String> pour distinguer
-    // "champ absent" (ne pas toucher) de "explicitement mis à null" (vider) --
-    // un COALESCE comme les autres champs ci-dessous ne permettrait jamais de
-    // retirer une catégorie déjà définie (même bug déjà corrigé une fois sur
-    // verification_rules, itération 9).
+    // server_category : "double Option" (Option<Option<String>>) pour distinguer
+    // "champ absent" (None, ne pas toucher) de "présent avec null" (Some(None),
+    // vider) -- un simple Option<String> + COALESCE ne permettrait jamais de
+    // retirer une catégorie déjà définie, un simple Option<Value> ne
+    // distinguerait pas non plus (serde réduit `null` JSON à `None` pour tout
+    // Option<T> de base) -- même bug déjà corrigé une fois sur
+    // verification_rules, itération 9, mais qui nécessite ici un vrai
+    // désérialiseur custom car ce champ cohabite avec des champs COALESCE.
     let category_provided = body.server_category.is_some();
-    let category_value: Option<String> = body.server_category
-        .as_ref()
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let category_value: Option<String> = body.server_category.flatten();
 
     let server = sqlx::query_as::<_, Server>(
         "UPDATE servers SET

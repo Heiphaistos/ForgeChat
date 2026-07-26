@@ -1,6 +1,18 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
+
+/// Distingue "champ absent" (None) de "champ présent, valeur null" (Some(None))
+/// -- serde réduit normalement `null` JSON à `None` pour un simple `Option<T>`,
+/// ce qui rend impossible de différencier "ne pas toucher" de "vider
+/// explicitement" dans un PATCH. Toujours combiner avec `#[serde(default)]`.
+fn deserialize_double_option<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Some(Option::deserialize(deserializer)?))
+}
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct Server {
@@ -54,7 +66,8 @@ pub struct UpdateServerRequest {
     pub rules_channel_id: Option<Uuid>,
     pub vanity_url: Option<String>,
     pub content_filter: Option<String>,
-    pub server_category: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub server_category: Option<Option<String>>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
