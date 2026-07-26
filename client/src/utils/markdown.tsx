@@ -206,11 +206,25 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         result.push(full)
       }
     } else if (full.startsWith('http')) {
+      // Détache la ponctuation de fin de phrase (. , ; : ! ? guillemets) du lien --
+      // sinon "voir https://exemple.com/page." capture le point final dans le href.
+      // La parenthèse fermante n'est détachée que si elle n'a pas de `(` correspondant
+      // dans l'URL (sinon on casserait des liens Wikipedia du type .../Foo_(bar)).
+      let url = full
+      let trailing = ''
+      const trailingChars = /[.,;:!?'"]+$/
+      const m = url.match(trailingChars)
+      if (m) { trailing = m[0]; url = url.slice(0, -m[0].length) }
+      while (url.endsWith(')') && (url.match(/\(/g)?.length ?? 0) < (url.match(/\)/g)?.length ?? 0)) {
+        trailing = ')' + trailing
+        url = url.slice(0, -1)
+      }
       result.push(
-        <a key={match.index} href={full} target="_blank" rel="noopener noreferrer">
-          {full}
+        <a key={match.index} href={url} target="_blank" rel="noopener noreferrer">
+          {url}
         </a>
       )
+      if (trailing) result.push(trailing)
     } else if (full.startsWith(':') && full.endsWith(':') && customEmojis) {
       const name = full.slice(1, -1)
       const url = customEmojis[name]
