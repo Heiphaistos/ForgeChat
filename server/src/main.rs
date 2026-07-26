@@ -507,6 +507,11 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/hide",
             post(handlers::channels::hide_channel)
             .delete(handlers::channels::unhide_channel))
+        // Forum channel tags
+        .route("/channels/:channel_id/tags",
+            get(handlers::channels::get_channel_tags)
+            .post(handlers::channels::create_channel_tag))
+        .route("/channels/:channel_id/tags/:tag_name", delete(handlers::channels::delete_channel_tag))
         // Channel move (cross-category)
         .route("/channels/:id/move", patch(handlers::channels::move_channel))
         .route("/channels/:id/purge", post(handlers::channels::purge_messages))

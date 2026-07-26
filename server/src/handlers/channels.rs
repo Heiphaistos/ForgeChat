@@ -55,6 +55,8 @@ pub async fn get_channels(
             "created_by_auto": r.get::<Option<Uuid>, _>("created_by_auto"),
             "archived": r.get::<bool, _>("archived"),
             "hidden": r.get::<bool, _>("is_hidden"),
+            "default_sort": r.get::<String, _>("default_sort"),
+            "require_tag": r.get::<bool, _>("require_tag"),
         })
     }).collect();
 
@@ -151,8 +153,11 @@ pub async fn update_channel(
                 user_limit = COALESCE($7, user_limit),
                 voice_password_hash = $8,
                 is_auto_create = COALESCE($9, is_auto_create),
-                auto_create_name = COALESCE($10, auto_create_name)
-             WHERE id=$1 AND server_id=$11 RETURNING *"
+                auto_create_name = COALESCE($10, auto_create_name),
+                bitrate = COALESCE($11, bitrate),
+                default_sort = COALESCE($12, default_sort),
+                require_tag = COALESCE($13, require_tag)
+             WHERE id=$1 AND server_id=$14 RETURNING *"
         )
         .bind(channel_id)
         .bind(body.name)
@@ -164,6 +169,9 @@ pub async fn update_channel(
         .bind(new_hash)
         .bind(body.is_auto_create)
         .bind(body.auto_create_name)
+        .bind(body.bitrate)
+        .bind(&body.default_sort)
+        .bind(body.require_tag)
         .bind(server_id)
         .fetch_one(&state.db)
         .await?
@@ -178,8 +186,11 @@ pub async fn update_channel(
                 is_nsfw = COALESCE($6, is_nsfw),
                 user_limit = COALESCE($7, user_limit),
                 is_auto_create = COALESCE($8, is_auto_create),
-                auto_create_name = COALESCE($9, auto_create_name)
-             WHERE id=$1 AND server_id=$10 RETURNING *"
+                auto_create_name = COALESCE($9, auto_create_name),
+                bitrate = COALESCE($10, bitrate),
+                default_sort = COALESCE($11, default_sort),
+                require_tag = COALESCE($12, require_tag)
+             WHERE id=$1 AND server_id=$13 RETURNING *"
         )
         .bind(channel_id)
         .bind(body.name)
@@ -190,6 +201,9 @@ pub async fn update_channel(
         .bind(body.user_limit)
         .bind(body.is_auto_create)
         .bind(body.auto_create_name)
+        .bind(body.bitrate)
+        .bind(&body.default_sort)
+        .bind(body.require_tag)
         .bind(server_id)
         .fetch_one(&state.db)
         .await?
@@ -360,8 +374,9 @@ pub async fn reorder_channels(
 pub async fn get_channel_permissions(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    Path(channel_id): Path<Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
     let rows = sqlx::query(
         "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
@@ -391,9 +406,10 @@ pub struct ChannelPermOverride {
 pub async fn put_channel_permission(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id, target_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((channel_id, target_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ChannelPermOverride>,
 ) -> Result<Json<serde_json::Value>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
     require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
     if !["role", "member"].contains(&body.target_type.as_str()) {
         return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
@@ -422,8 +438,9 @@ pub async fn put_channel_permission(
 pub async fn delete_channel_permission(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id, target_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path((channel_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
     require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
     sqlx::query("DELETE FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
         .bind(channel_id)
@@ -665,4 +682,88 @@ pub async fn set_github_webhook_token(
         .await?;
 
     Ok(Json(serde_json::json!({ "ok": true, "active": body.token.is_some() })))
+}
+
+// ─── Tags de forum ──────────────────────────────────────────────────────────────
+// ChannelSettingsModal.tsx appelait déjà ces 3 routes -- jamais enregistrées ni
+// implémentées côté backend. Les tags "ajoutés" ne vivaient qu'en state React
+// local et disparaissaient à chaque réouverture de la modale.
+
+async fn channel_server_id(state: &AppState, channel_id: Uuid) -> Result<Uuid> {
+    use sqlx::Row;
+    sqlx::query("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id).fetch_optional(&state.db).await?
+        .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?
+        .get::<Option<Uuid>, _>("server_id")
+        .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))
+}
+
+pub async fn get_channel_tags(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+) -> Result<Json<Vec<String>>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+
+    let tags: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM forum_tags WHERE channel_id=$1 ORDER BY name"
+    )
+    .bind(channel_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(tags))
+}
+
+#[derive(serde::Deserialize)]
+pub struct CreateChannelTagBody {
+    pub name: String,
+}
+
+pub async fn create_channel_tag(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(channel_id): Path<Uuid>,
+    Json(body): Json<CreateChannelTagBody>,
+) -> Result<Json<serde_json::Value>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    let name = body.name.trim();
+    if name.is_empty() || name.len() > 32 {
+        return Err(AppError::BadRequest("Le nom du tag doit faire entre 1 et 32 caractères".into()));
+    }
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM forum_tags WHERE channel_id=$1")
+        .bind(channel_id).fetch_one(&state.db).await?;
+    if count >= 20 {
+        return Err(AppError::BadRequest("Maximum 20 tags par forum".into()));
+    }
+
+    sqlx::query(
+        "INSERT INTO forum_tags (channel_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING"
+    )
+    .bind(channel_id)
+    .bind(name)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+pub async fn delete_channel_tag(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((channel_id, tag_name)): Path<(Uuid, String)>,
+) -> Result<Json<serde_json::Value>> {
+    let server_id = channel_server_id(&state, channel_id).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    sqlx::query("DELETE FROM forum_tags WHERE channel_id=$1 AND name=$2")
+        .bind(channel_id)
+        .bind(&tag_name)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
 }

@@ -28,6 +28,10 @@ pub struct Channel {
     pub created_by_auto: Option<Uuid>,
     #[sqlx(default)]
     pub archived: bool,
+    #[sqlx(default)]
+    pub default_sort: String,
+    #[sqlx(default)]
+    pub require_tag: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +61,10 @@ pub struct UpdateChannelRequest {
     pub is_auto_create: Option<bool>,
     /// Nom template pour les canaux temporaires créés (défaut: "{username}'s Channel")
     pub auto_create_name: Option<String>,
+    pub bitrate: Option<i32>,
+    /// Forum uniquement
+    pub default_sort: Option<String>,
+    pub require_tag: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
