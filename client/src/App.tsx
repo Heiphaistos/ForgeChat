@@ -692,12 +692,6 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['custom_emojis', d.server_id] })
       }
     })
-    const offEmojiUpdate = on('EMOJI_UPDATE', (d: any) => {
-      if (d.server_id) {
-        qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
-        qcHook.invalidateQueries({ queryKey: ['custom_emojis', d.server_id] })
-      }
-    })
     const offCategoryCreate = on('CATEGORY_CREATE', (d: any) => {
       if (d.server_id) {
         qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
@@ -737,7 +731,7 @@ function AppInner() {
     })
     return () => {
       offUpdate(); offCreate(); offDelete(); offServerUpdate()
-      offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate(); offCategoryDelete()
+      offEmojiCreate(); offEmojiDelete(); offCategoryCreate(); offCategoryDelete()
       offPermUpdate(); offArchive(); offMemberJoin(); offMemberLeave(); offMemberKicked(); offMemberBanned()
     }
   }, [user?.id])

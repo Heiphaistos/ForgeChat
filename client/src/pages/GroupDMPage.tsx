@@ -311,6 +311,15 @@ export default function GroupDMPage() {
         return prev
       })
     })
+    // Le serveur diffuse déjà GROUP_DM_PIN_TOGGLE à tous les membres, mais rien ne
+    // l'écoutait ici -- seul l'auteur du clic (invalidation locale dans la mutation
+    // togglePin) voyait le panneau épinglés se mettre à jour ; les autres membres
+    // restaient figés sur l'ancien état tant qu'ils ne fermaient/rouvraient pas le
+    // panneau.
+    const offPin = on('GROUP_DM_PIN_TOGGLE', (d: any) => {
+      if (d.group_id !== groupId) return
+      queryClient.invalidateQueries({ queryKey: ['group-dm-pins', groupId] })
+    })
     const offTyping = on('TYPING', (d: any) => {
       if (d.conversation_id !== groupId || d.user_id === user?.id) return
       setTypingUsers(prev => {
@@ -325,7 +334,7 @@ export default function GroupDMPage() {
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename() }
+    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename(); offPin() }
   }, [groupId, on, user?.id])
 
   // Tracker si l'utilisateur est en bas du scroll
