@@ -79,8 +79,8 @@ pub async fn create_channel(
 
     let channel_type = body.r#type.as_deref().unwrap_or("text");
     let channel = sqlx::query_as::<_, Channel>(
-        "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw, slowmode_delay, user_limit)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"
     )
     .bind(server_id)
     .bind(body.category_id)
@@ -88,6 +88,8 @@ pub async fn create_channel(
     .bind(channel_type)
     .bind(&body.topic)
     .bind(body.is_nsfw.unwrap_or(false))
+    .bind(body.slowmode_delay.unwrap_or(0))
+    .bind(body.user_limit)
     .fetch_one(&state.db)
     .await?;
 

@@ -43,7 +43,6 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
   const [isNsfw, setIsNsfw] = useState(false)
   const [slowmode, setSlowmode] = useState(0)
   const [userLimit, setUserLimit] = useState(0)
-  const [isPrivate, setIsPrivate] = useState(false)
   const qc = useQueryClient()
 
   // Récupérer les catégories pour le sélecteur
@@ -62,7 +61,6 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
       is_nsfw: isNsfw || undefined,
       slowmode_delay: slowmode > 0 ? slowmode : undefined,
       user_limit: userLimit > 0 ? userLimit : undefined,
-      is_private: isPrivate || undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', serverId] })
@@ -160,18 +158,6 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               </select>
             </div>
           )}
-
-          {/* Canal privé */}
-          <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-xl border border-fc-hover">
-            <div>
-              <div className="text-sm font-medium text-white flex items-center gap-1.5">🔒 Canal privé</div>
-              <div className="text-xs text-fc-muted">Seuls les membres avec les permissions appropriées y auront accès</div>
-            </div>
-            <button onClick={() => setIsPrivate(v => !v)}
-              className={`relative w-11 h-6 rounded-full transition flex-shrink-0 ${isPrivate ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
-              <span className={`absolute top-[3px] w-[18px] h-[18px] bg-white rounded-full transition-all shadow ${isPrivate ? 'left-[23px]' : 'left-[3px]'}`} />
-            </button>
-          </div>
 
           {/* Options avancées */}
           <button onClick={() => setShowAdvanced(v => !v)}

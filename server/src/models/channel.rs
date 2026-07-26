@@ -37,6 +37,8 @@ pub struct CreateChannelRequest {
     pub topic: Option<String>,
     pub category_id: Option<Uuid>,
     pub is_nsfw: Option<bool>,
+    pub slowmode_delay: Option<i32>,
+    pub user_limit: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
