@@ -133,7 +133,9 @@ function formatRelativeTime(unix: number): string {
 }
 
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
-  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|_(.+?)_|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
+  // __/_ exigent une frontière de mot (comme CommonMark) -- sinon un identifiant
+  // comme max_retries_value se retrouvait partiellement italicisé (_retries_).
+  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|(?<![\w_])__(.+?)__(?![\w_])|(?<![\w_])_(.+?)_(?![\w_])|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
   const result: React.ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -152,10 +154,13 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       result.push(<strong key={match.index}><em>{full.slice(3, -3)}</em></strong>)
     } else if (full.startsWith('**') && full.endsWith('**')) {
       result.push(<strong key={match.index}>{full.slice(2, -2)}</strong>)
+    } else if (full.startsWith('__') && full.endsWith('__')) {
+      // Vérifié AVANT le cas <em> ci-dessous : "__x__" satisfait aussi
+      // startsWith('_')/endsWith('_'), qui rendait cette branche inatteignable
+      // (affichait "_x_" en italique au lieu d'un soulignement).
+      result.push(<u key={match.index}>{full.slice(2, -2)}</u>)
     } else if ((full.startsWith('*') && full.endsWith('*')) || (full.startsWith('_') && full.endsWith('_'))) {
       result.push(<em key={match.index}>{full.slice(1, -1)}</em>)
-    } else if (full.startsWith('__') && full.endsWith('__')) {
-      result.push(<u key={match.index}>{full.slice(2, -2)}</u>)
     } else if (full.startsWith('~~') && full.endsWith('~~')) {
       result.push(<del key={match.index}>{full.slice(2, -2)}</del>)
     } else if (full.startsWith('||') && full.endsWith('||')) {
