@@ -356,6 +356,10 @@ pub async fn get_dm_messages(
     let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
     let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
+    // Voir messages.rs::get_messages -- la branche `around` construit déjà son
+    // résultat en ordre chronologique croissant, le `.reverse()` final ne doit
+    // s'appliquer qu'aux autres branches.
+    let is_around = around.is_some();
 
     let messages = if let Some(around_id) = around {
         let ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
@@ -512,7 +516,9 @@ pub async fn get_dm_messages(
         })
     }).collect();
 
-    result.reverse();
+    if !is_around {
+        result.reverse();
+    }
     Ok(Json(result))
 }
 

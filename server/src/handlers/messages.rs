@@ -25,6 +25,12 @@ pub async fn get_messages(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let limit = params.limit.unwrap_or(50).min(100);
+    // La branche `around` construit déjà son résultat en ordre chronologique
+    // croissant (before_rows inversé + after_rows) -- le `.reverse()` final plus
+    // bas ne doit s'appliquer qu'aux branches `before`/défaut (qui sortent de la
+    // requête SQL en DESC). Appliqué inconditionnellement avant ce fix, il
+    // remettait la vue "aller au message" (around) à l'envers (récent en haut).
+    let is_around = params.around.is_some();
 
     let messages = if let Some(around_id) = params.around {
         // Fetch up to 25 messages before the target + target + up to 24 after
@@ -177,7 +183,9 @@ pub async fn get_messages(
         });
     }
 
-    result.reverse();
+    if !is_around {
+        result.reverse();
+    }
     Ok(Json(result))
 }
 
