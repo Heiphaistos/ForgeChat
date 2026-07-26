@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     middleware::auth::Claims,
+    models::serde_helpers::deserialize_double_option,
     state::AppState,
 };
 
@@ -98,10 +99,14 @@ impl Default for UserSettings {
 pub struct UpdateUserSettings {
     pub font_family: Option<String>,
     pub font_size_px: Option<i32>,
-    pub font_color: Option<serde_json::Value>,
-    pub accent_color: Option<serde_json::Value>,
-    pub bg_color: Option<serde_json::Value>,
-    pub bg_image_url: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub font_color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub accent_color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub bg_color: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub bg_image_url: Option<Option<String>>,
     pub interface_density: Option<String>,
     pub emoji_style: Option<String>,
     pub time_format: Option<String>,
@@ -114,15 +119,18 @@ pub struct UpdateUserSettings {
     pub avatar_shape: Option<String>,
     pub streamer_mode: Option<bool>,
     pub quiet_hours_enabled: Option<bool>,
-    pub quiet_hours_start: Option<serde_json::Value>,
-    pub quiet_hours_end: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub quiet_hours_start: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub quiet_hours_end: Option<Option<String>>,
     pub reduce_motion: Option<bool>,
     pub high_contrast: Option<bool>,
     pub glassmorphism: Option<bool>,
     pub show_role_colors: Option<bool>,
     pub show_member_list_default: Option<bool>,
     pub sidebar_width_px: Option<i32>,
-    pub pronouns: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub pronouns: Option<Option<String>>,
     pub show_timestamps: Option<String>,
     pub message_display: Option<String>,
     pub colorblind_mode: Option<String>,
@@ -131,14 +139,6 @@ pub struct UpdateUserSettings {
     pub activity_visibility: Option<String>,
     pub friend_request_from: Option<String>,
     pub explicit_content_filter: Option<String>,
-}
-
-fn opt_str(v: &Option<serde_json::Value>) -> Option<String> {
-    match v {
-        Some(serde_json::Value::String(s)) => Some(s.clone()),
-        Some(serde_json::Value::Null) | None => None,
-        _ => None,
-    }
 }
 
 pub async fn get_user_settings(
@@ -182,13 +182,25 @@ pub async fn update_user_settings(
         }
     }
 
-    let font_color = opt_str(&body.font_color);
-    let accent_color = opt_str(&body.accent_color);
-    let bg_color = opt_str(&body.bg_color);
-    let bg_image_url = opt_str(&body.bg_image_url);
-    let quiet_hours_start = opt_str(&body.quiet_hours_start);
-    let quiet_hours_end = opt_str(&body.quiet_hours_end);
-    let pronouns = opt_str(&body.pronouns);
+    // Chaque section de Paramètres (Appearance/Language/Accessibility/Notifications/
+    // Privacy/Streamer/TextDisplay...) envoie un PUT PARTIEL avec seulement SES
+    // propres champs. Un champ absent du body ne doit JAMAIS écraser une valeur
+    // déjà enregistrée par une autre section -- sinon sauvegarder n'importe quel
+    // réglage réinitialise silencieusement TOUS les autres à leurs valeurs par
+    // défaut. `_provided` distingue "champ envoyé" (appliquer $n) de "champ absent"
+    // (garder l'existant) pour CHAQUE colonne via CASE WHEN -- un simple
+    // COALESCE($n, existing) ne suffit pas ici car $n est toujours une vraie
+    // valeur (jamais NULL) à cause du bind `.unwrap_or(default)` nécessaire pour
+    // le tout premier INSERT (colonnes NOT NULL). Pour les champs "effaçables"
+    // (couleurs, quiet hours, pronoms), double Option en plus pour distinguer
+    // "absent" de "présent avec null explicite" (voir modèle server_category).
+    let font_color = body.font_color.clone().flatten();
+    let accent_color = body.accent_color.clone().flatten();
+    let bg_color = body.bg_color.clone().flatten();
+    let bg_image_url = body.bg_image_url.clone().flatten();
+    let quiet_hours_start = body.quiet_hours_start.clone().flatten();
+    let quiet_hours_end = body.quiet_hours_end.clone().flatten();
+    let pronouns = body.pronouns.clone().flatten();
 
     sqlx::query(
         "INSERT INTO user_settings (
@@ -208,41 +220,41 @@ pub async fn update_user_settings(
            $29, $30, $31, $32, $33, $34, $35, $36, NOW()
          )
          ON CONFLICT (user_id) DO UPDATE SET
-           font_family = COALESCE($2, user_settings.font_family),
-           font_size_px = COALESCE($3, user_settings.font_size_px),
-           font_color = $4,
-           accent_color = $5,
-           bg_color = $6,
-           bg_image_url = $7,
-           interface_density = COALESCE($8, user_settings.interface_density),
-           emoji_style = COALESCE($9, user_settings.emoji_style),
-           time_format = COALESCE($10, user_settings.time_format),
-           date_format = COALESCE($11, user_settings.date_format),
-           language = COALESCE($12, user_settings.language),
-           gif_autoplay = COALESCE($13, user_settings.gif_autoplay),
-           link_preview = COALESCE($14, user_settings.link_preview),
-           code_theme = COALESCE($15, user_settings.code_theme),
-           message_grouping_minutes = COALESCE($16, user_settings.message_grouping_minutes),
-           avatar_shape = COALESCE($17, user_settings.avatar_shape),
-           streamer_mode = COALESCE($18, user_settings.streamer_mode),
-           quiet_hours_enabled = COALESCE($19, user_settings.quiet_hours_enabled),
-           quiet_hours_start = COALESCE($20::TIME, user_settings.quiet_hours_start),
-           quiet_hours_end = COALESCE($21::TIME, user_settings.quiet_hours_end),
-           reduce_motion = COALESCE($22, user_settings.reduce_motion),
-           high_contrast = COALESCE($23, user_settings.high_contrast),
-           glassmorphism = COALESCE($24, user_settings.glassmorphism),
-           show_role_colors = COALESCE($25, user_settings.show_role_colors),
-           show_member_list_default = COALESCE($26, user_settings.show_member_list_default),
-           sidebar_width_px = COALESCE($27, user_settings.sidebar_width_px),
-           pronouns = $28,
-           show_timestamps = COALESCE($29, user_settings.show_timestamps),
-           message_display = COALESCE($30, user_settings.message_display),
-           colorblind_mode = COALESCE($31, user_settings.colorblind_mode),
-           dm_from_all = COALESCE($32, user_settings.dm_from_all),
-           show_online = COALESCE($33, user_settings.show_online),
-           activity_visibility = COALESCE($34, user_settings.activity_visibility),
-           friend_request_from = COALESCE($35, user_settings.friend_request_from),
-           explicit_content_filter = COALESCE($36, user_settings.explicit_content_filter),
+           font_family = CASE WHEN $37 THEN $2 ELSE user_settings.font_family END,
+           font_size_px = CASE WHEN $38 THEN $3 ELSE user_settings.font_size_px END,
+           font_color = CASE WHEN $39 THEN $4 ELSE user_settings.font_color END,
+           accent_color = CASE WHEN $40 THEN $5 ELSE user_settings.accent_color END,
+           bg_color = CASE WHEN $41 THEN $6 ELSE user_settings.bg_color END,
+           bg_image_url = CASE WHEN $42 THEN $7 ELSE user_settings.bg_image_url END,
+           interface_density = CASE WHEN $43 THEN $8 ELSE user_settings.interface_density END,
+           emoji_style = CASE WHEN $44 THEN $9 ELSE user_settings.emoji_style END,
+           time_format = CASE WHEN $45 THEN $10 ELSE user_settings.time_format END,
+           date_format = CASE WHEN $46 THEN $11 ELSE user_settings.date_format END,
+           language = CASE WHEN $47 THEN $12 ELSE user_settings.language END,
+           gif_autoplay = CASE WHEN $48 THEN $13 ELSE user_settings.gif_autoplay END,
+           link_preview = CASE WHEN $49 THEN $14 ELSE user_settings.link_preview END,
+           code_theme = CASE WHEN $50 THEN $15 ELSE user_settings.code_theme END,
+           message_grouping_minutes = CASE WHEN $51 THEN $16 ELSE user_settings.message_grouping_minutes END,
+           avatar_shape = CASE WHEN $52 THEN $17 ELSE user_settings.avatar_shape END,
+           streamer_mode = CASE WHEN $53 THEN $18 ELSE user_settings.streamer_mode END,
+           quiet_hours_enabled = CASE WHEN $54 THEN $19 ELSE user_settings.quiet_hours_enabled END,
+           quiet_hours_start = CASE WHEN $55 THEN $20::TIME ELSE user_settings.quiet_hours_start END,
+           quiet_hours_end = CASE WHEN $56 THEN $21::TIME ELSE user_settings.quiet_hours_end END,
+           reduce_motion = CASE WHEN $57 THEN $22 ELSE user_settings.reduce_motion END,
+           high_contrast = CASE WHEN $58 THEN $23 ELSE user_settings.high_contrast END,
+           glassmorphism = CASE WHEN $59 THEN $24 ELSE user_settings.glassmorphism END,
+           show_role_colors = CASE WHEN $60 THEN $25 ELSE user_settings.show_role_colors END,
+           show_member_list_default = CASE WHEN $61 THEN $26 ELSE user_settings.show_member_list_default END,
+           sidebar_width_px = CASE WHEN $62 THEN $27 ELSE user_settings.sidebar_width_px END,
+           pronouns = CASE WHEN $63 THEN $28 ELSE user_settings.pronouns END,
+           show_timestamps = CASE WHEN $64 THEN $29 ELSE user_settings.show_timestamps END,
+           message_display = CASE WHEN $65 THEN $30 ELSE user_settings.message_display END,
+           colorblind_mode = CASE WHEN $66 THEN $31 ELSE user_settings.colorblind_mode END,
+           dm_from_all = CASE WHEN $67 THEN $32 ELSE user_settings.dm_from_all END,
+           show_online = CASE WHEN $68 THEN $33 ELSE user_settings.show_online END,
+           activity_visibility = CASE WHEN $69 THEN $34 ELSE user_settings.activity_visibility END,
+           friend_request_from = CASE WHEN $70 THEN $35 ELSE user_settings.friend_request_from END,
+           explicit_content_filter = CASE WHEN $71 THEN $36 ELSE user_settings.explicit_content_filter END,
            updated_at = NOW()"
     )
     .bind(claims.sub)
@@ -281,6 +293,41 @@ pub async fn update_user_settings(
     .bind(body.activity_visibility.as_deref().unwrap_or("everyone"))
     .bind(body.friend_request_from.as_deref().unwrap_or("everyone"))
     .bind(body.explicit_content_filter.as_deref().unwrap_or("none"))
+    .bind(body.font_family.is_some())
+    .bind(body.font_size_px.is_some())
+    .bind(body.font_color.is_some())
+    .bind(body.accent_color.is_some())
+    .bind(body.bg_color.is_some())
+    .bind(body.bg_image_url.is_some())
+    .bind(body.interface_density.is_some())
+    .bind(body.emoji_style.is_some())
+    .bind(body.time_format.is_some())
+    .bind(body.date_format.is_some())
+    .bind(body.language.is_some())
+    .bind(body.gif_autoplay.is_some())
+    .bind(body.link_preview.is_some())
+    .bind(body.code_theme.is_some())
+    .bind(body.message_grouping_minutes.is_some())
+    .bind(body.avatar_shape.is_some())
+    .bind(body.streamer_mode.is_some())
+    .bind(body.quiet_hours_enabled.is_some())
+    .bind(body.quiet_hours_start.is_some())
+    .bind(body.quiet_hours_end.is_some())
+    .bind(body.reduce_motion.is_some())
+    .bind(body.high_contrast.is_some())
+    .bind(body.glassmorphism.is_some())
+    .bind(body.show_role_colors.is_some())
+    .bind(body.show_member_list_default.is_some())
+    .bind(body.sidebar_width_px.is_some())
+    .bind(body.pronouns.is_some())
+    .bind(body.show_timestamps.is_some())
+    .bind(body.message_display.is_some())
+    .bind(body.colorblind_mode.is_some())
+    .bind(body.dm_from_all.is_some())
+    .bind(body.show_online.is_some())
+    .bind(body.activity_visibility.is_some())
+    .bind(body.friend_request_from.is_some())
+    .bind(body.explicit_content_filter.is_some())
     .execute(&state.db)
     .await?;
 
