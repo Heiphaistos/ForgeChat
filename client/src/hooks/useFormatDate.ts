@@ -20,22 +20,22 @@ export function useFormatDate() {
 
   const formatShort = (dateStr: string) => {
     const d = new Date(dateStr)
-    return format(d, timeFmt)
+    return format(d, timeFmt, { locale: fr })
   }
 
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
-    if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt)}`
-    if (isYesterday(d)) return `Hier à ${format(d, timeFmt)}`
+    if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt, { locale: fr })}`
+    if (isYesterday(d)) return `Hier à ${format(d, timeFmt, { locale: fr })}`
     return format(d, `${dateFmt} ${timeFmt}`, { locale: fr })
   }
 
-  const formatDate = (dateStr: string) => format(new Date(dateStr), dateFmt)
+  const formatDate = (dateStr: string) => format(new Date(dateStr), dateFmt, { locale: fr })
 
   const formatShortDate = (dateStr: string) => {
     const d = new Date(dateStr)
     const shortDate = dateFormat === 'MM/DD/YYYY' ? 'MM/dd' : dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM'
-    return format(d, `${shortDate} ${timeFmt}`)
+    return format(d, `${shortDate} ${timeFmt}`, { locale: fr })
   }
 
   return { formatTs, formatShort, formatDate, formatShortDate, timeFmt, dateFmt }
