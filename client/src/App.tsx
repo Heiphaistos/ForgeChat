@@ -699,7 +699,16 @@ function AppInner() {
       }
     })
     const offCategoryCreate = on('CATEGORY_CREATE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['categories', d.server_id] })
+      }
+    })
+    const offCategoryDelete = on('CATEGORY_DELETE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['categories', d.server_id] })
+      }
     })
     const offPermUpdate = on('CHANNEL_PERMISSION_UPDATE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
@@ -728,7 +737,7 @@ function AppInner() {
     })
     return () => {
       offUpdate(); offCreate(); offDelete(); offServerUpdate()
-      offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate()
+      offEmojiCreate(); offEmojiDelete(); offEmojiUpdate(); offCategoryCreate(); offCategoryDelete()
       offPermUpdate(); offArchive(); offMemberJoin(); offMemberLeave(); offMemberKicked(); offMemberBanned()
     }
   }, [user?.id])

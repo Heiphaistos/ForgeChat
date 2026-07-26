@@ -297,6 +297,29 @@ pub async fn get_categories(
     Ok(Json(cats))
 }
 
+pub async fn delete_category(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, category_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    sqlx::query("DELETE FROM categories WHERE id=$1 AND server_id=$2")
+        .bind(category_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
+
+    let event = serde_json::json!({
+        "type": "CATEGORY_DELETE",
+        "server_id": server_id,
+        "category_id": category_id,
+    });
+    state.broadcast_to_server_members(server_id, event.to_string()).await;
+
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 pub async fn get_pinned(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

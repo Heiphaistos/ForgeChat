@@ -1203,7 +1203,7 @@ export default function ChannelSidebar() {
                     { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
                     ...(isOwnerOrAdmin && categories.some((c: any) => c.id === key) ? [
                       { separator: true as const },
-                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/categories/${key}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
+                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/categories/${key}`); qc.invalidateQueries({ queryKey: ['server', serverId] }); qc.invalidateQueries({ queryKey: ['categories', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
                     ] : []),
                   ])}
                   onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
