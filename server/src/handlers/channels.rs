@@ -595,29 +595,41 @@ pub async fn purge_messages(
         .unwrap_or(100)
         .min(1000);
 
+    // PostgreSQL n'accepte pas `LIMIT` directement sur un DELETE (contrairement à
+    // MySQL) -- "syntax error at or near LIMIT", confirmé en direct. Chaque appel à
+    // cette purge a toujours échoué en erreur SQL depuis l'écriture de ce handler.
+    // Fix : pré-sélectionner les IDs à supprimer via un CTE, puis DELETE ... WHERE id IN.
     let deleted = if let Some(before_date) = before {
         if let Some(aid) = author_id {
             sqlx::query(
-                "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 LIMIT $4 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 LIMIT $4),
+                      deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
+                 SELECT COUNT(*) as n FROM deleted"
             )
             .bind(channel_id).bind(&before_date).bind(aid).bind(limit)
             .fetch_one(&state.db).await
         } else {
             sqlx::query(
-                "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz LIMIT $3 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz LIMIT $3),
+                      deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
+                 SELECT COUNT(*) as n FROM deleted"
             )
             .bind(channel_id).bind(&before_date).bind(limit)
             .fetch_one(&state.db).await
         }
     } else if let Some(aid) = author_id {
         sqlx::query(
-            "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 AND user_id=$2 LIMIT $3 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND user_id=$2 LIMIT $3),
+                  deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
+             SELECT COUNT(*) as n FROM deleted"
         )
         .bind(channel_id).bind(aid).bind(limit)
         .fetch_one(&state.db).await
     } else {
         sqlx::query(
-            "WITH deleted AS (DELETE FROM messages WHERE channel_id=$1 LIMIT $2 RETURNING id) SELECT COUNT(*) as n FROM deleted"
+            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 LIMIT $2),
+                  deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
+             SELECT COUNT(*) as n FROM deleted"
         )
         .bind(channel_id).bind(limit)
         .fetch_one(&state.db).await
