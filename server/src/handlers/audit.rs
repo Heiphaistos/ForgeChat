@@ -186,7 +186,7 @@ pub async fn set_automod(
 
 /// Vérifie un contenu de message contre les règles AutoMod du serveur.
 /// Retourne Some(AppError) si le message doit être rejeté.
-pub async fn check_automod(state: &AppState, server_id: Uuid, content: &str) -> Option<AppError> {
+pub async fn check_automod(state: &AppState, server_id: Uuid, user_id: Uuid, content: &str) -> Option<AppError> {
     use sqlx::Row;
     let row = sqlx::query(
         "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps
@@ -232,6 +232,33 @@ pub async fn check_automod(state: &AppState, server_id: Uuid, content: &str) -> 
                 format!("Trop de liens (max {})", max_links)
             ));
         }
+    }
+
+    // Anti-spam : le champ existait en DB/UI depuis la création de cette feature mais
+    // n'était jamais vérifié ici -- toggle complètement inerte. Bloque le 3e message
+    // identique consécutif d'un même user sur ce serveur en moins de 8s.
+    if row.get::<bool, _>("anti_spam") {
+        use redis::AsyncCommands;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        content.hash(&mut hasher);
+        let content_hash = hasher.finish();
+        let key = format!("automod_spam:{}:{}", server_id, user_id);
+        let mut redis = state.redis.lock().await;
+        let prev: Option<String> = redis.get(&key).await.unwrap_or(None);
+        let prev_count = prev
+            .as_deref()
+            .and_then(|s| s.split_once(':'))
+            .filter(|(h, _)| h.parse::<u64>() == Ok(content_hash))
+            .and_then(|(_, c)| c.parse::<u32>().ok());
+        let new_count = prev_count.map(|c| c + 1).unwrap_or(1);
+        if new_count >= 3 {
+            return Some(AppError::BadRequest("Message bloqué par l'AutoMod (spam détecté)".into()));
+        }
+        let _: () = redis
+            .set_ex(&key, format!("{}:{}", content_hash, new_count), 8)
+            .await
+            .unwrap_or(());
     }
 
     // Anti-caps : rejet si >70% majuscules et message > 10 chars

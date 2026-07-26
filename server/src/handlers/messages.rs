@@ -281,7 +281,7 @@ pub async fn send_message(
 
     // Enforcement AutoMod
     if let Some(content) = content_str.as_deref() {
-        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, content).await {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, content).await {
             return Err(err);
         }
     }
