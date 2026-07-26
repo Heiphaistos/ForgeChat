@@ -20,8 +20,11 @@ pub async fn export_user_data(
 
     let uid: Uuid = claims.sub;
 
-    // Toutes les données utilisateur en parallèle
-    let (user_res, messages, servers, friends) = tokio::join!(
+    // Toutes les données utilisateur en parallèle. L'export était présenté comme
+    // couvrant "vos messages" (conformité RGPD, droit à la portabilité) mais ne
+    // lisait QUE la table `messages` (serveur) -- les DM 1-à-1 et les messages de
+    // groupe DM, souvent le contenu le plus personnel, n'étaient jamais inclus.
+    let (user_res, messages, dm_messages, group_dm_messages, servers, friends) = tokio::join!(
         sqlx::query(
             "SELECT username, email, bio, pronouns, created_at FROM users WHERE id=$1"
         ).bind(uid).fetch_one(&state.db),
@@ -31,6 +34,24 @@ pub async fn export_user_data(
              JOIN channels c ON c.id = m.channel_id
              WHERE m.user_id = $1
              ORDER BY m.created_at DESC
+             LIMIT 100"
+        ).bind(uid).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT dm.content, dm.created_at,
+                    u.username as other_username
+             FROM dm_messages dm
+             JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+             JOIN users u ON u.id = (CASE WHEN dc.user1_id = $1 THEN dc.user2_id ELSE dc.user1_id END)
+             WHERE dm.sender_id = $1
+             ORDER BY dm.created_at DESC
+             LIMIT 100"
+        ).bind(uid).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT gm.content, gm.created_at, gc.name as group_name
+             FROM group_dm_messages gm
+             JOIN group_dm_channels gc ON gc.id = gm.dm_id
+             WHERE gm.sender_id = $1
+             ORDER BY gm.created_at DESC
              LIMIT 100"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
@@ -47,6 +68,8 @@ pub async fn export_user_data(
     );
     let user = user_res.map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
     let messages = messages.unwrap_or_default();
+    let dm_messages = dm_messages.unwrap_or_default();
+    let group_dm_messages = group_dm_messages.unwrap_or_default();
     let servers = servers.unwrap_or_default();
     let friends = friends.unwrap_or_default();
 
@@ -62,6 +85,16 @@ pub async fn export_user_data(
         "messages": messages.iter().map(|m| serde_json::json!({
             "content": m.get::<Option<String>, _>("content"),
             "channel": m.get::<String, _>("channel_name"),
+            "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
+        })).collect::<Vec<_>>(),
+        "dm_messages": dm_messages.iter().map(|m| serde_json::json!({
+            "content": m.get::<Option<String>, _>("content"),
+            "with": m.get::<String, _>("other_username"),
+            "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
+        })).collect::<Vec<_>>(),
+        "group_dm_messages": group_dm_messages.iter().map(|m| serde_json::json!({
+            "content": m.get::<Option<String>, _>("content"),
+            "group": m.get::<String, _>("group_name"),
             "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         })).collect::<Vec<_>>(),
         "servers": servers.iter().map(|s| s.get::<String, _>("name")).collect::<Vec<String>>(),

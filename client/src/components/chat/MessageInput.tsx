@@ -1,7 +1,7 @@
 ﻿import { useRef, useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { maybeCompressImage, formatBytes } from '../../utils/compressImage'
@@ -198,6 +198,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [showScheduled, setShowScheduled] = useState(false)
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
+  const [showPollCreator, setShowPollCreator] = useState(false)
+  const [pollQuestion, setPollQuestion] = useState('')
+  const [pollOptions, setPollOptions] = useState(['', ''])
+  const [pollMultiple, setPollMultiple] = useState(false)
   const [cursorPos, setCursorPos] = useState(0)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const [msgTtl, setMsgTtl] = useState<number | null>(null)
@@ -301,6 +305,27 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
     },
     onError: () => toast.error('Impossible d\'annuler'),
+  })
+
+  // Le backend (create_poll/get_poll/vote_poll/close_poll + PollDisplay côté
+  // affichage) était déjà 100% prêt et testé, mais aucune UI n'appelait jamais
+  // POST .../polls -- la feature "sondage" n'avait littéralement aucun moyen
+  // d'être créée depuis l'interface, malgré un affichage/vote/fermeture complets.
+  const createPoll = useMutation({
+    mutationFn: () =>
+      api.post(`/servers/${serverId}/channels/${channelId}/polls`, {
+        question: pollQuestion.trim(),
+        options: pollOptions.map(o => o.trim()).filter(Boolean),
+        multiple_choice: pollMultiple,
+      }),
+    onSuccess: () => {
+      toast.success('Sondage créé')
+      setShowPollCreator(false)
+      setPollQuestion('')
+      setPollOptions(['', ''])
+      setPollMultiple(false)
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -775,6 +800,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setShowStickerPicker(false)
     setShowScheduled(false)
     setShowQuickReplies(false)
+    setShowPollCreator(false)
   }
 
   useEffect(() => {
@@ -1280,6 +1306,101 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     ))}
                   </div>
                 )}
+              </PickerShell>
+            )}
+          </div>
+          )}
+
+          {/* Bouton Sondage — server-only (polls.channel_id référence `channels`),
+              masqué sur petits écrans et en DM comme "Programmer un message" ci-dessus */}
+          {serverId && (
+          <div className="relative hidden sm:block">
+            <button
+              onClick={() => { const next = !showPollCreator; closeAllPickers(); setShowPollCreator(next) }}
+              className={`p-1.5 rounded transition ${showPollCreator ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title="Créer un sondage"
+              aria-label="Créer un sondage"
+              aria-expanded={showPollCreator}
+              aria-pressed={showPollCreator}
+            >
+              <BarChart3 size={18} />
+            </button>
+
+            {showPollCreator && (
+              <PickerShell
+                onClose={() => setShowPollCreator(false)}
+                desktopClassName="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
+              >
+                <div className="px-4 py-3 border-b border-fc-hover">
+                  <div className="text-sm font-semibold text-white flex items-center gap-2">
+                    <BarChart3 size={14} className="text-fc-accent" />
+                    Créer un sondage
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3 max-h-96 overflow-y-auto overscroll-contain">
+                  <input
+                    value={pollQuestion}
+                    onChange={e => setPollQuestion(e.target.value)}
+                    placeholder="Question du sondage..."
+                    maxLength={300}
+                    className="w-full fc-input text-sm"
+                  />
+
+                  <div className="space-y-2">
+                    {pollOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          value={opt}
+                          onChange={e => setPollOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
+                          placeholder={`Option ${i + 1}`}
+                          maxLength={100}
+                          className="flex-1 fc-input text-sm"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button
+                            onClick={() => setPollOptions(prev => prev.filter((_, idx) => idx !== i))}
+                            className="p-1 text-fc-muted hover:text-fc-red rounded transition flex-shrink-0"
+                            title="Retirer cette option"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {pollOptions.length < 10 && (
+                      <button
+                        onClick={() => setPollOptions(prev => [...prev, ''])}
+                        className="text-xs text-fc-accent hover:underline"
+                      >
+                        + Ajouter une option
+                      </button>
+                    )}
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-fc-muted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pollMultiple}
+                      onChange={e => setPollMultiple(e.target.checked)}
+                      className="accent-fc-accent"
+                    />
+                    Choix multiple autorisé
+                  </label>
+
+                  <button
+                    onClick={() => {
+                      const validOptions = pollOptions.map(o => o.trim()).filter(Boolean)
+                      if (!pollQuestion.trim()) { toast.error('Question requise'); return }
+                      if (validOptions.length < 2) { toast.error('Au moins 2 options requises'); return }
+                      createPoll.mutate()
+                    }}
+                    disabled={createPoll.isPending || !pollQuestion.trim()}
+                    className="w-full btn-primary text-sm disabled:opacity-40"
+                  >
+                    {createPoll.isPending ? 'Création...' : 'Créer le sondage'}
+                  </button>
+                </div>
               </PickerShell>
             )}
           </div>
