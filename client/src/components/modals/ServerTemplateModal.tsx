@@ -103,11 +103,11 @@ export default function ServerTemplateModal({ onClose }: Props) {
 
   const createServer = useMutation({
     mutationFn: async ({ serverName, template }: { serverName: string; template: ServerTemplate }) => {
-      const res = await api.post('/api/servers', { name: serverName })
+      const res = await api.post('/servers', { name: serverName })
       const serverId = res.data.id
       for (const ch of template.channels) {
         try {
-          await api.post(`/api/servers/${serverId}/channels`, { name: ch.name, type: ch.type })
+          await api.post(`/servers/${serverId}/channels`, { name: ch.name, type: ch.type })
         } catch {
           // ignore individual channel failures
         }
