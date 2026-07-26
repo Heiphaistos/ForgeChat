@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import Logo3D from '../components/Logo3D'
 
-const RELEASE = 'v3.9.0'
+const RELEASE = 'v3.10.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
 const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${RELEASE}.exe`
 const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${RELEASE}.exe`
