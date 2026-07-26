@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, RotateCcw } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
 
 const THEMES = [
   { id: 'dark', label: 'Sombre', accent: '#5865f2', preview: ['#1a1b1e', '#232428', '#36393f'] },
@@ -126,7 +127,7 @@ export default function AppearanceSection() {
   const [bgColor, setBgColor] = useState('')
   const [density, setDensity] = useState('normal')
   const [avatarShape, setAvatarShape] = useState('round')
-  const [sidebarWidth, setSidebarWidth] = useState(240)
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [glassmorphism, setGlassmorphism] = useState(false)
   const [showRoleColors, setShowRoleColors] = useState(true)
   const [messageDisplay, setMessageDisplay] = useState('normal')
@@ -141,7 +142,7 @@ export default function AppearanceSection() {
       setBgColor(settings.bg_color ?? '')
       setDensity(settings.interface_density ?? 'normal')
       setAvatarShape(settings.avatar_shape ?? 'round')
-      setSidebarWidth(settings.sidebar_width_px ?? 240)
+      setSidebarWidth(settings.sidebar_width_px ?? SIDEBAR_DEFAULT)
       setGlassmorphism(settings.glassmorphism ?? false)
       setShowRoleColors(settings.show_role_colors ?? true)
       setMessageDisplay(settings.message_display ?? 'normal')
@@ -354,7 +355,7 @@ export default function AppearanceSection() {
           Largeur de la barre latérale — <span className="text-white">{sidebarWidth}px</span>
         </h3>
         <input
-          type="range" min={180} max={400} value={sidebarWidth}
+          type="range" min={SIDEBAR_MIN} max={SIDEBAR_MAX} value={sidebarWidth}
           onChange={e => setSidebarWidth(Number(e.target.value))}
           className="w-full accent-fc-accent"
         />

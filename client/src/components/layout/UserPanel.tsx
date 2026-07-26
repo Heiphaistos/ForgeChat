@@ -250,7 +250,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
       <div className="flex items-center gap-0.5 flex-shrink-0">
         <button
           onClick={toggleFocus}
-          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             user.focus_mode ? 'text-fc-accent' : 'text-fc-muted hover:text-white'
           }`}
           title={user.focus_mode ? 'Mode focus actif — cliquer pour désactiver' : 'Activer mode focus (muet notifications)'}
@@ -264,7 +264,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           onClick={joined ? toggleMute : undefined}
           aria-disabled={!joined}
           aria-label={joined ? (muted ? 'Réactiver le micro' : 'Couper le micro') : 'Pas dans un canal vocal'}
-          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && muted ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
           title={joined ? (muted ? 'Réactiver le micro (Ctrl+Shift+M)' : 'Couper le micro (Ctrl+Shift+M)') : 'Pas dans un canal vocal'}
@@ -275,7 +275,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           onClick={joined ? toggleDeafen : undefined}
           aria-disabled={!joined}
           aria-label={joined ? (deafened ? 'Réactiver le son' : 'Couper le son') : 'Pas dans un canal vocal'}
-          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${
+          className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && deafened ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
           title={joined ? (deafened ? 'Réactiver le son (Ctrl+Shift+D)' : 'Couper le son (Ctrl+Shift+D)') : 'Pas dans un canal vocal'}
@@ -285,7 +285,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         {onToggleActivity && (
           <button
             onClick={onToggleActivity}
-            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover transition flex items-center justify-center ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${activityOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
             title="Activité récente (Ctrl+Shift+A)"
             aria-label="Activité récente"
             aria-pressed={activityOpen}
@@ -295,7 +295,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         )}
         <button
           onClick={() => nav('/admin')}
-          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
+          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Dashboard Admin"
           aria-label="Dashboard Admin"
         >
@@ -303,7 +303,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         </button>
         <button
           onClick={() => nav('/settings')}
-          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
+          className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
           title="Paramètres (Ctrl+,)"
           aria-label="Paramètres"
         >

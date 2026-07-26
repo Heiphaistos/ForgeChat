@@ -202,6 +202,14 @@ function VoiceLobby({
   channel, serverId, participantCount, voicePassword,
 }: { channel: { id: string; name: string; type: string }; serverId: string; participantCount: number; voicePassword?: string }) {
   const { join, error } = useVoice()
+
+  // La bannière d'erreur ci-dessous ne s'affiche qu'à l'écran de pré-connexion --
+  // une erreur survenant APRÈS avoir rejoint (ex: shareScreen qui échoue) ne serait
+  // sinon jamais visible, d'où le toast en complément (ne clear pas le store, la
+  // bannière de pré-connexion garde son comportement existant).
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
   const [joining, setJoining] = useState(false)
   const [withVideo, setWithVideo] = useState(channel.type === 'video')
   const { openSidebar } = useContext(MobileContext)

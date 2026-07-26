@@ -8,12 +8,9 @@ import RightSidebar, { useRightSidebar } from './RightSidebar'
 import ConnectionBanner from './ConnectionBanner'
 import { SplitContext } from '../../contexts/SplitContext'
 import { MobileContext } from '../../contexts/MobileContext'
+import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
 
 const ChannelPage = lazy(() => import('../../pages/ChannelPage'))
-
-const SIDEBAR_MIN = 180
-const SIDEBAR_MAX = 360
-const SIDEBAR_DEFAULT = 240
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))

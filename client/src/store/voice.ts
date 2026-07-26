@@ -890,8 +890,15 @@ export const useVoice = create<VoiceStore>((set, get) => ({
 
       // Arrêt auto quand l'utilisateur clique "Arrêter" dans le navigateur
       svt.onended = () => { get().stopScreenShare() }
-    } catch {
-      // L'utilisateur a annulé
+    } catch (e) {
+      // NotAllowedError = l'utilisateur a annulé le prompt de sélection, silencieux.
+      // Toute autre erreur (contrainte média refusée, échec de renégociation avec
+      // un peer...) était avalée ici en silence -- exactement le pattern qui a
+      // caché 2 bugs WebRTC majeurs par le passé (cf. _warn plus haut).
+      if ((e as DOMException)?.name !== 'NotAllowedError') {
+        _warn('shareScreen', e)
+        set({ error: 'Impossible de partager l\'écran' })
+      }
     }
   },
 
