@@ -582,8 +582,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
               {channel.type === 'stage' && (
                 <div className="p-4 bg-pink-500/10 rounded-xl border border-pink-500/30">
                   <h4 className="text-sm font-semibold text-pink-300 mb-1">Canal Scène (Stage)</h4>
-                  <p className="text-xs text-fc-muted mb-2">Les modérateurs de scène peuvent gérer qui a le droit de parler. Idéal pour des événements, podcasts ou sessions Q&A.</p>
-                  <p className="text-xs text-fc-muted">Les membres de l'audience peuvent demander la parole via le bouton dédié.</p>
+                  <p className="text-xs text-fc-muted">Fonctionne actuellement comme un canal vocal standard : tous les membres qui rejoignent peuvent parler librement.</p>
                 </div>
               )}
 

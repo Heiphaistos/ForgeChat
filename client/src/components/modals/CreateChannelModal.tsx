@@ -13,7 +13,7 @@ const CHANNEL_TYPES: { value: ChannelType; icon: any; label: string; desc: strin
   { value: 'forum',        icon: MessagesSquare,  label: 'Forum',       desc: 'Posts organisés avec tags et réponses.',       color: 'text-green-400' },
   { value: 'voice',        icon: Volume2,         label: 'Vocal',       desc: 'Chat vocal avec des membres.',                 color: 'text-blue-400' },
   { value: 'video',        icon: Video,           label: 'Vidéo',       desc: 'Appels vidéo et partage d\'écran.',            color: 'text-purple-400' },
-  { value: 'stage',        icon: Radio,           label: 'Scène',       desc: 'Événements audio (speaker + audience).',       color: 'text-pink-400' },
+  { value: 'stage',        icon: Radio,           label: 'Scène',       desc: 'Vocal pour événements (fonctionne comme un vocal standard).', color: 'text-pink-400' },
 ]
 
 const SLOWMODE_OPTIONS = [

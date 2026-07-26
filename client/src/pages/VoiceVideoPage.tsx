@@ -297,6 +297,22 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     ...remoteSpeaking,
   }
 
+  // Accumulateur temps de parole pour SpeakerStats (sinon totalSpeakingMs restait
+  // codé en dur à 0 — le panneau affichait toujours 0s pour tout le monde).
+  // Ref pour éviter une closure obsolète dans l'intervalle (speakingMap est recalculé
+  // à chaque render, pas une valeur stable).
+  const speakingMapRef = useRef(speakingMap)
+  speakingMapRef.current = speakingMap
+  const speakingMsRef = useRef<Record<string, number>>({})
+  useEffect(() => {
+    const iv = setInterval(() => {
+      for (const [uid, level] of Object.entries(speakingMapRef.current)) {
+        if (level > 0.05) speakingMsRef.current[uid] = (speakingMsRef.current[uid] ?? 0) + 500
+      }
+    }, 500)
+    return () => clearInterval(iv)
+  }, [])
+
   const isInThisChannel = joined && activeChannelId === channel.id
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
@@ -441,7 +457,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     audioLevel: speakingMap[p.userId] ?? 0,
     isMuted: p.muted,
     isSpeaking: (speakingMap[p.userId] ?? 0) > 0.05,
-    totalSpeakingMs: 0,
+    totalSpeakingMs: speakingMsRef.current[p.userId] ?? 0,
   }))
 
   const spotlightTile = allTiles.find(t => t.key === spotlightTileKey) ?? allTiles[0]
