@@ -26,6 +26,43 @@ pub async fn get_roles(
     Ok(Json(roles))
 }
 
+/// Liste les membres ayant ce rôle. Route jamais enregistrée dans main.rs à l'origine --
+/// le frontend (RoleMembersTab) l'appelait déjà et absorbait silencieusement le 404 avec
+/// un `.catch(() => [])`, affichant en permanence "Aucun membre avec ce rôle." même quand
+/// des membres l'avaient réellement.
+pub async fn get_role_members(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, role_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use crate::handlers::servers::require_member;
+    require_member(&state, claims.sub, server_id).await?;
+
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT u.id, u.username, u.discriminator, u.avatar, sm.nickname
+         FROM member_roles mr
+         JOIN server_members sm ON sm.user_id = mr.user_id AND sm.server_id = mr.server_id
+         JOIN users u ON u.id = mr.user_id
+         WHERE mr.server_id = $1 AND mr.role_id = $2
+         ORDER BY u.username"
+    )
+    .bind(server_id)
+    .bind(role_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let members = rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "username": r.get::<String, _>("username"),
+        "discriminator": r.get::<String, _>("discriminator"),
+        "avatar": r.get::<Option<String>, _>("avatar"),
+        "nick": r.get::<Option<String>, _>("nickname"),
+    })).collect();
+
+    Ok(Json(members))
+}
+
 pub async fn create_role(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

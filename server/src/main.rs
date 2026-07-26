@@ -533,6 +533,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/roles", post(handlers::roles::create_role))
         .route("/servers/:server_id/roles/:role_id", patch(handlers::roles::update_role))
         .route("/servers/:server_id/roles/:role_id", delete(handlers::roles::delete_role))
+        .route("/servers/:server_id/roles/:role_id/members", get(handlers::roles::get_role_members))
         .route("/servers/:server_id/members/:user_id/roles/:role_id", put(handlers::roles::assign_role))
         .route("/servers/:server_id/members/:user_id/roles/:role_id", delete(handlers::roles::remove_role))
         // Invites
