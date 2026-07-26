@@ -56,6 +56,52 @@ pub async fn send_friend_request(
         return Err(AppError::BadRequest("Impossible de s'ajouter soi-même".into()));
     }
 
+    // Bloqué dans un sens ou l'autre -- jamais vérifié ici jusqu'ici (contrairement
+    // aux DMs/messages qui checkent déjà `blocks` ailleurs dans ce fichier)
+    let blocked = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
+         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    )
+    .bind(claims.sub)
+    .bind(target_id)
+    .fetch_one(&state.db)
+    .await?;
+    if blocked {
+        return Err(AppError::Forbidden);
+    }
+
+    // Réglage de confidentialité du destinataire (`friend_request_from` dans
+    // user_settings) -- jamais appliqué avant, un simple placebo côté UI.
+    let pref: Option<String> = sqlx::query_scalar::<_, String>(
+        "SELECT friend_request_from FROM user_settings WHERE user_id=$1"
+    )
+    .bind(target_id)
+    .fetch_optional(&state.db)
+    .await?;
+    match pref.as_deref() {
+        Some("nobody") => return Err(AppError::Forbidden),
+        Some("friends_of_friends") => {
+            let has_mutual = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(
+                    SELECT 1 FROM friendships f1
+                    JOIN friendships f2 ON
+                        (CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END) =
+                        (CASE WHEN f2.user_id=$2 THEN f2.friend_id ELSE f2.user_id END)
+                    WHERE (f1.user_id=$1 OR f1.friend_id=$1) AND f1.status='accepted'
+                      AND (f2.user_id=$2 OR f2.friend_id=$2) AND f2.status='accepted'
+                )"
+            )
+            .bind(claims.sub)
+            .bind(target_id)
+            .fetch_one(&state.db)
+            .await?;
+            if !has_mutual {
+                return Err(AppError::Forbidden);
+            }
+        }
+        _ => {}
+    }
+
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM friendships WHERE
          (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"

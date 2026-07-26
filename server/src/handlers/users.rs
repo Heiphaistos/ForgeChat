@@ -897,8 +897,15 @@ pub async fn get_my_stats(
     use sqlx::Row;
     let uid = claims.sub;
 
+    // Compte les 3 sources de messages (serveur + DM 1:1 + group DM) --
+    // ne compter que `messages` sous-évaluait fortement tout utilisateur
+    // actif surtout en DM.
     let msg_row = sqlx::query(
-        "SELECT COUNT(*)::bigint as total FROM messages WHERE user_id=$1"
+        "SELECT (
+            (SELECT COUNT(*) FROM messages WHERE user_id=$1) +
+            (SELECT COUNT(*) FROM dm_messages WHERE sender_id=$1) +
+            (SELECT COUNT(*) FROM group_dm_messages WHERE sender_id=$1)
+         )::bigint as total"
     )
     .bind(uid).fetch_one(&state.db).await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
@@ -919,15 +926,22 @@ pub async fn get_my_stats(
     let friends_count: i64 = friend_row.get("total");
 
     let react_given_row = sqlx::query(
-        "SELECT COUNT(*)::bigint as total FROM reactions WHERE user_id=$1"
+        "SELECT (
+            (SELECT COUNT(*) FROM reactions WHERE user_id=$1) +
+            (SELECT COUNT(*) FROM dm_reactions WHERE user_id=$1) +
+            (SELECT COUNT(*) FROM group_dm_reactions WHERE user_id=$1)
+         )::bigint as total"
     )
     .bind(uid).fetch_one(&state.db).await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
     let reactions_given: i64 = react_given_row.get("total");
 
     let react_recv_row = sqlx::query(
-        "SELECT COUNT(*)::bigint as total FROM reactions r
-         JOIN messages m ON m.id = r.message_id WHERE m.user_id=$1"
+        "SELECT (
+            (SELECT COUNT(*) FROM reactions r JOIN messages m ON m.id = r.message_id WHERE m.user_id=$1) +
+            (SELECT COUNT(*) FROM dm_reactions r JOIN dm_messages m ON m.id = r.dm_message_id WHERE m.sender_id=$1) +
+            (SELECT COUNT(*) FROM group_dm_reactions r JOIN group_dm_messages m ON m.id = r.group_dm_message_id WHERE m.sender_id=$1)
+         )::bigint as total"
     )
     .bind(uid).fetch_one(&state.db).await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
