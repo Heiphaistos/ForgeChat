@@ -32,6 +32,25 @@ pub struct ServerEvent {
 #[derive(Debug, Deserialize)]
 pub struct EventsQuery {
     pub filter: Option<String>, // "upcoming" | "past" | "all"
+    pub month: Option<String>, // "YYYY-MM" -- vue calendrier, prend le pas sur `filter`
+}
+
+/// Parse "YYYY-MM" en bornes [début du mois, début du mois suivant).
+fn parse_month_range(month: &str) -> Option<(chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)> {
+    use chrono::{NaiveDate, TimeZone, Utc};
+    let (y, m) = month.split_once('-')?;
+    let year: i32 = y.parse().ok()?;
+    let mon: u32 = m.parse().ok()?;
+    let start = NaiveDate::from_ymd_opt(year, mon, 1)?;
+    let end = if mon == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)?
+    } else {
+        NaiveDate::from_ymd_opt(year, mon + 1, 1)?
+    };
+    Some((
+        Utc.from_utc_datetime(&start.and_hms_opt(0, 0, 0)?),
+        Utc.from_utc_datetime(&end.and_hms_opt(0, 0, 0)?),
+    ))
 }
 
 async fn ensure_member(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<()> {
@@ -55,6 +74,30 @@ pub async fn list_events(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ServerEvent>>> {
     ensure_member(&state, server_id, claims.sub).await?;
+
+    // Vue calendrier (CalendarView.tsx) : borne au mois demandé, prend le pas sur `filter`.
+    if let Some(month_range) = q.month.as_deref().and_then(parse_month_range) {
+        let (start, end) = month_range;
+        let sql = "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
+                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
+                COUNT(a.user_id) AS attendee_count,
+                MAX(CASE WHEN a.user_id = $2 THEN a.status END) AS user_rsvp
+         FROM server_events e
+         LEFT JOIN event_attendees a ON a.event_id = e.id
+         WHERE e.server_id = $1 AND e.start_time >= $3 AND e.start_time < $4
+         GROUP BY e.id
+         ORDER BY e.start_time";
+
+        let events = sqlx::query_as::<_, ServerEvent>(sql)
+            .bind(server_id)
+            .bind(claims.sub)
+            .bind(start)
+            .bind(end)
+            .fetch_all(&state.db)
+            .await?;
+
+        return Ok(Json(events));
+    }
 
     let filter = q.filter.as_deref().unwrap_or("upcoming");
     let time_clause = match filter {
