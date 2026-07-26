@@ -63,6 +63,12 @@ pub async fn update_me(
         }
     }
 
+    if let Some(ref p) = body.pronouns {
+        if p.len() > 30 {
+            return Err(AppError::BadRequest("Pronoms : 30 caractères max".into()));
+        }
+    }
+
     let (birthday_val, birthday_clear): (Option<chrono::NaiveDate>, bool) = match &body.birthday {
         None => (None, false),
         Some(serde_json::Value::Null) => (None, true),
@@ -85,6 +91,7 @@ pub async fn update_me(
             activity_name = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($8, '') ELSE activity_name END,
             activity_detail = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($9, '') ELSE activity_detail END,
             birthday = CASE WHEN $11 THEN NULL WHEN $10::DATE IS NOT NULL THEN $10 ELSE birthday END,
+            pronouns = COALESCE($12, pronouns),
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -99,6 +106,7 @@ pub async fn update_me(
     .bind(body.activity_detail.as_deref())
     .bind(birthday_val)
     .bind(birthday_clear)
+    .bind(body.pronouns.as_deref())
     .fetch_one(&state.db)
     .await
     .map_err(|e| {

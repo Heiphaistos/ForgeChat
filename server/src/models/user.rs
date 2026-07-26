@@ -27,6 +27,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
     #[sqlx(default)]
     pub totp_enabled: bool,
+    pub pronouns: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -48,6 +49,7 @@ pub struct UserPublic {
     pub totp_enabled: bool,
     pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
+    pub pronouns: Option<String>,
 }
 
 impl From<User> for UserPublic {
@@ -70,6 +72,7 @@ impl From<User> for UserPublic {
             totp_enabled: u.totp_enabled,
             birthday: u.birthday,
             created_at: u.created_at,
+            pronouns: u.pronouns,
         }
     }
 }
@@ -106,6 +109,7 @@ pub struct UpdateProfileRequest {
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
     pub birthday: Option<serde_json::Value>,
+    pub pronouns: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
