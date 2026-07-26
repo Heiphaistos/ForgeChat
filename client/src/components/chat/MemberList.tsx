@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
+import toast from 'react-hot-toast'
 import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
 import { confirm } from '../ui/ConfirmModal'
@@ -124,7 +125,13 @@ export default function MemberList({ serverId, onClose }: Props) {
   const menuItems = (m: any) => [
     { label: 'Voir le profil', onClick: () => nav(`/users/${m.user_id}`) },
     { label: 'Envoyer un message', onClick: () => {
-      api.post('/dms', { user_id: m.user_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
+      // Route réelle : POST /dms/:user_id (id en path, pas de body), réponse
+      // { dm_id } -- l'ancien code postait sur /dms (route inexistante, seul
+      // GET /dms existe) et lisait r.data.id (jamais présent) : le clic
+      // n'ouvrait jamais de DM, sans le moindre message d'erreur (catch muet).
+      api.post(`/dms/${m.user_id}`)
+        .then(r => nav(`/dms/${r.data.dm_id}`))
+        .catch(() => toast.error("Impossible d'ouvrir la conversation"))
     }},
     { label: 'Mentionner', onClick: () => {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
