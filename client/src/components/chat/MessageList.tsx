@@ -588,7 +588,12 @@ export default function MessageList({
     avatarCtxMenu.open(e, [
       { label: 'Voir le profil', onClick: () => nav(`/users/${msg.author_id}`) },
       { label: 'Envoyer un message', onClick: () => {
-        api.post('/dms', { user_id: msg.author_id }).then(r => nav(`/dms/${r.data.id}`)).catch(() => {})
+        // Même bug que MemberList.tsx (déjà corrigé) : /dms n'existe pas en POST
+        // (seul GET /dms existe), la vraie route est /dms/:user_id sans body,
+        // et la réponse est { dm_id } pas { id } -- catch muet en plus.
+        api.post(`/dms/${msg.author_id}`)
+          .then(r => nav(`/dms/${r.data.dm_id}`))
+          .catch(() => toast.error("Impossible d'ouvrir la conversation"))
       }, disabled: msg.author_id === user?.id },
       { label: `Mentionner @${msg.author_username}`, onClick: () => {
         const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')

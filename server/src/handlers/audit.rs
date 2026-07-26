@@ -350,7 +350,11 @@ pub async fn get_reaction_detail(
     Query(q): Query<ReactionQuery>,
 ) -> Result<Json<ReactionDetail>, AppError> {
     use sqlx::Row;
-    // Vérifier que l'utilisateur est membre du serveur contenant ce message
+    // Le popup "qui a réagi" (MessageList.tsx, hover/long-press) est déclenché
+    // sur toute réaction, canal serveur OU DM -- mais les réactions DM vivent
+    // dans une table séparée `dm_reactions` (pas `reactions`), même pattern
+    // d'architecture que attachments/pinned_messages. Vérifier membership
+    // serveur d'abord, sinon retomber sur dm_reactions+dm_channels.
     let member_check = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(
             SELECT 1 FROM messages m
@@ -363,21 +367,47 @@ pub async fn get_reaction_detail(
     .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
-    if !member_check {
-        return Err(AppError::Forbidden);
-    }
 
-    let rows = sqlx::query(
-        "SELECT r.user_id, u.username, u.avatar
-         FROM reactions r
-         JOIN users u ON u.id=r.user_id
-         WHERE r.message_id=$1 AND r.emoji=$2
-         LIMIT 100"
-    )
-    .bind(q.message_id)
-    .bind(&q.emoji)
-    .fetch_all(&state.db)
-    .await?;
+    let rows = if member_check {
+        sqlx::query(
+            "SELECT r.user_id, u.username, u.avatar
+             FROM reactions r
+             JOIN users u ON u.id=r.user_id
+             WHERE r.message_id=$1 AND r.emoji=$2
+             LIMIT 100"
+        )
+        .bind(q.message_id)
+        .bind(&q.emoji)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        let dm_ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                SELECT 1 FROM dm_messages dm
+                JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+                WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)
+             )"
+        )
+        .bind(q.message_id)
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+        if !dm_ok {
+            return Err(AppError::Forbidden);
+        }
+
+        sqlx::query(
+            "SELECT r.user_id, u.username, u.avatar
+             FROM dm_reactions r
+             JOIN users u ON u.id=r.user_id
+             WHERE r.dm_message_id=$1 AND r.emoji=$2
+             LIMIT 100"
+        )
+        .bind(q.message_id)
+        .bind(&q.emoji)
+        .fetch_all(&state.db)
+        .await?
+    };
 
     let users: Vec<ReactionUser> = rows.iter().map(|r| ReactionUser {
         user_id: r.get("user_id"),
