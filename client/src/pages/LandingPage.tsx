@@ -6,10 +6,12 @@ import {
 } from 'lucide-react'
 import Logo3D from '../components/Logo3D'
 
-const RELEASE = 'v3.10.0'
+const RELEASE = 'v3.11.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
 const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${RELEASE}.exe`
 const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${RELEASE}.exe`
+const DEB_URL       = `${DL_BASE}/ForgeChat-${RELEASE}-amd64.deb`
+const APPIMAGE_URL  = `${DL_BASE}/ForgeChat-${RELEASE}-amd64.AppImage`
 
 const FEATURES = [
   {
@@ -291,6 +293,43 @@ export default function LandingPage() {
           </div>
 
           <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {RELEASE}</p>
+        </div>
+      </section>
+
+      {/* ── Téléchargement Linux ────────────────────────────────────── */}
+      <section aria-labelledby="download-linux-title" className="relative px-4 sm:px-6 py-14 sm:py-16">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 id="download-linux-title" className="text-xl sm:text-2xl font-bold text-white mb-3">Client Desktop Linux</h2>
+          <p className="text-white/40 mb-8 text-sm sm:text-base">
+            Debian, Ubuntu et dérivées via le paquet <code className="text-white/60">.deb</code>,
+            <br className="hidden sm:block" /> ou n'importe quelle distro via l'AppImage portable.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-stretch justify-center gap-3 sm:gap-4 mb-8">
+            <a href={DEB_URL} download
+              className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
+              <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
+                <Download size={18} />
+              </span>
+              <span className="text-left min-w-0">
+                <span className="block text-sm font-bold">Paquet .deb</span>
+                <span className="block text-xs text-white/40 truncate">Debian / Ubuntu · {RELEASE}</span>
+              </span>
+            </a>
+
+            <a href={APPIMAGE_URL} download
+              className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
+              <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
+                <Download size={18} />
+              </span>
+              <span className="text-left min-w-0">
+                <span className="block text-sm font-bold">AppImage</span>
+                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {RELEASE}</span>
+              </span>
+            </a>
+          </div>
+
+          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {RELEASE}</p>
         </div>
       </section>
 

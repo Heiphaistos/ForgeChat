@@ -112,17 +112,21 @@ pub fn run() {
         return;
     }
 
-    // WebRTC dans WebView2 : accorde micro/caméra/écran sans prompt de permission
+    // WebRTC dans WebView2 (Windows uniquement) : accorde micro/caméra/écran sans prompt
     // (--use-fake-ui-for-media-stream auto-accepte le prompt ; les périphériques restent réels)
-    let mut browser_args = String::from(
-        "--use-fake-ui-for-media-stream \
-         --enable-features=WebRTC-H264WithOpenH264FFmpeg",
-    );
-    // Harnais de test (VM sans micro/caméra) : périphériques média factices
-    if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
-        browser_args.push_str(" --use-fake-device-for-media-stream");
+    // Linux/WebKitGTK n'a pas d'équivalent WEBVIEW2_*, le prompt de permission natif s'affiche.
+    #[cfg(windows)]
+    {
+        let mut browser_args = String::from(
+            "--use-fake-ui-for-media-stream \
+             --enable-features=WebRTC-H264WithOpenH264FFmpeg",
+        );
+        // Harnais de test (VM sans micro/caméra) : périphériques média factices
+        if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
+            browser_args.push_str(" --use-fake-device-for-media-stream");
+        }
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
     }
-    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())

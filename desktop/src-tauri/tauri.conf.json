@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ForgeChat",
-  "version": "3.10.0",
+  "version": "3.11.0",
   "identifier": "org.heiphaistos.forgechat",
   "build": {
     "frontendDist": "../../client/dist",
@@ -23,7 +23,7 @@
         "decorations": true,
         "transparent": false,
         "center": true,
-        "userAgent": "ForgeChat/3.10.0 (Desktop; Windows)"
+        "userAgent": "ForgeChat/3.11.0 (Desktop)"
       }
     ],
     "security": {
@@ -39,7 +39,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": ["nsis", "deb", "appimage"],
+    "category": "Network",
+    "shortDescription": "Client de chat communautaire auto-hébergé",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -56,6 +58,14 @@
       "wix": null,
       "webviewInstallMode": {
         "type": "embedBootstrapper"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": true
       }
     },
     "resources": ["icons/tray-frames/*"],
