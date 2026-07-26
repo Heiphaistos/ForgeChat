@@ -195,7 +195,7 @@ pub async fn forum_upload(
     tokio::fs::create_dir_all(&upload_dir).await
         .map_err(|e| AppError::Internal(e.into()))?;
 
-    while let Some(field) = multipart.next_field().await
+    if let Some(field) = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
 
         let original_name = field.file_name().unwrap_or("fichier").to_string();

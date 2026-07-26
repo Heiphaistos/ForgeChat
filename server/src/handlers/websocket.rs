@@ -1109,6 +1109,63 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             }
         }
 
+        // Main levée en vocal -- envoyé par le client depuis toujours, mais jamais
+        // géré ici : silencieusement dropé par le `_ => {}` du bas, donc invisible
+        // pour tous les autres participants (seul l'auteur voyait sa propre main
+        // levée via son état local optimiste).
+        Some("HAND_RAISE") => {
+            if let (Some(channel_id_val), Some(raised)) = (
+                msg["channel_id"].as_str(),
+                msg["raised"].as_bool(),
+            ) {
+                if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    let is_member: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM channels c
+                            JOIN server_members sm ON sm.server_id = c.server_id
+                            WHERE c.id = $1 AND sm.user_id = $2
+                        )"
+                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                    if !is_member { return; }
+                    let event = serde_json::json!({
+                        "type": "HAND_RAISE",
+                        "channel_id": channel_id_val,
+                        "user_id": user_id.to_string(),
+                        "username": cached_username,
+                        "raised": raised,
+                    });
+                    state.broadcast_to_channel_members(cid, event.to_string()).await;
+                }
+            }
+        }
+
+        // Lecture soundboard en vocal -- même piège que HAND_RAISE : jamais géré
+        // côté serveur, donc un son ne se jouait que pour la personne qui cliquait.
+        Some("SOUNDBOARD_PLAY") => {
+            if let (Some(channel_id_val), Some(sound_id_val)) = (
+                msg["channel_id"].as_str(),
+                msg["sound_id"].as_str(),
+            ) {
+                if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    let is_member: bool = sqlx::query_scalar(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM channels c
+                            JOIN server_members sm ON sm.server_id = c.server_id
+                            WHERE c.id = $1 AND sm.user_id = $2
+                        )"
+                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                    if !is_member { return; }
+                    let event = serde_json::json!({
+                        "type": "SOUNDBOARD_PLAY",
+                        "channel_id": channel_id_val,
+                        "sound_id": sound_id_val,
+                        "user_id": user_id.to_string(),
+                    });
+                    state.broadcast_to_channel_members(cid, event.to_string()).await;
+                }
+            }
+        }
+
         _ => {}
     }
 }

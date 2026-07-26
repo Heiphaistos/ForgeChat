@@ -6,6 +6,8 @@ import {
   LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
   Focus, GalleryHorizontal,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import api from '../api/client'
 import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
@@ -352,6 +354,30 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const sendReaction = (emoji: string) => {
     send({ type: 'VOICE_REACTION', channel_id: channel.id, emoji })
   }
+
+  // WS: lecture soundboard des autres participants -- montée ici (toujours présente
+  // pendant l'appel) plutôt que dans Soundboard.tsx (démonté quand le panneau est
+  // fermé), sinon un son ne serait audible que si CHAQUE participant a son propre
+  // panneau ouvert au moment de la lecture. `user_id` filtré pour ignorer l'écho de
+  // notre propre clic (déjà joué localement en instantané dans Soundboard.tsx).
+  const { data: soundboardSounds = [] } = useQuery<{ id: string; url: string }[]>({
+    queryKey: ['soundboard', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/soundboard`).then(r => r.data),
+    staleTime: 60_000,
+  })
+  useEffect(() => {
+    const unsub = on('SOUNDBOARD_PLAY', (data: any) => {
+      if (data.channel_id !== channel.id || data.user_id === user?.id) return
+      const sound = soundboardSounds.find(s => s.id === data.sound_id)
+      if (!sound) return
+      const stored = localStorage.getItem('forgechat_soundboard_volume')
+      const volume = stored ? Math.min(100, Math.max(0, parseInt(stored, 10))) : 80
+      const audio = new Audio(sound.url)
+      audio.volume = volume / 100
+      audio.play().catch(() => null)
+    })
+    return unsub
+  }, [channel.id, on, user?.id, soundboardSounds])
 
   // Recording
   const recorderRef = useRef<MediaRecorder | null>(null)

@@ -585,7 +585,7 @@ pub async fn upload_server_icon(
 ) -> Result<Json<serde_json::Value>> {
     require_owner(&state, claims.sub, server_id).await?;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+    if let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let ct = field.content_type().unwrap_or("image/jpeg").to_string();
         if !ct.starts_with("image/") {
             return Err(AppError::BadRequest("Type de fichier non supporté".into()));
@@ -627,7 +627,7 @@ pub async fn upload_server_banner(
 ) -> Result<Json<serde_json::Value>> {
     require_owner(&state, claims.sub, server_id).await?;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
+    if let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let ct = field.content_type().unwrap_or("image/jpeg").to_string();
         if !ct.starts_with("image/") {
             return Err(AppError::BadRequest("Type de fichier non supporté".into()));
