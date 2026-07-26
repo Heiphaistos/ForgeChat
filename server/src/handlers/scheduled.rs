@@ -51,6 +51,20 @@ pub async fn create_scheduled(
         return Err(AppError::BadRequest("Planification max 30 jours dans le futur".into()));
     }
 
+    // Même enforcement timeout que messages.rs/forum.rs/threads.rs/polls.rs/tickets.rs :
+    // sans ce check, un membre en timeout pouvait quand même programmer un message
+    // pour publication automatique, contournant totalement la sanction.
+    let is_timed_out = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if is_timed_out {
+        return Err(AppError::Forbidden);
+    }
+
     let msg = sqlx::query_as::<_, ScheduledMessage>(
         "INSERT INTO scheduled_messages (channel_id, user_id, content, send_at)
          VALUES ($1, $2, $3, $4) RETURNING *"
