@@ -675,8 +675,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/feeds", post(handlers::feeds::create_channel_feed))
         .route("/servers/:server_id/feeds/:feed_id", delete(handlers::feeds::delete_channel_feed))
         .route("/servers/:server_id/feeds/:feed_id/toggle", patch(handlers::feeds::toggle_channel_feed))
-        // Historique des éditions de messages
-        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/edits", get(handlers::messages::get_message_edits))
+        // Historique des éditions de messages -- un seul segment (message_id) :
+        // canal de serveur OU DM, résolu+vérifié dans le handler.
+        .route("/messages/:msg_id/edits", get(handlers::messages::get_message_edits))
         // Forward message -- un seul segment (message_id) : le message source peut
         // venir d'un canal de serveur OU d'un DM, résolu+vérifié dans le handler.
         .route("/messages/:msg_id/forward", post(handlers::messages::forward_message))

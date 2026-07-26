@@ -908,8 +908,6 @@ export default function MessageList({
       {editHistoryMsg && (
         <EditHistoryModal
           messageId={editHistoryMsg.id}
-          serverId={serverId}
-          channelId={channelId}
           onClose={() => setEditHistoryMsg(null)}
         />
       )}

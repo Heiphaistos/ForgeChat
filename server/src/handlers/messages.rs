@@ -721,15 +721,36 @@ pub async fn search_messages(
 pub async fn get_message_edits(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path(message_id): Path<Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // EditHistoryModal.tsx est monté depuis MessageRow, réutilisé en canal de
+    // serveur ET en DM -- même pattern déjà corrigé sur remind/report/forward.
+    // Le message peut donc être dans `messages` (avec appartenance serveur) ou
+    // `dm_messages` (avec appartenance DM).
+    let in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM messages m
+            JOIN channels c ON c.id = m.channel_id
+            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+            WHERE m.id = $1
+         )"
+    ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?;
 
-    // Vérifier que le message appartient au canal
-    let msg_in_channel: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
-    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
-    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
+    let in_dm: bool = if in_channel {
+        false
+    } else {
+        sqlx::query_scalar(
+            "SELECT EXISTS(
+                SELECT 1 FROM dm_messages dm
+                JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+                WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)
+             )"
+        ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?
+    };
+
+    if !in_channel && !in_dm {
+        return Err(AppError::NotFound("Message introuvable".into()));
+    }
 
     use sqlx::Row;
     let rows = sqlx::query(

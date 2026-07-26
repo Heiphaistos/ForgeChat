@@ -6,18 +6,16 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   messageId: string
-  serverId: string
-  channelId: string
   onClose: () => void
 }
 
-export default function EditHistoryModal({ messageId, serverId, channelId, onClose }: Props) {
+export default function EditHistoryModal({ messageId, onClose }: Props) {
   useEscapeKey(onClose)
   const { formatTs } = useFormatDate()
   const { data: edits = [], isLoading } = useQuery<{ content: string; edited_at: string }[]>({
     queryKey: ['message_edits', messageId],
     queryFn: () =>
-      api.get(`/servers/${serverId}/channels/${channelId}/messages/${messageId}/edits`)
+      api.get(`/messages/${messageId}/edits`)
         .then(r => r.data),
     staleTime: 30_000,
   })
