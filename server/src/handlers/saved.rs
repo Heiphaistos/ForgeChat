@@ -28,6 +28,15 @@ pub struct SavedMessage {
     pub author_username: Option<String>,
     pub author_avatar: Option<String>,
     pub saved_at: DateTime<Utc>,
+    // Le frontend (SavedPage.tsx) attend ces 4 champs pour le fil d'ariane
+    // serveur/canal, la date d'origine du message et les pièces jointes --
+    // jamais renvoyés avant ce fix, donc toujours `undefined` côté client :
+    // fil d'ariane jamais affiché, date "Invalid Date", filtre Images/Fichiers
+    // toujours négatif (detectType() ne voyait jamais d'attachments).
+    pub created_at: DateTime<Utc>,
+    pub channel_name: Option<String>,
+    pub server_name: Option<String>,
+    pub attachments: Vec<crate::models::message::Attachment>,
 }
 
 pub async fn save_message(
@@ -76,23 +85,52 @@ pub async fn get_saved(
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<Vec<SavedMessage>>, AppError> {
     use sqlx::Row;
+    // LEFT JOIN partout : le message/canal/serveur d'origine peut avoir été
+    // supprimé depuis la sauvegarde (schéma volontairement sans FK dessus,
+    // cf. migration 006) -- content/author_* déjà figés dans saved_messages
+    // servent justement de secours dans ce cas, created_at retombe sur
+    // saved_at plutôt que de planter ou renvoyer NULL.
     let rows = sqlx::query(
-        "SELECT id, message_id, channel_id, server_id, content, author_username, author_avatar, saved_at
-         FROM saved_messages WHERE user_id=$1 ORDER BY saved_at DESC"
+        "SELECT sm.id, sm.message_id, sm.channel_id, sm.server_id,
+                sm.content, sm.author_username, sm.author_avatar, sm.saved_at,
+                COALESCE(m.created_at, sm.saved_at) as created_at,
+                c.name as channel_name,
+                s.name as server_name
+         FROM saved_messages sm
+         LEFT JOIN messages m ON m.id = sm.message_id
+         LEFT JOIN channels c ON c.id = sm.channel_id
+         LEFT JOIN servers s ON s.id = sm.server_id
+         WHERE sm.user_id=$1 ORDER BY sm.saved_at DESC"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
     .await?;
 
-    let items = rows.iter().map(|r| SavedMessage {
-        id: r.get("id"),
-        message_id: r.get("message_id"),
-        channel_id: r.get("channel_id"),
-        server_id: r.get("server_id"),
-        content: r.get("content"),
-        author_username: r.get("author_username"),
-        author_avatar: r.get("author_avatar"),
-        saved_at: r.get("saved_at"),
+    let message_ids: Vec<Uuid> = rows.iter().map(|r| r.get("message_id")).collect();
+    let all_attachments: Vec<crate::models::message::Attachment> = sqlx::query_as(
+        "SELECT * FROM attachments WHERE message_id = ANY($1) AND (expires_at IS NULL OR expires_at > NOW())"
+    )
+    .bind(&message_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let items = rows.iter().map(|r| {
+        let mid: Uuid = r.get("message_id");
+        SavedMessage {
+            id: r.get("id"),
+            message_id: mid,
+            channel_id: r.get("channel_id"),
+            server_id: r.get("server_id"),
+            content: r.get("content"),
+            author_username: r.get("author_username"),
+            author_avatar: r.get("author_avatar"),
+            saved_at: r.get("saved_at"),
+            created_at: r.get("created_at"),
+            channel_name: r.get("channel_name"),
+            server_name: r.get("server_name"),
+            attachments: all_attachments.iter().filter(|a| a.message_id == mid).cloned().collect(),
+        }
     }).collect();
 
     Ok(Json(items))
