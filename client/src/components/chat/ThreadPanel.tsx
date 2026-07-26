@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus } from 'lucide-react'
+import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus, Archive, ArchiveRestore, Lock } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
@@ -203,6 +203,23 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
+  // archive_thread (threads.rs) impose déjà côté serveur qu'un fil archivé/verrouillé
+  // refuse tout nouveau message (403) -- mais aucune UI n'a jamais existé pour
+  // basculer cet état : PATCH /threads/:id existait sans le moindre appelant.
+  const toggleArchive = useMutation({
+    mutationFn: () =>
+      api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}`, {
+        archived: !thread?.archived,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['threads', channelId] })
+      toast.success(thread?.archived ? 'Fil désarchivé' : 'Fil archivé')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
+
+  const isLocked = !!thread?.locked || !!thread?.archived
+
   const handleSend = () => {
     if (!input.trim()) return
     // Limite serveur : 4000 caractères
@@ -264,11 +281,24 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         <div className="p-3 border-b border-fc-bg bg-fc-accent/5">
           <div className="flex items-center gap-1.5">
             <Hash size={13} className="text-fc-accent" />
-            <span className="text-sm font-medium text-white truncate">{thread.title}</span>
+            <span className="text-sm font-medium text-white truncate flex-1">{thread.title}</span>
+            {thread.locked && <Lock size={12} className="text-fc-muted flex-shrink-0" aria-label="Fil verrouillé" />}
+            <button
+              onClick={() => toggleArchive.mutate()}
+              disabled={toggleArchive.isPending}
+              title={thread.archived ? 'Désarchiver le fil' : 'Archiver le fil'}
+              aria-label={thread.archived ? 'Désarchiver le fil' : 'Archiver le fil'}
+              className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
+            >
+              {thread.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+            </button>
           </div>
           <div className="text-xs text-fc-muted mt-0.5">
             par {thread.creator_username} · {thread.message_count} messages
           </div>
+          {thread.archived && (
+            <p className="text-xs text-fc-muted/80 mt-1 italic">Fil archivé — lecture seule.</p>
+          )}
         </div>
       )}
 
@@ -497,8 +527,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* Input -- masqué si le fil est archivé/verrouillé (send_thread_message
+          renvoie 403 dans ce cas, la zone de saisie serait trompeuse sinon) */}
       <div className="p-3 border-t border-fc-bg flex-shrink-0">
+        {isLocked ? (
+          <p className="text-xs text-fc-muted text-center py-2 italic">
+            {thread?.archived ? 'Ce fil est archivé.' : 'Ce fil est verrouillé.'}
+          </p>
+        ) : (
+        <>
         {Object.keys(typingUsers).length > 0 && (
           <div role="status" aria-live="polite" className="text-[11px] text-fc-muted italic mb-1 px-1 truncate">
             {Object.values(typingUsers).map(t => t.username).join(', ')} {Object.keys(typingUsers).length > 1 ? 'écrivent' : 'écrit'}…
@@ -550,6 +587,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             <Send size={16} />
           </button>
         </div>
+        </>
+        )}
       </div>
 
       {userPopup && (
