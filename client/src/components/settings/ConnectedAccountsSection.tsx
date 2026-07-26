@@ -38,12 +38,20 @@ export default function ConnectedAccountsSection() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (platform: string) =>
-      api.post('/user/connected-accounts', {
+    mutationFn: (platform: string) => {
+      const meta = PLATFORMS.find(p => p.id === platform)
+      const cleanUsername = username.trim()
+      // Si l'URL n'est pas renseignée et que la plateforme a un template
+      // (github/twitch/reddit), la dériver du username plutôt que de
+      // laisser le lien externe invisible faute de champ optionnel rempli.
+      const derivedUrl = url.trim() ||
+        (meta?.urlTemplate ? meta.urlTemplate.replace('{username}', cleanUsername.replace(/^[@/]+/, '')) : null)
+      return api.post('/user/connected-accounts', {
         platform,
-        platform_username: username.trim(),
-        platform_url: url.trim() || null,
-      }),
+        platform_username: cleanUsername,
+        platform_url: derivedUrl,
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connected-accounts'] })
       toast.success('Compte connecté')

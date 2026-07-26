@@ -24,7 +24,9 @@ interface WebhookItem {
 }
 
 interface CreatedWebhook extends WebhookItem {
-  token_preview: string
+  // Token complet, renvoyé UNE SEULE FOIS par le backend à la création
+  // (jamais réexposé ensuite — la liste persistante n'a que token_preview, tronqué)
+  token: string
 }
 
 const BASE_URL = 'https://forgechat.heiphaistos.org/api/webhook'
@@ -138,12 +140,12 @@ export default function WebhookManager({ serverId }: WebhookManagerProps) {
             </div>
             <div className="flex items-center gap-2">
               <code className="flex-1 bg-fc-input px-3 py-2 rounded text-xs text-white font-mono break-all">
-                {`${BASE_URL}/${createdWebhook.id}/${createdWebhook.token_preview.replace('...', '')}`}
+                {`${BASE_URL}/${createdWebhook.id}/${createdWebhook.token}`}
               </code>
               <button
                 onClick={() =>
                   copyToClipboard(
-                    `${BASE_URL}/${createdWebhook.id}/${createdWebhook.token_preview.replace('...', '')}`,
+                    `${BASE_URL}/${createdWebhook.id}/${createdWebhook.token}`,
                     'created'
                   )
                 }

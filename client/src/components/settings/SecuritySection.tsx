@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Shield } from 'lucide-react'
 import QRCode from 'qrcode'
+import toast from 'react-hot-toast'
 
 export default function SecuritySection() {
   const qc = useQueryClient()
@@ -27,16 +28,19 @@ export default function SecuritySection() {
   const setupMutation = useMutation({
     mutationFn: () => api.post('/auth/2fa/setup').then(r => r.data),
     onSuccess: (data) => { setSetupData(data); setStep('setup') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible d\'initialiser le 2FA'),
   })
 
   const confirmMutation = useMutation({
     mutationFn: () => api.post('/auth/2fa/confirm', { code }).then(r => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['me'] }); setStep('idle'); setCode('') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Code invalide'),
   })
 
   const disableMutation = useMutation({
     mutationFn: () => api.post('/auth/2fa/disable', { code }).then(r => r.data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['me'] }); setStep('idle'); setCode('') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Code invalide'),
   })
 
   const is2faEnabled = me?.totp_enabled ?? false
