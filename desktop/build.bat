@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-title ForgeChat Desktop — Build v3.14.0
+title ForgeChat Desktop — Build v3.15.0
 
 echo.
 echo ============================================
-echo   ForgeChat Desktop Builder v3.14.0
+echo   ForgeChat Desktop Builder v3.15.0
 echo ============================================
 echo.
 
@@ -69,8 +69,8 @@ if not exist "%OUT%" mkdir "%OUT%"
 set FOUND_NSIS=0
 for /r "%BUNDLE%\nsis" %%f in (*.exe) do (
     if !FOUND_NSIS!==0 (
-        copy "%%f" "%OUT%\ForgeChat-Setup-v3.14.0.exe" >nul
-        echo [OK] Installeur : dist-desktop\ForgeChat-Setup-v3.14.0.exe
+        copy "%%f" "%OUT%\ForgeChat-Setup-v3.15.0.exe" >nul
+        echo [OK] Installeur : dist-desktop\ForgeChat-Setup-v3.15.0.exe
         set FOUND_NSIS=1
     )
 )
@@ -80,8 +80,8 @@ if %FOUND_NSIS%==0 (
 
 :: Binaire portable (raw release exe)
 if exist "%SCRIPT_DIR%src-tauri\target\release\forgechat-desktop.exe" (
-    copy "%SCRIPT_DIR%src-tauri\target\release\forgechat-desktop.exe" "%OUT%\ForgeChat-Portable-v3.14.0.exe" >nul
-    echo [OK] Portable  : dist-desktop\ForgeChat-Portable-v3.14.0.exe
+    copy "%SCRIPT_DIR%src-tauri\target\release\forgechat-desktop.exe" "%OUT%\ForgeChat-Portable-v3.15.0.exe" >nul
+    echo [OK] Portable  : dist-desktop\ForgeChat-Portable-v3.15.0.exe
 ) else (
     echo [INFO] Binaire portable non trouve - le build NSIS peut l'avoir exclu
 )
