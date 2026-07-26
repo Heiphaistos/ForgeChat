@@ -58,8 +58,12 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
   })
 
   const forwardMutation = useMutation({
+    // Un seul segment (message_id) -- le backend résout le message source dans
+    // messages OU dm_messages ; sourceServerId/sourceChannelId n'existent pas
+    // en contexte DM (serverId="" transmis par MessageList), donc jamais utilisés
+    // ici pour construire l'URL (uniquement pour l'UX d'auto-expansion ci-dessus).
     mutationFn: (destChannelId: string) =>
-      api.post(`/servers/${sourceServerId}/channels/${sourceChannelId}/messages/${messageId}/forward`, {
+      api.post(`/messages/${messageId}/forward`, {
         channel_id: destChannelId,
       }),
     onSuccess: () => {

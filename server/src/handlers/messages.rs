@@ -752,27 +752,47 @@ pub async fn get_message_edits(
 pub async fn forward_message(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Path(message_id): Path<Uuid>,
     Json(body): Json<ForwardMessageRequest>,
 ) -> Result<Json<MessageWithAuthor>> {
     use sqlx::Row;
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    // Vérifier que le message source existe dans le canal source
-    let src = sqlx::query(
-        "SELECT m.content, m.type, COALESCE(m.webhook_display_name, u.username) as author_username
+    // ForwardModal.tsx est monté aussi bien depuis un canal de serveur que depuis
+    // une conversation privée (MessageList/MessageRow partagés, cf. fix reminders/
+    // report) -- message_id peut donc être un id de `messages` OU de `dm_messages`.
+    // On résout le message source dans les deux tables (avec vérification
+    // d'appartenance intégrée) plutôt que d'exiger server_id/channel_id du client,
+    // qui n'existent pas en contexte DM.
+    let server_src = sqlx::query(
+        "SELECT m.content, COALESCE(m.webhook_display_name, u.username) as author_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
-         WHERE m.id=$1 AND m.channel_id=$2"
+         JOIN channels c ON c.id = m.channel_id
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+         WHERE m.id = $1"
     )
     .bind(message_id)
-    .bind(channel_id)
+    .bind(claims.sub)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Message source introuvable".into()))?;
+    .await?;
 
-    let src_content: Option<String> = src.try_get("content").ok().flatten();
-    let src_author: String = src.get("author_username");
+    let (src_content, src_author): (Option<String>, String) = if let Some(row) = server_src {
+        (row.try_get("content").ok().flatten(), row.get("author_username"))
+    } else {
+        let dm_row = sqlx::query(
+            "SELECT dm.content, u.username as author_username
+             FROM dm_messages dm
+             JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+             JOIN users u ON u.id = dm.sender_id
+             WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)"
+        )
+        .bind(message_id)
+        .bind(claims.sub)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Message source introuvable".into()))?;
+        (dm_row.try_get("content").ok().flatten(), dm_row.get("author_username"))
+    };
 
     // Vérifier que le canal de destination appartient bien à un serveur dont l'user est membre
     let dest_server_id: Option<Uuid> = sqlx::query_scalar(
