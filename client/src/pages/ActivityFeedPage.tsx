@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import {
-  Pin, Users, Trophy, Calendar, UserPlus, Zap, ChevronLeft,
+  Pin, Users, UserPlus, Zap, ChevronLeft,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -10,11 +10,15 @@ import { useMobile } from '../contexts/MobileContext'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+// Limité aux 3 types réellement générés par get_activity_feed (server.rs) --
+// 'achievement'/'event_rsvp' existaient ici (+ filtre "Mes activités" dédié)
+// mais n'ont jamais été produits par le backend : les badges sont calculés à
+// la volée sans date de déblocage stockée, et event_attendees n'a aucun
+// timestamp -- impossible de savoir "récemment débloqué/RSVP" sans migration
+// de schéma, hors de proportion pour un simple fix de flux d'activité.
 export type ActivityType =
   | 'message_pin'
   | 'server_join'
-  | 'achievement'
-  | 'event_rsvp'
   | 'friend_join_server'
 
 interface ActivityItem {
@@ -56,29 +60,6 @@ const TYPE_CONFIG: Record<
       </>
     ),
   },
-  achievement: {
-    icon: <Trophy size={14} />,
-    color: 'text-orange-400 bg-orange-400/15',
-    label: (item) => (
-      <>
-        <strong className="text-white">@{item.actor.username}</strong>
-        {' a débloqué '}
-        <strong className="text-orange-300">{String(item.metadata?.achievement ?? 'une récompense')}</strong>
-      </>
-    ),
-  },
-  event_rsvp: {
-    icon: <Calendar size={14} />,
-    color: 'text-blue-400 bg-blue-400/15',
-    label: (item) => (
-      <>
-        <strong className="text-white">@{item.actor.username}</strong>
-        {' participe à '}
-        <strong className="text-blue-300">{String(item.metadata?.event ?? 'un événement')}</strong>
-        {item.server ? <> sur <strong className="text-fc-text">{item.server.name}</strong></> : null}
-      </>
-    ),
-  },
   friend_join_server: {
     icon: <UserPlus size={14} />,
     color: 'text-purple-400 bg-purple-400/15',
@@ -94,20 +75,18 @@ const TYPE_CONFIG: Record<
 
 // ─── Filtres ─────────────────────────────────────────────────────────────────
 
-type Filter = 'all' | 'friends' | 'servers' | 'me'
+type Filter = 'all' | 'friends' | 'servers'
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Tout' },
   { key: 'friends', label: 'Amis' },
   { key: 'servers', label: 'Serveurs' },
-  { key: 'me', label: 'Mes activités' },
 ]
 
 function filterItems(items: ActivityItem[], filter: Filter): ActivityItem[] {
   switch (filter) {
     case 'friends': return items.filter(i => i.type === 'friend_join_server')
     case 'servers': return items.filter(i => i.type === 'server_join' || i.type === 'message_pin')
-    case 'me': return items.filter(i => i.type === 'achievement' || i.type === 'event_rsvp')
     default: return items
   }
 }
