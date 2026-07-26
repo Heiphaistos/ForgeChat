@@ -50,6 +50,9 @@ export default function TicketsPage() {
   const [newCategoryId, setNewCategoryId] = useState('')
   const [filterCategoryId, setFilterCategoryId] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showAddCategory, setShowAddCategory] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatEmoji, setNewCatEmoji] = useState('')
 
   const { data: tickets = [] } = useQuery<Ticket[]>({
     queryKey: ['tickets', serverId],
@@ -99,6 +102,25 @@ export default function TicketsPage() {
     onError: () => toast.error('Erreur lors de la mise à jour'),
   })
 
+  // create_category (backend, requiert MANAGE_SERVER) existait sans aucun
+  // moyen frontend de l'appeler -- les filtres/sélecteurs de catégorie
+  // ci-dessous ne s'affichaient donc jamais (categories.length > 0 toujours
+  // faux), la fonctionnalité entière restait invisible pour tout le monde.
+  const createCategory = useMutation({
+    mutationFn: () => api.post(`/servers/${serverId}/ticket-categories`, {
+      name: newCatName.trim(),
+      emoji: newCatEmoji.trim() || undefined,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket-categories', serverId] })
+      setNewCatName('')
+      setNewCatEmoji('')
+      setShowAddCategory(false)
+      toast.success('Catégorie créée')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur lors de la création'),
+  })
+
   const visibleTickets = filterCategoryId
     ? tickets.filter(t => t.category_id === filterCategoryId)
     : tickets
@@ -137,6 +159,13 @@ export default function TicketsPage() {
               ))}
             </div>
           )}
+          <button
+            onClick={() => setShowAddCategory(v => !v)}
+            className="text-xs px-2.5 py-1 rounded-full font-medium bg-fc-hover text-fc-muted hover:text-white transition-colors"
+            title="Ajouter une catégorie (nécessite la permission Gérer le serveur)"
+          >
+            + Catégorie
+          </button>
         </div>
         <button
           onClick={() => setShowCreate(v => !v)}
@@ -145,6 +174,36 @@ export default function TicketsPage() {
           <Plus size={16} /> Nouveau ticket
         </button>
       </div>
+
+      {showAddCategory && (
+        <div className="px-6 py-3 border-b border-fc-hover bg-fc-channel/50">
+          <div className="flex gap-2 max-w-md">
+            <input
+              value={newCatEmoji}
+              onChange={e => setNewCatEmoji(e.target.value)}
+              placeholder="🎫"
+              maxLength={8}
+              className="w-16 bg-fc-hover border border-fc-hover rounded-lg px-2 py-1.5 text-sm text-white text-center"
+            />
+            <input
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              placeholder="Nom de la catégorie..."
+              maxLength={100}
+              enterKeyHint="done" autoCapitalize="sentences"
+              className="flex-1 bg-fc-hover border border-fc-hover rounded-lg px-3 py-1.5 text-sm text-white"
+              onKeyDown={e => e.key === 'Enter' && newCatName.trim() && createCategory.mutate()}
+            />
+            <button
+              onClick={() => createCategory.mutate()}
+              disabled={!newCatName.trim() || createCategory.isPending}
+              className="px-3 py-1.5 bg-fc-accent text-white rounded-lg text-sm disabled:opacity-50"
+            >
+              Ajouter
+            </button>
+          </div>
+        </div>
+      )}
 
       {showCreate && (
         <div className="px-6 py-4 border-b border-fc-hover bg-fc-channel/50">
