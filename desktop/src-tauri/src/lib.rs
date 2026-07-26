@@ -8,6 +8,73 @@ use tauri::{
 const TRAY_FRAME_COUNT: usize = 8;
 const TRAY_FRAME_INTERVAL_MS: u64 = 225;
 
+/// L'exe portable ne passe par aucun installeur : si le WebView2 Runtime n'est
+/// pas déjà présent sur la machine, Tauri ne peut pas peupler la fenêtre
+/// (fenêtre native visible mais grise, sans le moindre message d'erreur).
+/// On détecte ce cas AVANT de lancer Tauri pour afficher un message clair au
+/// lieu de laisser une fenêtre grise énigmatique.
+#[cfg(windows)]
+mod webview2_check {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::System::Registry::{
+        RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    fn to_wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    fn has_pv(hkey: HKEY, subkey: &str) -> bool {
+        let subkey_w = to_wide(subkey);
+        let value_w = to_wide("pv");
+        let mut buf = [0u16; 64];
+        let mut buf_size = (buf.len() * 2) as u32;
+        let status = unsafe {
+            RegGetValueW(
+                hkey,
+                subkey_w.as_ptr(),
+                value_w.as_ptr(),
+                RRF_RT_REG_SZ,
+                std::ptr::null_mut(),
+                buf.as_mut_ptr().cast(),
+                &mut buf_size,
+            )
+        };
+        status == 0 && buf_size > 2
+    }
+
+    const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+
+    pub fn runtime_missing() -> bool {
+        let machine_key = format!(
+            "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"
+        );
+        let user_key = format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}");
+        !(has_pv(HKEY_LOCAL_MACHINE, &machine_key) || has_pv(HKEY_CURRENT_USER, &user_key))
+    }
+
+    pub fn show_missing_dialog() {
+        let title = to_wide("ForgeChat");
+        let text = to_wide(
+            "WebView2 Runtime introuvable sur cette machine.\n\n\
+             ForgeChat a besoin du \u{ab}Microsoft Edge WebView2 Runtime\u{bb} pour s'afficher \
+             (déjà installé sur la plupart des Windows 10/11 à jour, mais pas ici).\n\n\
+             Installe-le depuis :\n\
+             https://developer.microsoft.com/microsoft-edge/webview2/\n\n\
+             puis relance ForgeChat.",
+        );
+        unsafe {
+            MessageBoxW(
+                0 as HWND,
+                text.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
+}
+
 /// Charge les 8 frames pré-rendues (mêmes PNG que le favicon web animé, cf.
 /// client/src/faviconAnimator.ts) et fait défiler l'icône du tray en continu --
 /// même identité visuelle "toujours en mouvement" que le reste de la marque.
@@ -39,6 +106,12 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(windows)]
+    if webview2_check::runtime_missing() {
+        webview2_check::show_missing_dialog();
+        return;
+    }
+
     // WebRTC dans WebView2 : accorde micro/caméra/écran sans prompt de permission
     // (--use-fake-ui-for-media-stream auto-accepte le prompt ; les périphériques restent réels)
     let mut browser_args = String::from(

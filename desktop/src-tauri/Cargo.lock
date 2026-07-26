@@ -1061,7 +1061,7 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "forgechat-desktop"
-version = "3.9.0"
+version = "3.10.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1072,6 +1072,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
