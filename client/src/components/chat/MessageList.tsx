@@ -88,6 +88,22 @@ export default function MessageList({
   const timeFormat = (userSettings?.time_format as string | undefined) ?? '24h'
   const dateFormat = (userSettings?.date_format as string | undefined) ?? 'DD/MM/YYYY'
   const showTimestamps = (userSettings?.show_timestamps as string | undefined) ?? 'hover'
+  const explicitFilter = (userSettings?.explicit_content_filter as string | undefined) ?? 'none'
+
+  // "Membres sans rôles" (Vie privée > Filtre de contenu explicite) n'a de sens qu'en
+  // contexte serveur (les rôles n'existent pas en DM) -- réglage stocké et relu depuis
+  // toujours mais jamais appliqué nulle part, un pur placebo côté UI jusqu'ici. Le
+  // membre list n'est fetché que si le mode l'exige, pas de coût pour les autres.
+  const { data: membersDetailed = [] } = useQuery<{ user_id: string; roles: unknown[] }[]>({
+    queryKey: ['members_detailed', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/members/detailed`).then(r => r.data),
+    enabled: !!serverId && explicitFilter === 'members_without_roles',
+    staleTime: 60_000,
+  })
+  const noRoleAuthorIds = useMemo(
+    () => new Set(membersDetailed.filter(m => (m.roles?.length ?? 0) === 0).map(m => m.user_id)),
+    [membersDetailed]
+  )
 
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
@@ -742,6 +758,8 @@ export default function MessageList({
               formatShortTs={formatShortTsCb}
               customEmojiMap={customEmojiMap}
               linkPreviewEnabled={linkPreviewEnabled}
+              explicitFilter={explicitFilter}
+              noRoleAuthorIds={noRoleAuthorIds}
               serverId={serverId}
               channelId={channelId}
               canManageMessages={canManageMessages}

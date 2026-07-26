@@ -95,7 +95,7 @@ export default function ConnectedAccountsSection() {
                   <div className="text-sm font-medium text-white">{platform.label}</div>
                   {connected && (
                     <div className="flex items-center gap-1.5 text-xs text-fc-muted">
-                      <span>{connected.platform_username}</span>
+                      <span className="streamer-blur">{connected.platform_username}</span>
                       {connected.verified && <Check size={10} className="text-fc-green" />}
                     </div>
                   )}

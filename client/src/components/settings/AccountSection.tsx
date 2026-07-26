@@ -41,7 +41,7 @@ export default function AccountSection({ user, updateMe }: Props) {
         <div>
           <div className="font-semibold text-white">{user.username}</div>
           <div className="text-sm text-fc-muted">#{user.discriminator ?? '0000'}</div>
-          <div className="text-xs text-fc-muted mt-0.5">{user.email}</div>
+          <div className="text-xs text-fc-muted mt-0.5 streamer-blur">{user.email}</div>
         </div>
       </div>
 

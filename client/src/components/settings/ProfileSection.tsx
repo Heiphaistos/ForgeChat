@@ -130,7 +130,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           placeholder="Décrivez-vous en quelques mots..."
           enterKeyHint="done"
           autoCapitalize="sentences"
-          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted"
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted streamer-blur"
         />
       </Field>
 
@@ -143,7 +143,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           enterKeyHint="done"
           autoCapitalize="none"
           autoComplete="off"
-          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted"
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted streamer-blur"
         />
       </Field>
 
@@ -152,7 +152,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           type="date"
           value={birthday}
           onChange={e => setBirthday(e.target.value)}
-          className="w-full fc-input text-sm"
+          className="w-full fc-input text-sm streamer-blur"
           max={new Date().toISOString().split('T')[0]}
         />
       </Field>

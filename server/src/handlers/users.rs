@@ -31,6 +31,7 @@ pub async fn get_me(
 
 pub async fn get_user(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserPublic>> {
     let user = sqlx::query_as::<_, crate::models::user::User>(
@@ -41,7 +42,42 @@ pub async fn get_user(
     .await?
     .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
 
-    Ok(Json(user.into()))
+    let mut public: UserPublic = user.into();
+
+    // `activity_visibility` (user_settings du TARGET, everyone/friends/nobody) était
+    // stocké et relu correctement dans les Réglages mais jamais consulté ici -- l'activité
+    // ("en train de jouer à...") était toujours visible par n'importe qui peu importe le
+    // réglage, un pur placebo côté UI.
+    if user_id != claims.sub {
+        let visibility: Option<String> = sqlx::query_scalar(
+            "SELECT activity_visibility FROM user_settings WHERE user_id=$1"
+        )
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+        let show_activity = match visibility.as_deref() {
+            Some("nobody") => false,
+            Some("friends") => sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM friendships WHERE status='accepted' AND
+                 ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)))"
+            )
+            .bind(claims.sub)
+            .bind(user_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false),
+            _ => true, // "everyone" ou pas de préférence enregistrée
+        };
+
+        if !show_activity {
+            public.activity_type = None;
+            public.activity_name = None;
+            public.activity_detail = None;
+        }
+    }
+
+    Ok(Json(public))
 }
 
 pub async fn update_me(
@@ -118,10 +154,32 @@ pub async fn update_me(
         AppError::from(e)
     })?;
 
-    // Broadcast mise à jour profil à tous les membres des serveurs communs (1 query)
-    let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
-    let event_str = event.to_string();
-    state.broadcast_to_user(claims.sub, event_str.clone()).await;
+    // Broadcast mise à jour profil à tous les membres des serveurs communs (1 query).
+    // `activity_visibility` (everyone/friends/nobody) ne servait à rien tant que ce
+    // broadcast temps réel envoyait toujours l'activité complète à tout le monde --
+    // un filtre posé uniquement sur GET /users/:id (voir get_user) aurait été
+    // trivialement contourné par ce canal WS. Construit donc 2 versions de l'event
+    // et choisit laquelle envoyer par destinataire.
+    let activity_visibility: String = sqlx::query_scalar(
+        "SELECT activity_visibility FROM user_settings WHERE user_id=$1"
+    )
+    .bind(claims.sub)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or_else(|| "everyone".to_string());
+
+    let public_full = UserPublic::from(user.clone());
+    let mut public_no_activity = public_full.clone();
+    public_no_activity.activity_type = None;
+    public_no_activity.activity_name = None;
+    public_no_activity.activity_detail = None;
+
+    let event_full = serde_json::json!({ "type": "USER_UPDATE", "user": public_full }).to_string();
+    let event_no_activity = serde_json::json!({ "type": "USER_UPDATE", "user": public_no_activity }).to_string();
+
+    // Soi-même voit toujours sa propre activité complète (autres onglets/appareils)
+    state.broadcast_to_user(claims.sub, event_full.clone()).await;
+
     let visible_to: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT sm2.user_id
          FROM server_members sm1
@@ -132,11 +190,32 @@ pub async fn update_me(
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
+
+    let friend_ids: std::collections::HashSet<Uuid> = if activity_visibility == "friends" {
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT CASE WHEN user_id=$1 THEN friend_id ELSE user_id END
+             FROM friendships WHERE status='accepted' AND (user_id=$1 OR friend_id=$1)"
+        )
+        .bind(claims.sub)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+    } else {
+        Default::default()
+    };
+
     {
         let clients = state.clients.read().await;
         for uid in visible_to {
             if let Some(tx) = clients.get(&uid) {
-                let _ = tx.send(event_str.clone());
+                let ev = match activity_visibility.as_str() {
+                    "nobody" => &event_no_activity,
+                    "friends" => if friend_ids.contains(&uid) { &event_full } else { &event_no_activity },
+                    _ => &event_full,
+                };
+                let _ = tx.send(ev.clone());
             }
         }
     }
@@ -445,9 +524,13 @@ pub async fn get_user_profile(
         "is_favorite":          false,
     });
 
+    let mut is_self = false;
+    let mut is_friend = false;
+
     if let Some(Extension(claims)) = claims {
         let me = claims.sub;
         if me == user_id {
+            is_self = true;
             profile["relationship"] = serde_json::json!("self");
         } else {
             // Amitié
@@ -464,7 +547,7 @@ pub async fn get_user_profile(
                 let friendship_id: Uuid = f.get("id");
                 profile["friendship_id"] = serde_json::json!(friendship_id);
                 let status: &str = match f.get::<String, _>("status").as_str() {
-                    "accepted" => "friend",
+                    "accepted" => { is_friend = true; "friend" }
                     "pending" => {
                         let initiator: Uuid = f.get("user_id");
                         if initiator == me { "pending_sent" } else { "pending_received" }
@@ -514,6 +597,31 @@ pub async fn get_user_profile(
                 "icon": r.get::<Option<String>, _>("icon"),
             })).collect();
             profile["mutual_servers"] = serde_json::json!(mutual_servers);
+        }
+    }
+
+    // `activity_visibility` (everyone/friends/nobody, réglage du TARGET) était stocké et
+    // relu correctement dans les Réglages mais jamais consulté ici -- l'activité était
+    // toujours visible par n'importe qui, y compris un visiteur anonyme, peu importe le
+    // réglage choisi.
+    if !is_self {
+        let visibility: Option<String> = sqlx::query_scalar(
+            "SELECT activity_visibility FROM user_settings WHERE user_id=$1"
+        )
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+
+        let show_activity = match visibility.as_deref() {
+            Some("nobody") => false,
+            Some("friends") => is_friend,
+            _ => true, // "everyone" ou pas de préférence enregistrée
+        };
+
+        if !show_activity {
+            profile["activity_type"] = serde_json::Value::Null;
+            profile["activity_name"] = serde_json::Value::Null;
+            profile["activity_detail"] = serde_json::Value::Null;
         }
     }
 

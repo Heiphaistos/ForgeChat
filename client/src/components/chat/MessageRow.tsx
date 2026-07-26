@@ -26,6 +26,8 @@ export interface MessageRowProps {
   formatShortTs: (dateStr: string) => string
   customEmojiMap: Record<string, string>
   linkPreviewEnabled: boolean
+  explicitFilter?: string
+  noRoleAuthorIds?: Set<string>
   serverId: string
   channelId: string
   canManageMessages: boolean
@@ -77,7 +79,7 @@ export interface MessageRowProps {
 function MessageRow({
   msg, isOwn, isGrouped, isFirstUnread, isLiveMsg, showDateDivider, dateLabel,
   isHighlighted, isEditing, compact, ultraCompact, showTimestamps, formatTs, formatShortTs,
-  customEmojiMap, linkPreviewEnabled, serverId, channelId, canManageMessages,
+  customEmojiMap, linkPreviewEnabled, explicitFilter = 'none', noRoleAuthorIds, serverId, channelId, canManageMessages,
   quickEmojis, showEmojiPicker, showReactionPicker, isReminderOpen, translation, isTranslating,
   poppingEmoji, bumpedEmojis,
   onStartEdit, onConfirmEdit, onCancelEdit, onOpenUserPopup, onAvatarContextMenu,
@@ -90,6 +92,17 @@ function MessageRow({
 }: MessageRowProps) {
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
+
+  // Filtre de contenu explicite (Vie privée > Paramètres) : stocké et relu depuis
+  // toujours mais jamais appliqué nulle part -- réglage du VIEWER, jamais des siens
+  // propres attachments. "members_without_roles" n'a de sens qu'en contexte serveur
+  // (pas de rôles en DM/group DM) -- noRoleAuthorIds y est toujours vide, donc ce
+  // mode se comporte comme "none" là-bas, dégradation silencieuse acceptable.
+  const [mediaRevealed, setMediaRevealed] = useState(false)
+  const shouldBlurMedia = !isOwn && !mediaRevealed && (
+    explicitFilter === 'all' ||
+    (explicitFilter === 'members_without_roles' && !!noRoleAuthorIds?.has(msg.author_id))
+  )
 
   return (
     <div className={isLiveMsg ? 'msg-enter' : undefined}>
@@ -268,14 +281,23 @@ function MessageRow({
                         loading="lazy"
                         decoding="async"
                         className="max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
-                        style={{ opacity: 0, transition: 'opacity 0.25s ease' }}
+                        style={{ opacity: 0, transition: 'opacity 0.25s ease, filter 0.2s ease', filter: shouldBlurMedia ? 'blur(32px)' : undefined }}
                         onLoad={e => { e.currentTarget.style.opacity = '1' }}
                         onClick={() => {
+                          if (shouldBlurMedia) return
                           const imgs = msg.attachments?.filter((a: any) => a.content_type?.startsWith('image/')).map((a: any) => a.url) ?? []
                           if (imgs.length > 0) onOpenLightbox(imgs, imgs.indexOf(att.url))
                         }}
                       />
-                      {att.expires_at && (
+                      {shouldBlurMedia && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setMediaRevealed(true) }}
+                          className="absolute inset-0 flex items-center justify-center bg-black/30 rounded text-white text-xs font-medium text-center px-2"
+                        >
+                          Contenu potentiellement explicite — cliquer pour afficher
+                        </button>
+                      )}
+                      {att.expires_at && !shouldBlurMedia && (
                         <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
                           <Clock size={9} />
                           {new Date(att.expires_at) > new Date()
@@ -286,15 +308,24 @@ function MessageRow({
                     </div>
                   ) : isVideo(att.content_type) ? (
                     <div className="relative max-w-full sm:max-w-sm">
-                      <video
-                        src={att.url}
-                        controls
-                        playsInline
-                        preload="metadata"
-                        className="max-w-full max-h-72 rounded shadow"
-                        style={{ background: '#111' }}
-                      />
-                      {att.expires_at && (
+                      {shouldBlurMedia ? (
+                        <button
+                          onClick={() => setMediaRevealed(true)}
+                          className="flex items-center justify-center w-full max-w-full sm:max-w-sm h-40 rounded shadow bg-black/60 text-white text-xs font-medium text-center px-2"
+                        >
+                          Contenu potentiellement explicite — cliquer pour afficher
+                        </button>
+                      ) : (
+                        <video
+                          src={att.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="max-w-full max-h-72 rounded shadow"
+                          style={{ background: '#111' }}
+                        />
+                      )}
+                      {att.expires_at && !shouldBlurMedia && (
                         <div className="mt-0.5 text-xs text-fc-muted flex items-center gap-1">
                           <Clock size={10} />
                           {new Date(att.expires_at) > new Date()

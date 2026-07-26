@@ -109,7 +109,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
         <div className="flex items-start justify-between">
           <div className="min-w-0">
             <p className="text-sm font-bold text-white truncate">{user?.username}</p>
-            <p className="text-xs text-fc-muted truncate">#{user?.discriminator}</p>
+            <p className="text-xs text-fc-muted truncate streamer-blur">#{user?.discriminator}</p>
           </div>
           <button
             onClick={copyId}
@@ -242,7 +242,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           <div className="text-sm font-semibold text-white truncate">{user.username}</div>
           <div className="text-xs text-fc-muted truncate">
             {user.custom_status_emoji && <span className="mr-0.5">{user.custom_status_emoji}</span>}
-            {user.custom_status || STATUS_LABELS[user.status] || `#${user.discriminator}`}
+            {user.custom_status || STATUS_LABELS[user.status] || <span className="streamer-blur">#{user.discriminator}</span>}
           </div>
         </div>
       </button>

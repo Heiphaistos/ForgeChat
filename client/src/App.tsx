@@ -1058,11 +1058,11 @@ function IncomingCallModal({ call, onAccept, onDecline }: {
   return (
     <div className="fixed bottom-6 right-6 z-[9999] bg-fc-channel border border-fc-hover rounded-2xl shadow-2xl p-5 w-80 animate-in slide-in-from-bottom-4 duration-300">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-full bg-fc-accent flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
+        <div className="w-12 h-12 rounded-full bg-fc-accent flex items-center justify-center text-lg font-bold text-white flex-shrink-0 streamer-blur">
           {call.fromUsername.charAt(0).toUpperCase()}
         </div>
         <div>
-          <p className="text-white font-semibold text-sm">{call.fromUsername}</p>
+          <p className="text-white font-semibold text-sm streamer-blur">{call.fromUsername}</p>
           <p className="text-fc-muted text-xs flex items-center gap-1">
             {call.callType === 'video' ? <Video size={11} /> : <Phone size={11} />}
             {call.callType === 'video' ? 'Appel vidéo entrant...' : 'Appel vocal entrant...'}
