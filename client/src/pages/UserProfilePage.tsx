@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
 import api from '../api/client'
 import { useAuth } from '../store/auth'
+import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,7 +194,10 @@ export default function UserProfilePage() {
       const { data } = await api.post(`/dms/${userId}`)
       nav(`/dms/${data.dm_id}`)
     } catch {
-      // silencieux — l'erreur sera visible dans le toast de la nav
+      // Le commentaire précédent affirmait qu'une erreur serait "visible dans
+      // le toast de la nav" -- nav() ne fait jamais ça, l'échec était donc
+      // totalement silencieux (clic sans aucun effet visible).
+      toast.error("Impossible d'ouvrir la conversation")
     }
   }
 

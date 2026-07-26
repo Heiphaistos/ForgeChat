@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State, Multipart},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     Extension, Json,
 };
 use std::collections::HashMap;
@@ -544,80 +544,6 @@ pub async fn get_user_profile_public(
         .map(Extension);
 
     get_user_profile(State(state), claims, Path(user_id)).await
-}
-
-/// POST /users/:id/block
-pub async fn block_user(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-) -> Result<StatusCode> {
-    if claims.sub == user_id {
-        return Err(AppError::BadRequest("Impossible de se bloquer soi-même".into()));
-    }
-    sqlx::query(
-        "INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-    )
-    .bind(claims.sub)
-    .bind(user_id)
-    .execute(&state.db)
-    .await?;
-    // Retirer l'amitié si existante
-    sqlx::query(
-        "DELETE FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
-    )
-    .bind(claims.sub)
-    .bind(user_id)
-    .execute(&state.db)
-    .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// DELETE /users/:id/block
-pub async fn unblock_user(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-) -> Result<StatusCode> {
-    sqlx::query("DELETE FROM blocks WHERE blocker_id=$1 AND blocked_id=$2")
-        .bind(claims.sub)
-        .bind(user_id)
-        .execute(&state.db)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// POST /users/:id/favorite
-pub async fn add_favorite(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-) -> Result<StatusCode> {
-    if claims.sub == user_id {
-        return Err(AppError::BadRequest("Impossible de se mettre en favori".into()));
-    }
-    sqlx::query(
-        "INSERT INTO user_favorites (user_id, target_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-    )
-    .bind(claims.sub)
-    .bind(user_id)
-    .execute(&state.db)
-    .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// DELETE /users/:id/favorite
-pub async fn remove_favorite(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-) -> Result<StatusCode> {
-    sqlx::query("DELETE FROM user_favorites WHERE user_id=$1 AND target_id=$2")
-        .bind(claims.sub)
-        .bind(user_id)
-        .execute(&state.db)
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_pubkey(
