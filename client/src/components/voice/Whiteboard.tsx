@@ -83,16 +83,16 @@ export default function Whiteboard({ channelId, onClose }: Props) {
     return () => { off(); offClear() }
   }, [channelId, drawPoints, on])
 
-  const getPos = (e: React.MouseEvent) => {
+  const getPosFromClient = (clientX: number, clientY: number) => {
     const rect = canvasRef.current!.getBoundingClientRect()
     return {
-      x: (e.clientX - rect.left) * (canvasRef.current!.width / rect.width),
-      y: (e.clientY - rect.top) * (canvasRef.current!.height / rect.height),
+      x: (clientX - rect.left) * (canvasRef.current!.width / rect.width),
+      y: (clientY - rect.top) * (canvasRef.current!.height / rect.height),
     }
   }
+  const getPos = (e: React.MouseEvent) => getPosFromClient(e.clientX, e.clientY)
 
-  const onMouseDown = (e: React.MouseEvent) => {
-    const pt = getPos(e)
+  const beginStroke = (pt: { x: number; y: number }) => {
     setDrawing(true)
     pointsRef.current = [pt, pt]
     if (tool !== 'pen' && tool !== 'eraser') {
@@ -102,9 +102,8 @@ export default function Whiteboard({ channelId, onClose }: Props) {
       }
     }
   }
-  const onMouseMove = (e: React.MouseEvent) => {
+  const moveStroke = (pt: { x: number; y: number }) => {
     if (!drawing) return
-    const pt = getPos(e)
     const ctx = getCtx()
     if (!ctx || !canvasRef.current) return
     if (tool === 'pen' || tool === 'eraser') {
@@ -117,6 +116,25 @@ export default function Whiteboard({ channelId, onClose }: Props) {
       drawPoints(ctx, pointsRef.current, tool, color, size)
     }
   }
+
+  const onMouseDown = (e: React.MouseEvent) => beginStroke(getPos(e))
+  const onMouseMove = (e: React.MouseEvent) => moveStroke(getPos(e))
+
+  // Le canvas ne gérait que la souris -- sur mobile/tablette (touchstart/move/end),
+  // dessiner était totalement impossible malgré une app par ailleurs très optimisée
+  // tactile (cibles 44px, etc. partout ailleurs). `touch-action: none` sur le canvas
+  // (voir style plus bas) empêche le scroll de la page de voler le geste.
+  const onTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault()
+    const t = e.touches[0]
+    if (t) beginStroke(getPosFromClient(t.clientX, t.clientY))
+  }
+  const onTouchMove = (e: React.TouchEvent) => {
+    e.preventDefault()
+    const t = e.touches[0]
+    if (t) moveStroke(getPosFromClient(t.clientX, t.clientY))
+  }
+
   const onMouseUp = () => {
     if (!drawing) return
     setDrawing(false)
@@ -205,11 +223,14 @@ export default function Whiteboard({ channelId, onClose }: Props) {
         width={1920}
         height={1080}
         className="flex-1 w-full cursor-crosshair"
-        style={{ background: '#1e1f29' }}
+        style={{ background: '#1e1f29', touchAction: 'none' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onMouseUp}
       />
     </div>
   )
