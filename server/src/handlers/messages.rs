@@ -431,6 +431,13 @@ pub async fn edit_message(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
+    // AutoMod : appliqué à la création (send_message) mais oublié à l'édition --
+    // un message anodin pouvait être édité vers un contenu que l'AutoMod aurait
+    // bloqué à la création (contournement du filtre de mots/mentions/liens).
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &body.content).await {
+        return Err(err);
+    }
+
     // Sauvegarder l'ancienne version dans l'historique
     sqlx::query(
         "INSERT INTO message_edits (message_id, content)
