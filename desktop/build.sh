@@ -2,7 +2,7 @@
 # ForgeChat Desktop Builder v3.11.0 — Linux (.deb + AppImage)
 set -euo pipefail
 
-VERSION="3.15.0"
+VERSION="3.16.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$ROOT_DIR/dist-desktop"
