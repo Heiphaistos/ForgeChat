@@ -190,8 +190,25 @@ pub async fn delete_sound(
         .await?
     };
 
-    if row.is_none() {
-        return Err(AppError::NotFound("Son introuvable ou non autorisé".into()));
+    let row = row.ok_or_else(|| AppError::NotFound("Son introuvable ou non autorisé".into()))?;
+
+    use sqlx::Row;
+    let file_url: String = row.get("file_url");
+
+    // Supprimer le fichier physique avec protection path traversal (même schéma que stickers.rs/emojis.rs)
+    let upload_dir = PathBuf::from(&state.config.upload_dir);
+    let base = upload_dir.canonicalize().unwrap_or_else(|_| upload_dir.clone());
+    if let Some(relative) = file_url.strip_prefix("/uploads/") {
+        if !relative.contains("..") && !relative.contains('\0') {
+            let path = upload_dir.join(relative);
+            if let Ok(canonical) = path.canonicalize() {
+                if canonical.starts_with(&base) {
+                    let _ = tokio::fs::remove_file(&canonical).await;
+                } else {
+                    tracing::warn!("Path traversal bloqué pour soundboard delete : {:?}", canonical);
+                }
+            }
+        }
     }
 
     Ok(Json(serde_json::json!({ "ok": true })))
