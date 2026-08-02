@@ -268,7 +268,9 @@ pub async fn login(
         match (body.totp_code.as_deref(), totp_secret.as_deref()) {
             (None, _) => return Err(AppError::TotpRequired),
             (Some(code), Some(secret)) => {
-                if !crate::handlers::totp::verify_totp(secret, code) {
+                if !crate::handlers::totp::verify_totp(secret, code)
+                    && !crate::handlers::totp::verify_and_consume_backup_code(&state, user.id, code).await?
+                {
                     return Err(AppError::Unauthorized);
                 }
             }

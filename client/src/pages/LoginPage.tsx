@@ -92,16 +92,16 @@ export default function LoginPage() {
           ) : (
             <div>
               <p className="text-fc-muted text-sm mb-3">
-                La double authentification est activée. Entrez votre code depuis l'application d'authentification.
+                La double authentification est activée. Entrez votre code depuis l'application d'authentification,
+                ou l'un de vos codes de secours si vous avez perdu l'accès.
               </p>
-              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code 2FA</label>
+              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code 2FA ou code de secours</label>
               <input
                 type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={6}
+                inputMode="text"
+                maxLength={9}
                 value={totpCode}
-                onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                onChange={e => setTotpCode(e.target.value.replace(/[^0-9a-fA-F-]/g, ''))}
                 autoFocus
                 placeholder="000000"
                 autoComplete="one-time-code"

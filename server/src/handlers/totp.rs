@@ -159,6 +159,41 @@ fn ct_str_eq(a: &str, b: &str) -> bool {
     a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// Vérifie un code de secours et le consomme (usage unique) s'il correspond.
+/// Seul recours pour un utilisateur ayant perdu son authenticator -- aucune
+/// autre voie de récupération 2FA n'existe (pas de reset TOTP par email).
+pub async fn verify_and_consume_backup_code(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    code: &str,
+) -> Result<bool, AppError> {
+    use sqlx::Row;
+
+    let row = sqlx::query("SELECT totp_backup_codes FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&state.db).await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let codes: Option<Vec<String>> = row.get("totp_backup_codes");
+    let mut codes = match codes {
+        Some(c) => c,
+        None => return Ok(false),
+    };
+
+    let code = code.trim();
+    let Some(pos) = codes.iter().position(|c| ct_str_eq(c, code)) else {
+        return Ok(false);
+    };
+    codes.remove(pos);
+
+    sqlx::query("UPDATE users SET totp_backup_codes = $1 WHERE id = $2")
+        .bind(&codes)
+        .bind(user_id)
+        .execute(&state.db).await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    Ok(true)
+}
+
 pub fn verify_totp(secret: &str, code: &str) -> bool {
     let secret_bytes = match BASE32.decode(secret.as_bytes()) {
         Ok(b) => b,
