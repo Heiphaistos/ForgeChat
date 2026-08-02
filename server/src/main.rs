@@ -223,8 +223,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook))
         // Webhook GitHub entrant (sans JWT — push/PR/issues)
         .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook))
-        // Vérification mise à jour desktop (sans auth)
-        .route("/api/desktop/update/:target/:arch/:version", get(handlers::desktop::check_update))
         // Routes protégées
         .nest("/api", protected_routes(state.clone()))
         // Fichiers uploadés — avec en-têtes de sécurité pour éviter le sniffing de type MIME
