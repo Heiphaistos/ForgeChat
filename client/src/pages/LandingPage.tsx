@@ -6,12 +6,17 @@ import {
 } from 'lucide-react'
 import Logo3D from '../components/Logo3D'
 
-const RELEASE = 'v3.16.0'
+// Windows et Linux sont packagés par deux scripts/machines distincts
+// (build.bat vs build.sh) et ne sortent pas toujours en même temps --
+// deux versions de release indépendantes évitent qu'un lien de
+// téléchargement pointe vers un artefact pas encore uploadé.
+const WIN_RELEASE = 'v3.16.0'
+const LINUX_RELEASE = 'v3.17.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
-const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${RELEASE}.exe`
-const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${RELEASE}.exe`
-const DEB_URL       = `${DL_BASE}/ForgeChat-${RELEASE}-amd64.deb`
-const APPIMAGE_URL  = `${DL_BASE}/ForgeChat-${RELEASE}-amd64.AppImage`
+const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${WIN_RELEASE}.exe`
+const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${WIN_RELEASE}.exe`
+const DEB_URL       = `${DL_BASE}/ForgeChat-${LINUX_RELEASE}-amd64.deb`
+const APPIMAGE_URL  = `${DL_BASE}/ForgeChat-${LINUX_RELEASE}-amd64.AppImage`
 
 const FEATURES = [
   {
@@ -164,7 +169,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-2 min-w-0">
           <Logo3D size={32} className="rounded-lg" />
           <span className="font-bold text-white text-base sm:text-lg truncate" aria-hidden>ForgeChat</span>
-          <span className="hidden sm:inline text-xs text-white/30 ml-1" aria-hidden>{RELEASE}</span>
+          <span className="hidden sm:inline text-xs text-white/30 ml-1" aria-hidden>{LINUX_RELEASE}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           <Link to="/login"
@@ -275,7 +280,7 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Version portable</span>
-                <span className="block text-xs text-indigo-200/70 truncate">Sans installation · {RELEASE} · 12 Mo</span>
+                <span className="block text-xs text-indigo-200/70 truncate">Sans installation · {WIN_RELEASE} · 12 Mo</span>
               </span>
             </a>
 
@@ -287,12 +292,12 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Installeur</span>
-                <span className="block text-xs text-white/40 truncate">Setup NSIS · {RELEASE} · 3 Mo</span>
+                <span className="block text-xs text-white/40 truncate">Setup NSIS · {WIN_RELEASE} · 3 Mo</span>
               </span>
             </a>
           </div>
 
-          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {RELEASE}</p>
+          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {WIN_RELEASE}</p>
         </div>
       </section>
 
@@ -313,7 +318,7 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Paquet .deb</span>
-                <span className="block text-xs text-white/40 truncate">Debian / Ubuntu · {RELEASE}</span>
+                <span className="block text-xs text-white/40 truncate">Debian / Ubuntu · {LINUX_RELEASE}</span>
               </span>
             </a>
 
@@ -324,12 +329,12 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">AppImage</span>
-                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {RELEASE}</span>
+                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {LINUX_RELEASE}</span>
               </span>
             </a>
           </div>
 
-          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {RELEASE}</p>
+          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {LINUX_RELEASE}</p>
         </div>
       </section>
 
@@ -338,7 +343,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Logo3D size={24} className="rounded" />
-            <span className="text-white/40 text-sm">ForgeChat {RELEASE} · Heiphaistos</span>
+            <span className="text-white/40 text-sm">ForgeChat {LINUX_RELEASE} · Heiphaistos</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-white/30">
             <a href="https://github.com/Heiphaistos/ForgeChat" target="_blank" rel="noopener noreferrer"
