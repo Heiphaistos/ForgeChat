@@ -78,6 +78,18 @@ mod webview2_check {
 /// Charge les 8 frames pré-rendues (mêmes PNG que le favicon web animé, cf.
 /// client/src/faviconAnimator.ts) et fait défiler l'icône du tray en continu --
 /// même identité visuelle "toujours en mouvement" que le reste de la marque.
+///
+/// Le thread de fond ne fait QUE dormir et calculer l'index : le `set_icon()`
+/// lui-même est renvoyé sur le thread principal via `run_on_main_thread`.
+/// Sur Linux, le tray est backé par GTK, qui n'autorise aucun appel touchant
+/// un widget hors de son thread principal -- l'appeler directement depuis ce
+/// thread de fond déclenchait un flot continu de `Gtk-CRITICAL:
+/// gtk_widget_get_scale_factor: assertion 'GTK_IS_WIDGET (widget)' failed`
+/// toutes les 225 ms, en continu, tant que l'app tournait (reproduit et
+/// confirmé en lançant le binaire réel : le log matche exactement
+/// TRAY_FRAME_INTERVAL_MS). Ce spam de corruption sur la boucle GTK partagée
+/// avec la fenêtre WebKitGTK est la cause la plus probable des rendus qui
+/// deviennent noirs "au bout d'un moment" signalés sur la version Linux.
 fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     let resource_dir = app.path().resource_dir()?;
     let frames_dir = resource_dir.join("icons").join("tray-frames");
@@ -93,9 +105,13 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     std::thread::spawn(move || {
         let mut i = 0usize;
         loop {
-            if let Some(tray) = app_handle.tray_by_id("main-tray") {
-                let _ = tray.set_icon(Some(frames[i].clone()));
-            }
+            let frame = frames[i].clone();
+            let handle = app_handle.clone();
+            let _ = app_handle.run_on_main_thread(move || {
+                if let Some(tray) = handle.tray_by_id("main-tray") {
+                    let _ = tray.set_icon(Some(frame));
+                }
+            });
             i = (i + 1) % TRAY_FRAME_COUNT;
             std::thread::sleep(Duration::from_millis(TRAY_FRAME_INTERVAL_MS));
         }
@@ -110,6 +126,21 @@ pub fn run() {
     if webview2_check::runtime_missing() {
         webview2_check::show_missing_dialog();
         return;
+    }
+
+    // WebKitGTK (Linux) : sur certains pilotes GPU (Mesa/NVIDIA proprio/VM), le chemin de
+    // rendu matériel DMA-BUF de WebKitGTK 2.4x laisse la fenêtre entièrement noire -- au
+    // premier lancement sur les machines concernées, ou après un changement d'état GPU
+    // (reprise, changement d'espace de travail). C'est le bug remonté le plus fréquemment
+    // dans l'écosystème Tauri pour ce symptôme exact ; corrigé nulle part côté app jusqu'ici
+    // (ForgeChat Desktop n'avait AUCUNE variable Linux, seulement du code Windows-only).
+    // Forcer le renderer logiciel élimine la dépendance au pilote GPU. Ne pas écraser une
+    // valeur déjà définie par l'utilisateur/l'environnement de lancement.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
 
     // WebRTC dans WebView2 (Windows uniquement) : accorde micro/caméra/écran sans prompt
