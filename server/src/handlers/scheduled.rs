@@ -124,9 +124,10 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
     use sqlx::Row;
 
     let pending = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.is_bot
+        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.is_bot, c.server_id
          FROM scheduled_messages sm
          JOIN users u ON u.id = sm.user_id
+         JOIN channels c ON c.id = sm.channel_id
          WHERE sm.send_at <= NOW() AND sm.sent = FALSE
          LIMIT 100"
     )
@@ -139,6 +140,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         let channel_id: Uuid = row.get("channel_id");
         let user_id: Uuid = row.get("user_id");
         let content: String = row.get("content");
+        let server_id: Uuid = row.get("server_id");
 
         // Insérer dans messages + marquer envoyé dans une transaction atomique
         let insert = async {
@@ -199,6 +201,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
 
                 let event = serde_json::json!({
                     "type": "MESSAGE_CREATE",
+                    "server_id": server_id,
                     "message": full_msg
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;

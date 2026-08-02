@@ -160,6 +160,7 @@ pub async fn create_poll(
     state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "MESSAGE_CREATE",
         "channel_id": channel_id,
+        "server_id": server_id,
         "message": &poll_msg,
     }).to_string()).await;
 

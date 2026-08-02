@@ -164,7 +164,10 @@ pub async fn execute_webhook(
     // dans ce même fichier -- filtrer par `WHERE token=$2` en SQL laisse Postgres
     // faire une comparaison memcmp classique (short-circuit au 1er octet différent),
     // un canal auxiliaire théorique. Fetch par id seul, comparaison XOR-fold en Rust.
-    let row = sqlx::query("SELECT channel_id, name, created_by, token FROM webhooks WHERE id=$1")
+    let row = sqlx::query(
+        "SELECT w.channel_id, w.name, w.created_by, w.token, c.server_id
+         FROM webhooks w JOIN channels c ON c.id = w.channel_id WHERE w.id=$1"
+    )
         .bind(webhook_id)
         .fetch_optional(&state.db).await?
         .ok_or(AppError::Unauthorized)?;
@@ -177,6 +180,7 @@ pub async fn execute_webhook(
     }
 
     let channel_id: Uuid = row.get("channel_id");
+    let server_id: Uuid = row.get("server_id");
     let created_by: Uuid = row.get("created_by");
     let raw_name: String = row.get("name");
     let webhook_name: String = match &body.username {
@@ -203,6 +207,7 @@ pub async fn execute_webhook(
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "channel_id": channel_id,
+        "server_id": server_id,
         "message": {
             "id": msg_id,
             "channel_id": channel_id,
@@ -297,7 +302,7 @@ pub async fn receive_github_webhook(
     };
 
     let row = sqlx::query(
-        "SELECT s.owner_id FROM channels c JOIN servers s ON s.id = c.server_id WHERE c.id = $1"
+        "SELECT s.owner_id, c.server_id FROM channels c JOIN servers s ON s.id = c.server_id WHERE c.id = $1"
     )
     .bind(channel_id)
     .fetch_optional(&state.db)
@@ -306,6 +311,7 @@ pub async fn receive_github_webhook(
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
     let owner_id: Uuid = row.get("owner_id");
+    let server_id: Uuid = row.get("server_id");
     let msg_id = Uuid::new_v4();
 
     sqlx::query(
@@ -322,6 +328,7 @@ pub async fn receive_github_webhook(
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "channel_id": channel_id,
+        "server_id": server_id,
         "message": {
             "id": msg_id,
             "channel_id": channel_id,

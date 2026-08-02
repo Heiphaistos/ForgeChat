@@ -432,6 +432,7 @@ async fn post_feed_message(state: &AppState, feed: &FeedRow, content: &str) {
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "channel_id": feed.channel_id,
+        "server_id": feed.server_id,
         "message": {
             "id": msg_id,
             "channel_id": feed.channel_id,

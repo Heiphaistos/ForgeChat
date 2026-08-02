@@ -271,7 +271,7 @@ pub async fn bot_send_message(
         poll_id: None,
     };
 
-    let event = serde_json::json!({ "type": "MESSAGE_CREATE", "message": full_msg });
+    let event = serde_json::json!({ "type": "MESSAGE_CREATE", "server_id": body.server_id, "message": full_msg });
     state.broadcast_to_channel_members(body.channel_id, event.to_string()).await;
 
     Ok(Json(full_msg))
