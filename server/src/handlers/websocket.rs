@@ -1034,6 +1034,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             let avatar: Option<String> = urow.get("avatar");
 
             let entry = serde_json::json!({
+                "type": "STAGE_HAND_RAISE",
                 "user_id": user_id,
                 "username": username,
                 "avatar": avatar,
