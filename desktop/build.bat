@@ -66,16 +66,16 @@ set OUT=%SCRIPT_DIR%..\dist-desktop
 if not exist "%OUT%" mkdir "%OUT%"
 
 :: Installeur NSIS — le dossier bundle\nsis\ accumule les .exe des builds
-:: precedents (Tauri ne le nettoie pas), donc prendre le PREMIER trouve par
-:: "for /r" est incorrect : l'ordre depend de l'enumeration disque, pas de la
-:: date. Trie explicitement par date de modif decroissante pour prendre le
-:: plus recent (bug reel trouve le 2026-08-03 : v3.17.0 copie sous le nom
-:: v3.18.0 car "3.17.0" precedait "3.18.0" dans l'enumeration).
+:: precedents (Tauri ne le nettoie pas). Matcher explicitement sur la version
+:: courante plutot que prendre le premier trouve par "for /r" (dont l'ordre
+:: depend de l'enumeration disque, pas de la date) -- bug reel trouve le
+:: 2026-08-03 : v3.17.0 copiee sous le nom v3.18.0 car "3.17.0" precedait
+:: "3.18.0" dans l'enumeration.
 set FOUND_NSIS=0
-for /f "delims=" %%f in ('dir /b /o-d "%BUNDLE%\nsis\*.exe" 2^>nul') do (
+for /r "%BUNDLE%\nsis" %%f in (*3.18.0*.exe) do (
     if !FOUND_NSIS!==0 (
-        copy "%BUNDLE%\nsis\%%f" "%OUT%\ForgeChat-Setup-v3.18.0.exe" >nul
-        echo [OK] Installeur : dist-desktop\ForgeChat-Setup-v3.18.0.exe ^(source: %%f^)
+        copy "%%f" "%OUT%\ForgeChat-Setup-v3.18.0.exe" >nul
+        echo [OK] Installeur : dist-desktop\ForgeChat-Setup-v3.18.0.exe ^(source: %%~nxf^)
         set FOUND_NSIS=1
     )
 )

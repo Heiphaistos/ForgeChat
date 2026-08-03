@@ -32,7 +32,12 @@ echo "[4/4] Copie des artefacts dans dist-desktop/..."
 mkdir -p "$OUT"
 BUNDLE="$SCRIPT_DIR/src-tauri/target/release/bundle"
 
-DEB_SRC=$(find "$BUNDLE/deb" -name '*.deb' -print -quit 2>/dev/null || true)
+# Matcher explicitement sur $VERSION -- bundle/{deb,appimage}/ accumule les
+# artefacts des builds precedents (Tauri ne nettoie pas), donc un simple
+# "*.deb -print -quit" peut renvoyer un ancien fichier au hasard de l'ordre
+# d'enumeration disque (bug reel trouve le 2026-08-03 sur l'equivalent
+# Windows build.bat : v3.17.0 copiee sous le nom v3.18.0).
+DEB_SRC=$(find "$BUNDLE/deb" -name "*${VERSION}*.deb" -print -quit 2>/dev/null || true)
 if [ -n "$DEB_SRC" ]; then
     cp "$DEB_SRC" "$OUT/ForgeChat-v$VERSION-amd64.deb"
     echo "[OK] .deb       : dist-desktop/ForgeChat-v$VERSION-amd64.deb"
@@ -40,7 +45,7 @@ else
     echo "[WARN] .deb non trouve dans $BUNDLE/deb/"
 fi
 
-APPIMAGE_SRC=$(find "$BUNDLE/appimage" -name '*.AppImage' -print -quit 2>/dev/null || true)
+APPIMAGE_SRC=$(find "$BUNDLE/appimage" -name "*${VERSION}*.AppImage" -print -quit 2>/dev/null || true)
 if [ -n "$APPIMAGE_SRC" ]; then
     cp "$APPIMAGE_SRC" "$OUT/ForgeChat-v$VERSION-amd64.AppImage"
     chmod +x "$OUT/ForgeChat-v$VERSION-amd64.AppImage"
