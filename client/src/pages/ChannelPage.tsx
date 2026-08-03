@@ -19,6 +19,7 @@ import MemberList from '../components/chat/MemberList'
 import PinnedPanel from '../components/chat/PinnedPanel'
 import SearchPanel from '../components/chat/SearchPanel'
 import VoiceVideoPage from './VoiceVideoPage'
+import StageChannel from '../components/voice/StageChannel'
 import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
 import ThreadSidebar from '../components/chat/ThreadSidebar'
@@ -316,8 +317,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }, [channelId, serverId, isSplit])
 
   // Tous les hooks doivent être AVANT tout return conditionnel (React Rules of Hooks)
-  const { canPost, canManageMessages } = useMemo(() => {
+  const { canPost, canManageMessages, canManageChannels } = useMemo(() => {
     const MANAGE_MESSAGES_BIT = 1 << 3
+    const MANAGE_CHANNELS_BIT = 1 << 4
     const ADMINISTRATOR_BIT = 1 << 31
     const myRoleIds: string[] = (serverData?.my_role_ids ?? []).map(String)
     const allRoles: any[] = serverData?.roles ?? []
@@ -330,6 +332,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     return {
       canPost: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
       canManageMessages: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
+      canManageChannels: hasAdmin || !!(myPerms & MANAGE_CHANNELS_BIT),
     }
   }, [serverData, meId])
 
@@ -429,8 +432,22 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const currentChannel = channels.find((c: any) => c.id === channelId)
   const isAnnouncement = currentChannel?.type === 'announcement'
 
-  // Canal vocal / vidéo / scène — même composant WebRTC
-  if (currentChannel?.type === 'voice' || currentChannel?.type === 'video' || currentChannel?.type === 'stage') {
+  // Canal Scène — roster speakers/audience + main levée, mesh vocal en écoute
+  // seule pour l'audience (cf. StageChannel.tsx)
+  if (currentChannel?.type === 'stage' && serverId) {
+    return (
+      <StageChannel
+        channelId={channelId}
+        serverId={serverId}
+        currentUserId={meId ?? ''}
+        isSpeaker={false}
+        isModerator={canManageChannels}
+      />
+    )
+  }
+
+  // Canal vocal / vidéo — même composant WebRTC
+  if (currentChannel?.type === 'voice' || currentChannel?.type === 'video') {
     return <VoiceVideoPage channel={currentChannel} serverId={serverId} />
   }
 

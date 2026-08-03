@@ -166,6 +166,31 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     return off
   }, [dmId, me?.id, on])
 
+  // --- WS : DM_READ (accusé de lecture niveau conversation, POST /dms/:id/read) ---
+  useEffect(() => {
+    const off = on('DM_READ', (d: any) => {
+      if (d.dm_id !== dmId) return
+      if (d.user_id === me?.id) return
+      const msgs = useChat.getState().messagesByChannel[dmId] ?? EMPTY_MESSAGES
+      const last = msgs[msgs.length - 1]
+      if (!last) return
+      const user: ReceiptUser = {
+        user_id: d.user_id,
+        username: d.username || d.user_id.slice(0, 4),
+        avatar: d.avatar ?? undefined,
+      }
+      setReceipts(prev => {
+        const next = new Map(prev)
+        const existing = next.get(last.id) ?? []
+        if (!existing.find(r => r.user_id === d.user_id)) {
+          next.set(last.id, [...existing, user])
+        }
+        return next
+      })
+    })
+    return off
+  }, [dmId, me?.id, on])
+
   // --- WS : TYPING ---
   useEffect(() => {
     const off = on('TYPING', (d: any) => {

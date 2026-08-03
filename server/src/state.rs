@@ -36,6 +36,10 @@ pub struct AppState {
     pub user_voice: Arc<RwLock<HashMap<Uuid, Uuid>>>,
     // État vocal par utilisateur : mute, vidéo, screen share
     pub voice_states: Arc<RwLock<HashMap<Uuid, VoiceStateData>>>,
+    // Canaux Scène : channel_id → {user_id} des speakers actuels
+    pub stage_speakers: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
+    // Canaux Scène : channel_id → user_id → {username, avatar} des mains levées
+    pub stage_hand_raises: Arc<RwLock<HashMap<Uuid, HashMap<Uuid, serde_json::Value>>>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
 }
@@ -61,6 +65,8 @@ impl AppState {
             voice_rooms: Arc::new(RwLock::new(HashMap::new())),
             user_voice: Arc::new(RwLock::new(HashMap::new())),
             voice_states: Arc::new(RwLock::new(HashMap::new())),
+            stage_speakers: Arc::new(RwLock::new(HashMap::new())),
+            stage_hand_raises: Arc::new(RwLock::new(HashMap::new())),
             http_client,
         }
     }
@@ -174,6 +180,27 @@ impl AppState {
         } else {
             Some((channel_id, vec![]))
         }
+    }
+
+    /// Retire un utilisateur de l'état Scène d'un canal (speaker + main levée).
+    /// Retourne (était_speaker, avait_main_levée) pour permettre au caller de
+    /// diffuser les bons événements STAGE_SPEAKER_REMOVE / STAGE_HAND_RAISE.
+    pub async fn stage_cleanup_user(&self, user_id: Uuid, channel_id: Uuid) -> (bool, bool) {
+        let was_speaker = {
+            let mut speakers = self.stage_speakers.write().await;
+            match speakers.get_mut(&channel_id) {
+                Some(set) => set.remove(&user_id),
+                None => false,
+            }
+        };
+        let had_hand_raised = {
+            let mut raises = self.stage_hand_raises.write().await;
+            match raises.get_mut(&channel_id) {
+                Some(map) => map.remove(&user_id).is_some(),
+                None => false,
+            }
+        };
+        (was_speaker, had_hand_raised)
     }
 
 }

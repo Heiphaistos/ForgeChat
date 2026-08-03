@@ -1,0 +1,2 @@
+desktop/build.bat text eol=crlf
+desktop/build.sh text eol=lf

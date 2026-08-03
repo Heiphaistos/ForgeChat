@@ -335,6 +335,25 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
         // Broadcast à tous les clients connectés (sidebar participantes globale)
         broadcast_to_all(state, user_id, event.to_string()).await;
 
+        // Nettoyage Scène — évite les speakers/mains levées fantômes si l'utilisateur
+        // quitte sans action explicite (fermeture d'onglet, crash, VOICE_LEAVE normal)
+        let (was_speaker, had_hand_raised) = state.stage_cleanup_user(user_id, channel_id).await;
+        if was_speaker {
+            broadcast_to_all(state, user_id, serde_json::json!({
+                "type": "STAGE_SPEAKER_REMOVE",
+                "user_id": user_id,
+                "channel_id": channel_id,
+            }).to_string()).await;
+        }
+        if had_hand_raised {
+            broadcast_to_all(state, user_id, serde_json::json!({
+                "type": "STAGE_HAND_RAISE",
+                "user_id": user_id,
+                "raised": false,
+                "channel_id": channel_id,
+            }).to_string()).await;
+        }
+
         // Si canal temporaire et dernier participant → supprimer automatiquement
         if remaining.is_empty() {
             let is_temp: bool = sqlx::query_scalar(
@@ -392,6 +411,17 @@ async fn broadcast_to_all(state: &AppState, exclude: Uuid, event: String) {
         if *uid != exclude {
             let _ = tx.send(event.clone());
         }
+    }
+}
+
+/// Comme broadcast_to_all mais inclut aussi l'auteur — utilisé pour les événements
+/// Scène où l'acteur doit voir sa propre action reflétée dans la liste partagée
+/// (main levée, ajout/retrait speaker), contrairement à VOICE_STATE_UPDATE où le
+/// client applique déjà son propre changement en optimiste localement.
+async fn broadcast_to_all_inclusive(state: &AppState, event: String) {
+    let clients = state.clients.read().await;
+    for tx in clients.values() {
+        let _ = tx.send(event.clone());
     }
 }
 
@@ -921,6 +951,181 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "payload": msg["payload"],
             });
             state.broadcast_to_user(to, signal.to_string()).await;
+        }
+
+        // ────────── Canal Scène (Stage) ──────────
+        // État en mémoire (state.stage_speakers / state.stage_hand_raises), même
+        // philosophie que voice_rooms — pas de persistance DB, nettoyé par
+        // cleanup_voice à la déconnexion/VOICE_LEAVE.
+        Some("STAGE_JOIN") => {
+            let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let is_member: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM channels c
+                    JOIN server_members sm ON sm.server_id = c.server_id
+                    WHERE c.id = $1 AND sm.user_id = $2
+                )"
+            )
+            .bind(channel_id).bind(user_id)
+            .fetch_one(&state.db).await.unwrap_or(false);
+            if !is_member { return; }
+
+            let speaker_ids: Vec<Uuid> = state.stage_speakers.read().await
+                .get(&channel_id).map(|s| s.iter().copied().collect()).unwrap_or_default();
+
+            let mut speakers = Vec::new();
+            for sid in &speaker_ids {
+                if let Ok(Some(row)) = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
+                    .bind(sid).fetch_optional(&state.db).await
+                {
+                    use sqlx::Row;
+                    speakers.push(serde_json::json!({
+                        "user_id": sid,
+                        "username": row.get::<String, _>("username"),
+                        "avatar": row.get::<Option<String>, _>("avatar"),
+                    }));
+                }
+            }
+            let hand_raises: Vec<serde_json::Value> = state.stage_hand_raises.read().await
+                .get(&channel_id).map(|m| m.values().cloned().collect()).unwrap_or_default();
+
+            state.broadcast_to_user(user_id, serde_json::json!({
+                "type": "STAGE_STATE",
+                "channel_id": channel_id,
+                "speakers": speakers,
+                "hand_raises": hand_raises,
+            }).to_string()).await;
+        }
+
+        Some("STAGE_HAND_RAISE") | Some("STAGE_REQUEST_SPEAK") => {
+            let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let is_member: bool = sqlx::query_scalar(
+                "SELECT EXISTS(
+                    SELECT 1 FROM channels c
+                    JOIN server_members sm ON sm.server_id = c.server_id
+                    WHERE c.id = $1 AND sm.user_id = $2
+                )"
+            )
+            .bind(channel_id).bind(user_id)
+            .fetch_one(&state.db).await.unwrap_or(false);
+            if !is_member { return; }
+
+            // "Demander à parler" alimente la même file d'attente modérateur que
+            // lever la main — pas de double mécanisme à maintenir côté client.
+            let raised = if msg["type"].as_str() == Some("STAGE_REQUEST_SPEAK") {
+                true
+            } else {
+                msg["raised"].as_bool().unwrap_or(false)
+            };
+
+            let Ok(Some(urow)) = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
+                .bind(user_id).fetch_optional(&state.db).await else { return; };
+            use sqlx::Row;
+            let username: String = urow.get("username");
+            let avatar: Option<String> = urow.get("avatar");
+
+            let entry = serde_json::json!({
+                "user_id": user_id,
+                "username": username,
+                "avatar": avatar,
+                "raised": raised,
+                "channel_id": channel_id,
+            });
+            {
+                let mut raises = state.stage_hand_raises.write().await;
+                let map = raises.entry(channel_id).or_insert_with(std::collections::HashMap::new);
+                if raised { map.insert(user_id, entry.clone()); } else { map.remove(&user_id); }
+            }
+
+            broadcast_to_all_inclusive(state, entry.to_string()).await;
+        }
+
+        Some("STAGE_INVITE_SPEAK") => {
+            let (Some(channel_id), Some(target_id)) = (
+                msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()),
+                msg["target_user_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()),
+            ) else { return; };
+
+            let server_id_opt: Option<Uuid> = sqlx::query_scalar(
+                "SELECT server_id FROM channels WHERE id=$1"
+            ).bind(channel_id).fetch_optional(&state.db).await.unwrap_or(None).flatten();
+            let Some(server_id) = server_id_opt else { return; };
+
+            // Modérateur uniquement (MANAGE_CHANNELS) — l'auto-invitation (prendre la
+            // parole soi-même) est acceptée, pas de cas particulier nécessaire.
+            if crate::handlers::servers::require_permission_and_channel(
+                state, user_id, server_id, channel_id, Permissions::MANAGE_CHANNELS,
+            ).await.is_err() {
+                return;
+            }
+
+            let Ok(Some(urow)) = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
+                .bind(target_id).fetch_optional(&state.db).await else { return; };
+            use sqlx::Row;
+            let username: String = urow.get("username");
+            let avatar: Option<String> = urow.get("avatar");
+
+            {
+                let mut speakers = state.stage_speakers.write().await;
+                speakers.entry(channel_id).or_insert_with(std::collections::HashSet::new).insert(target_id);
+            }
+            {
+                let mut raises = state.stage_hand_raises.write().await;
+                if let Some(map) = raises.get_mut(&channel_id) { map.remove(&target_id); }
+            }
+
+            broadcast_to_all_inclusive(state, serde_json::json!({
+                "type": "STAGE_SPEAKER_ADD",
+                "user_id": target_id,
+                "username": username,
+                "avatar": avatar,
+                "channel_id": channel_id,
+            }).to_string()).await;
+            broadcast_to_all_inclusive(state, serde_json::json!({
+                "type": "STAGE_HAND_RAISE",
+                "user_id": target_id,
+                "raised": false,
+                "channel_id": channel_id,
+            }).to_string()).await;
+        }
+
+        Some("STAGE_LEAVE_SPEAKER") => {
+            let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                return;
+            };
+            let target_id = msg["target_user_id"].as_str()
+                .and_then(|s| s.parse::<Uuid>().ok())
+                .unwrap_or(user_id);
+
+            // Self-service pour redescendre soi-même ; MANAGE_CHANNELS requis pour
+            // rétrograder quelqu'un d'autre.
+            if target_id != user_id {
+                let server_id_opt: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT server_id FROM channels WHERE id=$1"
+                ).bind(channel_id).fetch_optional(&state.db).await.unwrap_or(None).flatten();
+                let Some(server_id) = server_id_opt else { return; };
+                if crate::handlers::servers::require_permission_and_channel(
+                    state, user_id, server_id, channel_id, Permissions::MANAGE_CHANNELS,
+                ).await.is_err() {
+                    return;
+                }
+            }
+
+            let removed = {
+                let mut speakers = state.stage_speakers.write().await;
+                speakers.get_mut(&channel_id).map(|s| s.remove(&target_id)).unwrap_or(false)
+            };
+            if removed {
+                broadcast_to_all_inclusive(state, serde_json::json!({
+                    "type": "STAGE_SPEAKER_REMOVE",
+                    "user_id": target_id,
+                    "channel_id": channel_id,
+                }).to_string()).await;
+            }
         }
 
         Some("WHITEBOARD_DRAW") | Some("WHITEBOARD_CLEAR") => {

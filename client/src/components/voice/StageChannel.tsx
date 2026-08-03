@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Mic, Hand, UserPlus, Users } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Mic, Hand, UserPlus, UserMinus, LogOut, Users } from 'lucide-react'
 import { useWs } from '../../store/ws'
+import { useVoice } from '../../store/voice'
 import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,14 +36,23 @@ function Avatar({ user, size = 'md' }: { user: StageUser; size?: 'sm' | 'md' | '
 }
 
 // ─── Speaker tile ─────────────────────────────────────────────────────────────
-function SpeakerTile({ user }: { user: StageUser }) {
+function SpeakerTile({ user, canDemote, onDemote }: { user: StageUser; canDemote: boolean; onDemote: (userId: string, username: string) => void }) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1.5 relative group">
       <div className="relative">
         <Avatar user={user} size="lg" />
         <div aria-hidden className="absolute -bottom-1 -right-1 bg-fc-green rounded-full p-0.5">
           <Mic size={8} className="text-white" />
         </div>
+        {canDemote && (
+          <button
+            onClick={() => onDemote(user.user_id, user.username)}
+            aria-label={`Rétrograder ${user.username}`}
+            className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
+          >
+            <UserMinus size={8} className="text-white" aria-hidden />
+          </button>
+        )}
       </div>
       <span className="text-[11px] text-white font-medium text-center max-w-[60px] truncate">
         {user.username}
@@ -54,19 +64,52 @@ function SpeakerTile({ user }: { user: StageUser }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function StageChannel({
   channelId,
+  serverId,
   currentUserId,
   isSpeaker,
   isModerator,
 }: Props) {
   const { send, on } = useWs()
   const [speakers, setSpeakers] = useState<StageUser[]>([])
-  const [audience, setAudience] = useState<StageUser[]>([])
   const [handRaises, setHandRaises] = useState<HandRaise[]>([])
   const [handRaised, setHandRaised] = useState(false)
   const [hasRequestedSpeak, setHasRequestedSpeak] = useState(false)
+  const [amSpeaking, setAmSpeaking] = useState(isSpeaker)
+
+  // Audience dérivée de la présence vocale globale déjà suivie par le store
+  // (VOICE_USER_JOINED/LEFT via initGlobalListeners) moins les speakers —
+  // évite d'inventer un second mécanisme de présence rien que pour ce composant.
+  const roomParticipants = useVoice(s => s.roomParticipants[channelId] ?? [])
+  const audience = useMemo(
+    () => roomParticipants
+      .filter(p => !speakers.some(s => s.user_id === p.userId))
+      .map(p => ({ user_id: p.userId, username: p.username, avatar: p.avatar })),
+    [roomParticipants, speakers],
+  )
+
+  // Valeur figée au montage — la transition audience↔speaker en cours de session
+  // est gérée explicitement par les listeners STAGE_SPEAKER_ADD/REMOVE ci-dessous,
+  // pas par cet effet de montage (sinon double-join en boucle).
+  const initialIsSpeakerRef = useRef(isSpeaker)
+
+  // ── Rejoindre le mesh vocal (réel si déjà speaker, écoute seule sinon) ─────
+  useEffect(() => {
+    send({ type: 'STAGE_JOIN', channel_id: channelId })
+    useVoice.getState().join(channelId, serverId, false, undefined, undefined, !initialIsSpeakerRef.current)
+    return () => {
+      useVoice.getState().leave()
+    }
+  }, [channelId, serverId, send])
 
   // WS listeners
   useEffect(() => {
+    const unState = on('STAGE_STATE', (raw: unknown) => {
+      const data = raw as { channel_id: string; speakers: StageUser[]; hand_raises: HandRaise[] }
+      if (data.channel_id !== channelId) return
+      setSpeakers(data.speakers ?? [])
+      setHandRaises(data.hand_raises ?? [])
+    })
+
     const unSpeakerAdd = on('STAGE_SPEAKER_ADD', (raw: unknown) => {
       const data = raw as StageUser & { channel_id?: string }
       if (data.channel_id && data.channel_id !== channelId) return
@@ -74,13 +117,26 @@ export default function StageChannel({
         if (prev.some(s => s.user_id === data.user_id)) return prev
         return [...prev, { user_id: data.user_id, username: data.username, avatar: data.avatar }]
       })
-      setAudience(prev => prev.filter(a => a.user_id !== data.user_id))
+      if (data.user_id === currentUserId) {
+        // Promu speaker : passer de l'écoute seule à un vrai micro
+        setAmSpeaking(true)
+        setHasRequestedSpeak(false)
+        setHandRaised(false)
+        useVoice.getState().leave()
+        useVoice.getState().join(channelId, serverId, false, undefined, undefined, false)
+      }
     })
 
     const unSpeakerRemove = on('STAGE_SPEAKER_REMOVE', (raw: unknown) => {
       const data = raw as { user_id: string; channel_id?: string }
       if (data.channel_id && data.channel_id !== channelId) return
       setSpeakers(prev => prev.filter(s => s.user_id !== data.user_id))
+      if (data.user_id === currentUserId) {
+        // Rétrogradé (ou a quitté la scène soi-même) : retour en écoute seule
+        setAmSpeaking(false)
+        useVoice.getState().leave()
+        useVoice.getState().join(channelId, serverId, false, undefined, undefined, true)
+      }
     })
 
     const unHandRaise = on('STAGE_HAND_RAISE', (raw: unknown) => {
@@ -91,17 +147,24 @@ export default function StageChannel({
         if (!data.raised) return without
         return [...without, { user_id: data.user_id, username: data.username, avatar: data.avatar, raised: true }]
       })
+      if (data.raised && data.user_id === currentUserId) {
+        setHandRaised(true)
+      } else if (!data.raised && data.user_id === currentUserId) {
+        setHandRaised(false)
+        setHasRequestedSpeak(false)
+      }
       if (data.raised && data.user_id !== currentUserId) {
         toast(`✋ ${data.username} demande à parler`, { duration: 3000 })
       }
     })
 
     return () => {
+      unState()
       unSpeakerAdd()
       unSpeakerRemove()
       unHandRaise()
     }
-  }, [channelId, currentUserId, on])
+  }, [channelId, serverId, currentUserId, on])
 
   const handleRequestSpeak = () => {
     if (hasRequestedSpeak) return
@@ -122,17 +185,50 @@ export default function StageChannel({
     toast.success(`Invitation envoyée à ${username}`)
   }
 
+  const handleTakeFloor = () => {
+    send({ type: 'STAGE_INVITE_SPEAK', channel_id: channelId, target_user_id: currentUserId })
+    toast.success('Vous prenez la parole')
+  }
+
+  const handleLeaveSpeaker = () => {
+    send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: channelId })
+  }
+
+  const handleDemoteSpeaker = (userId: string, username: string) => {
+    send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: channelId, target_user_id: userId })
+    toast(`${username} a été rétrogradé`, { duration: 2500 })
+  }
+
   const currentUserInAudience = audience.some(a => a.user_id === currentUserId)
 
   return (
     <div className="flex flex-col h-full bg-fc-bg text-white">
       {/* Section Orateurs */}
       <section aria-label="Orateurs sur scène" className="flex-shrink-0 p-4 border-b border-fc-hover">
-        <div className="flex items-center gap-2 mb-3" aria-hidden>
-          <Mic size={14} className="text-fc-accent" />
-          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
-            Scene — Orateurs
-          </span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2" aria-hidden>
+            <Mic size={14} className="text-fc-accent" />
+            <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
+              Scene — Orateurs
+            </span>
+          </div>
+          {isModerator && !amSpeaking && (
+            <button
+              onClick={handleTakeFloor}
+              className="text-[11px] font-medium text-fc-accent hover:text-fc-accent/80 transition"
+            >
+              Prendre la parole
+            </button>
+          )}
+          {amSpeaking && (
+            <button
+              onClick={handleLeaveSpeaker}
+              className="flex items-center gap-1 text-[11px] font-medium text-fc-muted hover:text-white transition"
+            >
+              <LogOut size={12} aria-hidden />
+              Quitter la scène
+            </button>
+          )}
         </div>
 
         {speakers.length === 0 ? (
@@ -141,7 +237,11 @@ export default function StageChannel({
           <div className="flex flex-wrap gap-4" role="list" aria-label={`${speakers.length} orateur${speakers.length > 1 ? 's' : ''}`}>
             {speakers.map(s => (
               <div key={s.user_id} role="listitem">
-                <SpeakerTile user={s} />
+                <SpeakerTile
+                  user={s}
+                  canDemote={isModerator && s.user_id !== currentUserId}
+                  onDemote={handleDemoteSpeaker}
+                />
               </div>
             ))}
           </div>
@@ -207,7 +307,7 @@ export default function StageChannel({
       )}
 
       {/* Actions (audience seulement, ou non-speaker) */}
-      {!isSpeaker && (currentUserInAudience || audience.length === 0) && (
+      {!amSpeaking && (currentUserInAudience || audience.length === 0) && (
         <div className="flex-shrink-0 p-4 flex items-center gap-2">
           <button
             onClick={handleRequestSpeak}

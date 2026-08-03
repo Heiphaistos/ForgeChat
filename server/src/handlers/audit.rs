@@ -468,10 +468,16 @@ pub async fn mark_dm_read(
 
     // Notifier l'autre participant que le DM a été lu
     if let Some(other) = other_id {
+        let reader: Option<(String, Option<String>)> = sqlx::query_as(
+            "SELECT username, avatar FROM users WHERE id=$1"
+        ).bind(claims.sub).fetch_optional(&state.db).await.ok().flatten();
+        let (username, avatar) = reader.unwrap_or_default();
         let event = serde_json::json!({
             "type": "DM_READ",
             "dm_id": dm_id,
             "user_id": claims.sub,
+            "username": username,
+            "avatar": avatar,
             "read_at": now,
         });
         state.broadcast_to_user(other, event.to_string()).await;

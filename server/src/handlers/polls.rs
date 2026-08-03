@@ -164,14 +164,6 @@ pub async fn create_poll(
         "message": &poll_msg,
     }).to_string()).await;
 
-    // POLL_CREATE pour le composant PollDisplay s'il est déjà monté
-    state.broadcast_to_channel_members(channel_id, serde_json::json!({
-        "type": "POLL_CREATE",
-        "channel_id": channel_id,
-        "poll": &poll,
-        "message_id": msg_id,
-    }).to_string()).await;
-
     Ok(Json(poll))
 }
 

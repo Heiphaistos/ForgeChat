@@ -31,6 +31,8 @@ interface VoiceStore {
   channelName: string | null
   serverId: string | null
   joined: boolean
+  // Écoute seule (ex: audience Stage) — pas de micro, pas d'envoi, réception uniquement
+  listenOnly: boolean
   peers: VoicePeer[]
   localStream: MediaStream | null
   localScreenStream: MediaStream | null
@@ -53,7 +55,7 @@ interface VoiceStore {
   // Streams actifs Go Live : userId ? {userId, username, channelId}
   activeStreams: Record<string, { userId: string; username: string; channelId: string }>
 
-  join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string): Promise<void>
+  join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
   toggleMute(): void
   toggleDeafen(): void
@@ -292,6 +294,13 @@ async function _createPC(
       const sender = pc.addTrack(t, _localStream!)
       if (t.kind === 'video') _camSenders.set(peerId, sender)
     })
+  } else {
+    // Écoute seule (audience Stage) : aucune piste à envoyer, mais sans transceiver
+    // explicite une offer créée par CE peer (cas VOICE_EXISTING_PEERS, où le
+    // nouvel arrivant initie toujours l'offer) serait vide — aucune section média,
+    // donc rien à recevoir. Répondre à une offer entrante marche déjà sans ceci
+    // (le navigateur négocie recvonly automatiquement quand on n'a pas de piste).
+    pc.addTransceiver('audio', { direction: 'recvonly' })
   }
   // Si un partage d'écran est déjà en cours (peer rejoint après coup), lui envoyer
   // aussi la piste écran — sender séparé, groupé sous _localScreenGroupStream
@@ -438,6 +447,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   channelName: null,
   serverId: null,
   joined: false,
+  listenOnly: false,
   peers: [],
   localStream: null,
   localScreenStream: null,
@@ -541,66 +551,74 @@ export const useVoice = create<VoiceStore>((set, get) => ({
   },
 
   // ── Join ──────────────────────────────────────────────────────────────────
-  join: async (channelId, serverId, withVideo = false, password, channelName) => {
+  join: async (channelId, serverId, withVideo = false, password, channelName, listenOnly = false) => {
     const cur = get()
-    if (cur.joined && cur.channelId === channelId) return
+    if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
     if (cur.joined) get().leave()
 
     set({ error: null })
 
-    const savedMicId = localStorage.getItem('fc_audio_input') || undefined
-    const audioConstraints: MediaTrackConstraints = {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
-    }
+    let hasVideo = false
 
-    let stream: MediaStream
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: withVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false,
-      })
-    } catch {
-      if (withVideo) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: audioConstraints,
-          })
-        } catch {
+    if (listenOnly) {
+      // Audience Stage : jamais de getUserMedia, réception uniquement (cf. _createPC)
+      _localStream = null
+    } else {
+      const savedMicId = localStorage.getItem('fc_audio_input') || undefined
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
+      }
+
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: withVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false,
+        })
+      } catch {
+        if (withVideo) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: audioConstraints,
+            })
+          } catch {
+            set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
+            return
+          }
+        } else {
           set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
           return
         }
-      } else {
-        set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
-        return
       }
+
+      _localStream = stream
+      // Sauvegarder la piste audio brute — nécessaire pour restaurer quand NS désactivée
+      _rawAudioTrack = stream.getAudioTracks()[0] ?? null
+
+      // Appliquer la noise suppression si activée dans les préférences
+      const noiseSuppressionEnabled = localStorage.getItem('fc_noise_suppression') !== 'false'
+      if (noiseSuppressionEnabled) {
+        _processedStream = await _applyNoiseSuppression(stream)
+        // Le stream envoyé aux peers est le stream traité (audio filtré + vidéo originale)
+        _localStream = _processedStream
+      }
+
+      hasVideo = stream.getVideoTracks().length > 0
     }
-
-    _localStream = stream
-    // Sauvegarder la piste audio brute — nécessaire pour restaurer quand NS désactivée
-    _rawAudioTrack = stream.getAudioTracks()[0] ?? null
-
-    // Appliquer la noise suppression si activée dans les préférences
-    const noiseSuppressionEnabled = localStorage.getItem('fc_noise_suppression') !== 'false'
-    if (noiseSuppressionEnabled) {
-      _processedStream = await _applyNoiseSuppression(stream)
-      // Le stream envoyé aux peers est le stream traité (audio filtré + vidéo originale)
-      _localStream = _processedStream
-    }
-
-    const hasVideo = stream.getVideoTracks().length > 0
 
     set({
       joined: true,
+      listenOnly,
       channelId,
       channelName: channelName ?? null,
       serverId,
       localStream: _localStream,
       localScreenStream: null,
       videoEnabled: hasVideo,
-      muted: false,
+      muted: listenOnly,
       deafened: false,
       screenSharing: false,
       peers: [],
@@ -752,7 +770,7 @@ export const useVoice = create<VoiceStore>((set, get) => ({
     _offFns.forEach(off => off())
     _offFns = []
 
-    set({ joined: false, channelId: null, channelName: null, serverId: null, localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
+    set({ joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null, localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
   },
 
   // ── Toggle mute ───────────────────────────────────────────────────────────
