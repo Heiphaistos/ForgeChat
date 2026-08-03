@@ -10,8 +10,8 @@ import Logo3D from '../components/Logo3D'
 // (build.bat vs build.sh) et ne sortent pas toujours en même temps --
 // deux versions de release indépendantes évitent qu'un lien de
 // téléchargement pointe vers un artefact pas encore uploadé.
-const WIN_RELEASE = 'v3.17.0'
-const LINUX_RELEASE = 'v3.17.0'
+const WIN_RELEASE = 'v3.18.0'
+const LINUX_RELEASE = 'v3.18.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
 const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${WIN_RELEASE}.exe`
 const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${WIN_RELEASE}.exe`
