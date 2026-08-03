@@ -228,6 +228,7 @@ async fn handle_socket(
             .await;
         broadcast_presence(&state, user_id, "offline").await;
         cleanup_voice(&state, user_id).await;
+        cleanup_stage(&state, user_id).await;
 
         // Appels DM encore en sonnerie : l'appelant a disparu sans HANGUP (crash,
         // fermeture d'onglet) → résoudre en 'missed' et prévenir le destinataire
@@ -335,25 +336,6 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
         // Broadcast à tous les clients connectés (sidebar participantes globale)
         broadcast_to_all(state, user_id, event.to_string()).await;
 
-        // Nettoyage Scène — évite les speakers/mains levées fantômes si l'utilisateur
-        // quitte sans action explicite (fermeture d'onglet, crash, VOICE_LEAVE normal)
-        let (was_speaker, had_hand_raised) = state.stage_cleanup_user(user_id, channel_id).await;
-        if was_speaker {
-            broadcast_to_all(state, user_id, serde_json::json!({
-                "type": "STAGE_SPEAKER_REMOVE",
-                "user_id": user_id,
-                "channel_id": channel_id,
-            }).to_string()).await;
-        }
-        if had_hand_raised {
-            broadcast_to_all(state, user_id, serde_json::json!({
-                "type": "STAGE_HAND_RAISE",
-                "user_id": user_id,
-                "raised": false,
-                "channel_id": channel_id,
-            }).to_string()).await;
-        }
-
         // Si canal temporaire et dernier participant → supprimer automatiquement
         if remaining.is_empty() {
             let is_temp: bool = sqlx::query_scalar(
@@ -389,6 +371,29 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
                     state.broadcast_to_server_members(server_id, del_event.to_string()).await;
                 }
             }
+        }
+    }
+}
+
+/// Nettoyage Scène — UNIQUEMENT à la vraie déconnexion WS (voir doc de
+/// stage_cleanup_user_everywhere). Un simple STAGE_LEAVE_SPEAKER explicite gère
+/// déjà le cas "je descends de la scène volontairement" séparément.
+async fn cleanup_stage(state: &AppState, user_id: Uuid) {
+    for (channel_id, was_speaker, had_hand_raised) in state.stage_cleanup_user_everywhere(user_id).await {
+        if was_speaker {
+            broadcast_to_all_inclusive(state, serde_json::json!({
+                "type": "STAGE_SPEAKER_REMOVE",
+                "user_id": user_id,
+                "channel_id": channel_id,
+            }).to_string()).await;
+        }
+        if had_hand_raised {
+            broadcast_to_all_inclusive(state, serde_json::json!({
+                "type": "STAGE_HAND_RAISE",
+                "user_id": user_id,
+                "raised": false,
+                "channel_id": channel_id,
+            }).to_string()).await;
         }
     }
 }

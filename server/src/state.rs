@@ -182,25 +182,31 @@ impl AppState {
         }
     }
 
-    /// Retire un utilisateur de l'état Scène d'un canal (speaker + main levée).
-    /// Retourne (était_speaker, avait_main_levée) pour permettre au caller de
-    /// diffuser les bons événements STAGE_SPEAKER_REMOVE / STAGE_HAND_RAISE.
-    pub async fn stage_cleanup_user(&self, user_id: Uuid, channel_id: Uuid) -> (bool, bool) {
-        let was_speaker = {
+    /// Retire un utilisateur déconnecté de TOUT état Scène (speaker + main levée),
+    /// dans tous les canaux où il apparaît. Utilisé uniquement à la vraie
+    /// déconnexion WS (crash, fermeture d'onglet) — PAS sur un simple VOICE_LEAVE,
+    /// qui peut n'être qu'une reconnexion interne (ex: passage écoute→speaker,
+    /// qui fait un leave()+join() du mesh vocal sans quitter la scène). Retourne
+    /// la liste des (channel_id, était_speaker, avait_main_levée) affectés.
+    pub async fn stage_cleanup_user_everywhere(&self, user_id: Uuid) -> Vec<(Uuid, bool, bool)> {
+        let mut affected: std::collections::HashMap<Uuid, (bool, bool)> = std::collections::HashMap::new();
+        {
             let mut speakers = self.stage_speakers.write().await;
-            match speakers.get_mut(&channel_id) {
-                Some(set) => set.remove(&user_id),
-                None => false,
+            for (channel_id, set) in speakers.iter_mut() {
+                if set.remove(&user_id) {
+                    affected.entry(*channel_id).or_insert((false, false)).0 = true;
+                }
             }
-        };
-        let had_hand_raised = {
+        }
+        {
             let mut raises = self.stage_hand_raises.write().await;
-            match raises.get_mut(&channel_id) {
-                Some(map) => map.remove(&user_id).is_some(),
-                None => false,
+            for (channel_id, map) in raises.iter_mut() {
+                if map.remove(&user_id).is_some() {
+                    affected.entry(*channel_id).or_insert((false, false)).1 = true;
+                }
             }
-        };
-        (was_speaker, had_hand_raised)
+        }
+        affected.into_iter().map(|(c, (s, h))| (c, s, h)).collect()
     }
 
 }

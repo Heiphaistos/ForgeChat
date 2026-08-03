@@ -92,11 +92,22 @@ export default function StageChannel({
   // pas par cet effet de montage (sinon double-join en boucle).
   const initialIsSpeakerRef = useRef(isSpeaker)
 
+  // Le nettoyage du démontage a besoin de la valeur COURANTE de amSpeaking, pas
+  // celle figée à l'exécution de l'effet de montage — d'où la ref tenue à jour.
+  const amSpeakingRef = useRef(amSpeaking)
+  amSpeakingRef.current = amSpeaking
+
   // ── Rejoindre le mesh vocal (réel si déjà speaker, écoute seule sinon) ─────
   useEffect(() => {
     send({ type: 'STAGE_JOIN', channel_id: channelId })
     useVoice.getState().join(channelId, serverId, false, undefined, undefined, !initialIsSpeakerRef.current)
     return () => {
+      // Quitter réellement la scène (pas juste une reconnexion interne du mesh
+      // vocal, cf. cleanup_stage côté serveur qui ne réagit plus qu'à ceci ou à
+      // une vraie déconnexion) si on parlait au moment de quitter la page.
+      if (amSpeakingRef.current) {
+        send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: channelId })
+      }
       useVoice.getState().leave()
     }
   }, [channelId, serverId, send])
