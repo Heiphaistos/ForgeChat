@@ -210,8 +210,6 @@ export default function StageChannel({
     toast(`${username} a été rétrogradé`, { duration: 2500 })
   }
 
-  const currentUserInAudience = audience.some(a => a.user_id === currentUserId)
-
   return (
     <div className="flex flex-col h-full bg-fc-bg text-white">
       {/* Section Orateurs */}
@@ -317,8 +315,10 @@ export default function StageChannel({
         </section>
       )}
 
-      {/* Actions (audience seulement, ou non-speaker) */}
-      {!amSpeaking && (currentUserInAudience || audience.length === 0) && (
+      {/* Actions (non-speaker uniquement — tout non-speaker fait partie de
+          l'audience, `roomParticipants` n'inclut jamais l'utilisateur courant
+          lui-même donc pas de garde supplémentaire possible ni nécessaire ici) */}
+      {!amSpeaking && (
         <div className="flex-shrink-0 p-4 flex items-center gap-2">
           <button
             onClick={handleRequestSpeak}
