@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "linux"))]
 use std::time::Duration;
 use tauri::{
     Manager,
@@ -5,7 +6,9 @@ use tauri::{
     tray::{TrayIconBuilder, MouseButton, TrayIconEvent},
 };
 
+#[cfg(not(target_os = "linux"))]
 const TRAY_FRAME_COUNT: usize = 8;
+#[cfg(not(target_os = "linux"))]
 const TRAY_FRAME_INTERVAL_MS: u64 = 225;
 
 /// L'exe portable ne passe par aucun installeur : si le WebView2 Runtime n'est
@@ -79,17 +82,21 @@ mod webview2_check {
 /// client/src/faviconAnimator.ts) et fait défiler l'icône du tray en continu --
 /// même identité visuelle "toujours en mouvement" que le reste de la marque.
 ///
-/// Le thread de fond ne fait QUE dormir et calculer l'index : le `set_icon()`
-/// lui-même est renvoyé sur le thread principal via `run_on_main_thread`.
-/// Sur Linux, le tray est backé par GTK, qui n'autorise aucun appel touchant
-/// un widget hors de son thread principal -- l'appeler directement depuis ce
-/// thread de fond déclenchait un flot continu de `Gtk-CRITICAL:
+/// Windows/macOS uniquement (voir le `#[cfg]` sur le point d'appel). Une
+/// première tentative de fix envoyait `set_icon()` sur le thread principal via
+/// `run_on_main_thread` (le thread de fond ne fait que dormir et calculer
+/// l'index), sur la théorie que GTK interdit tout appel touchant un widget
+/// hors de son thread principal. Ça n'a PAS suffi : reproduit en lançant le
+/// binaire réel (AppImage ET .deb installé) sur Ubuntu 22.04, la fenêtre est
+/// noire dès les premières secondes et stderr crache en continu `Gtk-CRITICAL:
 /// gtk_widget_get_scale_factor: assertion 'GTK_IS_WIDGET (widget)' failed`
-/// toutes les 225 ms, en continu, tant que l'app tournait (reproduit et
-/// confirmé en lançant le binaire réel : le log matche exactement
-/// TRAY_FRAME_INTERVAL_MS). Ce spam de corruption sur la boucle GTK partagée
-/// avec la fenêtre WebKitGTK est la cause la plus probable des rendus qui
-/// deviennent noirs "au bout d'un moment" signalés sur la version Linux.
+/// exactement toutes les TRAY_FRAME_INTERVAL_MS -- donc même bien posté sur le
+/// thread principal, remplacer l'icône du tray ~4x/s corrompt la boucle GTK
+/// partagée avec la fenêtre WebKitGTK. Cause exacte non élucidée (probable bug
+/// interne à tray-icon/muda ou à l'AppIndicator de secours GtkStatusIcon), mais
+/// le signal est trop net pour continuer à risquer un rendu cassé pour un
+/// détail cosmétique : désactivé sur Linux plutôt que retenté une 3e fois.
+#[cfg(not(target_os = "linux"))]
 fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     let resource_dir = app.path().resource_dir()?;
     let frames_dir = resource_dir.join("icons").join("tray-frames");
@@ -208,6 +215,9 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Désactivé sur Linux : corrompt la boucle de rendu GTK/WebKitGTK
+            // partagée (fenêtre noire), voir la doc de animate_tray_icon().
+            #[cfg(not(target_os = "linux"))]
             if let Err(e) = animate_tray_icon(app.handle()) {
                 eprintln!("[ForgeChat] Animation icône tray désactivée (chargement frames échoué) : {e}");
             }

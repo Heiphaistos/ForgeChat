@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# ForgeChat Desktop Builder v3.18.0 — Linux (.deb + AppImage)
+# ForgeChat Desktop Builder v3.19.0 — Linux (.deb + AppImage)
 set -euo pipefail
 
-VERSION="3.18.0"
+VERSION="3.19.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$ROOT_DIR/dist-desktop"
