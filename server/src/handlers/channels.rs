@@ -79,6 +79,18 @@ pub async fn create_channel(
         return Err(AppError::BadRequest("Le nom du canal ne peut pas dépasser 100 caractères".into()));
     }
 
+    // IDOR : category_id n'était jamais vérifié comme appartenant à ce serveur --
+    // reproduit en direct (compte+2 serveurs jetables) : un canal du serveur A
+    // pouvait référencer une catégorie du serveur B, cross-tenant.
+    if let Some(cat_id) = body.category_id {
+        let cat_ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM categories WHERE id=$1 AND server_id=$2)"
+        ).bind(cat_id).bind(server_id).fetch_one(&state.db).await?;
+        if !cat_ok {
+            return Err(AppError::BadRequest("Catégorie invalide pour ce serveur".into()));
+        }
+    }
+
     let channel_type = body.r#type.as_deref().unwrap_or("text");
     let channel = sqlx::query_as::<_, Channel>(
         "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw, slowmode_delay, user_limit)
@@ -573,6 +585,17 @@ pub async fn move_channel(
     let server_id: Uuid = row.get("server_id");
 
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    // Même IDOR que create_channel : vérifier que la catégorie cible appartient
+    // bien à ce serveur avant de déplacer le canal dedans.
+    if let Some(cat_id) = new_category_id {
+        let cat_ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM categories WHERE id=$1 AND server_id=$2)"
+        ).bind(cat_id).bind(server_id).fetch_one(&state.db).await?;
+        if !cat_ok {
+            return Err(AppError::BadRequest("Catégorie invalide pour ce serveur".into()));
+        }
+    }
 
     sqlx::query("UPDATE channels SET category_id=$1 WHERE id=$2 AND server_id=$3")
         .bind(new_category_id)
