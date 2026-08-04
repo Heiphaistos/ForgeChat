@@ -17,6 +17,14 @@ pub struct Channel {
     pub user_limit: Option<i32>,
     pub last_message_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    // Jamais renvoyé au client -- ne sert qu'à peupler ce champ depuis la ligne
+    // SQL pour la vérification bcrypt côté serveur (websocket.rs lit la colonne
+    // brute directement, pas via ce struct). Sérialiser le hash bcrypt en clair
+    // dans les réponses JSON (create_channel/update_channel) permettait un
+    // craquage hors-ligne du mot de passe vocal sans aucune limite de débit --
+    // trouvé et reproduit en direct : PATCH d'un canal vocal protégé renvoyait
+    // le hash complet, exploitable par n'importe quel modérateur MANAGE_CHANNELS.
+    #[serde(skip_serializing)]
     pub voice_password_hash: Option<String>,
     #[sqlx(default)]
     pub is_auto_create: bool,

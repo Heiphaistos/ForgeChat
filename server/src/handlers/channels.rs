@@ -48,7 +48,7 @@ pub async fn get_channels(
             "user_limit": r.get::<Option<i32>, _>("user_limit"),
             "last_message_id": r.get::<Option<Uuid>, _>("last_message_id"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-            "voice_password_hash": r.get::<Option<String>, _>("voice_password_hash"),
+            "has_voice_password": r.get::<Option<String>, _>("voice_password_hash").is_some(),
             "is_auto_create": r.get::<bool, _>("is_auto_create"),
             "auto_create_name": r.get::<Option<String>, _>("auto_create_name"),
             "is_temporary": r.get::<bool, _>("is_temporary"),

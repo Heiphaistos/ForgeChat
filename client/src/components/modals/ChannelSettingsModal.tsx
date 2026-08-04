@@ -56,7 +56,7 @@ interface Channel {
   slowmode_delay: number
   user_limit?: number
   is_nsfw: boolean
-  voice_password_hash?: string | null
+  has_voice_password?: boolean
   is_auto_create?: boolean
   auto_create_name?: string | null
   bitrate?: number
@@ -276,7 +276,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   const [isNsfw, setIsNsfw] = useState(channel.is_nsfw)
   const [voicePassword, setVoicePassword] = useState('')
   const [removePassword, setRemovePassword] = useState(false)
-  const [hasExistingPassword] = useState(!!channel.voice_password_hash)
+  const [hasExistingPassword] = useState(!!channel.has_voice_password)
   const [isAutoCreate, setIsAutoCreate] = useState(channel.is_auto_create ?? false)
   const [autoCreateName, setAutoCreateName] = useState(channel.auto_create_name ?? '')
   const [bitrate, setBitrate] = useState(channel.bitrate ?? 64000)

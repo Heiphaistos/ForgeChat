@@ -806,7 +806,7 @@ export default function ChannelSidebar() {
   }
 
   const handleVoiceChannelClick = (ch: any) => {
-    if (ch.voice_password_hash) {
+    if (ch.has_voice_password) {
       // Canal protégé — afficher le prompt password
       setPasswordPrompt({ channel: ch })
     } else {
@@ -829,7 +829,7 @@ export default function ChannelSidebar() {
     const isVoiceCh = ch.type === 'voice' || ch.type === 'video' || ch.type === 'stage'
     const participants = isVoiceCh ? (roomParticipants[ch.id] ?? []) : []
     const isMeConnected = voiceChannelId === ch.id
-    const hasPassword = !!ch.voice_password_hash
+    const hasPassword = !!ch.has_voice_password
     const userLimit = ch.user_limit ?? 0
     const slowmodeDelay = ch.slowmode_delay ?? 0
     const isAutoCreate = !!ch.is_auto_create
