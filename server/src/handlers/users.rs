@@ -112,6 +112,22 @@ pub async fn update_me(
         }
     }
 
+    // `bio`/`custom_status` sont des colonnes TEXT non bornées en DB -- seuls les
+    // attributs `maxLength` HTML côté client (190 / 128, ProfileSection.tsx /
+    // CustomStatusModal.tsx) limitaient la taille, trivialement contournables par
+    // un appel direct à l'API. Confirmé en direct : PATCH avec un bio de 50000
+    // caractères était accepté et stocké tel quel avant ce fix.
+    if let Some(ref bio) = body.bio {
+        if bio.chars().count() > 190 {
+            return Err(AppError::BadRequest("Bio : 190 caractères max".into()));
+        }
+    }
+    if let Some(ref cs) = body.custom_status {
+        if cs.chars().count() > 128 {
+            return Err(AppError::BadRequest("Statut personnalisé : 128 caractères max".into()));
+        }
+    }
+
     let (birthday_val, birthday_clear): (Option<chrono::NaiveDate>, bool) = match &body.birthday {
         None => (None, false),
         Some(serde_json::Value::Null) => (None, true),
