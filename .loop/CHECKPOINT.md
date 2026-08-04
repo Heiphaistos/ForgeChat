@@ -122,12 +122,24 @@ bots.rs, webhooks.rs (revalidé), soundboard.rs — tous propres sauf les 5 bugs
 au-dessus. Client : AdminPage, ExplorePage, ActivityFeedPage, LeaderboardPage,
 TicketsPage, WebhooksTab, TagsTab, BansTab, StatsTab, AuditLogTab.
 
-**Encore jamais audités niveau logique (modals volumineux, pistes pour la suite)** :
-ChannelSettingsModal.tsx (632L), ServerSettingsModal.tsx (804L, au-delà des sections
-bots/stats déjà vérifiées par ce passage), RolesTab.tsx (529L), InviteModal.tsx,
-FeedsTab.tsx, AutoModTab.tsx, CreateChannelModal.tsx, ImportContactsModal.tsx,
-ServerTemplateModal.tsx, MembersTab.tsx, NicknameModal.tsx, ChannelNotifModal.tsx,
-UserProfileModal.tsx, VerificationGateModal.tsx, VoicePasswordPrompt.tsx.
+**Liste du 2026-07-24 -- TOUS AUDITÉS PENDANT LA BOUCLE DU 2026-08-04 (cycles 1-19), ne pas re-creuser sans piste précise** :
+ChannelSettingsModal.tsx (cycle 6, IDOR category_id cross-tenant trouvé+fixé côté serveur),
+ServerSettingsModal.tsx (cycle 8, icône non réinitialisée après échec upload, fixé),
+RolesTab.tsx (cycle 1/3, finding permissions HAUTE, voir plus haut), InviteModal.tsx
+(cycle 10, race TOCTOU max_uses, fixé+vérifié live), FeedsTab.tsx (cycle 12, gap SSRF
+DNS rebinding noté, pas fixé), AutoModTab.tsx (cycle 4, filtre substring→mot entier,
+fixé), CreateChannelModal.tsx (cycle 9, même IDOR category_id que ChannelSettingsModal),
+ImportContactsModal.tsx (cycle 14, invite_bulk bypass blocage/confidentialité, fixé+
+vérifié live), ServerTemplateModal.tsx (cycle 17, categories déclarées mais jamais
+utilisées, mineur pas fixé), MembersTab.tsx (cycle 3, propre), NicknameModal.tsx (cycle
+18... en fait cycle 16, broadcast WS manquant, fixé+vérifié via vrai client WebSocket),
+ChannelNotifModal.tsx (cycle 18, level "all" jamais consulté, fixé), UserProfileModal.tsx
+(cycle 15, bypass charset username via édition profil, fixé+vérifié live),
+VerificationGateModal.tsx (cycle 11, finding enforcement jamais câblé, voir plus haut),
+VoicePasswordPrompt.tsx (cycle 7, fuite hash bcrypt via GET channels, fixé+vérifié live).
+Desktop : lib.rs+capabilities (cycle 2), build.bat+build.sh (cycle 5, version hardcodée),
+build Linux réel vérifié de bout en bout (cycle 17), build Windows en cours de
+vérification (cycle 19).
 
 ## Fichiers encore jamais audités (pistes pour la suite, historique pré-2026-07-24)
 
