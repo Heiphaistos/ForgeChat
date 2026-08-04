@@ -184,6 +184,34 @@ pub async fn set_automod(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Cherche `needle` dans `haystack` comme mot/expression entière (frontières non
+/// alphanumériques des deux côtés), pas comme simple sous-chaîne -- sinon bloquer
+/// "hell" bloque aussi "hello", "shell", "michelle", etc. (problème de Scunthorpe).
+/// Marche aussi pour une expression à espaces ("gros mot"), seuls les bords
+/// extérieurs de l'expression doivent être des frontières de mot.
+fn contains_word(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    let mut search_from = 0usize;
+    while let Some(rel) = haystack[search_from..].find(needle) {
+        let idx = search_from + rel;
+        let end = idx + needle.len();
+        let before_ok = haystack[..idx].chars().next_back().is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = haystack[end..].chars().next().is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok {
+            return true;
+        }
+        // Avance d'un caractère (pas d'un octet) pour rester sur une frontière UTF-8 valide
+        let step = haystack[idx..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        search_from = idx + step;
+        if search_from >= haystack.len() {
+            break;
+        }
+    }
+    false
+}
+
 /// Vérifie un contenu de message contre les règles AutoMod du serveur.
 /// Retourne Some(AppError) si le message doit être rejeté.
 pub async fn check_automod(state: &AppState, server_id: Uuid, user_id: Uuid, content: &str) -> Option<AppError> {
@@ -207,7 +235,7 @@ pub async fn check_automod(state: &AppState, server_id: Uuid, user_id: Uuid, con
     // Filtre de mots
     let blocked: Vec<String> = row.get("word_filter");
     for word in &blocked {
-        if !word.is_empty() && lower.contains(word.to_lowercase().as_str()) {
+        if !word.is_empty() && contains_word(&lower, word.to_lowercase().as_str()) {
             return Some(AppError::BadRequest("Message bloqué par l'AutoMod (mot interdit)".into()));
         }
     }
@@ -678,4 +706,45 @@ async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Resu
     use crate::models::role::Permissions;
     // Déléguer à require_permission qui gère owner + ADMINISTRATOR + MANAGE_SERVER
     require_permission(state, user_id, server_id, Permissions::MANAGE_SERVER).await
+}
+
+#[cfg(test)]
+mod automod_word_filter_tests {
+    use super::contains_word;
+
+    #[test]
+    fn blocks_the_exact_word() {
+        assert!(contains_word("hello hell world", "hell"));
+    }
+
+    #[test]
+    fn does_not_block_word_as_substring() {
+        assert!(!contains_word("hello world", "hell"));
+        assert!(!contains_word("this is a shell script", "hell"));
+        assert!(!contains_word("michelle said hi", "hell"));
+    }
+
+    #[test]
+    fn blocks_at_start_and_end_of_string() {
+        assert!(contains_word("hell yeah", "hell"));
+        assert!(contains_word("go to hell", "hell"));
+    }
+
+    #[test]
+    fn blocks_multi_word_phrase_respecting_outer_boundaries() {
+        assert!(contains_word("that is a gros mot right there", "gros mot"));
+        assert!(!contains_word("un grosminet mot passe", "gros mot"));
+    }
+
+    #[test]
+    fn punctuation_counts_as_a_boundary() {
+        assert!(contains_word("hell, really?", "hell"));
+        assert!(contains_word("(hell)", "hell"));
+    }
+
+    #[test]
+    fn handles_multibyte_utf8_without_panicking() {
+        assert!(!contains_word("café hello monde", "hell"));
+        assert!(contains_word("café hell monde", "hell"));
+    }
 }
