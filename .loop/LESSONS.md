@@ -106,3 +106,16 @@
   chercher d'autres explications : forcer immédiatement `docker compose build --no-cache
   server && docker compose up -d server` et re-tester, sans perdre de temps à vérifier des
   métadonnées Docker qui se sont avérées non fiables à deux reprises.
+- **JAMAIS lancer `build.bat` (Windows) et `build.sh` (Linux/WSL2) en parallèle sur ForgeChat**
+  (2026-08-04) : les deux scripts font chacun leur propre `npm install` sur `client/node_modules`,
+  qui est le MÊME dossier physique côté disque (accédé via `C:\...` sous Windows et `/mnt/c/...`
+  sous WSL2) -- pas deux copies séparées. Windows a besoin de shims `.bin/*.cmd` natifs, WSL2/Linux
+  a besoin de symlinks POSIX -- une course entre les deux `npm install` corrompt le dossier pour
+  LES DEUX plateformes (vu concrètement : Windows échouait sur `'eslint' n'est pas reconnu`
+  pendant que Linux échouait sur des erreurs de modules manquants sans rapport apparent
+  `caniuse-lite`/`date-fns locale`, symptôme classique d'un `node_modules` à moitié écrit).
+  Règle : toujours attendre la fin COMPLÈTE d'un build desktop avant de lancer l'autre. Si l'autre
+  plateforme a été buildée entre-temps, faire `rm -rf client/node_modules && npm install` natif à
+  LA PLATEFORME CIBLE juste avant de lancer le build (PowerShell pour Windows, `wsl -d ... --
+  npm install` pour Linux) -- ne jamais supposer que le `npm install` interne au script suffit à
+  réparer un `node_modules` déjà pollué par l'autre plateforme.

@@ -4,7 +4,7 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-04 23:20) — server 3.232.0 / client 3.572.0 / desktop 3.21.0
+## Statut actuel (2026-08-04 23:45) — server 3.232.0 / client 3.573.0 / desktop 3.21.0 (release publiée)
 
 Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Boucle autonome en cours (cron 10min, portée web+desktop Windows+desktop Linux) : 14+ vrais fixes déployés ce jour (dont AutoMod bypass bots/webhooks/threads/forum/**scheduled messages (cycle 26)**, fuite hash bcrypt mot de passe vocal, IDOR cross-tenant category_id, race TOCTOU max_uses invitations, export RGPD tronqué à 100 messages, bypass blocage/confidentialité invite_bulk, bypass charset username, **et un message programmé qui contournait kick/ban/timeout en partant quand même à l'heure prévue (cycle 26)**) + 4 findings en attente de décision produit (RolesTab, Permissions par canal, Vérification serveur, bits bruts moderation.rs/tickets.rs) + 1 finding de durcissement technique (SSRF DNS rebinding) -- tous détaillés dans JOURNAL.md.
 
@@ -26,9 +26,11 @@ Finding séparé lié, PAS corrigé (changement d'architecture auth, hors périm
 
 **Cycle 31 (`totp.rs`, 2FA re-setup silencieux)** : `setup_totp` renvoyait `200` avec un secret/QR/codes de secours flambant neufs même quand le 2FA était déjà activé -- l'UPDATE protégé par `WHERE totp_enabled=FALSE` n'affectait alors 0 ligne, jamais vérifié, donc les données "réussies" renvoyées au client n'étaient jamais persistées. Risque de verrouillage si l'utilisateur scannait ce faux QR et remplaçait son entrée authenticator existante. Repro live confirmé (2e appel `setup_totp` → nouveau secret, code généré depuis ce secret rejeté par `disable_totp`, preuve qu'il n'a jamais été écrit en base). Fix : vérifie `rows_affected()==0`, renvoie `400` explicite. **Déploiement confirmé** (vérifié suite à question directe de Momo) : rebuild CI terminé, `verify_2fa_resetup.mjs` relancé → 2e appel `setup_totp` renvoie bien `400`.
 
-## Desktop : 3 correctifs en attente d'une release (aucune coupée depuis le 3 août)
+## Desktop : release v3.21.0 publiée (2026-08-04 23:45, sur demande explicite de Momo)
 
-Dernier binaire publié : Windows v3.18.0 (3 août), Linux v3.19.0 (3 août 20:30) -- `/opt/forgechat/downloads/` sur le VPS. Source desktop actuelle : v3.21.0. Écart = 3 fixes de cette session jamais packagés : version dynamique dans build.bat/build.sh (cycle 5), retrait `shell:default` (cycle 2), retrait `unsafe-inline` du CSP (cycle 28). Conforme à la règle "grouper avant de couper une release" -- pas d'action automatique, à faire sur demande explicite de Momo.
+Windows (`ForgeChat-Setup-v3.21.0.exe` + `ForgeChat-Portable-v3.21.0.exe`) et Linux (`ForgeChat-v3.21.0-amd64.deb` + `.AppImage`) buildés localement, publiés sur `/opt/forgechat/downloads/`, confirmés HTTP 200 sur les 4 URLs. `LandingPage.tsx` (WIN_RELEASE/LINUX_RELEASE) mis à jour vers v3.21.0, poussé (commit 0224ab7). Contient les 3 fixes accumulés : version dynamique build.bat/build.sh (cycle 5), retrait `shell:default` (cycle 2), retrait `unsafe-inline` CSP (cycle 28). **Déploiement web en attente** : poussé, source VPS à jour, mais `version.json` affichait encore l'ancienne version à la fin -- à reconfirmer.
+
+**Piège rencontré et documenté dans LESSONS.md** : build.bat et build.sh partagent le même `client/node_modules` physique (Windows via `C:\`, WSL2 via `/mnt/c/`) -- les avoir lancés en parallèle une 1re fois a corrompu les DEUX builds (symlinks `.bin/*` incompatibles Windows .cmd vs POSIX). Résolu en relançant séquentiellement avec un `rm -rf node_modules && npm install` natif à chaque plateforme juste avant son build.
 
 ## ⚠️ Fiabilité CI/déploiement à investiguer — cache Docker menteur, 2 occurrences dans cette session (2026-08-04, cycles 20 et 24)
 
