@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
-# ForgeChat Desktop Builder v3.19.0 — Linux (.deb + AppImage)
+# ForgeChat Desktop Builder — Linux (.deb + AppImage)
 set -euo pipefail
 
-VERSION="3.19.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$ROOT_DIR/dist-desktop"
-
-echo "============================================"
-echo "  ForgeChat Desktop Builder v$VERSION (Linux)"
-echo "============================================"
 
 command -v rustc >/dev/null || { echo "[ERREUR] Rust non trouve. Installe depuis https://rustup.rs"; exit 1; }
 command -v node  >/dev/null || { echo "[ERREUR] Node.js non trouve."; exit 1; }
 command -v cargo >/dev/null || { echo "[ERREUR] Cargo non trouve."; exit 1; }
 pkg-config --exists webkit2gtk-4.1 || { echo "[ERREUR] libwebkit2gtk-4.1-dev manquant (apt install libwebkit2gtk-4.1-dev)."; exit 1; }
+
+# Version lue depuis tauri.conf.json (source de verite utilisee par Tauri pour
+# nommer les artefacts de build) plutot que codee en dur -- un litteral fige
+# ici se perime a chaque bump de version (meme bug que build.bat, cf. sa doc :
+# trouve le 2026-08-03, recree entre-temps par un bump normal de version
+# pendant cette session, le script visait encore "3.19.0" en etant a 3.20.0).
+VERSION="$(node -p "require('$SCRIPT_DIR/src-tauri/tauri.conf.json').version")"
+if [ -z "$VERSION" ]; then
+    echo "[ERREUR] Impossible de lire la version depuis src-tauri/tauri.conf.json"
+    exit 1
+fi
+
+echo "============================================"
+echo "  ForgeChat Desktop Builder v$VERSION (Linux)"
+echo "============================================"
 
 echo "[1/4] Build du client React..."
 cd "$ROOT_DIR/client"
