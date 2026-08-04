@@ -75,6 +75,15 @@ pub async fn get_user(
             public.activity_name = None;
             public.activity_detail = None;
         }
+
+        // `birthday` (date exacte) et `totp_enabled` n'ont de sens que pour SA PROPRE
+        // fiche (ProfileSection.tsx pour éditer, SecuritySection.tsx pour l'état 2FA) --
+        // aucun code client ne les lit jamais depuis le profil d'un AUTRE utilisateur,
+        // pourtant `UserPublic` (partagé entre get_me et get_user) les incluait sans
+        // distinction : n'importe quel utilisateur authentifié pouvait récupérer la date
+        // de naissance exacte de n'importe qui via GET /users/:id, sans même être ami.
+        public.birthday = None;
+        public.totp_enabled = false;
     }
 
     Ok(Json(public))
