@@ -11,7 +11,6 @@
     "core:window:allow-maximize",
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
-    "shell:default",
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",
