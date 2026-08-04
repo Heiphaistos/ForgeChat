@@ -12,10 +12,22 @@
 
 import { useCallback, useRef } from 'react'
 import api from '../api/client'
+import { useAuth } from '../store/auth'
 
 const DB_NAME = 'forgechat_e2e'
 const DB_STORE = 'keys'
 const KEY_RECORD = 'my_keypair'
+
+// IndexedDB est scopée par ORIGINE, pas par compte ForgeChat -- sur un navigateur
+// partagé (PC familial, poste public), si l'utilisateur A génère une paire de clés
+// puis se déconnecte, l'utilisateur B qui se connecte ensuite et active le E2E
+// retrouvait la paire de clés de A sous ce même enregistrement non scopé : sa propre
+// génération de clé se déclenchait en no-op ("déjà généré"), son upload de clé
+// publique était sauté, et B chiffrait/déchiffrait silencieusement avec l'IDENTITÉ
+// CRYPTOGRAPHIQUE DE A. Fix : inclure l'ID utilisateur dans la clé d'enregistrement.
+function keyRecordFor(userId: string | undefined): string {
+  return userId ? `${KEY_RECORD}:${userId}` : KEY_RECORD
+}
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 
@@ -89,12 +101,13 @@ export function useE2E() {
   const aesKeyCache = useRef<Map<string, CryptoKey>>(new Map())
 
   const getMyKeyPair = useCallback(async (): Promise<CryptoKeyPair | null> => {
-    const kp = await idbGet<CryptoKeyPair>(KEY_RECORD)
+    const kp = await idbGet<CryptoKeyPair>(keyRecordFor(useAuth.getState().user?.id))
     return kp ?? null
   }, [])
 
   const generateAndStoreKeyPair = useCallback(async (): Promise<void> => {
-    const existing = await idbGet<CryptoKeyPair>(KEY_RECORD)
+    const record = keyRecordFor(useAuth.getState().user?.id)
+    const existing = await idbGet<CryptoKeyPair>(record)
     if (existing) return // déjà généré
 
     const kp = await crypto.subtle.generateKey(
@@ -104,7 +117,7 @@ export function useE2E() {
     ) as CryptoKeyPair
 
     // Stocker la paire de clés en IndexedDB (clé privée ne quitte jamais le browser)
-    await idbSet(KEY_RECORD, kp)
+    await idbSet(record, kp)
 
     // Uploader la clé publique sur le serveur
     const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey)
