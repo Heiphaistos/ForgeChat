@@ -4,7 +4,7 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-04 22:30) — server 3.231.0 / client 3.571.0 / desktop 3.21.0
+## Statut actuel (2026-08-04 23:00) — server 3.231.0 / client 3.572.0 / desktop 3.21.0
 
 Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Boucle autonome en cours (cron 10min, portée web+desktop Windows+desktop Linux) : 14+ vrais fixes déployés ce jour (dont AutoMod bypass bots/webhooks/threads/forum/**scheduled messages (cycle 26)**, fuite hash bcrypt mot de passe vocal, IDOR cross-tenant category_id, race TOCTOU max_uses invitations, export RGPD tronqué à 100 messages, bypass blocage/confidentialité invite_bulk, bypass charset username, **et un message programmé qui contournait kick/ban/timeout en partant quand même à l'heure prévue (cycle 26)**) + 4 findings en attente de décision produit (RolesTab, Permissions par canal, Vérification serveur, bits bruts moderation.rs/tickets.rs) + 1 finding de durcissement technique (SSRF DNS rebinding) -- tous détaillés dans JOURNAL.md.
 
@@ -21,6 +21,8 @@ Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'
 **Vérifié en conditions réelles au cycle 30** : script de repro relancé après rebuild CI terminé -- revoke → 204, puis refresh avec le token de cet appareil → `401 {"error":"Non authentifié"}` (attendu). Fix confirmé actif en prod.
 
 Finding séparé lié, PAS corrigé (changement d'architecture auth, hors périmètre autonome) : `sessions[0] = session actuelle` côté client reste un heuristique (tri par `last_seen`), pas une garantie -- le JWT ne porte aucun identifiant de session. Amélioré par ce fix (last_seen redevient fiable) mais pas rendu structurellement certain.
+
+**Cycle 30 (client, `AuditLogPage.tsx`)** : le bouton "Charger plus" du journal d'audit ne pouvait JAMAIS s'afficher -- la requête n'envoyait aucun `limit`, donc le serveur plafonnait à 50 par défaut, et le pager client-side (qui slice sur ce même lot de 50) avait donc systématiquement `hasMore=false`. Historique au-delà des 50 dernières actions silencieusement inaccessible. Fix : `limit=200` (plafond serveur existant) ajouté à la requête. Vérifié eslint+tsc+`npm run build` complet (build WSL2 d'abord bloqué par un binaire natif `lightningcss` manquant côté Linux, environnement jamais provisionné pour WSL -- corrigé via `npm install --no-save`, aucun impact sur package.json/lock committé). **Déploiement en attente** : poussé (4fe77da), source VPS à jour, mais `version.json` affichait encore l'ancienne version à la fin du cycle -- à reconfirmer au cycle suivant.
 
 ## ⚠️ Fiabilité CI/déploiement à investiguer — cache Docker menteur, 2 occurrences dans cette session (2026-08-04, cycles 20 et 24)
 
