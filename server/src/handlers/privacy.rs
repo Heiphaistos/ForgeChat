@@ -28,13 +28,18 @@ pub async fn export_user_data(
         sqlx::query(
             "SELECT username, email, bio, pronouns, created_at FROM users WHERE id=$1"
         ).bind(uid).fetch_one(&state.db),
+        // Pas de LIMIT -- un export RGPD (droit à la portabilité) doit couvrir la
+        // TOTALITÉ des messages, pas un échantillon. `LIMIT 100` tronquait
+        // silencieusement l'export dès qu'un utilisateur avait posté plus de 100
+        // messages au total (n'importe quel utilisateur actif sur plusieurs
+        // semaines), sans jamais l'indiquer -- l'utilisateur recevait un fichier
+        // qui se présentait comme complet mais ne l'était pas.
         sqlx::query(
             "SELECT m.content, m.created_at, c.name as channel_name
              FROM messages m
              JOIN channels c ON c.id = m.channel_id
              WHERE m.user_id = $1
-             ORDER BY m.created_at DESC
-             LIMIT 100"
+             ORDER BY m.created_at DESC"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
             "SELECT dm.content, dm.created_at,
@@ -43,16 +48,14 @@ pub async fn export_user_data(
              JOIN dm_channels dc ON dc.id = dm.dm_channel_id
              JOIN users u ON u.id = (CASE WHEN dc.user1_id = $1 THEN dc.user2_id ELSE dc.user1_id END)
              WHERE dm.sender_id = $1
-             ORDER BY dm.created_at DESC
-             LIMIT 100"
+             ORDER BY dm.created_at DESC"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
             "SELECT gm.content, gm.created_at, gc.name as group_name
              FROM group_dm_messages gm
              JOIN group_dm_channels gc ON gc.id = gm.dm_id
              WHERE gm.sender_id = $1
-             ORDER BY gm.created_at DESC
-             LIMIT 100"
+             ORDER BY gm.created_at DESC"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
             "SELECT s.name FROM servers s
