@@ -292,9 +292,12 @@ pub async fn login(
 
     // Enregistrer la session
     {
-        use sha2::{Sha256, Digest};
-        let token_hash: String = Sha256::digest(refresh_token.as_bytes())
-            .iter().map(|b| format!("{:02x}", b)).collect();
+        // hash_token() (même fonction que pour refresh_tokens.token_hash, base64) --
+        // avant ce fix, ce bloc calculait son propre hash hex-encodé en dur, donc
+        // user_sessions.refresh_token_hash ne matchait JAMAIS refresh_tokens.token_hash
+        // (encodages différents). Sans corrélation possible, revoke_session ne pouvait
+        // pas retrouver quel refresh_token invalider -- "Révoquer" ne faisait rien.
+        let token_hash = hash_token(&refresh_token);
         let device = headers.get("user-agent")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("Unknown")
@@ -355,6 +358,21 @@ pub async fn refresh(
 
     let new_refresh_token = generate_refresh_token();
     store_refresh_token(&state, row.0, &new_refresh_token).await?;
+
+    // Garder user_sessions synchronisé avec la rotation RTR (sinon refresh_token_hash
+    // devient obsolète dès ce premier refresh, et revoke_session ne retrouve plus
+    // jamais la bonne ligne refresh_tokens à invalider). Met aussi last_seen à jour --
+    // ce champ n'était sinon jamais réécrit après la création de la session, gelé
+    // à l'heure du login au lieu de refléter une vraie activité récente.
+    let new_hash = hash_token(&new_refresh_token);
+    let _ = sqlx::query(
+        "UPDATE user_sessions SET refresh_token_hash=$1, last_seen=NOW() WHERE refresh_token_hash=$2 AND user_id=$3"
+    )
+    .bind(&new_hash)
+    .bind(&token_hash)
+    .bind(row.0)
+    .execute(&state.db)
+    .await;
 
     let access_token = create_token(row.0, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
@@ -577,13 +595,28 @@ pub async fn revoke_session(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
 ) -> Result<axum::http::StatusCode> {
-    sqlx::query(
-        "DELETE FROM user_sessions WHERE id = $1 AND user_id = $2",
+    // Ne supprimait avant QUE la ligne d'affichage user_sessions -- le refresh_token
+    // réel de cet appareil restait valide dans `refresh_tokens` (table distincte,
+    // jamais consultée ici), donc l'appareil "révoqué" pouvait continuer à rafraîchir
+    // indéfiniment son access token (jusqu'à l'expiration naturelle du refresh token,
+    // 30 jours). Bouton de sécurité 100% cosmétique. Fix : supprimer aussi la ligne
+    // refresh_tokens correspondante avant de retirer l'entrée d'affichage.
+    let hash: Option<String> = sqlx::query_scalar(
+        "DELETE FROM user_sessions WHERE id = $1 AND user_id = $2 RETURNING refresh_token_hash",
     )
     .bind(session_id)
     .bind(claims.sub)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await?;
+
+    if let Some(hash) = hash {
+        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2")
+            .bind(&hash)
+            .bind(claims.sub)
+            .execute(&state.db)
+            .await?;
+    }
+
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
