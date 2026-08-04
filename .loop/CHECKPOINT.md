@@ -4,7 +4,7 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-04 22:00) — server 3.230.0 / client 3.571.0 / desktop 3.21.0
+## Statut actuel (2026-08-04 22:30) — server 3.231.0 / client 3.571.0 / desktop 3.21.0
 
 Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Boucle autonome en cours (cron 10min, portée web+desktop Windows+desktop Linux) : 14+ vrais fixes déployés ce jour (dont AutoMod bypass bots/webhooks/threads/forum/**scheduled messages (cycle 26)**, fuite hash bcrypt mot de passe vocal, IDOR cross-tenant category_id, race TOCTOU max_uses invitations, export RGPD tronqué à 100 messages, bypass blocage/confidentialité invite_bulk, bypass charset username, **et un message programmé qui contournait kick/ban/timeout en partant quand même à l'heure prévue (cycle 26)**) + 4 findings en attente de décision produit (RolesTab, Permissions par canal, Vérification serveur, bits bruts moderation.rs/tickets.rs) + 1 finding de durcissement technique (SSRF DNS rebinding) -- tous détaillés dans JOURNAL.md.
 
@@ -13,6 +13,14 @@ Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'
 **Fix cycle 27 (`join_server` repli sur `servers.invite_code`) vérifié en conditions réelles au cycle 28** : serveur public jetable créé, listé par `/explore`, JOIN réel réussi (200) depuis un 2e compte avec exactement le flux d'`ExplorePage.tsx`. Rejoindre un serveur public depuis Explorer/Découvrir fonctionne à nouveau en prod.
 
 **Cycle 28 (desktop, hardening CSP)** : `script-src 'unsafe-inline'` retiré de `tauri.conf.json` (build réel + grep source ne montrent aucun besoin de script inline). Vérifié par analyse statique + `cargo check` uniquement -- PAS testé en exécution réelle (pas d'outillage navigateur automatisé dans ce repo). Sans effet tant qu'aucun nouveau build .exe/.deb/.AppImage n'est publié. Desktop 3.20.0 → 3.21.0.
+
+## ⚠️ Fix CRITIQUE cycle 29 (`auth.rs`, révocation de session) — vérification prod EN ATTENTE
+
+`revoke_session` était **100% cosmétique** : supprimait seulement la ligne d'affichage `user_sessions`, jamais `refresh_tokens` (table réellement consultée par `/auth/refresh`) -- pire, les deux tables ne pouvaient structurellement jamais se corréler (hash hex vs base64 du même SHA256) et `user_sessions.refresh_token_hash` n'était jamais resynchronisé après une rotation RTR. Un appareil "révoqué" gardait un accès total (refresh illimité) jusqu'à l'expiration naturelle du refresh token (30 jours). C'est la fonctionnalité qu'un utilisateur utiliserait EN PREMIER en cas de compte compromis/appareil volé, et elle ne faisait rien. **Repro confirmé en direct contre la prod AVANT le fix** (compte jetable : revoke → 204, puis refresh avec le token "révoqué" → 200 quand même). Fix : hash cohérent (`hash_token()` partout), resync de `user_sessions` à chaque refresh (bonus : `last_seen` redevient significatif), et `revoke_session` supprime vraiment la ligne `refresh_tokens` correspondante. Sessions déjà existantes en prod avant ce déploiement : no-op silencieux tant que l'utilisateur ne s'est pas reconnecté (pas un bug, juste transitoire).
+
+**Vérification cycle 29 EN ATTENTE** : poussé (commit 45feb45), source confirmée à jour sur le VPS, mais `cargo build --release` CI toujours en cours à la fin du cycle -- pas encore de test fonctionnel réel post-déploiement. À faire au cycle suivant : relancer le script de repro et confirmer que `refresh` retourne bien 401 après révocation.
+
+Finding séparé lié, PAS corrigé (changement d'architecture auth, hors périmètre autonome) : `sessions[0] = session actuelle` côté client reste un heuristique (tri par `last_seen`), pas une garantie -- le JWT ne porte aucun identifiant de session. Amélioré par ce fix (last_seen redevient fiable) mais pas rendu structurellement certain.
 
 ## ⚠️ Fiabilité CI/déploiement à investiguer — cache Docker menteur, 2 occurrences dans cette session (2026-08-04, cycles 20 et 24)
 
