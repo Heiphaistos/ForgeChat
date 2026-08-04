@@ -1,5 +1,37 @@
 import { useState, useCallback } from 'react'
 import { stripMarkdown } from '../utils/mdShortcuts'
+import { queryClient } from '../main'
+
+// `quiet_hours_*` (PrivacySection.tsx) était sauvegardé et réaffiché mais jamais
+// consulté nulle part -- un pur placebo côté UI, comme les autres réglages du même
+// type trouvés cette session. Il n'existe aucun push serveur (pas de crate web-push/
+// VAPID côté back) : les notifications sont déclenchées localement à la réception
+// d'un event WS, donc l'application de ce réglage doit se faire ici, au point d'appel
+// central déjà utilisé par tous les événements notifiables.
+function isWithinQuietHours(start?: string | null, end?: string | null): boolean {
+  if (!start || !end) return false
+  const now = new Date()
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  if ([sh, sm, eh, em].some(n => Number.isNaN(n))) return false
+  const startMin = sh * 60 + sm
+  const endMin = eh * 60 + em
+  // Plage traversant minuit (ex. 22:00 -> 08:00) vs plage normale (ex. 09:00 -> 17:00)
+  return startMin <= endMin
+    ? nowMin >= startMin && nowMin < endMin
+    : nowMin >= startMin || nowMin < endMin
+}
+
+function isQuietHoursActive(): boolean {
+  const settings = queryClient.getQueryData<{
+    quiet_hours_enabled?: boolean
+    quiet_hours_start?: string | null
+    quiet_hours_end?: string | null
+  }>(['user-settings'])
+  if (!settings?.quiet_hours_enabled) return false
+  return isWithinQuietHours(settings.quiet_hours_start, settings.quiet_hours_end)
+}
 
 export function usePushNotifications() {
   const supported = typeof window !== 'undefined' && 'Notification' in window
@@ -32,6 +64,7 @@ export function sendNativeNotification(
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   if (document.hasFocus()) return
+  if (isQuietHoursActive()) return
 
   try {
     const { onClick, ...notifOptions } = options ?? {}

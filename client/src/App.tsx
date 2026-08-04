@@ -10,7 +10,7 @@ import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useUpdateNotifier } from './hooks/useUpdateNotifier'
 import api from './api/client'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
@@ -94,6 +94,14 @@ function AppInner() {
   const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   const qcHook = useQueryClient()
+  // Peuple le cache ['user-settings'] dès le montage (pas seulement quand l'utilisateur
+  // ouvre Paramètres) -- nécessaire pour que sendNativeNotification puisse lire
+  // quiet_hours_* de façon synchrone dès la 1re notification de la session.
+  useQuery({
+    queryKey: ['user-settings'],
+    queryFn: () => api.get('/user/settings').then(r => r.data),
+    staleTime: 60_000,
+  })
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
   const pendingNotifs = useRef<Array<{ title: string; body: string; path: string }>>([])
   const wasConnected = useRef(false)

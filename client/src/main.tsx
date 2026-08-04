@@ -6,7 +6,9 @@ import App from './App'
 import './index.css'
 import { initFaviconAnimation } from './faviconAnimator'
 
-const queryClient = new QueryClient({
+// Exporté pour permettre à des utilitaires hors-composant (ex. sendNativeNotification)
+// de lire le cache sans avoir à traverser le contexte React.
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 30_000 },
   },
