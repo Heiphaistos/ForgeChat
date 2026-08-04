@@ -103,7 +103,13 @@ export default function AuditLogPage({ serverId }: Props) {
 
   const { data: entries = [], isLoading, isError } = useQuery<AuditEntry[]>({
     queryKey: ['audit', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/audit`).then(r => r.data),
+    // limit=200 (plafond serveur, cf. get_audit_log) -- sans ce paramètre le
+    // serveur ne renvoie que les 50 entrées par défaut, ce qui rendait le
+    // bouton "Charger plus" ci-dessous invisible en permanence (la 1re page
+    // client de 50 couvrait déjà 100% des entrées reçues, hasMore restait
+    // toujours false) : l'historique au-delà des 50 dernières actions était
+    // silencieusement inaccessible, sans aucun indice qu'il en manquait.
+    queryFn: () => api.get(`/servers/${serverId}/audit`, { params: { limit: 200 } }).then(r => r.data),
     refetchInterval: 30_000,
   })
 
