@@ -4,11 +4,15 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-04 21:00) — server 3.229.0 / client 3.571.0 / desktop 3.20.0
+## Statut actuel (2026-08-04 22:00) — server 3.230.0 / client 3.571.0 / desktop 3.21.0
 
 Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Boucle autonome en cours (cron 10min, portée web+desktop Windows+desktop Linux) : 14+ vrais fixes déployés ce jour (dont AutoMod bypass bots/webhooks/threads/forum/**scheduled messages (cycle 26)**, fuite hash bcrypt mot de passe vocal, IDOR cross-tenant category_id, race TOCTOU max_uses invitations, export RGPD tronqué à 100 messages, bypass blocage/confidentialité invite_bulk, bypass charset username, **et un message programmé qui contournait kick/ban/timeout en partant quand même à l'heure prévue (cycle 26)**) + 4 findings en attente de décision produit (RolesTab, Permissions par canal, Vérification serveur, bits bruts moderation.rs/tickets.rs) + 1 finding de durcissement technique (SSRF DNS rebinding) -- tous détaillés dans JOURNAL.md.
 
 **Fix cycle 26 (`scheduled.rs`) vérifié en conditions réelles au cycle 27** : script Node.js de bout en bout contre la prod (comptes+serveur jetables, supprimés après) a confirmé les 2 corrections -- AutoMod bloque bien un message programmé contenant un mot interdit (400), ET un membre kické après programmation mais avant `send_at` ne voit plus son message publié par le dispatcher. Aucun signe de cache Docker menteur cette fois (image reconstruite en ~2 min après le push, timestamp cohérent).
+
+**Fix cycle 27 (`join_server` repli sur `servers.invite_code`) vérifié en conditions réelles au cycle 28** : serveur public jetable créé, listé par `/explore`, JOIN réel réussi (200) depuis un 2e compte avec exactement le flux d'`ExplorePage.tsx`. Rejoindre un serveur public depuis Explorer/Découvrir fonctionne à nouveau en prod.
+
+**Cycle 28 (desktop, hardening CSP)** : `script-src 'unsafe-inline'` retiré de `tauri.conf.json` (build réel + grep source ne montrent aucun besoin de script inline). Vérifié par analyse statique + `cargo check` uniquement -- PAS testé en exécution réelle (pas d'outillage navigateur automatisé dans ce repo). Sans effet tant qu'aucun nouveau build .exe/.deb/.AppImage n'est publié. Desktop 3.20.0 → 3.21.0.
 
 ## ⚠️ Fiabilité CI/déploiement à investiguer — cache Docker menteur, 2 occurrences dans cette session (2026-08-04, cycles 20 et 24)
 
