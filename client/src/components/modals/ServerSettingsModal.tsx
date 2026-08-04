@@ -190,7 +190,14 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       qc.invalidateQueries({ queryKey: ['servers'] })
       toast.success('Icône mise à jour')
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload'),
+    onError: (e: any) => {
+      // Le clic sur "Changer l'icône" affiche un aperçu local optimiste
+      // (URL.createObjectURL) avant même la réponse serveur -- si l'upload
+      // échoue, revenir à l'icône réellement enregistrée au lieu de laisser
+      // l'aperçu d'un fichier jamais sauvegardé affiché comme si de rien n'était.
+      setIconPreview(server.icon ?? null)
+      toast.error(e.response?.data?.error ?? 'Erreur upload')
+    },
   })
 
   const deleteServer = useMutation({

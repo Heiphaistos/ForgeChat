@@ -56,3 +56,21 @@
   un `docker compose build --no-cache server` manuel était nécessaire à CHAQUE déploiement
   touchant le serveur pour être sûr que le binaire tournant reflète vraiment le code —
   ce correctif rend l'invalidation fiable sans intervention manuelle.
+- **`client/node_modules/.bin/*` sont des symlinks POSIX (installés depuis WSL2)** :
+  `npx eslint`/`npm run lint`/`npm run build` échouent sous PowerShell/Git-Bash Windows
+  ("'eslint' n'est pas reconnu") -- Windows ne résout pas ces symlinks comme des shims
+  exécutables. Contournement rapide : `node node_modules/eslint/bin/eslint.js src --quiet`
+  et `node node_modules/typescript/bin/tsc --noEmit` marchent (invocation directe du
+  fichier JS). Mais `node node_modules/vite/bin/vite.js build` échoue différemment
+  ("Cannot resolve entry module vite.config.ts") même en invocation directe -- pour une
+  vraie vérification de build complet (eslint+tsc+vite enchaînés comme le fait
+  `npm run build`), lancer depuis WSL2 : `wsl -d Ubuntu-22.04 -- bash -lc "cd
+  /mnt/c/Users/Momo/ForgeChat/client && npm run build"` (environnement natif où les
+  symlinks résolvent correctement). Ne pas reconclure "cassé" sur le seul échec Windows.
+- **Après un déploiement serveur, ne pas se fier uniquement à `git rev-parse HEAD` sur le
+  VPS pour confirmer le déploiement** : le git reset peut réussir immédiatement alors que
+  le rebuild Docker (`cargo build --release`, ~10-11 min) est encore en cours -- vérifier
+  `docker inspect forgechat-server-1 --format '{{.Created}}'` a bien un timestamp POSTÉRIEUR
+  au push avant de tester le comportement runtime, sinon on teste encore l'ancien binaire
+  (piège revu 2026-08-04, même symptôme que l'incident du 2026-07-22 mais ici juste le
+  temps de build normal, pas une régression du fix GIT_SHA).
