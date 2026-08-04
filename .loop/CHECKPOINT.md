@@ -219,6 +219,12 @@ en prod, identifié par lecture de code. Fix propre = file d'attente de renégoc
 par pc. **Ne pas corriger sans l'accord de Momo** — surface large, risque de casser la
 voix/vidéo en prod si mal fait.
 
+## Finding NON corrigé — credentials TURN statiques et non expirantes (2026-08-05, cycle 35)
+
+`GET /api/voice/ice-config` (`server/src/handlers/voice.rs`, seul point d'entrée jamais audité côté serveur cette session, 36 lignes lues intégralement) renvoie à **tout utilisateur authentifié** les identifiants du serveur TURN (`TURN_USERNAME`/`TURN_PASSWORD`, env vars) **tels quels, statiques, sans expiration**. Confirmé sur le VPS (`docker exec forgechat-server-1 env` + `/etc/turnserver.conf`) : coturn tourne en mode `lt-cred-mech` (long-term credentials) avec un seul couple `user=forgechat:9bbd24...` codé en dur côté serveur ET renvoyé identique à chaque appel de l'endpoint, sans rotation ni limite de durée. N'importe quel utilisateur authentifié (ou un JWT volé) peut extraire ce credential depuis le trafic réseau (devtools) et l'utiliser indéfiniment pour relayer du trafic arbitraire via le serveur TURN — pas juste pour les appels ForgeChat, un TURN relay accepte n'importe quel trafic UDP/TCP une fois authentifié. Risque : abus de bande passante/coûts, relay ouvert détourné à des fins sans rapport avec l'app.
+
+**Pourquoi pas corrigé en autonome** : le fix standard (mécanisme REST API de coturn, `use-auth-secret`/`static-auth-secret` + génération HMAC-SHA1 de credentials éphémères côté serveur, `username=timestamp:userid`, expiration 24h typique) nécessite de coordonner un changement CÔTÉ CODE (Rust, voice.rs) ET côté infra externe (`/etc/turnserver.conf` sur le VPS, redémarrage du service coturn) -- deux systèmes différents à faire évoluer ensemble. Si l'un change sans l'autre, TOUS les appels voix/vidéo cassent immédiatement en prod (authentification TURN rejetée). Même catégorie de risque que la race WebRTC ci-dessus (changement d'infra WebRTC à large surface, haute criticité si mal fait) -- explicitement hors du périmètre "correctif minimal et sûr" de cette boucle autonome. Noté pour une session dédiée si Momo juge le risque prioritaire (le commentaire déjà présent dans `turnserver.conf`, "Sécurité SSRF : bloquer accès aux réseaux internes via TURN", montre qu'un durcissement TURN a déjà été fait consciemment par le passé -- celui-ci serait la suite logique).
+
 ## Contexte technique (stable, ne change pas d'une itération à l'autre)
 
 - Repo : `C:\Users\Momo\ForgeChat` (client React/Vite/TS, server Rust/Axum, VPS
