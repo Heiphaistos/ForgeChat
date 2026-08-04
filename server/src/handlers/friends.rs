@@ -1762,6 +1762,55 @@ pub async fn invite_bulk(
             continue;
         }
 
+        // Mêmes garde-fous que send_friend_request (endpoint mono-cible) --
+        // cette boucle bulk les avait tous les deux oubliés : ni le blocage
+        // mutuel (table `blocks`, séparée de `friendships`) ni le réglage de
+        // confidentialité `friend_request_from` du destinataire n'étaient
+        // vérifiés, permettant de contourner les deux via l'import CSV.
+        let blocked = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM blocks WHERE
+             (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+        )
+        .bind(claims.sub)
+        .bind(target_id)
+        .fetch_one(&state.db)
+        .await?;
+        if blocked {
+            not_found.push(raw.clone());
+            continue;
+        }
+
+        let pref: Option<String> = sqlx::query_scalar::<_, String>(
+            "SELECT friend_request_from FROM user_settings WHERE user_id=$1"
+        )
+        .bind(target_id)
+        .fetch_optional(&state.db)
+        .await?;
+        let allowed = match pref.as_deref() {
+            Some("nobody") => false,
+            Some("friends_of_friends") => {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(
+                        SELECT 1 FROM friendships f1
+                        JOIN friendships f2 ON
+                            (CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END) =
+                            (CASE WHEN f2.user_id=$2 THEN f2.friend_id ELSE f2.user_id END)
+                        WHERE (f1.user_id=$1 OR f1.friend_id=$1) AND f1.status='accepted'
+                          AND (f2.user_id=$2 OR f2.friend_id=$2) AND f2.status='accepted'
+                    )"
+                )
+                .bind(claims.sub)
+                .bind(target_id)
+                .fetch_one(&state.db)
+                .await?
+            }
+            _ => true,
+        };
+        if !allowed {
+            not_found.push(raw.clone());
+            continue;
+        }
+
         let exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM friendships WHERE
              (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
