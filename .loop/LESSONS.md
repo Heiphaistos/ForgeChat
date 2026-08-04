@@ -74,3 +74,17 @@
   au push avant de tester le comportement runtime, sinon on teste encore l'ancien binaire
   (piège revu 2026-08-04, même symptôme que l'incident du 2026-07-22 mais ici juste le
   temps de build normal, pas une régression du fix GIT_SHA).
+- **MÊME `docker inspect .Created` postérieur au push ne garantit PAS un binaire à jour**
+  (revu 2026-08-04, cycle 20 : conteneur recréé à 15:38, source VPS confirmée à jour via
+  `git log`, mais `docker inspect --format '{{.Image}}'` pointait vers une image buildée à
+  15:08 -- AVANT le push, cache Docker menteur malgré le fix GIT_SHA du 2026-07-22, cause
+  racine exacte non élucidée côté CI cette fois). Symptôme observé : le fix déployé n'avait
+  simplement AUCUN effet en prod (comportement identique à avant), sans aucune erreur. La
+  vérification fiable n'est ni le timestamp du conteneur NI `git rev-parse` côté VPS, mais
+  soit (a) `docker inspect <container> --format '{{.Image}}'` puis comparer le `CreatedAt`
+  de CETTE image précise, soit (b) directement un TEST FONCTIONNEL du comportement corrigé
+  (le plus fiable -- c'est ce qui a révélé l'incohérence ici). Fix immédiat sans attendre un
+  nouveau push : `docker compose build --no-cache server` (confirmer "Building commit <sha>"
+  dans les logs du RUN Dockerfile) puis `docker compose up -d server`, re-tester. Toujours
+  faire un test comportemental réel après un déploiement serveur qui doit changer un
+  comportement observable, pas seulement vérifier des métadonnées de conteneur/git.
