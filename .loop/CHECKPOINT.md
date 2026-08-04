@@ -4,7 +4,7 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-05 00:25) — server 3.234.0 / client 3.573.0 / desktop 3.21.0 (release publiée)
+## Statut actuel (2026-08-05 01:45) — server 3.235.0 / client 3.574.0 / desktop 3.21.0 (release publiée)
 
 **Cycle 32 (`user_settings.rs`, XSS via `platform_url`)** : `ConnectedAccountsSection.tsx` pose `platform_url` (saisi libre par l'utilisateur) directement dans un `href` React sans neutralisation, et le serveur n'avait aucune validation de schéma -- un `javascript:...` était accepté et stocké. Repro live confirmé (`200` avant fix). Impact réel aujourd'hui limité à du self-XSS (endpoint scope `claims.sub`, aucune autre vue ne consulte `connected_accounts`), mais corrigé par précaution (devient un vrai XSS stocké cross-utilisateur si un profil public affiche un jour ces liens). Fix : rejet `400` si l'URL ne commence pas par `http://`/`https://` (même pattern que feeds.rs/audit.rs). **Déploiement confirmé au cycle 33** : `verify_connected_url.mjs` relancé après rebuild → `400` (rejeté correctement) au lieu du `200` d'avant.
 
