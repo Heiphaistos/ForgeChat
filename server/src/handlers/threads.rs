@@ -110,6 +110,13 @@ pub async fn create_thread(
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| first_msg.chars().take(50).collect::<String>());
 
+    // Jamais vérifié sur ce chemin de création de message (comme send_thread_message
+    // plus bas, et comme bots.rs/webhooks.rs avant leur fix) -- un thread contournait
+    // entièrement le filtre AutoMod du serveur.
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, first_msg.trim()).await {
+        return Err(err);
+    }
+
     let mut tx = state.db.begin().await?;
 
     let thread = sqlx::query_as::<_, Thread>(
@@ -314,6 +321,10 @@ pub async fn send_thread_message(
 
     if thread_row.get::<bool, _>("locked") || thread_row.get::<bool, _>("archived") {
         return Err(AppError::Forbidden);
+    }
+
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content_trimmed).await {
+        return Err(err);
     }
 
     let msg = sqlx::query_as::<_, ThreadMessage>(

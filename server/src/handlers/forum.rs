@@ -154,6 +154,15 @@ pub async fn create_post(
         ));
     }
 
+    // Jamais vérifié sur ce chemin (comme reply_to_post plus bas) -- un post de forum
+    // contournait entièrement le filtre AutoMod du serveur. Le contenu est optionnel
+    // pour un post forum (titre seul valide), donc check seulement s'il y en a un.
+    if let Some(ref c) = content_str {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, c).await {
+            return Err(err);
+        }
+    }
+
     let post = sqlx::query_as::<_, ForumPost>(
         "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags)
          VALUES ($1, $2, $3, $4, $5) RETURNING *"
@@ -339,6 +348,13 @@ pub async fn reply_to_post(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let content = content_raw;
+
+    // Jamais vérifié sur ce chemin -- une réponse de forum contournait entièrement le
+    // filtre AutoMod du serveur. Fait avant d'ouvrir la transaction ci-dessous pour ne
+    // pas garder le verrou FOR UPDATE plus longtemps que nécessaire.
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content).await {
+        return Err(err);
+    }
 
     // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
     let mut tx = state.db.begin().await?;
