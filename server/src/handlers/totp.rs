@@ -41,7 +41,15 @@ pub async fn setup_totp(
             rand::thread_rng().gen::<u16>()))
         .collect();
 
-    sqlx::query(
+    // Le WHERE totp_enabled=FALSE protège contre l'écrasement silencieux d'un secret
+    // déjà actif, mais avant ce fix, un appel avec le 2FA déjà activé (double-clic,
+    // 2e onglet/appareil avec un `me` en cache, retry réseau) faisait un UPDATE
+    // affectant 0 ligne SANS ERREUR -- le handler renvoyait quand même 200 avec un
+    // secret/QR/codes de secours flambant neufs, qui semblaient valides côté client
+    // mais n'étaient jamais persistés : scanner ce QR configurait l'authenticator
+    // avec un secret que le serveur ignorait totalement, un risque réel de
+    // verrouillage si l'utilisateur remplaçait ensuite son entrée existante.
+    let result = sqlx::query(
         "UPDATE users SET totp_secret = $1, totp_backup_codes = $2
          WHERE id = $3 AND totp_enabled = FALSE"
     )
@@ -50,6 +58,10 @@ pub async fn setup_totp(
     .bind(claims.sub)
     .execute(&state.db).await
     .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::BadRequest("2FA déjà activé -- désactivez-le d'abord pour le reconfigurer".into()));
+    }
 
     Ok(Json(TotpSetupResponse { secret, qr_url, backup_codes }))
 }
