@@ -65,6 +65,13 @@ pub async fn create_scheduled(
         return Err(AppError::Forbidden);
     }
 
+    // Même check que messages.rs/threads.rs/forum.rs/bots.rs/webhooks.rs :
+    // sans lui, un message programmé contournait entièrement le filtre AutoMod
+    // du serveur (mots interdits, liens, mentions, spam, majuscules).
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, body.content.trim()).await {
+        return Err(err);
+    }
+
     let msg = sqlx::query_as::<_, ScheduledMessage>(
         "INSERT INTO scheduled_messages (channel_id, user_id, content, send_at)
          VALUES ($1, $2, $3, $4) RETURNING *"
@@ -141,6 +148,33 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         let user_id: Uuid = row.get("user_id");
         let content: String = row.get("content");
         let server_id: Uuid = row.get("server_id");
+
+        // Revalider au moment de l'envoi (pas seulement à la programmation) : jusqu'à
+        // 30 jours peuvent s'écouler entre les deux, pendant lesquels l'auteur peut être
+        // expulsé/banni (retiré de server_members par kick_member/ban_member) ou mis en
+        // timeout -- sans cette revérification, un message programmé avant la sanction
+        // la contournait entièrement en partant quand même à l'heure prévue.
+        let still_eligible = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)
+             AND NOT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false);
+
+        if !still_eligible {
+            let _ = sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")
+                .bind(sched_id)
+                .execute(&state.db)
+                .await;
+            tracing::info!(
+                "Message programmé {} annulé silencieusement (auteur expulsé/banni ou en timeout depuis la programmation)",
+                sched_id
+            );
+            continue;
+        }
 
         // Insérer dans messages + marquer envoyé dans une transaction atomique
         let insert = async {
