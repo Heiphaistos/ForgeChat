@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Bell, BellOff, BellRing, X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useChannelNotif } from '../../store/channelNotif'
 
 interface Props {
   channelId: string
@@ -25,6 +26,12 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
   const [muted, setMuted] = useState(false)
   const [saving, setSaving] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+  // Store partagé consulté par App.tsx pour décider des notifications en direct --
+  // jamais synchronisé après une sauvegarde ici, donc un changement de niveau/mute
+  // via ce modal n'avait d'effet qu'après un refetch complet (fermeture/réouverture
+  // d'app), pas en direct dans la session en cours.
+  const setStoreMuted = useChannelNotif(s => s.setMuted)
+  const setStoreLevel = useChannelNotif(s => s.setLevel)
 
   useEffect(() => {
     api.get(`/user/channel-notif/${channelId}`)
@@ -47,6 +54,8 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
     setSaving(true)
     try {
       await api.post(`/user/channel-notif/${channelId}`, { level, muted })
+      setStoreMuted(channelId, muted)
+      setStoreLevel(channelId, level)
       toast.success('Préférences sauvegardées')
       onClose()
     } catch {

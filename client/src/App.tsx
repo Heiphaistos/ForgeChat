@@ -190,6 +190,7 @@ function AppInner() {
   const fetchChannelNotif = useChannelNotif(s => s.fetch)
   const isChannelMuted = useChannelNotif(s => s.isMuted)
   const isServerMuted = useChannelNotif(s => s.isServerMuted)
+  const getChannelNotifLevel = useChannelNotif(s => s.getLevel)
 
   useEffect(() => {
     if (!user) return
@@ -368,17 +369,28 @@ function AppInner() {
       const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
       // Réponse à un de mes messages = notification aussi (comme Discord)
       const repliedToMe = !!msg.reply_to && msg.reply_to_username === user.username
-      if (mentionedMe || repliedToMe || content.includes('@everyone') || content.includes('@here')) {
-        // Invalidate notification bell so new mention shows immediately
-        qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
-        playMention()
+      const isMentionEvent = mentionedMe || repliedToMe || content.includes('@everyone') || content.includes('@here')
+      // ChannelNotifModal.tsx permet de choisir "Tous les messages" par canal,
+      // mais ce niveau n'était jamais relu ici -- seules les mentions notifiaient
+      // jamais, quel que soit le réglage choisi. Un canal explicitement réglé sur
+      // "all" doit aussi notifier pour les messages non-mention.
+      const notifyAllForChannel = msg.channel_id && getChannelNotifLevel(msg.channel_id) === 'all'
+      if (isMentionEvent || notifyAllForChannel) {
+        if (isMentionEvent) {
+          // Invalidate notification bell so new mention shows immediately
+          qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
+          playMention()
+        } else if (!document.hasFocus()) {
+          playMessage()
+        }
         const goToMsg = () => d.server_id && d.message?.channel_id
           ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`)
           : undefined
         const activeChannelId = window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
         const isActiveChannel = activeChannelId === msg.channel_id
+        const icon = isMentionEvent ? (repliedToMe && !mentionedMe ? '↩️' : '🔔') : '💬'
         if (document.hasFocus() && !isActiveChannel) {
-          toast(`${repliedToMe && !mentionedMe ? '↩️' : '🔔'} ${msg.author_username ?? 'Quelqu\'un'}: ${contentClean.slice(0, 60)}`, {
+          toast(`${icon} ${msg.author_username ?? 'Quelqu\'un'}: ${contentClean.slice(0, 60)}`, {
             duration: 5000,
             style: { cursor: 'pointer', maxWidth: '360px' },
             onClick: goToMsg,
@@ -390,8 +402,8 @@ function AppInner() {
           })
         } else if (d.server_id && d.message?.channel_id) {
           pendingNotifs.current.push({
-            title: msg.author_username ?? 'Mention',
-            body: `🔔 ${contentClean.slice(0, 60)}`,
+            title: msg.author_username ?? (isMentionEvent ? 'Mention' : 'Message'),
+            body: `${icon} ${contentClean.slice(0, 60)}`,
             path: `/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`,
           })
         }
@@ -400,7 +412,7 @@ function AppInner() {
       }
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, getChannelNotifLevel, playJoin, playLeave, playMessage, playMention])
 
   // Statut "Absent" automatique après 10 min d'inactivité — uniquement si le
   // statut est "online" (ne jamais écraser un dnd/invisible choisi manuellement) ;
