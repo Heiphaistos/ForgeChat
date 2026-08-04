@@ -453,7 +453,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   // Forum
   if (currentChannel?.type === 'forum') {
-    return <ForumPage channel={currentChannel} serverId={serverId} channelId={channelId} />
+    return <ForumPage channel={currentChannel} serverId={serverId} channelId={channelId} canManageMessages={canManageMessages} />
   }
 
   // Canal texte / annonces

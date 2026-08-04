@@ -25,6 +25,7 @@ interface Props {
   channel: { id: string; name: string; topic?: string }
   serverId: string
   channelId: string
+  canManageMessages?: boolean
 }
 
 interface ForumPost {
@@ -215,7 +216,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
   )
 }
 
-function PostView({ serverId, channelId, post, onBack }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void }) {
+function PostView({ serverId, channelId, post, onBack, canManageMessages }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void; canManageMessages?: boolean }) {
   const [reply, setReply] = useState(() => forumDrafts.get(post.id) ?? '')
   // Sauvegarder le brouillon en continu (purgé à l'envoi)
   useEffect(() => {
@@ -406,20 +407,24 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
           >
             <Link2 size={15} aria-hidden />
           </button>
-          <button
-            onClick={() => togglePin.mutate()}
-            title={localPost.pinned ? 'Désépingler' : 'Épingler'}
-            className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
-          >
-            <Pin size={15} />
-          </button>
-          <button
-            onClick={() => toggleLock.mutate()}
-            title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
-            className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
-          >
-            <Lock size={15} />
-          </button>
+          {canManageMessages && (
+            <>
+              <button
+                onClick={() => togglePin.mutate()}
+                title={localPost.pinned ? 'Désépingler' : 'Épingler'}
+                className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
+              >
+                <Pin size={15} />
+              </button>
+              <button
+                onClick={() => toggleLock.mutate()}
+                title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
+                className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
+              >
+                <Lock size={15} />
+              </button>
+            </>
+          )}
           {user && post.creator_id === user.id && (
             <button
               onClick={async () => { if (await confirm({ message: 'Supprimer ce post et toutes ses réponses ?', danger: true, confirmLabel: 'Supprimer' })) deletePost.mutate() }}
@@ -729,7 +734,7 @@ function PostView({ serverId, channelId, post, onBack }: { serverId: string; cha
   )
 }
 
-export default function ForumPage({ channel, serverId, channelId }: Props) {
+export default function ForumPage({ channel, serverId, channelId, canManageMessages }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedPost, setSelectedPostState] = useState<ForumPost | null>(null)
   const [urlParams, setUrlParams] = useSearchParams()
@@ -821,7 +826,7 @@ export default function ForumPage({ channel, serverId, channelId }: Props) {
   }, [selectedPost?.title, channel.name])
 
   if (selectedPost) {
-    return <PostView serverId={serverId} channelId={channelId} post={selectedPost} onBack={() => setSelectedPost(null)} />
+    return <PostView serverId={serverId} channelId={channelId} post={selectedPost} onBack={() => setSelectedPost(null)} canManageMessages={canManageMessages} />
   }
 
   return (
