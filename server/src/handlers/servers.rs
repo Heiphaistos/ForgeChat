@@ -283,17 +283,45 @@ pub async fn join_server(
     )
     .bind(&code)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Invitation invalide".into()))?;
+    .await?;
 
-    if let Some(exp) = invite.expires_at {
-        if exp < chrono::Utc::now() {
-            return Err(AppError::BadRequest("Invitation expirée".into()));
+    // Repli sur `servers.invite_code` (code permanent généré à la création du
+    // serveur, cf. create_server) si le code ne correspond à aucune invitation
+    // de la table `invites` -- ExplorePage.tsx et ServerDiscoveryPage.tsx
+    // envoient CE code (`PublicServer.invite_code`, renvoyé par /explore),
+    // jamais un code de `invites` : sans ce repli, rejoindre un serveur public
+    // depuis Explorer/Découvrir échouait TOUJOURS avec "Invitation invalide",
+    // faute d'une ligne correspondante dans `invites`.
+    // Restreint à `is_public=true` : `invite_code` est un champ brut renvoyé
+    // par TOUS les endpoints qui sérialisent `Server` (get_server, etc.), donc
+    // visible de n'importe quel membre d'un serveur PRIVÉ aussi -- l'autoriser
+    // comme invitation valide pour un serveur privé permettrait à n'importe
+    // quel membre de contourner silencieusement le contrôle MANAGE_SERVER sur
+    // la création d'invitations (invite permanente, non révocable, non listée
+    // dans /invites). Les serveurs publics n'ont pas ce problème : leur
+    // invite_code est déjà intentionnellement public (c'est le but de
+    // /explore et /discover).
+    let server_id = match &invite {
+        Some(inv) => inv.server_id,
+        None => sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM servers WHERE invite_code=$1 AND is_public=true"
+        )
+            .bind(&code)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Invitation invalide".into()))?,
+    };
+
+    if let Some(inv) = &invite {
+        if let Some(exp) = inv.expires_at {
+            if exp < chrono::Utc::now() {
+                return Err(AppError::BadRequest("Invitation expirée".into()));
+            }
         }
-    }
-    if let Some(max) = invite.max_uses {
-        if invite.uses >= max {
-            return Err(AppError::BadRequest("Invitation épuisée".into()));
+        if let Some(max) = inv.max_uses {
+            if inv.uses >= max {
+                return Err(AppError::BadRequest("Invitation épuisée".into()));
+            }
         }
     }
     // Le check ci-dessus est juste un rejet rapide (lecture en mémoire, pas
@@ -305,7 +333,7 @@ pub async fn join_server(
         "SELECT EXISTS(SELECT 1 FROM bans WHERE user_id=$1 AND server_id=$2)"
     )
     .bind(claims.sub)
-    .bind(invite.server_id)
+    .bind(server_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -317,7 +345,7 @@ pub async fn join_server(
         "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)"
     )
     .bind(claims.sub)
-    .bind(invite.server_id)
+    .bind(server_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -325,47 +353,51 @@ pub async fn join_server(
         return Err(AppError::Conflict("Déjà membre".into()));
     }
 
-    // Réclamer atomiquement un "usage" de l'invitation dans le même UPDATE qui
-    // revérifie expiration/max_uses -- l'ancien flux relisait `invite.uses` en
-    // mémoire (check ci-dessus) puis réécrivait `uses+1` dans une requête
-    // SÉPARÉE après l'INSERT du membre (TOCTOU) : deux requêtes concurrentes
-    // sur une invitation à 1 utilisation pouvaient toutes les deux passer le
-    // check initial et rejoindre, dépassant max_uses. Non reproduit en direct
-    // (3 puis 5 requêtes concurrentes réelles contre la prod, une seule a
-    // abouti à chaque fois -- probablement la latence réseau vers le VPS qui
-    // sérialise en pratique) mais le défaut de non-atomicité est certain à la
-    // lecture du code (deux requêtes SQL séparées, aucune transaction/verrou
-    // entre les deux) -- corrigé en root-cause par prudence, fix sans risque.
-    let claimed: bool = sqlx::query_scalar(
-        "UPDATE invites SET uses = uses + 1
-         WHERE code = $1
-           AND (expires_at IS NULL OR expires_at > NOW())
-           AND (max_uses IS NULL OR uses < max_uses)
-         RETURNING true"
-    )
-    .bind(&code)
-    .fetch_optional(&state.db)
-    .await?
-    .unwrap_or(false);
-    if !claimed {
-        return Err(AppError::BadRequest("Invitation invalide, expirée ou épuisée".into()));
+    if invite.is_some() {
+        // Réclamer atomiquement un "usage" de l'invitation dans le même UPDATE qui
+        // revérifie expiration/max_uses -- l'ancien flux relisait `invite.uses` en
+        // mémoire (check ci-dessus) puis réécrivait `uses+1` dans une requête
+        // SÉPARÉE après l'INSERT du membre (TOCTOU) : deux requêtes concurrentes
+        // sur une invitation à 1 utilisation pouvaient toutes les deux passer le
+        // check initial et rejoindre, dépassant max_uses. Non reproduit en direct
+        // (3 puis 5 requêtes concurrentes réelles contre la prod, une seule a
+        // abouti à chaque fois -- probablement la latence réseau vers le VPS qui
+        // sérialise en pratique) mais le défaut de non-atomicité est certain à la
+        // lecture du code (deux requêtes SQL séparées, aucune transaction/verrou
+        // entre les deux) -- corrigé en root-cause par prudence, fix sans risque.
+        let claimed: bool = sqlx::query_scalar(
+            "UPDATE invites SET uses = uses + 1
+             WHERE code = $1
+               AND (expires_at IS NULL OR expires_at > NOW())
+               AND (max_uses IS NULL OR uses < max_uses)
+             RETURNING true"
+        )
+        .bind(&code)
+        .fetch_optional(&state.db)
+        .await?
+        .unwrap_or(false);
+        if !claimed {
+            return Err(AppError::BadRequest("Invitation invalide, expirée ou épuisée".into()));
+        }
     }
+    // Sinon (repli servers.invite_code) : code permanent sans compteur
+    // d'utilisation ni expiration, rien à réclamer.
 
     sqlx::query(
         "INSERT INTO server_members (user_id, server_id) VALUES ($1, $2)"
     )
     .bind(claims.sub)
-    .bind(invite.server_id)
+    .bind(server_id)
     .execute(&state.db)
     .await?;
 
     sqlx::query("UPDATE servers SET member_count = member_count + 1 WHERE id=$1")
-        .bind(invite.server_id)
+        .bind(server_id)
         .execute(&state.db)
         .await?;
 
     let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id=$1")
-        .bind(invite.server_id)
+        .bind(server_id)
         .fetch_one(&state.db)
         .await?;
 
@@ -375,10 +407,10 @@ pub async fn join_server(
         .fetch_optional(&state.db)
         .await?;
     if let Some(u) = user {
-        log_event(&state, invite.server_id, "MEMBER_JOIN", Some(claims.sub), Some(&u.username), None, None, None).await;
-        state.broadcast_to_server_members(invite.server_id, serde_json::json!({
+        log_event(&state, server_id, "MEMBER_JOIN", Some(claims.sub), Some(&u.username), None, None, None).await;
+        state.broadcast_to_server_members(server_id, serde_json::json!({
             "type": "MEMBER_JOIN",
-            "server_id": invite.server_id,
+            "server_id": server_id,
             "user_id": claims.sub,
             "username": u.username,
             "avatar": u.avatar,
