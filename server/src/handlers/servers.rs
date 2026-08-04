@@ -296,6 +296,9 @@ pub async fn join_server(
             return Err(AppError::BadRequest("Invitation épuisée".into()));
         }
     }
+    // Le check ci-dessus est juste un rejet rapide (lecture en mémoire, pas
+    // atomique) -- la vraie garantie anti-dépassement de max_uses vient de
+    // l'UPDATE conditionnel juste avant l'INSERT du membre, plus bas.
 
     // Vérifier que l'utilisateur n'est pas banni du serveur
     let is_banned = sqlx::query_scalar::<_, bool>(
@@ -322,6 +325,32 @@ pub async fn join_server(
         return Err(AppError::Conflict("Déjà membre".into()));
     }
 
+    // Réclamer atomiquement un "usage" de l'invitation dans le même UPDATE qui
+    // revérifie expiration/max_uses -- l'ancien flux relisait `invite.uses` en
+    // mémoire (check ci-dessus) puis réécrivait `uses+1` dans une requête
+    // SÉPARÉE après l'INSERT du membre (TOCTOU) : deux requêtes concurrentes
+    // sur une invitation à 1 utilisation pouvaient toutes les deux passer le
+    // check initial et rejoindre, dépassant max_uses. Non reproduit en direct
+    // (3 puis 5 requêtes concurrentes réelles contre la prod, une seule a
+    // abouti à chaque fois -- probablement la latence réseau vers le VPS qui
+    // sérialise en pratique) mais le défaut de non-atomicité est certain à la
+    // lecture du code (deux requêtes SQL séparées, aucune transaction/verrou
+    // entre les deux) -- corrigé en root-cause par prudence, fix sans risque.
+    let claimed: bool = sqlx::query_scalar(
+        "UPDATE invites SET uses = uses + 1
+         WHERE code = $1
+           AND (expires_at IS NULL OR expires_at > NOW())
+           AND (max_uses IS NULL OR uses < max_uses)
+         RETURNING true"
+    )
+    .bind(&code)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or(false);
+    if !claimed {
+        return Err(AppError::BadRequest("Invitation invalide, expirée ou épuisée".into()));
+    }
+
     sqlx::query(
         "INSERT INTO server_members (user_id, server_id) VALUES ($1, $2)"
     )
@@ -332,11 +361,6 @@ pub async fn join_server(
 
     sqlx::query("UPDATE servers SET member_count = member_count + 1 WHERE id=$1")
         .bind(invite.server_id)
-        .execute(&state.db)
-        .await?;
-
-    sqlx::query("UPDATE invites SET uses = uses + 1 WHERE code=$1")
-        .bind(&code)
         .execute(&state.db)
         .await?;
 
