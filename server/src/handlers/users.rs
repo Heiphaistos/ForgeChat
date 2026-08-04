@@ -89,6 +89,13 @@ pub async fn update_me(
         if username.len() < 2 || username.len() > 32 {
             return Err(AppError::BadRequest("Nom 2-32 chars".into()));
         }
+        // Même règle que l'inscription (auth.rs::register) -- jamais reportée ici,
+        // donc modifier son profil permettait de contourner entièrement la
+        // validation de caractères imposée à la création du compte (espaces,
+        // emoji, HTML/scripts, caractères de contrôle, tout passait).
+        if !username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+            return Err(AppError::BadRequest("Le nom d'utilisateur ne peut contenir que des lettres, chiffres, _ et -".into()));
+        }
     }
 
     // Valider activity_type si fourni
