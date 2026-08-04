@@ -28,7 +28,7 @@ Finding séparé lié, PAS corrigé (changement d'architecture auth, hors périm
 
 ## Desktop : release v3.21.0 publiée (2026-08-04 23:45, sur demande explicite de Momo)
 
-Windows (`ForgeChat-Setup-v3.21.0.exe` + `ForgeChat-Portable-v3.21.0.exe`) et Linux (`ForgeChat-v3.21.0-amd64.deb` + `.AppImage`) buildés localement, publiés sur `/opt/forgechat/downloads/`, confirmés HTTP 200 sur les 4 URLs. `LandingPage.tsx` (WIN_RELEASE/LINUX_RELEASE) mis à jour vers v3.21.0, poussé (commit 0224ab7). Contient les 3 fixes accumulés : version dynamique build.bat/build.sh (cycle 5), retrait `shell:default` (cycle 2), retrait `unsafe-inline` CSP (cycle 28). **Déploiement web en attente** : poussé, source VPS à jour, mais `version.json` affichait encore l'ancienne version à la fin -- à reconfirmer.
+Windows (`ForgeChat-Setup-v3.21.0.exe` + `ForgeChat-Portable-v3.21.0.exe`) et Linux (`ForgeChat-v3.21.0-amd64.deb` + `.AppImage`) buildés localement, publiés sur `/opt/forgechat/downloads/`, confirmés HTTP 200 sur les 4 URLs. `LandingPage.tsx` (WIN_RELEASE/LINUX_RELEASE) mis à jour vers v3.21.0, poussé (commit 0224ab7). Contient les 3 fixes accumulés : version dynamique build.bat/build.sh (cycle 5), retrait `shell:default` (cycle 2), retrait `unsafe-inline` CSP (cycle 28). **Déploiement web confirmé** : `version.json` → `3.573.0`.
 
 **Piège rencontré et documenté dans LESSONS.md** : build.bat et build.sh partagent le même `client/node_modules` physique (Windows via `C:\`, WSL2 via `/mnt/c/`) -- les avoir lancés en parallèle une 1re fois a corrompu les DEUX builds (symlinks `.bin/*` incompatibles Windows .cmd vs POSIX). Résolu en relançant séquentiellement avec un `rm -rf node_modules && npm install` natif à chaque plateforme juste avant son build.
 
