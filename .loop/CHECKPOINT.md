@@ -4,9 +4,17 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-08-04 14:10) — server 3.218.0 / client 3.567.0 / desktop 3.19.0
+## Statut actuel (2026-08-04 15:25) — server 3.219.0 / client 3.567.0 / desktop 3.20.0
 
-Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Reprise de la boucle autonome (cron 10min, portée web+desktop Windows+desktop Linux).
+Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Boucle autonome en cours (cron 10min, portée web+desktop Windows+desktop Linux) : 3 vrais fixes déployés ce jour (AutoMod substring→mot entier, build.bat/build.sh version hardcodée, capability shell inutile retirée) + 1 finding sécurité HAUTE en attente + 1 nouveau finding fonctionnel ci-dessous.
+
+## ⚠️ Finding NON corrigé — feature "Permissions par canal" 100% placebo, jamais appliquée (2026-08-04, cycle 6)
+
+`ChannelSettingsModal.tsx` (onglet Permissions) laisse un admin configurer des overrides allow/deny par rôle ou par membre POUR UN CANAL DONNÉ (ex. rendre un canal privé en refusant VIEW_CHANNEL à @everyone). Ces valeurs sont bien sauvegardées (`PUT /channels/:id/permissions/:target_id` → table `channel_permissions`, confirmé par lecture de `channels.rs::put_channel_permission`) et bien réaffichées (`GET .../permissions`). **Mais `channel_permissions` n'est JAMAIS lue nulle part ailleurs dans tout le serveur** (grep exhaustif `channel_permissions` sur `server/src` : seulement les 3 sites CRUD, zéro consultation) — `require_member_and_channel()` (le seul gate utilisé pour voir/poster dans un canal) vérifie uniquement l'appartenance au SERVEUR + que le canal existe, jamais les overrides du canal. Un admin qui pense avoir rendu un canal privé via cet onglet ne restreint RIEN en réalité : tous les membres du serveur gardent un accès complet, silencieusement. Pas une faille d'escalade (rien de PIRE que l'état actuel ne peut arriver), mais un vrai gap de contrôle d'accès si un admin s'appuie dessus pour la confidentialité d'un canal.
+
+**Pourquoi pas corrigé en autonome** : contrairement aux fixes de ce cycle, une vraie correction ne tient pas dans un patch minimal -- il faut construire une fonction de résolution de permission effective (base rôle+@everyone, puis overlay des overrides canal par rôle, puis override canal par membre -- ordre Discord standard) et la brancher dans TOUS les points d'accès canal (get_messages/send_message/etc, pas juste un endroit). Ça change un comportement d'accès réel pour tout serveur ayant déjà configuré des overrides (probablement rare vu que la feature n'a jamais eu d'effet, mais inconnu sans vérifier la prod). De plus les bits envoyés par le client (`CHANNEL_PERMISSION_BITS`) suivent le MÊME référentiel que RolesTab.tsx (client, désaligné du serveur, cf. finding ci-dessus) -- donc une vraie correction de cette feature doit être coordonnée avec la décision de remap déjà en attente, pas traitée séparément. À décider avec Momo en même temps que le finding RolesTab.
+
+## ⚠️ Finding HAUTE SÉVÉRITÉ non corrigé — nécessite décision Momo AVANT tout fix (2026-08-04, CORRIGÉ au cycle 3 par test live réel)
 
 ## ⚠️ Finding HAUTE SÉVÉRITÉ non corrigé — nécessite décision Momo AVANT tout fix (2026-08-04, CORRIGÉ au cycle 3 par test live réel)
 
