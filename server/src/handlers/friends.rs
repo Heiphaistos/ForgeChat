@@ -316,6 +316,45 @@ pub async fn open_dm(
     Extension(claims): Extension<Claims>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
+    if user_id == claims.sub {
+        return Err(AppError::BadRequest("Impossible de s'envoyer un DM à soi-même".into()));
+    }
+
+    // Même pattern que send_friend_request : ni le blocage ni le réglage de
+    // confidentialité `dm_from_all` du destinataire n'étaient jamais vérifiés ici --
+    // n'importe qui pouvait ouvrir un salon DM avec n'importe qui, y compris un
+    // utilisateur l'ayant bloqué ou ayant explicitement désactivé "Autoriser les DMs
+    // de tout le monde" dans PrivacySection.tsx (réglage 100% placebo côté serveur).
+    let blocked = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
+         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    )
+    .bind(claims.sub)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    if blocked {
+        return Err(AppError::Forbidden);
+    }
+
+    let dm_from_all: bool = sqlx::query_scalar("SELECT dm_from_all FROM user_settings WHERE user_id=$1")
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?
+        .unwrap_or(true);
+    if !dm_from_all {
+        let is_friend: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted')"
+        )
+        .bind(claims.sub)
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !is_friend {
+            return Err(AppError::Forbidden);
+        }
+    }
+
     let (u1, u2) = if claims.sub < user_id {
         (claims.sub, user_id)
     } else {
