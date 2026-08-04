@@ -385,6 +385,27 @@ pub async fn delete_account(
     Extension(claims): Extension<Claims>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
+    // Rate limit : 5 tentatives / 15min par compte -- même pattern que change_password
+    // (auth.rs), qui protège la même opération "vérifier le mot de passe courant" mais
+    // n'existait pas ici. Scope par claims.sub plutôt que par IP : cet endpoint ne peut
+    // de toute façon cibler que le compte du token authentifié (pas de risque cross-
+    // compte), donc bloquer par utilisateur suffit et reste valable même si l'attaquant
+    // change d'IP.
+    {
+        use redis::AsyncCommands;
+        let key = format!("delacc_attempts:{}", claims.sub);
+        let mut redis = state.redis.lock().await;
+        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
+        let count = count.unwrap_or(0);
+        if count >= 5 {
+            return Err(AppError::TooManyRequests);
+        }
+        let _: () = redis.incr(&key, 1).await.unwrap_or(());
+        if count == 0 {
+            let _: () = redis.expire(&key, 900).await.unwrap_or(());
+        }
+    }
+
     // Exiger la confirmation du mot de passe pour éviter la suppression accidentelle/CSRF
     let password = body["password"]
         .as_str()
