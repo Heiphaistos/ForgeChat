@@ -808,9 +808,20 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
       }
     })
+    // Le surnom se sauvegardait bien en DB (PATCH /servers/:id/nickname) mais
+    // n'était diffusé nulle part -- ni l'auteur du changement ni les autres
+    // membres ne le voyaient sans recharger. Même invalidation que MEMBER_ROLE_UPDATE.
+    const offMemberNicknameUpdate = on('MEMBER_NICKNAME_UPDATE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
+      }
+    })
     return () => {
       offUserUpdate(); offBoost(); offTagAssign(); offTagRemove()
       offMemberTimeout(); offMemberTimeoutLifted(); offRoleCreate(); offRoleDelete(); offRoleUpdate(); offMemberRoleUpdate()
+      offMemberNicknameUpdate()
       offServerTagCreate(); offServerTagDelete()
     }
   }, [user?.id])

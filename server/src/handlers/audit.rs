@@ -465,10 +465,21 @@ pub async fn set_nickname(
         }
     }
     sqlx::query("UPDATE server_members SET nickname=$1 WHERE user_id=$2 AND server_id=$3")
-        .bind(body.nickname)
+        .bind(&body.nickname)
         .bind(claims.sub)
         .bind(server_id)
         .execute(&state.db).await?;
+
+    // Jamais diffusé jusqu'ici -- le surnom se sauvegardait bien en DB mais ni
+    // l'auteur du changement (pas d'invalidation locale) ni les autres membres
+    // (aucun event WS) ne le voyaient sans recharger la page/renaviguer.
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "MEMBER_NICKNAME_UPDATE",
+        "server_id": server_id,
+        "user_id": claims.sub,
+        "nickname": body.nickname,
+    }).to_string()).await;
+
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
