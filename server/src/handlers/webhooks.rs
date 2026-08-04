@@ -196,6 +196,14 @@ pub async fn execute_webhook(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
 
+    // Même gap qu'ailleurs sur ce chemin d'écriture séparé de send_message : AutoMod
+    // n'était jamais consulté, un webhook pouvait poster le contenu que le filtre du
+    // serveur est censé bloquer. `created_by` (créateur du webhook) sert d'identité
+    // pour le compteur anti-spam, comme bot_id côté bots.rs.
+    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, created_by, &content).await {
+        return Err(err);
+    }
+
     let msg_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO messages (id, channel_id, user_id, content, type, webhook_display_name)

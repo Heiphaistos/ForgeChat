@@ -230,6 +230,14 @@ pub async fn bot_send_message(
         content_raw
     };
 
+    // AutoMod n'était jamais consulté sur ce chemin -- un bot (créé par n'importe
+    // quel MANAGE_SERVER) pouvait poster exactement le contenu que le filtre de mots/
+    // spam/CAPS du serveur est censé bloquer pour tout le monde. Même check que
+    // send_message (messages.rs), avec bot_id comme identité pour le compteur anti-spam.
+    if let Some(err) = crate::handlers::audit::check_automod(&state, body.server_id, bot_id, &content).await {
+        return Err(err);
+    }
+
     let msg = sqlx::query(
         "INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
     )
