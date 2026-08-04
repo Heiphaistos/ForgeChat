@@ -88,3 +88,21 @@
   dans les logs du RUN Dockerfile) puis `docker compose up -d server`, re-tester. Toujours
   faire un test comportemental réel après un déploiement serveur qui doit changer un
   comportement observable, pas seulement vérifier des métadonnées de conteneur/git.
+- **Le piège ci-dessus S'EST REPRODUIT au cycle 24, MÊME en suivant sa propre recommandation**
+  (2026-08-04) : cette fois `docker inspect` sur l'image (pas juste le conteneur) montrait un
+  timestamp cohérent et récent (17:04:56, aligné avec le conteneur) -- donc "l'image a bien
+  été reconstruite" semblait confirmé -- mais le comportement testé en direct (thread avec mot
+  AutoMod bloqué) est quand même passé sans être bloqué. **Conclusion plus dure que celle du
+  cycle 20** : même un timestamp d'image fraîche et cohérente ne suffit pas à prouver que le
+  code compilé À L'INTÉRIEUR est à jour -- le cache Docker peut apparemment réutiliser une
+  couche interne (probablement le `RUN cargo build --release`) tout en ré-exportant/ré-étiquetant
+  l'image avec un nouveau timestamp externe, rendant TOUTE vérification de métadonnées Docker
+  non fiable pour ce projet. Root cause CI toujours pas élucidée après 2 occurrences dans la
+  même session -- signalé à Momo comme fiabilité CI/déploiement à investiguer plus en
+  profondeur (au-delà de ce qu'un cycle de loop autonome peut diagnostiquer par SSH). **Nouvelle
+  règle absolue** : après TOUT déploiement serveur censé changer un comportement observable, le
+  SEUL test qui fait foi est un test fonctionnel réel contre l'endpoint concerné -- si le
+  comportement attendu n'est pas observé, ne JAMAIS supposer "ça va finir par arriver" ou
+  chercher d'autres explications : forcer immédiatement `docker compose build --no-cache
+  server && docker compose up -d server` et re-tester, sans perdre de temps à vérifier des
+  métadonnées Docker qui se sont avérées non fiables à deux reprises.
