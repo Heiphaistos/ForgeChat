@@ -382,6 +382,18 @@ pub async fn add_connected_account(
     if body.platform_username.trim().is_empty() {
         return Err(AppError::BadRequest("Nom d'utilisateur requis".into()));
     }
+    // platform_url est renvoyé tel quel au client et posé directement dans un
+    // attribut href (ConnectedAccountsSection.tsx) -- sans ce garde-fou, un schéma
+    // arbitraire (javascript:, data:) était accepté et stocké tel quel. Ce endpoint
+    // est self-only aujourd'hui (aucun autre utilisateur ne peut voir ces liens),
+    // donc l'impact actuel se limite à du self-XSS, mais rien ne garantit que ce
+    // reste vrai si "afficher les comptes connectés sur le profil public" est
+    // ajouté plus tard -- même pattern de validation que feeds.rs/audit.rs.
+    if let Some(url) = body.platform_url.as_deref().map(str::trim).filter(|u| !u.is_empty()) {
+        if !url.starts_with("https://") && !url.starts_with("http://") {
+            return Err(AppError::BadRequest("L'URL doit commencer par http:// ou https://".into()));
+        }
+    }
     let acc = sqlx::query_as::<_, ConnectedAccount>(
         "INSERT INTO connected_accounts (user_id, platform, platform_username, platform_url)
          VALUES ($1, $2, $3, $4)
