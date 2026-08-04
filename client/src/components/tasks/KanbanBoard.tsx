@@ -10,7 +10,7 @@ interface Task {
   title: string
   description?: string
   status: 'todo' | 'in_progress' | 'review' | 'done'
-  priority: 'low' | 'medium' | 'high' | 'urgent'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
   assignee_id?: string
   assignee_username?: string
   assignee_avatar?: string
@@ -34,7 +34,7 @@ const COLUMNS: { id: Col; label: string }[] = [
 
 const PRIORITY_BADGE: Record<Task['priority'], { label: string; cls: string }> = {
   low:    { label: 'Low',    cls: 'bg-zinc-500/20 text-zinc-400' },
-  medium: { label: 'Medium', cls: 'bg-blue-500/20 text-blue-300' },
+  normal: { label: 'Medium', cls: 'bg-blue-500/20 text-blue-300' },
   high:   { label: 'High',   cls: 'bg-orange-500/20 text-orange-300' },
   urgent: { label: 'Urgent', cls: 'bg-red-500/20 text-red-300' },
 }
@@ -59,7 +59,7 @@ interface CreateFormProps {
 
 function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
   const [title, setTitle] = useState('')
-  const [priority, setPriority] = useState<Task['priority']>('medium')
+  const [priority, setPriority] = useState<Task['priority']>('normal')
   const [desc, setDesc] = useState('')
 
   const createTask = useMutation({
@@ -100,7 +100,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
           onChange={e => setPriority(e.target.value as Task['priority'])}
           className="bg-fc-hover text-white text-xs rounded px-2 py-1 outline-none"
         >
-          {(['low', 'medium', 'high', 'urgent'] as Task['priority'][]).map(p => (
+          {(['low', 'normal', 'high', 'urgent'] as Task['priority'][]).map(p => (
             <option key={p} value={p}>{PRIORITY_BADGE[p].label}</option>
           ))}
         </select>
