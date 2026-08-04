@@ -4,7 +4,15 @@ Historique détaillé itération par itération : `.loop/JOURNAL.md`. Ce fichier
 résumé d'état à jour, élagué périodiquement (dernier élagage : 2026-07-24, après
 audit web+client complet — l'historique complet reste dans JOURNAL.md, rien n'est perdu).
 
-## Statut actuel (2026-07-24 15:20) — server 3.178.0 / client 3.525.0 / desktop 3.8.2 (inchangé)
+## Statut actuel (2026-08-04 14:10) — server 3.218.0 / client 3.567.0 / desktop 3.19.0
+
+Header resynchronisé (était resté figé au 2026-07-24 malgré des semaines d'avancement réel — Stage channel câblé, DM_READ, fixes AppImage glibc + tray GTK Linux, voir mémoire globale `project_forgechat.md` pour le détail complet de cette période non journalisée ici). Reprise de la boucle autonome (cron 10min, portée web+desktop Windows+desktop Linux).
+
+## ⚠️ Finding CRITIQUE non corrigé — nécessite décision Momo AVANT tout fix (2026-08-04)
+
+**Le bitmask de permissions envoyé par `RolesTab.tsx` (client) n'a AUCUN rapport avec les bits vérifiés par `require_permission()` côté serveur.** Conséquence la plus grave : cocher "Commandes d'application" (USE_APPLICATION_CMDS, bit client 31, catégorie anodine "Salons texte") envoie exactement le bit que le serveur interprète comme ADMINISTRATOR (bypass total) — un rôle low-trust peut se voir accorder les pleins pouvoirs serveur par une case à cocher qui n'a l'air de rien. Aucune des ~19 permissions partagées par le nom (Kick/Ban/Manage Roles/Manage Channels/...) ne fait ce qu'elle prétend non plus (bits totalement différents des deux côtés). Détail complet, table de collision, analyse d'exploitabilité et 2 options de fix (avec recommandation) dans `.loop/JOURNAL.md` entrée `[2026-08-04T14:10:00]`. **Pourquoi pas corrigé en autonome** : le fix change la signification des valeurs déjà stockées dans `roles.permissions` en prod pour tout rôle personnalisé existant (discontinuité UX + décision d'architecture sur données réelles) — attend l'accord explicite de Momo, pas un fix unilatéral en cycle cron non supervisé.
+
+## Statut précédent (2026-07-24 15:20) — server 3.178.0 / client 3.525.0 / desktop 3.8.2
 
 Audit complet web (server handlers jamais touchés + pages/modals client jamais relues).
 **6 bugs réels trouvés et corrigés, tous déployés+vérifiés en prod** :
