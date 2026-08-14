@@ -785,6 +785,10 @@ pub async fn leave_group_dm(
     ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
+    let was_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_channels WHERE id=$1 AND owner_id=$2)"
+    ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
+
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
         .bind(group_id).bind(claims.sub).execute(&state.db).await?;
 
@@ -798,6 +802,20 @@ pub async fn leave_group_dm(
         sqlx::query("DELETE FROM group_dm_channels WHERE id=$1")
             .bind(group_id).execute(&state.db).await.ok();
     } else {
+        // owner_id n'était jamais réassigné quand le owner quittait -- remove_group_dm_member
+        // (seule action owner-only du fichier) devenait PERMANENTEMENT inutilisable pour ce
+        // groupe dès que le créateur le quittait avec d'autres membres restants, puisque
+        // owner_id continuait de pointer vers quelqu'un absent de group_dm_members et que
+        // rien ne peut plus jamais satisfaire ce check. Transfert au membre restant le plus
+        // ancien (group_dm_members.joined_at), pas de nouvelle colonne nécessaire.
+        if was_owner {
+            let _ = sqlx::query(
+                "UPDATE group_dm_channels SET owner_id = (
+                    SELECT user_id FROM group_dm_members WHERE dm_id=$1 ORDER BY joined_at ASC LIMIT 1
+                 ) WHERE id=$1"
+            ).bind(group_id).execute(&state.db).await;
+        }
+
         let event = serde_json::json!({
             "type": "GROUP_DM_MEMBER_LEAVE",
             "group_id": group_id,

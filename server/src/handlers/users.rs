@@ -431,6 +431,26 @@ pub async fn delete_account(
         return Err(AppError::BadRequest("Mot de passe incorrect".into()));
     }
 
+    // group_dm_channels.owner_id REFERENCES users(id) ON DELETE CASCADE -- sans
+    // réassignation, supprimer son propre compte efface INTÉGRALEMENT (messages compris,
+    // cascade transitive) chaque groupe DM qu'on possède, pour TOUS les autres membres,
+    // sans leur consentement. Même logique de transfert que leave_group_dm (membre
+    // restant le plus ancien via joined_at) appliquée à chaque groupe possédé, avant le
+    // DELETE FROM users -- seuls les groupes SANS aucun autre membre restent voués à la
+    // cascade (comportement correct : plus personne à qui transférer).
+    sqlx::query(
+        "UPDATE group_dm_channels gc SET owner_id = (
+            SELECT gm.user_id FROM group_dm_members gm
+            WHERE gm.dm_id = gc.id AND gm.user_id != $1
+            ORDER BY gm.joined_at ASC LIMIT 1
+         )
+         WHERE gc.owner_id = $1
+           AND EXISTS(SELECT 1 FROM group_dm_members gm WHERE gm.dm_id = gc.id AND gm.user_id != $1)"
+    )
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?;
+
     sqlx::query("DELETE FROM users WHERE id=$1")
         .bind(claims.sub)
         .execute(&state.db)
