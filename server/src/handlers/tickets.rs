@@ -67,23 +67,33 @@ pub async fn list_tickets(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Vec<Ticket>>> {
     require_member(&state, claims.sub, server_id).await?;
-    let tickets = sqlx::query_as::<_, Ticket>(
-        "SELECT * FROM tickets
-         WHERE server_id = $1
-         AND (creator_id = $2
-              OR EXISTS(
-                SELECT 1 FROM server_members sm
-                LEFT JOIN member_roles mr ON mr.user_id=sm.user_id AND mr.server_id=sm.server_id
-                LEFT JOIN roles r ON r.id=mr.role_id
-                WHERE sm.server_id=$1 AND sm.user_id=$2
-                AND ((r.permissions & 16384)<>0 OR sm.is_owner=true)
-              ))
-         ORDER BY created_at DESC LIMIT 100"
-    )
-    .bind(server_id)
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await?;
+
+    // Voir les tickets des AUTRES membres (triage support) requiert MANAGE_SERVER.
+    // Un check inline (bitmask `& 16384`) réimplémentait ownership/ADMINISTRATOR/rôle
+    // @everyone à la main et ciblait par erreur SPEAK_VOICE (1<<14) au lieu de
+    // MANAGE_SERVER (1<<8) -- tout membre avec le droit "Parler en vocal" (quasi tout
+    // le monde) pouvait donc lister les tickets de tous les autres. Fix : réutiliser
+    // require_permission (même logique que le reste du fichier, dont update_ticket).
+    let can_see_all = require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER)
+        .await
+        .is_ok();
+
+    let tickets = if can_see_all {
+        sqlx::query_as::<_, Ticket>(
+            "SELECT * FROM tickets WHERE server_id = $1 ORDER BY created_at DESC LIMIT 100"
+        )
+        .bind(server_id)
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        sqlx::query_as::<_, Ticket>(
+            "SELECT * FROM tickets WHERE server_id = $1 AND creator_id = $2 ORDER BY created_at DESC LIMIT 100"
+        )
+        .bind(server_id)
+        .bind(claims.sub)
+        .fetch_all(&state.db)
+        .await?
+    };
     Ok(Json(tickets))
 }
 
