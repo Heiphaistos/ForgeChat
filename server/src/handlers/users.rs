@@ -431,6 +431,22 @@ pub async fn delete_account(
         return Err(AppError::BadRequest("Mot de passe incorrect".into()));
     }
 
+    // servers.owner_id REFERENCES users(id) SANS ON DELETE CASCADE (par design --
+    // contrairement aux groupes DM, on ne réassigne pas silencieusement la propriété
+    // d'un serveur entier à un membre au hasard). Sans ce check, DELETE FROM users
+    // plus bas heurtait la contrainte FK (code Postgres 23503) et remontait en 500
+    // générique "Erreur base de données" -- aucune fonctionnalité de transfert de
+    // propriété n'existe (grep négatif sur servers.rs), donc un owner de serveur ne
+    // pouvait JAMAIS supprimer son compte sans un message expliquant pourquoi.
+    let owns_server: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
+    if owns_server {
+        return Err(AppError::BadRequest(
+            "Vous devez d'abord supprimer les serveurs dont vous êtes propriétaire.".into()
+        ));
+    }
+
     // group_dm_channels.owner_id REFERENCES users(id) ON DELETE CASCADE -- sans
     // réassignation, supprimer son propre compte efface INTÉGRALEMENT (messages compris,
     // cascade transitive) chaque groupe DM qu'on possède, pour TOUS les autres membres,

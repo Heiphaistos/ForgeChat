@@ -389,3 +389,9 @@ Commit local fait, push github OK, forgejo bloqué (9 correctifs en attente : ti
 
 cargo check clean (les deux fixes). Server 3.245.0 → 3.246.0.
 Commit local fait, push github OK, forgejo bloqué (11 correctifs en attente au total).
+[2026-08-14T13:09:11] Cycle 66. Forgejo bloqué (18e tentative). Sync github OK.
+Suite directe du fix cycle 65 (owner_id jamais géré à la suppression de compte) : grep systématique de tous les `owner_id UUID ... REFERENCES users` dans les migrations pour trouver d'autres occurrences de la même famille. 2 résultats : group_dm_channels (déjà fixé cycle 65) et servers.owner_id (001_initial.sql) -- PAS de ON DELETE CASCADE cette fois (par design, confirmé bonne pratique : pas de réassignation silencieuse d'un serveur entier à un membre au hasard).
+
+BUG RÉEL trouvé et corrigé (server/src/handlers/users.rs::delete_account) : sans CASCADE, `DELETE FROM users` heurtait la contrainte FK dès qu'un utilisateur possédait au moins un serveur (violation 23503) -- remontait en 500 générique "Erreur base de données" (pas de fuite de stack trace, error.rs sanitise déjà bien, mais aucun message actionnable). Pire : grep négatif confirmé, AUCUNE fonctionnalité de transfert de propriété de serveur n'existe dans servers.rs -- un propriétaire de serveur ne pouvait donc JAMAIS supprimer son compte sans comprendre pourquoi ni quoi faire (delete_server existe au moins, donc une sortie propre existe). Fix : check explicite `EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)` avant le DELETE, retourne un message clair ("Vous devez d'abord supprimer les serveurs dont vous êtes propriétaire.") au lieu de laisser la contrainte FK échouer en 500 opaque. Vérifié client (AdvancedSection.tsx) : `onError` affiche déjà `e.response?.data?.error` en toast, aucun changement client nécessaire.
+cargo check clean. Server 3.246.0 → 3.247.0.
+Commit local fait, push github OK, forgejo bloqué (12 correctifs en attente au total).
