@@ -70,11 +70,17 @@ pub async fn export_user_data(
         ).bind(uid).fetch_all(&state.db),
     );
     let user = user_res.map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
-    let messages = messages.unwrap_or_default();
-    let dm_messages = dm_messages.unwrap_or_default();
-    let group_dm_messages = group_dm_messages.unwrap_or_default();
-    let servers = servers.unwrap_or_default();
-    let friends = friends.unwrap_or_default();
+    // `.unwrap_or_default()` sur une vraie erreur DB (pas juste "aucune ligne", fetch_all
+    // renvoie déjà Ok(vec![]) dans ce cas) produisait silencieusement un export RGPD
+    // amputé d'une section entière -- même défaut que les deux bugs déjà corrigés dans
+    // cette fonction (LIMIT tronquant, DM absents) : présenté comme complet, ne l'était
+    // pas. Propager l'erreur : mieux vaut un export qui échoue franchement qu'un export
+    // qui ment sur son contenu.
+    let messages = messages?;
+    let dm_messages = dm_messages?;
+    let group_dm_messages = group_dm_messages?;
+    let servers = servers?;
+    let friends = friends?;
 
     let export = serde_json::json!({
         "exported_at": chrono::Utc::now().to_rfc3339(),
