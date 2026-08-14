@@ -940,6 +940,39 @@ pub async fn require_permission(
     }
 }
 
+/// Masque de permissions effectif de `user_id` sur `server_id` -- i64::MAX (tout activé)
+/// si owner ou ADMINISTRATOR, sinon la combinaison rôles assignés + @everyone. Même
+/// requête que require_permission, mais renvoie la valeur au lieu de comparer à un seul
+/// bit -- utilisé pour empêcher un détenteur de MANAGE_ROLES de créer/s'auto-assigner un
+/// rôle avec des permissions qu'il ne possède pas lui-même (élévation de privilège).
+pub async fn effective_permissions(state: &AppState, user_id: Uuid, server_id: Uuid) -> Result<i64> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT sm.is_owner,
+                COALESCE(BIT_OR(r.permissions), 0)
+                | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
+                AS combined_perms
+         FROM server_members sm
+         LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+         LEFT JOIN roles r ON r.id = mr.role_id
+         WHERE sm.user_id = $1 AND sm.server_id = $2
+         GROUP BY sm.is_owner"
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    Ok(match row {
+        None => 0,
+        Some(r) => {
+            if r.get::<bool, _>("is_owner") { return Ok(i64::MAX); }
+            let perms: i64 = r.get("combined_perms");
+            if perms & crate::models::role::Permissions::ADMINISTRATOR != 0 { i64::MAX } else { perms }
+        }
+    })
+}
+
 /// Vérifie permission + appartenance canal en parallèle.
 pub async fn require_permission_and_channel(
     state: &AppState, user_id: Uuid, server_id: Uuid, channel_id: Uuid, perm: i64,

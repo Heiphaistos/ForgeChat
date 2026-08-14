@@ -77,6 +77,17 @@ pub async fn create_role(
     const VALID_PERMS: i64 = 0x3FFFF; // bits 0-17 définis
     let perms = body.permissions.unwrap_or(0) & VALID_PERMS;
 
+    // Élévation de privilège : MANAGE_ROLES seul permettait de créer un rôle avec
+    // N'IMPORTE QUELLE permission du masque (BAN_MEMBERS, MANAGE_SERVER, KICK_MEMBERS...)
+    // puis de se l'auto-assigner (assign_role, même garde à ajouter) -- un modérateur
+    // n'ayant reçu QUE "Gérer les rôles" pouvait ainsi s'octroyer n'importe quel autre
+    // pouvoir du serveur. Un rôle ne peut désormais accorder que des permissions que son
+    // créateur possède déjà lui-même (owner/ADMINISTRATOR non concernés, cf. effective_permissions).
+    let actor_perms = crate::handlers::servers::effective_permissions(&state, claims.sub, server_id).await?;
+    if perms & !actor_perms != 0 {
+        return Err(AppError::Forbidden);
+    }
+
     let role = sqlx::query_as::<_, Role>(
         "INSERT INTO roles (server_id, name, color, permissions, mentionable, hoisted)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
@@ -120,6 +131,25 @@ pub async fn update_role(
 
     const VALID_PERMS: i64 = 0x3FFFF;
     let perms = body.permissions.map(|p| p & VALID_PERMS);
+
+    // Même garde anti-élévation que create_role, mais relative aux bits DÉJÀ présents sur
+    // le rôle (pas à zéro) : le client renvoie le masque complet à chaque édition (ex.
+    // renommer un rôle réenvoie ses permissions inchangées), donc comparer au total
+    // bloquerait toute édition mineure d'un rôle déjà élevé par quelqu'un qui n'a que
+    // MANAGE_ROLES. Seuls les bits NOUVELLEMENT ajoutés doivent être dans les droits de
+    // l'éditeur -- un rôle peut être rétréci librement, jamais élargi au-delà de ses
+    // propres droits.
+    if let Some(p) = perms {
+        let old_perms: i64 = sqlx::query_scalar(
+            "SELECT permissions FROM roles WHERE id=$1 AND server_id=$2"
+        ).bind(role_id).bind(server_id).fetch_optional(&state.db).await?
+            .ok_or_else(|| AppError::NotFound("Rôle introuvable".into()))?;
+        let newly_added = p & !old_perms;
+        let actor_perms = crate::handlers::servers::effective_permissions(&state, claims.sub, server_id).await?;
+        if newly_added & !actor_perms != 0 {
+            return Err(AppError::Forbidden);
+        }
+    }
 
     let role = sqlx::query_as::<_, Role>(
         "UPDATE roles SET
@@ -204,11 +234,24 @@ pub async fn assign_role(
         return Err(AppError::NotFound("Membre introuvable".into()));
     }
 
-    // Vérifier que le rôle appartient bien à ce serveur
-    let role_ok: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM roles WHERE id=$1 AND server_id=$2)"
-    ).bind(role_id).bind(server_id).fetch_one(&state.db).await?;
-    if !role_ok { return Err(AppError::NotFound("Rôle introuvable".into())); }
+    // Vérifier que le rôle appartient bien à ce serveur, et récupérer ses permissions
+    let role_perms: Option<i64> = sqlx::query_scalar(
+        "SELECT permissions FROM roles WHERE id=$1 AND server_id=$2"
+    ).bind(role_id).bind(server_id).fetch_optional(&state.db).await?;
+    let Some(role_perms) = role_perms else {
+        return Err(AppError::NotFound("Rôle introuvable".into()));
+    };
+
+    // Élévation de privilège : create_role/update_role empêchent désormais qu'un rôle
+    // dépasse les droits de son créateur, mais un rôle PLUS PUISSANT que l'acteur courant
+    // peut déjà exister (créé par le owner, ex. "Modérateur" avec BAN_MEMBERS) --
+    // n'importe quel détenteur de MANAGE_ROLES pouvait se l'auto-assigner (ou l'assigner
+    // à un complice) sans jamais avoir été vetté pour ces droits. Même garde : on ne peut
+    // assigner que des rôles qui n'accordent rien au-delà de ses propres permissions.
+    let actor_perms = crate::handlers::servers::effective_permissions(&state, claims.sub, server_id).await?;
+    if role_perms & !actor_perms != 0 {
+        return Err(AppError::Forbidden);
+    }
 
     // Limiter à 20 rôles par membre
     let role_count: i64 = sqlx::query_scalar(
