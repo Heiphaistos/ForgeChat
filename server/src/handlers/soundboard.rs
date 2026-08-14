@@ -100,6 +100,16 @@ pub async fn upload_sound(
                 emoji = Some(field.text().await.map_err(|e| AppError::BadRequest(e.to_string()))?);
             }
             "file" => {
+                // stickers.rs/emojis.rs valident déjà content_type() (pas seulement le nom
+                // de fichier, entièrement contrôlé par le client) avant d'accepter un upload
+                // -- soundboard.rs ne le faisait pas, seule extension manquante du même trio
+                // de handlers d'upload. Sans ça, n'importe quel fichier pouvait être déposé
+                // sous `/uploads/sounds/` tant que son NOM se terminait par une extension
+                // autorisée, peu importe son contenu réel.
+                let ct = field.content_type().unwrap_or("").to_string();
+                if !ct.starts_with("audio/") {
+                    return Err(AppError::BadRequest("Seuls les fichiers audio sont acceptés".into()));
+                }
                 let filename = field
                     .file_name()
                     .unwrap_or("sound.mp3")
