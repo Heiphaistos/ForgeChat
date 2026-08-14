@@ -381,14 +381,14 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid) {
 async fn cleanup_stage(state: &AppState, user_id: Uuid) {
     for (channel_id, was_speaker, had_hand_raised) in state.stage_cleanup_user_everywhere(user_id).await {
         if was_speaker {
-            broadcast_to_all_inclusive(state, serde_json::json!({
+            state.broadcast_to_channel_members(channel_id, serde_json::json!({
                 "type": "STAGE_SPEAKER_REMOVE",
                 "user_id": user_id,
                 "channel_id": channel_id,
             }).to_string()).await;
         }
         if had_hand_raised {
-            broadcast_to_all_inclusive(state, serde_json::json!({
+            state.broadcast_to_channel_members(channel_id, serde_json::json!({
                 "type": "STAGE_HAND_RAISE",
                 "user_id": user_id,
                 "raised": false,
@@ -416,17 +416,6 @@ async fn broadcast_to_all(state: &AppState, exclude: Uuid, event: String) {
         if *uid != exclude {
             let _ = tx.send(event.clone());
         }
-    }
-}
-
-/// Comme broadcast_to_all mais inclut aussi l'auteur — utilisé pour les événements
-/// Scène où l'acteur doit voir sa propre action reflétée dans la liste partagée
-/// (main levée, ajout/retrait speaker), contrairement à VOICE_STATE_UPDATE où le
-/// client applique déjà son propre changement en optimiste localement.
-async fn broadcast_to_all_inclusive(state: &AppState, event: String) {
-    let clients = state.clients.read().await;
-    for tx in clients.values() {
-        let _ = tx.send(event.clone());
     }
 }
 
@@ -1047,7 +1036,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 if raised { map.insert(user_id, entry.clone()); } else { map.remove(&user_id); }
             }
 
-            broadcast_to_all_inclusive(state, entry.to_string()).await;
+            state.broadcast_to_channel_members(channel_id, entry.to_string()).await;
         }
 
         Some("STAGE_INVITE_SPEAK") => {
@@ -1084,14 +1073,14 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 if let Some(map) = raises.get_mut(&channel_id) { map.remove(&target_id); }
             }
 
-            broadcast_to_all_inclusive(state, serde_json::json!({
+            state.broadcast_to_channel_members(channel_id, serde_json::json!({
                 "type": "STAGE_SPEAKER_ADD",
                 "user_id": target_id,
                 "username": username,
                 "avatar": avatar,
                 "channel_id": channel_id,
             }).to_string()).await;
-            broadcast_to_all_inclusive(state, serde_json::json!({
+            state.broadcast_to_channel_members(channel_id, serde_json::json!({
                 "type": "STAGE_HAND_RAISE",
                 "user_id": target_id,
                 "raised": false,
@@ -1126,7 +1115,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 speakers.get_mut(&channel_id).map(|s| s.remove(&target_id)).unwrap_or(false)
             };
             if removed {
-                broadcast_to_all_inclusive(state, serde_json::json!({
+                state.broadcast_to_channel_members(channel_id, serde_json::json!({
                     "type": "STAGE_SPEAKER_REMOVE",
                     "user_id": target_id,
                     "channel_id": channel_id,
