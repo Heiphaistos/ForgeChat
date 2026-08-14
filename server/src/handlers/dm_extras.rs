@@ -10,6 +10,30 @@ async fn assert_dm_member(db: &sqlx::PgPool, dm_id: Uuid, user_id: Uuid) -> Resu
     Ok(())
 }
 
+// group_dms.rs::toggle_group_dm_pin diffuse déjà GROUP_DM_PIN_TOGGLE à tous les membres
+// (et le client group l'écoute) -- pin_dm_message/unpin_dm_message n'avaient jamais eu
+// l'équivalent : épingler/désépingler un message en DM 1-à-1 ne se propageait qu'au
+// cache local de l'auteur du clic (invalidateQueries dans la mutation), le partenaire
+// restait figé sur l'ancien état de son panneau épinglés tant qu'il ne le fermait/
+// rouvrait pas. Même pattern d'émission que send_dm (fetch de l'autre participant +
+// notifier aussi l'auteur pour la sync multi-onglets).
+async fn broadcast_dm_pin_toggle(state: &AppState, dm_id: Uuid, actor_id: Uuid, message_id: Uuid, pinned: bool) {
+    use sqlx::Row;
+    let Ok(row) = sqlx::query(
+        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END as other
+         FROM dm_channels WHERE id=$1"
+    ).bind(dm_id).bind(actor_id).fetch_one(&state.db).await else { return };
+    let other_id: Uuid = row.get("other");
+    let event = serde_json::json!({
+        "type": "DM_PIN_TOGGLE",
+        "dm_id": dm_id,
+        "message_id": message_id,
+        "pinned": pinned,
+    }).to_string();
+    state.broadcast_to_user(other_id, event.clone()).await;
+    state.broadcast_to_user(actor_id, event).await;
+}
+
 // ── Pins ──────────────────────────────────────────────────────────────────────
 
 pub async fn get_dm_pins(
@@ -73,6 +97,7 @@ pub async fn pin_dm_message(
     sqlx::query(
         "INSERT INTO dm_pins (dm_channel_id, message_id, pinned_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
     ).bind(dm_id).bind(message_id).bind(claims.sub).execute(&state.db).await?;
+    broadcast_dm_pin_toggle(&state, dm_id, claims.sub, message_id, true).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -84,5 +109,6 @@ pub async fn unpin_dm_message(
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     sqlx::query("DELETE FROM dm_pins WHERE dm_channel_id=$1 AND message_id=$2")
         .bind(dm_id).bind(message_id).execute(&state.db).await?;
+    broadcast_dm_pin_toggle(&state, dm_id, claims.sub, message_id, false).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

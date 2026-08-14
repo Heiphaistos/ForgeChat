@@ -369,6 +369,20 @@ export default function DMPage() {
     return off
   }, [dmId, e2eMode])
 
+  // Le serveur diffuse DM_PIN_TOGGLE aux deux participants (pin_dm_message/
+  // unpin_dm_message, dm_extras.rs) -- sans ce listener, seul l'auteur du clic
+  // (invalidation locale dans la mutation togglePin) voyait le panneau épinglés
+  // se mettre à jour ; le partenaire restait figé sur l'ancien état tant qu'il ne
+  // fermait/rouvrait pas le panneau. Même pattern que GroupDMPage/GROUP_DM_PIN_TOGGLE.
+  useEffect(() => {
+    if (!dmId) return
+    const off = on('DM_PIN_TOGGLE', (d: any) => {
+      if (d.dm_id !== dmId) return
+      qc.invalidateQueries({ queryKey: ['dm_pins', dmId] })
+    })
+    return off
+  }, [dmId])
+
   // E2E WebSocket listener (incoming encrypted messages from partner)
   useEffect(() => {
     if (!dmId || !e2eMode) return
