@@ -81,8 +81,14 @@ pub async fn create_group_dm(
         .await?;
     }
 
-    // Notifier tous les membres de la création du groupe
-    let all_members: Vec<Uuid> = std::iter::once(claims.sub).chain(members.iter().copied()).collect();
+    // Notifier les membres RÉELLEMENT ajoutés -- `members` est la liste demandée avant
+    // filtrage des bloqueurs, `allowed` est celle effectivement insérée. Utiliser
+    // `members` ici notifiait aussi quelqu'un qui avait bloqué le créateur (donc jamais
+    // inséré dans group_dm_members) : GROUP_DM_CREATE lui parvenait quand même,
+    // révélant l'activité du créateur à une personne qui a explicitement coupé le
+    // contact -- fuite mineure mais réelle, en plus d'un événement pour un groupe
+    // auquel cette personne n'appartient en fait pas.
+    let all_members: Vec<Uuid> = std::iter::once(claims.sub).chain(allowed.iter().copied()).collect();
     let event = serde_json::json!({ "type": "GROUP_DM_CREATE", "group": { "id": group_id, "name": name } });
     let event_str = event.to_string();
     for uid in &all_members {
