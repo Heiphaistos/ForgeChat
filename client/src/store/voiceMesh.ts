@@ -113,7 +113,9 @@ async function applySenderQuality(sender: RTCRtpSender, kind: 'camera' | 'screen
   try {
     const prefs = getQualityPrefs()
     const params = sender.getParameters()
-    if (!params.encodings || params.encodings.length === 0) params.encodings = [{}]
+    // Ne jamais fabriquer d'encodings : setParameters exige l'objet rendu par
+    // getParameters, une liste reconstruite est rejetee (et peut couper l'emission).
+    if (!params.encodings || params.encodings.length === 0) return
     params.encodings[0].maxBitrate = kind === 'camera' ? prefs.camMaxBitrate : prefs.screenMaxBitrate
     params.degradationPreference = kind === 'camera' ? 'balanced' : 'maintain-resolution'
     await sender.setParameters(params)
@@ -348,7 +350,11 @@ export async function handleSignal(from: string, payload: any, ctx: MeshCtx) {
       const collision = _makingOffer.get(from) === true || pc.signalingState !== 'stable'
       _ignoreOffer.set(from, !polite && collision)
       if (_ignoreOffer.get(from)) return
-      if (collision) {
+      // Rollback UNIQUEMENT depuis have-local-offer : appele en 'stable' (cas
+      // makingOffer=true, ou createOffer pas encore applique) il leve
+      // InvalidStateError, l'offer distante n'est jamais repondue et le pair
+      // reste fige -- c'etait la cause des echecs intermittents du glare.
+      if (pc.signalingState === 'have-local-offer') {
         await pc.setLocalDescription({ type: 'rollback' } as RTCLocalSessionDescriptionInit)
       }
       await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
