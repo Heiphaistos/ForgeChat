@@ -1,7 +1,19 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
-import { useAuth } from './auth'
 import api from '../api/client'
+import {
+  createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
+  type NoiseEngine, type ProcessedAudio,
+} from '../lib/audio'
+import {
+  createPC, teardownPeer, teardownAll, handleSignal, getPeerConnections,
+  setLocalStream, replaceMicTrack, applyMicEnabled, addCameraTrack, removeCameraTrack,
+  startScreenTracks, stopScreenTracks, clearLocalMedia, getLocalStream, getRawMicTrack,
+  getMicTrack, getQualityPrefs, refreshAllSenderQuality, setWhisper, warn,
+  type MeshCtx,
+} from './voiceMesh'
+
+export { getPeerConnections }
 
 export interface VoicePeer {
   userId: string
@@ -9,12 +21,13 @@ export interface VoicePeer {
   avatar?: string
   discriminator?: string
   stream: MediaStream | null       // audio micro + vidéo caméra
-  screenStream: MediaStream | null // vidéo écran partagé — distinct de stream, actif simultanément
+  screenStream: MediaStream | null // écran partagé (vidéo + son du partage) — msid distinct
   muted: boolean
   deafened: boolean
   videoEnabled: boolean
   screenSharing: boolean
   prioritySpeaker?: boolean
+  connectionLost?: boolean
 }
 
 export interface VoiceRoomParticipant {
@@ -26,12 +39,18 @@ export interface VoiceRoomParticipant {
   screen: boolean
 }
 
+export interface ActiveStream {
+  userId: string
+  username: string
+  channelId: string
+  viewers?: number
+}
+
 interface VoiceStore {
   channelId: string | null
   channelName: string | null
   serverId: string | null
   joined: boolean
-  // Écoute seule (ex: audience Stage) — pas de micro, pas d'envoi, réception uniquement
   listenOnly: boolean
   peers: VoicePeer[]
   localStream: MediaStream | null
@@ -41,19 +60,16 @@ interface VoiceStore {
   videoEnabled: boolean
   screenSharing: boolean
   error: string | null
-  // Participants par canal (pour la sidebar — tous serveurs)
+  notice: string | null
   roomParticipants: Record<string, VoiceRoomParticipant[]>
-  // Push-to-talk
   pttActive: boolean
   pttMode: boolean
-  // Volume par utilisateur (0-200, 100 = normal)
   userVolumes: Record<string, number>
-  // Priority speaker actif (userId ou null)
+  screenVolumes: Record<string, number>
   activePrioritySpeaker: string | null
-  // Whisper : liste des userId à qui on chuchote (null = mode normal)
   whisperTargets: string[] | null
-  // Streams actifs Go Live : userId ? {userId, username, channelId}
-  activeStreams: Record<string, { userId: string; username: string; channelId: string }>
+  activeStreams: Record<string, ActiveStream>
+  noiseEngine: NoiseEngine
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
@@ -63,989 +79,672 @@ interface VoiceStore {
   shareScreen(): Promise<void>
   stopScreenShare(): Promise<void>
   clearError(): void
-  // Appelé par App pour écouter les events globaux (joins/leaves)
+  clearNotice(): void
   initGlobalListeners(): () => void
-  // Push-to-talk
   setPttMode(enabled: boolean): void
   activatePtt(): void
   deactivatePtt(): void
-  // Volume par utilisateur
   setUserVolume(userId: string, volume: number): void
-  // Noise suppression toggle
+  setScreenVolume(userId: string, volume: number): void
   setNoiseSuppressionEnabled(enabled: boolean): Promise<void>
-  // Whisper
+  setNoiseEngine(engine: NoiseEngine): Promise<void>
+  setAudioInput(deviceId: string): Promise<void>
+  setVideoInput(deviceId: string): Promise<void>
+  applyQualityPrefs(): Promise<void>
   setWhisperTargets(targets: string[] | null): void
 }
 
-// Trace des échecs de signaling — les deux vrais bugs WebRTC de 2026-07-14 se
-// cachaient derrière des catch muets ; ne jamais avaler ces erreurs en silence.
-function _warn(ctx: string, e: unknown) {
-  console.warn(`[voice] ${ctx}`, e)
-}
-
-// ── Singletons non-réactifs ──────────────────────────────────────────────────
-const _pcs = new Map<string, RTCPeerConnection>()
-export const getPeerConnections = () => _pcs
-const _iceQueues = new Map<string, RTCIceCandidateInit[]>()
-let _localStream: MediaStream | null = null
-let _rawAudioTrack: MediaStreamTrack | null = null  // piste audio brute (avant noise suppression)
-let _processedStream: MediaStream | null = null     // stream après traitement noise suppression
-let _noiseAudioCtx: AudioContext | null = null       // AudioContext dédié noise suppression
-let _screenTrack: MediaStreamTrack | null = null
-let _screenAudioTrack: MediaStreamTrack | null = null // audio système capturé pendant le partage (mixé au micro)
-let _localScreenStream: MediaStream | null = null
-let _micMixCtx: AudioContext | null = null
-let _micTrackBeforeMix: MediaStreamTrack | null = null // piste micro à restaurer sur le sender après le partage
-let _mixedAudioTrack: MediaStreamTrack | null = null // piste mixée courante (micro+audio système), si un mix est actif
-// Stream dédié (sans piste locale) utilisé uniquement pour donner à la piste écran un
-// msid distinct de _localStream — permet au récepteur de séparer caméra vs écran sans
-// signalisation additionnelle (cf. _createPC/ontrack : 1er stream vu = groupe caméra,
-// tout stream avec un id différent = écran).
-let _localScreenGroupStream: MediaStream | null = null
-const _screenSenders = new Map<string, RTCRtpSender>()
-// Sender de NOTRE caméra par pair — sans ceci, camSender() retombait sur n'importe quel
-// sender track===null, y compris le sender recvonly auto-créé par le navigateur quand le
-// pair distant active sa propre caméra en premier. replaceTrack() sur ce sender-là marche
-// (aperçu local OK) mais ne renégocie jamais et le pair ne reçoit jamais rien : caméra
-// bidirectionnelle silencieusement cassée si le distant a activé la sienne avant nous.
-const _camSenders = new Map<string, RTCRtpSender>()
-const _camStreamId = new Map<string, string>() // peerId -> id du MediaStream distant groupant micro+caméra
+// ── État non réactif ─────────────────────────────────────────────────────────
+let _processed: ProcessedAudio | null = null
+let _joining = false
 let _offFns: Array<() => void> = []
+let _offOpen: (() => void) | null = null
 
-// Cache de la config ICE — fetchée une seule fois par session
-let _iceConfigCache: RTCConfiguration | null = null
+const VOLUMES_KEY = 'fc_user_volumes'
+const SCREEN_VOLUMES_KEY = 'fc_screen_volumes'
+const PTT_KEY = 'fc_ptt_mode'
 
-
-// Fallback ICE config (STUN seulement) utilisé si le fetch échoue
-const ICE_FALLBACK: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-  ],
-}
-
-async function _getIceConfig(): Promise<RTCConfiguration> {
-  if (_iceConfigCache) return _iceConfigCache
+function loadVolumes(key: string): Record<string, number> {
   try {
-    const res = await api.get('/voice/ice-config')
-    _iceConfigCache = { iceServers: res.data.ice_servers }
-    return _iceConfigCache
+    const raw = localStorage.getItem(key)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return typeof parsed === 'object' && parsed !== null ? parsed : {}
   } catch {
-    // En cas d'erreur réseau, fallback STUN seulement
-    return ICE_FALLBACK
+    return {}
   }
 }
 
-// ── Noise Suppression (chaîne Web Audio "Krisp-like") ────────────────────────
-// Highpass 85Hz → Lowpass 8kHz → Noise gate (AudioWorklet) → Compressor 12:1 → Gain output
-// Le gate attaque un point que les filtres statiques ne couvrent pas : ils façonnent
-// le spectre mais laissent passer le bruit constant (ventilateur, hum) sous le niveau
-// de la voix. Le gate coupe ce bruit pendant les silences/creux, filtres avant lui.
-let _noiseGain: GainNode | null = null
-let _noiseWorkletModule: Promise<void> | null = null
+function saveVolumes(key: string, volumes: Record<string, number>) {
+  try { localStorage.setItem(key, JSON.stringify(volumes)) } catch { /* quota/private mode */ }
+}
 
-async function _ensureNoiseWorklet(ctx: AudioContext): Promise<boolean> {
-  if (!_noiseWorkletModule) {
-    _noiseWorkletModule = ctx.audioWorklet.addModule('/noise-gate-worklet.js')
+function micConstraints(): MediaTrackConstraints {
+  const savedMicId = localStorage.getItem('fc_audio_input') || undefined
+  const engine = getNoiseEngine()
+  // Quand un moteur applicatif traite le signal, l'AGC du navigateur en plus
+  // faisait « pomper » la voix (gain qui monte dans les silences nettoyés).
+  const nativeProcessing = engine === 'off' || engine === 'browser'
+  return {
+    echoCancellation: true,
+    noiseSuppression: nativeProcessing,
+    autoGainControl: nativeProcessing,
+    ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
   }
+}
+
+function camConstraints(): MediaTrackConstraints {
+  const savedCamId = localStorage.getItem('fc_video_input') || undefined
+  const height = Number(localStorage.getItem('fc_cam_height') ?? '720') || 720
+  return {
+    width: { ideal: Math.round((height * 16) / 9) },
+    height: { ideal: height },
+    frameRate: { ideal: Number(localStorage.getItem('fc_cam_fps') ?? '30') || 30 },
+    ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
+  }
+}
+
+function screenConstraints() {
+  const height = Number(localStorage.getItem('fc_screen_height') ?? '1080') || 1080
+  const fps = Number(localStorage.getItem('fc_screen_fps') ?? '30') || 30
+  return {
+    video: { width: { ideal: Math.round((height * 16) / 9) }, height: { ideal: height }, frameRate: { ideal: fps } },
+    // systemAudio/selfBrowserSurface : sans eux, partager une fenêtre ne transmet
+    // aucun son et rien n'empêche de partager l'onglet ForgeChat lui-même (miroir).
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    systemAudio: 'include',
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'include',
+  }
+}
+
+function micShouldBeOpen(s: VoiceStore): boolean {
+  if (s.listenOnly) return false
+  if (s.pttMode) return s.pttActive
+  return !s.muted
+}
+
+/** Construit la piste micro à envoyer : brute + moteur de suppression de bruit. */
+async function buildMicTrack(raw: MediaStreamTrack, engine: NoiseEngine): Promise<{ track: MediaStreamTrack; error: string | null }> {
+  if (engine === 'off' || engine === 'browser') return { track: raw, error: null }
   try {
-    await _noiseWorkletModule
-    return true
+    _processed?.dispose()
+    _processed = await createProcessedAudioTrack(raw, engine)
+    return { track: _processed.track, error: null }
   } catch (e) {
-    _warn('chargement noise-gate-worklet', e)
-    _noiseWorkletModule = null
-    return false
+    warn(`moteur de suppression de bruit "${engine}" indisponible`, e)
+    _processed = null
+    return { track: raw, error: `Suppression de bruit « ${engine} » indisponible : traitement du navigateur utilisé à la place.` }
   }
 }
 
-async function _buildNoiseChain(ctx: AudioContext, source: MediaStreamAudioSourceNode): Promise<MediaStreamAudioDestinationNode> {
-  const highpass = ctx.createBiquadFilter()
-  highpass.type = 'highpass'
-  highpass.frequency.value = 85
-  highpass.Q.value = 0.5
-
-  const lowpass = ctx.createBiquadFilter()
-  lowpass.type = 'lowpass'
-  lowpass.frequency.value = 8000
-  lowpass.Q.value = 0.5
-
-  const compressor = ctx.createDynamicsCompressor()
-  compressor.threshold.value = -55
-  compressor.knee.value = 30
-  compressor.ratio.value = 12
-  compressor.attack.value = 0.003
-  compressor.release.value = 0.15
-
-  const outputGain = ctx.createGain()
-  outputGain.gain.value = 1.4
-  _noiseGain = outputGain
-
-  const dest = ctx.createMediaStreamDestination()
-
-  const gateReady = await _ensureNoiseWorklet(ctx)
-  source.connect(highpass)
-  highpass.connect(lowpass)
-
-  if (gateReady) {
-    const gate = new AudioWorkletNode(ctx, 'noise-gate-processor')
-    lowpass.connect(gate)
-    gate.connect(compressor)
-  } else {
-    // Worklet indisponible (vieux navigateur/contexte non sécurisé) — filtres statiques seuls
-    lowpass.connect(compressor)
-  }
-
-  compressor.connect(outputGain)
-  outputGain.connect(dest)
-  return dest
-}
-
-async function _applyNoiseSuppression(inputStream: MediaStream): Promise<MediaStream> {
-  try {
-    // Réutiliser le contexte existant — évite la fuite mémoire sur rejoin
-    if (!_noiseAudioCtx || _noiseAudioCtx.state === 'closed') {
-      _noiseAudioCtx = new AudioContext({ sampleRate: 48000 })
-    }
-    const ctx = _noiseAudioCtx
-    // Resume AudioContext — browsers may suspend it outside a user gesture
-    if (ctx.state === 'suspended') {
-      await ctx.resume().catch(() => {})
-    }
-
-    const source = ctx.createMediaStreamSource(inputStream)
-    const dest = await _buildNoiseChain(ctx, source)
-
-    const outputStream = dest.stream
-    inputStream.getVideoTracks().forEach(t => outputStream.addTrack(t))
-    return outputStream
-  } catch {
-    return inputStream
-  }
-}
-
-function _cleanupNoiseSuppression() {
-  _noiseGain = null
-  if (_noiseAudioCtx && _noiseAudioCtx.state !== 'closed') {
-    _noiseAudioCtx.close()
-    _noiseAudioCtx = null
-  }
-  _processedStream = null
-}
-
-// ── Mixage audio système + micro pendant le partage d'écran ──────────────────
-// Un seul sender audio existe par PC (le micro) — on y remplace la piste par ce
-// mix plutôt que d'ouvrir un 2e sender, pour rester compatible avec le reste du
-// code qui suppose un seul flux audio par peer.
-function _mixSystemAudioWithMic(systemTrack: MediaStreamTrack, micTrack: MediaStreamTrack): MediaStreamTrack {
-  try {
-    if (!_micMixCtx || _micMixCtx.state === 'closed') _micMixCtx = new AudioContext()
-    const ctx = _micMixCtx
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {})
-    const dest = ctx.createMediaStreamDestination()
-    ctx.createMediaStreamSource(new MediaStream([micTrack])).connect(dest)
-    ctx.createMediaStreamSource(new MediaStream([systemTrack])).connect(dest)
-    return dest.stream.getAudioTracks()[0]
-  } catch (e) {
-    _warn('mixage audio système+micro', e)
-    return micTrack
-  }
-}
-
-function _cleanupMicMix() {
-  if (_micMixCtx && _micMixCtx.state !== 'closed') {
-    _micMixCtx.close()
-    _micMixCtx = null
-  }
-}
-
-// Pousse une piste micro (brute ou traitée NS) vers tous les senders audio — si un
-// partage d'écran avec audio système est en cours, re-mixe d'abord avec cette
-// nouvelle piste au lieu d'écraser le mix (cf. toggle NS pendant un partage).
-function _pushMicTrackToSenders(micTrack: MediaStreamTrack) {
-  let outTrack = micTrack
-  if (_screenAudioTrack) {
-    _micTrackBeforeMix = micTrack
-    outTrack = _mixSystemAudioWithMic(_screenAudioTrack, micTrack)
-  }
-  _mixedAudioTrack = _screenAudioTrack ? outTrack : null
-  _pcs.forEach(async (pc) => {
-    const sender = pc.getSenders().find(s => s.track?.kind === 'audio')
-    if (sender) try { await sender.replaceTrack(outTrack) } catch (e) { _warn('mise à jour piste audio', e) }
-  })
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-async function _createPC(
-  peerId: string,
-  info: Partial<VoicePeer>,
-  get: () => VoiceStore,
-  set: (fn: (s: VoiceStore) => Partial<VoiceStore>) => void,
-) {
-  if (_pcs.has(peerId)) return _pcs.get(peerId)!
-  const iceConfig = await _getIceConfig()
-  const pc = new RTCPeerConnection(iceConfig)
-  _pcs.set(peerId, pc)
-  _iceQueues.set(peerId, [])
-
-  // Ajouter toutes les pistes locales (peer qui rejoint après coup avec caméra déjà active)
-  if (_localStream) {
-    _localStream.getTracks().forEach(t => {
-      const sender = pc.addTrack(t, _localStream!)
-      if (t.kind === 'video') _camSenders.set(peerId, sender)
-    })
-  } else {
-    // Écoute seule (audience Stage) : aucune piste à envoyer, mais sans transceiver
-    // explicite une offer créée par CE peer (cas VOICE_EXISTING_PEERS, où le
-    // nouvel arrivant initie toujours l'offer) serait vide — aucune section média,
-    // donc rien à recevoir. Répondre à une offer entrante marche déjà sans ceci
-    // (le navigateur négocie recvonly automatiquement quand on n'a pas de piste).
-    pc.addTransceiver('audio', { direction: 'recvonly' })
-  }
-  // Si un partage d'écran est déjà en cours (peer rejoint après coup), lui envoyer
-  // aussi la piste écran — sender séparé, groupé sous _localScreenGroupStream
-  if (_screenTrack && _localScreenGroupStream) {
-    const sender = pc.addTrack(_screenTrack, _localScreenGroupStream)
-    _screenSenders.set(peerId, sender)
-  }
-  // Si un mix micro+audio système est déjà actif, ce peer doit recevoir le mix — pas
-  // juste le micro brut ajouté par la boucle ci-dessus (sinon il n'entend jamais le
-  // son du partage d'écran, contrairement aux peers déjà connectés)
-  if (_mixedAudioTrack) {
-    const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
-    if (audioSender) audioSender.replaceTrack(_mixedAudioTrack).catch(() => {})
-  }
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      useWs.getState().send({
-        type: 'VOICE_SIGNAL',
-        to: peerId,
-        payload: { type: 'ice', data: e.candidate.toJSON() },
-      })
-    }
-  }
-
-  pc.ontrack = (e) => {
-    const incoming = e.streams[0] ?? new MediaStream([e.track])
-    const camId = _camStreamId.get(peerId)
-    // Piste audio ou 1er flux vidéo vu pour ce peer → groupe micro+caméra (msid de référence)
-    // Piste vidéo d'un flux avec un msid différent → écran partagé (cf. shareScreen)
-    const isScreenVideo = e.track.kind === 'video' && camId !== undefined && incoming.id !== camId
-
-    if (!isScreenVideo && !_camStreamId.has(peerId)) {
-      _camStreamId.set(peerId, incoming.id)
-    }
-
-    if (isScreenVideo) {
-      set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, screenStream: incoming, screenSharing: true } : p) }))
-      e.track.onended = () => {
-        set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, screenStream: null, screenSharing: false } : p) }))
-      }
-    } else {
-      // Respecter le deafen actif : couper l'audio des flux arrivés après activation
-      if (e.track.kind === 'audio' && get().deafened) {
-        incoming.getAudioTracks().forEach(t => { t.enabled = false })
-      }
-      set(s => ({ peers: s.peers.map(p => p.userId === peerId ? { ...p, stream: incoming } : p) }))
-    }
-  }
-
-  let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
-
-  pc.onconnectionstatechange = () => {
-    const state_ = pc.connectionState
-    if (state_ === 'disconnected') {
-      // Attendre 4s avant de fermer — les coupures réseau temporaires récupèrent souvent
-      _reconnectTimer = setTimeout(() => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          pc.close()
-          _pcs.delete(peerId)
-          _iceQueues.delete(peerId)
-          _camStreamId.delete(peerId)
-          _screenSenders.delete(peerId)
-          _camSenders.delete(peerId)
-          set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
-        }
-      }, 4000)
-    } else if (state_ === 'failed') {
-      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
-      // Tentative de renegotiation ICE restart avant de supprimer le peer
-      pc.restartIce()
-      setTimeout(async () => {
-        if (pc.connectionState === 'failed') {
-          try {
-            const offer = await pc.createOffer({ iceRestart: true })
-            await pc.setLocalDescription(offer)
-            useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-          } catch {
-            pc.close()
-            _pcs.delete(peerId)
-            _iceQueues.delete(peerId)
-            _camStreamId.delete(peerId)
-            _screenSenders.delete(peerId)
-            _camSenders.delete(peerId)
-            set(s => ({ peers: s.peers.filter(p => p.userId !== peerId) }))
-          }
-        }
-      }, 2000)
-    } else if (state_ === 'connected') {
-      if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
-    }
-  }
-
-  set(s => ({
-    peers: s.peers.some(p => p.userId === peerId)
-      ? s.peers
-      : [...s.peers, {
-          userId: peerId,
-          username: info.username ?? peerId,
-          avatar: info.avatar,
-          discriminator: info.discriminator,
-          stream: null,
-          screenStream: null,
-          muted: info.muted ?? false,
-          deafened: false,
-          videoEnabled: info.videoEnabled ?? false,
-          screenSharing: false,
-        }],
-  }))
-
-  return pc
-}
-
-async function _drainIce(peerId: string) {
-  const pc = _pcs.get(peerId)
-  const queue = _iceQueues.get(peerId) ?? []
-  if (!pc || queue.length === 0) return
-  _iceQueues.set(peerId, [])
-  for (const c of queue) {
-    try { await pc.addIceCandidate(new RTCIceCandidate(c)) } catch {}
-  }
-}
-
-function _broadcastState(get: () => VoiceStore) {
-  const s = get()
-  if (!s.channelId) return
-  useWs.getState().send({
-    type: 'VOICE_STATE',
-    channel_id: s.channelId,
-    muted: s.muted,
-    deafened: s.deafened,
-    video: s.videoEnabled,
-    screen: s.screenSharing,
-  })
-}
-
-function _refreshLocalStream(set: (fn: (s: VoiceStore) => Partial<VoiceStore>) => void) {
-  set(() => ({ localStream: _localStream ? new MediaStream(_localStream.getTracks()) : null }))
+function disposeProcessed() {
+  _processed?.dispose()
+  _processed = null
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
-export const useVoice = create<VoiceStore>((set, get) => ({
-  channelId: null,
-  channelName: null,
-  serverId: null,
-  joined: false,
-  listenOnly: false,
-  peers: [],
-  localStream: null,
-  localScreenStream: null,
-  muted: false,
-  deafened: false,
-  videoEnabled: false,
-  screenSharing: false,
-  error: null,
-  roomParticipants: {},
-  pttActive: false,
-  pttMode: false,
-  userVolumes: {},
-  activePrioritySpeaker: null,
-  whisperTargets: null,
-  activeStreams: {},
+export const useVoice = create<VoiceStore>((set, get) => {
+  const ctx: MeshCtx = { get: get as any, set: set as any }
 
-  // ── Listeners globaux (joins/leaves de tout le monde pour la sidebar) ──────
-  initGlobalListeners: () => {
-    const ws = useWs.getState()
-    const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
-      set(s => {
-        const current = s.roomParticipants[d.channel_id] ?? []
-        return {
-          roomParticipants: {
-            ...s.roomParticipants,
-            [d.channel_id]: [
-              ...current.filter(p => p.userId !== d.user_id),
-              { userId: d.user_id, username: d.username, avatar: d.avatar, muted: false, video: false, screen: false },
-            ],
-          },
-        }
-      })
+  const syncMic = () => applyMicEnabled(micShouldBeOpen(get()))
+
+  const broadcastState = () => {
+    const s = get()
+    if (!s.channelId) return
+    useWs.getState().send({
+      type: 'VOICE_STATE',
+      channel_id: s.channelId,
+      muted: s.muted,
+      deafened: s.deafened,
+      video: s.videoEnabled,
+      screen: s.screenSharing,
     })
-    const offLeft = ws.on('VOICE_USER_LEFT', (d: any) => {
-      set(s => {
-        const current = s.roomParticipants[d.channel_id] ?? []
-        return {
-          roomParticipants: {
-            ...s.roomParticipants,
-            [d.channel_id]: current.filter(p => p.userId !== d.user_id),
-          },
-        }
-      })
-    })
-    const offVoiceState = ws.on('VOICE_STATE_UPDATE', (d: any) => {
-      const isPriority = d.priority_speaker === true
+  }
 
-      set(s => {
-        const current = s.roomParticipants[d.channel_id] ?? []
+  const refreshLocal = () => {
+    const ls = getLocalStream()
+    set({ localStream: ls ? new MediaStream(ls.getTracks()) : null })
+  }
 
-        // Mise à jour du priority speaker actif
-        let newActivePriority = s.activePrioritySpeaker
-        if (isPriority && !d.muted) {
-          newActivePriority = d.user_id
-        } else if (s.activePrioritySpeaker === d.user_id && (d.muted || !isPriority)) {
-          newActivePriority = null
-        }
+  return {
+    channelId: null,
+    channelName: null,
+    serverId: null,
+    joined: false,
+    listenOnly: false,
+    peers: [],
+    localStream: null,
+    localScreenStream: null,
+    muted: false,
+    deafened: false,
+    videoEnabled: false,
+    screenSharing: false,
+    error: null,
+    notice: null,
+    roomParticipants: {},
+    pttActive: false,
+    pttMode: localStorage.getItem(PTT_KEY) === 'true',
+    userVolumes: loadVolumes(VOLUMES_KEY),
+    screenVolumes: loadVolumes(SCREEN_VOLUMES_KEY),
+    activePrioritySpeaker: null,
+    whisperTargets: null,
+    activeStreams: {},
+    noiseEngine: getNoiseEngine(),
 
-        // Le duck (atténuation des autres pairs pendant qu'un priority speaker parle) est
-        // appliqué réactivement par PersistentVoiceAudio à partir de activePrioritySpeaker
-        // ci-dessous (HTMLMediaElement.volume) — pas ici. Avant ce fix, le duck créait son
-        // propre gain node Web Audio connecté à ctx.createMediaStreamDestination() (un flux
-        // qui ne joue nulle part), donc l'atténuation n'avait jamais d'effet audible ; le
-        // volume réel venait toujours du <audio> natif de PeerTile, inchangé.
+    // ── Listeners globaux (sidebar, badges LIVE) ─────────────────────────────
+    initGlobalListeners: () => {
+      const ws = useWs.getState()
 
-        return {
-          activePrioritySpeaker: newActivePriority,
-          roomParticipants: {
-            ...s.roomParticipants,
-            [d.channel_id]: current.map(p =>
-              p.userId === d.user_id
-                ? { ...p, muted: d.muted, video: d.video, screen: d.screen }
-                : p
-            ),
-          },
-          // Mettre à jour le peer si on est dans la même room
-          peers: s.peers.map(p =>
-            p.userId === d.user_id
-              ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null }
-              : p
-          ),
-        }
-      })
-    })
-    const offStreamStart = ws.on('STREAM_START', (d: any) => {
-      set(s => ({
-        activeStreams: {
-          ...s.activeStreams,
-          [d.user_id]: { userId: d.user_id, username: d.username, channelId: d.channel_id },
-        },
-      }))
-    })
-    const offStreamEnd = ws.on('STREAM_END', (d: any) => {
-      set(s => {
-        const next = { ...s.activeStreams }
-        delete next[d.user_id]
-        return { activeStreams: next }
-      })
-    })
-    return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd() }
-  },
-
-  // ── Join ──────────────────────────────────────────────────────────────────
-  join: async (channelId, serverId, withVideo = false, password, channelName, listenOnly = false) => {
-    const cur = get()
-    if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
-    if (cur.joined) get().leave()
-
-    set({ error: null })
-
-    let hasVideo = false
-
-    if (listenOnly) {
-      // Audience Stage : jamais de getUserMedia, réception uniquement (cf. _createPC)
-      _localStream = null
-    } else {
-      const savedMicId = localStorage.getItem('fc_audio_input') || undefined
-      const audioConstraints: MediaTrackConstraints = {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
-      }
-
-      let stream: MediaStream
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-          video: withVideo ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false,
-        })
-      } catch {
-        if (withVideo) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              audio: audioConstraints,
-            })
-          } catch {
-            set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
-            return
-          }
-        } else {
-          set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
-          return
-        }
-      }
-
-      _localStream = stream
-      // Sauvegarder la piste audio brute — nécessaire pour restaurer quand NS désactivée
-      _rawAudioTrack = stream.getAudioTracks()[0] ?? null
-
-      // Appliquer la noise suppression si activée dans les préférences
-      const noiseSuppressionEnabled = localStorage.getItem('fc_noise_suppression') !== 'false'
-      if (noiseSuppressionEnabled) {
-        _processedStream = await _applyNoiseSuppression(stream)
-        // Le stream envoyé aux peers est le stream traité (audio filtré + vidéo originale)
-        _localStream = _processedStream
-      }
-
-      hasVideo = stream.getVideoTracks().length > 0
-    }
-
-    set({
-      joined: true,
-      listenOnly,
-      channelId,
-      channelName: channelName ?? null,
-      serverId,
-      localStream: _localStream,
-      localScreenStream: null,
-      videoEnabled: hasVideo,
-      muted: listenOnly,
-      deafened: false,
-      screenSharing: false,
-      peers: [],
-    })
-
-    const ws = useWs.getState()
-
-    const offExisting = ws.on('VOICE_EXISTING_PEERS', async (d: any) => {
-      if (d.channel_id !== channelId) return
-      // Initialiser roomParticipants avec les peers existants
-      set(s => ({
-        roomParticipants: {
-          ...s.roomParticipants,
-          [channelId]: (d.peers ?? []).map((p: any) => ({
-            userId: p.user_id, username: p.username, avatar: p.avatar,
-            muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
-          })),
-        },
-      }))
-      for (const peer of (d.peers ?? [])) {
-        const pc = await _createPC(peer.user_id, {
-          username: peer.username, avatar: peer.avatar,
-          discriminator: peer.discriminator, muted: peer.muted,
-        }, get, set)
+      const bootstrap = async () => {
+        // Sans ce bootstrap, après un F5 tous les canaux vocaux apparaissaient
+        // vides et les badges LIVE disparaissaient jusqu'au prochain join/leave.
         try {
-          const offer = await pc.createOffer()
-          await pc.setLocalDescription(offer)
-          ws.send({ type: 'VOICE_SIGNAL', to: peer.user_id, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-        } catch (e) { _warn(`offer initiale vers ${peer.user_id}`, e) }
-      }
-    })
-
-    const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
-      if (d.channel_id !== channelId) return
-      _createPC(d.user_id, { username: d.username, avatar: d.avatar, discriminator: d.discriminator }, get, set)
-    })
-
-    const offLeft = ws.on('VOICE_USER_LEFT', (d: any) => {
-      if (d.channel_id !== channelId) return
-      const pc = _pcs.get(d.user_id)
-      pc?.close()
-      _pcs.delete(d.user_id)
-      _iceQueues.delete(d.user_id)
-      _camStreamId.delete(d.user_id)
-      _screenSenders.delete(d.user_id)
-      _camSenders.delete(d.user_id)
-      set(s => ({ peers: s.peers.filter(p => p.userId !== d.user_id) }))
-    })
-
-    const offSignal = ws.on('VOICE_SIGNAL', async (d: any) => {
-      const { from, payload } = d
-      // Ignorer les signaux d'appel DM (format payload.sdp/candidate) — seul le format
-      // vocal de serveur (payload.data) concerne ce store
-      if (!payload || payload.data === undefined) return
-      // Si on reçoit une offer pour un peer inconnu, créer le PC
-      if (payload.type === 'offer' && !_pcs.has(from)) {
-        await _createPC(from, { username: from }, get, set)
-      }
-      const pc = _pcs.get(from)
-      if (!pc) return
-      try {
-        if (payload.type === 'offer') {
-          // Glare (offers croisées quand les deux pairs renégocient en même temps) :
-          // le pair "poli" (id lexicographiquement inférieur) abandonne son offer
-          // locale (rollback) et répond ; l'autre ignore l'offer entrante — la sienne
-          // gagne, et le poli re-proposera sa modification une fois stable.
-          let rolledBack = false
-          if (pc.signalingState === 'have-local-offer') {
-            const myId = useAuth.getState().user?.id ?? ''
-            const polite = myId < from
-            if (!polite) return
-            await pc.setLocalDescription({ type: 'rollback' })
-            rolledBack = true
-          }
-          await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
-          await _drainIce(from)
-          const answer = await pc.createAnswer()
-          await pc.setLocalDescription(answer)
-          ws.send({ type: 'VOICE_SIGNAL', to: from, payload: { type: 'answer', data: { type: answer.type, sdp: answer.sdp } } })
-          // Re-proposer la modification abandonnée par le rollback (ex: notre caméra)
-          if (rolledBack && pc.signalingState === 'stable') {
-            const offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
-            ws.send({ type: 'VOICE_SIGNAL', to: from, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-          }
-        } else if (payload.type === 'answer') {
-          if (pc.signalingState === 'have-local-offer') {
-            await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
-            await _drainIce(from)
-          }
-        } else if (payload.type === 'ice') {
-          if (payload.data) {
-            if (pc.remoteDescription) {
-              try { await pc.addIceCandidate(new RTCIceCandidate(payload.data)) } catch {}
-            } else {
-              const q = _iceQueues.get(from) ?? []
-              q.push(payload.data)
-              _iceQueues.set(from, q)
+          const { data } = await api.get('/voice/state')
+          const rooms: Record<string, VoiceRoomParticipant[]> = {}
+          const streams: Record<string, ActiveStream> = {}
+          for (const channel of data.channels ?? []) {
+            rooms[channel.channel_id] = (channel.participants ?? []).map((p: any) => ({
+              userId: p.user_id, username: p.username, avatar: p.avatar,
+              muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
+            }))
+            for (const p of channel.participants ?? []) {
+              if (p.screen) streams[p.user_id] = { userId: p.user_id, username: p.username, channelId: channel.channel_id }
             }
           }
+          set(s => ({
+            roomParticipants: { ...s.roomParticipants, ...rooms },
+            activeStreams: { ...streams },
+          }))
+        } catch (e) {
+          warn('bootstrap état vocal', e)
         }
-      } catch (e) { _warn(`signal ${payload?.type} de ${from} (état ${pc.signalingState})`, e) }
-    })
-
-    _offFns = [offExisting, offJoined, offLeft, offSignal]
-
-    ws.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
-
-    // Broadcast état initial
-    setTimeout(() => {
-      ws.send({ type: 'VOICE_STATE', channel_id: channelId, muted: false, deafened: false, video: hasVideo, screen: false })
-    }, 200)
-  },
-
-  // ── Leave ─────────────────────────────────────────────────────────────────
-  leave: () => {
-    const { channelId, joined } = get()
-    if (!joined) return
-
-    useWs.getState().send({ type: 'VOICE_LEAVE', channel_id: channelId })
-
-    _pcs.forEach(pc => pc.close())
-    _pcs.clear()
-    _iceQueues.clear()
-    _camStreamId.clear()
-    _screenSenders.clear()
-    _camSenders.clear()
-
-    // Stopper toutes les pistes des deux streams (raw + processed)
-    const allTracks = new Set<MediaStreamTrack>()
-    _localStream?.getTracks().forEach(t => allTracks.add(t))
-    _processedStream?.getTracks().forEach(t => allTracks.add(t))
-    _localScreenStream?.getTracks().forEach(t => allTracks.add(t))
-    allTracks.forEach(t => t.stop())
-
-    _cleanupNoiseSuppression()
-    _localStream = null
-    _rawAudioTrack = null
-    _screenTrack?.stop()
-    _screenTrack = null
-    _screenAudioTrack?.stop()
-    _screenAudioTrack = null
-    _micTrackBeforeMix = null
-    _mixedAudioTrack = null
-    _cleanupMicMix()
-    _localScreenStream = null
-    _localScreenGroupStream = null
-
-    _offFns.forEach(off => off())
-    _offFns = []
-
-    set({ joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null, localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false, videoEnabled: false, screenSharing: false, error: null, pttActive: false, pttMode: false, userVolumes: {}, activePrioritySpeaker: null, whisperTargets: null, activeStreams: {} })
-  },
-
-  // ── Toggle mute ───────────────────────────────────────────────────────────
-  toggleMute: () => {
-    const { muted } = get()
-    const next = !muted
-    _localStream?.getAudioTracks().forEach(t => { t.enabled = !next })
-    set({ muted: next })
-    _broadcastState(get)
-  },
-
-  // ── Toggle deafen ─────────────────────────────────────────────────────────
-  toggleDeafen: () => {
-    const { deafened } = get()
-    const next = !deafened
-    // Couper/rétablir l'audio de tous les pairs
-    get().peers.forEach(peer => {
-      peer.stream?.getAudioTracks().forEach(t => { t.enabled = !next })
-    })
-    set({ deafened: next })
-    _broadcastState(get)
-  },
-
-  // ── Toggle vidéo ──────────────────────────────────────────────────────────
-  toggleVideo: async () => {
-    const { videoEnabled, joined } = get()
-    if (!joined || !_localStream) return
-
-    // Sender caméra = NOTRE sender vidéo suivi explicitement (cf. _camSenders) — un simple
-    // `track === null` matcherait aussi le sender recvonly auto-créé par le navigateur en
-    // recevant la caméra du pair distant, cassant la renégociation (voir commentaire _camSenders).
-    const camSender = (pc: RTCPeerConnection, peerId: string) => {
-      const tracked = _camSenders.get(peerId)
-      if (tracked && pc.getSenders().includes(tracked)) return tracked
-      const screenSender = _screenSenders.get(peerId)
-      return pc.getSenders().find(s => s.track?.kind === 'video' && s !== screenSender)
-    }
-
-    if (videoEnabled) {
-      // Désactiver
-      _localStream.getVideoTracks().forEach(t => { t.stop(); _localStream!.removeTrack(t) })
-      for (const [peerId, pc] of _pcs) {
-        const sender = camSender(pc, peerId)
-        if (sender) try { await sender.replaceTrack(null) } catch {}
       }
-      set({ videoEnabled: false })
-      _refreshLocalStream(set)
-    } else {
-      // Activer la caméra + renegociation
-      try {
-        const savedCamId = localStorage.getItem('fc_video_input') || undefined
-        const vs = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
-            ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
-          },
-        })
-        const vt = vs.getVideoTracks()[0]
-        _localStream.addTrack(vt)
-        for (const [peerId, pc] of _pcs) {
-          const sender = camSender(pc, peerId)
-          if (sender) {
-            await sender.replaceTrack(vt)
-          } else {
-            const newSender = pc.addTrack(vt, _localStream)
-            _camSenders.set(peerId, newSender)
-            try {
-              const offer = await pc.createOffer()
-              await pc.setLocalDescription(offer)
-              useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-            } catch (e) { _warn(`renégociation caméra vers ${peerId}`, e) }
+      void bootstrap()
+
+      const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
+        set(s => {
+          const current = s.roomParticipants[d.channel_id] ?? []
+          return {
+            roomParticipants: {
+              ...s.roomParticipants,
+              [d.channel_id]: [
+                ...current.filter(p => p.userId !== d.user_id),
+                { userId: d.user_id, username: d.username, avatar: d.avatar, muted: d.muted ?? false, video: d.video ?? false, screen: d.screen ?? false },
+              ],
+            },
           }
-        }
-        set({ videoEnabled: true })
-        _refreshLocalStream(set)
-      } catch {
-        set({ error: 'Impossible d\'accéder à la caméra.' })
-      }
-    }
-    _broadcastState(get)
-  },
-
-  // ── Screen share ──────────────────────────────────────────────────────────
-  // Caméra et écran voyagent sur deux pistes vidéo distinctes (deux senders) —
-  // partager l'écran n'arrête plus la caméra, les deux sont visibles simultanément
-  // chez les pairs (cf. pc.ontrack : le stream écran a un msid distinct de _localStream).
-  shareScreen: async () => {
-    const { joined } = get()
-    if (!joined || !_localStream) return
-
-    try {
-      const screenStream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
-        audio: true,
+        })
       })
 
-      const svt = screenStream.getVideoTracks()[0]
-      _screenTrack = svt
-      if (!_localScreenGroupStream) _localScreenGroupStream = new MediaStream()
+      const offLeft = ws.on('VOICE_USER_LEFT', (d: any) => {
+        set(s => {
+          const current = s.roomParticipants[d.channel_id] ?? []
+          // Purge du badge LIVE : sans ça, un utilisateur qui ferme son onglet en
+          // plein partage restait « en live » pour tout le monde, indéfiniment.
+          const streams = { ...s.activeStreams }
+          delete streams[d.user_id]
+          return {
+            roomParticipants: { ...s.roomParticipants, [d.channel_id]: current.filter(p => p.userId !== d.user_id) },
+            activeStreams: streams,
+          }
+        })
+      })
 
-      // Audio système capturé (ex: onglet avec du son) — mixé au micro sur le même
-      // sender audio, le micro n'est plus jamais coupé pendant un partage avec son
-      const sat = screenStream.getAudioTracks()[0]
-      if (sat) {
-        const micTrack = _localStream.getAudioTracks()[0]
-        if (micTrack) {
-          _screenAudioTrack = sat
-          _pushMicTrackToSenders(micTrack)
-        } else {
-          sat.stop()
-        }
-      }
+      const offVoiceState = ws.on('VOICE_STATE_UPDATE', (d: any) => {
+        const isPriority = d.priority_speaker === true
+        set(s => {
+          const current = s.roomParticipants[d.channel_id] ?? []
+          let newActivePriority = s.activePrioritySpeaker
+          if (isPriority && !d.muted) newActivePriority = d.user_id
+          else if (s.activePrioritySpeaker === d.user_id && (d.muted || !isPriority)) newActivePriority = null
 
-      // Ajouter/remplacer la piste écran dans tous les PC — sender dédié, séparé de la caméra
-      for (const [peerId, pc] of _pcs) {
-        const existingSender = _screenSenders.get(peerId)
-        if (existingSender) {
-          await existingSender.replaceTrack(svt)
+          return {
+            activePrioritySpeaker: newActivePriority,
+            roomParticipants: {
+              ...s.roomParticipants,
+              [d.channel_id]: current.map(p => p.userId === d.user_id ? { ...p, muted: d.muted, video: d.video, screen: d.screen } : p),
+            },
+            peers: s.peers.map(p => p.userId === d.user_id
+              ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null }
+              : p),
+          }
+        })
+      })
+
+      const offStreamStart = ws.on('STREAM_START', (d: any) => {
+        set(s => ({
+          activeStreams: {
+            ...s.activeStreams,
+            [d.user_id]: { userId: d.user_id, username: d.username, channelId: d.channel_id, viewers: d.viewers },
+          },
+        }))
+      })
+
+      const offStreamEnd = ws.on('STREAM_END', (d: any) => {
+        set(s => {
+          const next = { ...s.activeStreams }
+          delete next[d.user_id]
+          return { activeStreams: next }
+        })
+      })
+
+      const offOpen = ws.onOpen(() => { void bootstrap() })
+
+      return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd(); offOpen() }
+    },
+
+    // ── Join ────────────────────────────────────────────────────────────────
+    join: async (channelId, serverId, withVideo = false, password, channelName, listenOnly = false) => {
+      const cur = get()
+      if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
+      // Garde posée AVANT l'await : deux clics rapides créaient deux jeux de
+      // listeners WS, le premier n'étant jamais désabonné.
+      if (_joining) return
+      _joining = true
+      try {
+        if (cur.joined) get().leave()
+        set({ error: null, notice: null })
+
+        let hasVideo = false
+        let noiseError: string | null = null
+        const engine = getNoiseEngine()
+
+        if (listenOnly) {
+          setLocalStream(null, null)
         } else {
-          const sender = pc.addTrack(svt, _localScreenGroupStream)
-          _screenSenders.set(peerId, sender)
+          let stream: MediaStream
           try {
-            const offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
-            useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-          } catch (e) { _warn(`renégociation partage d'écran vers ${peerId}`, e) }
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: micConstraints(),
+              video: withVideo ? camConstraints() : false,
+            })
+          } catch {
+            try {
+              // Repli sans deviceId : un micro mémorisé puis débranché rendait
+              // sinon tout le vocal inaccessible.
+              stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            } catch {
+              set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
+              return
+            }
+          }
+
+          const raw = stream.getAudioTracks()[0] ?? null
+          hasVideo = stream.getVideoTracks().length > 0
+
+          let micTrack = raw
+          if (raw) {
+            const built = await buildMicTrack(raw, engine)
+            micTrack = built.track
+            noiseError = built.error
+          }
+
+          const outgoing = new MediaStream()
+          if (micTrack) outgoing.addTrack(micTrack)
+          stream.getVideoTracks().forEach(t => outgoing.addTrack(t))
+          setLocalStream(outgoing, raw)
+        }
+
+        set({
+          joined: true,
+          listenOnly,
+          channelId,
+          channelName: channelName ?? null,
+          serverId,
+          localStream: getLocalStream(),
+          localScreenStream: null,
+          videoEnabled: hasVideo,
+          muted: listenOnly,
+          deafened: false,
+          screenSharing: false,
+          peers: [],
+          noiseEngine: engine,
+          notice: noiseError,
+        })
+        syncMic()
+
+        const ws = useWs.getState()
+
+        const offExisting = ws.on('VOICE_EXISTING_PEERS', async (d: any) => {
+          const s = get()
+          // Comparer au canal EFFECTIF : sur un canal auto-create, le serveur
+          // répond pour le canal temporaire, pas pour celui qui a été cliqué.
+          if (d.channel_id !== s.channelId) return
+          set(st => ({
+            roomParticipants: {
+              ...st.roomParticipants,
+              [d.channel_id]: (d.peers ?? []).map((p: any) => ({
+                userId: p.user_id, username: p.username, avatar: p.avatar,
+                muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
+              })),
+            },
+          }))
+          for (const peer of (d.peers ?? [])) {
+            // Les drapeaux video/screen étaient perdus ici : la tuile restait sur
+            // l'avatar jusqu'au prochain VOICE_STATE_UPDATE du pair.
+            await createPC(peer.user_id, {
+              username: peer.username, avatar: peer.avatar,
+              discriminator: peer.discriminator, muted: peer.muted,
+              videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false,
+            }, ctx)
+            // L'offer part toute seule : addTrack déclenche onnegotiationneeded.
+          }
+        })
+
+        const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
+          if (d.channel_id !== get().channelId) return
+          void createPC(d.user_id, {
+            username: d.username, avatar: d.avatar, discriminator: d.discriminator,
+            videoEnabled: d.video ?? false, screenSharing: d.screen ?? false,
+          }, ctx)
+        })
+
+        const offLeft = ws.on('VOICE_USER_LEFT', (d: any) => {
+          if (d.channel_id !== get().channelId) return
+          teardownPeer(d.user_id, ctx)
+        })
+
+        const offSignal = ws.on('VOICE_SIGNAL', async (d: any) => {
+          const { from, payload } = d
+          // Les signaux d'appel DM ont un autre format (payload.sdp/candidate)
+          if (!payload || payload.data === undefined) return
+          await handleSignal(from, payload, ctx)
+        })
+
+        const offRedirect = ws.on('VOICE_REDIRECT', (d: any) => {
+          // Canal auto-create : le serveur nous place dans un canal temporaire.
+          // On met simplement à jour l'identifiant courant — un leave()/join()
+          // ici supprimait le canal temporaire aussitôt créé.
+          if (!d?.channel_id) return
+          set({ channelId: d.channel_id })
+        })
+
+        const offError = ws.on('VOICE_JOIN_ERROR', (d: any) => {
+          if (d.reason === 'channel_full' || d.reason === 'full') set({ error: `Canal plein (${d.current ?? '?'}/${d.limit} places)` })
+          else if (d.reason === 'missing_permission') set({ error: "Vous n'avez pas la permission de rejoindre ce salon vocal." })
+          else if (d.reason === 'rate_limited') set({ error: 'Trop de tentatives de connexion : patientez quelques secondes.' })
+          else if (d.reason === 'wrong_password') set({ error: 'Mot de passe du salon incorrect.' })
+        })
+
+        // Le serveur refuse un partage sans la permission STREAM : sans ce handler,
+        // la capture locale continuait et l'utilisateur croyait diffuser.
+        const offStateError = ws.on('VOICE_STATE_ERROR', (d: any) => {
+          if (d.permission === 'STREAM') {
+            void get().stopScreenShare()
+            set({ error: "Vous n'avez pas la permission de partager votre écran sur ce serveur." })
+          } else if (d.permission === 'SPEAK_VOICE') {
+            set({ muted: true, notice: "Vous n'avez pas la permission de parler dans ce salon : micro coupé." })
+            syncMic()
+          }
+        })
+
+        _offFns = [offExisting, offJoined, offLeft, offSignal, offRedirect, offError, offStateError]
+
+        // Re-synchronisation après reconnexion WS : sans elle, le serveur nous a
+        // sortis du canal (cleanup à la déconnexion) alors que l'UI affiche
+        // toujours « connecté » — invisible pour les autres, définitivement.
+        _offOpen?.()
+        _offOpen = ws.onOpen(() => {
+          const s = get()
+          if (!s.joined || !s.channelId) return
+          teardownAll(ctx)
+          ws.send({ type: 'VOICE_JOIN', channel_id: s.channelId, ...(password ? { password } : {}) })
+          setTimeout(broadcastState, 300)
+        })
+
+        ws.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
+        setTimeout(broadcastState, 200)
+      } finally {
+        _joining = false
+      }
+    },
+
+    // ── Leave ───────────────────────────────────────────────────────────────
+    leave: () => {
+      const { channelId, joined, screenSharing } = get()
+      if (!joined) return
+
+      const ws = useWs.getState()
+      // Annoncer la fin du partage AVANT de quitter, sinon le badge LIVE reste
+      // affiché chez les autres.
+      if (screenSharing && channelId) {
+        ws.send({ type: 'VOICE_STATE', channel_id: channelId, muted: true, deafened: false, video: false, screen: false })
+      }
+      ws.send({ type: 'VOICE_LEAVE', channel_id: channelId })
+
+      teardownAll(ctx)
+
+      const tracks = new Set<MediaStreamTrack>()
+      getLocalStream()?.getTracks().forEach(t => tracks.add(t))
+      const raw = getRawMicTrack()
+      // La piste micro BRUTE n'était référencée que par ce champ dès que la
+      // suppression de bruit était active : elle n'était jamais stoppée et
+      // l'indicateur micro de l'OS restait allumé après avoir quitté.
+      if (raw) tracks.add(raw)
+      const mic = getMicTrack()
+      if (mic) tracks.add(mic)
+      get().localScreenStream?.getTracks().forEach(t => tracks.add(t))
+      tracks.forEach(t => t.stop())
+
+      disposeProcessed()
+      void stopScreenTracks()
+      clearLocalMedia()
+
+      _offFns.forEach(off => off())
+      _offFns = []
+      _offOpen?.()
+      _offOpen = null
+
+      set({
+        joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
+        localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
+        videoEnabled: false, screenSharing: false, error: null, notice: null,
+        pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
+        // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
+        // à la sortie du salon (et sont persistées).
+      })
+    },
+
+    toggleMute: () => {
+      set(s => ({ muted: !s.muted }))
+      syncMic()
+      broadcastState()
+    },
+
+    toggleDeafen: () => {
+      const next = !get().deafened
+      get().peers.forEach(peer => {
+        peer.stream?.getAudioTracks().forEach(t => { t.enabled = !next })
+        peer.screenStream?.getAudioTracks().forEach(t => { t.enabled = !next })
+      })
+      set({ deafened: next })
+      broadcastState()
+    },
+
+    // ── Caméra ──────────────────────────────────────────────────────────────
+    toggleVideo: async () => {
+      const { videoEnabled, joined, listenOnly } = get()
+      if (!joined || listenOnly) return
+
+      if (videoEnabled) {
+        await removeCameraTrack()
+        set({ videoEnabled: false })
+        refreshLocal()
+      } else {
+        try {
+          const vs = await navigator.mediaDevices.getUserMedia({ video: camConstraints() })
+          const vt = vs.getVideoTracks()[0]
+          if (!vt) throw new Error('aucune piste caméra')
+          await addCameraTrack(vt)
+          set({ videoEnabled: true })
+          refreshLocal()
+        } catch (e) {
+          warn('activation caméra', e)
+          set({ error: 'Impossible d\'accéder à la caméra.' })
         }
       }
+      broadcastState()
+    },
 
-      // Aperçu local de l'écran — flux séparé, la caméra locale n'est pas touchée
-      _localScreenStream = new MediaStream([svt])
+    // ── Partage d'écran ─────────────────────────────────────────────────────
+    shareScreen: async () => {
+      const { joined, listenOnly } = get()
+      if (!joined || listenOnly) return
+      const md = navigator.mediaDevices as any
+      if (typeof md?.getDisplayMedia !== 'function') {
+        set({ error: 'Le partage d\'écran n\'est pas disponible sur cette version de l\'application.' })
+        return
+      }
 
-      set({ screenSharing: true, localScreenStream: _localScreenStream })
-      _broadcastState(get)
+      try {
+        const screenStream: MediaStream = await md.getDisplayMedia(screenConstraints())
+        const svt = screenStream.getVideoTracks()[0]
+        if (!svt) throw new Error('aucune piste écran')
+        const sat = screenStream.getAudioTracks()[0] ?? null
 
-      // Arrêt auto quand l'utilisateur clique "Arrêter" dans le navigateur
-      svt.onended = () => { get().stopScreenShare() }
-    } catch (e) {
-      // NotAllowedError = l'utilisateur a annulé le prompt de sélection, silencieux.
-      // Toute autre erreur (contrainte média refusée, échec de renégociation avec
-      // un peer...) était avalée ici en silence -- exactement le pattern qui a
-      // caché 2 bugs WebRTC majeurs par le passé (cf. _warn plus haut).
-      if ((e as DOMException)?.name !== 'NotAllowedError') {
-        _warn('shareScreen', e)
+        await startScreenTracks(svt, sat, getQualityPrefs().screenContentHint)
+
+        const localScreen = new MediaStream([svt])
+        set({
+          screenSharing: true,
+          localScreenStream: localScreen,
+          // Partager UNE FENÊTRE ne transmet jamais le son (limite navigateur) :
+          // le dire, au lieu de laisser croire que le retour audio est cassé.
+          notice: sat ? null : 'Aucun son capté : partagez un onglet ou l\'écran entier pour transmettre le son du jeu.',
+        })
+        broadcastState()
+
+        svt.onended = () => { void get().stopScreenShare() }
+      } catch (e) {
+        const err = e as DOMException
+        if (err?.name === 'NotAllowedError' && /permission|denied|disallowed/i.test(err.message ?? '')) {
+          // Sous WebKitGTK (paquets Linux), la capture est refusée par le moteur
+          // et renvoie la même erreur qu'une annulation utilisateur.
+          set({ error: 'Partage d\'écran refusé par le système. Sur Linux, lancez l\'application avec le portail de capture activé ou utilisez la version web.' })
+          return
+        }
+        if (err?.name === 'NotAllowedError') return // annulation du sélecteur
+        warn('shareScreen', e)
         set({ error: 'Impossible de partager l\'écran' })
       }
-    }
-  },
+    },
 
-  // ── Stop screen share ─────────────────────────────────────────────────────
-  stopScreenShare: async () => {
-    _screenTrack?.stop()
-    _screenTrack = null
-    _localScreenStream = null
+    stopScreenShare: async () => {
+      await stopScreenTracks()
+      set({ screenSharing: false, localScreenStream: null })
+      broadcastState()
+    },
 
-    // Restaurer le micro seul sur le sender audio (retire le mix avec l'audio système)
-    _screenAudioTrack?.stop()
-    _screenAudioTrack = null
-    _mixedAudioTrack = null
-    if (_micTrackBeforeMix) {
-      const micTrack = _micTrackBeforeMix
-      _micTrackBeforeMix = null
-      for (const [, pc] of _pcs) {
-        const audioSender = pc.getSenders().find(s => s.track?.kind === 'audio')
-        if (audioSender) try { await audioSender.replaceTrack(micTrack) } catch (e) { _warn('restauration micro post-partage', e) }
-      }
-      _cleanupMicMix()
-    }
+    clearError: () => set({ error: null }),
+    clearNotice: () => set({ notice: null }),
 
-    for (const [peerId, pc] of _pcs) {
-      const sender = _screenSenders.get(peerId)
-      if (!sender) continue
-      _screenSenders.delete(peerId)
-      try {
-        pc.removeTrack(sender)
-        const offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
-        useWs.getState().send({ type: 'VOICE_SIGNAL', to: peerId, payload: { type: 'offer', data: { type: offer.type, sdp: offer.sdp } } })
-      } catch (e) { _warn(`arrêt partage d'écran vers ${peerId}`, e) }
-    }
+    // ── Push-to-talk ────────────────────────────────────────────────────────
+    setPttMode: (enabled) => {
+      localStorage.setItem(PTT_KEY, enabled ? 'true' : 'false')
+      set({ pttMode: enabled, pttActive: false })
+      syncMic()
+      broadcastState()
+    },
 
-    set({ screenSharing: false, localScreenStream: null })
-    _broadcastState(get)
-  },
+    activatePtt: () => {
+      if (!get().pttMode || !get().joined) return
+      set({ pttActive: true })
+      syncMic()
+      broadcastState()
+    },
 
-  clearError: () => set({ error: null }),
+    deactivatePtt: () => {
+      if (!get().pttMode || !get().joined) return
+      set({ pttActive: false })
+      syncMic()
+      broadcastState()
+    },
 
-  // ── Push-to-talk ──────────────────────────────────────────────────────────
-  setPttMode: (enabled) => {
-    set({ pttMode: enabled })
-    if (!enabled) {
-      // Quand on désactive PTT, on restaure le vrai état mute
-      const { muted } = get()
-      _localStream?.getAudioTracks().forEach(t => { t.enabled = !muted })
-    }
-  },
-
-  activatePtt: () => {
-    const { pttMode, joined } = get()
-    if (!pttMode || !joined) return
-    // Ouvrir le micro pendant PTT (sans changer l'état muted persistant)
-    _localStream?.getAudioTracks().forEach(t => { t.enabled = true })
-    set({ pttActive: true })
-  },
-
-  deactivatePtt: () => {
-    const { pttMode, muted, joined } = get()
-    if (!pttMode || !joined) return
-    // Remettre l'état de mute d'avant
-    _localStream?.getAudioTracks().forEach(t => { t.enabled = !muted })
-    set({ pttActive: false })
-  },
-
-  // ── Volume par utilisateur ─────────────────────────────────────────────────
-  // Le volume réel est appliqué réactivement par PersistentVoiceAudio (HTMLMediaElement.volume)
-  // à partir de userVolumes ci-dessous — pas de Web Audio ici.
-  setUserVolume: (userId, volume) => {
-    set(s => ({ userVolumes: { ...s.userVolumes, [userId]: volume } }))
-  },
-
-  // ── Noise suppression toggle — appliqué en temps réel si en appel ───────────
-  setNoiseSuppressionEnabled: async (enabled) => {
-    localStorage.setItem('fc_noise_suppression', enabled ? 'true' : 'false')
-
-    if (!get().joined || !_localStream) return
-
-    if (enabled && !_noiseGain) {
-      // Activer NS sur la piste brute sauvegardée
-      if (!_rawAudioTrack) {
-        _rawAudioTrack = _localStream?.getAudioTracks()[0] ?? null
-      }
-      if (!_rawAudioTrack) return
-      // Construire le stream brut pour _applyNoiseSuppression
-      const rawStreamForNS = new MediaStream([
-        _rawAudioTrack,
-        ...(_localStream?.getVideoTracks() ?? []),
-      ])
-      const processed = await _applyNoiseSuppression(rawStreamForNS)
-      _processedStream = processed
-      _localStream = processed
-      // Remplacer la piste audio dans tous les PC existants
-      const audioTrack = processed.getAudioTracks()[0]
-      if (audioTrack) _pushMicTrackToSenders(audioTrack)
-      set(() => ({ localStream: new MediaStream(processed.getTracks()) }))
-    } else if (!enabled && _noiseGain) {
-      // Désactiver : revenir à la piste audio BRUTE (pas la piste du stream traité)
-      const rawTrack = _rawAudioTrack
-      if (rawTrack) _pushMicTrackToSenders(rawTrack)
-      const videoTracks = _localStream?.getVideoTracks() ?? []
-      _cleanupNoiseSuppression()
-      // Reconstruire le stream local avec la piste brute + pistes vidéo originales
-      _localStream = new MediaStream([
-        ...(_rawAudioTrack ? [_rawAudioTrack] : []),
-        ...videoTracks,
-      ])
-      set(() => ({ localStream: _localStream }))
-    }
-  },
-
-  // ── Whisper : parler uniquement à certains peers ──────────────────────────
-  setWhisperTargets: (targets) => {
-    set({ whisperTargets: targets })
-
-    // Activer/désactiver les tracks audio vers chaque peer
-    for (const [peerId, pc] of _pcs) {
-      const isWhisperTarget = targets === null || targets.includes(peerId)
-      const senders = pc.getSenders().filter(s => s.track?.kind === 'audio')
-      senders.forEach(sender => {
-        if (sender.track) {
-          sender.track.enabled = isWhisperTarget
-        }
+    // ── Volumes ─────────────────────────────────────────────────────────────
+    setUserVolume: (userId, volume) => {
+      set(s => {
+        const next = { ...s.userVolumes, [userId]: volume }
+        saveVolumes(VOLUMES_KEY, next)
+        return { userVolumes: next }
       })
-    }
-  },
-}))
+    },
 
+    setScreenVolume: (userId, volume) => {
+      set(s => {
+        const next = { ...s.screenVolumes, [userId]: volume }
+        saveVolumes(SCREEN_VOLUMES_KEY, next)
+        return { screenVolumes: next }
+      })
+    },
 
+    // ── Suppression de bruit ────────────────────────────────────────────────
+    setNoiseSuppressionEnabled: async (enabled) => {
+      await get().setNoiseEngine(enabled ? 'rnnoise' : 'browser')
+    },
 
+    setNoiseEngine: async (engine) => {
+      persistNoiseEngine(engine)
+      set({ noiseEngine: engine })
+      if (!get().joined || get().listenOnly) return
+
+      const raw = getRawMicTrack()
+      if (!raw) return
+      const built = await buildMicTrack(raw, engine)
+      // Réappliquer l'état mute APRÈS le remplacement : sinon basculer ce réglage
+      // rouvrait le micro d'un utilisateur muet, sans que l'icône ne change.
+      await replaceMicTrack(built.track, micShouldBeOpen(get()))
+      refreshLocal()
+      set({ notice: built.error })
+    },
+
+    // ── Périphériques à chaud ───────────────────────────────────────────────
+    setAudioInput: async (deviceId) => {
+      localStorage.setItem('fc_audio_input', deviceId)
+      if (!get().joined || get().listenOnly) return
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() })
+        const raw = stream.getAudioTracks()[0]
+        if (!raw) return
+        getRawMicTrack()?.stop()
+        disposeProcessed()
+        const built = await buildMicTrack(raw, get().noiseEngine)
+        const ls = getLocalStream()
+        setLocalStream(ls, raw)
+        await replaceMicTrack(built.track, micShouldBeOpen(get()))
+        refreshLocal()
+        set({ notice: built.error })
+      } catch (e) {
+        warn('changement de microphone', e)
+        set({ error: 'Impossible d\'utiliser ce microphone.' })
+      }
+    },
+
+    setVideoInput: async (deviceId) => {
+      localStorage.setItem('fc_video_input', deviceId)
+      if (!get().joined || !get().videoEnabled) return
+      try {
+        const vs = await navigator.mediaDevices.getUserMedia({ video: camConstraints() })
+        const vt = vs.getVideoTracks()[0]
+        if (!vt) return
+        await addCameraTrack(vt)
+        refreshLocal()
+      } catch (e) {
+        warn('changement de caméra', e)
+        set({ error: 'Impossible d\'utiliser cette caméra.' })
+      }
+    },
+
+    applyQualityPrefs: async () => {
+      await refreshAllSenderQuality()
+    },
+
+    // ── Whisper ─────────────────────────────────────────────────────────────
+    setWhisperTargets: (targets) => {
+      set({ whisperTargets: targets })
+      // Par sender (replaceTrack), jamais par track.enabled : tous les senders
+      // partagent le MÊME MediaStreamTrack, donc couper « pour un pair » coupait
+      // le micro pour tout le monde.
+      void setWhisper(targets, micShouldBeOpen(get()) ? getMicTrack() : null)
+    },
+  }
+})

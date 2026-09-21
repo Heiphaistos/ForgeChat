@@ -63,7 +63,12 @@ async fn handle_socket(
         }
     };
 
-    tracing::info!("WS connecté: {}", user_id);
+    // N5 — identité de CONNEXION, distincte de l'identité d'utilisateur.
+    // Plusieurs onglets partagent le même `user_id` mais ont chacun leur
+    // `session_id` : l'état vocal est désormais rattaché à la session.
+    let session_id = Uuid::new_v4();
+
+    tracing::info!("WS connecté: {} (session {})", user_id, session_id);
 
     // Charger le username une fois au connect pour éviter les DB queries dans les TYPING events
     let cached_username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
@@ -165,6 +170,16 @@ async fn handle_socket(
     }
 
     let (mut sender, mut receiver) = socket.split();
+
+    // N5 — envoyé directement sur CETTE socket (pas via le broadcast partagé
+    // entre onglets) : chaque session apprend son propre identifiant et peut
+    // ignorer les événements qu'elle a elle-même déclenchés (DM_CALL_TAKEN).
+    let _ = sender
+        .send(Message::Text(
+            serde_json::json!({ "type": "SESSION_INIT", "session_id": session_id }).to_string(),
+        ))
+        .await;
+
     let mut rx = tx.subscribe();
 
     let send_task = tokio::spawn(async move {
@@ -195,7 +210,7 @@ async fn handle_socket(
                         tracing::warn!("WS: message trop grand ({} bytes) de {}", text.len(), user_id);
                         break;
                     }
-                    handle_ws_message(&state_clone, user_id, &text, &username_clone).await;
+                    handle_ws_message(&state_clone, user_id, session_id, &text, &username_clone).await;
                 }
                 Message::Close(_) => break,
                 Message::Ping(_) => {}
@@ -221,18 +236,22 @@ async fn handle_socket(
         last
     };
 
+    // N5 — le vocal se nettoie à la fermeture de CHAQUE session, mais seulement
+    // si c'est la session qui détenait le vocal (un 2e onglet fermé n'éjecte
+    // plus l'onglet en appel).
+    cleanup_voice(&state, user_id, Some(session_id)).await;
+
     if is_last {
         let _ = sqlx::query("UPDATE users SET status='offline' WHERE id=$1")
             .bind(user_id)
             .execute(&state.db)
             .await;
         broadcast_presence(&state, user_id, "offline").await;
-        cleanup_voice(&state, user_id).await;
         cleanup_stage(&state, user_id).await;
 
         // Appels DM encore en sonnerie : l'appelant a disparu sans HANGUP (crash,
         // fermeture d'onglet) → résoudre en 'missed' et prévenir le destinataire
-        // tout de suite (sinon son modal attend le timeout 50s). Les appels
+        // tout de suite (sinon son modal attend le timeout 45s). Les appels
         // 'answered' ne sont pas touchés : le média P2P survit à une coupure WS.
         if let Ok(rows) = sqlx::query(
             "UPDATE call_history SET status='missed', ended_at=NOW()
@@ -326,18 +345,73 @@ async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
     }
 }
 
-async fn cleanup_voice(state: &AppState, user_id: Uuid) {
-    if let Some((channel_id, remaining)) = state.voice_leave(user_id).await {
+/// Sortie du vocal. `session` = la session WS qui part (`None` = VOICE_LEAVE
+/// explicite d'une session dont on vérifie déjà la propriété en amont).
+async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Option<Uuid>) {
+    // N5 — ne rien faire si ce n'est pas la session qui détient le vocal.
+    if let Some(sid) = session {
+        let owner = state.voice_sessions.read().await.get(&user_id).copied();
+        match owner {
+            Some(owner_sid) if owner_sid == sid => {}
+            Some(_) => {
+                tracing::debug!(
+                    user_id = %user_id, session = %sid,
+                    "cleanup_voice ignoré : cette session ne détient pas le vocal"
+                );
+                return;
+            }
+            None => return,
+        }
+    }
+
+    if let Some((channel_id, remaining, prev_state)) = state.voice_leave(user_id).await {
+        // S2 — l'utilisateur partageait son écran : le badge LIVE doit tomber
+        // chez tout le monde, y compris sur un crash / fermeture d'onglet.
+        if prev_state.map(|s| s.screen).unwrap_or(false) {
+            state.broadcast_to_channel_members_except(channel_id, None, serde_json::json!({
+                "type": "STREAM_END",
+                "user_id": user_id,
+                "channel_id": channel_id,
+            }).to_string()).await;
+        }
+
+        // N13 — une main levée ne reste pas levée après le départ de son auteur
+        for cid in state.voice_hand_cleanup(user_id).await {
+            state.broadcast_to_channel_members(cid, serde_json::json!({
+                "type": "HAND_RAISE",
+                "channel_id": cid.to_string(),
+                "user_id": user_id.to_string(),
+                "raised": false,
+            }).to_string()).await;
+        }
+
         let event = serde_json::json!({
             "type": "VOICE_USER_LEFT",
             "user_id": user_id,
             "channel_id": channel_id,
         });
-        // Broadcast à tous les clients connectés (sidebar participantes globale)
-        broadcast_to_all(state, user_id, event.to_string()).await;
+        // N10 — ciblé sur les membres du serveur qui voient ce canal, plus
+        // l'instance entière.
+        state.broadcast_to_channel_members_except(channel_id, Some(user_id), event.to_string()).await;
 
         // Si canal temporaire et dernier participant → supprimer automatiquement
         if remaining.is_empty() {
+            // N1 — fenêtre de grâce : un canal auto-create vient peut-être
+            // d'être créé et le VOICE_JOIN de redirection n'est pas encore
+            // arrivé. Le supprimer ici détruit le canal avant son premier
+            // occupant (symptôme : utilisateur hors de tout canal, micro ouvert).
+            // ponytail: si le VOICE_JOIN de redirection n'arrive jamais (client
+            // tué pendant la fenêtre), le canal temporaire vide survit jusqu'au
+            // prochain leave d'un occupant. Ajouter un balayage périodique des
+            // canaux `is_temporary` vides si ça devient visible.
+            if state.temp_channel_in_grace(channel_id).await {
+                tracing::debug!(
+                    channel_id = %channel_id,
+                    "Canal temporaire dans sa fenêtre de grâce : suppression différée"
+                );
+                return;
+            }
+
             let is_temp: bool = sqlx::query_scalar(
                 "SELECT is_temporary FROM channels WHERE id=$1"
             )
@@ -410,16 +484,93 @@ async fn users_share_dm(state: &AppState, a: Uuid, b: Uuid) -> bool {
     .fetch_one(&state.db).await.unwrap_or(false)
 }
 
-async fn broadcast_to_all(state: &AppState, exclude: Uuid, event: String) {
-    let clients = state.clients.read().await;
-    for (uid, tx) in clients.iter() {
-        if *uid != exclude {
-            let _ = tx.send(event.clone());
-        }
-    }
+
+/// Durée de sonnerie d'un appel DM (N19) — doit rester égale à la constante
+/// client (`call.ts:272-276`).
+const DM_RING_TIMEOUT_S: u64 = 45;
+
+/// N5 — un appel décroché/refusé depuis un onglet doit éteindre la modale des
+/// AUTRES onglets du même utilisateur. Le broadcast atteint toutes les
+/// sessions ; `session_id` permet à celle qui a agi de s'ignorer.
+async fn notify_call_taken(
+    state: &AppState,
+    user_id: Uuid,
+    session_id: Uuid,
+    dm_id: &serde_json::Value,
+    action: &str,
+) {
+    state.broadcast_to_user(user_id, serde_json::json!({
+        "type": "DM_CALL_TAKEN",
+        "user_id": user_id,
+        "session_id": session_id,
+        "dm_id": dm_id,
+        "action": action,
+    }).to_string()).await;
 }
 
-async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_username: &str) {
+/// N9 — limiteur de débit Redis générique, même motif que `TYPING_START` /
+/// `DM_CALL_INIT` : compteur INCR + EXPIRE sur la fenêtre.
+/// Retourne `true` si l'action est autorisée.
+async fn rate_ok(state: &AppState, key: String, limit: i64, window_s: i64) -> bool {
+    use redis::AsyncCommands;
+    let mut redis = state.redis.lock().await;
+    let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
+    if count == 1 {
+        let _: () = redis.expire(&key, window_s).await.unwrap_or(());
+    }
+    // count == 0 => Redis indisponible : on laisse passer plutôt que de couper le vocal.
+    count == 0 || count <= limit
+}
+
+/// Permissions effectives de `user_id` sur `channel_id`, overrides de canal
+/// compris. `None` = pas membre du serveur du canal.
+async fn channel_perms(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
+    state.effective_channel_permissions(user_id, channel_id).await
+}
+
+fn has_perm(perms: i64, bit: i64) -> bool {
+    perms & Permissions::ADMINISTRATOR != 0 || perms & bit != 0
+}
+
+/// Ce bit de permission est-il réellement administré sur ce serveur ?
+///
+/// ⚠ Les rôles `@everyone` sont créés (`servers.rs:52-65`) avec
+/// VIEW_CHANNEL|SEND_MESSAGES|READ_HISTORY|ADD_REACTIONS|ATTACH_FILES —
+/// **sans** CONNECT_VOICE, SPEAK_VOICE ni STREAM. Refuser sur cette seule base
+/// éjecterait tout le monde du vocal sur tous les serveurs existants.
+/// On ne fait donc appliquer le bit que si quelqu'un l'a explicitement posé
+/// quelque part : sur un rôle du serveur, ou dans un override de ce canal.
+/// Une migration qui ajoute ces bits à `@everyone` rendra ce garde-fou inutile.
+async fn perm_is_administered(state: &AppState, server_id: Uuid, channel_id: Uuid, bit: i64) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(
+            SELECT 1 FROM roles WHERE server_id=$1 AND (permissions & $3) <> 0
+            UNION ALL
+            SELECT 1 FROM channel_permissions WHERE channel_id=$2 AND ((allow | deny) & $3) <> 0
+        )"
+    )
+    .bind(server_id)
+    .bind(channel_id)
+    .bind(bit)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(false)
+}
+
+/// `has_perm` + garde-fou de rétrocompatibilité (voir `perm_is_administered`).
+async fn voice_perm_ok(
+    state: &AppState, server_id: Uuid, channel_id: Uuid, perms: i64, bit: i64,
+) -> bool {
+    has_perm(perms, bit) || !perm_is_administered(state, server_id, channel_id, bit).await
+}
+
+async fn handle_ws_message(
+    state: &AppState,
+    user_id: Uuid,
+    session_id: Uuid,
+    text: &str,
+    cached_username: &str,
+) {
     let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) else {
         return;
     };
@@ -642,20 +793,42 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
         // ────────── Vocal / Vidéo (WebRTC signaling) ──────────
         Some("VOICE_JOIN") => {
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                tracing::warn!(user_id = %user_id, "VOICE_JOIN rejeté : channel_id absent ou invalide");
                 return;
             };
 
-            // Vérifier que l'utilisateur est membre du serveur propriétaire du canal
-            let is_member: bool = sqlx::query_scalar(
-                "SELECT EXISTS(
-                    SELECT 1 FROM channels c
-                    JOIN server_members sm ON sm.server_id = c.server_id
-                    WHERE c.id = $1 AND sm.user_id = $2
-                )"
-            )
-            .bind(channel_id).bind(user_id)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !is_member { return; }
+            // N9 — 10 joins par minute et par utilisateur
+            if !rate_ok(state, format!("rl:vjoin:{}", user_id), 10, 60).await {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : rate limit");
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "rate_limited",
+                    "current": 0,
+                }).to_string()).await;
+                return;
+            }
+
+            // N8 — appartenance ET permissions de canal (CONNECT_VOICE / SPEAK_VOICE),
+            // overrides `channel_permissions` compris.
+            let Some((server_id, perms)) = channel_perms(state, user_id, channel_id).await else {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : non membre du serveur");
+                return;
+            };
+            if !voice_perm_ok(state, server_id, channel_id, perms, Permissions::CONNECT_VOICE).await {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : CONNECT_VOICE manquant");
+                let current = state.voice_rooms.read().await
+                    .get(&channel_id).map(|r| r.len()).unwrap_or(0);
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "missing_permission",
+                    "permission": "CONNECT_VOICE",
+                    "current": current,
+                }).to_string()).await;
+                return;
+            }
+            let can_speak = voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await;
 
             // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
@@ -683,10 +856,14 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                     let provided = msg["password"].as_str().unwrap_or("");
                     let ok = bcrypt::verify(provided, hash).unwrap_or(false);
                     if !ok {
+                        tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : mot de passe vocal incorrect");
+                        let current = state.voice_rooms.read().await
+                            .get(&channel_id).map(|r| r.len()).unwrap_or(0);
                         let err = serde_json::json!({
                             "type": "VOICE_JOIN_ERROR",
                             "channel_id": channel_id,
                             "reason": "wrong_password",
+                            "current": current,
                         });
                         state.broadcast_to_user(user_id, err.to_string()).await;
                         return;
@@ -722,6 +899,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                         .await
                         {
                             effective_channel_id = new_ch.id;
+                            // N1 — fenêtre de grâce : le client va faire
+                            // leave()+join() pour suivre la redirection, la room
+                            // sera vide entre les deux. Interdire la suppression
+                            // pendant 10 s.
+                            state.mark_temp_channel(new_ch.id).await;
                             // Notifier tous les clients du nouveau canal
                             let create_event = serde_json::json!({
                                 "type": "CHANNEL_CREATE",
@@ -736,15 +918,30 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
 
             let max_users = user_limit.map(|l| l as usize);
             let Some(existing_ids) = state.voice_join(user_id, effective_channel_id, max_users).await else {
+                // N16 — le client affiche « Canal plein (current/limit) » : sans
+                // `current` il imprimait `undefined`.
+                let current = state.voice_rooms.read().await
+                    .get(&effective_channel_id).map(|r| r.len()).unwrap_or(0);
+                tracing::warn!(user_id = %user_id, channel_id = %effective_channel_id, "VOICE_JOIN rejeté : canal plein");
                 let err = serde_json::json!({
                     "type": "VOICE_JOIN_ERROR",
                     "channel_id": effective_channel_id,
                     "reason": "channel_full",
                     "limit": user_limit,
+                    "current": current,
                 });
                 state.broadcast_to_user(user_id, err.to_string()).await;
                 return;
             };
+
+            // N5 — cette session détient désormais le vocal pour cet utilisateur.
+            state.voice_sessions.write().await.insert(user_id, session_id);
+
+            // N13 — mains levées déjà en l'air dans ce canal
+            let hand_raised_ids: Vec<Uuid> = state.voice_hand_raises.read().await
+                .get(&effective_channel_id)
+                .map(|m| m.keys().copied().collect())
+                .unwrap_or_default();
 
             // Construire la liste des pairs existants avec leur état vocal
             let mut existing_peers = Vec::new();
@@ -764,8 +961,10 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                         "avatar": row.get::<Option<String>, _>("avatar"),
                         "discriminator": row.get::<String, _>("discriminator"),
                         "muted": vs.as_ref().map(|v| v.muted).unwrap_or(false),
+                        "deafened": vs.as_ref().map(|v| v.deafened).unwrap_or(false),
                         "video": vs.as_ref().map(|v| v.video).unwrap_or(false),
                         "screen": vs.as_ref().map(|v| v.screen).unwrap_or(false),
+                        "hand_raised": hand_raised_ids.contains(peer_id),
                     }));
                 }
             }
@@ -774,6 +973,13 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "type": "VOICE_EXISTING_PEERS",
                 "channel_id": effective_channel_id,
                 "peers": existing_peers,
+                // N13 — mains levées du canal, pour qu'un arrivant les voie
+                "hand_raises": state.voice_hand_raises.read().await
+                    .get(&effective_channel_id)
+                    .map(|m| m.values().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default(),
+                // N8 — le client sait s'il peut ouvrir son micro
+                "can_speak": can_speak,
             }).to_string()).await;
 
             // Récupérer les infos du rejoignant
@@ -793,8 +999,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                     "avatar": row.get::<Option<String>, _>("avatar"),
                     "discriminator": row.get::<String, _>("discriminator"),
                 });
-                // Broadcast global : tous les clients voient le join (sidebar)
-                broadcast_to_all(state, user_id, notif.to_string()).await;
+                // N10 — ciblé sur les membres du serveur qui voient ce canal
+                // (la sidebar du serveur concerné en a besoin), plus toute l'instance.
+                state.broadcast_to_channel_members_except(
+                    effective_channel_id, Some(user_id), notif.to_string(),
+                ).await;
 
                 // Si canal temporaire différent du canal cliqué, notifier le client de la redirection
                 if effective_channel_id != channel_id {
@@ -808,13 +1017,19 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
         }
 
         Some("VOICE_LEAVE") => {
-            cleanup_voice(state, user_id).await;
+            cleanup_voice(state, user_id, Some(session_id)).await;
         }
 
         Some("VOICE_STATE") => {
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                tracing::warn!(user_id = %user_id, "VOICE_STATE rejeté : channel_id absent ou invalide");
                 return;
             };
+            // N9 — 20 changements d'état par 10 s
+            if !rate_ok(state, format!("rl:vstate:{}", user_id), 20, 10).await {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE rejeté : rate limit");
+                return;
+            }
             let muted = msg["muted"].as_bool().unwrap_or(false);
             let deafened = msg["deafened"].as_bool().unwrap_or(false);
             let video = msg["video"].as_bool().unwrap_or(false);
@@ -830,38 +1045,44 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 let in_channel = uv.get(&user_id)
                     .map(|c| *c == channel_id)
                     .unwrap_or(false);
-                if !in_channel { return; }
+                if !in_channel {
+                    tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE rejeté : utilisateur absent de ce canal vocal");
+                    return;
+                }
             }
 
-            // Vérifier si l'utilisateur a la permission PRIORITY_SPEAKER
-            let server_id_opt = sqlx::query_scalar::<_, Option<Uuid>>(
-                "SELECT server_id FROM channels WHERE id=$1"
-            )
-            .bind(channel_id)
-            .fetch_optional(&state.db)
-            .await
-            .unwrap_or(None)
-            .flatten();
+            // Permissions de canal (overrides compris) — sert à PRIORITY_SPEAKER,
+            // SPEAK_VOICE (N8) et STREAM (S4).
+            let Some((server_id, perms)) = channel_perms(state, user_id, channel_id).await else {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE rejeté : non membre du serveur");
+                return;
+            };
+            let priority_speaker = has_perm(perms, Permissions::PRIORITY_SPEAKER);
 
-            let priority_speaker = if let Some(server_id) = server_id_opt {
-                // Vérifier via les rôles du membre
-                let perms: Option<i64> = sqlx::query_scalar(
-                    "SELECT BIT_OR(r.permissions) FROM roles r
-                     JOIN member_roles mr ON mr.role_id = r.id
-                     WHERE mr.user_id = $1 AND r.server_id = $2"
-                )
-                .bind(user_id)
-                .bind(server_id)
-                .fetch_optional(&state.db)
-                .await
-                .unwrap_or(None)
-                .flatten();
+            // S4 — le partage d'écran exige la permission STREAM (bit 40).
+            if screen && !voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE rejeté : STREAM manquant");
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_STATE_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "missing_permission",
+                    "permission": "STREAM",
+                }).to_string()).await;
+                return;
+            }
 
-                let combined = perms.unwrap_or(0);
-                combined & Permissions::ADMINISTRATOR != 0
-                    || combined & Permissions::PRIORITY_SPEAKER != 0
-            } else {
-                false
+            // N8 — sans SPEAK_VOICE l'utilisateur reste muet quoi qu'il envoie.
+            let muted = if voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await { muted } else {
+                if !muted {
+                    tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE forcé muet : SPEAK_VOICE manquant");
+                    state.broadcast_to_user(user_id, serde_json::json!({
+                        "type": "VOICE_STATE_ERROR",
+                        "channel_id": channel_id,
+                        "reason": "missing_permission",
+                        "permission": "SPEAK_VOICE",
+                    }).to_string()).await;
+                }
+                true
             };
 
             // Récupérer l'ancien état screen pour détecter changements Go Live
@@ -873,6 +1094,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             state.voice_states.write().await.insert(user_id, VoiceStateData {
                 channel_id, muted, deafened, video, screen,
             });
+            state.persist_voice_to_redis().await;
 
             let event = serde_json::json!({
                 "type": "VOICE_STATE_UPDATE",
@@ -884,8 +1106,8 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "screen": screen,
                 "priority_speaker": priority_speaker,
             });
-            // Broadcast à toute la room + à tous pour la sidebar
-            broadcast_to_all(state, user_id, event.to_string()).await;
+            // N10 — ciblé sur les membres du serveur qui voient ce canal
+            state.broadcast_to_channel_members_except(channel_id, Some(user_id), event.to_string()).await;
 
             // Go Live : émettre STREAM_START / STREAM_END selon changement d'état screen
             if screen && !prev_screen {
@@ -902,7 +1124,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                         "username": username,
                         "channel_id": channel_id,
                     });
-                    broadcast_to_all(state, user_id, stream_event.to_string()).await;
+                    state.broadcast_to_channel_members_except(channel_id, Some(user_id), stream_event.to_string()).await;
                 }
             } else if !screen && prev_screen {
                 let stream_event = serde_json::json!({
@@ -910,14 +1132,22 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                     "user_id": user_id,
                     "channel_id": channel_id,
                 });
-                broadcast_to_all(state, user_id, stream_event.to_string()).await;
+                state.broadcast_to_channel_members_except(channel_id, Some(user_id), stream_event.to_string()).await;
             }
         }
 
         Some("VOICE_SIGNAL") => {
             let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
+                tracing::warn!(user_id = %user_id, "VOICE_SIGNAL rejeté : destinataire absent ou invalide");
                 return;
             };
+            // N9 — 100 signaux par 10 s et par paire émetteur→destinataire.
+            // Généreux : une négociation complète (offer + answer + ICE) en
+            // consomme une dizaine.
+            if !rate_ok(state, format!("rl:vsig:{}:{}", user_id, to), 100, 10).await {
+                tracing::warn!(user_id = %user_id, to = %to, "VOICE_SIGNAL rejeté : rate limit");
+                return;
+            }
             // Autoriser si canal DM commun OU les deux utilisateurs sont dans le même canal vocal
             let same_voice_channel = {
                 let uv = state.user_voice.read().await;
@@ -938,7 +1168,10 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 .bind(user_id).bind(to)
                 .fetch_one(&state.db).await.unwrap_or(false)
             };
-            if !authorized { return; }
+            if !authorized {
+                tracing::warn!(user_id = %user_id, to = %to, "VOICE_SIGNAL rejeté : ni canal vocal commun ni DM commun");
+                return;
+            }
             let signal = serde_json::json!({
                 "type": "VOICE_SIGNAL",
                 "from": user_id,
@@ -1127,6 +1360,12 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
             if let Some(channel_id) = msg["channel_id"].as_str()
                 .and_then(|s| s.parse::<Uuid>().ok())
             {
+                // N9 — flux de dessin : très généreux (300 traits par 10 s),
+                // juste de quoi empêcher un client malveillant de noyer le canal.
+                if !rate_ok(state, format!("rl:wb:{}", user_id), 300, 10).await {
+                    tracing::warn!(user_id = %user_id, channel_id = %channel_id, "WHITEBOARD rejeté : rate limit");
+                    return;
+                }
                 let is_member: bool = sqlx::query_scalar(
                     "SELECT EXISTS(
                         SELECT 1 FROM channels c
@@ -1208,8 +1447,38 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "from_username": cached_username,
                 "dm_id": msg["dm_id"],
                 "call_type": call_type,
+                // N19 — le client n'a plus à coder sa propre durée de sonnerie
+                "ring_timeout_ms": DM_RING_TIMEOUT_S * 1000,
             });
             state.broadcast_to_user(to, event.to_string()).await;
+
+            // N19 — expiration côté serveur alignée sur le client (45 s) : sans
+            // elle, un appel non décroché restait 'ringing' en base indéfiniment
+            // et seul le client décidait de l'abandon.
+            let expiry_state = state.clone();
+            let dm_val = msg["dm_id"].clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(DM_RING_TIMEOUT_S)).await;
+                let expired = sqlx::query(
+                    "UPDATE call_history SET status='missed', ended_at=NOW()
+                     WHERE id = (SELECT id FROM call_history
+                                 WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
+                                 ORDER BY started_at DESC LIMIT 1)
+                     RETURNING id"
+                )
+                .bind(user_id).bind(to)
+                .fetch_optional(&expiry_state.db).await;
+                if matches!(expired, Ok(Some(_))) {
+                    let ended = serde_json::json!({
+                        "type": "DM_CALL_ENDED",
+                        "from": user_id,
+                        "dm_id": dm_val,
+                        "reason": "timeout",
+                    }).to_string();
+                    expiry_state.broadcast_to_user(to, ended.clone()).await;
+                    expiry_state.broadcast_to_user(user_id, ended).await;
+                }
+            });
         }
 
         Some("DM_CALL_ACCEPT") => {
@@ -1232,6 +1501,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "dm_id": msg["dm_id"],
             });
             state.broadcast_to_user(to, event.to_string()).await;
+            notify_call_taken(state, user_id, session_id, &msg["dm_id"], "accepted").await;
         }
 
         Some("DM_CALL_DECLINE") => {
@@ -1254,6 +1524,7 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 "dm_id": msg["dm_id"],
             });
             state.broadcast_to_user(to, event.to_string()).await;
+            notify_call_taken(state, user_id, session_id, &msg["dm_id"], "declined").await;
         }
 
         Some("DM_CALL_HANGUP") => {
@@ -1290,6 +1561,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 msg["emoji"].as_str(),
             ) {
                 if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    // N9 — 20 réactions par minute
+                    if !rate_ok(state, format!("rl:vreact:{}", user_id), 20, 60).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : rate limit");
+                        return;
+                    }
                     let is_member: bool = sqlx::query_scalar(
                         "SELECT EXISTS(
                             SELECT 1 FROM channels c
@@ -1297,7 +1573,10 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                             WHERE c.id = $1 AND sm.user_id = $2
                         )"
                     ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member { return; }
+                    if !is_member {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : non membre du serveur");
+                        return;
+                    }
                     let event = serde_json::json!({
                         "type": "VOICE_REACTION",
                         "channel_id": channel_id_val,
@@ -1319,6 +1598,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 msg["raised"].as_bool(),
             ) {
                 if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    // N9 — 10 mains levées par minute
+                    if !rate_ok(state, format!("rl:hand:{}", user_id), 10, 60).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : rate limit");
+                        return;
+                    }
                     let is_member: bool = sqlx::query_scalar(
                         "SELECT EXISTS(
                             SELECT 1 FROM channels c
@@ -1326,7 +1610,29 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                             WHERE c.id = $1 AND sm.user_id = $2
                         )"
                     ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member { return; }
+                    if !is_member {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : non membre du serveur");
+                        return;
+                    }
+                    // N13 — état serveur, même motif que `stage_hand_raises` :
+                    // un arrivant voit les mains déjà levées et elles retombent
+                    // au départ de leur auteur.
+                    {
+                        let mut raises = state.voice_hand_raises.write().await;
+                        if raised {
+                            let avatar: Option<String> = sqlx::query_scalar(
+                                "SELECT avatar FROM users WHERE id=$1"
+                            ).bind(user_id).fetch_optional(&state.db).await.unwrap_or(None).flatten();
+                            raises.entry(cid).or_default().insert(user_id, serde_json::json!({
+                                "user_id": user_id.to_string(),
+                                "username": cached_username,
+                                "avatar": avatar,
+                            }));
+                        } else if let Some(m) = raises.get_mut(&cid) {
+                            m.remove(&user_id);
+                        }
+                        raises.retain(|_, m| !m.is_empty());
+                    }
                     let event = serde_json::json!({
                         "type": "HAND_RAISE",
                         "channel_id": channel_id_val,
@@ -1347,6 +1653,11 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                 msg["sound_id"].as_str(),
             ) {
                 if let Ok(cid) = channel_id_val.parse::<Uuid>() {
+                    // N9 — 5 sons par minute
+                    if !rate_ok(state, format!("rl:sound:{}", user_id), 5, 60).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : rate limit");
+                        return;
+                    }
                     let is_member: bool = sqlx::query_scalar(
                         "SELECT EXISTS(
                             SELECT 1 FROM channels c
@@ -1354,7 +1665,10 @@ async fn handle_ws_message(state: &AppState, user_id: Uuid, text: &str, cached_u
                             WHERE c.id = $1 AND sm.user_id = $2
                         )"
                     ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member { return; }
+                    if !is_member {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : non membre du serveur");
+                        return;
+                    }
                     let event = serde_json::json!({
                         "type": "SOUNDBOARD_PLAY",
                         "channel_id": channel_id_val,

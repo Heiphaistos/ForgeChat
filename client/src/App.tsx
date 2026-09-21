@@ -28,6 +28,7 @@ import MainLayout from './components/layout/MainLayout'
 import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
+import VoiceHotkeys from './components/voice/VoiceHotkeys'
 
 // Lazy loading pour les pages non-critiques au premier affichage
 const LandingPage = lazy(() => import('./pages/LandingPage'))
@@ -1035,6 +1036,7 @@ function AppInner() {
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
         {user && <FloatingCallPiP />}
+        {user && <VoiceHotkeys />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
         <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}

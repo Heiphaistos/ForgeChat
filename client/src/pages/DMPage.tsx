@@ -622,7 +622,12 @@ export default function DMPage() {
         <div className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
           {callType === 'video' ? (
             <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center">
-              <video ref={remoteVideoRef} autoPlay playsInline className="w-full max-h-56 object-contain" />
+              {/* muted OBLIGATOIRE : PersistentDmCallAudio joue déjà ce même remoteStream
+                  hors de cette page (pour que le son survive à la navigation). Sans ça, la
+                  voix du correspondant sort deux fois — volume doublé et écho métallique
+                  sur tout appel vidéo (défaut A5). Le son reste sur l'élément audio
+                  persistant, comme pour VoiceVideoPage. */}
+              <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full max-h-56 object-contain" />
               <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
               {callState === 'connected' && remoteStream && (
                 <span

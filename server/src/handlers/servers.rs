@@ -59,7 +59,10 @@ pub async fn create_server(
             | crate::models::role::Permissions::SEND_MESSAGES
             | crate::models::role::Permissions::READ_HISTORY
             | crate::models::role::Permissions::ADD_REACTIONS
-            | crate::models::role::Permissions::ATTACH_FILES,
+            | crate::models::role::Permissions::ATTACH_FILES
+            | crate::models::role::Permissions::CONNECT_VOICE
+            | crate::models::role::Permissions::SPEAK_VOICE
+            | crate::models::role::Permissions::STREAM,
     )
     .execute(&state.db)
     .await?;

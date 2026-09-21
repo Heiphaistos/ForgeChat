@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
-import { Camera, RefreshCw, ShieldCheck, ShieldX } from 'lucide-react'
+import { Camera, RefreshCw, ShieldCheck, ShieldX, Monitor } from 'lucide-react'
+import { useVoice } from '../../store/voice'
 
 export default function VideoSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
@@ -9,6 +10,20 @@ export default function VideoSection() {
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const setVideoInput = useVoice(s => s.setVideoInput)
+  const applyQualityPrefs = useVoice(s => s.applyQualityPrefs)
+  const [camHeight, setCamHeight] = useState(() => localStorage.getItem('fc_cam_height') ?? '720')
+  const [camBitrate, setCamBitrate] = useState(() => localStorage.getItem('fc_cam_bitrate') ?? '1200000')
+  const [screenHeight, setScreenHeight] = useState(() => localStorage.getItem('fc_screen_height') ?? '1080')
+  const [screenFps, setScreenFps] = useState(() => localStorage.getItem('fc_screen_fps') ?? '30')
+  const [screenBitrate, setScreenBitrate] = useState(() => localStorage.getItem('fc_screen_bitrate') ?? '4000000')
+  const [screenHint, setScreenHint] = useState(() => localStorage.getItem('fc_screen_hint') ?? 'motion')
+
+  const savePref = (key: string, value: string, setter: (v: string) => void) => {
+    localStorage.setItem(key, value)
+    setter(value)
+    void applyQualityPrefs()
+  }
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -53,7 +68,9 @@ export default function VideoSection() {
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
+      // L'élément <video> n'existe pas encore au premier clic : il n'est monté
+      // qu'une fois previewActive à true. Assigner srcObject avant, c'était
+      // assigner à null — caméra allumée, cadre noir.
       setPreviewActive(true)
       setPermission('granted')
       await refreshDevices()
@@ -69,11 +86,19 @@ export default function VideoSection() {
     setPreviewActive(false)
   }
 
+  // Attache le flux dès que le <video> est monté (et à chaque changement de flux)
+  useEffect(() => {
+    if (previewActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [previewActive])
+
   useEffect(() => () => stopPreview(), [])
 
   const handleCameraChange = (id: string) => {
     setSelectedCamera(id)
-    localStorage.setItem('fc_video_input', id)
+    // Applique la caméra à l'appel en cours (replaceTrack) et pas seulement au suivant
+    void setVideoInput(id)
     if (previewActive) {
       stopPreview()
       setTimeout(startPreview, 100)
@@ -166,6 +191,61 @@ export default function VideoSection() {
           )}
         </div>
       </div>
+
+      {/* Qualité d'émission — aucune de ces valeurs n'était réglable, et aucun
+          plafond de débit n'était appliqué aux senders (mesh N-à-N sans limite). */}
+      <Field label="Qualité de la caméra">
+        <div className="grid grid-cols-2 gap-2">
+          <select value={camHeight} onChange={e => savePref('fc_cam_height', e.target.value, setCamHeight)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="360">360p (économe)</option>
+            <option value="480">480p</option>
+            <option value="720">720p (recommandé)</option>
+            <option value="1080">1080p</option>
+          </select>
+          <select value={camBitrate} onChange={e => savePref('fc_cam_bitrate', e.target.value, setCamBitrate)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="500000">0,5 Mb/s</option>
+            <option value="1200000">1,2 Mb/s (recommandé)</option>
+            <option value="2500000">2,5 Mb/s</option>
+            <option value="4000000">4 Mb/s</option>
+          </select>
+        </div>
+        <p className="text-xs text-fc-muted mt-1">
+          Chaque participant reçoit son propre flux : au-delà de 5-6 caméras, baissez la résolution et le débit.
+        </p>
+      </Field>
+
+      <Field label="Qualité du partage d'écran">
+        <div className="grid grid-cols-2 gap-2">
+          <select value={screenHeight} onChange={e => savePref('fc_screen_height', e.target.value, setScreenHeight)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="720">720p</option>
+            <option value="1080">1080p (recommandé)</option>
+            <option value="1440">1440p</option>
+          </select>
+          <select value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="15">15 images/s</option>
+            <option value="30">30 images/s</option>
+            <option value="60">60 images/s (jeu)</option>
+          </select>
+          <select value={screenBitrate} onChange={e => savePref('fc_screen_bitrate', e.target.value, setScreenBitrate)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="1500000">1,5 Mb/s</option>
+            <option value="4000000">4 Mb/s (recommandé)</option>
+            <option value="8000000">8 Mb/s</option>
+          </select>
+          <select value={screenHint} onChange={e => savePref('fc_screen_hint', e.target.value, setScreenHint)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
+            <option value="motion">Fluidité (jeu, vidéo)</option>
+            <option value="detail">Netteté (texte, code)</option>
+          </select>
+        </div>
+        <p className="text-xs text-fc-muted mt-1 flex items-center gap-1">
+          <Monitor size={12} /> Le son du partage n'est transmis que pour un onglet ou l'écran entier — une fenêtre seule ne peut pas partager son audio.
+        </p>
+      </Field>
     </div>
   )
 }

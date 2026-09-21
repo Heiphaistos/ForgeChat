@@ -31,6 +31,31 @@ async function fetchWsTicket(): Promise<string | null> {
   }
 }
 
+// File d'émission utilisée quand la socket n'est pas ouverte (cf. send()).
+interface Queued { msg: object; at: number }
+const _outbox: Queued[] = []
+
+let _lastAck = 0
+
+// Un signal WebRTC périmé est pire qu'aucun signal : on jette ce qui a dépassé
+// sa fenêtre utile au lieu de le rejouer à la reconnexion.
+const MAX_AGE: Record<string, number> = {
+  VOICE_SIGNAL: 3_000,
+  VOICE_STATE: 10_000,
+  TYPING_START: 3_000,
+}
+
+function flushOutbox(socket: WebSocket) {
+  const now = Date.now()
+  const pending = _outbox.splice(0, _outbox.length)
+  for (const { msg, at } of pending) {
+    const type = (msg as any)?.type
+    const maxAge = MAX_AGE[type] ?? 30_000
+    if (now - at > maxAge) continue
+    try { socket.send(JSON.stringify(msg)) } catch { /* socket refermée entre-temps */ }
+  }
+}
+
 function backoffDelay(attempt: number): number {
   // 1s, 2s, 4s, 8s, 16s → capped at 30s, with ±20% jitter to spread reconnects
   const base = Math.min(1000 * Math.pow(2, attempt), 30_000)
@@ -83,6 +108,11 @@ export const useWs = create<WsState>((set, get) => ({
       // Chaque handler isolé dans son propre try/catch : un handler qui plante ne doit
       // ni bloquer silencieusement les suivants (forEach s'arrêterait net) ni disparaître
       // sans trace — avant, tout le dispatch était dans un seul catch {} muet.
+      // Le serveur répond HEARTBEAT_ACK ; sans surveiller ces accusés, une socket
+      // « half-open » (NAT/proxy qui oublie le flux sans FIN) n'était jamais
+      // détectée : l'utilisateur restait « en vocal » alors que plus rien
+      // n'arrivait.
+      if (msg.type === 'HEARTBEAT_ACK') { _lastAck = Date.now() }
       const handlers = get().handlers.get(msg.type) ?? []
       handlers.forEach(h => {
         try { h(msg) } catch (err) { console.error(`[ws] handler "${msg.type}" a levé`, err) }
@@ -102,12 +132,20 @@ export const useWs = create<WsState>((set, get) => ({
     }
 
     ws.onopen = () => {
+      _lastAck = Date.now()
       const interval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
+        if (ws.readyState !== WebSocket.OPEN) return
+        // Deux battements sans accusé = socket morte côté réseau : on ferme pour
+        // déclencher la reconnexion au lieu d'attendre indéfiniment.
+        if (Date.now() - _lastAck > 75_000) {
+          console.warn('[ws] aucun HEARTBEAT_ACK depuis 75 s, reconnexion forcée')
+          ws.close()
+          return
         }
+        ws.send(JSON.stringify({ type: 'HEARTBEAT' }))
       }, 30_000)
       set({ socket: ws, connected: true, _reconnectAttempts: 0, _heartbeatInterval: interval })
+      flushOutbox(ws)
       get()._openCallbacks.forEach(cb => cb())
     }
     set({ socket: ws })
@@ -125,7 +163,13 @@ export const useWs = create<WsState>((set, get) => ({
     const { socket } = get()
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msg))
+      return
     }
+    // Hors ligne : mettre en file plutôt que de jeter en silence. Un candidat ICE
+    // ou une answer perdus pendant une micro-coupure WS = appel qui ne s'établit
+    // jamais, sans la moindre trace.
+    _outbox.push({ msg, at: Date.now() })
+    if (_outbox.length > 200) _outbox.splice(0, _outbox.length - 200)
   },
 
   on: (type, handler) => {

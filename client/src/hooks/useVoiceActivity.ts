@@ -1,114 +1,86 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { attachMeter, subscribeLevels, SPEAKING_THRESHOLD } from '../lib/audio'
 
-const SPEAKING_THRESHOLD = 18
-const SAMPLE_INTERVAL = 80
+// Détection de parole. Tous les analyseurs vivent sur l'AudioContext partagé de
+// lib/audio.ts et sont échantillonnés par UNE seule boucle : chaque hook créait
+// avant son propre AudioContext (jusqu'à 2 + N + 3 sur une page d'appel), au-delà
+// de la limite de 6 de Chrome — les indicateurs se figeaient en silence dès ~3
+// pairs. Le seuil est lui aussi unique, sinon l'anneau de la tuile et la barre
+// d'activité ne s'allumaient pas au même moment.
 
-interface PeerAnalyser {
-  ctx: AudioContext
-  analyser: AnalyserNode
-  data: Uint8Array<ArrayBuffer>
-  stream: MediaStream
-}
-
-// Variante multi-pairs de useVoiceActivity ci-dessous : un seul AnalyserNode par pair
-// distant (indexé par userId), partagés entre tous les tiles d'une page d'appel. Sans
-// ça, l'indicateur "en train de parler" des pairs distants était figé en dur à false
-// (aucun événement WS SPEAKING n'existe côté serveur) -- seul le tile local réagissait.
+/** Niveaux (0-255) par pair, mis à jour 10 fois par seconde. */
 export function usePeersVoiceActivity(peers: { userId: string; stream: MediaStream | null }[]): Record<string, number> {
   const [levels, setLevels] = useState<Record<string, number>>({})
-  const analysersRef = useRef<Map<string, PeerAnalyser>>(new Map())
+  const keys = useMemo(
+    () => peers.filter(p => p.stream).map(p => `${p.userId}:${p.stream!.id}`).join('|'),
+    [peers],
+  )
 
   useEffect(() => {
-    const analysers = analysersRef.current
+    const detach = peers
+      .filter(p => p.stream)
+      .map(p => attachMeter(p.userId, p.stream))
+    return () => detach.forEach(fn => fn())
+    // `keys` capture l'identité réelle des flux ; `peers` est un tableau recréé à
+    // chaque render, s'en servir comme dépendance relançait l'effet 12 fois par
+    // seconde.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keys])
 
-    for (const [userId, entry] of Array.from(analysers.entries())) {
-      const p = peers.find(pp => pp.userId === userId)
-      const stillValid = p && p.stream && p.stream === entry.stream && p.stream.getAudioTracks().length > 0
-      if (!stillValid) {
-        entry.ctx.close()
-        analysers.delete(userId)
-      }
-    }
-
-    for (const p of peers) {
-      if (!p.stream || p.stream.getAudioTracks().length === 0) continue
-      if (analysers.has(p.userId)) continue
-      try {
-        const ctx = new AudioContext()
-        const source = ctx.createMediaStreamSource(p.stream)
-        const analyser = ctx.createAnalyser()
-        analyser.fftSize = 256
-        analyser.smoothingTimeConstant = 0.3
-        source.connect(analyser)
-        analysers.set(p.userId, { ctx, analyser, data: new Uint8Array(analyser.frequencyBinCount), stream: p.stream })
-      } catch {
-        // AudioContext non disponible
-      }
-    }
-  }, [peers])
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const next: Record<string, number> = {}
-      for (const [userId, { analyser, data }] of analysersRef.current) {
-        analyser.getByteFrequencyData(data)
-        const avg = data.slice(0, data.length / 2).reduce((a, b) => a + b, 0) / (data.length / 2)
-        next[userId] = avg > SPEAKING_THRESHOLD ? 1 : 0
-      }
-      setLevels(next)
-    }, SAMPLE_INTERVAL)
-    return () => clearInterval(id)
-  }, [])
-
-  useEffect(() => () => {
-    for (const entry of analysersRef.current.values()) entry.ctx.close()
-    analysersRef.current.clear()
-  }, [])
+  useEffect(() => subscribeLevels((map) => {
+    const next: Record<string, number> = {}
+    map.forEach((v, k) => { next[k] = v })
+    setLevels(prev => {
+      const sameLength = Object.keys(prev).length === Object.keys(next).length
+      if (sameLength && Object.keys(next).every(k => prev[k] === next[k])) return prev
+      return next
+    })
+  }), [])
 
   return levels
 }
 
+/** `true` tant que le flux dépasse le seuil de parole. */
 export function useVoiceActivity(stream: MediaStream | null, enabled = true): boolean {
   const [speaking, setSpeaking] = useState(false)
-  const ctxRef = useRef<AudioContext | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const keyRef = useRef<string>('')
 
   useEffect(() => {
     if (!stream || !enabled) {
       setSpeaking(false)
       return
     }
-
-    const audioTracks = stream.getAudioTracks()
-    if (audioTracks.length === 0) return
-
-    try {
-      const ctx = new AudioContext()
-      ctxRef.current = ctx
-
-      const source = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.3
-      source.connect(analyser)
-
-      const data = new Uint8Array(analyser.frequencyBinCount)
-
-      timerRef.current = setInterval(() => {
-        analyser.getByteFrequencyData(data)
-        const avg = data.slice(0, data.length / 2).reduce((a, b) => a + b, 0) / (data.length / 2)
-        setSpeaking(avg > SPEAKING_THRESHOLD)
-      }, SAMPLE_INTERVAL)
-
-      return () => {
-        clearInterval(timerRef.current!)
-        ctx.close()
-        setSpeaking(false)
-      }
-    } catch {
-      // AudioContext non disponible
-    }
+    const key = `local:${stream.id}`
+    keyRef.current = key
+    const detach = attachMeter(key, stream)
+    return () => { detach(); setSpeaking(false) }
   }, [stream, enabled])
 
+  useEffect(() => subscribeLevels((map) => {
+    const level = map.get(keyRef.current) ?? 0
+    setSpeaking(prev => {
+      const next = level > SPEAKING_THRESHOLD
+      return prev === next ? prev : next
+    })
+  }), [])
+
   return speaking
+}
+
+/** Niveau brut (0-255) d'un flux, pour les barres d'activité. */
+export function useAudioLevel(key: string, stream: MediaStream | null | undefined): number {
+  const [level, setLevel] = useState(0)
+
+  useEffect(() => {
+    if (!stream) { setLevel(0); return }
+    const detach = attachMeter(key, stream)
+    return () => { detach(); setLevel(0) }
+  }, [key, stream])
+
+  useEffect(() => subscribeLevels((map) => {
+    const v = map.get(key) ?? 0
+    setLevel(prev => (prev === v ? prev : v))
+  }), [key])
+
+  return level
 }

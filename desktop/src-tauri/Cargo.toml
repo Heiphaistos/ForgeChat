@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-desktop"
-version = "3.22.0"
+version = "3.23.0"
 edition = "2021"
 
 [lib]
@@ -21,6 +21,8 @@ tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-deep-link = "2"
+# Push-to-talk global, actif fenetre non focalisee (correctif A9)
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -30,3 +32,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Registry",
     "Win32_Foundation",
 ] }
+
+# Handler de permission média WebKitGTK (correctif S3). Version epinglee sur
+# celle que wry 0.55 utilise : `PlatformWebview::inner()` rend un
+# `webkit2gtk::WebView` de CETTE version exacte, une autre version donnerait
+# deux types distincts et ne compilerait pas. Meme feature `v2_38` que wry.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
