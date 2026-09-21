@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_conn = redis_client.get_multiplexed_async_connection().await?;
     tracing::info!("Redis OK");
 
-    let state = AppState::new(db, redis_conn, config.clone());
+    let state = AppState::new(db, redis_conn, config.clone()).await;
 
     // Tâche de nettoyage des pièces jointes expirées (toutes les heures)
     let cleanup_state = state.clone();
@@ -686,6 +686,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled))
         // ICE config pour WebRTC (STUN + TURN)
         .route("/voice/ice-config", get(handlers::voice::get_ice_config))
+        // Bootstrap REST de l'état vocal (N11) + télémétrie WebRTC (F9)
+        .route("/voice/state", get(handlers::voice::get_voice_state))
+        .route("/voice/telemetry", post(handlers::voice::post_voice_telemetry))
         // Server Templates
         .route("/servers/:id/template", post(handlers::templates::create_template_from_server))
         .route("/templates", get(handlers::templates::list_templates))

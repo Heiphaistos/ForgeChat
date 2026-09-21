@@ -50,6 +50,9 @@ function MeetingTimer({ startTime }: { startTime: number }) {
 // ─── Call Quality ─────────────────────────────────────────────────────────────
 function CallQualityIndicator({ pcs }: { pcs: Map<string, RTCPeerConnection> }) {
   const [quality, setQuality] = useState<'good' | 'ok' | 'poor' | 'unknown'>('unknown')
+  const poorStreak = useRef(0)
+  const degraded = useRef(false)
+  const samples = useRef(0)
 
   useEffect(() => {
     const check = async () => {
@@ -70,9 +73,29 @@ function CallQualityIndicator({ pcs }: { pcs: Map<string, RTCPeerConnection> }) 
       }
       if (count === 0) { setQuality('unknown'); return }
       const avg = totalLoss / count
-      if (avg < 0.02) setQuality('good')
-      else if (avg < 0.08) setQuality('ok')
-      else setQuality('poor')
+      // Télémétrie : sans elle, un appel qui coupe n'est diagnosticable que dans la
+      // console du navigateur de l'utilisateur. Échantillonnée (1 envoi / 30 s).
+      samples.current++
+      if (samples.current % 6 === 0) {
+        api.post('/voice/telemetry', { peers: pcs.size, fraction_lost: Number(avg.toFixed(4)), at: Date.now() }).catch(() => {})
+      }
+      if (avg < 0.02) { setQuality('good'); poorStreak.current = 0 }
+      else if (avg < 0.08) { setQuality('ok'); poorStreak.current = 0 }
+      else {
+        setQuality('poor')
+        poorStreak.current++
+        // L'indicateur était purement décoratif : trois mesures mauvaises de suite
+        // (15 s) déclenchent maintenant une vraie dégradation du débit émis.
+        if (poorStreak.current >= 3 && !degraded.current) {
+          degraded.current = true
+          const cam = Number(localStorage.getItem('fc_cam_bitrate') ?? '1200000')
+          const screen = Number(localStorage.getItem('fc_screen_bitrate') ?? '4000000')
+          localStorage.setItem('fc_cam_bitrate', String(Math.max(250000, Math.round(cam / 2))))
+          localStorage.setItem('fc_screen_bitrate', String(Math.max(600000, Math.round(screen / 2))))
+          void useVoice.getState().applyQualityPrefs()
+          toast('Réseau instable : qualité vidéo réduite automatiquement', { icon: '📶', duration: 5000 })
+        }
+      }
     }
     check()
     const id = setInterval(check, 5000)
@@ -91,11 +114,12 @@ function CallQualityIndicator({ pcs }: { pcs: Map<string, RTCPeerConnection> }) 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
 function PeerTile({
   peer, stream, muted = false, isLocal = false, speaking = false,
-  handRaised = false, blurEnabled = false, onExpand,
+  handRaised = false, blurEnabled = false, onExpand, onVolume, connectionLost = false,
 }: {
   peer: { username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
-  handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void
+  handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void; onVolume?: () => void
+  connectionLost?: boolean
 }) {
   const hasVideo = peer.videoEnabled && stream && stream.getVideoTracks().some(t => t.readyState === 'live')
 
@@ -136,14 +160,26 @@ function PeerTile({
           {peer.screenSharing ? <Monitor size={11} className="text-fc-green" /> : null}
           <span className="text-xs text-white truncate max-w-[100px]">{isLocal ? `${peer.username} (Vous)` : peer.username}</span>
         </div>
-        {onExpand && hasVideo && (
-          <button onClick={onExpand} aria-label="Agrandir la vidéo" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-            <Maximize2 size={11} aria-hidden />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onVolume && (
+            <button onClick={onVolume} aria-label={`Régler le volume de ${peer.username}`} title="Volume" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <Volume2 size={11} aria-hidden />
+            </button>
+          )}
+          {onExpand && hasVideo && (
+            <button onClick={onExpand} aria-label="Agrandir la vidéo" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <Maximize2 size={11} aria-hidden />
+            </button>
+          )}
+        </div>
       </div>
 
       {isLocal && <div className="absolute top-2 left-2 bg-fc-accent/90 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Vous</div>}
+      {connectionLost && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-fc-yellow/90 text-black text-[10px] px-2 py-0.5 rounded-full font-semibold">
+          Reconnexion...
+        </div>
+      )}
       {handRaised && (
         <div className="absolute top-2 right-2 bg-fc-yellow/90 text-white text-xs px-1.5 py-0.5 rounded-full animate-bounce">✋</div>
       )}
@@ -152,23 +188,32 @@ function PeerTile({
 }
 
 // ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
-function ScreenTile({ stream, label, onExpand }: { stream: MediaStream; label: string; onExpand?: () => void }) {
+function ScreenTile({ stream, label, onExpand, onVolume }: { stream: MediaStream; label: string; onExpand?: () => void; onVolume?: () => void }) {
   const attachStream = (el: HTMLVideoElement | null) => {
     if (el && el.srcObject !== stream) el.srcObject = stream
   }
   return (
     <div className="relative rounded-xl overflow-hidden bg-black flex items-center justify-center aspect-video ring-1 ring-fc-green/40">
-      <video ref={attachStream} autoPlay playsInline className="w-full h-full object-contain" />
+      {/* muted : le son du partage est joué par PersistentVoiceAudio, avec son
+          propre réglage de volume, distinct de celui de la voix du pair. */}
+      <video ref={attachStream} autoPlay playsInline muted className="w-full h-full object-contain" />
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
         <div className="flex items-center gap-1">
           <Monitor size={11} className="text-fc-green" />
           <span className="text-xs text-white truncate max-w-[140px]">Écran de {label}</span>
         </div>
-        {onExpand && (
-          <button onClick={onExpand} aria-label="Agrandir l'écran partagé" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-            <Maximize2 size={11} aria-hidden />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onVolume && (
+            <button onClick={onVolume} aria-label={`Volume du partage de ${label}`} title="Volume du partage" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <Volume2 size={11} aria-hidden />
+            </button>
+          )}
+          {onExpand && (
+            <button onClick={onExpand} aria-label="Agrandir l'écran partagé" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <Maximize2 size={11} aria-hidden />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -188,13 +233,16 @@ function getGridClass(n: number) {
 function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; label: string; onClose: () => void }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => { if (ref.current) ref.current.srcObject = stream }, [stream])
+  // `muted` obligatoire : agrandir SA PROPRE tuile rejouait le micro local dans
+  // les haut-parleurs (larsen immédiat), et agrandir celle d'un pair doublait son
+  // audio par-dessus PersistentVoiceAudio.
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 bg-black/60">
         <span className="text-white font-semibold text-sm">{label}</span>
         <button onClick={onClose} aria-label="Fermer le plein écran" className="p-1.5 rounded hover:bg-white/10 text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><X size={18} aria-hidden /></button>
       </div>
-      <video ref={ref} autoPlay playsInline className="flex-1 object-contain" />
+      <video ref={ref} autoPlay playsInline muted className="flex-1 object-contain" />
     </div>
   )
 }
@@ -286,8 +334,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const {
     peers, localStream, localScreenStream, muted, deafened, videoEnabled, screenSharing,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
-    userVolumes, setUserVolume, joined, channelId: activeChannelId,
-    roomParticipants, pttMode, activatePtt, deactivatePtt,
+    userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
+    roomParticipants, notice, clearNotice,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
@@ -418,41 +466,20 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   useEffect(() => () => { recorderRef.current?.stop() }, [])
 
-  // V → toggle camera / S → screen share (raccourcis vocaux)
-  useEffect(() => {
-    if (!joined) return
-    const isInput = (el: EventTarget | null) => {
-      const tag = (el as HTMLElement)?.tagName
-      return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement)?.isContentEditable
-    }
-    const handler = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
-      if (isInput(e.target)) return
-      if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleVideo() }
-      if (e.key === 's' || e.key === 'S') {
-        e.preventDefault()
-        if (screenSharing) stopScreenShare()
-        else shareScreen()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [joined, toggleVideo, screenSharing, shareScreen, stopScreenShare])
+  // Les raccourcis vocaux (caméra, partage, push-to-talk) sont montés au niveau
+  // racine dans App.tsx : ici ils mouraient dès qu'on quittait la page d'appel,
+  // et ils ignoraient les raccourcis configurés dans les Réglages.
 
-  // Push-to-talk — P ou Espace maintenu = micro ouvert (en mode PTT uniquement)
+  // Avertissements non bloquants du store (moteur de bruit indisponible, partage
+  // de fenêtre sans son...) — sinon ils restaient invisibles.
   useEffect(() => {
-    if (!pttMode || !joined) return
-    const isPttKey = (k: string) => k === 'p' || k === 'P' || k === ' '
-    const isInput = (el: EventTarget | null) => {
-      const tag = (el as HTMLElement)?.tagName
-      return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement)?.isContentEditable
-    }
-    const onDown = (e: KeyboardEvent) => { if (isPttKey(e.key) && !isInput(e.target)) activatePtt() }
-    const onUp   = (e: KeyboardEvent) => { if (isPttKey(e.key)) deactivatePtt() }
-    window.addEventListener('keydown', onDown)
-    window.addEventListener('keyup', onUp)
-    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
-  }, [pttMode, joined, activatePtt, deactivatePtt])
+    if (!notice) return
+    toast(notice, { duration: 6000, icon: 'ℹ️' })
+    clearNotice()
+  }, [notice, clearNotice])
+
+  // Volume par participant : état local de la popover
+  const [volumeTarget, setVolumeTarget] = useState<{ userId: string; username: string; kind: 'voice' | 'screen' } | null>(null)
 
   if (!user) return null
 
@@ -492,6 +519,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     if (t.kind === 'screen' && t.stream) {
       return (
         <ScreenTile stream={t.stream} label={t.peer.username}
+          onVolume={t.peer.isLocal ? undefined : () => setVolumeTarget({ userId: t.peer.userId, username: t.peer.username, kind: 'screen' })}
           onExpand={onExpand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${t.peer.username}` }) : undefined} />
       )
     }
@@ -500,6 +528,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       <PeerTile peer={p} stream={t.stream} muted={p.isLocal}
         isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
         handRaised={raisedHands[p.userId]} blurEnabled={blurBackground}
+        connectionLost={(p as any).connectionLost === true}
+        onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
         onExpand={onExpand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
     )
   }
@@ -612,7 +642,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             <div className="flex flex-col h-full p-3 gap-3">
               <div className="flex-1 flex items-center justify-center bg-black rounded-xl overflow-hidden">
                 {presenter.stream
-                  ? <video autoPlay playsInline muted={presenter.kind === 'camera' && presenter.peer.isLocal}
+                  // muted inconditionnel : l'audio de TOUS les participants passe par
+                  // PersistentVoiceAudio (volumes par utilisateur, duck priority speaker).
+                  ? <video autoPlay playsInline muted
                       ref={el => { if (el && presenter.stream && el.srcObject !== presenter.stream) el.srcObject = presenter.stream }}
                       className="max-h-full max-w-full object-contain" />
                   : <div className="text-fc-muted text-sm">Aucun partage d'écran actif</div>}
@@ -734,6 +766,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             activeClass="bg-fc-green text-white" inactiveClass="bg-fc-hover text-fc-muted"
             label={screenSharing ? 'Arrêter le partage' : 'Partager l\'écran'}
           />
+          {screenSharing && (
+            <span className="hidden md:flex items-center gap-1 text-xs text-fc-green" title="Spectateurs de votre partage">
+              <Users size={12} />{peers.length}
+            </span>
+          )}
 
           <div className="w-px h-8 bg-fc-hover mx-1 hidden md:block" />
 
@@ -837,6 +874,22 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       />
 
       <FloatingReactions channelId={channel.id} />
+
+      {volumeTarget && (
+        <div className="absolute bottom-24 left-4 z-50">
+          <VolumeSlider
+            userId={volumeTarget.userId}
+            username={volumeTarget.kind === 'screen' ? `Partage de ${volumeTarget.username}` : volumeTarget.username}
+            initialVolume={volumeTarget.kind === 'screen'
+              ? (screenVolumes[volumeTarget.userId] ?? 100)
+              : (userVolumes[volumeTarget.userId] ?? 100)}
+            onVolumeChange={v => volumeTarget.kind === 'screen'
+              ? setScreenVolume(volumeTarget.userId, v)
+              : setUserVolume(volumeTarget.userId, v)}
+            onClose={() => setVolumeTarget(null)}
+          />
+        </div>
+      )}
 
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />

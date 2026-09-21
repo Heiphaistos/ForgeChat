@@ -312,11 +312,12 @@ export default function ChannelSidebar() {
         toast.error('Mot de passe incorrect')
       }
     })
-    const offRedirect = wsOn('VOICE_REDIRECT', (d: any) => {
-      if (serverId) {
-        voiceJoin(d.channel_id, serverId)
-        toast.success('Redirigé vers un sous-canal vocal')
-      }
+    const offRedirect = wsOn('VOICE_REDIRECT', () => {
+      // Ne PAS rappeler voiceJoin ici : le store bascule déjà sur le canal
+      // temporaire. L'ancien appel déclenchait un leave() qui vidait le canal,
+      // le serveur le supprimait (is_temporary) et le join suivant échouait en
+      // silence — les canaux « auto-create » étaient inutilisables.
+      toast.success('Redirigé vers un sous-canal vocal')
     })
     return () => { offErr(); offRedirect() }
   }, [voiceJoin, serverId])
@@ -1051,7 +1052,13 @@ export default function ChannelSidebar() {
             {channelStreams.map(s => (
               <button
                 key={s.userId}
-                onClick={() => { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() }}
+                onClick={() => {
+                  // Rejoint en écoute seule : regarder un live n'ouvre plus le micro
+                  // et ne demande plus l'autorisation du navigateur.
+                  if (serverId) voiceJoin(ch.id, serverId, false, undefined, ch.name, true)
+                  nav(`/servers/${serverId}/channels/${ch.id}`)
+                  closeSidebar()
+                }}
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-red-500/10 w-full text-left transition"
                 title={`Regarder le live de ${s.username}`}
               >

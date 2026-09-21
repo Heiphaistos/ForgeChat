@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
+import { useAuth } from './auth'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 
@@ -12,9 +13,13 @@ export interface IncomingCallInfo {
 
 export type DmCallState = 'idle' | 'calling' | 'ringing' | 'connected'
 
+// Doit rester identique au fallback de store/voice.ts : deux listes STUN divergentes
+// donnaient deux comportements différents derrière le même NAT selon qu'on était en
+// DM ou en vocal de serveur (défaut N18).
 const ICE_FALLBACK = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
 ]
 
 let _iceCache: RTCIceServer[] | null = null
@@ -50,6 +55,10 @@ interface CallStore {
   remoteStream: MediaStream | null
   micMuted: boolean
   camOff: boolean
+  // Miroir du deafen du store vocal (voice.ts) : le bouton « casque coupé » doit aussi
+  // couper l'audio d'un appel DM simultané (défaut A21). Poussé par
+  // PersistentDmCallAudio, qui est le seul point où les deux stores se croisent.
+  deafened: boolean
   // Timestamp de connexion — persiste dans le store (pas un état local de page) pour que
   // la durée affichée reste correcte si on quitte la conversation et qu'on y revient
   // pendant que l'appel est toujours actif, au lieu de repartir de 0.
@@ -61,7 +70,8 @@ interface CallStore {
   declineCall: (dmId: string, fromUserId: string) => void
   hangup: () => void
   toggleMic: () => void
-  toggleCam: () => void
+  toggleCam: () => Promise<void>
+  setDeafened: (v: boolean) => void
 }
 
 // ── État module-level de l'appel DM actif (persiste hors du cycle de vie de tout composant) ──
@@ -71,9 +81,31 @@ let _pendingCandidates: RTCIceCandidateInit[] = []
 let _callTimeout: ReturnType<typeof setTimeout> | null = null
 let _callInFlight = false
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
+// Sender vidéo suivi explicitement : une fois la caméra éteinte par replaceTrack(null),
+// aucun `s.track.kind === 'video'` ne permet plus de le retrouver (cf. toggleCam).
+let _camSender: RTCRtpSender | null = null
+// Fenêtre de course de la négociation : `signalingState` est encore 'stable' entre
+// createOffer() et setLocalDescription(). Sans ce drapeau, une offer distante arrivée
+// dans cet intervalle est appliquée, puis notre setLocalDescription lève
+// InvalidStateError et la PC reste figée (défaut V11/V7).
+let _makingOffer = false
+let _mySessionId: string | null = null
+
+// Vidange de la file de candidats ICE reçus avant la remoteDescription. Doit être
+// appelée dans les DEUX branches (offer ET answer) : côté appelant, seule la branche
+// answer existe, et tous les candidats précoces étaient perdus (défaut V4).
+async function _drainIce(pc: RTCPeerConnection) {
+  const queued = _pendingCandidates
+  _pendingCandidates = []
+  for (const c of queued) {
+    await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+  }
+}
 
 function _cleanup(set: (fn: (s: CallStore) => Partial<CallStore>) => void) {
   _callInFlight = false
+  _camSender = null
+  _makingOffer = false
   if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
   if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null }
   _pc?.close()
@@ -102,7 +134,11 @@ async function _buildPc(
     }
   }
   pc.ontrack = e => {
-    if (e.streams[0]) set(() => ({ remoteStream: e.streams[0] }))
+    if (!e.streams[0]) return
+    // Respecter un deafen déjà actif : un flux arrivé après le clic sur « casque coupé »
+    // doit rester muet (même logique que voice.ts:347)
+    if (get().deafened) e.streams[0].getAudioTracks().forEach(t => { t.enabled = false })
+    set(() => ({ remoteStream: e.streams[0] }))
   }
   pc.onconnectionstatechange = () => {
     const state_ = pc.connectionState
@@ -124,11 +160,14 @@ async function _buildPc(
       setTimeout(async () => {
         if (pc.connectionState === 'failed') {
           try {
+            _makingOffer = true
             const offer = await pc.createOffer({ iceRestart: true })
             await pc.setLocalDescription(offer)
             if (_pcPeer) useWs.getState().send({ type: 'VOICE_SIGNAL', to: _pcPeer, payload: { type: 'offer', sdp: offer } })
           } catch {
             _cleanup(set)
+          } finally {
+            _makingOffer = false
           }
         }
       }, 2000)
@@ -138,19 +177,48 @@ async function _buildPc(
   }
   _pc = pc
   _pcPeer = pid
-  void get
   return pc
+}
+
+// Mêmes contraintes que store/voice.ts:567-580 : le micro et la caméra choisis dans
+// Réglages étaient ignorés en DM, et aucun traitement (EC/NS/AGC) n'était demandé au
+// navigateur — l'appel DM partait sur le périphérique par défaut, brut (défaut A7).
+// ponytail: NS maison branchée dans le lot 4 (la chaîne WebAudio de voice.ts est en
+// cours de réécriture ; la dupliquer ici créerait un second exemplaire à corriger).
+function _audioConstraints(): MediaTrackConstraints {
+  const savedMicId = localStorage.getItem('fc_audio_input') || undefined
+  return {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
+  }
+}
+
+function _videoConstraints(): MediaTrackConstraints {
+  const savedCamId = localStorage.getItem('fc_video_input') || undefined
+  return {
+    width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+    ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
+  }
 }
 
 // getUserMedia avec repli audio seul si la caméra est indisponible
 async function _getCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
+  const audio = _audioConstraints()
   try {
+    return await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? _videoConstraints() : false })
+  } catch {
+    if (type === 'video') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio })
+        toast('Caméra indisponible — appel en audio seul', { icon: '🎤', duration: 4000 })
+        return stream
+      } catch { /* périphérique choisi introuvable : repli plus bas */ }
+    }
+    // Dernier repli : périphériques par défaut. Un `deviceId: { exact }` pointant sur un
+    // micro débranché lève OverconstrainedError et rendrait tout appel DM impossible.
     return await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
-  } catch (err) {
-    if (type !== 'video') throw err
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    toast('Caméra indisponible — appel en audio seul', { icon: '🎤', duration: 4000 })
-    return stream
   }
 }
 
@@ -168,6 +236,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
   remoteStream: null,
   micMuted: false,
   camOff: false,
+  deafened: false,
   connectedAt: null,
 
   initGlobalListeners: () => {
@@ -186,18 +255,32 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
       try {
         if (payload.type === 'offer') {
-          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
-          for (const c of _pendingCandidates) {
-            await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+          const pid = d.from ? String(d.from) : get().partnerId
+          // Glare : quand les deux pairs renégocient en même temps (typiquement deux ICE
+          // restarts simultanés après une coupure réseau), chacun a une offer locale en
+          // vol. Sans arbitrage, les deux offers entrantes sont appliquées à l'aveugle et
+          // la PC ne revient jamais dans un état sain (défaut V11). Même tie-break que
+          // voice.ts:683-706 : le pair « poli » (id lexicographiquement inférieur) annule
+          // son offer et répond ; l'impoli ignore l'offer entrante, la sienne gagne.
+          const collision = _makingOffer || pc.signalingState !== 'stable'
+          if (collision) {
+            const myId = String(useAuth.getState().user?.id ?? '')
+            const polite = myId < String(pid ?? '')
+            if (!polite) return
+            await pc.setLocalDescription({ type: 'rollback' })
           }
-          _pendingCandidates = []
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+          await _drainIce(pc)
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
-          const pid = d.from ? String(d.from) : get().partnerId
           if (pid) ws.send({ type: 'VOICE_SIGNAL', to: pid, payload: { type: 'answer', sdp: answer } })
         } else if (payload.type === 'answer') {
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+            // Côté appelant, c'est la SEULE branche qui pose une remoteDescription : sans
+            // cette vidange, tous les candidats ICE arrivés avant l'answer étaient perdus
+            // et l'appel restait muet en NAT strict (défaut V4).
+            await _drainIce(pc)
           }
         } else if (payload.type === 'ice') {
           if (pc.remoteDescription) {
@@ -220,6 +303,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       if (!pc) return
       if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
       try {
+        _makingOffer = true
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
         const partnerId = get().partnerId
@@ -229,6 +313,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
         set({ callState: 'ringing' })
       } catch {
         _cleanup(set)
+      } finally {
+        _makingOffer = false
       }
     })
 
@@ -249,7 +335,17 @@ export const useCallStore = create<CallStore>((set, get) => ({
       _cleanup(set)
     })
 
-    return () => { offSignal(); offAccepted(); offEnded(); offDeclined(); offError() }
+    // Multi-onglet : l'appel entrant sonne dans TOUTES les sessions du compte.
+    // Sans cet event, accepter dans un onglet laissait la modale ouverte (et la
+    // sonnerie active) dans les autres.
+    const offTaken = ws.on('DM_CALL_TAKEN', (d: any) => {
+      if (d.session_id && d.session_id === _mySessionId) return
+      if (get().incomingCall && get().incomingCall?.dmId === d.dm_id) set({ incomingCall: null })
+    })
+
+    const offSession = ws.on('SESSION_INIT', (d: any) => { _mySessionId = d.session_id ?? null })
+
+    return () => { offSignal(); offAccepted(); offEnded(); offDeclined(); offError(); offTaken(); offSession() }
   },
 
   startCall: async (dmId, partnerId, type) => {
@@ -318,12 +414,53 @@ export const useCallStore = create<CallStore>((set, get) => ({
     }
   },
 
-  toggleCam: () => {
+  // Couper la caméra doit RELÂCHER le périphérique (LED éteinte, caméra rendue aux autres
+  // applications) : `enabled = false` laissait la capture tourner indéfiniment (défaut V5).
+  // Même pattern que voice.ts:814-845 : stop + replaceTrack(null) à l'extinction,
+  // ré-acquisition + replaceTrack à l'allumage, sans renégociation si le sender existe déjà.
+  toggleCam: async () => {
     const { localStream, camOff } = get()
-    const videoTrack = localStream?.getVideoTracks()[0]
-    if (videoTrack) {
-      videoTrack.enabled = camOff // toggle : ré-active si actuellement off
-      set({ camOff: !camOff })
+    if (!localStream) return
+
+    if (!camOff) {
+      const vt = localStream.getVideoTracks()[0]
+      if (!vt) return
+      if (!_camSender) _camSender = _pc?.getSenders().find(s => s.track === vt) ?? null
+      try { await _camSender?.replaceTrack(null) } catch {}
+      vt.stop()
+      localStream.removeTrack(vt)
+      set({ camOff: true })
+      return
     }
+
+    try {
+      const vs = await navigator.mediaDevices.getUserMedia({ video: _videoConstraints() })
+      const vt = vs.getVideoTracks()[0]
+      localStream.addTrack(vt)
+      if (_camSender) {
+        await _camSender.replaceTrack(vt)
+      } else if (_pc) {
+        _camSender = _pc.addTrack(vt, localStream)
+        // Aucun sender vidéo préexistant (appel démarré en vocal) : il faut renégocier
+        try {
+          _makingOffer = true
+          const offer = await _pc.createOffer()
+          await _pc.setLocalDescription(offer)
+          if (_pcPeer) useWs.getState().send({ type: 'VOICE_SIGNAL', to: _pcPeer, payload: { type: 'offer', sdp: offer } })
+        } catch (e) {
+          console.warn('[dm-call] renégociation caméra', e)
+        } finally {
+          _makingOffer = false
+        }
+      }
+      set({ camOff: false })
+    } catch {
+      toast.error('Impossible d\'accéder à la caméra.')
+    }
+  },
+
+  setDeafened: (v) => {
+    get().remoteStream?.getAudioTracks().forEach(t => { t.enabled = !v })
+    set({ deafened: v })
   },
 }))

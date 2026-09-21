@@ -28,7 +28,13 @@ mod webview2_check {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    fn has_pv(hkey: HKEY, subkey: &str) -> bool {
+    /// Lit `pv` (la version du runtime) sous la clé EdgeUpdate donnée.
+    ///
+    /// EdgeUpdate laisse la clé en place après une désinstallation, avec
+    /// `pv = "0.0.0.0"` : une simple présence de la valeur donnait donc un
+    /// faux négatif (« runtime présent » sur une machine où il ne l'est plus,
+    /// puis fenêtre grise). On rejette explicitement cette version fantôme.
+    fn read_pv(hkey: HKEY, subkey: &str) -> Option<String> {
         let subkey_w = to_wide(subkey);
         let value_w = to_wide("pv");
         let mut buf = [0u16; 64];
@@ -44,7 +50,17 @@ mod webview2_check {
                 &mut buf_size,
             )
         };
-        status == 0 && buf_size > 2
+        if status != 0 || buf_size <= 2 {
+            return None;
+        }
+        // buf_size est en octets et inclut le NUL final.
+        let len = (buf_size as usize / 2).saturating_sub(1);
+        let pv = String::from_utf16_lossy(&buf[..len]);
+        let pv = pv.trim_end_matches('\0').trim().to_string();
+        if pv.is_empty() || pv.split('.').all(|part| part == "0") {
+            return None;
+        }
+        Some(pv)
     }
 
     const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
@@ -54,7 +70,9 @@ mod webview2_check {
             "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"
         );
         let user_key = format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}");
-        !(has_pv(HKEY_LOCAL_MACHINE, &machine_key) || has_pv(HKEY_CURRENT_USER, &user_key))
+        read_pv(HKEY_LOCAL_MACHINE, &machine_key)
+            .or_else(|| read_pv(HKEY_CURRENT_USER, &user_key))
+            .is_none()
     }
 
     pub fn show_missing_dialog() {
@@ -127,6 +145,113 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Push-to-talk global (correctif A9).
+///
+/// Les listeners `keydown`/`keyup` du front ne reçoivent rien quand ForgeChat
+/// n'a pas le focus — or c'est le cas d'usage principal du PTT (jeu en plein
+/// écran). On enregistre donc un raccourci au niveau de l'OS et on renvoie
+/// l'appui/relâchement au front sous forme d'events globaux.
+///
+/// Contrat côté front :
+/// - `invoke('register_ptt_shortcut', { accelerator: 'Alt+Space' })`
+/// - `invoke('unregister_ptt_shortcut')`
+/// - `listen('ptt-down' | 'ptt-up', e => ...)`, `e.payload` = l'accélérateur
+///   normalisé (ex. `"alt+Space"`).
+///
+/// ⚠ L'accélérateur doit contenir une **vraie touche** : un modificateur seul
+/// (`"Alt"`, le défaut actuel des Réglages) est refusé par l'API OS — la
+/// commande renvoie alors une `Err` lisible que le front doit afficher.
+#[cfg(desktop)]
+#[tauri::command]
+fn register_ptt_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    // Un seul PTT à la fois : repartir d'une table vide évite d'accumuler des
+    // raccourcis orphelins à chaque changement de touche dans les Réglages.
+    gs.unregister_all().map_err(|e| e.to_string())?;
+    gs.register(accelerator.as_str()).map_err(|e| e.to_string())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn unregister_ptt_shortcut(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(desktop)]
+fn global_shortcut_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use tauri::Emitter;
+    use tauri_plugin_global_shortcut::ShortcutState;
+
+    tauri_plugin_global_shortcut::Builder::new()
+        .with_handler(|app, shortcut, event| {
+            let name = match event.state() {
+                ShortcutState::Pressed => "ptt-down",
+                ShortcutState::Released => "ptt-up",
+            };
+            let _ = app.emit(name, shortcut.to_string());
+        })
+        .build()
+}
+
+/// WebKitGTK (Linux) refuse par défaut **toute** demande de permission média :
+/// sans handler `permission-request`, le signal retombe sur le comportement par
+/// défaut de WebKitWebView (deny) et `getUserMedia`/`getDisplayMedia` rejettent
+/// immédiatement avec `NotAllowedError`. Côté front ce rejet est indiscernable
+/// d'une annulation du sélecteur, donc « Partager l'écran » ne faisait
+/// strictement rien, sans erreur ni toast (défaut S3).
+///
+/// On autorise ici les seules demandes `WebKitUserMediaPermissionRequest`
+/// (micro, caméra, capture d'écran) ; tout le reste (géolocalisation,
+/// notifications, pointer lock, accès aux données de sites tiers) retombe sur
+/// le comportement par défaut, c'est-à-dire refusé. Le contenu chargé est notre
+/// propre front, pas du web arbitraire — la CSP de tauri.conf.json le verrouille.
+///
+/// Pour la capture d'écran, autoriser la permission ne court-circuite pas le
+/// choix de l'utilisateur : WebKitGTK délègue ensuite au portail
+/// xdg-desktop-portal (ScreenCast), qui affiche son propre sélecteur de source.
+///
+/// `enable-media-stream` / `enable-webrtc` doivent en plus être activés
+/// explicitement : wry ne touche pas à ces réglages WebKitSettings et leur
+/// défaut n'est pas garanti d'une version de WebKitGTK à l'autre.
+#[cfg(target_os = "linux")]
+fn enable_linux_media_capture(app: &tauri::AppHandle) {
+    use webkit2gtk::glib::prelude::Cast;
+    use webkit2gtk::{PermissionRequestExt, SettingsExt, UserMediaPermissionRequest, WebViewExt};
+
+    let Some(window) = app.get_webview_window("main") else {
+        eprintln!("[ForgeChat] Fenêtre 'main' introuvable : capture média Linux non câblée");
+        return;
+    };
+
+    if let Err(e) = window.with_webview(|platform| {
+        let webview = platform.inner();
+
+        if let Some(settings) = WebViewExt::settings(&webview) {
+            settings.set_enable_media_stream(true);
+            settings.set_enable_mediasource(true);
+            settings.set_enable_webrtc(true);
+        } else {
+            eprintln!("[ForgeChat] WebKitSettings indisponibles : WebRTC peut rester désactivé");
+        }
+
+        webview.connect_permission_request(|_, request| {
+            match request.downcast_ref::<UserMediaPermissionRequest>() {
+                Some(media) => {
+                    media.allow();
+                    true
+                }
+                None => false,
+            }
+        });
+    }) {
+        eprintln!("[ForgeChat] Câblage de la permission média WebKitGTK échoué : {e}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(windows)]
@@ -150,9 +275,25 @@ pub fn run() {
         }
     }
 
-    // WebRTC dans WebView2 (Windows uniquement) : accorde micro/caméra/écran sans prompt
-    // (--use-fake-ui-for-media-stream auto-accepte le prompt ; les périphériques restent réels)
-    // Linux/WebKitGTK n'a pas d'équivalent WEBVIEW2_*, le prompt de permission natif s'affiche.
+    // WebRTC dans WebView2 (Windows uniquement).
+    //
+    // `--use-fake-ui-for-media-stream` auto-accepte le prompt de permission
+    // **getUserMedia** (micro + caméra) ; les périphériques restent réels.
+    // Il ne couvre PAS `getDisplayMedia` : le partage d'écran passe par le
+    // sélecteur de source de Chromium, qui n'est pas un prompt de permission
+    // et s'affiche quoi qu'il arrive (correctif S12 — le commentaire précédent
+    // affirmait le contraire et donnait un faux sentiment de couverture).
+    //
+    // `--auto-select-desktop-capture-source=<titre>` existe et supprimerait ce
+    // sélecteur, mais il impose une source unique choisie par nous : on ne
+    // l'ajoute PAS, ce serait une régression fonctionnelle (l'utilisateur ne
+    // pourrait plus choisir quel écran ou quelle fenêtre partager). C'est un
+    // drapeau de harnais de test, pas de production ; s'il devient nécessaire
+    // pour les tests automatisés, il devra être conditionné à
+    // FORGECHAT_FAKE_MEDIA comme --use-fake-device-for-media-stream ci-dessous.
+    //
+    // Linux/WebKitGTK n'a pas d'équivalent WEBVIEW2_* : la capture y est
+    // autorisée par le handler `permission-request` posé dans `setup()`.
     #[cfg(windows)]
     {
         let mut browser_args = String::from(
@@ -166,7 +307,7 @@ pub fn run() {
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
     }
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -177,13 +318,28 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notification::init());
+
+    // Push-to-talk global : plugin + commandes exposées au front (correctif A9).
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(global_shortcut_plugin())
+        .invoke_handler(tauri::generate_handler![
+            register_ptt_shortcut,
+            unregister_ptt_shortcut
+        ]);
+
+    builder
         .setup(|app| {
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
+
+            // Capture micro/caméra/écran sous WebKitGTK (correctif S3).
+            #[cfg(target_os = "linux")]
+            enable_linux_media_capture(app.handle());
 
             // ── Tray icon ────────────────────────────────────────────
             let quit = MenuItem::with_id(app, "quit", "Quitter ForgeChat", true, None::<&str>)?;

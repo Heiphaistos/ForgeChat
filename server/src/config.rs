@@ -20,6 +20,9 @@ pub struct Config {
     pub turn_url: Option<String>,
     pub turn_username: Option<String>,
     pub turn_password: Option<String>,
+    /// Secret partagé coturn (`static-auth-secret`) pour les credentials éphémères
+    /// (TURN REST API). Si présent, il prime sur turn_username/turn_password.
+    pub turn_static_auth_secret: Option<String>,
 }
 
 impl Config {
@@ -51,6 +54,7 @@ impl Config {
             turn_url: env::var("TURN_URL").ok(),
             turn_username: env::var("TURN_USERNAME").ok(),
             turn_password: env::var("TURN_PASSWORD").ok(),
+            turn_static_auth_secret: env::var("TURN_STATIC_AUTH_SECRET").ok(),
         })
     }
 }

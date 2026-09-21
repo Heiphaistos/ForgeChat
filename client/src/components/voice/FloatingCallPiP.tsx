@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Maximize2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Maximize2, PictureInPicture2, MonitorOff } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
 
@@ -29,6 +30,7 @@ export default function FloatingCallPiP() {
   const toggleVoiceMute = useVoice(s => s.toggleMute)
   const toggleVoiceVideo = useVoice(s => s.toggleVideo)
   const leaveVoice = useVoice(s => s.leave)
+  const stopVoiceScreenShare = useVoice(s => s.stopScreenShare)
 
   // ── Appel DM ──────────────────────────────────────────────────────────────
   const dmCallState = useCallStore(s => s.callState)
@@ -84,6 +86,7 @@ export default function FloatingCallPiP() {
         videoEnabled={voiceVideoEnabled}
         onToggleVideo={() => toggleVoiceVideo()}
         onHangup={leaveVoice}
+        onStopShare={voiceScreenSharing ? stopVoiceScreenShare : undefined}
       />
     )
   }
@@ -92,7 +95,7 @@ export default function FloatingCallPiP() {
 }
 
 function Widget({
-  stream, label, onExpand, micMuted, onToggleMic, videoEnabled, onToggleVideo, onHangup,
+  stream, label, onExpand, micMuted, onToggleMic, videoEnabled, onToggleVideo, onHangup, onStopShare,
 }: {
   stream: MediaStream | null
   label: string
@@ -102,13 +105,32 @@ function Widget({
   videoEnabled: boolean
   onToggleVideo: () => void
   onHangup: () => void
+  onStopShare?: () => void
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [pipError, setPipError] = useState(false)
+
+  // Picture-in-Picture natif : la vignette CSS disparaît dès que ForgeChat perd le
+  // focus ou est réduite — c'est-à-dire exactement pendant une partie en plein
+  // écran, le cas d'usage principal du stream.
+  const togglePip = async () => {
+    const el = videoRef.current
+    if (!el) return
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture()
+      else await el.requestPictureInPicture()
+      setPipError(false)
+    } catch {
+      setPipError(true)
+    }
+  }
+
   return (
     <div className="fixed bottom-4 right-4 z-[150] w-56 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-black select-none">
       <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={onExpand}>
         {stream ? (
           <video
-            ref={el => { if (el && el.srcObject !== stream) el.srcObject = stream }}
+            ref={el => { videoRef.current = el; if (el && el.srcObject !== stream) el.srcObject = stream }}
             autoPlay
             playsInline
             muted
@@ -117,14 +139,26 @@ function Widget({
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white/60 text-xs px-2 text-center">{label}</div>
         )}
-        <button
-          onClick={e => { e.stopPropagation(); onExpand() }}
-          aria-label="Agrandir l'appel"
-          title="Agrandir l'appel"
-          className="absolute top-1.5 right-1.5 p-1 rounded bg-black/50 hover:bg-black/70 text-white"
-        >
-          <Maximize2 size={12} />
-        </button>
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          {stream && 'requestPictureInPicture' in HTMLVideoElement.prototype && (
+            <button
+              onClick={e => { e.stopPropagation(); void togglePip() }}
+              aria-label="Détacher la vignette (Picture-in-Picture)"
+              title={pipError ? 'Picture-in-Picture refusé par le navigateur' : 'Garder la vignette visible hors de ForgeChat'}
+              className="p-1 rounded bg-black/50 hover:bg-black/70 text-white"
+            >
+              <PictureInPicture2 size={12} />
+            </button>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); onExpand() }}
+            aria-label="Agrandir l'appel"
+            title="Agrandir l'appel"
+            className="p-1 rounded bg-black/50 hover:bg-black/70 text-white"
+          >
+            <Maximize2 size={12} />
+          </button>
+        </div>
         <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/50 text-white text-[10px] font-medium truncate max-w-[85%]">
           {label}
         </span>
@@ -146,6 +180,16 @@ function Widget({
         >
           {videoEnabled ? <Video size={14} /> : <VideoOff size={14} />}
         </button>
+        {onStopShare && (
+          <button
+            onClick={onStopShare}
+            aria-label="Arrêter le partage d'écran"
+            title="Arrêter le partage d'écran"
+            className="p-2 rounded text-green-400 hover:bg-green-500/20"
+          >
+            <MonitorOff size={14} />
+          </button>
+        )}
         <button
           onClick={onHangup}
           aria-label="Quitter l'appel"

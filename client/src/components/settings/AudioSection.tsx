@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
-import { Mic, RefreshCw, Waves } from 'lucide-react'
+import { Mic, RefreshCw, Waves, Radio } from 'lucide-react'
 import { useVoice } from '../../store/voice'
+import { NOISE_ENGINES, getNoiseEngine, type NoiseEngine } from '../../lib/audio'
 
 export default function AudioSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
@@ -9,12 +10,15 @@ export default function AudioSection() {
   const [selectedOutput, setSelectedOutput] = useState(localStorage.getItem('fc_audio_output') ?? '')
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [vuLevel, setVuLevel] = useState(0)
-  const [noiseSuppression, setNoiseSuppression] = useState(() => localStorage.getItem('fc_noise_suppression') !== 'false')
+  const [engine, setEngine] = useState<NoiseEngine>(() => getNoiseEngine())
   const testStreamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const testCtxRef = useRef<AudioContext | null>(null)
-  const { setNoiseSuppressionEnabled } = useVoice()
+  const setNoiseEngine = useVoice(s => s.setNoiseEngine)
+  const setAudioInput = useVoice(s => s.setAudioInput)
+  const pttMode = useVoice(s => s.pttMode)
+  const setPttMode = useVoice(s => s.setPttMode)
 
   const refreshDevices = useCallback(async () => {
     try {
@@ -89,7 +93,10 @@ export default function AudioSection() {
 
   const handleInputChange = (id: string) => {
     setSelectedInput(id)
-    localStorage.setItem('fc_audio_input', id)
+    // setAudioInput réacquiert le micro et le pousse aux pairs : avant, changer de
+    // micro pendant un appel n'avait aucun effet jusqu'au prochain join, sans rien
+    // signaler à l'utilisateur.
+    void setAudioInput(id)
     if (testStreamRef.current) {
       stopMicTest()
       setTimeout(startMicTest, 100)
@@ -99,7 +106,9 @@ export default function AudioSection() {
   const handleOutputChange = (id: string) => {
     setSelectedOutput(id)
     localStorage.setItem('fc_audio_output', id)
-    document.querySelectorAll('audio, video').forEach(el => {
+    // Ne rediriger QUE les éléments d'appel : ce balayage touchait aussi les
+    // lecteurs de pièces jointes et les vidéos des messages affichés.
+    document.querySelectorAll('audio[data-fc-call], video[data-fc-call]').forEach(el => {
       if ('setSinkId' in el) (el as any).setSinkId(id).catch(() => {})
     })
   }
@@ -177,29 +186,62 @@ export default function AudioSection() {
         )}
       </div>
 
-      {/* Noise Suppression */}
+      {/* Suppression de bruit — plusieurs moteurs, façon Krisp */}
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
+        <div className="flex items-center gap-3">
+          <Waves size={16} className={engine === 'off' ? 'text-fc-muted' : 'text-fc-accent'} />
+          <div>
+            <p className="text-sm font-medium text-white">Suppression de bruit</p>
+            <p className="text-xs text-fc-muted mt-0.5">
+              Filtre le bruit de fond (ventilateur, clavier, ambiance). Appliqué immédiatement, même en pleine conversation.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          {NOISE_ENGINES.map(opt => (
+            <label
+              key={opt.id}
+              className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer border transition
+                ${engine === opt.id ? 'border-fc-accent bg-fc-accent/10' : 'border-transparent hover:bg-fc-hover/50'}`}
+            >
+              <input
+                type="radio"
+                name="noise-engine"
+                className="mt-0.5 accent-fc-accent"
+                checked={engine === opt.id}
+                onChange={() => { setEngine(opt.id); void setNoiseEngine(opt.id) }}
+              />
+              <span>
+                <span className="block text-sm text-white">{opt.label}</span>
+                <span className="block text-xs text-fc-muted">{opt.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Mode d'entrée : voix / push-to-talk */}
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Waves size={16} className={noiseSuppression ? 'text-fc-accent' : 'text-fc-muted'} />
+            <Radio size={16} className={pttMode ? 'text-fc-accent' : 'text-fc-muted'} />
             <div>
-              <p className="text-sm font-medium text-white">Suppression de bruit</p>
-              <p className="text-xs text-fc-muted mt-0.5">Filtre le bruit de fond (ventilateur, clavier, ambiance)</p>
+              <p className="text-sm font-medium text-white">Push-to-Talk</p>
+              <p className="text-xs text-fc-muted mt-0.5">
+                Le micro ne s'ouvre que pendant l'appui sur le raccourci (Réglages &gt; Raccourcis clavier).
+                Sur l'application bureau, il fonctionne même quand ForgeChat n'a pas le focus.
+              </p>
             </div>
           </div>
           <button
-            onClick={() => {
-              const next = !noiseSuppression
-              setNoiseSuppression(next)
-              setNoiseSuppressionEnabled(next)
-            }}
+            onClick={() => setPttMode(!pttMode)}
             className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer
-              ${noiseSuppression ? 'bg-fc-accent' : 'bg-fc-hover'}`}
+              ${pttMode ? 'bg-fc-accent' : 'bg-fc-hover'}`}
             role="switch"
-            aria-checked={noiseSuppression}
+            aria-checked={pttMode}
           >
             <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200
-              ${noiseSuppression ? 'translate-x-5' : 'translate-x-0'}`} />
+              ${pttMode ? 'translate-x-5' : 'translate-x-0'}`} />
           </button>
         </div>
       </div>

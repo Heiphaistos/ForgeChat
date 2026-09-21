@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useAudioLevel } from '../../hooks/useVoiceActivity'
+import { SPEAKING_THRESHOLD } from '../../lib/audio'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Participant {
@@ -11,63 +12,9 @@ interface Props {
   participants: Participant[]
 }
 
-// ─── Audio level analyser per stream ─────────────────────────────────────────
-function useAudioLevel(stream: MediaStream | undefined): number {
-  const [level, setLevel] = useState(0)
-  const rafRef = useRef<number>(0)
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const ctxRef = useRef<AudioContext | null>(null)
-
-  useEffect(() => {
-    if (!stream) {
-      setLevel(0)
-      return
-    }
-
-    const audioTracks = stream.getAudioTracks()
-    if (audioTracks.length === 0 || audioTracks[0].readyState !== 'live') {
-      setLevel(0)
-      return
-    }
-
-    let ctx: AudioContext
-    try {
-      ctx = new AudioContext()
-    } catch {
-      return
-    }
-    ctxRef.current = ctx
-
-    const analyser = ctx.createAnalyser()
-    analyser.fftSize = 256
-    analyserRef.current = analyser
-
-    const source = ctx.createMediaStreamSource(stream)
-    source.connect(analyser)
-
-    const data = new Uint8Array(analyser.frequencyBinCount)
-
-    const tick = () => {
-      analyser.getByteFrequencyData(data)
-      const avg = data.reduce((a, b) => a + b, 0) / data.length
-      setLevel(avg)
-      rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-
-    return () => {
-      cancelAnimationFrame(rafRef.current)
-      try { source.disconnect() } catch {}
-      try { ctx.close() } catch {}
-    }
-  }, [stream])
-
-  return level
-}
-
 // ─── Speaking bars animation ──────────────────────────────────────────────────
 function SpeakingBars({ level }: { level: number }) {
-  const active = level > 10
+  const active = level > SPEAKING_THRESHOLD
   const bars = 4
   return (
     <div aria-hidden="true" className="flex items-end gap-0.5 h-3">
@@ -89,8 +36,8 @@ function SpeakingBars({ level }: { level: number }) {
 
 // ─── Single participant indicator ────────────────────────────────────────────
 function ParticipantLevel({ participant }: { participant: Participant }) {
-  const level = useAudioLevel(participant.stream)
-  const speaking = level > 10
+  const level = useAudioLevel(participant.user_id, participant.stream)
+  const speaking = level > SPEAKING_THRESHOLD
 
   return (
     <div

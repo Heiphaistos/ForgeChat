@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCallStore } from '../../store/call'
+import { useVoice } from '../../store/voice'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 
 /**
@@ -14,6 +15,11 @@ import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 export default function PersistentDmCallAudio() {
   const callState = useCallStore(s => s.callState)
   const remoteStream = useCallStore(s => s.remoteStream)
+  // Le bouton « casque coupé » vit dans le store vocal ; c'est ici que les deux stores se
+  // croisent, donc ici qu'on propage l'état à l'appel DM en cours (défaut A21).
+  const deafened = useVoice(s => s.deafened)
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false)
+  const elRef = useRef<HTMLAudioElement | null>(null)
   const { playRingback } = useAudioNotifications()
 
   useEffect(() => {
@@ -23,19 +29,40 @@ export default function PersistentDmCallAudio() {
     return () => clearInterval(iv)
   }, [callState, playRingback])
 
+  // Coupe les pistes distantes reçues (et pas seulement le volume de l'élément) : le
+  // <video> de DMPage rend le même stream. remoteStream en dépendance pour réappliquer
+  // l'état à un flux arrivé après le clic.
+  useEffect(() => {
+    useCallStore.getState().setDeafened(deafened)
+  }, [deafened, remoteStream])
+
   if (callState === 'idle' || !remoteStream) return null
 
+  const attach = (el: HTMLAudioElement | null) => {
+    if (!el) return
+    elRef.current = el
+    if (el.srcObject !== remoteStream) el.srcObject = remoteStream
+    el.muted = deafened
+    const savedOut = localStorage.getItem('fc_audio_output')
+    if (savedOut && 'setSinkId' in el) (el as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(savedOut).catch(() => {})
+    // autoPlay seul ne suffit pas : sur une policy autoplay stricte (Safari, onglet
+    // restauré) la lecture est refusée et l'appel paraît connecté mais muet, sans le
+    // moindre indice (défaut A18). Le rejet doit être visible et rattrapable.
+    el.play().then(() => setAutoplayBlocked(false)).catch(() => setAutoplayBlocked(true))
+  }
+
   return (
-    <audio
-      ref={el => {
-        if (!el) return
-        if (el.srcObject !== remoteStream) el.srcObject = remoteStream
-        const savedOut = localStorage.getItem('fc_audio_output')
-        if (savedOut && 'setSinkId' in el) (el as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(savedOut).catch(() => {})
-      }}
-      autoPlay
-      style={{ display: 'none' }}
-      aria-hidden="true"
-    />
+    <>
+      <audio data-fc-call="dm" ref={attach} autoPlay style={{ display: 'none' }} aria-hidden="true" />
+      {autoplayBlocked && (
+        <button
+          type="button"
+          onClick={() => { elRef.current?.play().then(() => setAutoplayBlocked(false)).catch(() => {}) }}
+          className="fixed bottom-20 right-4 z-50 px-4 py-2 rounded-lg bg-fc-accent text-white text-sm font-medium shadow-lg"
+        >
+          Cliquez pour activer le son
+        </button>
+      )}
+    </>
   )
 }
