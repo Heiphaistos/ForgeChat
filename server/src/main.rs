@@ -204,6 +204,9 @@ async fn main() -> anyhow::Result<()> {
         // (contrairement à /health qui n'a pas de route nginx dédiée et retombe
         // silencieusement sur le SPA React, 200 même backend down)
         .route("/api/health", get(|| async { "ok" }))
+        // Manifeste de mise à jour de l'application bureau. Public : l'updater
+        // l'interroge au lancement, avant toute authentification.
+        .route("/api/desktop/latest", get(handlers::desktop::get_latest))
         // Auth publique
         .route("/api/auth/register", post(handlers::auth::register))
         .route("/api/auth/verify-email", post(handlers::auth::verify_email))

@@ -1,5 +1,9 @@
 #[cfg(not(target_os = "linux"))]
 use std::time::Duration;
+
+/// Mise à jour automatique (version installée ET version portable).
+pub mod updater;
+
 use tauri::{
     Manager,
     menu::{Menu, MenuItem},
@@ -260,6 +264,10 @@ pub fn run() {
         return;
     }
 
+    // Balaye l'exécutable écarté par la mise à jour portable précédente : il ne
+    // pouvait pas être supprimé tant qu'il tournait, c'est maintenant possible.
+    updater::balayer_ancien();
+
     // WebKitGTK (Linux) : sur certains pilotes GPU (Mesa/NVIDIA proprio/VM), le chemin de
     // rendu matériel DMA-BUF de WebKitGTK 2.4x laisse la fenêtre entièrement noire -- au
     // premier lancement sur les machines concernées, ou après un changement d'état GPU
@@ -326,7 +334,10 @@ pub fn run() {
         .plugin(global_shortcut_plugin())
         .invoke_handler(tauri::generate_handler![
             register_ptt_shortcut,
-            unregister_ptt_shortcut
+            unregister_ptt_shortcut,
+            updater::update_check,
+            updater::update_install,
+            updater::update_restart
         ]);
 
     builder

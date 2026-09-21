@@ -34,3 +34,4 @@ pub mod stickers;
 pub mod totp;
 pub mod tickets;
 pub mod privacy;
+pub mod desktop;

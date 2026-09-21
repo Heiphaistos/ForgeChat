@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-desktop"
-version = "3.23.0"
+version = "3.24.0"
 edition = "2021"
 
 [lib]
@@ -25,12 +25,19 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Mise a jour automatique (src/updater.rs) : telechargement du manifeste et de
+# l'artefact, puis verification de son empreinte AVANT installation.
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "charset", "http2"] }
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Registry",
     "Win32_Foundation",
+    # ShellExecuteW : lancer l'installeur NSIS, qui exige l'elevation et ne peut
+    # donc pas etre demarre par Command::spawn (ERROR_ELEVATION_REQUIRED).
+    "Win32_UI_Shell",
 ] }
 
 # Handler de permission média WebKitGTK (correctif S3). Version epinglee sur

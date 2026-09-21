@@ -368,10 +368,13 @@ export async function handleSignal(from: string, payload: any, ctx: MeshCtx) {
         await pc.setRemoteDescription(new RTCSessionDescription(payload.data))
         await drainIce(from)
       } else {
-        // Une answer hors état était jetée sans trace : le pair pouvait rester
-        // bloqué en have-local-offer indéfiniment.
-        warn(`answer ignorée de ${from} (état ${pc.signalingState})`, null)
-        if (pc.signalingState === 'stable') void negotiate(from, pc)
+        // Answer hors etat : on la trace, mais on ne relance SURTOUT pas une
+        // offre ici. Ce rattrapage creait un ping-pong d'offres avec le pair :
+        // chaque collision provoquait un rollback, chaque rollback relancait le
+        // gathering ICE, et la connexion n'emettait plus un seul candidat --
+        // appel muet et sans image, au hasard des courses. Si une negociation
+        // est reellement necessaire, onnegotiationneeded la declenchera.
+        warn(`answer ignoree de ${from} (etat ${pc.signalingState})`, null)
       }
     } else if (payload.type === 'ice' && payload.data) {
       if (pc.remoteDescription) {
