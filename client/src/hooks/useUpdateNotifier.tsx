@@ -22,7 +22,10 @@ function useDesktopUpdateNotifier() {
   const notified = useRef(false)
 
   useEffect(() => {
-    if (!isTauri) return
+    // En dev le binaire lancé est celui de `tauri dev` : il n'a pas
+    // d'uninstall.exe à côté, donc le chemin portable le remplacerait par une
+    // build de production. On ne vérifie rien tant qu'on développe.
+    if (!isTauri || import.meta.env.DEV) return
 
     let cancelled = false
     const check = async () => {

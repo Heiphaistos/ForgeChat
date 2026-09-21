@@ -23,7 +23,14 @@ OUT="$(cd "$SCRIPT_DIR/.." && pwd)/dist-desktop"
 
 command -v node >/dev/null || { echo "[ERREUR] Node.js non trouve."; exit 1; }
 
-VERSION="$(node -p "require('$SCRIPT_DIR/src-tauri/tauri.conf.json').version")"
+# Sous Git Bash, bash manipule des chemins POSIX (/c/Users/...) que le node de
+# Windows ne sait pas ouvrir. Ne convertir qu'au moment de passer un chemin a
+# node ; le reste du script reste en chemins POSIX.
+chemin_natif() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
+}
+
+VERSION="$(node -p "require(process.argv[1]).version" "$(chemin_natif "$SCRIPT_DIR/src-tauri/tauri.conf.json")")"
 [ -n "$VERSION" ] || { echo "[ERREUR] Version illisible dans src-tauri/tauri.conf.json"; exit 1; }
 
 NOTES=""
@@ -76,7 +83,7 @@ node -e '
     const [version, notes, pub_date, platforms, out] = process.argv.slice(1);
     require("fs").writeFileSync(out, JSON.stringify(
         { version, notes, pub_date, platforms: JSON.parse(platforms) }, null, 2) + "\n");
-' "$VERSION" "$NOTES" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PLATFORMS" "$OUT/latest.json"
+' "$VERSION" "$NOTES" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PLATFORMS" "$(chemin_natif "$OUT/latest.json")"
 
 echo
 echo "[OK] Manifeste : dist-desktop/latest.json (version $VERSION)"
