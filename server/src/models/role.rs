@@ -58,5 +58,7 @@ impl Permissions {
     pub const DEAFEN_MEMBERS: i64 = 1 << 16;
     pub const MOVE_MEMBERS: i64 = 1 << 17;
     pub const PRIORITY_SPEAKER: i64 = 1 << 18;
+    /// Partage d'écran / Go Live — déclaré côté UI depuis toujours (RolesTab bit 40)
+    pub const STREAM: i64 = 1 << 40;
     pub const ADMINISTRATOR: i64 = 1 << 31;
 }

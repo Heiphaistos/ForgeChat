@@ -12,7 +12,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Permission « Partager l'écran / Go Live » (bit 40), déclarée côté UI
 /// (`RolesTab.tsx:85`) mais absente de `models::role::Permissions`.
 /// Définie ici pour ne pas modifier le modèle de rôles hors périmètre.
-pub const PERM_STREAM: i64 = 1 << 40;
+pub const PERM_STREAM: i64 = crate::models::role::Permissions::STREAM;
 
 /// Fenêtre de grâce pendant laquelle un canal vocal temporaire fraîchement créé
 /// ne peut pas être supprimé par `cleanup_voice` (correctif N1 : la redirection
