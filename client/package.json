@@ -1,6 +1,6 @@
 {
   "name": "forgechat-client",
-  "version": "3.581.0",
+  "version": "3.581.1",
   "type": "module",
   "scripts": {
     "dev": "npm run prebuild && vite",

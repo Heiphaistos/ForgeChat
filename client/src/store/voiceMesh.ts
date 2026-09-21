@@ -56,6 +56,9 @@ const _camStreamId = new Map<string, string>()
 const _retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 export const getPeerConnections = () => _pcs
+// Exposé pour le diagnostic (console, harnais Playwright) : sans accès aux
+// RTCPeerConnection, un appel qui coupe n'est analysable qu'à l'aveugle.
+if (typeof window !== 'undefined') (window as any).__fcPcs = _pcs
 
 // ── Config ICE ───────────────────────────────────────────────────────────────
 const ICE_FALLBACK: RTCConfiguration = {

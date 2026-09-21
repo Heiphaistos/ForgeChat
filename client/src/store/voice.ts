@@ -15,6 +15,10 @@ import {
 
 export { getPeerConnections }
 
+// Idem : le store est atteignable depuis la console pour diagnostiquer un appel
+// (window.__fcVoiceStore.getState()).
+declare global { interface Window { __fcVoiceStore?: unknown } }
+
 export interface VoicePeer {
   userId: string
   username: string
@@ -748,3 +752,5 @@ export const useVoice = create<VoiceStore>((set, get) => {
     },
   }
 })
+
+if (typeof window !== 'undefined') window.__fcVoiceStore = useVoice
