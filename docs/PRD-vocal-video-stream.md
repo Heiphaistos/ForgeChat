@@ -469,3 +469,50 @@ Les lots 0 à 5 ont été implémentés dans la foulée de ce PRD, sur les trois
 4. **Vérification en conditions réelles** : les scénarios T1 à T16 du §7 n'ont pas encore été joués à deux comptes sur le VPS. Tout ce qui précède est vérifié par compilation, typage et lint, pas par un appel réel.
 5. **Paquet Linux** : `xdg-desktop-portal` (+ un backend `-gtk`/`-gnome`/`-kde`) est requis à l'exécution pour la capture d'écran ; volontairement non ajouté aux `depends` du `.deb`.
 6. **Wayland** : le raccourci global de push-to-talk repose sur `XGrabKey` — inopérant en session Wayland pure.
+
+### Mise en ligne et vérification réelle (2026-09-22, 05 h)
+
+Tout est déployé sur https://forgechat.heiphaistos.org — serveur `3.250.0`, client `3.582.1`, application de bureau `3.24.0`. Migration `061_everyone_voice_permissions.sql` appliquée : les 10 rôles `@everyone` portent désormais `CONNECT_VOICE | SPEAK_VOICE | STREAM`, donc les contrôles de permission sont réellement actifs sans avoir éjecté personne.
+
+**Deux défauts supplémentaires, introduits par les correctifs eux-mêmes, ont été trouvés par la mesure et corrigés** :
+
+| # | Symptôme | Cause |
+|---|---|---|
+| X1 | Activation simultanée des deux caméras : l'un des deux pairs reste sans image, au hasard | `setLocalDescription({type:'rollback'})` appelé alors que l'état est encore `stable` lève `InvalidStateError` ; l'offer distante n'est jamais répondue |
+| X2 | Appel muet **et** noir, environ une fois sur trois, alors que le SDP s'échange correctement | Une `answer` reçue hors état déclenchait une nouvelle offre. Chaque collision provoquait un rollback, chaque rollback relançait le gathering ICE : le pair perdant n'émettait plus **aucun** candidat (`emitted: 0`, `iceGatheringState` oscillant `gathering → new`), les deux restaient en `connectionState: "new"` |
+
+X2 a été identifié en injectant un compteur de candidats ICE dans la page (`tests/playwright-diag-glare.js`) : sans cette mesure, le symptôme ressemblait à un problème de TURN.
+
+**Résultats des harnais à deux comptes réels sur la production** :
+
+| Harnais | Résultat |
+|---|---|
+| `playwright-test-late-joiner-stream.js` (T1, T2, T6, T7, T12 — nouveau) | ✅ l'arrivant tardif reçoit caméra + écran + son du jeu sur piste dédiée |
+| `playwright-test-glare.js` (T15 partiel) | ✅ 4 exécutions sur 4 après correctifs (0 sur 1 avant) |
+| `playwright-test-camscreen.js` | ✅ 12 / 12 |
+| `playwright-test-screenshare-audio.js` | ✅ 11 / 11 — son du partage mesuré à `peak=1` sur sa **propre** piste |
+| `playwright-test-dmcall.js` | ✅ 12 / 12 |
+| `playwright-test-navpersist.js` | ⚠️ la navigation, la vignette et sa vidéo passent ; les deux mesures de niveau restent instables (voir ci-dessous) |
+
+Trois harnais ont dû être corrigés, pas le produit : ils mesuraient autre chose que ce qu'ils annonçaient — `document.querySelector('audio')` tombait sur la nouvelle piste de partage, une pièce jointe vidéo d'un ancien message faisait échouer « plus aucune vidéo après raccrochage », et surtout **RNNoise supprime la tonalité du micro factice de Chromium** (c'est le comportement voulu : ce signal continu *est* du bruit), ce qui rend toute mesure de niveau inexploitable tant qu'on ne force pas le moteur `browser`.
+
+### Mise à jour automatique (lot 8, demandé après coup)
+
+Livré et en ligne pour les quatre cibles : `GET /api/desktop/latest` sert le manifeste, les artefacts sont servis depuis `/desktop/` (dossier `/var/www/forgechat-desktop`, hors de l'arborescence de déploiement pour que le `rsync --delete` ne les efface pas).
+
+| Cible | Artefact | Taille |
+|---|---|---|
+| `windows-x86_64` | `ForgeChat-Setup-v3.24.0.exe` | 6,8 Mo |
+| `windows-portable` | `ForgeChat-Portable-v3.24.0.exe` | 18,0 Mo |
+| `linux-x86_64` | `ForgeChat-v3.24.0-amd64.deb` | 9,1 Mo |
+| `linux-portable` | `ForgeChat-v3.24.0-amd64.AppImage` | 86,2 Mo |
+
+Les empreintes SHA-256 servies par l'API correspondent aux fichiers réellement en place (recoupées avec `sha256sum` sur le VPS) et les quatre artefacts se téléchargent en HTTP 200. L'empreinte est vérifiée avant toute installation ; le caractère inscriptible du dossier est vérifié **avant** le téléchargement, et la version portable se remplace par renommage (`.ancien`), Windows refusant de supprimer un exécutable en cours d'exécution.
+
+### Ce qui reste, honnêtement
+
+1. **Recette de la mise à jour non jouée** : il faut une version 3.25.0 pour prouver le mécanisme de bout en bout (aucune version en ligne ne savait se mettre à jour jusqu'ici). À éprouver en particulier : refus d'un artefact dont l'empreinte a été modifiée d'un octet, portable sur support en lecture seule, UAC de l'installeur Windows, remplacement de `$APPIMAGE`.
+2. **Scénarios T4, T5, T9, T10, T11, T14, T16 non joués** (navigation prolongée, PiP fenêtre réduite, coupure réseau de 10 s, déploiement en pleine réunion, deux onglets, push-to-talk hors focus, panne TURN volontaire).
+3. **Lot 6 (SFU)** toujours ouvert : le mesh reste plafonné à ~6 caméras, désormais avec plafond de débit et dégradation automatique.
+4. `xdg-desktop-portal` n'est pas déclaré en dépendance du `.deb` ; Wayland ne permet pas le raccourci global de push-to-talk.
+5. Le remote **Forgejo** n'a pas pu être réparé depuis cette session (écriture d'un jeton refusée par le garde-fou) : le dépôt de référence est GitHub, le VPS y tire directement.
