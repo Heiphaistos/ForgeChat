@@ -23,6 +23,9 @@ window.addEventListener('load', () => {
 /// Mise à jour automatique (version installée ET version portable).
 pub mod updater;
 
+/// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
+pub mod native_voice;
+
 use tauri::{
     Manager,
     menu::{Menu, MenuItem},
@@ -396,7 +399,15 @@ pub fn run() {
             unregister_ptt_shortcut,
             updater::update_check,
             updater::update_install,
-            updater::update_restart
+            updater::update_restart,
+            native_voice::nv_connect,
+            native_voice::nv_disconnect,
+            native_voice::nv_set_mic,
+            native_voice::nv_set_deafen,
+            native_voice::nv_set_peer_audio,
+            native_voice::nv_set_camera,
+            native_voice::nv_set_screen,
+            native_voice::nv_popout
         ]);
 
     builder

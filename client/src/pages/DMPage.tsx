@@ -135,7 +135,7 @@ export default function DMPage() {
   // de cette conversation" de "un appel tourne ailleurs" (ne pas afficher/permettre de
   // raccrocher le mauvais appel depuis une autre page de DM).
   const {
-    dmId: activeCallDmId, callState, callType, localStream, remoteStream, micMuted, camOff,
+    dmId: activeCallDmId, callState, callType, localStream, remoteStream, remoteVideoUrl, localVideoUrl, micMuted, camOff,
     startCall, acceptCall, hangup, toggleMic, toggleCam,
     pendingAccept, setPendingAccept,
   } = useCallStore()
@@ -627,9 +627,14 @@ export default function DMPage() {
                   voix du correspondant sort deux fois — volume doublé et écho métallique
                   sur tout appel vidéo (défaut A5). Le son reste sur l'élément audio
                   persistant, comme pour VoiceVideoPage. */}
-              <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full max-h-56 object-contain" />
-              <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
-              {callState === 'connected' && remoteStream && (
+              {/* Application Linux : flux MJPEG locaux fournis par le vocal natif. */}
+              {remoteVideoUrl
+                ? <img src={remoteVideoUrl} alt="" className="w-full max-h-56 object-contain" />
+                : <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full max-h-56 object-contain" />}
+              {localVideoUrl
+                ? <img src={localVideoUrl} alt="" className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
+                : <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />}
+              {callState === 'connected' && (remoteStream || remoteVideoUrl) && (
                 <span
                   className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-xs font-medium tabular-nums select-none"
                   aria-label={`Durée de l'appel ${callDuration}`}
@@ -637,7 +642,7 @@ export default function DMPage() {
                   {callDuration}
                 </span>
               )}
-              {!remoteStream && (
+              {!remoteStream && !remoteVideoUrl && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
                   <div className="w-14 h-14 rounded-full bg-fc-accent flex items-center justify-center text-xl font-bold text-white overflow-hidden">
                     {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}

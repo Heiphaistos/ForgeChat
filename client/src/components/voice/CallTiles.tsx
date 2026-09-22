@@ -6,6 +6,7 @@ import { MicOff, Monitor, Volume2, Maximize2, ExternalLink } from 'lucide-react'
 export function PeerTile({
   peer, stream, muted = false, isLocal = false, speaking = false,
   handRaised = false, blurEnabled = false, onExpand, onVolume, onPopOut, connectionLost = false, compact = false,
+  videoUrl = null,
 }: {
   peer: { username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
@@ -13,8 +14,11 @@ export function PeerTile({
   onPopOut?: () => void; connectionLost?: boolean
   /** Vignette de bandeau : avatar et textes réduits. */
   compact?: boolean
+  /** Application Linux : flux MJPEG local à la place d'un MediaStream. */
+  videoUrl?: string | null
 }) {
-  const hasVideo = peer.videoEnabled && stream && stream.getVideoTracks().some(t => t.readyState === 'live')
+  const hasStream = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
+  const hasVideo = peer.videoEnabled && (hasStream || !!videoUrl)
 
   // Ref callback plutôt qu'useEffect([stream]) : quand la vidéo arrive en cours d'appel
   // (caméra/partage d'écran), la référence du stream ne change pas — un effet ne se
@@ -35,7 +39,10 @@ export function PeerTile({
     <div className={`relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
-      {hasVideo ? (
+      {hasVideo && !hasStream && videoUrl ? (
+        <img src={videoUrl} alt="" className="w-full h-full object-cover"
+          style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
+      ) : hasVideo ? (
         <video ref={attachStream} autoPlay playsInline
           muted={isLocal ? muted : true}
           className="w-full h-full object-cover"
@@ -89,17 +96,19 @@ export function PeerTile({
 }
 
 // ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
-export function ScreenTile({ stream, label, onExpand, onVolume, onPopOut, compact = false }: {
-  stream: MediaStream; label: string; onExpand?: () => void; onVolume?: () => void; onPopOut?: () => void; compact?: boolean
+export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPopOut, compact = false }: {
+  stream: MediaStream | null; url?: string | null; label: string; onExpand?: () => void; onVolume?: () => void; onPopOut?: () => void; compact?: boolean
 }) {
   const attachStream = (el: HTMLVideoElement | null) => {
-    if (el && el.srcObject !== stream) el.srcObject = stream
+    if (el && stream && el.srcObject !== stream) el.srcObject = stream
   }
   return (
     <div className="relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-black flex items-center justify-center ring-1 ring-fc-green/40">
       {/* muted : le son du partage est joué par PersistentVoiceAudio, avec son
           propre réglage de volume, distinct de celui de la voix du pair. */}
-      <video ref={attachStream} autoPlay playsInline muted className="w-full h-full object-contain" />
+      {stream
+        ? <video ref={attachStream} autoPlay playsInline muted className="w-full h-full object-contain" />
+        : url && <img src={url} alt="" className="w-full h-full object-contain" />}
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
         <div className="flex items-center gap-1">
           <Monitor size={11} className="text-fc-green" />

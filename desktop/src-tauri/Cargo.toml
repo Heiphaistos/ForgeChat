@@ -48,3 +48,12 @@ windows-sys = { version = "0.59", features = [
 # deux types distincts et ne compilerait pas. Meme feature `v2_38` que wry.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+# Vocal natif : WebKitGTK des distributions n'a pas WebRTC (RTCPeerConnection
+# absent, mesuré sur 2.50.4). Le média passe par le SDK Rust de LiveKit, qui
+# embarque son propre WebRTC, et par le module audio natif (PulseAudio/ALSA).
+livekit = { version = "=0.9.1", features = ["rustls-tls-webpki-roots"] }
+jpeg-encoder = "0.7"
+futures = "0.3"
+tokio = { version = "1", features = ["sync"] }
+nokhwa = { version = "0.10", default-features = false, features = ["input-v4l"] }
+zune-jpeg = "0.5"

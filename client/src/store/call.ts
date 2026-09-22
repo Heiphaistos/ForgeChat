@@ -3,6 +3,9 @@ import { useWs } from './ws'
 import api from '../api/client'
 import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
 import {
+  isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic, nativeSetDeafen, nativeSetCamera,
+} from '../lib/nativeVoice'
+import {
   Room, RoomEvent, Track, DisconnectReason,
   type LocalTrackPublication, type RemoteParticipant,
 } from 'livekit-client'
@@ -36,6 +39,9 @@ interface CallStore {
   callType: 'voice' | 'video'
   localStream: MediaStream | null
   remoteStream: MediaStream | null
+  /** Application Linux : vidéo du correspondant et aperçu local en MJPEG local. */
+  remoteVideoUrl: string | null
+  localVideoUrl: string | null
   micMuted: boolean
   camOff: boolean
   // Miroir du deafen du store vocal (voice.ts) : le bouton « casque coupé » doit aussi
@@ -67,6 +73,8 @@ let _callInFlight = false
 let _camPub: LocalTrackPublication | null = null
 let _micPub: LocalTrackPublication | null = null
 let _mySessionId: string | null = null
+/** Appel porté par le vocal natif Linux. */
+let _native = false
 
 type SetFn = (fn: (s: CallStore) => Partial<CallStore>) => void
 
@@ -78,11 +86,13 @@ function _cleanup(set: SetFn) {
   _room = null
   _camPub = _micPub = null
   void room?.disconnect(true)
+  if (_native) { _native = false; void nativeDisconnect() }
   set(s => {
     s.localStream?.getTracks().forEach(t => t.stop())
     return {
       dmId: null, partnerId: null, callState: 'idle',
-      localStream: null, remoteStream: null, micMuted: false, camOff: false, connectedAt: null,
+      localStream: null, remoteStream: null, remoteVideoUrl: null, localVideoUrl: null,
+      micMuted: false, camOff: false, connectedAt: null,
     }
   })
 }
@@ -99,7 +109,40 @@ function _rebuildRemote(p: RemoteParticipant, set: SetFn, get: () => CallStore) 
 }
 
 /** Connexion au SFU avec le jeton délivré par le serveur à l'acceptation. */
+/** Application Linux : le processus natif porte micro, caméra et son. */
+async function _connectNative(lk: { url: string; token: string }, set: SetFn, get: () => CallStore) {
+  if (_native) return
+  _native = true
+  const partner = () => get().partnerId
+  const res = await api.get('/voice/ice-config').catch(() => null)
+  try {
+    await nativeConnect(lk.url, lk.token, res?.data.ice_servers ?? [], true, !get().micMuted, {
+      onTrack: e => {
+        if (e.identity !== partner()) return
+        if (e.source === 'camera') set(() => ({ remoteVideoUrl: e.active ? e.url : null }))
+        if (e.active) set(s => ({ callState: 'connected', connectedAt: s.connectedAt ?? Date.now() }))
+      },
+      onSpeakers: () => {},
+      onState: e => {
+        if (e.status === 'disconnected' && _native) {
+          toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
+          _cleanup(set)
+        }
+      },
+    })
+    if (get().callType === 'video') {
+      const url = await nativeSetCamera(true).catch(() => null)
+      set(() => ({ localVideoUrl: url, camOff: !url }))
+    }
+    if (get().deafened) void nativeSetDeafen(true)
+  } catch (e) {
+    toast.error(`Appel impossible : ${String(e)}`)
+    _cleanup(set)
+  }
+}
+
 async function _connect(lk: { url: string; token: string }, set: SetFn, get: () => CallStore) {
+  if (isNativeVoice()) return _connectNative(lk, set, get)
   if (_room) return
   const room = new Room({ adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false })
   _room = room
@@ -209,6 +252,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
   callType: 'voice',
   localStream: null,
   remoteStream: null,
+  remoteVideoUrl: null,
+  localVideoUrl: null,
   micMuted: false,
   camOff: false,
   deafened: false,
@@ -271,14 +316,15 @@ export const useCallStore = create<CallStore>((set, get) => ({
     // le flux média (micro/caméra restent actifs, connexion WebRTC orpheline).
     if (_callInFlight) return
     if (get().callState !== 'idle') return
-    if (webrtcMissing()) {
+    if (webrtcMissing() && !isNativeVoice()) {
       toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
       return
     }
     _callInFlight = true
     set({ dmId, partnerId, callType: type })
     try {
-      const stream = await _getCallMedia(type)
+      // Linux natif : micro et caméra capturés par le processus Rust.
+      const stream = isNativeVoice() ? null : await _getCallMedia(type)
       set({ localStream: stream })
       useWs.getState().send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
       set({ callState: 'calling' })
@@ -296,7 +342,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
   acceptCall: async (dmId, fromUserId, type) => {
     if (_callInFlight) return
-    if (webrtcMissing()) {
+    if (webrtcMissing() && !isNativeVoice()) {
       // Laisser sonner : l'appel peut être décroché dans le navigateur ouvert.
       toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
       return
@@ -304,7 +350,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
     _callInFlight = true
     set({ dmId, partnerId: fromUserId, callType: type })
     try {
-      const stream = await _getCallMedia(type)
+      // Linux natif : micro et caméra capturés par le processus Rust.
+      const stream = isNativeVoice() ? null : await _getCallMedia(type)
       set({ localStream: stream })
       useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
       set({ callState: 'ringing' })
@@ -327,6 +374,12 @@ export const useCallStore = create<CallStore>((set, get) => ({
   },
 
   toggleMic: () => {
+    if (_native) {
+      const next = !get().micMuted
+      void nativeSetMic(!next).catch(() => {})
+      set({ micMuted: next })
+      return
+    }
     const { localStream, micMuted } = get()
     const audioTrack = localStream?.getAudioTracks()[0]
     if (!audioTrack) return
@@ -339,6 +392,15 @@ export const useCallStore = create<CallStore>((set, get) => ({
   // Couper la caméra RELÂCHE le périphérique (LED éteinte, caméra rendue aux autres
   // applications) : `enabled = false` laissait la capture tourner (défaut V5).
   toggleCam: async () => {
+    if (_native) {
+      try {
+        const url = await nativeSetCamera(get().camOff)
+        set({ camOff: !url, localVideoUrl: url })
+      } catch {
+        toast.error("Impossible d'accéder à la caméra.")
+      }
+      return
+    }
     const { localStream, camOff } = get()
     if (!localStream) return
     if (!camOff) {
@@ -362,6 +424,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
   },
 
   setDeafened: (v) => {
+    if (_native) void nativeSetDeafen(v).catch(() => {})
     get().remoteStream?.getAudioTracks().forEach(t => { t.enabled = !v })
     set({ deafened: v })
   },

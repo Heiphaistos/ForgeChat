@@ -3,6 +3,7 @@ import { useWs } from './ws'
 import { useAuth } from './auth'
 import api from '../api/client'
 import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
+import { isNativeVoice, nativeSetDeafen, nativeSetPeerAudio, nativeSetCamera, nativeSetScreen } from '../lib/nativeVoice'
 import {
   createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
   type NoiseEngine, type ProcessedAudio,
@@ -36,6 +37,9 @@ export interface VoicePeer {
   screenSharing: boolean
   prioritySpeaker?: boolean
   connectionLost?: boolean
+  /** Application Linux : vidéo reçue sous forme de flux MJPEG local (pas de MediaStream). */
+  videoUrl?: string | null
+  screenUrl?: string | null
 }
 
 export interface VoiceRoomParticipant {
@@ -81,6 +85,10 @@ interface VoiceStore {
   /** État de la connexion au serveur média (SFU), distinct de la présence WebSocket. */
   mediaStatus: MediaStatus
   mediaQuality: ConnectionQuality | null
+  /** Application Linux : aperçus locaux et orateurs actifs fournis par le natif. */
+  localVideoUrl: string | null
+  localScreenUrl: string | null
+  nativeSpeakers: string[]
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
@@ -243,6 +251,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
     noiseEngine: getNoiseEngine(),
     mediaStatus: 'idle',
     mediaQuality: null,
+    localVideoUrl: null,
+    localScreenUrl: null,
+    nativeSpeakers: [],
 
     // ── Listeners globaux (sidebar, badges LIVE) ─────────────────────────────
     initGlobalListeners: () => {
@@ -350,7 +361,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     join: async (channelId, serverId, withVideo = false, password, channelName, listenOnly = false) => {
       const cur = get()
       if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
-      if (webrtcMissing()) {
+      if (webrtcMissing() && !isNativeVoice()) {
         const opened = await openInBrowser(`/servers/${serverId}/channels/${channelId}`)
         set({ error: opened ? NO_WEBRTC_MESSAGE : 'Ce moteur d\'affichage ne gère pas les appels : ouvrez ForgeChat dans votre navigateur.' })
         return
@@ -367,7 +378,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
         let noiseError: string | null = null
         const engine = getNoiseEngine()
 
-        if (listenOnly) {
+        if (listenOnly || isNativeVoice()) {
+          // Application Linux : micro et caméra capturés par le processus natif.
           setLocalStream(null, null)
         } else {
           let stream: MediaStream
@@ -567,6 +579,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
       set({
         joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
+        localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [],
         localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
         videoEnabled: false, screenSharing: false, error: null, notice: null,
         pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
@@ -583,6 +596,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
     toggleDeafen: () => {
       const next = !get().deafened
+      if (isNativeVoice()) void nativeSetDeafen(next).catch(e => warn('sourdine native', e))
       get().peers.forEach(peer => {
         peer.stream?.getAudioTracks().forEach(t => { t.enabled = !next })
         peer.screenStream?.getAudioTracks().forEach(t => { t.enabled = !next })
@@ -595,6 +609,17 @@ export const useVoice = create<VoiceStore>((set, get) => {
     toggleVideo: async () => {
       const { videoEnabled, joined, listenOnly } = get()
       if (!joined || listenOnly) return
+      if (isNativeVoice()) {
+        try {
+          const url = await nativeSetCamera(!videoEnabled)
+          set({ videoEnabled: !videoEnabled && !!url, localVideoUrl: url })
+        } catch (e) {
+          warn('caméra native', e)
+          set({ error: `Caméra indisponible : ${String(e)}` })
+        }
+        broadcastState()
+        return
+      }
 
       if (videoEnabled) {
         await removeCameraTrack()
@@ -620,6 +645,17 @@ export const useVoice = create<VoiceStore>((set, get) => {
     shareScreen: async () => {
       const { joined, listenOnly } = get()
       if (!joined || listenOnly) return
+      if (isNativeVoice()) {
+        try {
+          const url = await nativeSetScreen(true)
+          set({ screenSharing: !!url, localScreenUrl: url })
+          broadcastState()
+        } catch (e) {
+          warn('partage natif', e)
+          set({ error: `Partage d'écran impossible : ${String(e)}` })
+        }
+        return
+      }
       const md = navigator.mediaDevices as any
       if (typeof md?.getDisplayMedia !== 'function') {
         set({ error: 'Le partage d\'écran n\'est pas disponible sur cette version de l\'application.' })
@@ -660,6 +696,10 @@ export const useVoice = create<VoiceStore>((set, get) => {
     },
 
     stopScreenShare: async () => {
+      if (isNativeVoice()) {
+        await nativeSetScreen(false).catch(e => warn('fin du partage natif', e))
+        set({ localScreenUrl: null })
+      }
       await stopScreenTracks()
       set({ screenSharing: false, localScreenStream: null })
       broadcastState()
@@ -692,6 +732,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
     // ── Volumes ─────────────────────────────────────────────────────────────
     setUserVolume: (userId, volume) => {
+      // Natif : le module audio du système ne règle pas le volume par personne,
+      // seulement coupé ou audible.
+      if (isNativeVoice()) void nativeSetPeerAudio(userId, volume > 0).catch(e => warn('volume natif', e))
       set(s => {
         const next = { ...s.userVolumes, [userId]: volume }
         saveVolumes(VOLUMES_KEY, next)

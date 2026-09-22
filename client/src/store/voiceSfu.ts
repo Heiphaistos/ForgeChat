@@ -17,6 +17,10 @@ import {
 } from 'livekit-client'
 import type { VoicePeer } from './voice'
 import api from '../api/client'
+import {
+  isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic,
+  type NativeTrackEvent, type NativeStateEvent,
+} from '../lib/nativeVoice'
 
 export function warn(ctx: string, e: unknown) {
   console.warn(`[voice] ${ctx}`, e)
@@ -46,6 +50,8 @@ let _screenPub: LocalTrackPublication | null = null
 let _screenAudioPub: LocalTrackPublication | null = null
 let _whisper: string[] | null = null
 let _ctx: MeshCtx | null = null
+/** Salle ouverte par le vocal natif Linux (pas d'objet Room côté JS). */
+let _nativeRoom: string | null = null
 
 export const getLocalStream = () => _localStream
 export const getRawMicTrack = () => _rawMicTrack
@@ -194,6 +200,8 @@ export function addPeer(userId: string, info: Partial<VoicePeer>, ctx: MeshCtx) 
           connectionLost: false,
         }],
   }))
+  const known = _nativeUrls.get(userId)
+  if (known) patchPeer(userId, known)
   const rp = _room?.remoteParticipants.get(userId)
   if (rp) rebuildPeer(rp)
   applyWhisper()
@@ -205,13 +213,56 @@ export function removePeer(userId: string, ctx: MeshCtx) {
 
 // ── Connexion au SFU ─────────────────────────────────────────────────────────
 export function isConnectedTo(room: string) {
+  if (_nativeRoom !== null) return _nativeRoom === room
   return _room !== null && _roomName === room && _room.state !== 'disconnected'
+}
+
+// ── Vocal natif (application Linux) ──────────────────────────────────────────
+// URL connues par personne : une piste peut arriver avant l'annonce du pair par le serveur.
+const _nativeUrls = new Map<string, { videoUrl?: string | null; screenUrl?: string | null }>()
+
+function onNativeTrack(e: NativeTrackEvent) {
+  const cur = _nativeUrls.get(e.identity) ?? {}
+  if (e.source === 'camera') cur.videoUrl = e.active ? e.url : null
+  else if (e.source === 'screen') cur.screenUrl = e.active ? e.url : null
+  else return
+  _nativeUrls.set(e.identity, cur)
+  patchPeer(e.identity, e.source === 'screen' ? { screenUrl: cur.screenUrl, screenSharing: e.active } : { videoUrl: cur.videoUrl })
+}
+
+function onNativeState(e: NativeStateEvent, ctx: MeshCtx) {
+  if (e.status === 'disconnected') {
+    if (_nativeRoom !== null && ctx.get().joined) {
+      ctx.set({ mediaStatus: 'failed', error: 'Connexion au serveur audio/vidéo perdue. Quittez et rejoignez le salon.' })
+    }
+    return
+  }
+  ctx.set({ mediaStatus: e.status === 'failed' ? 'failed' : e.status, ...(e.quality ? { mediaQuality: e.quality } : {}) })
+}
+
+async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx) {
+  const ice = (await getIceConfig())?.iceServers ?? []
+  const s = ctx.get()
+  _nativeRoom = roomName
+  try {
+    await nativeConnect(url, token, ice, !s.listenOnly, _micOpen, {
+      onTrack: onNativeTrack,
+      onSpeakers: ids => ctx.set({ nativeSpeakers: ids }),
+      onState: e => onNativeState(e, ctx),
+    })
+    report('connected', { native: true })
+  } catch (e) {
+    _nativeRoom = null
+    report('connect_failed', { native: true, error: String(e) })
+    ctx.set({ mediaStatus: 'failed', error: `Vocal indisponible : ${String(e)}` })
+  }
 }
 
 export async function connectMedia(url: string, token: string, roomName: string, ctx: MeshCtx) {
   _ctx = ctx
   if (isConnectedTo(roomName)) return
   await disconnectMedia()
+  if (isNativeVoice()) return connectNative(url, token, roomName, ctx)
 
   if (typeof RTCPeerConnection === 'undefined') {
     ctx.set({ mediaStatus: 'failed', error: 'Ce moteur d\'affichage ne gère pas WebRTC : le vocal y est impossible. Utilisez la version web dans Chrome, Edge ou Firefox.' })
@@ -288,6 +339,11 @@ export async function connectMedia(url: string, token: string, roomName: string,
 }
 
 export async function disconnectMedia() {
+  if (_nativeRoom !== null) {
+    _nativeRoom = null
+    _nativeUrls.clear()
+    await nativeDisconnect()
+  }
   const room = _room
   _room = null
   _roomName = null
@@ -312,6 +368,10 @@ export function setLocalStream(outgoing: MediaStream | null, raw: MediaStreamTra
 
 export async function applyMicEnabled(open: boolean) {
   _micOpen = open
+  if (_nativeRoom !== null) {
+    await nativeSetMic(open).catch(e => warn('micro natif', e))
+    return
+  }
   // Coupure au niveau de la piste : effective même avant la publication.
   if (_micTrack) _micTrack.enabled = open
   try {

@@ -16,6 +16,8 @@ export interface StageTile {
   username: string
   isLocal: boolean
   stream: MediaStream | null
+  /** Application Linux : flux MJPEG local. */
+  url?: string | null
 }
 
 export interface RenderOpts { compact?: boolean; expand?: boolean }

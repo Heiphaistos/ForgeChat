@@ -24,6 +24,7 @@ import toast from 'react-hot-toast'
 import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
 import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../components/voice/CallStage'
 import { popOut } from '../lib/popout'
+import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
 
 
@@ -175,6 +176,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
     peers, localStream, localScreenStream, muted, deafened, videoEnabled, screenSharing,
+    localVideoUrl, localScreenUrl, nativeSpeakers,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
     roomParticipants, notice, clearNotice,
@@ -187,6 +189,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const speakingMap: Record<string, number> = {
     ...(user ? { [user.id]: isLocalSpeaking ? 1 : 0 } : {}),
     ...remoteSpeaking,
+    // Application Linux : orateurs actifs mesurés par le SFU (aucun flux local à analyser).
+    ...Object.fromEntries(nativeSpeakers.map(id => [id, 1])),
   }
 
   // Accumulateur temps de parole pour SpeakerStats (sinon totalSpeakingMs restait
@@ -332,17 +336,17 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   }
 
   const allPeers = [
-    { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, screenStream: screenSharing ? localScreenStream : null, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
+    { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, screenStream: screenSharing ? localScreenStream : null, videoUrl: localVideoUrl, screenUrl: localScreenUrl, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
     ...peers.map(p => ({ ...p, avatar: p.avatar ?? undefined, isLocal: false })),
   ]
 
   // Chaque participant contribue une tuile caméra + une tuile écran séparée s'il partage —
   // ainsi caméra et écran sont visibles simultanément dans TOUTES les dispositions, pas
   // seulement en mode Présentation/Focus.
-  type Tile = { key: string; kind: 'camera' | 'screen'; peer: typeof allPeers[number]; stream: MediaStream | null }
+  type Tile = { key: string; kind: 'camera' | 'screen'; peer: typeof allPeers[number]; stream: MediaStream | null; url?: string | null }
   const allTiles: Tile[] = allPeers.flatMap(p => {
-    const tiles: Tile[] = [{ key: `${p.userId}-cam`, kind: 'camera', peer: p, stream: p.stream }]
-    if (p.screenStream) tiles.push({ key: `${p.userId}-screen`, kind: 'screen', peer: p, stream: p.screenStream })
+    const tiles: Tile[] = [{ key: `${p.userId}-cam`, kind: 'camera', peer: p, stream: p.stream, url: p.videoUrl }]
+    if (p.screenStream || p.screenUrl) tiles.push({ key: `${p.userId}-screen`, kind: 'screen', peer: p, stream: p.screenStream, url: p.screenUrl })
     return tiles
   })
 
@@ -358,32 +362,38 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   const peerById = new Map(allPeers.map(p => [p.userId, p]))
   const stageTiles: StageTile[] = allTiles.map(t => ({
-    key: t.key, kind: t.kind, userId: t.peer.userId, username: t.peer.username, isLocal: t.peer.isLocal, stream: t.stream,
+    key: t.key, kind: t.kind, userId: t.peer.userId, username: t.peer.username, isLocal: t.peer.isLocal, stream: t.stream, url: t.url,
   }))
   const activeSpeakerId = allPeers.find(p => !p.isLocal && (speakingMap[p.userId] ?? 0) > 0.05)?.userId ?? null
 
-  const detach = (userId: string, kind: 'camera' | 'screen', label: string) => {
+  const detach = (userId: string, kind: 'camera' | 'screen', label: string, url?: string | null) => {
+    if (isNativeVoice()) {
+      // Linux : la vue web ne partage pas de flux entre fenêtres, la fenêtre relit le flux local.
+      if (url) void nativePopOut(url, kind === 'screen' ? `Écran de ${label} — ForgeChat` : `${label} — ForgeChat`)
+        .catch(e => toast.error(`Fenêtre impossible : ${String(e)}`))
+      return
+    }
     if (!popOut(userId, kind, label)) toast.error('Fenêtre bloquée : autorisez les fenêtres surgissantes pour ForgeChat.')
   }
 
   const renderTile = (t: StageTile, o: RenderOpts) => {
     const p = peerById.get(t.userId)
     if (!p) return null
-    if (t.kind === 'screen' && t.stream) {
+    if (t.kind === 'screen' && (t.stream || t.url)) {
       return (
-        <ScreenTile stream={t.stream} label={p.username} compact={o.compact}
+        <ScreenTile stream={t.stream} url={t.url} label={p.username} compact={o.compact}
           onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
-          onPopOut={() => detach(p.userId, 'screen', p.username)}
+          onPopOut={() => detach(p.userId, 'screen', p.username, t.url)}
           onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${p.username}` }) : undefined} />
       )
     }
     return (
-      <PeerTile peer={p} stream={t.stream} muted={p.isLocal} compact={o.compact}
+      <PeerTile peer={p} stream={t.stream} videoUrl={t.url} muted={p.isLocal} compact={o.compact}
         isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
         handRaised={raisedHands[p.userId]} blurEnabled={blurBackground}
         connectionLost={(p as { connectionLost?: boolean }).connectionLost === true}
         onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
-        onPopOut={() => detach(p.userId, 'camera', p.username)}
+        onPopOut={() => detach(p.userId, 'camera', p.username, t.url)}
         onExpand={o.expand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
     )
   }
