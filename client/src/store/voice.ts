@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
+import { useAuth } from './auth'
 import api from '../api/client'
 import {
   createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
@@ -421,13 +422,22 @@ export const useVoice = create<VoiceStore>((set, get) => {
           // Comparer au canal EFFECTIF : sur un canal auto-create, le serveur
           // répond pour le canal temporaire, pas pour celui qui a été cliqué.
           if (d.channel_id !== s.channelId) return
+          // La liste du serveur ne contient que les AUTRES : sans s'y ajouter soi-même,
+          // on n'apparaissait pas sous le salon dans sa propre barre latérale.
+          const me = useAuth.getState().user
           set(st => ({
             roomParticipants: {
               ...st.roomParticipants,
-              [d.channel_id]: (d.peers ?? []).map((p: any) => ({
-                userId: p.user_id, username: p.username, avatar: p.avatar,
-                muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
-              })),
+              [d.channel_id]: [
+                ...(me ? [{
+                  userId: me.id, username: me.username, avatar: me.avatar ?? undefined,
+                  muted: st.muted, video: st.videoEnabled, screen: st.screenSharing,
+                }] : []),
+                ...(d.peers ?? []).filter((p: any) => String(p.user_id) !== me?.id).map((p: any) => ({
+                  userId: p.user_id, username: p.username, avatar: p.avatar,
+                  muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
+                })),
+              ],
             },
           }))
           // Réponse à un re-VOICE_JOIN (reconnexion WS) : retirer ceux partis entre-temps.
