@@ -15,6 +15,21 @@ const TRAY_FRAME_COUNT: usize = 8;
 #[cfg(not(target_os = "linux"))]
 const TRAY_FRAME_INTERVAL_MS: u64 = 225;
 
+/// Frames embarquées dans le binaire : le portable est un fichier unique, des
+/// ressources posées à côté de l'exe n'y existent pas (icône figée avant).
+#[cfg(not(target_os = "linux"))]
+const TRAY_FRAMES: [&[u8]; TRAY_FRAME_COUNT] = [
+    include_bytes!("../icons/tray-frames/f0.png"),
+    include_bytes!("../icons/tray-frames/f1.png"),
+    include_bytes!("../icons/tray-frames/f2.png"),
+    include_bytes!("../icons/tray-frames/f3.png"),
+    include_bytes!("../icons/tray-frames/f4.png"),
+    include_bytes!("../icons/tray-frames/f5.png"),
+    include_bytes!("../icons/tray-frames/f6.png"),
+    include_bytes!("../icons/tray-frames/f7.png"),
+];
+
+
 /// L'exe portable ne passe par aucun installeur : si le WebView2 Runtime n'est
 /// pas déjà présent sur la machine, Tauri ne peut pas peupler la fenêtre
 /// (fenêtre native visible mais grise, sans le moindre message d'erreur).
@@ -120,14 +135,9 @@ mod webview2_check {
 /// détail cosmétique : désactivé sur Linux plutôt que retenté une 3e fois.
 #[cfg(not(target_os = "linux"))]
 fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let resource_dir = app.path().resource_dir()?;
-    let frames_dir = resource_dir.join("icons").join("tray-frames");
-
     let mut frames = Vec::with_capacity(TRAY_FRAME_COUNT);
-    for i in 0..TRAY_FRAME_COUNT {
-        let path = frames_dir.join(format!("f{i}.png"));
-        let bytes = std::fs::read(&path).map_err(tauri::Error::Io)?;
-        frames.push(tauri::image::Image::from_bytes(&bytes)?.to_owned());
+    for bytes in TRAY_FRAMES {
+        frames.push(tauri::image::Image::from_bytes(bytes)?.to_owned());
     }
 
     let app_handle = app.clone();
@@ -257,7 +267,33 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Purge le service worker que les versions <= 3.24.0 enregistraient sous
+/// http://tauri.localhost. Sous WebView2, les fetch() émis par un service
+/// worker ne sont pas routés vers le protocole Tauri : dès le 2e lancement,
+/// /assets/* échouait et la fenêtre restait vide. Le front n'enregistre plus
+/// de SW dans l'application bureau, mais un profil existant en garde un, et
+/// le bundle React ne démarre jamais assez loin pour le désinscrire lui-même.
+/// À faire AVANT la création du webview (le profil n'est pas encore ouvert).
+#[cfg(windows)]
+fn purger_service_worker_webview2() {
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else { return };
+    let dir = std::path::PathBuf::from(local)
+        .join("org.heiphaistos.forgechat")
+        .join("EBWebView")
+        .join("Default")
+        .join("Service Worker");
+    if dir.is_dir() {
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => eprintln!("[ForgeChat] Service worker WebView2 hérité purgé"),
+            Err(e) => eprintln!("[ForgeChat] Purge du service worker impossible : {e}"),
+        }
+    }
+}
+
 pub fn run() {
+    #[cfg(windows)]
+    purger_service_worker_webview2();
+
     #[cfg(windows)]
     if webview2_check::runtime_missing() {
         webview2_check::show_missing_dialog();

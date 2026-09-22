@@ -5,6 +5,9 @@ import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 
+// Dans l'application bureau, « / » redirige vers /login : le lien bouclerait sur lui-même.
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -139,9 +142,11 @@ export default function LoginPage() {
                 Contacter l'administrateur
               </a>
             </p>
-            <p className="text-center mt-3">
-              <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
-            </p>
+            {!isTauri && (
+              <p className="text-center mt-3">
+                <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
+              </p>
+            )}
             <p className="text-center mt-2">
               <a
                 href="https://heiphaistos.org/legal/" target="_blank" rel="noopener noreferrer"

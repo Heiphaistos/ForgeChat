@@ -15,11 +15,25 @@ export const queryClient = new QueryClient({
 })
 
 // Service worker : cache-first des assets hashés (chargements suivants instantanés)
-// — prod uniquement pour ne pas gêner le HMR de dev
+// — prod uniquement pour ne pas gêner le HMR de dev.
+//
+// JAMAIS dans l'application bureau : sous WebView2 (origine http://tauri.localhost)
+// les fetch() émis depuis un service worker ne passent pas par le protocole Tauri.
+// Au 2e lancement le SW interceptait /assets/*, échouait, et la fenêtre restait
+// vide (bug « fenêtre noire » des 3.22.0 et 3.24.0). On désinscrit aussi un SW
+// éventuellement laissé par une version précédente.
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
-  })
+  if (isTauri) {
+    navigator.serviceWorker.getRegistrations()
+      .then(regs => Promise.all(regs.map(r => r.unregister())))
+      .then(() => caches?.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))))
+      .catch(() => {})
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    })
+  }
 }
 
 initFaviconAnimation()
