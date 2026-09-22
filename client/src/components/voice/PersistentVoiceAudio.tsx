@@ -1,6 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
 import { Volume2 } from 'lucide-react'
 import { useVoice } from '../../store/voice'
+import { getAudioContext } from '../../lib/audio'
+
+/**
+ * Volume au-delà de 100 % (le curseur monte à 200 %, comme Discord).
+ * `HTMLMediaElement.volume` refuse toute valeur > 1 (IndexSizeError, levée en
+ * plein rendu) : on amplifie par un GainNode et l'élément <audio> joue le flux
+ * amplifié, ce qui garde setSinkId (choix de la sortie).
+ * Un <audio> muet reste branché sur le flux d'origine : sans lui, Chrome ne fait
+ * pas circuler l'audio WebRTC distant dans WebAudio.
+ */
+const _boosted = new WeakMap<MediaStream, { out: MediaStream; gain: GainNode; keepAlive: HTMLAudioElement }>()
+
+function playable(stream: MediaStream, volume: number): { stream: MediaStream; elementVolume: number } {
+  if (volume <= 1) return { stream, elementVolume: Math.max(0, volume) }
+  let b = _boosted.get(stream)
+  if (!b) {
+    const ctx = getAudioContext()
+    const gain = ctx.createGain()
+    const dst = ctx.createMediaStreamDestination()
+    ctx.createMediaStreamSource(stream).connect(gain).connect(dst)
+    const keepAlive = new Audio()
+    keepAlive.muted = true
+    keepAlive.srcObject = stream
+    void keepAlive.play().catch(() => {})
+    b = { out: dst.stream, gain, keepAlive }
+    _boosted.set(stream, b)
+  }
+  b.gain.gain.value = Math.min(volume, 2)
+  return { stream: b.out, elementVolume: 1 }
+}
 
 /**
  * Lecture audio des pairs en salon vocal — montée une seule fois, hors de
@@ -35,8 +65,9 @@ export default function PersistentVoiceAudio() {
   const attach = (el: HTMLAudioElement | null, stream: MediaStream, volume: number) => {
     if (!el) return
     elementsRef.current.add(el)
-    if (el.srcObject !== stream) el.srcObject = stream
-    el.volume = deafened ? 0 : volume
+    const out = playable(stream, volume)
+    if (el.srcObject !== out.stream) el.srcObject = out.stream
+    el.volume = deafened ? 0 : out.elementVolume
     const savedOut = localStorage.getItem('fc_audio_output')
     // setSinkId n'est ré-appelé que si le périphérique a changé : dans une ref
     // callback, il repartait à chaque render (une promesse par rendu).

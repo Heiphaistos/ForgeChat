@@ -1,6 +1,25 @@
 #[cfg(not(target_os = "linux"))]
 use std::time::Duration;
 
+/// Voir `FORGECHAT_SELFTEST=popout` dans `setup`.
+const POPOUT_SELFTEST_JS: &str = r#"
+window.addEventListener('load', () => {
+  if (window.opener) return;
+  setTimeout(() => {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+    const g = c.getContext('2d'); let n = 0;
+    setInterval(() => { g.fillStyle = `hsl(${(n++ * 7) % 360},80%,50%)`; g.fillRect(0, 0, 320, 180); }, 40);
+    const stream = c.captureStream(25);
+    const w = window.open('', 'fc-selftest', 'popup,width=400,height=260');
+    if (!w) { document.title = 'SELFTEST BLOQUE'; return; }
+    w.document.title = 'SELFTEST ATTENTE';
+    const v = w.document.createElement('video'); v.muted = true; v.autoplay = true;
+    w.document.body.appendChild(v); v.srcObject = stream; v.play().catch(() => {});
+    setTimeout(() => { w.document.title = 'SELFTEST ' + v.videoWidth + 'x' + v.videoHeight + ' paused=' + v.paused; }, 3000);
+  }, 2000);
+});
+"#;
+
 /// Mise à jour automatique (version installée ET version portable).
 pub mod updater;
 
@@ -382,6 +401,38 @@ pub fn run() {
 
     builder
         .setup(|app| {
+            // Fenêtre principale créée ici (et non par tauri.conf.json, `create: false`)
+            // pour lui attacher un gestionnaire de nouvelles fenêtres. Sans lui, wry
+            // refuse tout `window.open` sous WebView2 : impossible de détacher un
+            // stream ou une caméra dans sa propre fenêtre.
+            // Seules les fenêtres détachées, ouvertes vides (`about:blank`) sur la même
+            // origine, sont autorisées : elles partagent alors les flux vidéo de la
+            // fenêtre principale. Tout autre `window.open` reste refusé.
+            let main_cfg = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == "main")
+                .cloned()
+                .ok_or("fenêtre 'main' absente de tauri.conf.json")?;
+            let mut main_builder = tauri::WebviewWindowBuilder::from_config(app, &main_cfg)?;
+            // Auto-test des fenêtres détachées (harnais uniquement) : ouvre une fenêtre
+            // vide, y lit un flux vidéo de la fenêtre principale, et écrit le résultat
+            // dans son titre, lisible par l'outil de capture sans toucher à l'écran.
+            if std::env::var("FORGECHAT_SELFTEST").as_deref() == Ok("popout") {
+                main_builder = main_builder.initialization_script(POPOUT_SELFTEST_JS);
+            }
+            main_builder
+                .on_new_window(|url, _features| {
+                    if url.as_str() == "about:blank" {
+                        tauri::webview::NewWindowResponse::Allow
+                    } else {
+                        tauri::webview::NewWindowResponse::Deny
+                    }
+                })
+                .build()?;
+
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();

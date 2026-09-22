@@ -3,7 +3,7 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  LayoutTemplate, Layout, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
+  Layout, Sparkles, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
   Focus, GalleryHorizontal,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -21,9 +21,11 @@ import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
 import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
+import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
+import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../components/voice/CallStage'
+import { popOut } from '../lib/popout'
 import { MobileContext } from '../contexts/MobileContext'
 
-type ViewMode = 'grid' | 'spotlight' | 'sidebar' | 'presentation' | 'focus' | 'filmstrip'
 
 interface Props {
   channel: { id: string; name: string; type: string }
@@ -67,124 +69,6 @@ function CallQualityIndicator() {
       {view.icon}{view.label && <span>{view.label}</span>}
     </div>
   )
-}
-
-// ─── Peer Tile ─────────────────────────────────────────────────────────────────
-function PeerTile({
-  peer, stream, muted = false, isLocal = false, speaking = false,
-  handRaised = false, blurEnabled = false, onExpand, onVolume, connectionLost = false,
-}: {
-  peer: { username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
-  stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
-  handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void; onVolume?: () => void
-  connectionLost?: boolean
-}) {
-  const hasVideo = peer.videoEnabled && stream && stream.getVideoTracks().some(t => t.readyState === 'live')
-
-  // Ref callback plutôt qu'useEffect([stream]) : quand la vidéo arrive en cours d'appel
-  // (caméra/partage d'écran), la référence du stream ne change pas — un effet ne se
-  // rejouerait pas au montage tardif du <video> et le flux ne serait jamais attaché.
-  const attachStream = (el: HTMLVideoElement | null) => {
-    if (el && stream && el.srcObject !== stream) el.srcObject = stream
-  }
-
-  // L'audio des pairs distants ne passe pas par ce <video> (toujours muted pour eux,
-  // affichage uniquement) : il est joué par des <audio> natifs dédiés dans
-  // PersistentVoiceAudio.tsx, montés indépendamment de cette page — sinon le son
-  // coupait dès qu'on quittait le canal (Paramètres, autre salon...) même si l'appel
-  // restait connecté.
-  return (
-    <div className={`relative rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center aspect-video transition-all
-      ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
-      ${isLocal ? 'ring-fc-accent/50' : ''}`}>
-      {hasVideo ? (
-        <video ref={attachStream} autoPlay playsInline
-          muted={isLocal ? muted : true}
-          className="w-full h-full object-cover"
-          style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
-      ) : (
-        <div className="flex flex-col items-center gap-2">
-          {peer.avatar
-            ? <img src={peer.avatar} alt="" loading="lazy" decoding="async" className="w-16 h-16 rounded-full object-cover border-2 border-fc-accent/50" />
-            : <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white">
-                {peer.username.charAt(0).toUpperCase()}
-              </div>}
-        </div>
-      )}
-
-      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
-        <div className="flex items-center gap-1">
-          {peer.muted ? <MicOff size={11} className="text-fc-red" /> : null}
-          {peer.screenSharing ? <Monitor size={11} className="text-fc-green" /> : null}
-          <span className="text-xs text-white truncate max-w-[100px]">{isLocal ? `${peer.username} (Vous)` : peer.username}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {onVolume && (
-            <button onClick={onVolume} aria-label={`Régler le volume de ${peer.username}`} title="Volume" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-              <Volume2 size={11} aria-hidden />
-            </button>
-          )}
-          {onExpand && hasVideo && (
-            <button onClick={onExpand} aria-label="Agrandir la vidéo" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-              <Maximize2 size={11} aria-hidden />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {isLocal && <div className="absolute top-2 left-2 bg-fc-accent/90 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Vous</div>}
-      {connectionLost && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-fc-yellow/90 text-black text-[10px] px-2 py-0.5 rounded-full font-semibold">
-          Reconnexion...
-        </div>
-      )}
-      {handRaised && (
-        <div className="absolute top-2 right-2 bg-fc-yellow/90 text-white text-xs px-1.5 py-0.5 rounded-full animate-bounce">✋</div>
-      )}
-    </div>
-  )
-}
-
-// ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
-function ScreenTile({ stream, label, onExpand, onVolume }: { stream: MediaStream; label: string; onExpand?: () => void; onVolume?: () => void }) {
-  const attachStream = (el: HTMLVideoElement | null) => {
-    if (el && el.srcObject !== stream) el.srcObject = stream
-  }
-  return (
-    <div className="relative rounded-xl overflow-hidden bg-black flex items-center justify-center aspect-video ring-1 ring-fc-green/40">
-      {/* muted : le son du partage est joué par PersistentVoiceAudio, avec son
-          propre réglage de volume, distinct de celui de la voix du pair. */}
-      <video ref={attachStream} autoPlay playsInline muted className="w-full h-full object-contain" />
-      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
-        <div className="flex items-center gap-1">
-          <Monitor size={11} className="text-fc-green" />
-          <span className="text-xs text-white truncate max-w-[140px]">Écran de {label}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {onVolume && (
-            <button onClick={onVolume} aria-label={`Volume du partage de ${label}`} title="Volume du partage" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-              <Volume2 size={11} aria-hidden />
-            </button>
-          )}
-          {onExpand && (
-            <button onClick={onExpand} aria-label="Agrandir l'écran partagé" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
-              <Maximize2 size={11} aria-hidden />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Grid Layout ──────────────────────────────────────────────────────────────
-function getGridClass(n: number) {
-  if (n <= 1) return 'grid-cols-1'
-  if (n <= 2) return 'grid-cols-2'
-  if (n <= 4) return 'grid-cols-2'
-  if (n <= 6) return 'grid-cols-3'
-  if (n <= 9) return 'grid-cols-3'
-  return 'grid-cols-4'
 }
 
 // ─── Fullscreen ───────────────────────────────────────────────────────────────
@@ -324,7 +208,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const isInThisChannel = joined && activeChannelId === channel.id
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  // Auto : galerie, et bascule d'elle-même en « stream en grand » dès qu'un écran est partagé.
+  const [viewMode, setViewMode] = useState<ViewMode>('auto')
   const [spotlightTileKey, setSpotlightTileKey] = useState<string | null>(null)
   const [fullscreenStream, setFullscreenStream] = useState<{ stream: MediaStream; label: string } | null>(null)
   const [handRaised, setHandRaised] = useState(false)
@@ -471,24 +356,35 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     totalSpeakingMs: speakingMsRef.current[p.userId] ?? 0,
   }))
 
-  const spotlightTile = allTiles.find(t => t.key === spotlightTileKey) ?? allTiles[0]
+  const peerById = new Map(allPeers.map(p => [p.userId, p]))
+  const stageTiles: StageTile[] = allTiles.map(t => ({
+    key: t.key, kind: t.kind, userId: t.peer.userId, username: t.peer.username, isLocal: t.peer.isLocal, stream: t.stream,
+  }))
+  const activeSpeakerId = allPeers.find(p => !p.isLocal && (speakingMap[p.userId] ?? 0) > 0.05)?.userId ?? null
 
-  const renderTile = (t: Tile, onExpand?: boolean) => {
+  const detach = (userId: string, kind: 'camera' | 'screen', label: string) => {
+    if (!popOut(userId, kind, label)) toast.error('Fenêtre bloquée : autorisez les fenêtres surgissantes pour ForgeChat.')
+  }
+
+  const renderTile = (t: StageTile, o: RenderOpts) => {
+    const p = peerById.get(t.userId)
+    if (!p) return null
     if (t.kind === 'screen' && t.stream) {
       return (
-        <ScreenTile stream={t.stream} label={t.peer.username}
-          onVolume={t.peer.isLocal ? undefined : () => setVolumeTarget({ userId: t.peer.userId, username: t.peer.username, kind: 'screen' })}
-          onExpand={onExpand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${t.peer.username}` }) : undefined} />
+        <ScreenTile stream={t.stream} label={p.username} compact={o.compact}
+          onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
+          onPopOut={() => detach(p.userId, 'screen', p.username)}
+          onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${p.username}` }) : undefined} />
       )
     }
-    const p = t.peer
     return (
-      <PeerTile peer={p} stream={t.stream} muted={p.isLocal}
+      <PeerTile peer={p} stream={t.stream} muted={p.isLocal} compact={o.compact}
         isLocal={p.isLocal} speaking={(speakingMap[p.userId] ?? 0) > 0.05}
         handRaised={raisedHands[p.userId]} blurEnabled={blurBackground}
-        connectionLost={(p as any).connectionLost === true}
+        connectionLost={(p as { connectionLost?: boolean }).connectionLost === true}
         onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
-        onExpand={onExpand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
+        onPopOut={() => detach(p.userId, 'camera', p.username)}
+        onExpand={o.expand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
     )
   }
 
@@ -506,10 +402,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         {/* View mode switcher — masqué sur mobile */}
         <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1" role="group" aria-label="Disposition d'affichage">
           {([
+            { mode: 'auto' as ViewMode, icon: <Sparkles size={14} />, label: 'Auto (le stream passe en grand)' },
             { mode: 'grid' as ViewMode, icon: <Grid2x2 size={14} />, label: 'Grille' },
             { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'Spotlight' },
             { mode: 'sidebar' as ViewMode, icon: <Layout size={14} />, label: 'Barre latérale' },
-            { mode: 'presentation' as ViewMode, icon: <LayoutTemplate size={14} />, label: 'Présentation' },
             { mode: 'focus' as ViewMode, icon: <Focus size={14} />, label: 'Focus (suit l\'orateur)' },
             { mode: 'filmstrip' as ViewMode, icon: <GalleryHorizontal size={14} />, label: 'Bandeau' },
           ] as const).map(({ mode, icon, label }) => (
@@ -535,124 +431,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
       {/* Main area */}
       <div className="flex-1 overflow-hidden relative">
-        {/* Grid view */}
-        {viewMode === 'grid' && (
-          <div className={`grid ${getGridClass(allTiles.length)} gap-2 p-3 h-full auto-rows-fr`}>
-            {allTiles.map(t => (
-              <div key={t.key} className="contents">{renderTile(t, true)}</div>
-            ))}
-          </div>
-        )}
-
-        {/* Spotlight view */}
-        {viewMode === 'spotlight' && (
-          <div className="flex flex-col h-full p-3 gap-3">
-            <div className="flex-1 rounded-xl overflow-hidden">
-              {renderTile(spotlightTile)}
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {allTiles.filter(t => t.key !== spotlightTile.key).map(t => (
-                <div
-                  key={t.key}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Mettre en avant ${t.peer.username}${t.kind === 'screen' ? ' (écran partagé)' : ''}`}
-                  className="w-32 flex-shrink-0 cursor-pointer"
-                  onClick={() => setSpotlightTileKey(t.key)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSpotlightTileKey(t.key) } }}
-                >
-                  {renderTile(t)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sidebar view */}
-        {viewMode === 'sidebar' && (
-          <div className="flex h-full">
-            <div className="flex-1 p-3">
-              {renderTile(spotlightTile)}
-            </div>
-            <div className="w-48 flex flex-col gap-2 p-2 overflow-y-auto overscroll-contain border-l border-fc-hover bg-fc-sidebar/50">
-              {allTiles.map(t => (
-                <div
-                  key={t.key}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Mettre en avant ${t.peer.username}${t.kind === 'screen' ? ' (écran partagé)' : ''}`}
-                  className="cursor-pointer"
-                  onClick={() => setSpotlightTileKey(t.key)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSpotlightTileKey(t.key) } }}
-                >
-                  {renderTile(t)}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Presentation view: écran partagé en grand, caméras en bandeau */}
-        {viewMode === 'presentation' && (() => {
-          const screenTile = allTiles.find(t => t.kind === 'screen')
-          const presenter = screenTile ?? spotlightTile
-          return (
-            <div className="flex flex-col h-full p-3 gap-3">
-              <div className="flex-1 flex items-center justify-center bg-black rounded-xl overflow-hidden">
-                {presenter.stream
-                  // muted inconditionnel : l'audio de TOUS les participants passe par
-                  // PersistentVoiceAudio (volumes par utilisateur, duck priority speaker).
-                  ? <video autoPlay playsInline muted
-                      ref={el => { if (el && presenter.stream && el.srcObject !== presenter.stream) el.srcObject = presenter.stream }}
-                      className="max-h-full max-w-full object-contain" />
-                  : <div className="text-fc-muted text-sm">Aucun partage d'écran actif</div>}
-              </div>
-              <div className="flex gap-2 overflow-x-auto">
-                {allTiles.filter(t => t.kind === 'camera').map(t => (
-                  <div key={t.key} className="w-28 flex-shrink-0">
-                    {renderTile(t)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Focus view: suit automatiquement l'écran partagé ou l'orateur actif, soi-même en PiP */}
-        {viewMode === 'focus' && (() => {
-          const screenTile = allTiles.find(t => t.kind === 'screen')
-          const activeSpeakerTile = allTiles.find(t => t.kind === 'camera' && !t.peer.isLocal && (speakingMap[t.peer.userId] ?? 0) > 0.05)
-          const focusTile = screenTile ?? activeSpeakerTile ?? spotlightTile
-          // PiP : d'abord la caméra du MÊME pair que la cible du focus (ex: A partage écran+caméra,
-          // le focus prend l'écran de A — sans ça la caméra de A disparaissait entièrement, elle
-          // n'était affichée nulle part). Sinon repli sur sa propre caméra locale pour se voir.
-          const companionCamTile = allTiles.find(t => t.kind === 'camera' && t.peer.userId === focusTile.peer.userId && t.key !== focusTile.key)
-          const localCamTile = allTiles.find(t => t.kind === 'camera' && t.peer.isLocal)
-          const pipTile = companionCamTile ?? (localCamTile && localCamTile.key !== focusTile.key ? localCamTile : undefined)
-          return (
-            <div className="relative h-full p-3">
-              <div className="w-full h-full rounded-xl overflow-hidden">
-                {renderTile(focusTile)}
-              </div>
-              {pipTile && (
-                <div className="absolute bottom-4 right-4 w-40 aspect-video shadow-xl rounded-lg overflow-hidden ring-2 ring-black/40">
-                  {renderTile(pipTile)}
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* Filmstrip view: bandeau unique défilant horizontal, tuiles taille fixe */}
-        {viewMode === 'filmstrip' && (
-          <div className="flex gap-2 p-3 h-full overflow-x-auto overscroll-contain">
-            {allTiles.map(t => (
-              <div key={t.key} className="h-full aspect-video flex-shrink-0">
-                {renderTile(t, true)}
-              </div>
-            ))}
-          </div>
-        )}
+        <CallStage tiles={stageTiles} mode={viewMode} featuredKey={spotlightTileKey}
+          onFeature={setSpotlightTileKey} render={renderTile} activeSpeakerId={activeSpeakerId} />
 
         {/* Captions overlay */}
         {showCaptions && captions.length > 0 && (
