@@ -15,12 +15,13 @@ import Logo3D from '../components/Logo3D'
 // plus rester sur une vieille version (elle affichait encore 3.22.0 en 3.25.0).
 // Le repli ne sert que si l'API est injoignable.
 type Artefact = { url: string; size?: number }
-type Release = { version: string; platforms: Record<string, Artefact> }
+type Release = { version: string; pub_date?: string; platforms: Record<string, Artefact> }
 
 const FALLBACK_VERSION = '3.25.0'
 const DL_BASE = 'https://forgechat.heiphaistos.org/desktop'
 const FALLBACK: Release = {
   version: FALLBACK_VERSION,
+  pub_date: '2026-09-22T19:49:00Z',
   platforms: {
     'windows-portable': { url: `${DL_BASE}/ForgeChat-Portable-v${FALLBACK_VERSION}.exe` },
     'windows-x86_64':   { url: `${DL_BASE}/ForgeChat-Setup-v${FALLBACK_VERSION}.exe` },
@@ -37,13 +38,21 @@ function useRelease(): Release {
       .then(r => (r.ok && r.status !== 204 ? r.json() : null))
       .then((d: Release | null) => {
         if (!cancelled && d?.version && d.platforms) {
-          setRelease({ version: d.version, platforms: { ...FALLBACK.platforms, ...d.platforms } })
+          setRelease({ version: d.version, pub_date: d.pub_date, platforms: { ...FALLBACK.platforms, ...d.platforms } })
         }
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
   return release
+}
+
+/** « 22 septembre 2026 », heure de Paris ; null si la date est absente ou illisible. */
+function dateMaj(iso?: string): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' })
 }
 
 const taille = (a: Artefact) => (a.size ? ` · ${Math.round(a.size / 1_048_576)} Mo` : '')
@@ -190,6 +199,7 @@ export default function LandingPage() {
   const setup = release.platforms['windows-x86_64']
   const deb = release.platforms['linux-x86_64']
   const appimage = release.platforms['linux-portable']
+  const majLe = dateMaj(release.pub_date)
   useEffect(() => {
     // Classe sur <html> : html ET body sont en overflow:hidden globalement (app chat),
     // et libérer body seul ne débloque pas le défilement tactile mobile
@@ -334,6 +344,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
+          {majLe && <p className="text-xs text-white/40 text-center">Mis à jour le {majLe}</p>}
         </div>
       </section>
 
@@ -371,6 +382,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
+          {majLe && <p className="text-xs text-white/40 text-center">Mis à jour le {majLe}</p>}
         </div>
       </section>
 
