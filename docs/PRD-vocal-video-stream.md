@@ -516,3 +516,24 @@ Les empreintes SHA-256 servies par l'API correspondent aux fichiers réellement 
 3. **Lot 6 (SFU)** toujours ouvert : le mesh reste plafonné à ~6 caméras, désormais avec plafond de débit et dégradation automatique.
 4. `xdg-desktop-portal` n'est pas déclaré en dépendance du `.deb` ; Wayland ne permet pas le raccourci global de push-to-talk.
 5. Le remote **Forgejo** n'a pas pu être réparé depuis cette session (écriture d'un jeton refusée par le garde-fou) : le dépôt de référence est GitHub, le VPS y tire directement.
+
+### Scénarios restants joués (2026-09-22, 06 h)
+
+| Scénario | Mesure |
+|---|---|
+| **T4** — le stream survit à la navigation | ✅ partage toujours actif après passage aux Réglages, le pair voit toujours le 1920×1080 |
+| **T9** — coupure réseau de 10 s | ✅ les deux connexions repassent `connected/connected` **2 s** après le retour en ligne |
+| **T10** — redémarrage du serveur **en plein appel** (`docker compose restart server`, pour de vrai) | ✅ re-synchronisés en **2 s**, `GET /api/voice/state` revoit les 2 participants |
+| **T11** — deux onglets du même compte | ✅ le 2e onglet ne casse pas le 1er, et quitter depuis le 2e n'éjecte plus le 1er |
+| **T16** — healthcheck TURN | ✅ sur les 4 branches : joignable → 0 ; port mort → `exit 1` ; `TURN_URL` sans credential → `exit 1` ; TURN absent → avertissement non bloquant |
+| **T5**, **T14** | ❌ non joués : ils exigent une fenêtre réelle (PiP quand l'application est réduite, push-to-talk sans focus). À éprouver à la main sur l'application de bureau. |
+
+**Le garde-fou de la mise à jour est désormais prouvé, plus seulement affirmé.** 12 tests dans `desktop/src-tauri/src/updater.rs`, dont un test réseau (`cargo test --lib -- --ignored --nocapture`) qui télécharge l'artefact réellement publié, confirme son empreinte, puis **retourne un seul octet et constate le refus**, message à l'appui. Sont couverts aussi : artefact publié sans empreinte → refusé ; `3.9.0 < 3.24.0` (piège lexicographique) ; dix versions malformées sans panique.
+
+Deux limites à connaître : le champ `size` du manifeste n'est jamais lu (seuls `TAILLE_MAX` et le SHA-256 bornent), et l'empreinte prouve l'**intégrité**, pas l'**authenticité** — un serveur compromis réécrirait l'empreinte en même temps que le binaire. La signature minisign hors-ligne reste le seul remède, son chemin est documenté dans `updater.rs`.
+
+Les artefacts des quatre cibles ont été **reconstruits et republiés** après ce travail, pour que les empreintes servies correspondent exactement au code source. Le `.deb` recommande désormais `xdg-desktop-portal` et `xdg-desktop-portal-gtk`, dont la capture d'écran Linux a besoin à l'exécution, sans en faire une dépendance dure qui casserait les installations dont le backend diffère.
+
+**Suite complète au vert** : late-joiner, glare, camscreen, screenshare-audio, dmcall, navpersist, resilience — 7 harnais sur 7.
+
+Trois assertions ont dû être corrigées parce qu'elles mesuraient autre chose que ce qu'elles annonçaient : un `page.goto` recharge toute la page d'une application monopage et tue l'appel de toute façon (naviguer par clic) ; `MediaStreamTrack.muted` rapporte « muet » sur une piste distante alimentée par une chaîne WebAudio alors que le signal arrive à plein niveau, donc c'est le niveau mesuré qui fait foi ; et RNNoise supprime la tonalité du micro factice de Chromium, ce qui est le comportement voulu.
