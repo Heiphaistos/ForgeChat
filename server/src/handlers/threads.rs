@@ -58,7 +58,7 @@ pub async fn list_threads(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let threads = sqlx::query(
-        "SELECT t.*, u.username as creator_username, u.avatar as creator_avatar
+        "SELECT t.*, COALESCE(t.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(t.webhook_avatar_url, u.avatar), '') as creator_avatar
          FROM threads t
          JOIN users u ON u.id = t.creator_id
          WHERE t.channel_id = $1
@@ -172,7 +172,7 @@ pub async fn get_thread_messages(
     if !thread_ok { return Err(AppError::NotFound("Thread introuvable".into())); }
 
     let rows = sqlx::query(
-        "SELECT tm.*, u.username, u.avatar, u.discriminator
+        "SELECT tm.*, COALESCE(tm.webhook_display_name, u.username) AS username, NULLIF(COALESCE(tm.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator
          FROM thread_messages tm
          JOIN users u ON u.id = tm.user_id
          WHERE tm.thread_id = $1

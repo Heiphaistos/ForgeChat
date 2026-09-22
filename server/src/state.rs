@@ -413,6 +413,16 @@ impl AppState {
         .collect()
     }
 
+    /// Voir [`hidden_channels`].
+    pub async fn hidden_channels(
+        &self,
+        user_id: Uuid,
+        server_id: Option<Uuid>,
+        channel_id: Option<Uuid>,
+    ) -> sqlx::Result<HashSet<Uuid>> {
+        hidden_channels(&self.db, user_id, server_id, channel_id).await
+    }
+
     // Rejoindre un salon vocal — retourne les user_ids déjà présents
     /// Rejoindre un salon vocal. Retourne `None` si la limite est atteinte.
     pub async fn voice_join(&self, user_id: Uuid, channel_id: Uuid, max_users: Option<usize>) -> Option<Vec<Uuid>> {
@@ -530,6 +540,97 @@ impl AppState {
     }
 
 }
+
+/// Canaux que `user_id` ne peut PAS voir, parmi les serveurs dont il est
+/// membre (filtrés par `server_id` / `channel_id` si fournis).
+///
+/// Seul un override de canal qui refuse explicitement `VIEW_CHANNEL` peut
+/// masquer un canal : la base (rôles + @everyone) est considérée comme ayant
+/// `VIEW_CHANNEL`, parce que ForgeChat ne l'a jamais exigé jusqu'ici et que
+/// des serveurs existants ont un @everyone sans ce bit. Un salon privé
+/// (importé de Discord : deny @everyone + allow rôle) reste donc privé sans
+/// verrouiller les serveurs existants.
+pub async fn hidden_channels(
+    db: &PgPool,
+    user_id: Uuid,
+    server_id: Option<Uuid>,
+    channel_id: Option<Uuid>,
+) -> sqlx::Result<HashSet<Uuid>> {
+    use sqlx::Row;
+    let view = crate::models::role::Permissions::VIEW_CHANNEL;
+    let rows = sqlx::query(
+        "SELECT c.server_id, cp.channel_id, cp.target_id, cp.target_type, cp.allow, cp.deny
+         FROM channel_permissions cp
+         JOIN channels c ON c.id = cp.channel_id
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1
+         WHERE ($2::uuid IS NULL OR c.server_id = $2)
+           AND ($3::uuid IS NULL OR c.id = $3)
+           AND EXISTS (SELECT 1 FROM channel_permissions d WHERE d.channel_id = c.id AND d.deny & $4 <> 0)"
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .bind(channel_id)
+    .bind(view)
+    .fetch_all(db)
+    .await?;
+    let mut hidden = HashSet::new();
+    if rows.is_empty() { return Ok(hidden); }
+
+    type Overrides = Vec<(Uuid, String, i64, i64)>;
+    let mut by_server: HashMap<Uuid, HashMap<Uuid, Overrides>> = HashMap::new();
+    for r in &rows {
+        by_server
+            .entry(r.get("server_id")).or_default()
+            .entry(r.get("channel_id")).or_default()
+            .push((r.get("target_id"), r.get("target_type"), r.get("allow"), r.get("deny")));
+    }
+
+    for (sid, channels) in by_server {
+        let base = sqlx::query(
+            "SELECT sm.is_owner,
+                    COALESCE(BIT_OR(r.permissions), 0)
+                    | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
+                    AS combined_perms
+             FROM server_members sm
+             LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+             LEFT JOIN roles r ON r.id = mr.role_id
+             WHERE sm.user_id = $1 AND sm.server_id = $2
+             GROUP BY sm.is_owner"
+        )
+        .bind(user_id)
+        .bind(sid)
+        .fetch_one(db)
+        .await?;
+        let my_roles: HashSet<Uuid> = sqlx::query_scalar::<_, Uuid>(
+            "SELECT role_id FROM member_roles WHERE server_id=$1 AND user_id=$2"
+        )
+        .bind(sid)
+        .bind(user_id)
+        .fetch_all(db)
+        .await?
+        .into_iter()
+        .collect();
+        let everyone: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM roles WHERE server_id=$1 AND is_everyone=true LIMIT 1"
+        )
+        .bind(sid)
+        .fetch_optional(db)
+        .await?;
+        for (cid, ov) in channels {
+            let perms = apply_channel_overrides(
+                base.get::<i64, _>("combined_perms") | view,
+                base.get::<bool, _>("is_owner"),
+                user_id,
+                Some(&my_roles),
+                everyone,
+                &ov,
+            );
+            if perms & view == 0 { hidden.insert(cid); }
+        }
+    }
+    Ok(hidden)
+}
+
 
 /// Applique les overrides `channel_permissions` sur un masque de base, dans
 /// l'ordre Discord : @everyone, puis les rôles du membre (deny cumulés puis

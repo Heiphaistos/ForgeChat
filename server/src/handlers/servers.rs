@@ -139,7 +139,8 @@ pub async fn get_server(
         .map(|r| r.get::<Uuid, _>("channel_id"))
         .collect();
 
-    let channels_json: Vec<serde_json::Value> = channels.iter().map(|c| {
+    let forbidden = state.hidden_channels(claims.sub, Some(server_id), None).await?;
+    let channels_json: Vec<serde_json::Value> = channels.iter().filter(|c| !forbidden.contains(&c.id)).map(|c| {
         let mut v = serde_json::to_value(c).unwrap_or_default();
         if let serde_json::Value::Object(ref mut m) = v {
             m.insert("hidden".to_string(), serde_json::json!(hidden_ids.contains(&c.id)));
@@ -877,7 +878,14 @@ pub async fn require_member_and_channel(
             "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
         ).bind(channel_id).bind(server_id).fetch_one(&state.db),
     )?;
-    if !member_ok || !channel_ok { Err(AppError::Forbidden) } else { Ok(()) }
+    if !member_ok || !channel_ok { return Err(AppError::Forbidden); }
+    // Un canal masqué par ses overrides (VIEW_CHANNEL refusé) n'était protégé
+    // que dans les diffusions temps réel : l'historique restait lisible par
+    // n'importe quel membre. Tous les accès « canal » passent par ici.
+    if state.hidden_channels(user_id, Some(server_id), Some(channel_id)).await?.contains(&channel_id) {
+        return Err(AppError::Forbidden);
+    }
+    Ok(())
 }
 
 /// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
@@ -1140,7 +1148,7 @@ pub async fn get_admin_stats(
     })))
 }
 
-fn generate_invite_code() -> String {
+pub(crate) fn generate_invite_code() -> String {
     rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(8)

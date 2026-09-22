@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Redis OK");
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
+    handlers::discord_import::recover_interrupted(&state).await;
 
     // Tâche de nettoyage des pièces jointes expirées (toutes les heures)
     let cleanup_state = state.clone();
@@ -480,6 +481,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:id", patch(handlers::servers::update_server))
         .route("/servers/:id", delete(handlers::servers::delete_server))
         .route("/servers/join/:code", post(handlers::servers::join_server))
+        .route("/servers/import-discord", post(handlers::discord_import::start_import))
+        .route("/servers/import-discord/:id", get(handlers::discord_import::get_import))
         .route("/servers/:id/leave", post(handlers::servers::leave_server))
         .route("/servers/:id/members", get(handlers::servers::get_members))
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))

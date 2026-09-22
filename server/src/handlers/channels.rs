@@ -32,7 +32,11 @@ pub async fn get_channels(
     .fetch_all(&state.db)
     .await?;
 
-    let result = rows.iter().map(|r| {
+    let forbidden = state.hidden_channels(claims.sub, Some(server_id), None).await?;
+    let result = rows.iter().filter(|r| {
+        use sqlx::Row;
+        !forbidden.contains(&r.get::<Uuid, _>("id"))
+    }).map(|r| {
         use sqlx::Row;
         serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
@@ -337,10 +341,10 @@ pub async fn get_pinned(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member(&state, claims.sub, server_id).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let pinned = sqlx::query(
-        "SELECT m.*, u.username, u.avatar FROM messages m
+        "SELECT m.*, u.username, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar FROM messages m
          JOIN pinned_messages pm ON pm.message_id = m.id
          JOIN users u ON u.id = m.user_id
          WHERE pm.channel_id=$1

@@ -44,8 +44,8 @@ pub async fn get_messages(
 
         let half = limit / 2;
         let before_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, ru.username as reply_to_username
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
@@ -58,8 +58,8 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, ru.username as reply_to_username
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
@@ -86,8 +86,8 @@ pub async fn get_messages(
         let ts = cursor_ts.ok_or_else(|| AppError::NotFound("Curseur invalide".into()))?;
 
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, ru.username as reply_to_username
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
@@ -100,8 +100,8 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, ru.username as reply_to_username
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to
@@ -690,8 +690,8 @@ pub async fn search_messages(
     let q_esc = q.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     let pattern = format!("%{}%", q_esc);
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, u.avatar, u.is_bot, u.is_verified,
-                rm.content as reply_to_content, ru.username as reply_to_username
+        "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+                rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN messages rm ON rm.id = m.reply_to

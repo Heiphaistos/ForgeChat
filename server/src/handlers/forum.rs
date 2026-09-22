@@ -72,7 +72,7 @@ pub async fn list_posts(
     };
 
     let rows = sqlx::query(&format!(
-        "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
+        "SELECT fp.*, COALESCE(fp.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(fp.webhook_avatar_url, u.avatar), '') as creator_avatar
          FROM forum_posts fp
          JOIN users u ON u.id = fp.creator_id
          WHERE fp.channel_id = $1
@@ -189,7 +189,7 @@ pub async fn get_post(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let post_row = sqlx::query(
-        "SELECT fp.*, u.username as creator_username, u.avatar as creator_avatar
+        "SELECT fp.*, COALESCE(fp.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(fp.webhook_avatar_url, u.avatar), '') as creator_avatar
          FROM forum_posts fp
          JOIN users u ON u.id = fp.creator_id
          WHERE fp.id = $1 AND fp.channel_id = $2"
@@ -201,7 +201,7 @@ pub async fn get_post(
     .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
     let reply_rows = sqlx::query(
-        "SELECT fr.*, u.username, u.avatar, u.discriminator
+        "SELECT fr.*, COALESCE(fr.webhook_display_name, u.username) AS username, NULLIF(COALESCE(fr.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator
          FROM forum_replies fr
          JOIN users u ON u.id = fr.user_id
          WHERE fr.post_id = $1

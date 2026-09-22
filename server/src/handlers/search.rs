@@ -33,7 +33,7 @@ pub async fn global_search(
     let (messages, users, channels) = tokio::try_join!(
         sqlx::query(
             "SELECT m.id, m.content, m.created_at,
-                    COALESCE(m.webhook_display_name, u.username) as author_username, u.avatar as author_avatar,
+                    COALESCE(m.webhook_display_name, u.username) as author_username, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') as author_avatar,
                     c.name as channel_name, c.id as channel_id, c.server_id
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -78,7 +78,11 @@ pub async fn global_search(
         .fetch_all(&state.db),
     )?;
 
-    let messages_json: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
+    // Canaux masqués par leurs overrides (VIEW_CHANNEL refusé) : exclus des résultats
+    let hidden = state.hidden_channels(uid, None, None).await?;
+    let messages_json: Vec<serde_json::Value> = messages.iter()
+        .filter(|r| !hidden.contains(&r.get::<Uuid, _>("channel_id")))
+        .map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
         "content": r.get::<Option<String>, _>("content"),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
@@ -96,7 +100,9 @@ pub async fn global_search(
         "status": r.get::<String, _>("status"),
     })).collect();
 
-    let channels_json: Vec<serde_json::Value> = channels.iter().map(|r| serde_json::json!({
+    let channels_json: Vec<serde_json::Value> = channels.iter()
+        .filter(|r| !hidden.contains(&r.get::<Uuid, _>("id")))
+        .map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
         "name": r.get::<String, _>("name"),
         "type": r.get::<String, _>("channel_type"),

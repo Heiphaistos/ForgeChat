@@ -23,6 +23,12 @@ pub struct Config {
     /// Secret partagé coturn (`static-auth-secret`) pour les credentials éphémères
     /// (TURN REST API). Si présent, il prime sur turn_username/turn_password.
     pub turn_static_auth_secret: Option<String>,
+    /// Origine autorisée des ZIP d'import Discord (anti-SSRF).
+    pub archiveforge_url: String,
+    /// Taille maximale d'un ZIP d'import Discord, en octets.
+    pub discord_import_max_bytes: u64,
+    /// Dossier des ZIP d'import en cours de traitement (hors du dossier servi /uploads).
+    pub discord_import_tmp_dir: String,
 }
 
 impl Config {
@@ -55,6 +61,15 @@ impl Config {
             turn_username: env::var("TURN_USERNAME").ok(),
             turn_password: env::var("TURN_PASSWORD").ok(),
             turn_static_auth_secret: env::var("TURN_STATIC_AUTH_SECRET").ok(),
+            archiveforge_url: env::var("ARCHIVEFORGE_URL")
+                .unwrap_or_else(|_| "https://forgearchive.heiphaistos.org".into()),
+            discord_import_max_bytes: env::var("DISCORD_IMPORT_MAX_BYTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(20 * 1024 * 1024 * 1024),
+            discord_import_tmp_dir: env::var("DISCORD_IMPORT_TMP_DIR").unwrap_or_else(|_| {
+                std::env::temp_dir().join("forgechat-discord-import").to_string_lossy().into_owned()
+            }),
         })
     }
 }

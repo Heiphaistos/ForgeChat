@@ -258,7 +258,7 @@ pub async fn get_user_mentions(
             s.name as server_name,
             u.id as author_id,
             COALESCE(m.webhook_display_name, u.username) as author_username,
-            u.avatar as author_avatar,
+            NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') as author_avatar,
             m.content,
             m.created_at
          FROM messages m
@@ -285,7 +285,10 @@ pub async fn get_user_mentions(
     .fetch_all(&state.db)
     .await?;
 
-    let result: Vec<MentionItem> = rows.into_iter().map(|r| {
+    let hidden = state.hidden_channels(claims.sub, None, None).await?;
+    let result: Vec<MentionItem> = rows.into_iter()
+        .filter(|r| !hidden.contains(&r.get::<Uuid, _>("channel_id")))
+        .map(|r| {
         let created_at: chrono::DateTime<chrono::Utc> = r.get("created_at");
         MentionItem {
             message_id: r.get::<Uuid, _>("message_id").to_string(),

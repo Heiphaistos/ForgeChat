@@ -14,6 +14,17 @@ use crate::{
     state::AppState,
 };
 
+/// Liste blanche d'extensions autorisées (SVG réservé aux admins/mods — XSS via JS inline)
+pub const ALLOWED_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "gif", "webp",
+    "mp4", "webm", "mov", "mkv",
+    "mp3", "ogg", "wav", "flac",
+    "pdf", "txt", "md",
+    "zip", "tar", "gz", "7z", "rar",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "bin",
+];
+
 pub async fn upload_file(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -95,16 +106,6 @@ pub async fn upload_file(
             .unwrap_or("bin")
             .to_lowercase();
 
-        // Liste blanche d'extensions autorisées (SVG réservé aux admins/mods — XSS via JS inline)
-        const ALLOWED_EXTENSIONS: &[&str] = &[
-            "jpg", "jpeg", "png", "gif", "webp",
-            "mp4", "webm", "mov", "mkv",
-            "mp3", "ogg", "wav", "flac",
-            "pdf", "txt", "md",
-            "zip", "tar", "gz", "7z", "rar",
-            "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-            "bin",
-        ];
 
         if !is_privileged && !ALLOWED_EXTENSIONS.contains(&raw_ext.as_str()) {
             return Err(AppError::BadRequest(
