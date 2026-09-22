@@ -24,7 +24,7 @@ const DEFAULTS: Record<string, string> = {
   toggle_deafen: 'Ctrl+D',
   // Un modificateur seul ne peut pas être enregistré comme raccourci global
   // (limite de l'API OS) : le défaut est un vrai combo.
-  push_to_talk: 'Alt+Space',
+  push_to_talk: 'Ctrl+Shift+Space',
   toggle_screen_share: 'Ctrl+Alt+S',
   toggle_camera: 'Ctrl+Shift+C',
 }

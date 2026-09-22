@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org; img-src 'self' https://forgechat.heiphaistos.org data: blob: https:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline' https://forgechat.heiphaistos.org; script-src 'self' https://forgechat.heiphaistos.org; connect-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org https://api.tenor.com; worker-src 'self' blob:; frame-src 'none'"
+      "csp": "default-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org; img-src 'self' https://forgechat.heiphaistos.org data: blob: https:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline' https://forgechat.heiphaistos.org; script-src 'self' 'wasm-unsafe-eval' https://forgechat.heiphaistos.org; connect-src 'self' https://forgechat.heiphaistos.org wss://forgechat.heiphaistos.org https://api.tenor.com; worker-src 'self' blob:; frame-src 'none'"
     }
   },
   "plugins": {

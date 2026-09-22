@@ -157,7 +157,7 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
 /// l'appui/relâchement au front sous forme d'events globaux.
 ///
 /// Contrat côté front :
-/// - `invoke('register_ptt_shortcut', { accelerator: 'Alt+Space' })`
+/// - `invoke('register_ptt_shortcut', { accelerator: 'Control+Shift+Space' })`
 /// - `invoke('unregister_ptt_shortcut')`
 /// - `listen('ptt-down' | 'ptt-up', e => ...)`, `e.payload` = l'accélérateur
 ///   normalisé (ex. `"alt+Space"`).

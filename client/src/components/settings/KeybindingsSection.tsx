@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 const DEFAULT_KEYBINDINGS: { action: string; label: string; default: string }[] = [
   { action: 'toggle_mute', label: 'Activer/désactiver le micro', default: 'Ctrl+M' },
   { action: 'toggle_deafen', label: 'Activer/désactiver le casque', default: 'Ctrl+D' },
-  { action: 'push_to_talk', label: 'Push-to-Talk', default: 'Alt+Space' },
+  { action: 'push_to_talk', label: 'Push-to-Talk', default: 'Ctrl+Shift+Space' },
   { action: 'toggle_screen_share', label: 'Partager l\'écran', default: 'Ctrl+Alt+S' },
   { action: 'focus_chat', label: 'Focus sur le chat', default: 'Ctrl+L' },
   { action: 'search', label: 'Recherche globale', default: 'Ctrl+K' },
