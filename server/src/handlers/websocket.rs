@@ -1539,12 +1539,33 @@ async fn handle_ws_message(
             )
             .bind(to).bind(user_id)
             .execute(&state.db).await;
+            // Accès au SFU pour les deux interlocuteurs, délivré seulement après
+            // la vérification de la conversation privée commune ci-dessus.
+            let room = crate::livekit::room_for_dm(user_id, to);
+            let media = |uid: Uuid, name: &str| state.livekit.as_ref().map(|lk| serde_json::json!({
+                "url": lk.public_url,
+                "room": room,
+                "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
+                    crate::livekit::Publish { microphone: true, camera: true, screen: true }),
+            }));
+            let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+                .bind(to).fetch_optional(&state.db).await.ok().flatten()
+                .unwrap_or_else(|| to.to_string());
             let event = serde_json::json!({
                 "type": "DM_CALL_ACCEPTED",
                 "from": user_id,
                 "dm_id": msg["dm_id"],
+                "livekit": media(to, &caller_name),
             });
             state.broadcast_to_user(to, event.to_string()).await;
+            // Seule la session qui a décroché se connecte (les autres onglets
+            // reçoivent aussi DM_CALL_TAKEN et ferment leur sonnerie).
+            state.broadcast_to_user(user_id, serde_json::json!({
+                "type": "DM_CALL_MEDIA",
+                "dm_id": msg["dm_id"],
+                "session_id": session_id,
+                "livekit": media(user_id, &cached_username),
+            }).to_string()).await;
             notify_call_taken(state, user_id, session_id, &msg["dm_id"], "accepted").await;
         }
 
@@ -1597,6 +1618,16 @@ async fn handle_ws_message(
                 "dm_id": msg["dm_id"],
             });
             state.broadcast_to_user(to, event.to_string()).await;
+            // Fin d'appel : les deux quittent le SFU, même si un client ne le fait pas.
+            if let Some(lk) = state.livekit.clone() {
+                let http = state.http_client.clone();
+                let room = crate::livekit::room_for_dm(user_id, to);
+                tokio::spawn(async move {
+                    for uid in [user_id, to] {
+                        crate::livekit::remove_participant(&http, &lk, &room, &uid.to_string()).await;
+                    }
+                });
+            }
         }
 
         Some("VOICE_REACTION") => {

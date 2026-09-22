@@ -99,6 +99,13 @@ pub fn room_for_channel(channel_id: uuid::Uuid) -> String {
     format!("voice-{channel_id}")
 }
 
+/// Salle d'un appel privé : ordre des identifiants normalisé, les deux
+/// interlocuteurs calculent le même nom quel que soit l'appelant.
+pub fn room_for_dm(a: uuid::Uuid, b: uuid::Uuid) -> String {
+    let (x, y) = if a < b { (a, b) } else { (b, a) };
+    format!("dm-{x}-{y}")
+}
+
 /// Jeton de participation à une salle.
 pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, publish: Publish) -> Option<String> {
     let mut sources = Vec::new();
@@ -196,6 +203,14 @@ mod tests {
         assert_eq!(c["video"]["canPublish"], true);
         assert_eq!(c["video"]["canPublishSources"], serde_json::json!(["microphone", "camera"]));
         assert!(c["video"].get("roomAdmin").is_none());
+    }
+
+    #[test]
+    fn la_salle_privee_ne_depend_pas_de_l_appelant() {
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        assert_eq!(room_for_dm(a, b), room_for_dm(b, a));
+        assert_ne!(room_for_dm(a, b), room_for_dm(a, uuid::Uuid::new_v4()));
     }
 
     #[test]
