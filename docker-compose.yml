@@ -43,8 +43,14 @@ services:
       TURN_URL: ${TURN_URL:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_PASSWORD: ${TURN_PASSWORD:-}
+      TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET:-}
+      FORGECHAT_DESKTOP_MANIFEST: ${FORGECHAT_DESKTOP_MANIFEST:-/app/desktop-releases/latest.json}
+      FORGECHAT_DESKTOP_BASE_URL: ${FORGECHAT_DESKTOP_BASE_URL:-https://forgechat.heiphaistos.org/desktop}
     volumes:
       - uploads:/app/uploads
+      # Artefacts et manifeste des applications de bureau, deposes sur l'hote.
+      # En lecture seule : le serveur ne fait que lire le manifeste.
+      - /var/www/forgechat-desktop:/app/desktop-releases:ro
     depends_on:
       postgres:
         condition: service_healthy
