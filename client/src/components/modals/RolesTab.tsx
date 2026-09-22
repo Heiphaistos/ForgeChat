@@ -7,22 +7,20 @@ import toast from 'react-hot-toast'
 // Utilise des puissances de 2 comme nombres JS (safe jusqu'à 2**52 avec Number)
 const B = (n: number) => Math.pow(2, n)
 
-// 50+ permissions organisées par groupe
+// Mêmes bits que le serveur (server/src/models/role.rs::Permissions) : ce sont
+// les seuls que le serveur applique. L'ancienne liste (50+ droits, numérotés
+// comme Discord) enregistrait des bits que le serveur lisait autrement :
+// « Administrateur » cochait en réalité « Voir le salon ».
 const PERMISSION_GROUPS = [
   {
     key: 'admin',
     label: 'Administration',
     color: 'text-red-400',
     perms: [
-      { key: 'ADMINISTRATOR',         bit: B(0),  label: 'Administrateur',              desc: 'Toutes les permissions, bypass tous les overrides' },
-      { key: 'VIEW_AUDIT_LOG',         bit: B(1),  label: 'Voir le journal d\'audit',    desc: 'Voir les actions de modération dans le journal' },
-      { key: 'MANAGE_SERVER',          bit: B(2),  label: 'Gérer le serveur',            desc: 'Modifier le nom, l\'icône, la région' },
-      { key: 'VIEW_GUILD_INSIGHTS',    bit: B(3),  label: 'Voir les statistiques',       desc: 'Accéder aux analytics du serveur' },
-      { key: 'MANAGE_WEBHOOKS',        bit: B(4),  label: 'Gérer les webhooks',          desc: 'Créer, modifier, supprimer des webhooks' },
-      { key: 'MANAGE_EMOJIS',         bit: B(5),  label: 'Gérer les emojis & stickers', desc: 'Ajouter, modifier, supprimer des emojis custom' },
-      { key: 'MANAGE_BOTS',           bit: B(6),  label: 'Gérer les bots',              desc: 'Ajouter et gérer les bots du serveur' },
-      { key: 'MANAGE_EVENTS',         bit: B(7),  label: 'Gérer les événements',        desc: 'Créer, modifier, supprimer les événements' },
-      { key: 'CREATE_EVENTS',         bit: B(8),  label: 'Créer des événements',        desc: 'Peut créer des événements sans les gérer' },
+      { key: 'ADMINISTRATOR',    bit: B(31), label: 'Administrateur',        desc: 'Toutes les permissions, ignore les restrictions des salons' },
+      { key: 'MANAGE_SERVER',    bit: B(8),  label: 'Gérer le serveur',      desc: 'Modifier le nom, l\'icône et les paramètres du serveur' },
+      { key: 'MANAGE_ROLES',     bit: B(5),  label: 'Gérer les rôles',       desc: 'Créer, modifier, supprimer et attribuer des rôles' },
+      { key: 'MANAGE_CHANNELS',  bit: B(4),  label: 'Gérer les salons',      desc: 'Créer, modifier, supprimer des salons' },
     ]
   },
   {
@@ -30,15 +28,8 @@ const PERMISSION_GROUPS = [
     label: 'Gestion des membres',
     color: 'text-orange-400',
     perms: [
-      { key: 'CREATE_INVITE',         bit: B(9),  label: 'Créer des invitations',       desc: 'Créer des liens d\'invitation vers le serveur' },
-      { key: 'CHANGE_NICKNAME',       bit: B(10), label: 'Changer son surnom',          desc: 'Peut modifier son propre surnom' },
-      { key: 'MANAGE_NICKNAMES',      bit: B(11), label: 'Gérer les surnoms',           desc: 'Modifier les surnoms des autres membres' },
-      { key: 'KICK_MEMBERS',          bit: B(12), label: 'Expulser des membres',        desc: 'Expulser des membres du serveur' },
-      { key: 'BAN_MEMBERS',           bit: B(13), label: 'Bannir des membres',          desc: 'Bannir définitivement des membres' },
-      { key: 'MODERATE_MEMBERS',      bit: B(14), label: 'Mettre en sourdine (timeout)', desc: 'Mettre temporairement en sourdine des membres' },
-      { key: 'MANAGE_ROLES_BELOW',    bit: B(15), label: 'Gérer les rôles inférieurs',  desc: 'Attribuer/retirer des rôles inférieurs au sien' },
-      { key: 'MANAGE_ROLES',          bit: B(16), label: 'Gérer les rôles',             desc: 'Créer, modifier, supprimer des rôles' },
-      { key: 'VIEW_MEMBER_LIST',      bit: B(17), label: 'Voir la liste des membres',   desc: 'Accéder à la liste complète des membres' },
+      { key: 'KICK_MEMBERS',     bit: B(6),  label: 'Expulser des membres',  desc: 'Expulser des membres du serveur' },
+      { key: 'BAN_MEMBERS',      bit: B(7),  label: 'Bannir des membres',    desc: 'Bannir définitivement des membres' },
     ]
   },
   {
@@ -46,33 +37,14 @@ const PERMISSION_GROUPS = [
     label: 'Salons texte',
     color: 'text-blue-400',
     perms: [
-      { key: 'VIEW_CHANNEL',          bit: B(18), label: 'Voir les salons',             desc: 'Voir les salons et leur historique' },
-      { key: 'MANAGE_CHANNELS',       bit: B(19), label: 'Gérer les salons',            desc: 'Créer, modifier, supprimer des salons' },
-      { key: 'SEND_MESSAGES',         bit: B(20), label: 'Envoyer des messages',        desc: 'Écrire des messages dans les salons texte' },
-      { key: 'SEND_TTS_MESSAGES',     bit: B(21), label: 'Envoyer des messages TTS',    desc: 'Utiliser /tts pour la synthèse vocale' },
-      { key: 'MANAGE_MESSAGES',       bit: B(22), label: 'Gérer les messages',          desc: 'Supprimer et épingler les messages des autres' },
-      { key: 'EMBED_LINKS',           bit: B(23), label: 'Intégrer des liens',          desc: 'Générer des aperçus de liens (embeds)' },
-      { key: 'ATTACH_FILES',          bit: B(24), label: 'Joindre des fichiers',        desc: 'Envoyer des fichiers et images' },
-      { key: 'READ_MESSAGE_HISTORY',  bit: B(25), label: 'Lire l\'historique',          desc: 'Voir les messages précédents dans un salon' },
-      { key: 'MENTION_EVERYONE',      bit: B(26), label: 'Mentionner @everyone',        desc: 'Mentionner @everyone, @here, et tous les rôles' },
-      { key: 'USE_EXTERNAL_EMOJIS',   bit: B(27), label: 'Emojis externes',            desc: 'Utiliser des emojis de serveurs externes' },
-      { key: 'USE_EXTERNAL_STICKERS', bit: B(28), label: 'Stickers externes',          desc: 'Utiliser des stickers de serveurs externes' },
-      { key: 'ADD_REACTIONS',         bit: B(29), label: 'Ajouter des réactions',      desc: 'Réagir aux messages avec des emojis' },
-      { key: 'USE_SLASH_COMMANDS',    bit: B(30), label: 'Utiliser les slash commands', desc: 'Utiliser les commandes / des bots' },
-      { key: 'USE_APPLICATION_CMDS',  bit: B(31), label: 'Commandes d\'application',   desc: 'Utiliser les interactions des applications' },
-      { key: 'MANAGE_PINS',           bit: B(32), label: 'Gérer les messages épinglés', desc: 'Épingler et désépingler des messages' },
-    ]
-  },
-  {
-    key: 'threads',
-    label: 'Fils de discussion',
-    color: 'text-purple-400',
-    perms: [
-      { key: 'CREATE_PUBLIC_THREADS',  bit: B(33), label: 'Créer des fils publics',     desc: 'Créer des fils de discussion publics' },
-      { key: 'CREATE_PRIVATE_THREADS', bit: B(34), label: 'Créer des fils privés',      desc: 'Créer des fils de discussion privés' },
-      { key: 'SEND_IN_THREADS',        bit: B(35), label: 'Envoyer dans les fils',      desc: 'Envoyer des messages dans les fils' },
-      { key: 'MANAGE_THREADS',         bit: B(36), label: 'Gérer les fils',             desc: 'Archiver, supprimer et gérer les fils' },
-      { key: 'USE_THREADS',            bit: B(37), label: 'Voir les fils',              desc: 'Accéder aux fils de discussion' },
+      { key: 'VIEW_CHANNEL',     bit: B(0),  label: 'Voir les salons',       desc: 'Voir les salons et leur contenu' },
+      { key: 'READ_HISTORY',     bit: B(2),  label: 'Lire l\'historique',    desc: 'Voir les messages précédents dans un salon' },
+      { key: 'SEND_MESSAGES',    bit: B(1),  label: 'Envoyer des messages',  desc: 'Écrire des messages dans les salons texte' },
+      { key: 'MANAGE_MESSAGES',  bit: B(3),  label: 'Gérer les messages',    desc: 'Supprimer et épingler les messages des autres' },
+      { key: 'MENTION_EVERYONE', bit: B(9),  label: 'Mentionner @everyone',  desc: 'Mentionner @everyone et @here' },
+      { key: 'ATTACH_FILES',     bit: B(10), label: 'Joindre des fichiers',  desc: 'Envoyer des fichiers et images' },
+      { key: 'EMBED_LINKS',      bit: B(11), label: 'Intégrer des liens',    desc: 'Générer des aperçus de liens' },
+      { key: 'ADD_REACTIONS',    bit: B(12), label: 'Ajouter des réactions', desc: 'Réagir aux messages avec des emojis' },
     ]
   },
   {
@@ -80,35 +52,20 @@ const PERMISSION_GROUPS = [
     label: 'Vocal & Vidéo',
     color: 'text-green-400',
     perms: [
-      { key: 'CONNECT_VOICE',          bit: B(38), label: 'Rejoindre la voix',          desc: 'Accéder aux canaux vocaux' },
-      { key: 'SPEAK',                  bit: B(39), label: 'Parler',                     desc: 'Parler dans les canaux vocaux' },
-      { key: 'STREAM',                 bit: B(40), label: 'Partager l\'écran / Go Live', desc: 'Partager son écran ou la caméra' },
-      { key: 'USE_VAD',                bit: B(41), label: 'Détection d\'activité vocale', desc: 'Parler sans maintenir un bouton (VAD)' },
-      { key: 'PRIORITY_SPEAKER',       bit: B(42), label: 'Orateur prioritaire',        desc: 'Voix amplifiée, autres atténuées' },
-      { key: 'MUTE_MEMBERS_VOICE',     bit: B(43), label: 'Rendre muet (voix)',         desc: 'Couper le micro des autres en vocal' },
-      { key: 'DEAFEN_MEMBERS_VOICE',   bit: B(44), label: 'Rendre sourd (voix)',        desc: 'Couper le son des autres en vocal' },
-      { key: 'MOVE_MEMBERS',          bit: B(45), label: 'Déplacer des membres',       desc: 'Déplacer des membres entre salons vocaux' },
-      { key: 'USE_SOUNDBOARD',         bit: B(46), label: 'Utiliser le soundboard',     desc: 'Jouer des sons depuis le soundboard' },
-      { key: 'USE_EMBEDDED_ACTIVITIES', bit: B(47), label: 'Activités intégrées',       desc: 'Jouer à des jeux ou utiliser des apps vocales' },
-      { key: 'REQUEST_TO_SPEAK',       bit: B(48), label: 'Demander la parole (Stage)', desc: 'Demander la parole dans les canaux Stage' },
-    ]
-  },
-  {
-    key: 'forum',
-    label: 'Forums & Annonces',
-    color: 'text-yellow-400',
-    perms: [
-      { key: 'CREATE_POSTS',           bit: B(49), label: 'Créer des posts de forum',   desc: 'Créer des posts dans les salons forum' },
-      { key: 'MANAGE_POSTS',           bit: B(50), label: 'Gérer les posts de forum',   desc: 'Modifier et supprimer les posts des autres' },
-      { key: 'SEND_ANNOUNCEMENTS',     bit: B(51), label: 'Envoyer des annonces',       desc: 'Envoyer des messages dans les salons d\'annonces' },
-      { key: 'FOLLOW_CHANNELS',        bit: B(52), label: 'Suivre des salons',          desc: 'Abonner des salons à des flux d\'annonces' },
+      { key: 'CONNECT_VOICE',    bit: B(13), label: 'Rejoindre la voix',     desc: 'Accéder aux salons vocaux' },
+      { key: 'SPEAK_VOICE',      bit: B(14), label: 'Parler',                desc: 'Parler dans les salons vocaux' },
+      { key: 'STREAM',           bit: B(40), label: 'Partager l\'écran / Go Live', desc: 'Partager son écran ou sa caméra' },
+      { key: 'PRIORITY_SPEAKER', bit: B(18), label: 'Orateur prioritaire',   desc: 'Voix amplifiée, autres atténuées' },
+      { key: 'MUTE_MEMBERS',     bit: B(15), label: 'Rendre muet',           desc: 'Couper le micro des autres en vocal' },
+      { key: 'DEAFEN_MEMBERS',   bit: B(16), label: 'Rendre sourd',          desc: 'Couper le son des autres en vocal' },
+      { key: 'MOVE_MEMBERS',     bit: B(17), label: 'Déplacer des membres',  desc: 'Déplacer des membres entre salons vocaux' },
     ]
   },
 ]
 
 // Flatten pour usage
 const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.perms)
-const ADMIN_BIT = B(0)
+const ADMIN_BIT = B(31)
 
 function colorIntToHex(c: number): string {
   return '#' + (c >>> 0).toString(16).padStart(6, '0')

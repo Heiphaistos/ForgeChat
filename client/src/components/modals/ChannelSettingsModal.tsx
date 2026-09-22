@@ -18,27 +18,24 @@ const SLOWMODE_OPTIONS = [
   { label: '1 heure', value: 3600 },
 ]
 
-// Permissions affichables dans les overrides canal
+// Permissions affichables dans les overrides canal — mêmes bits que le serveur
+// (server/src/models/role.rs::Permissions), seuls appliqués.
 const CHANNEL_PERMISSION_BITS = [
-  { key: 'VIEW_CHANNEL',         bit: Math.pow(2, 18), label: 'Voir le salon' },
-  { key: 'SEND_MESSAGES',        bit: Math.pow(2, 20), label: 'Envoyer des messages' },
-  { key: 'READ_MESSAGE_HISTORY', bit: Math.pow(2, 25), label: 'Lire l\'historique' },
-  { key: 'MANAGE_MESSAGES',      bit: Math.pow(2, 22), label: 'Gérer les messages' },
-  { key: 'ATTACH_FILES',         bit: Math.pow(2, 24), label: 'Joindre des fichiers' },
-  { key: 'ADD_REACTIONS',        bit: Math.pow(2, 29), label: 'Ajouter des réactions' },
-  { key: 'EMBED_LINKS',          bit: Math.pow(2, 23), label: 'Intégrer des liens' },
-  { key: 'MENTION_EVERYONE',     bit: Math.pow(2, 26), label: 'Mentionner @everyone' },
-  { key: 'USE_SLASH_COMMANDS',   bit: Math.pow(2, 30), label: 'Slash commands' },
-  { key: 'SEND_TTS_MESSAGES',    bit: Math.pow(2, 21), label: 'Messages TTS' },
-  { key: 'MANAGE_THREADS',       bit: Math.pow(2, 36), label: 'Gérer les fils' },
-  { key: 'CREATE_PUBLIC_THREADS',bit: Math.pow(2, 33), label: 'Créer fils publics' },
-  { key: 'CONNECT_VOICE',        bit: Math.pow(2, 38), label: 'Rejoindre la voix' },
-  { key: 'SPEAK',                bit: Math.pow(2, 39), label: 'Parler' },
-  { key: 'STREAM',               bit: Math.pow(2, 40), label: 'Partager l\'écran' },
-  { key: 'MUTE_MEMBERS_VOICE',   bit: Math.pow(2, 43), label: 'Rendre muet' },
-  { key: 'DEAFEN_MEMBERS_VOICE', bit: Math.pow(2, 44), label: 'Rendre sourd' },
-  { key: 'MOVE_MEMBERS',         bit: Math.pow(2, 45), label: 'Déplacer des membres' },
-  { key: 'PRIORITY_SPEAKER',     bit: Math.pow(2, 42), label: 'Orateur prioritaire' },
+  { key: 'VIEW_CHANNEL',     bit: Math.pow(2, 0),  label: 'Voir le salon' },
+  { key: 'SEND_MESSAGES',    bit: Math.pow(2, 1),  label: 'Envoyer des messages' },
+  { key: 'READ_HISTORY',     bit: Math.pow(2, 2),  label: 'Lire l\'historique' },
+  { key: 'MANAGE_MESSAGES',  bit: Math.pow(2, 3),  label: 'Gérer les messages' },
+  { key: 'ATTACH_FILES',     bit: Math.pow(2, 10), label: 'Joindre des fichiers' },
+  { key: 'ADD_REACTIONS',    bit: Math.pow(2, 12), label: 'Ajouter des réactions' },
+  { key: 'EMBED_LINKS',      bit: Math.pow(2, 11), label: 'Intégrer des liens' },
+  { key: 'MENTION_EVERYONE', bit: Math.pow(2, 9),  label: 'Mentionner @everyone' },
+  { key: 'CONNECT_VOICE',    bit: Math.pow(2, 13), label: 'Rejoindre la voix' },
+  { key: 'SPEAK_VOICE',      bit: Math.pow(2, 14), label: 'Parler' },
+  { key: 'STREAM',           bit: Math.pow(2, 40), label: 'Partager l\'écran' },
+  { key: 'MUTE_MEMBERS',     bit: Math.pow(2, 15), label: 'Rendre muet' },
+  { key: 'DEAFEN_MEMBERS',   bit: Math.pow(2, 16), label: 'Rendre sourd' },
+  { key: 'MOVE_MEMBERS',     bit: Math.pow(2, 17), label: 'Déplacer des membres' },
+  { key: 'PRIORITY_SPEAKER', bit: Math.pow(2, 18), label: 'Orateur prioritaire' },
 ]
 
 const FORUM_SORT_OPTIONS = [
