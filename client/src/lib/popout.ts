@@ -39,9 +39,15 @@ function sync() {
       _pops.delete(key)
       continue
     }
-    if (pop.video.srcObject !== stream) pop.video.srcObject = stream
+    if (pop.video.srcObject !== stream) { pop.video.srcObject = stream; play(pop.video) }
   }
   if (_pops.size === 0 && _unsub) { _unsub(); _unsub = null }
+}
+
+/** L'autoplay seul ne suffit pas : une fenêtre passée en arrière-plan à l'ouverture
+ *  de la suivante restait en pause (mesuré : 0x0, paused=true). */
+function play(video: HTMLVideoElement) {
+  void video.play().catch(() => {})
 }
 
 function buildWindow(win: Window, title: string): HTMLVideoElement {
@@ -61,6 +67,8 @@ function buildWindow(win: Window, title: string): HTMLVideoElement {
     else void video.requestFullscreen().catch(() => {})
   })
   doc.body.appendChild(video)
+  doc.addEventListener('visibilitychange', () => { if (video.paused) play(video) })
+  video.addEventListener('pause', () => { if (!doc.hidden) play(video) })
   return video
 }
 
@@ -78,14 +86,9 @@ export function popOut(userId: string, kind: PopKind, label: string): boolean {
   const title = kind === 'screen' ? `Écran de ${label} — ForgeChat` : `${label} — ForgeChat`
   const video = buildWindow(win, title)
   video.srcObject = stream
+  play(video)
   _pops.set(key, { win, video, userId, kind })
   _unsub ??= useVoice.subscribe(sync)
   win.addEventListener('pagehide', () => { _pops.delete(key) })
   return true
-}
-
-export function closeAllPopOuts() {
-  for (const p of _pops.values()) p.win.close()
-  _pops.clear()
-  if (_unsub) { _unsub(); _unsub = null }
 }
