@@ -150,7 +150,7 @@ function MessageRow({
                 title={`Profil de ${msg.author_username}`}
               >
                 {msg.author_avatar
-                  ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author_username.charAt(0).toUpperCase()}
               </button>
             )}

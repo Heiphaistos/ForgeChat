@@ -764,6 +764,7 @@ function CreateServerModal({
   onCreate: (name: string, templateData?: any) => void
   isPending: boolean
 }) {
+  const nav = useNavigate()
   const [step, setStep] = useState<Step>('choice')
   const [name, setName] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState<BuiltinTemplate | null>(null)
@@ -834,6 +835,17 @@ function CreateServerModal({
                 </div>
                 <div className="text-xs text-fc-muted mt-0.5">
                   Gaming, Communauté, Étude, Team et plus...
+                </div>
+              </button>
+              <button
+                onClick={() => { onClose(); nav('/import-discord') }}
+                className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
+              >
+                <div className="font-semibold text-white group-hover:text-fc-accent transition">
+                  Importer depuis Discord (ArchiveForge)
+                </div>
+                <div className="text-xs text-fc-muted mt-0.5">
+                  Recrée un serveur Discord exporté : salons, rôles, messages, fichiers
                 </div>
               </button>
             </div>

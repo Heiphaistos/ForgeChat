@@ -464,7 +464,7 @@ function PostView({ serverId, channelId, post, onBack, canManageMessages }: { se
                 className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </button>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
@@ -563,7 +563,7 @@ function PostView({ serverId, channelId, post, onBack, canManageMessages }: { se
               className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
             >
               {r.author?.avatar
-                ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                 : (r.author?.username ?? '?').charAt(0).toUpperCase()}
             </button>
             <div className="flex-1 min-w-0">
@@ -949,7 +949,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

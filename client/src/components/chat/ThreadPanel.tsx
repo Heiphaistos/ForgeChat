@@ -413,7 +413,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {msg.author?.avatar
-                  ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author?.username?.charAt(0).toUpperCase()}
               </button>
               <div className="flex-1 min-w-0">

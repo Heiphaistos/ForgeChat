@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       await login(email, password, needTotp ? totpCode : undefined)
       const redirect = searchParams.get('redirect')
-      nav(redirect && redirect.startsWith('/') ? redirect : '/friends')
+      nav(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/friends')
     } catch (err: any) {
       const msg = err.response?.data?.error ?? ''
       if (msg === 'totp_required') {

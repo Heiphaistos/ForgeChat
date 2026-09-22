@@ -711,6 +711,8 @@ export default function MessageList({
           const isGrouped =
             prev &&
             prev.author_id === msg.author_id &&
+            // Webhooks et messages importés de Discord : même compte, auteurs affichés différents
+            prev.author_username === msg.author_username &&
             new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < groupingMs
 
           const msgTs = new Date(msg.created_at).getTime()

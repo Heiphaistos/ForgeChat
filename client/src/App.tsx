@@ -55,6 +55,7 @@ const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
 const TicketsPage = lazy(() => import('./pages/TicketsPage'))
 const ServerAdminPage = lazy(() => import('./pages/ServerAdminPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const ImportDiscordPage = lazy(() => import('./pages/ImportDiscordPage'))
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'))
 
 const PageFallback = () => (
@@ -65,12 +66,16 @@ const PageFallback = () => (
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) return (
     <div className="flex items-center justify-center h-screen bg-fc-bg">
       <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
     </div>
   )
-  return user ? <>{children}</> : <Navigate to="/login" replace />
+  if (user) return <>{children}</>
+  // Garder la destination (ex. lien profond /import-discord?src=…) pour y revenir après connexion
+  const redirect = location.pathname + location.search
+  return <Navigate to={redirect === '/' ? '/login' : `/login?redirect=${encodeURIComponent(redirect)}`} replace />
 }
 
 
@@ -1027,6 +1032,7 @@ function AppInner() {
             <Route path="servers/:serverId/tickets" element={<TicketsPage />} />
             <Route path="servers/:serverId/admin" element={<ServerAdminPage />} />
             <Route path="admin" element={<AdminPage />} />
+            <Route path="import-discord" element={<ImportDiscordPage />} />
           </Route>
         </Routes>
         {/* Montés ici (racine, hors de <Routes>) et non dans MainLayout : /settings est une

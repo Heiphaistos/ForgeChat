@@ -59,7 +59,10 @@ api.interceptors.response.use(
         return api(err.config)
       } catch {
         if (isTauri) localStorage.clear()
-        if (!onPublicPage) window.location.href = '/login'
+        // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
+        // /login?redirect=… ; un rechargement vers /login nu perdait la destination
+        const { pathname, search } = window.location
+        if (!publicPaths.includes(pathname)) window.location.href = `/login?redirect=${encodeURIComponent(pathname + search)}`
       }
     }
     return Promise.reject(err)
