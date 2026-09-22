@@ -312,6 +312,10 @@ pub fn run() {
         if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
             browser_args.push_str(" --use-fake-device-for-media-stream");
         }
+        // Note : --remote-debugging-port ne sert a rien ici, WebView2 filtre ce
+        // drapeau dans AdditionalBrowserArguments (essaye le 2026-09-22, le port
+        // n'ecoute jamais). Pour lire la console d'une build de production,
+        // utiliser F12 : la feature `devtools` de tauri est activee en release.
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
     }
 
