@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useWs } from './ws'
 import { useAuth } from './auth'
 import api from '../api/client'
+import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
 import {
   createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
   type NoiseEngine, type ProcessedAudio,
@@ -349,6 +350,11 @@ export const useVoice = create<VoiceStore>((set, get) => {
     join: async (channelId, serverId, withVideo = false, password, channelName, listenOnly = false) => {
       const cur = get()
       if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
+      if (webrtcMissing()) {
+        const opened = await openInBrowser(`/servers/${serverId}/channels/${channelId}`)
+        set({ error: opened ? NO_WEBRTC_MESSAGE : 'Ce moteur d\'affichage ne gère pas les appels : ouvrez ForgeChat dans votre navigateur.' })
+        return
+      }
       // Garde posée AVANT l'await : deux clics rapides créaient deux jeux de
       // listeners WS, le premier n'étant jamais désabonné.
       if (_joining) return

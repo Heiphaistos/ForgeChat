@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
 import api from '../api/client'
+import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
 import {
   Room, RoomEvent, Track, DisconnectReason,
   type LocalTrackPublication, type RemoteParticipant,
@@ -270,6 +271,10 @@ export const useCallStore = create<CallStore>((set, get) => ({
     // le flux média (micro/caméra restent actifs, connexion WebRTC orpheline).
     if (_callInFlight) return
     if (get().callState !== 'idle') return
+    if (webrtcMissing()) {
+      toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
+      return
+    }
     _callInFlight = true
     set({ dmId, partnerId, callType: type })
     try {
@@ -291,6 +296,11 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
   acceptCall: async (dmId, fromUserId, type) => {
     if (_callInFlight) return
+    if (webrtcMissing()) {
+      // Laisser sonner : l'appel peut être décroché dans le navigateur ouvert.
+      toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
+      return
+    }
     _callInFlight = true
     set({ dmId, partnerId: fromUserId, callType: type })
     try {
