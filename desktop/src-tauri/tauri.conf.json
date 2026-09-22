@@ -33,13 +33,19 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["forgechat"]
+        "schemes": [
+          "forgechat"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "deb", "appimage"],
+    "targets": [
+      "nsis",
+      "deb",
+      "appimage"
+    ],
     "category": "SocialNetworking",
     "shortDescription": "Client de chat communautaire auto-hébergé",
     "icon": [
@@ -51,7 +57,9 @@
     ],
     "windows": {
       "nsis": {
-        "languages": ["French"],
+        "languages": [
+          "French"
+        ],
         "displayLanguageSelector": false,
         "installMode": "both"
       },
@@ -62,11 +70,17 @@
     },
     "linux": {
       "deb": {
-        "depends": []
+        "depends": [],
+        "recommends": [
+          "xdg-desktop-portal",
+          "xdg-desktop-portal-gtk"
+        ]
       },
       "appimage": {}
     },
-    "resources": ["icons/tray-frames/*"],
+    "resources": [
+      "icons/tray-frames/*"
+    ],
     "createUpdaterArtifacts": false
   }
 }

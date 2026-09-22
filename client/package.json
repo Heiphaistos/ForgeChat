@@ -1,13 +1,14 @@
 {
   "name": "forgechat-client",
-  "version": "3.582.1",
+  "version": "3.582.2",
   "type": "module",
   "scripts": {
-    "dev": "npm run prebuild && vite",
+    "dev": "vite",
     "lint": "eslint src --quiet",
-    "build": "npm run prebuild && eslint src --quiet && tsc && vite build",
+    "build": "eslint src --quiet && tsc && vite build",
     "preview": "vite preview",
-    "prebuild": "node scripts/copy-noise-assets.mjs"
+    "prebuild": "node scripts/copy-noise-assets.mjs",
+    "predev": "node scripts/copy-noise-assets.mjs"
   },
   "dependencies": {
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
