@@ -84,7 +84,7 @@ Autres mesures :
 | Priorité | Sujet | Détail |
 |---|---|---|
 | Haute | **Recette sur les deux PC réels de Momo** | Seul scénario que l'automatisation ne reproduit pas. Recharger les deux pages (Ctrl+F5) avant. |
-| Haute | Application de bureau 3.26.0 | Embarque le nouveau client et les fenêtres détachées ; les 3.25.0 et antérieures parlent encore pair-à-pair et n'entendent pas les clients web. |
+| Fait | Application de bureau 3.26.0 | Publiée sur les quatre cibles (empreintes recoupées). Les 3.25.0 et antérieures parlent encore pair-à-pair : elles n'entendent pas les clients à jour, la mise à jour automatique leur est proposée au lancement. |
 | Moyenne | Vocal natif sous Linux | SDK Rust `livekit` dans le processus Tauri : micro et haut-parleurs via `cpal` (faisable), vidéo reçue à rendre dans la vue web (lourd). Changement d'architecture de l'app Linux : décision de Momo. |
 | Moyenne | Regarder un stream sur demande | `autoSubscribe: false` pour les partages, aperçu figé et bouton « Regarder » : économise la bande passante des spectateurs passifs, comme Discord. |
 | Basse | Supprimer le relais `VOICE_SIGNAL` | Gardé tant que des applications de bureau antérieures à 3.26.0 circulent. |
