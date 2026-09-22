@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
-import { useVoice, getPeerConnections, type VoicePeer } from '../store/voice'
+import { useVoice, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useLocation } from 'react-router-dom'
@@ -48,65 +48,23 @@ function MeetingTimer({ startTime }: { startTime: number }) {
 }
 
 // ─── Call Quality ─────────────────────────────────────────────────────────────
-function CallQualityIndicator({ pcs }: { pcs: Map<string, RTCPeerConnection> }) {
-  const [quality, setQuality] = useState<'good' | 'ok' | 'poor' | 'unknown'>('unknown')
-  const poorStreak = useRef(0)
-  const degraded = useRef(false)
-  const samples = useRef(0)
-
-  useEffect(() => {
-    const check = async () => {
-      if (pcs.size === 0) { setQuality('unknown'); return }
-      let totalLoss = 0; let count = 0
-      for (const pc of pcs.values()) {
-        try {
-          const stats = await pc.getStats()
-          stats.forEach((r: RTCStats) => {
-            if (r.type === 'remote-inbound-rtp') {
-              const s = r as any
-              if (typeof s.fractionLost === 'number') {
-                totalLoss += s.fractionLost; count++
-              }
-            }
-          })
-        } catch {}
-      }
-      if (count === 0) { setQuality('unknown'); return }
-      const avg = totalLoss / count
-      // Télémétrie : sans elle, un appel qui coupe n'est diagnosticable que dans la
-      // console du navigateur de l'utilisateur. Échantillonnée (1 envoi / 30 s).
-      samples.current++
-      if (samples.current % 6 === 0) {
-        api.post('/voice/telemetry', { peers: pcs.size, fraction_lost: Number(avg.toFixed(4)), at: Date.now() }).catch(() => {})
-      }
-      if (avg < 0.02) { setQuality('good'); poorStreak.current = 0 }
-      else if (avg < 0.08) { setQuality('ok'); poorStreak.current = 0 }
-      else {
-        setQuality('poor')
-        poorStreak.current++
-        // L'indicateur était purement décoratif : trois mesures mauvaises de suite
-        // (15 s) déclenchent maintenant une vraie dégradation du débit émis.
-        if (poorStreak.current >= 3 && !degraded.current) {
-          degraded.current = true
-          const cam = Number(localStorage.getItem('fc_cam_bitrate') ?? '1200000')
-          const screen = Number(localStorage.getItem('fc_screen_bitrate') ?? '4000000')
-          localStorage.setItem('fc_cam_bitrate', String(Math.max(250000, Math.round(cam / 2))))
-          localStorage.setItem('fc_screen_bitrate', String(Math.max(600000, Math.round(screen / 2))))
-          void useVoice.getState().applyQualityPrefs()
-          toast('Réseau instable : qualité vidéo réduite automatiquement', { icon: '📶', duration: 5000 })
-        }
-      }
-    }
-    check()
-    const id = setInterval(check, 5000)
-    return () => clearInterval(id)
-  }, [pcs])
-
-  const map = { good: { icon: <Wifi size={12} />, color: 'text-fc-green', label: 'Bonne' }, ok: { icon: <Wifi size={12} />, color: 'text-fc-yellow', label: 'Moyenne' }, poor: { icon: <WifiOff size={12} />, color: 'text-fc-red', label: 'Mauvaise' }, unknown: { icon: <Wifi size={12} />, color: 'text-fc-muted', label: '' } }
-  const { icon, color, label } = map[quality]
+// Qualité mesurée par le SFU (perte, gigue, débit) : plus de sondage getStats().
+// Le SFU dégrade aussi tout seul (simulcast + dynacast + contrôle de congestion),
+// l'ancien divisé-par-deux manuel des débits n'a plus de raison d'être.
+function CallQualityIndicator() {
+  const status = useVoice(s => s.mediaStatus)
+  const q = useVoice(s => s.mediaQuality)
+  const view =
+    status === 'connecting' ? { icon: <Wifi size={12} />, color: 'text-fc-muted', label: 'Connexion…' }
+    : status === 'reconnecting' ? { icon: <WifiOff size={12} />, color: 'text-fc-yellow', label: 'Reconnexion…' }
+    : status === 'failed' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: 'Hors ligne' }
+    : q === 'excellent' || q === 'good' ? { icon: <Wifi size={12} />, color: 'text-fc-green', label: q === 'excellent' ? 'Excellente' : 'Bonne' }
+    : q === 'poor' ? { icon: <Wifi size={12} />, color: 'text-fc-yellow', label: 'Faible' }
+    : q === 'lost' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: 'Perdue' }
+    : { icon: <Wifi size={12} />, color: 'text-fc-muted', label: '' }
   return (
-    <div className={`flex items-center gap-1 text-xs ${color}`} title={`Qualité : ${label}`}>
-      {icon}{label && <span>{label}</span>}
+    <div className={`flex items-center gap-1 text-xs ${view.color}`} title={`Connexion audio/vidéo : ${view.label || 'inconnue'}`} role="status">
+      {view.icon}{view.label && <span>{view.label}</span>}
     </div>
   )
 }
@@ -542,7 +500,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <Volume2 size={16} className="text-fc-accent flex-shrink-0" />
           <span className="text-sm font-semibold text-white truncate max-w-[120px] md:max-w-none">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
-          <CallQualityIndicator pcs={getPeerConnections()} />
+          <CallQualityIndicator />
         </div>
 
         {/* View mode switcher — masqué sur mobile */}

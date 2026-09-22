@@ -73,6 +73,8 @@ pub struct AppState {
     pub temp_channels_created: Arc<RwLock<HashMap<Uuid, Instant>>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
+    /// Serveur média (SFU). `None` = vocal indisponible (variables LIVEKIT_* absentes).
+    pub livekit: Option<crate::livekit::LiveKitConfig>,
 }
 
 impl AppState {
@@ -104,7 +106,11 @@ impl AppState {
             voice_sessions: Arc::new(RwLock::new(HashMap::new())),
             temp_channels_created: Arc::new(RwLock::new(HashMap::new())),
             http_client,
+            livekit: crate::livekit::LiveKitConfig::from_env(),
         };
+        if state.livekit.is_none() {
+            tracing::warn!("LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET absents : le vocal est désactivé");
+        }
 
         state.restore_voice_from_redis().await;
 

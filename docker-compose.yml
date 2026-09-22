@@ -46,6 +46,10 @@ services:
       TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET:-}
       FORGECHAT_DESKTOP_MANIFEST: ${FORGECHAT_DESKTOP_MANIFEST:-/app/desktop-releases/latest.json}
       FORGECHAT_DESKTOP_BASE_URL: ${FORGECHAT_DESKTOP_BASE_URL:-https://forgechat.heiphaistos.org/desktop}
+      LIVEKIT_URL: ${LIVEKIT_URL:-wss://forgechat.heiphaistos.org/livekit}
+      LIVEKIT_INTERNAL_URL: http://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?LIVEKIT_API_KEY requis}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET requis}
     volumes:
       - uploads:/app/uploads
       # Artefacts et manifeste des applications de bureau, deposes sur l'hote.
@@ -62,6 +66,22 @@ services:
       interval: 10s
       retries: 5
       start_period: 30s
+
+  # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
+  # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      NODE_IP: ${LIVEKIT_NODE_IP:?LIVEKIT_NODE_IP requis (IP publique du VPS)}
+    ports:
+      - "127.0.0.1:7880:7880"
+      - "7881:7881"
+      - "65100:65100/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    restart: unless-stopped
 
 volumes:
   pgdata:

@@ -365,6 +365,14 @@ async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Option<Uuid>) {
     }
 
     if let Some((channel_id, remaining, prev_state)) = state.voice_leave(user_id).await {
+        // Le média passe par le SFU : sans cette éjection, un utilisateur sorti
+        // (ou exclu) côté ForgeChat resterait audible et visible.
+        if let Some(lk) = state.livekit.clone() {
+            let http = state.http_client.clone();
+            tokio::spawn(async move {
+                crate::livekit::remove_participant(&http, &lk, &crate::livekit::room_for_channel(channel_id), &user_id.to_string()).await;
+            });
+        }
         // S2 — l'utilisateur partageait son écran : le badge LIVE doit tomber
         // chez tout le monde, y compris sur un crash / fermeture d'onglet.
         if prev_state.map(|s| s.screen).unwrap_or(false) {
@@ -829,6 +837,17 @@ async fn handle_ws_message(
                 return;
             }
             let can_speak = voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await;
+            let can_stream = voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await;
+            let listen_only = msg["listen_only"].as_bool().unwrap_or(false);
+            let Some(livekit) = state.livekit.clone() else {
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "media_unavailable",
+                    "current": 0,
+                }).to_string()).await;
+                return;
+            };
 
             // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
@@ -944,6 +963,15 @@ async fn handle_ws_message(
                 .unwrap_or_default();
 
             // Construire la liste des pairs existants avec leur état vocal
+            // Nom affiché dans le jeton du SFU (repli sur l'id si la lecture échoue).
+            let joiner_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+                .bind(user_id)
+                .fetch_optional(&state.db)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| user_id.to_string());
+
             let mut existing_peers = Vec::new();
             for peer_id in &existing_ids {
                 if let Ok(row) = sqlx::query(
@@ -980,6 +1008,22 @@ async fn handle_ws_message(
                     .unwrap_or_default(),
                 // N8 — le client sait s'il peut ouvrir son micro
                 "can_speak": can_speak,
+                // Accès au serveur média, délivré seulement après tous les contrôles ci-dessus.
+                "livekit": {
+                    "url": livekit.public_url,
+                    "room": crate::livekit::room_for_channel(effective_channel_id),
+                    "token": crate::livekit::join_token(
+                        &livekit,
+                        &crate::livekit::room_for_channel(effective_channel_id),
+                        &user_id.to_string(),
+                        &joiner_name,
+                        crate::livekit::Publish {
+                            microphone: can_speak && !listen_only,
+                            camera: can_speak && !listen_only,
+                            screen: can_stream && !listen_only,
+                        },
+                    ),
+                },
             }).to_string()).await;
 
             // Récupérer les infos du rejoignant

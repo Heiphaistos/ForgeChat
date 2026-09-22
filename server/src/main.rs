@@ -2,6 +2,7 @@ mod config;
 mod email;
 mod error;
 mod handlers;
+mod livekit;
 mod middleware;
 mod models;
 mod state;

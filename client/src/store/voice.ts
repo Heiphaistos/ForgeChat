@@ -6,14 +6,16 @@ import {
   type NoiseEngine, type ProcessedAudio,
 } from '../lib/audio'
 import {
-  createPC, teardownPeer, teardownAll, handleSignal, getPeerConnections,
+  addPeer, removePeer, connectMedia, disconnectMedia,
   setLocalStream, replaceMicTrack, applyMicEnabled, addCameraTrack, removeCameraTrack,
   startScreenTracks, stopScreenTracks, clearLocalMedia, getLocalStream, getRawMicTrack,
-  getMicTrack, getQualityPrefs, refreshAllSenderQuality, setWhisper, warn,
-  type MeshCtx,
-} from './voiceMesh'
+  getMicTrack, refreshAllSenderQuality, setWhisper, warn,
+  type MeshCtx, type MediaStatus,
+} from './voiceSfu'
+import type { ConnectionQuality } from 'livekit-client'
 
-export { getPeerConnections }
+export { getRoom } from './voiceSfu'
+export type { MediaStatus }
 
 // Idem : le store est atteignable depuis la console pour diagnostiquer un appel
 // (window.__fcVoiceStore.getState()).
@@ -74,6 +76,9 @@ interface VoiceStore {
   whisperTargets: string[] | null
   activeStreams: Record<string, ActiveStream>
   noiseEngine: NoiseEngine
+  /** État de la connexion au serveur média (SFU), distinct de la présence WebSocket. */
+  mediaStatus: MediaStatus
+  mediaQuality: ConnectionQuality | null
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
@@ -234,6 +239,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
     whisperTargets: null,
     activeStreams: {},
     noiseEngine: getNoiseEngine(),
+    mediaStatus: 'idle',
+    mediaQuality: null,
 
     // ── Listeners globaux (sidebar, badges LIVE) ─────────────────────────────
     initGlobalListeners: () => {
@@ -423,21 +430,30 @@ export const useVoice = create<VoiceStore>((set, get) => {
               })),
             },
           }))
+          // Réponse à un re-VOICE_JOIN (reconnexion WS) : retirer ceux partis entre-temps.
+          const present = new Set((d.peers ?? []).map((p: any) => String(p.user_id)))
+          set(st => ({ peers: st.peers.filter(p => present.has(p.userId)) }))
           for (const peer of (d.peers ?? [])) {
             // Les drapeaux video/screen étaient perdus ici : la tuile restait sur
             // l'avatar jusqu'au prochain VOICE_STATE_UPDATE du pair.
-            await createPC(peer.user_id, {
+            addPeer(String(peer.user_id), {
               username: peer.username, avatar: peer.avatar,
               discriminator: peer.discriminator, muted: peer.muted,
               videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false,
             }, ctx)
-            // L'offer part toute seule : addTrack déclenche onnegotiationneeded.
           }
+          const lk = d.livekit
+          if (!lk?.url || !lk?.token || !lk?.room) {
+            set({ mediaStatus: 'failed', error: 'Serveur audio/vidéo indisponible : réessayez dans un instant.' })
+            return
+          }
+          // Sans effet si la connexion au SFU tient déjà (reconnexion du seul WebSocket).
+          await connectMedia(lk.url, lk.token, lk.room, ctx)
         })
 
         const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
           if (d.channel_id !== get().channelId) return
-          void createPC(d.user_id, {
+          addPeer(String(d.user_id), {
             username: d.username, avatar: d.avatar, discriminator: d.discriminator,
             videoEnabled: d.video ?? false, screenSharing: d.screen ?? false,
           }, ctx)
@@ -445,14 +461,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
         const offLeft = ws.on('VOICE_USER_LEFT', (d: any) => {
           if (d.channel_id !== get().channelId) return
-          teardownPeer(d.user_id, ctx)
-        })
-
-        const offSignal = ws.on('VOICE_SIGNAL', async (d: any) => {
-          const { from, payload } = d
-          // Les signaux d'appel DM ont un autre format (payload.sdp/candidate)
-          if (!payload || payload.data === undefined) return
-          await handleSignal(from, payload, ctx)
+          removePeer(String(d.user_id), ctx)
         })
 
         const offRedirect = ws.on('VOICE_REDIRECT', (d: any) => {
@@ -482,7 +491,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
           }
         })
 
-        _offFns = [offExisting, offJoined, offLeft, offSignal, offRedirect, offError, offStateError]
+        _offFns = [offExisting, offJoined, offLeft, offRedirect, offError, offStateError]
 
         // Re-synchronisation après reconnexion WS : sans elle, le serveur nous a
         // sortis du canal (cleanup à la déconnexion) alors que l'UI affiche
@@ -491,12 +500,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
         _offOpen = ws.onOpen(() => {
           const s = get()
           if (!s.joined || !s.channelId) return
-          teardownAll(ctx)
-          ws.send({ type: 'VOICE_JOIN', channel_id: s.channelId, ...(password ? { password } : {}) })
+          // Le média ne passe pas par le WebSocket : la connexion au SFU survit
+          // à un redémarrage du serveur ForgeChat, seule la présence est rejouée.
+          ws.send({ type: 'VOICE_JOIN', channel_id: s.channelId, listen_only: s.listenOnly, ...(password ? { password } : {}) })
           setTimeout(broadcastState, 300)
         })
 
-        ws.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
+        ws.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(password ? { password } : {}) })
         setTimeout(broadcastState, 200)
       } finally {
         _joining = false
@@ -516,7 +526,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       }
       ws.send({ type: 'VOICE_LEAVE', channel_id: channelId })
 
-      teardownAll(ctx)
+      void disconnectMedia()
 
       const tracks = new Set<MediaStreamTrack>()
       getLocalStream()?.getTracks().forEach(t => tracks.add(t))
@@ -606,7 +616,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         if (!svt) throw new Error('aucune piste écran')
         const sat = screenStream.getAudioTracks()[0] ?? null
 
-        await startScreenTracks(svt, sat, getQualityPrefs().screenContentHint)
+        await startScreenTracks(svt, sat)
 
         const localScreen = new MediaStream([svt])
         set({
@@ -748,7 +758,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       // Par sender (replaceTrack), jamais par track.enabled : tous les senders
       // partagent le MÊME MediaStreamTrack, donc couper « pour un pair » coupait
       // le micro pour tout le monde.
-      void setWhisper(targets, micShouldBeOpen(get()) ? getMicTrack() : null)
+      setWhisper(targets)
     },
   }
 })
