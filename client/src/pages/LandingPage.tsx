@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Shield, Palette, Video, Server, Download, MessageSquare,
@@ -10,13 +10,43 @@ import Logo3D from '../components/Logo3D'
 // (build.bat vs build.sh) et ne sortent pas toujours en même temps --
 // deux versions de release indépendantes évitent qu'un lien de
 // téléchargement pointe vers un artefact pas encore uploadé.
-const WIN_RELEASE = 'v3.22.0'
-const LINUX_RELEASE = 'v3.22.0'
-const DL_BASE = 'https://forgechat.heiphaistos.org/downloads'
-const PORTABLE_URL  = `${DL_BASE}/ForgeChat-Portable-${WIN_RELEASE}.exe`
-const INSTALLER_URL = `${DL_BASE}/ForgeChat-Setup-${WIN_RELEASE}.exe`
-const DEB_URL       = `${DL_BASE}/ForgeChat-${LINUX_RELEASE}-amd64.deb`
-const APPIMAGE_URL  = `${DL_BASE}/ForgeChat-${LINUX_RELEASE}-amd64.AppImage`
+// Liens de téléchargement lus dans le manifeste du canal de mise à jour
+// (`GET /api/desktop/latest`) : une seule source de vérité, la page ne peut
+// plus rester sur une vieille version (elle affichait encore 3.22.0 en 3.25.0).
+// Le repli ne sert que si l'API est injoignable.
+type Artefact = { url: string; size?: number }
+type Release = { version: string; platforms: Record<string, Artefact> }
+
+const FALLBACK_VERSION = '3.25.0'
+const DL_BASE = 'https://forgechat.heiphaistos.org/desktop'
+const FALLBACK: Release = {
+  version: FALLBACK_VERSION,
+  platforms: {
+    'windows-portable': { url: `${DL_BASE}/ForgeChat-Portable-v${FALLBACK_VERSION}.exe` },
+    'windows-x86_64':   { url: `${DL_BASE}/ForgeChat-Setup-v${FALLBACK_VERSION}.exe` },
+    'linux-x86_64':     { url: `${DL_BASE}/ForgeChat-v${FALLBACK_VERSION}-amd64.deb` },
+    'linux-portable':   { url: `${DL_BASE}/ForgeChat-v${FALLBACK_VERSION}-amd64.AppImage` },
+  },
+}
+
+function useRelease(): Release {
+  const [release, setRelease] = useState<Release>(FALLBACK)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/desktop/latest')
+      .then(r => (r.ok && r.status !== 204 ? r.json() : null))
+      .then((d: Release | null) => {
+        if (!cancelled && d?.version && d.platforms) {
+          setRelease({ version: d.version, platforms: { ...FALLBACK.platforms, ...d.platforms } })
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+  return release
+}
+
+const taille = (a: Artefact) => (a.size ? ` · ${Math.round(a.size / 1_048_576)} Mo` : '')
 
 const FEATURES = [
   {
@@ -154,6 +184,12 @@ function AppPreview() {
 }
 
 export default function LandingPage() {
+  const release = useRelease()
+  const VERSION = `v${release.version}`
+  const win = release.platforms['windows-portable']
+  const setup = release.platforms['windows-x86_64']
+  const deb = release.platforms['linux-x86_64']
+  const appimage = release.platforms['linux-portable']
   useEffect(() => {
     // Classe sur <html> : html ET body sont en overflow:hidden globalement (app chat),
     // et libérer body seul ne débloque pas le défilement tactile mobile
@@ -169,7 +205,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-2 min-w-0">
           <Logo3D size={32} className="rounded-lg" />
           <span className="font-bold text-white text-base sm:text-lg truncate" aria-hidden>ForgeChat</span>
-          <span className="hidden sm:inline text-xs text-white/30 ml-1" aria-hidden>{LINUX_RELEASE}</span>
+          <span className="hidden sm:inline text-xs text-white/30 ml-1" aria-hidden>{VERSION}</span>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           <Link to="/login"
@@ -272,7 +308,7 @@ export default function LandingPage() {
 
           <div className="flex flex-col sm:flex-row items-stretch justify-center gap-3 sm:gap-4 mb-8">
             {/* Portable — mis en avant */}
-            <a href={PORTABLE_URL} download
+            <a href={win.url} download
               className="relative flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition shadow-lg shadow-indigo-600/25 group">
               <span className="absolute -top-2.5 right-4 px-2 py-0.5 rounded-full bg-green-500 text-[10px] font-bold text-white uppercase tracking-wide">Recommandé</span>
               <span aria-hidden className="p-2 bg-white/15 rounded-lg group-hover:bg-white/20 transition flex-shrink-0">
@@ -280,24 +316,24 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Version portable</span>
-                <span className="block text-xs text-indigo-200/70 truncate">Sans installation · {WIN_RELEASE} · 12 Mo</span>
+                <span className="block text-xs text-indigo-200/70 truncate">Sans installation · {VERSION}{taille(win)}</span>
               </span>
             </a>
 
             {/* Installeur */}
-            <a href={INSTALLER_URL} download
+            <a href={setup.url} download
               className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
               <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
                 <Download size={18} />
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Installeur</span>
-                <span className="block text-xs text-white/40 truncate">Setup NSIS · {WIN_RELEASE} · 3 Mo</span>
+                <span className="block text-xs text-white/40 truncate">Setup NSIS · {VERSION}{taille(setup)}</span>
               </span>
             </a>
           </div>
 
-          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {WIN_RELEASE}</p>
+          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
         </div>
       </section>
 
@@ -311,30 +347,30 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-stretch justify-center gap-3 sm:gap-4 mb-8">
-            <a href={DEB_URL} download
+            <a href={deb.url} download
               className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
               <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
                 <Download size={18} />
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">Paquet .deb</span>
-                <span className="block text-xs text-white/40 truncate">Debian / Ubuntu · {LINUX_RELEASE}</span>
+                <span className="block text-xs text-white/40 truncate">Debian / Ubuntu · {VERSION}{taille(deb)}</span>
               </span>
             </a>
 
-            <a href={APPIMAGE_URL} download
+            <a href={appimage.url} download
               className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
               <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
                 <Download size={18} />
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">AppImage</span>
-                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {LINUX_RELEASE}</span>
+                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {VERSION}{taille(appimage)}</span>
               </span>
             </a>
           </div>
 
-          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {LINUX_RELEASE}</p>
+          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
         </div>
       </section>
 
@@ -343,7 +379,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Logo3D size={24} className="rounded" />
-            <span className="text-white/40 text-sm">ForgeChat {LINUX_RELEASE} · Heiphaistos</span>
+            <span className="text-white/40 text-sm">ForgeChat {VERSION} · Heiphaistos</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-white/30">
             <a href="https://github.com/Heiphaistos/ForgeChat" target="_blank" rel="noopener noreferrer"
