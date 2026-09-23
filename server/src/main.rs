@@ -144,11 +144,7 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
-            let _ = sqlx::query(
-                "DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < NOW()"
-            )
-            .execute(&ephemeral_state.db)
-            .await;
+            purge_expired_messages(&ephemeral_state).await;
         }
     });
 
@@ -261,6 +257,51 @@ async fn main() -> anyhow::Result<()> {
     ).await?;
 
     Ok(())
+}
+
+/// Supprime les messages éphémères expirés comme une suppression normale :
+/// MESSAGE_DELETE diffusé aux membres qui voient le salon et fichiers joints
+/// effacés du disque. Le SELECT externe lit l'instantané d'avant le DELETE,
+/// donc les pièces jointes (supprimées en cascade) y sont encore visibles.
+async fn purge_expired_messages(state: &AppState) {
+    use sqlx::Row;
+    let rows = match sqlx::query(
+        "WITH gone AS (
+            DELETE FROM messages WHERE expires_at IS NOT NULL AND expires_at < NOW()
+            RETURNING id, channel_id
+         )
+         SELECT g.id, g.channel_id, a.url
+         FROM gone g LEFT JOIN attachments a ON a.message_id = g.id"
+    )
+    .fetch_all(&state.db)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::error!("Purge des messages éphémères : {}", e);
+            return;
+        }
+    };
+
+    let mut deleted: std::collections::HashSet<(uuid::Uuid, uuid::Uuid)> = std::collections::HashSet::new();
+    let mut urls = Vec::new();
+    for r in &rows {
+        deleted.insert((r.get("id"), r.get("channel_id")));
+        if let Some(url) = r.get::<Option<String>, _>("url") {
+            urls.push(url);
+        }
+    }
+    handlers::uploads::remove_upload_files(state, urls);
+
+    // ponytail: une requête d'audience par message ; regrouper par salon si la purge devient massive.
+    for (message_id, channel_id) in deleted {
+        let event = serde_json::json!({
+            "type": "MESSAGE_DELETE",
+            "message_id": message_id,
+            "channel_id": channel_id,
+        });
+        state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+    }
 }
 
 async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
@@ -591,6 +632,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", patch(handlers::threads::edit_thread_message))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/reactions/:emoji", put(handlers::threads::toggle_thread_reaction))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", delete(handlers::threads::delete_thread_message))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/attachments", post(handlers::uploads::upload_thread_attachment))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/ack", post(handlers::threads::ack_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id", patch(handlers::threads::archive_thread))
         // Forum
         .route("/servers/:server_id/channels/:channel_id/posts", get(handlers::forum::list_posts))
@@ -602,6 +645,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/reactions/:emoji", put(handlers::forum::toggle_reply_reaction))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", patch(handlers::forum::edit_reply))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", delete(handlers::forum::delete_reply))
+        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/attachments", post(handlers::uploads::upload_forum_reply_attachment))
         // Custom Emojis
         .route("/servers/:server_id/emojis", get(handlers::emojis::list_emojis))
         .route("/servers/:server_id/emojis", post(handlers::emojis::create_emoji))
