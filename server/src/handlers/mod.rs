@@ -3,6 +3,8 @@ pub mod password_reset;
 pub mod users;
 pub mod servers;
 pub mod channels;
+pub mod channel_access;
+pub mod channel_backup;
 pub mod messages;
 pub mod roles;
 pub mod invites;

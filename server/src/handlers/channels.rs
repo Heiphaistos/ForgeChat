@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
+    handlers::channel_access::{check_deletion, deletion_context, CAN_CREATE, CAN_EDIT},
     handlers::servers::{require_member, require_permission, require_member_and_channel},
     middleware::auth::Claims,
     models::{
@@ -61,6 +62,7 @@ pub async fn get_channels(
             "hidden": r.get::<bool, _>("is_hidden"),
             "default_sort": r.get::<String, _>("default_sort"),
             "require_tag": r.get::<bool, _>("require_tag"),
+            "created_by": r.get::<Option<Uuid>, _>("created_by"),
         })
     }).collect();
 
@@ -73,7 +75,7 @@ pub async fn create_channel(
     Path(server_id): Path<Uuid>,
     Json(body): Json<CreateChannelRequest>,
 ) -> Result<Json<Channel>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_CREATE).await?;
 
     let name = body.name.trim();
     if name.is_empty() {
@@ -97,8 +99,8 @@ pub async fn create_channel(
 
     let channel_type = body.r#type.as_deref().unwrap_or("text");
     let channel = sqlx::query_as::<_, Channel>(
-        "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw, slowmode_delay, user_limit)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"
+        "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw, slowmode_delay, user_limit, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *"
     )
     .bind(server_id)
     .bind(body.category_id)
@@ -108,6 +110,7 @@ pub async fn create_channel(
     .bind(body.is_nsfw.unwrap_or(false))
     .bind(body.slowmode_delay.unwrap_or(0))
     .bind(body.user_limit)
+    .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
 
@@ -131,8 +134,8 @@ pub async fn update_channel(
 ) -> Result<Json<Channel>> {
     // P3-3 — le créateur d'un salon temporaire (« rejoindre pour créer ») peut
     // le renommer, fixer sa limite de places et le verrouiller par mot de
-    // passe, comme un salon temporaire TeamSpeak. Rien d'autre sans MANAGE_CHANNELS.
-    if let Err(e) = require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await {
+    // passe, comme un salon temporaire TeamSpeak. Rien d'autre sans droit de modification.
+    if let Err(e) = require_permission(&state, claims.sub, server_id, CAN_EDIT).await {
         let owner_fields_only = body.topic.is_none() && body.position.is_none()
             && body.slowmode_delay.is_none() && body.is_nsfw.is_none()
             && body.is_auto_create.is_none() && body.auto_create_name.is_none()
@@ -283,7 +286,16 @@ pub async fn delete_channel(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    let ctx = deletion_context(&state, claims.sub, server_id).await?;
+    let created_by: Option<Uuid> = sqlx::query_scalar(
+        "SELECT created_by FROM channels WHERE id=$1 AND server_id=$2"
+    )
+    .bind(channel_id)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
+    check_deletion(ctx, claims.sub, created_by)?;
 
     sqlx::query("DELETE FROM channels WHERE id=$1 AND server_id=$2")
         .bind(channel_id)
@@ -309,20 +321,21 @@ pub async fn create_category(
     Path(server_id): Path<Uuid>,
     Json(body): Json<CreateCategoryRequest>,
 ) -> Result<Json<Category>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_CREATE).await?;
 
     let cat = sqlx::query_as::<_, Category>(
-        "INSERT INTO categories (server_id, name) VALUES ($1, $2) RETURNING *"
+        "INSERT INTO categories (server_id, name, created_by) VALUES ($1, $2, $3) RETURNING *"
     )
     .bind(server_id)
     .bind(&body.name)
+    .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
 
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "CATEGORY_CREATE",
         "server_id": server_id,
-        "category": { "id": cat.id, "name": cat.name, "position": cat.position },
+        "category": { "id": cat.id, "name": cat.name, "position": cat.position, "created_by": cat.created_by },
     }).to_string()).await;
 
     Ok(Json(cat))
@@ -348,7 +361,37 @@ pub async fn delete_category(
     Extension(claims): Extension<Claims>,
     Path((server_id, category_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    let ctx = deletion_context(&state, claims.sub, server_id).await?;
+    let created_by: Option<Uuid> = sqlx::query_scalar(
+        "SELECT created_by FROM categories WHERE id=$1 AND server_id=$2"
+    )
+    .bind(category_id)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Catégorie introuvable".into()))?;
+    check_deletion(ctx, claims.sub, created_by)?;
+
+    // Règle la plus sûre : les salons d'une catégorie supprimée sont détachés
+    // (ON DELETE SET NULL), ce qui les modifie. Il faut donc pouvoir supprimer
+    // CHACUN d'eux ; sinon refus complet et rien n'est touché.
+    let inner: Vec<(String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT name, created_by FROM channels WHERE category_id=$1 AND server_id=$2"
+    )
+    .bind(category_id)
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+    let blocked: Vec<&str> = inner.iter()
+        .filter(|(_, by)| check_deletion(ctx, claims.sub, *by).is_err())
+        .map(|(n, _)| n.as_str())
+        .collect();
+    if !blocked.is_empty() {
+        return Err(AppError::ForbiddenMsg(format!(
+            "Suppression refusée : cette catégorie contient {} salon(s) que vous ne pouvez pas supprimer (#{}). Déplacez-les hors de la catégorie ou demandez au propriétaire du serveur.",
+            blocked.len(), blocked.join(", #"),
+        )));
+    }
 
     sqlx::query("DELETE FROM categories WHERE id=$1 AND server_id=$2")
         .bind(category_id)
@@ -413,7 +456,7 @@ pub async fn reorder_channels(
     Path(server_id): Path<Uuid>,
     Json(req): Json<ReorderChannelsRequest>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     let positions: Vec<i32> = (0..req.channel_ids.len() as i32).collect();
     sqlx::query(
@@ -479,7 +522,7 @@ pub async fn put_channel_permission(
     Json(body): Json<ChannelPermOverride>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
     if !["role", "member"].contains(&body.target_type.as_str()) {
         return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
     }
@@ -510,7 +553,7 @@ pub async fn delete_channel_permission(
     Path((channel_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, crate::models::role::Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
     sqlx::query("DELETE FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
         .bind(channel_id)
         .bind(target_id)
@@ -529,7 +572,7 @@ pub async fn archive_channel(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     use sqlx::Row;
     let row = sqlx::query(
@@ -618,7 +661,7 @@ pub async fn move_channel(
         .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
     let server_id: Uuid = row.get("server_id");
 
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     // Même IDOR que create_channel : vérifier que la catégorie cible appartient
     // bien à ce serveur avant de déplacer le canal dedans.
@@ -756,7 +799,7 @@ pub async fn set_github_webhook_token(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<SetGithubTokenBody>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
     use crate::handlers::servers::require_channel_in_server;
     require_channel_in_server(&state, channel_id, server_id).await?;
 
@@ -820,7 +863,7 @@ pub async fn create_channel_tag(
     Json(body): Json<CreateChannelTagBody>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     let name = body.name.trim();
     if name.is_empty() || name.len() > 32 {
@@ -849,7 +892,7 @@ pub async fn delete_channel_tag(
     Path((channel_id, tag_name)): Path<(Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     sqlx::query("DELETE FROM forum_tags WHERE channel_id=$1 AND name=$2")
         .bind(channel_id)

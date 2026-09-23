@@ -53,12 +53,13 @@ function Shell({ title, onClose, children }: { title: string; onClose: () => voi
   )
 }
 
-function SanctionDialog({ serverId, dialog, onClose, onDone }: {
-  serverId: string; dialog: Dialog & { kind: 'ban' | 'timeout' }; onClose: () => void; onDone: () => void
+function SanctionDialog({ serverId, dialog, canBanForever, onClose, onDone }: {
+  serverId: string; dialog: Dialog & { kind: 'ban' | 'timeout' }; canBanForever: boolean; onClose: () => void; onDone: () => void
 }) {
   const { member, kind } = dialog
   const name = member.nickname ?? member.username
-  const choices = kind === 'ban' ? BANS : TIMEOUTS
+  // Sans « Bannir définitivement » (BAN_TEMP seul) : pas d'option définitive, durée obligatoire.
+  const choices = kind === 'ban' ? (canBanForever ? BANS : BANS.filter(([, h]) => h !== null)) : TIMEOUTS
   const [choice, setChoice] = useState(0)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -247,7 +248,7 @@ export function useMemberModeration(serverId?: string) {
           .catch(e => toast.error(errorOf(e, 'Expulsion refusée')))
       } })
     }
-    if (above && perms.has(PERM.BAN_MEMBERS)) {
+    if (above && perms.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) {
       items.push({ label: 'Bannir…', danger: true, onClick: () => setDialog({ kind: 'ban', member: m }) })
     }
     if (above && moderator) {
@@ -268,7 +269,7 @@ export function useMemberModeration(serverId?: string) {
   const node = serverId && dialog
     ? dialog.kind === 'notes'
       ? <NotesDialog serverId={serverId} member={dialog.member} onClose={() => setDialog(null)} />
-      : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} onClose={() => setDialog(null)} onDone={refresh} />
+      : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} canBanForever={perms.has(PERM.BAN_MEMBERS)} onClose={() => setDialog(null)} onDone={refresh} />
     : null
 
   return { itemsFor, voiceItemsFor, canMove: perms.has(PERM.MOVE_MEMBERS), byId, node }

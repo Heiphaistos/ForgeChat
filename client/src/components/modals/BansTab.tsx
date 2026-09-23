@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { UserCheck } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 
 interface Ban {
   user_id: string
@@ -10,10 +11,14 @@ interface Ban {
   avatar: string | null
   reason: string | null
   banned_at: string
+  /** null = bannissement définitif */
+  expires_at?: string | null
 }
 
 export default function BansTab({ serverId }: { serverId: string }) {
   const qc = useQueryClient()
+  // Lever un ban définitif exige « Bannir définitivement » (BAN_MEMBERS).
+  const canBanForever = useServerPerms(serverId).has(PERM.BAN_MEMBERS)
 
   const { data: bans = [], isLoading } = useQuery<Ban[]>({
     queryKey: ['bans', serverId],
@@ -59,9 +64,10 @@ export default function BansTab({ serverId }: { serverId: string }) {
             )}
             <div className="text-xs text-fc-muted">
               Banni le {new Date(b.banned_at).toLocaleDateString('fr-FR')}
+              {b.expires_at ? ` · jusqu'au ${new Date(b.expires_at).toLocaleString('fr-FR')}` : ' · définitif'}
             </div>
           </div>
-          <button
+          {(b.expires_at || canBanForever) && <button
             onClick={() => unban.mutate(b.user_id)}
             disabled={unban.isPending}
             aria-label={`Débannir ${b.username}`}
@@ -71,7 +77,7 @@ export default function BansTab({ serverId }: { serverId: string }) {
           >
             <UserCheck size={13} aria-hidden />
             <span aria-hidden>Débannir</span>
-          </button>
+          </button>}
         </div>
       ))}
     </div>

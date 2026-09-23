@@ -5,6 +5,8 @@ import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useAuth } from '../../store/auth'
+import { useServerPerms } from '../../hooks/useServerPerms'
+import { deleteWithBackup } from '../../lib/deleteWithBackup'
 
 const SLOWMODE_OPTIONS = [
   { label: 'Désactivé', value: 0 },
@@ -57,6 +59,7 @@ interface Channel {
   has_voice_password?: boolean
   is_temporary?: boolean
   created_by_auto?: string | null
+  created_by?: string | null
   is_auto_create?: boolean
   auto_create_name?: string | null
   bitrate?: number
@@ -267,7 +270,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   useEscapeKey(onClose)
   const qc = useQueryClient()
   const [tab, setTab] = useState<TabId>('general')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const { canEditChannels, canDeleteChannel } = useServerPerms(serverId)
+  const [deleting, setDeleting] = useState(false)
 
   const [name, setName] = useState(channel.name)
   const [topic, setTopic] = useState(channel.topic ?? '')
@@ -337,15 +341,16 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
-  const deleteChannel = useMutation({
-    mutationFn: () => api.delete(`/servers/${serverId}/channels/${channel.id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['server', serverId] })
-      toast.success('Canal supprimé')
-      onClose()
-    },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
-  })
+  const removeChannel = async () => {
+    setDeleting(true)
+    const serverName = qc.getQueryData<any>(['server', serverId])?.server?.name
+    const done = await deleteWithBackup({ kind: 'channel', serverId, serverName, id: channel.id, name: channel.name })
+    setDeleting(false)
+    if (!done) return
+    qc.invalidateQueries({ queryKey: ['server', serverId] })
+    toast.success('Canal supprimé')
+    onClose()
+  }
 
   const addForumTag = () => {
     const tag = newTag.trim()
@@ -374,7 +379,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
   const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'general', label: 'Général', icon: <Settings size={14} /> },
-    { id: 'permissions', label: 'Permissions', icon: <Lock size={14} /> },
+    ...(canEditChannels ? [{ id: 'permissions' as TabId, label: 'Permissions', icon: <Lock size={14} /> }] : []),
     { id: 'advanced', label: 'Avancé', icon: <Shield size={14} /> },
   ]
 
@@ -607,27 +612,17 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                 </div>
               )}
 
-              <div className="border-t border-fc-hover pt-4">
-                <h4 className="text-sm font-semibold text-red-400 mb-2">Zone dangereuse</h4>
-                <button onClick={() => setShowDeleteConfirm(true)}
-                  disabled={deleteChannel.isPending}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition">
-                  <Trash2 size={14} />
-                  Supprimer le canal #{channel.name}
-                </button>
-                {showDeleteConfirm && (
-                  <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
-                    <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                      <h3 className="text-lg font-bold text-white mb-2">Supprimer #{channel.name}</h3>
-                      <p className="text-sm text-fc-muted mb-5">Cette action est irréversible. Tous les messages seront perdus.</p>
-                      <div className="flex gap-3 justify-end">
-                        <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
-                        <button onClick={() => { deleteChannel.mutate(); setShowDeleteConfirm(false) }} disabled={deleteChannel.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Supprimer</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {canDeleteChannel(channel.created_by) && (
+                <div className="border-t border-fc-hover pt-4">
+                  <h4 className="text-sm font-semibold text-red-400 mb-2">Zone dangereuse</h4>
+                  <button onClick={removeChannel}
+                    disabled={deleting}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition disabled:opacity-50">
+                    <Trash2 size={14} />
+                    Supprimer le canal #{channel.name}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -636,7 +631,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
         {tab !== 'permissions' && (
           <div className="px-5 py-4 border-t border-fc-bg flex justify-end gap-3 flex-shrink-0">
             <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">Annuler</button>
-            {tab === 'general' && (
+            {tab === 'general' && (canEditChannels || ownsTemp) && (
               <button onClick={() => save.mutate()} disabled={save.isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
                 {save.isPending ? 'Enregistrement...' : 'Enregistrer'}

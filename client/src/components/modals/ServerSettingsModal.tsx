@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import RolesTab from './RolesTab'
 import TransferOwnershipSection from './TransferOwnershipSection'
 import MembersTab from './MembersTab'
@@ -102,6 +103,8 @@ function BoostSection({ server }: { server: any }) {
 
 export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
   useEscapeKey(onClose)
+  // Liste des bans : bannir définitivement OU temporairement.
+  const canSeeBans = useServerPerms(server.id).has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)
   const [tab, setTab] = useState<Tab>('general')
   const [mobileShowContent, setMobileShowContent] = useState(false)
   const [name, setName] = useState(server.name)
@@ -302,7 +305,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
         { id: 'roles'    as Tab, label: 'Rôles',     icon: Shield },
         { id: 'members'  as Tab, label: 'Membres',   icon: Users },
         { id: 'tags'     as Tab, label: 'Tags clan',  icon: Tag },
-        ...(isAdmin ? [{ id: 'bans' as Tab, label: 'Bans', icon: Ban }] : []),
+        ...(isAdmin || canSeeBans ? [{ id: 'bans' as Tab, label: 'Bans', icon: Ban }] : []),
         { id: 'emojis'   as Tab, label: 'Emojis',    icon: SmilePlus },
         { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
         ...(isAdmin ? [{ id: 'webhooks' as Tab, label: 'Webhooks', icon: Link }] : []),

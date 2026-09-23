@@ -211,7 +211,7 @@ pub async fn use_template(
         let old_id = cat["id"].as_str().unwrap_or("").to_string();
 
         let new_cat = sqlx::query(
-            "INSERT INTO categories (server_id, name, position) VALUES ($1, $2, $3) RETURNING id"
+            "INSERT INTO categories (server_id, name, position, created_by) VALUES ($1, $2, $3, (SELECT owner_id FROM servers WHERE id=$1)) RETURNING id"
         )
         .bind(server.id)
         .bind(cat_name)
@@ -235,7 +235,7 @@ pub async fn use_template(
     // S'il n'y a pas de canaux dans le template, créer un canal général par défaut
     if channels.is_empty() {
         sqlx::query(
-            "INSERT INTO channels (server_id, name, type, position) VALUES ($1, 'général', 'text', 0)"
+            "INSERT INTO channels (server_id, name, type, position, created_by) VALUES ($1, 'général', 'text', 0, (SELECT owner_id FROM servers WHERE id=$1))"
         )
         .bind(server.id)
         .execute(&state.db)
@@ -250,8 +250,8 @@ pub async fn use_template(
             let new_cat_id = cat_id_map.get(&old_cat_id).copied();
 
             sqlx::query(
-                "INSERT INTO channels (server_id, category_id, name, type, topic, position)
-                 VALUES ($1, $2, $3, $4, $5, $6)"
+                "INSERT INTO channels (server_id, category_id, name, type, topic, position, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, (SELECT owner_id FROM servers WHERE id=$1))"
             )
             .bind(server.id)
             .bind(new_cat_id)

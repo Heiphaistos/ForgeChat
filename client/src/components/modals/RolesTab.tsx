@@ -20,7 +20,11 @@ const PERMISSION_GROUPS = [
       { key: 'ADMINISTRATOR',    bit: B(31), label: 'Administrateur',        desc: 'Toutes les permissions, ignore les restrictions des salons' },
       { key: 'MANAGE_SERVER',    bit: B(8),  label: 'Gérer le serveur',      desc: 'Modifier le nom, l\'icône et les paramètres du serveur' },
       { key: 'MANAGE_ROLES',     bit: B(5),  label: 'Gérer les rôles',       desc: 'Créer, modifier, supprimer et attribuer des rôles' },
-      { key: 'MANAGE_CHANNELS',  bit: B(4),  label: 'Gérer les salons',      desc: 'Créer, modifier, supprimer des salons' },
+      { key: 'MANAGE_CHANNELS',  bit: B(4),  label: 'Gérer les salons',      desc: 'Créer, modifier et supprimer des salons (vaut les quatre droits ci-dessous, sauf les salons du propriétaire)' },
+      { key: 'CREATE_CHANNELS',  bit: B(19), label: 'Créer des salons',      desc: 'Créer des salons et des catégories' },
+      { key: 'EDIT_CHANNELS',    bit: B(20), label: 'Modifier les salons',   desc: 'Nom, sujet, réglages, ordre, archivage, permissions, tags, flux RSS, webhook GitHub' },
+      { key: 'DELETE_CHANNELS',  bit: B(21), label: 'Supprimer tous les salons', desc: 'Supprimer n’importe quel salon ou catégorie, sauf ceux créés par le propriétaire' },
+      { key: 'DELETE_OWN_CHANNELS', bit: B(22), label: 'Supprimer ses propres salons', desc: 'Supprimer uniquement les salons et catégories qu’on a créés' },
     ]
   },
   {
@@ -29,7 +33,8 @@ const PERMISSION_GROUPS = [
     color: 'text-orange-400',
     perms: [
       { key: 'KICK_MEMBERS',     bit: B(6),  label: 'Expulser des membres',  desc: 'Expulser des membres du serveur' },
-      { key: 'BAN_MEMBERS',      bit: B(7),  label: 'Bannir des membres',    desc: 'Bannir définitivement des membres' },
+      { key: 'BAN_MEMBERS',      bit: B(7),  label: 'Bannir définitivement', desc: 'Bannir définitivement ou temporairement, lever tout bannissement' },
+      { key: 'BAN_TEMP',         bit: B(23), label: 'Bannir temporairement', desc: 'Bannir pour une durée limitée et lever les bannissements temporaires' },
     ]
   },
   {

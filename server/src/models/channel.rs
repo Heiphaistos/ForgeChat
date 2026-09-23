@@ -42,6 +42,10 @@ pub struct Channel {
     pub default_sort: String,
     #[sqlx(default)]
     pub require_tag: bool,
+    /// Créateur (migration 068) : droit DELETE_OWN_CHANNELS et protection des
+    /// salons du propriétaire. NULL si le compte a été supprimé.
+    #[sqlx(default)]
+    pub created_by: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +90,8 @@ pub struct Category {
     pub server_id: Uuid,
     pub name: String,
     pub position: i32,
+    #[sqlx(default)]
+    pub created_by: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]

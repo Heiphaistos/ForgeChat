@@ -27,6 +27,8 @@ import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
+import { deleteWithBackup } from '../../lib/deleteWithBackup'
+import { useServerPerms } from '../../hooks/useServerPerms'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
 import { useMemberModeration } from '../chat/MemberModeration'
@@ -490,6 +492,15 @@ export default function ChannelSidebar() {
     )
     return { channels: ch, hiddenChannels: hidden, archivedChannels: archived, isOwnerOrAdmin: isAdmin }
   }, [allChannels, data, server, currentUser?.id])
+  // Droits fins sur les salons (créer / modifier / supprimer), voir useServerPerms.
+  const { canCreateChannels: canCreate, canEditChannels: canEdit, canDeleteChannel } = useServerPerms(serverId ?? undefined)
+  const removeWithBackup = async (kind: 'channel' | 'category', id: string, name: string) => {
+    if (!serverId) return
+    if (await deleteWithBackup({ kind, serverId, serverName: server?.name, id, name })) {
+      qc.invalidateQueries({ queryKey: ['server', serverId] })
+      if (kind === 'category') qc.invalidateQueries({ queryKey: ['categories', serverId] })
+    }
+  }
 
   // Construire les groupes dynamiques basés sur les catégories DB
   const categoryGroups = useMemo(() => {
@@ -855,22 +866,22 @@ export default function ChannelSidebar() {
     return (
       <div
         key={ch.id}
-        draggable={isOwnerOrAdmin}
-        onDragStart={isOwnerOrAdmin ? e => handleChannelDragStart(e, ch.id) : undefined}
+        draggable={canEdit}
+        onDragStart={canEdit ? e => handleChannelDragStart(e, ch.id) : undefined}
         onDragOver={e => {
           if (isVoiceMemberDrag(e)) {
             if (!isVoiceCh || ch.is_auto_create || ch.type === 'stage') return
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
             setVoiceDropTarget(ch.id)
-          } else if (isOwnerOrAdmin) handleChannelDragOver(e, ch.id)
+          } else if (canEdit) handleChannelDragOver(e, ch.id)
         }}
         onDragLeave={() => { if (voiceDropTarget === ch.id) setVoiceDropTarget(null) }}
         onDrop={e => {
           if (isVoiceMemberDrag(e)) dropVoiceMember(e, ch.id)
-          else if (isOwnerOrAdmin) handleChannelDrop(e, ch.id, groupChannels, categoryKey)
+          else if (canEdit) handleChannelDrop(e, ch.id, groupChannels, categoryKey)
         }}
-        onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
+        onDragEnd={canEdit ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${voiceDropTarget === ch.id ? 'ring-1 ring-fc-accent rounded' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
         onContextMenu={e => {
           const channelMuted = isChannelMuted(ch.id)
@@ -884,11 +895,13 @@ export default function ChannelSidebar() {
             { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
             { separator: true },
             { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
-            ...(isOwnerOrAdmin ? [
+            ...(canEdit ? [
               { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
               { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+            ] : []),
+            ...(canDeleteChannel(ch.created_by) ? [
               { separator: true as const },
-              { label: 'Supprimer le canal', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/channels/${ch.id}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
+              { label: 'Supprimer le canal', danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
             ] : []),
           ])
         }}
@@ -908,7 +921,7 @@ export default function ChannelSidebar() {
               { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
               { separator: true },
               { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
-              ...(isOwnerOrAdmin ? [
+              ...(canEdit ? [
                 { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
                 { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
               ] : []),
@@ -1006,8 +1019,8 @@ export default function ChannelSidebar() {
             <span role="status" aria-label="Messages non lus" className="flex-shrink-0 w-2 h-2 bg-white rounded-full" />
           ))}
 
-          {/* Poignée drag (visible au hover si owner/admin) */}
-          {isOwnerOrAdmin && (
+          {/* Poignée drag (visible au hover si droit de modifier les salons) */}
+          {canEdit && (
             <span
               className="opacity-0 group-hover:opacity-100 p-0.5 text-fc-muted cursor-grab active:cursor-grabbing flex-shrink-0"
               title="Réordonner"
@@ -1024,7 +1037,7 @@ export default function ChannelSidebar() {
           >
             <Settings size={12} />
           </button>
-          {isOwnerOrAdmin && (
+          {canEdit && (
             <button
               onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
               className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
@@ -1164,6 +1177,7 @@ export default function ChannelSidebar() {
               >
                 <UserPlus size={16} /> Inviter des personnes
               </button>
+              {canCreate && (<>
               <div className="border-t border-fc-hover my-1" />
               <button
                 onClick={() => { setShowCreateChannel(true); setMenuOpen(false) }}
@@ -1171,6 +1185,7 @@ export default function ChannelSidebar() {
               >
                 <Plus size={16} /> Créer un canal
               </button>
+              </>)}
               <div className="border-t border-fc-hover my-1" />
               <button
                 onClick={() => { setShowSettings(true); setMenuOpen(false) }}
@@ -1236,14 +1251,14 @@ export default function ChannelSidebar() {
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
-                    { label: 'Créer un canal', onClick: () => setShowCreateChannel(true) },
-                    ...(isOwnerOrAdmin && categories.some((c: any) => c.id === key) ? [
+                    ...(canCreate ? [{ label: 'Créer un canal', onClick: () => setShowCreateChannel(true) }] : []),
+                    ...(categories.some((c: any) => c.id === key && canDeleteChannel(c.created_by)) ? [
                       { separator: true as const },
-                      { label: 'Supprimer la catégorie', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer la catégorie "${label}" ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/categories/${key}`); qc.invalidateQueries({ queryKey: ['server', serverId] }); qc.invalidateQueries({ queryKey: ['categories', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
+                      { label: 'Supprimer la catégorie', danger: true, onClick: () => removeWithBackup('category', key, label) },
                     ] : []),
                   ])}
-                  onDragOver={isOwnerOrAdmin && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
-                  onDrop={isOwnerOrAdmin && draggedChannelId ? e => {
+                  onDragOver={canEdit && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
+                  onDrop={canEdit && draggedChannelId ? e => {
                     e.preventDefault()
                     const newCategoryId = key === UNCATEGORIZED_KEY ? null : key
                     moveChannel.mutate({ channelId: draggedChannelId, categoryId: newCategoryId })
@@ -1258,14 +1273,14 @@ export default function ChannelSidebar() {
                     />
                     <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide select-none">{label}</span>
                   </div>
-                  <button
+                  {canCreate && <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
                     className="text-fc-muted opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
                     title={`Créer un canal dans ${label}`}
                     aria-label={`Créer un canal dans ${label}`}
                   >
                     <Plus size={14} />
-                  </button>
+                  </button>}
                 </div>
 
                 {!isCollapsed
@@ -1305,7 +1320,7 @@ export default function ChannelSidebar() {
           )}
 
           {/* Canaux archivés */}
-          {isOwnerOrAdmin && archivedChannels.length > 0 && (
+          {canEdit && archivedChannels.length > 0 && (
             <div className="mt-3 mb-2">
               <div
                 className="flex items-center gap-1 px-2 py-1 cursor-pointer"
@@ -1325,9 +1340,9 @@ export default function ChannelSidebar() {
                   className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition"
                   onContextMenu={e => ctxMenu.open(e, [
                     { label: 'Restaurer le canal', onClick: () => archiveChannel.mutate(ch.id) },
-                    ...(isOwnerOrAdmin ? [
+                    ...(canDeleteChannel(ch.created_by) ? [
                       { separator: true as const },
-                      { label: 'Supprimer définitivement', danger: true, onClick: async () => { if (await confirm({ message: `Supprimer définitivement #${ch.name} ?`, danger: true, confirmLabel: 'Supprimer' })) { try { await api.delete(`/servers/${serverId}/channels/${ch.id}`); qc.invalidateQueries({ queryKey: ['server', serverId] }) } catch { toast.error('Erreur lors de la suppression') } } } },
+                      { label: 'Supprimer définitivement', danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
                     ] : []),
                   ])}
                 >

@@ -97,7 +97,7 @@ pub async fn list_reports(
         &state,
         claims.sub,
         server_id,
-        Permissions::BAN_MEMBERS,
+        Permissions::BAN_MEMBERS | Permissions::BAN_TEMP,
     )
     .await?;
 
@@ -152,7 +152,7 @@ pub async fn update_report(
         &state,
         claims.sub,
         server_id,
-        Permissions::BAN_MEMBERS,
+        Permissions::BAN_MEMBERS | Permissions::BAN_TEMP,
     )
     .await?;
 

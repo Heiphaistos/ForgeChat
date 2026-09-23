@@ -8,6 +8,9 @@ pub enum AppError {
     Unauthorized,
     #[error("Accès interdit")]
     Forbidden,
+    /// 403 avec un motif lisible (ex. salon protégé du propriétaire).
+    #[error("{0}")]
+    ForbiddenMsg(String),
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
@@ -31,6 +34,7 @@ impl IntoResponse for AppError {
         let (status, message) = match &self {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
+            AppError::ForbiddenMsg(m) => (StatusCode::FORBIDDEN, m.clone()),
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),

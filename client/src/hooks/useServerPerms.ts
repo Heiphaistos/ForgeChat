@@ -13,6 +13,11 @@ export const PERM = {
   MUTE_MEMBERS: 1 << 15,
   DEAFEN_MEMBERS: 1 << 16,
   MOVE_MEMBERS: 1 << 17,
+  CREATE_CHANNELS: 1 << 19,
+  EDIT_CHANNELS: 1 << 20,
+  DELETE_CHANNELS: 1 << 21,
+  DELETE_OWN_CHANNELS: 1 << 22,
+  BAN_TEMP: 1 << 23,
   ADMINISTRATOR: 1 << 31,
 } as const
 
@@ -58,6 +63,21 @@ export function useServerPerms(serverId?: string) {
       if (target.is_owner || target.user_id === ownerId) return false
       return isOwner || myTop > topPosition(target.role_ids ?? [])
     }
-    return { loaded: !!data, meId, isOwner, isAdmin, has, outranks, channels: (data?.channels ?? []) as any[] }
+    // MANAGE_CHANNELS vaut créer + modifier + supprimer (rôles existants).
+    const canCreateChannels = has(PERM.MANAGE_CHANNELS | PERM.CREATE_CHANNELS)
+    const canEditChannels = has(PERM.MANAGE_CHANNELS | PERM.EDIT_CHANNELS)
+    /** Même règle que `deletion_refusal` (channel_access.rs) : ce que le
+     *  propriétaire a créé n'est supprimable que par lui ou un administrateur. */
+    const canDeleteChannel = (createdBy?: string | null) => {
+      if (isAdmin) return true
+      if (createdBy && createdBy === ownerId) return false
+      if (has(PERM.MANAGE_CHANNELS | PERM.DELETE_CHANNELS)) return true
+      return has(PERM.DELETE_OWN_CHANNELS) && !!createdBy && createdBy === meId
+    }
+    return {
+      loaded: !!data, meId, isOwner, isAdmin, has, outranks,
+      canCreateChannels, canEditChannels, canDeleteChannel,
+      channels: (data?.channels ?? []) as any[],
+    }
   }, [data, meId])
 }

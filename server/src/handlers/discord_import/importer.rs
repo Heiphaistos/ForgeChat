@@ -216,7 +216,7 @@ impl Importer {
         let mut cat_map: HashMap<String, (Uuid, Option<Vec<Overwrite>>)> = HashMap::new();
         for c in &g.categories {
             let id: Uuid = sqlx::query_scalar(
-                "INSERT INTO categories (server_id, name, position) VALUES ($1, $2, $3) RETURNING id",
+                "INSERT INTO categories (server_id, name, position, created_by) VALUES ($1, $2, $3, (SELECT owner_id FROM servers WHERE id=$1)) RETURNING id",
             )
             .bind(server_id)
             .bind(truncate(c.name.trim(), 100))
@@ -415,8 +415,8 @@ impl Importer {
     ) -> anyhow::Result<Uuid> {
         let name = truncate(name.trim(), 100);
         let id: Uuid = sqlx::query_scalar(
-            "INSERT INTO channels (server_id, category_id, name, type, topic, position, is_nsfw, slowmode_delay)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+            "INSERT INTO channels (server_id, category_id, name, type, topic, position, is_nsfw, slowmode_delay, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (SELECT owner_id FROM servers WHERE id=$1)) RETURNING id",
         )
         .bind(sid)
         .bind(category_id)

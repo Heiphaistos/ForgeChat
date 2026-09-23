@@ -6,7 +6,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{error::AppError, middleware::auth::Claims, models::role::Permissions, state::AppState};
+use crate::{error::AppError, middleware::auth::Claims, state::AppState};
+use crate::handlers::channel_access::CAN_EDIT;
 
 /// Vérifie qu'une URL de feed ne pointe pas vers un réseau interne (anti-SSRF).
 fn is_ssrf_safe_feed_url(url: &str) -> bool {
@@ -106,7 +107,7 @@ pub async fn create_channel_feed(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateFeedRequest>,
 ) -> Result<Json<ChannelFeed>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
     crate::handlers::servers::require_channel_in_server(&state, channel_id, server_id).await?;
 
     // Validation basique
@@ -157,7 +158,7 @@ pub async fn delete_channel_feed(
     Extension(claims): Extension<Claims>,
     Path((server_id, feed_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     let rows = sqlx::query(
         "DELETE FROM channel_feeds WHERE id = $1 AND server_id = $2"
@@ -180,7 +181,7 @@ pub async fn toggle_channel_feed(
     Extension(claims): Extension<Claims>,
     Path((server_id, feed_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
 
     let rows = sqlx::query(
         "UPDATE channel_feeds SET enabled = NOT enabled WHERE id = $1 AND server_id = $2"

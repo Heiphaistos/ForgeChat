@@ -792,8 +792,8 @@ async fn handle_ws_message(
                         let new_name = template.replace("{username}", &username);
 
                         if let Ok(new_ch) = sqlx::query_as::<_, crate::models::channel::Channel>(
-                            "INSERT INTO channels (server_id, name, type, is_temporary, created_by_auto, position)
-                             VALUES ($1, $2, 'voice', TRUE, $3,
+                            "INSERT INTO channels (server_id, name, type, is_temporary, created_by_auto, created_by, position)
+                             VALUES ($1, $2, 'voice', TRUE, $3, $3,
                                (SELECT COALESCE(MAX(position), 0) + 1 FROM channels WHERE server_id=$1))
                              RETURNING *"
                         )

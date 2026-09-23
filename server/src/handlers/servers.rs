@@ -78,7 +78,7 @@ pub async fn create_server(
 
     // Canal général par défaut
     sqlx::query(
-        "INSERT INTO channels (server_id, name, type, position) VALUES ($1, 'général', 'text', 0)"
+        "INSERT INTO channels (server_id, name, type, position, created_by) VALUES ($1, 'général', 'text', 0, (SELECT owner_id FROM servers WHERE id=$1))"
     )
     .bind(server.id)
     .execute(&state.db)
@@ -665,10 +665,32 @@ pub async fn ban_member(
     Path((server_id, user_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(
-        &state, claims.sub, server_id,
-        crate::models::role::Permissions::BAN_MEMBERS,
-    ).await?;
+    use crate::models::role::Permissions;
+    // Sans durée = définitif : BAN_MEMBERS. Avec durée : BAN_MEMBERS ou BAN_TEMP.
+    let temporary = body["duration_hours"].as_i64().is_some();
+    let can_ban_forever = require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS).await.is_ok();
+    if !temporary && !can_ban_forever {
+        require_permission(&state, claims.sub, server_id, Permissions::BAN_TEMP).await?;
+        return Err(AppError::ForbiddenMsg(
+            "Bannir définitivement exige le droit « Bannir définitivement » : indiquez une durée.".into(),
+        ));
+    }
+    if temporary && !can_ban_forever {
+        require_permission(&state, claims.sub, server_id, Permissions::BAN_TEMP).await?;
+        // Un ban temporaire écraserait (ON CONFLICT) un ban définitif existant.
+        let already_forever: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM bans WHERE user_id=$1 AND server_id=$2 AND expires_at IS NULL)"
+        )
+        .bind(user_id)
+        .bind(server_id)
+        .fetch_one(&state.db)
+        .await?;
+        if already_forever {
+            return Err(AppError::ForbiddenMsg(
+                "Ce membre est déjà banni définitivement : seul un détenteur de « Bannir définitivement » peut changer ce bannissement.".into(),
+            ));
+        }
+    }
 
     if user_id == claims.sub {
         return Err(AppError::BadRequest("Impossible de se bannir soi-même".into()));

@@ -36,6 +36,8 @@ pub struct UpdateRoleRequest {
 }
 
 // Bitfield permissions (comme Discord)
+// MANAGE_CHANNELS (bit 4) reste valable : il vaut CREATE + EDIT + DELETE_CHANNELS
+// pour les rôles existants (les gardes passent `MANAGE_CHANNELS | X`).
 pub struct Permissions;
 #[allow(dead_code)]
 impl Permissions {
@@ -58,6 +60,17 @@ impl Permissions {
     pub const DEAFEN_MEMBERS: i64 = 1 << 16;
     pub const MOVE_MEMBERS: i64 = 1 << 17;
     pub const PRIORITY_SPEAKER: i64 = 1 << 18;
+    /// Créer des salons et des catégories.
+    pub const CREATE_CHANNELS: i64 = 1 << 19;
+    /// Modifier les salons : nom, sujet, réglages, ordre, déplacement, archivage,
+    /// surcharges de permissions, tags, flux RSS, jeton webhook GitHub.
+    pub const EDIT_CHANNELS: i64 = 1 << 20;
+    /// Supprimer n'importe quel salon ou catégorie (sauf ceux du propriétaire).
+    pub const DELETE_CHANNELS: i64 = 1 << 21;
+    /// Supprimer seulement les salons et catégories qu'on a créés soi-même.
+    pub const DELETE_OWN_CHANNELS: i64 = 1 << 22;
+    /// Bannir temporairement (BAN_MEMBERS = définitivement et temporairement).
+    pub const BAN_TEMP: i64 = 1 << 23;
     /// Partage d'écran / Go Live — déclaré côté UI depuis toujours (RolesTab bit 40)
     pub const STREAM: i64 = 1 << 40;
     pub const ADMINISTRATOR: i64 = 1 << 31;
@@ -71,5 +84,7 @@ impl Permissions {
         | Self::MENTION_EVERYONE | Self::ATTACH_FILES | Self::EMBED_LINKS
         | Self::ADD_REACTIONS | Self::CONNECT_VOICE | Self::SPEAK_VOICE
         | Self::MUTE_MEMBERS | Self::DEAFEN_MEMBERS | Self::MOVE_MEMBERS
-        | Self::PRIORITY_SPEAKER | Self::STREAM | Self::ADMINISTRATOR;
+        | Self::PRIORITY_SPEAKER | Self::CREATE_CHANNELS | Self::EDIT_CHANNELS
+        | Self::DELETE_CHANNELS | Self::DELETE_OWN_CHANNELS | Self::BAN_TEMP
+        | Self::STREAM | Self::ADMINISTRATOR;
 }

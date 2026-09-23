@@ -16,10 +16,10 @@ pub async fn list_bans(
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS | Permissions::BAN_TEMP).await?;
 
     let rows = sqlx::query(
-        "SELECT b.user_id, b.reason, b.banned_at,
+        "SELECT b.user_id, b.reason, b.banned_at, b.expires_at,
                 u.username, u.discriminator, u.avatar
          FROM bans b
          JOIN users u ON u.id = b.user_id
@@ -41,6 +41,7 @@ pub async fn list_bans(
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "reason": r.get::<Option<String>, _>("reason"),
                 "banned_at": r.get::<chrono::DateTime<chrono::Utc>, _>("banned_at"),
+                "expires_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at"),
             })
         })
         .collect();
@@ -53,7 +54,22 @@ pub async fn unban_member(
     Extension(claims): Extension<Claims>,
     Path((server_id, user_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS).await?;
+    require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS | Permissions::BAN_TEMP).await?;
+    // Lever un ban définitif (expires_at NULL) exige BAN_MEMBERS.
+    let expires: Option<Option<chrono::DateTime<chrono::Utc>>> = sqlx::query_scalar(
+        "SELECT expires_at FROM bans WHERE server_id=$1 AND user_id=$2"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if matches!(expires, Some(None))
+        && require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS).await.is_err()
+    {
+        return Err(AppError::ForbiddenMsg(
+            "Lever un bannissement définitif exige le droit « Bannir définitivement ».".into(),
+        ));
+    }
 
     let result = sqlx::query("DELETE FROM bans WHERE server_id=$1 AND user_id=$2")
         .bind(server_id)
