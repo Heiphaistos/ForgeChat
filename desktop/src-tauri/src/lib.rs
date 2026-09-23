@@ -339,6 +339,14 @@ pub fn run() {
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+        // Fenêtre BLANCHE au démarrage alors que la page est bien construite (DOM
+        // complet, vérifié par WebDriver) : le mode composition accélérée de
+        // WebKitGTK ne peint rien sur certains couples pilote/compositeur (NVIDIA
+        // propriétaire, Wayland, AppImage sur une distribution autre qu'Ubuntu).
+        // Le rendu logiciel suffit à une messagerie ; la vidéo reste décodée à part.
+        if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        }
     }
 
     // WebRTC dans WebView2 (Windows uniquement).
