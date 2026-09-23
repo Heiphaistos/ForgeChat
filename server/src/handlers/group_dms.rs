@@ -446,9 +446,16 @@ pub async fn send_group_message(
     )
     .bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
 
-    for uid in members {
-        state.broadcast_to_user(uid, event_str.clone()).await;
+    for uid in &members {
+        state.broadcast_to_user(*uid, event_str.clone()).await;
     }
+    let others: Vec<Uuid> = members.into_iter().filter(|u| *u != claims.sub).collect();
+    crate::notify::push_direct(&state, others, None, serde_json::json!({
+        "title": user.get::<String, _>("username"),
+        "body": content.as_deref().map(|c| c.chars().take(200).collect::<String>()).unwrap_or_else(|| "Pièce jointe".into()),
+        "url": format!("/dms/groups/{group_id}"),
+        "tag": group_id,
+    }));
 
     Ok(Json(msg_json))
 }

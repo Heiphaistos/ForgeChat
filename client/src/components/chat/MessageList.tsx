@@ -615,6 +615,7 @@ export default function MessageList({
         const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
         if (el) {
           const pos = el.selectionStart ?? el.value.length
+          window.dispatchEvent(new CustomEvent('forgechat:mention-picked', { detail: { name: msg.author_username, token: `<@${msg.author_id}>` } }))
           const mention = `@${msg.author_username} `
           const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
           el.focus()

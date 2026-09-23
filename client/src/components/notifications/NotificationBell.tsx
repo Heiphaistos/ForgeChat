@@ -41,8 +41,8 @@ export default function NotificationBell() {
   const { data: mentions = [] } = useQuery<MentionItem[]>({
     queryKey: ['user_mentions'],
     queryFn: () => api.get('/user/mentions').then(r => r.data),
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
+    // Plus de sondage : MENTION_CREATE et READ_STATE_UPDATE tiennent ce cache à jour (App.tsx)
+    staleTime: Infinity,
   })
 
   const markRead = useMutation({

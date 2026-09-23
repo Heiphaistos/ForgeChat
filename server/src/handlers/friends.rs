@@ -853,6 +853,13 @@ pub async fn send_dm(
     state.broadcast_to_user(other_id, event_str.clone()).await;
     // Sync multi-onglets/appareils : notifier aussi le sender lui-même
     state.broadcast_to_user(claims.sub, event_str).await;
+    // Destinataire sans aucune session ouverte : Web Push.
+    crate::notify::push_direct(&state, vec![other_id], Some(dm_id), serde_json::json!({
+        "title": sender_username,
+        "body": if content.is_empty() { "Pièce jointe".to_string() } else { content.chars().take(200).collect() },
+        "url": format!("/dms/{dm_id}"),
+        "tag": dm_id,
+    }));
 
     Ok(Json(serde_json::json!({
         "id": msg_id,

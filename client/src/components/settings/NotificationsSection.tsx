@@ -5,6 +5,47 @@ import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
+import { enableWebPush, disableWebPush, isWebPushActive, webPushSupported } from '../../utils/webPush'
+
+// Web Push : alertes (mentions, MP, appels) même onglet fermé. Le serveur ne
+// pousse que si aucune session n'est ouverte et selon les réglages de sourdine.
+function WebPushBlock() {
+  const [active, setActive] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { isWebPushActive().then(setActive) }, [])
+  if (!webPushSupported()) return null
+
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      if (active) {
+        await disableWebPush()
+        setActive(false)
+        toast.success('Notifications push désactivées sur ce navigateur')
+      } else {
+        const r = await enableWebPush()
+        if (r === 'ok') { setActive(true); toast.success('Notifications push activées') }
+        else if (r === 'denied') toast.error('Permission refusée par le navigateur')
+        else if (r === 'disabled') toast.error("Le serveur n'a pas configuré les notifications push")
+        else toast.error('Notifications push indisponibles ici')
+      }
+    } catch {
+      toast.error("Impossible de modifier l'abonnement push")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 pt-2 border-t border-fc-hover">
+      <div>
+        <div className="text-sm text-white">Notifications push</div>
+        <div className="text-xs text-fc-muted">Mentions, messages privés et appels, même quand ForgeChat est fermé.</div>
+      </div>
+      <Toggle value={active} onChange={() => { if (!busy) toggle() }} />
+    </div>
+  )
+}
 
 function DesktopNotifBlock() {
   const [perm, setPerm] = useState<NotificationPermission>(() =>
@@ -46,6 +87,7 @@ function DesktopNotifBlock() {
       {supported && perm === 'denied' && (
         <p className="text-xs text-fc-muted">Permission refusée. Modifie les paramètres de ton navigateur pour les activer.</p>
       )}
+      <WebPushBlock />
     </div>
   )
 }

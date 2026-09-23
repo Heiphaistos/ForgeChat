@@ -133,14 +133,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   // Marquer comme lu + reset load-more quand on ouvre un nouveau canal ou focus
   useEffect(() => {
     if (!channelId) return
-    const doMark = async () => {
-      // Attendre le POST last_read avant d'invalider, sinon le refetch des
-      // mentions repart avant que le serveur ait enregistré la lecture
-      await markRead(channelId, serverId || undefined)
-      // Fait disparaître immédiatement le badge @ de la sidebar si ce canal
-      // contenait une mention (sinon il persiste jusqu'au refetch 30s)
-      qc.invalidateQueries({ queryKey: ['user_mentions'] })
-    }
+    // Les badges (mentions comprises) de tous les appareils sont effacés par
+    // l'événement READ_STATE_UPDATE que le serveur renvoie (App.tsx).
+    const doMark = () => markRead(channelId, serverId || undefined)
     doMark()
     setHasMore(true)
     window.addEventListener('focus', doMark)

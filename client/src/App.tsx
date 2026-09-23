@@ -17,6 +17,8 @@ import { useChat } from './store/chat'
 import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
 import { stripMarkdown } from './utils/mdShortcuts'
+import { mentionsToText } from './utils/mentions'
+import { syncWebPush } from './utils/webPush'
 
 function hexToRgb(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -81,6 +83,28 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <Navigate to={redirect === '/' ? '/login' : `/login?redirect=${encodeURIComponent(redirect)}`} replace />
 }
 
+
+// L'utilisateur a ce salon / ce MP sous les yeux : onglet visible, fenêtre au
+// premier plan, route correspondante. Sert à marquer lu en continu (P1-6) et à
+// ne pas notifier un message qu'il est en train de lire.
+function isViewing(channelId: string): boolean {
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) return false
+  const path = window.location.pathname
+  return path.includes(`/channels/${channelId}`) || path === `/dms/${channelId}` || path === `/dms/groups/${channelId}`
+}
+
+// Messages déjà signalés par MENTION_CREATE (reçu juste avant MESSAGE_CREATE) :
+// MESSAGE_CREATE ne doit pas les notifier une seconde fois.
+const mentionedMessageIds = new Set<string>()
+
+interface MentionEvent {
+  message_id: string
+  channel_id: string
+  server_id: string
+  channel_name: string
+  author_username: string
+  content: string
+}
 
 function AppInner() {
   const { fetchMe, user, updateMe } = useAuth()
@@ -208,7 +232,7 @@ function AppInner() {
   const fetchChannelNotif = useChannelNotif(s => s.fetch)
   const isChannelMuted = useChannelNotif(s => s.isMuted)
   const isServerMuted = useChannelNotif(s => s.isServerMuted)
-  const getChannelNotifLevel = useChannelNotif(s => s.getLevel)
+  const effectiveNotifLevel = useChannelNotif(s => s.effectiveLevel)
 
   useEffect(() => {
     if (!user) return
@@ -336,19 +360,75 @@ function AppInner() {
     return () => { offUpdate(); offInit() }
   }, [user?.id])
 
-  // Incrémenter non-lus pour les messages reçus sur des canaux non actifs
+  // Non-lus : un message du salon qu'on regarde est marqué lu tout de suite
+  // (anti-rebond, par message_id) pour que les autres appareils le sachent ;
+  // sinon il incrémente le compteur (fenêtre en arrière-plan comprise).
   useEffect(() => {
     const off = on('MESSAGE_CREATE', (d: any) => {
       const msg = d.message
       if (!msg?.channel_id || msg?.author_id === user?.id) return
-      const currentPath = window.location.pathname
-      const activeChannelId = currentPath.match(/\/channels\/([^/]+)/)?.[1]
-      if (activeChannelId !== msg.channel_id) {
+      if (isViewing(msg.channel_id)) {
+        useUnread.getState().markReadSoon(`/channels/${msg.channel_id}/read`, msg.channel_id, d.server_id ?? undefined, msg.id)
+      } else {
         incrUnread(msg.channel_id, d.server_id ?? undefined)
       }
     })
     return off
   }, [user?.id])
+
+  // Alerte visible : toast si la fenêtre est au premier plan, notification
+  // système sinon, ou file d'attente affichée au retour du focus.
+  const alertUser = useCallback((title: string, text: string, path: string, icon: string) => {
+    const clean = stripMarkdown(mentionsToText(text))
+    if (document.hasFocus()) {
+      toast(`${icon} ${title}: ${clean.slice(0, 60)}`, {
+        duration: 5000,
+        style: { cursor: 'pointer', maxWidth: '360px' },
+        onClick: () => nav(path),
+      } as any)
+    } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      sendNativeNotification(title, { body: clean.slice(0, 80), onClick: () => nav(path) })
+    } else {
+      pendingNotifs.current.push({ title, body: `${icon} ${clean.slice(0, 60)}`, path })
+    }
+  }, [nav])
+
+  // Mentions (résolues côté serveur) et synchronisation des lectures entre appareils
+  useEffect(() => {
+    if (!user) return
+    const offMention = on('MENTION_CREATE', (raw) => {
+      const d = raw as { notify?: boolean; mention?: MentionEvent }
+      const m = d.mention
+      if (!m) return
+      mentionedMessageIds.add(m.message_id)
+      setTimeout(() => mentionedMessageIds.delete(m.message_id), 60_000)
+      if (isViewing(m.channel_id)) return
+      useUnread.getState().addMention(m.channel_id, m.server_id)
+      qcHook.setQueryData<MentionEvent[]>(['user_mentions'], old =>
+        [m, ...(old ?? []).filter(x => x.message_id !== m.message_id)].slice(0, 50))
+      if (!d.notify || useAuth.getState().user?.focus_mode) return
+      playMention()
+      alertUser(m.author_username ?? 'Mention', m.content ?? '',
+        `/servers/${m.server_id}/channels/${m.channel_id}?highlight=${m.message_id}`, '🔔')
+    })
+    const offRead = on('READ_STATE_UPDATE', (raw) => {
+      const d = raw as { all?: boolean; whole_server?: boolean; channel_id?: string; server_id?: string | null }
+      const u = useUnread.getState()
+      const keep = (pred: (m: MentionEvent) => boolean) =>
+        qcHook.setQueryData<MentionEvent[]>(['user_mentions'], old => old?.filter(pred))
+      if (d.all) {
+        u.clearAll()
+        qcHook.setQueryData(['user_mentions'], [])
+      } else if (d.whole_server && d.server_id) {
+        u.resetServer(d.server_id)
+        keep(m => m.server_id !== d.server_id)
+      } else if (d.channel_id) {
+        u.reset(d.channel_id, d.server_id ?? undefined)
+        keep(m => m.channel_id !== d.channel_id)
+      }
+    })
+    return () => { offMention(); offRead() }
+  }, [user?.id, playMention, alertUser])
 
   // Typing global — alimente useChat.typing pour TOUS les canaux/DMs/groupes
   // afin que la sidebar puisse afficher un indicateur "écrit..." (les pages
@@ -377,62 +457,20 @@ function AppInner() {
     if (!user) return
     const offJoin = on('VOICE_USER_JOINED', () => { if (!user.focus_mode) playJoin() })
     const offLeave = on('VOICE_USER_LEFT', () => { if (!user.focus_mode) playLeave() })
+    // Les mentions et réponses sont notifiées par MENTION_CREATE (règle serveur).
+    // Ici : seulement les salons au niveau « Tous les messages », hors sourdine.
     const offMsg = on('MESSAGE_CREATE', (d: any) => {
       const msg = d.message
-      if (!msg || msg.author_id === user.id) return
-      if (user.focus_mode) return
-      if (msg.channel_id && isChannelMuted(msg.channel_id)) return
-      if (d.server_id && isServerMuted(d.server_id)) return
-      const content: string = msg.content ?? ''
-      const contentClean = stripMarkdown(content)
-      const escapedName = user.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const mentionedMe = new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content)
-      // Réponse à un de mes messages = notification aussi (comme Discord)
-      const repliedToMe = !!msg.reply_to && msg.reply_to_username === user.username
-      const isMentionEvent = mentionedMe || repliedToMe || content.includes('@everyone') || content.includes('@here')
-      // ChannelNotifModal.tsx permet de choisir "Tous les messages" par canal,
-      // mais ce niveau n'était jamais relu ici -- seules les mentions notifiaient
-      // jamais, quel que soit le réglage choisi. Un canal explicitement réglé sur
-      // "all" doit aussi notifier pour les messages non-mention.
-      const notifyAllForChannel = msg.channel_id && getChannelNotifLevel(msg.channel_id) === 'all'
-      if (isMentionEvent || notifyAllForChannel) {
-        if (isMentionEvent) {
-          // Invalidate notification bell so new mention shows immediately
-          qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
-          playMention()
-        } else if (!document.hasFocus()) {
-          playMessage()
-        }
-        const goToMsg = () => d.server_id && d.message?.channel_id
-          ? nav(`/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`)
-          : undefined
-        const activeChannelId = window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
-        const isActiveChannel = activeChannelId === msg.channel_id
-        const icon = isMentionEvent ? (repliedToMe && !mentionedMe ? '↩️' : '🔔') : '💬'
-        if (document.hasFocus() && !isActiveChannel) {
-          toast(`${icon} ${msg.author_username ?? 'Quelqu\'un'}: ${contentClean.slice(0, 60)}`, {
-            duration: 5000,
-            style: { cursor: 'pointer', maxWidth: '360px' },
-            onClick: goToMsg,
-          } as any)
-        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          sendNativeNotification(msg.author_username ?? 'Quelqu\'un', {
-            body: contentClean.slice(0, 80),
-            onClick: goToMsg,
-          })
-        } else if (d.server_id && d.message?.channel_id) {
-          pendingNotifs.current.push({
-            title: msg.author_username ?? (isMentionEvent ? 'Mention' : 'Message'),
-            body: `${icon} ${contentClean.slice(0, 60)}`,
-            path: `/servers/${d.server_id}/channels/${d.message.channel_id}?highlight=${msg.id}`,
-          })
-        }
-      } else if (!document.hasFocus()) {
-        playMessage()
-      }
+      if (!msg?.channel_id || !d.server_id || msg.author_id === user.id || user.focus_mode) return
+      if (mentionedMessageIds.has(msg.id) || isViewing(msg.channel_id)) return
+      if (isChannelMuted(msg.channel_id) || isServerMuted(d.server_id)) return
+      if (effectiveNotifLevel(msg.channel_id, d.server_id) !== 'all') return
+      if (!document.hasFocus()) playMessage()
+      alertUser(msg.author_username ?? 'Message', msg.content ?? '',
+        `/servers/${d.server_id}/channels/${msg.channel_id}?highlight=${msg.id}`, '💬')
     })
     return () => { offJoin(); offLeave(); offMsg() }
-  }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, getChannelNotifLevel, playJoin, playLeave, playMessage, playMention])
+  }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, effectiveNotifLevel, playJoin, playLeave, playMessage, alertUser])
 
   // Absence automatique : chaque onglet/appareil signale son inactivité au
   // serveur (10 min sans activité), qui n'affiche « Absent » que si TOUTES les
@@ -458,9 +496,12 @@ function AppInner() {
     return () => { clearTimeout(timer); offOpen(); events.forEach(ev => window.removeEventListener(ev, onActivity)) }
   }, [user?.id])
 
-  // Demander permission notifications au login
+  // Demander permission notifications au login ; rattacher l'abonnement Web Push
+  // éventuel de ce navigateur au compte connecté
   useEffect(() => {
-    if (user) requestPermission()
+    if (!user) return
+    requestPermission()
+    syncWebPush()
   }, [user?.id])
 
   // Badge non-lus dans le titre de la page (hors serveurs muets)
@@ -616,6 +657,7 @@ function AppInner() {
       if (msg.sender_id === user.id) return
       const currentPath = window.location.pathname
       const isActive = currentPath === `/dms/${d.dm_id}` && document.hasFocus()
+      if (isActive) useUnread.getState().markReadSoon(`/dms/${d.dm_id}/read`, d.dm_id)
       if (!isActive) {
         const isMuted = getDmMuted(d.dm_id)
         incrUnread(d.dm_id)
@@ -647,6 +689,7 @@ function AppInner() {
       if (msg.sender_id === user.id) return
       const currentPath = window.location.pathname
       const isActive = currentPath === `/dms/groups/${d.group_id}` && document.hasFocus()
+      if (isActive) useUnread.getState().markReadSoon(`/dms/groups/${d.group_id}/read`, d.group_id)
       if (!isActive) {
         incrUnread(d.group_id)
         const isGroupMuted = qcHook.getQueryData<any[]>(['dms'])?.find(dm => dm.id === d.group_id)?.is_muted ?? false

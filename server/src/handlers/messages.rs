@@ -288,14 +288,12 @@ pub async fn send_message(
         }
     }
 
-    let mention_everyone = content_str.as_deref().map(|c| c.contains("@everyone") || c.contains("@here")).unwrap_or(false);
-
-    // Vérifier permission MENTION_EVERYONE si @everyone ou @here
-    if mention_everyone {
-        require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
-    }
+    // @everyone / @here sans MENTION_EVERYONE : le message part quand même mais
+    // ne notifie personne (comportement Discord ; voir `notify::dispatch_channel_mentions`).
+    let mention_everyone = content_str.as_deref().is_some_and(|c| {
+        let p = crate::notify::parse_mentions(c);
+        p.everyone || p.here
+    }) && require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE).await.is_ok();
 
     // Messages éphémères : 10 s à 7 jours. Une valeur énorme faisait paniquer le
     // calcul de date, une valeur négative supprimait le message à l'envoi.
@@ -329,21 +327,21 @@ pub async fn send_message(
 
     use sqlx::Row;
     let reply_to_id: Option<Uuid> = msg.get("reply_to");
-    let (reply_to_content, reply_to_username) = if let Some(rid) = reply_to_id {
+    let (reply_to_content, reply_to_username, reply_author) = if let Some(rid) = reply_to_id {
         let row = sqlx::query(
-            "SELECT m.content, u.username FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id=$1"
+            "SELECT m.content, m.user_id, u.username FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id=$1"
         )
         .bind(rid)
         .fetch_optional(&state.db)
         .await
         .unwrap_or(None);
         if let Some(r) = row {
-            (r.get::<Option<String>, _>("content"), Some(r.get::<String, _>("username")))
+            (r.get::<Option<String>, _>("content"), Some(r.get::<String, _>("username")), Some(r.get::<Uuid, _>("user_id")))
         } else {
-            (None, None)
+            (None, None, None)
         }
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     let full_msg = MessageWithAuthor {
@@ -370,6 +368,22 @@ pub async fn send_message(
         expires_at: msg.try_get("expires_at").ok().flatten(),
         poll_id: None,
     };
+
+    // Mentions : enregistrées et notifiées AVANT MESSAGE_CREATE, pour que le
+    // client sache déjà que ce message le mentionne quand il le reçoit.
+    if let Err(e) = crate::notify::dispatch_channel_mentions(&state, crate::notify::ChannelMessage {
+        server_id,
+        channel_id,
+        message_id: full_msg.id,
+        author_id: claims.sub,
+        author_username: &full_msg.author_username,
+        author_avatar: full_msg.author_avatar.as_deref(),
+        content: full_msg.content.as_deref().unwrap_or(""),
+        reply_author,
+        created_at: full_msg.created_at,
+    }).await {
+        tracing::warn!("Mentions non traitées pour le message {} : {e}", full_msg.id);
+    }
 
     let pending_attachments = body.has_attachments.unwrap_or(false) && full_msg.content.is_none();
     let event = serde_json::json!({

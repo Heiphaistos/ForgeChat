@@ -86,6 +86,8 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     /// Serveur média (SFU). `None` = vocal indisponible (variables LIVEKIT_* absentes).
     pub livekit: Option<crate::livekit::LiveKitConfig>,
+    /// Web Push (VAPID). `None` = variables VAPID_* absentes, push désactivé.
+    pub push: Option<Arc<crate::push::PushConfig>>,
 }
 
 impl AppState {
@@ -120,7 +122,11 @@ impl AppState {
             voice_move_grants: Arc::new(RwLock::new(HashMap::new())),
             http_client,
             livekit: crate::livekit::LiveKitConfig::from_env(),
+            push: crate::push::PushConfig::from_env(),
         };
+        if state.push.is_none() {
+            tracing::info!("VAPID_* absents ou invalides : notifications Web Push désactivées");
+        }
         if state.livekit.is_none() {
             tracing::warn!("LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET absents : le vocal est désactivé");
         }
@@ -251,9 +257,16 @@ impl AppState {
     /// Membres connectés du serveur du canal ayant `VIEW_CHANNEL` après
     /// application des overrides de canal.
     pub async fn channel_audience(&self, channel_id: Uuid) -> Vec<Uuid> {
-        use sqlx::Row;
         let connected: Vec<Uuid> = self.clients.read().await.keys().copied().collect();
-        if connected.is_empty() { return vec![]; }
+        self.channel_audience_among(channel_id, &connected).await
+    }
+
+    /// Parmi `candidates`, ceux qui sont membres du serveur du canal et le voient
+    /// (même règle que `hidden_channels`). Sert aussi aux mentions, où les
+    /// destinataires ne sont pas forcément connectés.
+    pub async fn channel_audience_among(&self, channel_id: Uuid, candidates: &[Uuid]) -> Vec<Uuid> {
+        use sqlx::Row;
+        if candidates.is_empty() { return vec![]; }
 
         let Some(server_id) = self.channel_server_id(channel_id).await else { return vec![]; };
 
@@ -270,7 +283,7 @@ impl AppState {
              GROUP BY sm.user_id, sm.is_owner"
         )
         .bind(server_id)
-        .bind(&connected)
+        .bind(candidates)
         .fetch_all(&self.db)
         .await
         .unwrap_or_default();

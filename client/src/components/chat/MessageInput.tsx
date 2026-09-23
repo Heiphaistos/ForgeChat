@@ -1,4 +1,4 @@
-﻿import { useRef, useState, useEffect, useCallback, lazy, Suspense } from 'react'
+﻿import { useRef, useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
   Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3,
@@ -10,6 +10,7 @@ import { useWs } from '../../store/ws'
 import { useDraft, useChat } from '../../store/chat'
 import { useAuth } from '../../store/auth'
 import api, { mediaUrl } from '../../api/client'
+import { encodeMentions } from '../../utils/mentions'
 import toast from 'react-hot-toast'
 import { formatStickerMessage } from './sticker-utils'
 import type { Sticker } from './sticker-utils'
@@ -151,6 +152,21 @@ interface MentionUser {
   discriminator: string
 }
 
+interface MentionRole {
+  id: string
+  name: string
+  color: number
+  mentionable: boolean
+  is_everyone: boolean
+}
+
+// Entrée de l'autocomplétion @ : membre, rôle mentionnable, ou @everyone / @here
+// (le serveur ne notifie ces deux-là que si l'auteur a MENTION_EVERYONE).
+type MentionOption =
+  | { kind: 'user'; key: string; name: string; token: string; user: MentionUser }
+  | { kind: 'role'; key: string; name: string; token: string; color: number }
+  | { kind: 'special'; key: string; name: string; token: null }
+
 interface ChannelItem {
   id: string
   name: string
@@ -236,6 +252,42 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     },
     enabled: showMentions && mentionQuery.length >= 1,
   })
+
+  const { data: serverRoles = [] } = useQuery<MentionRole[]>({
+    queryKey: ['roles', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/roles`).then(r => r.data),
+    enabled: showMentions && !!serverId,
+    staleTime: 60_000,
+  })
+
+  // `@nom` affiché dans la zone de saisie → jeton envoyé (<@id>, <@&id>).
+  const pickedMentions = useRef(new Map<string, string>())
+  useEffect(() => { pickedMentions.current.clear() }, [channelId])
+  // Action « Mentionner » de la liste des membres (MemberList.tsx)
+  useEffect(() => {
+    const onPicked = (e: Event) => {
+      const { name, token } = (e as CustomEvent<{ name: string; token: string }>).detail ?? {}
+      if (name && token) pickedMentions.current.set(name, token)
+    }
+    window.addEventListener('forgechat:mention-picked', onPicked)
+    return () => window.removeEventListener('forgechat:mention-picked', onPicked)
+  }, [])
+
+  const mentionOptions = useMemo<MentionOption[]>(() => {
+    const q = mentionQuery.toLowerCase()
+    const users: MentionOption[] = (mentionQuery.length >= 1 ? mentionResults : []).map(u => (
+      { kind: 'user', key: `u${u.id}`, name: u.username, token: `<@${u.id}>`, user: u }
+    ))
+    if (!serverId) return users
+    const roles: MentionOption[] = serverRoles
+      .filter(r => r.mentionable && !r.is_everyone && r.name.toLowerCase().startsWith(q))
+      .slice(0, 5)
+      .map(r => ({ kind: 'role', key: `r${r.id}`, name: r.name, token: `<@&${r.id}>`, color: r.color }))
+    const specials: MentionOption[] = (['everyone', 'here'] as const)
+      .filter(n => n.startsWith(q))
+      .map(n => ({ kind: 'special', key: n, name: n, token: null }))
+    return [...users, ...roles, ...specials]
+  }, [mentionQuery, mentionResults, serverRoles, serverId])
 
   const { data: allServerChannels = [] } = useQuery<ChannelItem[]>({
     queryKey: ['server_channels_list', serverId],
@@ -535,17 +587,18 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }
 
-  const insertMention = (user: MentionUser) => {
+  const insertMention = (opt: MentionOption) => {
     const pos = cursorPos
     const before = content.slice(0, pos)
     const after = content.slice(pos)
     const atIdx = before.lastIndexOf('@')
-    const newContent = before.slice(0, atIdx) + `@${user.username} ` + after
+    const newContent = before.slice(0, atIdx) + `@${opt.name} ` + after
+    if (opt.token) pickedMentions.current.set(opt.name, opt.token)
     setContent(newContent)
     setShowMentions(false)
     setTimeout(() => {
       if (textareaRef.current) {
-        const newPos = atIdx + user.username.length + 2
+        const newPos = atIdx + opt.name.length + 2
         textareaRef.current.focus()
         textareaRef.current.setSelectionRange(newPos, newPos)
       }
@@ -612,10 +665,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       }
       if (e.key === 'Escape') { setShowSlash(false); return }
     }
-    if (showMentions && mentionResults.length > 0) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionResults.length - 1)); return }
+    if (showMentions && mentionOptions.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionOptions.length - 1)); return }
       if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return }
-      if (e.key === 'Tab' || (e.key === 'Enter' && showMentions)) { e.preventDefault(); insertMention(mentionResults[mentionIndex]); return }
+      if (e.key === 'Tab' || (e.key === 'Enter' && showMentions)) { e.preventDefault(); insertMention(mentionOptions[Math.min(mentionIndex, mentionOptions.length - 1)]); return }
       if (e.key === 'Escape') { setShowMentions(false); return }
     }
     if (showChannels && channelResults.length > 0) {
@@ -700,7 +753,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
   const submit = () => {
     if (sending) return
-    const trimmed = content.trim()
+    // Mentions choisies → jetons résolus par le serveur (salons seulement)
+    const trimmed = serverId ? encodeMentions(content.trim(), pickedMentions.current) : content.trim()
 
     // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
     if (trimmed.length > MAX_CHARS) {
@@ -893,25 +947,40 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       )}
 
       {/* Dropdown mentions */}
-      {showMentions && mentionResults.length > 0 && (
+      {showMentions && mentionOptions.length > 0 && (
         <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-52 overflow-y-auto overscroll-contain">
           <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover">
-            Membres — @{mentionQuery}
+            Mentions — @{mentionQuery}
           </div>
-          {mentionResults.map((user, idx) => (
+          {mentionOptions.map((opt, idx) => (
             <button
-              key={user.id}
-              onClick={() => insertMention(user)}
+              key={opt.key}
+              onClick={() => insertMention(opt)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition
                 ${idx === mentionIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
             >
-              <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
-                {user.avatar ? <img src={mediaUrl(user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : user.username.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div className="text-sm font-medium">{user.username}</div>
-                <div className="text-xs text-fc-muted">#{user.discriminator}</div>
-              </div>
+              {opt.kind === 'user' ? (
+                <>
+                  <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
+                    {opt.user.avatar ? <img src={mediaUrl(opt.user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : opt.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">{opt.name}</div>
+                    <div className="text-xs text-fc-muted">#{opt.user.discriminator}</div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-7 h-7 rounded-full bg-fc-hover flex items-center justify-center text-sm font-bold flex-shrink-0"
+                    style={opt.kind === 'role' && opt.color ? { color: `#${opt.color.toString(16).padStart(6, '0')}` } : undefined}>@</div>
+                  <div>
+                    <div className="text-sm font-medium">@{opt.name}</div>
+                    <div className="text-xs text-fc-muted">
+                      {opt.kind === 'role' ? 'Rôle' : opt.name === 'everyone' ? 'Tous les membres du salon' : 'Membres en ligne du salon'}
+                    </div>
+                  </div>
+                </>
+              )}
             </button>
           ))}
         </div>

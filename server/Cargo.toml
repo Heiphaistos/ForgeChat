@@ -41,6 +41,8 @@ totp-lite = "2"
 data-encoding = "2.6"
 urlencoding = "2"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+# Web Push (VAPID + aes128gcm) en Rust pur : la crate `web-push` tire `ece` -> openssl.
+web-push-native = { version = "0.5", default-features = false, features = ["vapid"] }
 
 [profile.release]
 opt-level = 3

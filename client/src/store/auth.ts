@@ -5,7 +5,8 @@ import { useChat } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
 import { useWs } from './ws'
-import { useChannelNotif } from './channelNotif'
+import { useChannelNotif, EMPTY_NOTIF_STATE } from './channelNotif'
+import { disableWebPush } from '../utils/webPush'
 import { queryClient } from '../main'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -65,13 +66,16 @@ export const useAuth = create<AuthState>()(
 
     logout: async () => {
       const body = isTauri ? { refresh_token: localStorage.getItem('refresh_token') } : {}
+      // Avant la déconnexion (route authentifiée) : ce navigateur ne doit plus
+      // recevoir les notifications push de ce compte.
+      await disableWebPush()
       await api.post('/auth/logout', body).catch(() => {})
       if (isTauri) localStorage.clear()
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
-      useUnread.setState({ counts: {}, serverCounts: {} })
-      useChannelNotif.setState({ mutedChannels: new Set(), mutedServers: new Set(), channelLevels: new Map(), loaded: false })
+      useUnread.getState().clearAll()
+      useChannelNotif.setState(EMPTY_NOTIF_STATE)
       set(s => { s.user = null })
       // Sans ça, le compte suivant connecté dans le même onglet voit les serveurs,
       // MP et amis du précédent tant que le cache n'est pas périmé.

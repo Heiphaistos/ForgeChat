@@ -1,6 +1,8 @@
-import { mediaUrl } from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import hljs from 'highlight.js/lib/common'
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { cachedRole, cachedUsername } from './mentions'
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -173,7 +175,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         <span key={match.index} className="mention mention-everyone">{full}</span>
       )
     } else if (full.startsWith('<@')) {
-      result.push(<span key={match.index} className="mention">{full}</span>)
+      result.push(<MentionChip key={match.index} raw={full} />)
     } else if (full.startsWith('@') && full.length > 1) {
       result.push(<span key={match.index} className="mention">{full}</span>)
     } else if (full.startsWith('<t:')) {
@@ -299,5 +301,27 @@ function SpoilerText({ text }: { text: string }) {
     >
       {text}
     </span>
+  )
+}
+
+// Jeton <@id> / <@&id> (voir utils/mentions.ts) affiché en @pseudo / @rôle.
+// Nom pris dans le cache (membres, rôles, profils) ; sinon profil chargé une fois.
+function MentionChip({ raw }: { raw: string }) {
+  const m = raw.match(/^<@([&!]?)([0-9a-fA-F-]{36})>$/)
+  const isRole = m?.[1] === '&'
+  const id = m?.[2] ?? ''
+  const role = isRole ? cachedRole(id) : undefined
+  const known = isRole ? role?.name : cachedUsername(id)
+  const { data } = useQuery<{ username?: string }>({
+    queryKey: ['user', id],
+    queryFn: () => api.get(`/users/${id}`).then(r => r.data),
+    enabled: !!id && !isRole && !known,
+    staleTime: 60_000,
+  })
+  if (!m) return <>{raw}</>
+  const name = known ?? data?.username ?? (isRole ? 'rôle-supprimé' : 'utilisateur')
+  const color = role?.color ? `#${role.color.toString(16).padStart(6, '0')}` : undefined
+  return (
+    <span className="mention" style={color ? { color, background: `${color}26` } : undefined}>@{name}</span>
   )
 }
