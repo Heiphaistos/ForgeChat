@@ -652,7 +652,7 @@ pub async fn search_group_dm_messages(
                 u.username as author_username, u.avatar as author_avatar
          FROM group_dm_messages gdm
          JOIN users u ON u.id = gdm.sender_id
-         WHERE gdm.dm_id = $1 AND LOWER(gdm.content) LIKE $2
+         WHERE gdm.dm_id = $1 AND gdm.content ILIKE $2
          ORDER BY gdm.created_at DESC LIMIT 50"
     )
     .bind(group_id).bind(&pattern)

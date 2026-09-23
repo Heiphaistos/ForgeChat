@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight, Users } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
+import { messageLink } from '../utils/searchLink'
 
 const HISTORY_KEY = 'fc_search_history'
 function loadHistory(): string[] {
@@ -178,13 +179,13 @@ export default function QuickSwitcher({ onClose }: Props) {
                     <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">Messages</p>
                     {searchResults.messages.map((m: any) => (
                       <button key={m.id}
-                        onClick={() => { nav(`/servers/${m.server_id}/channels/${m.channel_id}`); onClose() }}
+                        onClick={() => { nav(messageLink(m)); onClose() }}
                         className="w-full flex items-start gap-2 px-2 py-2 rounded hover:bg-fc-hover text-left transition">
                         <Hash size={13} className="text-fc-muted mt-0.5 flex-shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 text-xs text-fc-muted">
                             <span className="font-medium text-white">{m.author_username}</span>
-                            <span>dans #{m.channel_name}</span>
+                            <span>dans {m.kind === 'channel' || !m.kind ? '#' : ''}{m.channel_name}</span>
                           </div>
                           <p className="text-sm text-fc-text truncate">{m.content}</p>
                         </div>

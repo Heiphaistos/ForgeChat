@@ -708,7 +708,7 @@ pub async fn search_messages(
          JOIN users u ON u.id = m.user_id
          LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
          LEFT JOIN users ru ON ru.id = rm.user_id
-         WHERE m.channel_id=$1 AND LOWER(m.content) LIKE $2
+         WHERE m.channel_id=$1 AND m.content ILIKE $2
          ORDER BY m.created_at DESC LIMIT 50"
     )
     .bind(channel_id)

@@ -2118,7 +2118,7 @@ pub async fn search_dm_messages(
         "SELECT dm.id, dm.content, dm.created_at, u.username as author_username, u.avatar as author_avatar
          FROM dm_messages dm
          JOIN users u ON u.id = dm.sender_id
-         WHERE dm.dm_channel_id = $1 AND LOWER(dm.content) LIKE $2
+         WHERE dm.dm_channel_id = $1 AND dm.content ILIKE $2
          ORDER BY dm.created_at DESC LIMIT 50"
     )
     .bind(dm_id)
