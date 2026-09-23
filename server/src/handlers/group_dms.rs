@@ -220,10 +220,10 @@ pub async fn get_group_messages(
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
-             WHERE m.dm_id=$1 AND m.created_at < $2
-             ORDER BY m.created_at DESC LIMIT $3"
+             WHERE m.dm_id=$1 AND (m.created_at, m.id) < ($2, $4)
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $3"
         )
-        .bind(group_id).bind(ts).bind(half)
+        .bind(group_id).bind(ts).bind(half).bind(around_id)
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
@@ -234,10 +234,10 @@ pub async fn get_group_messages(
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
-             WHERE m.dm_id=$1 AND m.created_at >= $2
-             ORDER BY m.created_at ASC LIMIT $3"
+             WHERE m.dm_id=$1 AND (m.created_at, m.id) >= ($2, $4)
+             ORDER BY m.created_at ASC, m.id ASC LIMIT $3"
         )
-        .bind(group_id).bind(ts).bind(limit - half + 1)
+        .bind(group_id).bind(ts).bind(limit - half + 1).bind(around_id)
         .fetch_all(&state.db).await?;
 
         before_rows.reverse();
@@ -253,8 +253,8 @@ pub async fn get_group_messages(
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
-               AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
-             ORDER BY m.created_at DESC LIMIT $2"
+               AND (m.created_at, m.id) < (SELECT created_at, id FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $2"
         )
         .bind(group_id).bind(limit).bind(before_id)
         .fetch_all(&state.db).await?
@@ -268,7 +268,7 @@ pub async fn get_group_messages(
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
-             ORDER BY m.created_at DESC LIMIT $2"
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $2"
         )
         .bind(group_id).bind(limit)
         .fetch_all(&state.db).await?
