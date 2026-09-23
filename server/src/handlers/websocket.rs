@@ -1408,6 +1408,13 @@ async fn handle_ws_message(
             // Informer l'appelant si le destinataire est hors ligne
             let is_online = state.clients.read().await.contains_key(&to);
             if !is_online {
+                let dm_uuid = msg["dm_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
+                crate::notify::push_direct(state, vec![to], dm_uuid, serde_json::json!({
+                    "title": "Appel entrant",
+                    "body": format!("{} essaie de vous appeler", cached_username),
+                    "url": dm_uuid.map(|d| format!("/dms/{d}")).unwrap_or_else(|| "/friends".into()),
+                    "tag": format!("call-{user_id}"),
+                }));
                 let err = serde_json::json!({
                     "type": "DM_CALL_ERROR",
                     "reason": "offline",

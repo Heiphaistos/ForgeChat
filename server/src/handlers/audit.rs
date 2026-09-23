@@ -504,6 +504,7 @@ pub async fn mark_dm_read(
          ON CONFLICT (dm_id, user_id) DO UPDATE SET last_read_at=NOW()"
     )
     .bind(dm_id).bind(claims.sub).execute(&state.db).await?;
+    crate::handlers::reads::broadcast_read_state(&state, claims.sub, serde_json::json!({ "channel_id": dm_id, "server_id": null })).await;
 
     // Notifier l'autre participant que le DM a été lu
     if let Some(other) = other_id {
@@ -563,7 +564,7 @@ pub struct OgMeta {
 }
 
 /// Vérifie qu'une URL n'est pas une adresse privée/locale (protection SSRF)
-fn is_ssrf_safe_url(url: &str) -> bool {
+pub(crate) fn is_ssrf_safe_url(url: &str) -> bool {
     use std::net::IpAddr;
 
     // Doit commencer par https:// uniquement (pas http:// — pas de redirections non chiffrées)

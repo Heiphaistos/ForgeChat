@@ -434,7 +434,19 @@ pub struct ServerNotifOverride {
     pub id: Uuid,
     pub server_id: Uuid,
     pub level: String,
+    /// Muet effectif : un « couper pendant 1 h » expiré vaut `false`.
     pub muted: bool,
+    pub muted_until: Option<chrono::DateTime<chrono::Utc>>,
+    pub suppress_everyone: bool,
+}
+
+/// Durées proposées par « Couper pendant… » : 0 = jusqu'à réactivation ;
+/// absent = échéance actuelle conservée si déjà en sourdine (sinon illimitée).
+fn valid_mute_minutes(m: Option<i32>) -> Result<Option<i32>> {
+    match m {
+        None | Some(0 | 15 | 60 | 480 | 1440) => Ok(m),
+        Some(_) => Err(AppError::BadRequest("Durée de sourdine invalide".into())),
+    }
 }
 
 pub async fn get_notification_overrides(
@@ -442,7 +454,9 @@ pub async fn get_notification_overrides(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ServerNotifOverride>>> {
     let rows = sqlx::query_as::<_, ServerNotifOverride>(
-        "SELECT id, server_id, level, muted
+        "SELECT id, server_id, level,
+                (muted AND (muted_until IS NULL OR muted_until > NOW())) AS muted,
+                CASE WHEN muted THEN muted_until END AS muted_until, suppress_everyone
          FROM notification_overrides_server WHERE user_id = $1 ORDER BY id"
     )
     .bind(claims.sub)
@@ -456,6 +470,10 @@ pub struct SetNotifOverride {
     pub server_id: Uuid,
     pub level: String,
     pub muted: bool,
+    /// Avec `muted` : 15, 60, 480 ou 1440 min, 0 = jusqu'à réactivation, absent = inchangé.
+    pub mute_minutes: Option<i32>,
+    /// Absent : réglage inchangé.
+    pub suppress_everyone: Option<bool>,
 }
 
 pub async fn set_notification_override(
@@ -466,15 +484,25 @@ pub async fn set_notification_override(
     if !["all", "mentions", "nothing", "inherit"].contains(&body.level.as_str()) {
         return Err(AppError::BadRequest("level invalide".into()));
     }
+    let mute_minutes = valid_mute_minutes(body.mute_minutes)?;
+    crate::handlers::servers::require_member(&state, claims.sub, body.server_id).await?;
     sqlx::query(
-        "INSERT INTO notification_overrides_server (user_id, server_id, level, muted)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (user_id, server_id) DO UPDATE SET level = EXCLUDED.level, muted = EXCLUDED.muted"
+        "INSERT INTO notification_overrides_server (user_id, server_id, level, muted, muted_until, suppress_everyone)
+         VALUES ($1, $2, $3, $4,
+                 CASE WHEN $4 AND $5 > 0 THEN NOW() + make_interval(mins => $5) END,
+                 COALESCE($6, FALSE))
+         ON CONFLICT (user_id, server_id) DO UPDATE SET level = EXCLUDED.level, muted = EXCLUDED.muted,
+             muted_until = CASE WHEN EXCLUDED.muted AND $5::int IS NULL AND notification_overrides_server.muted
+                                     AND notification_overrides_server.muted_until > NOW()
+                                THEN notification_overrides_server.muted_until ELSE EXCLUDED.muted_until END,
+             suppress_everyone = COALESCE($6, notification_overrides_server.suppress_everyone)"
     )
     .bind(claims.sub)
     .bind(body.server_id)
     .bind(&body.level)
     .bind(body.muted)
+    .bind(mute_minutes)
+    .bind(body.suppress_everyone)
     .execute(&state.db)
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -487,7 +515,9 @@ pub struct ChannelNotifOverride {
     pub id: Uuid,
     pub channel_id: Uuid,
     pub level: String,
+    /// Muet effectif : un « couper pendant 1 h » expiré vaut `false`.
     pub muted: bool,
+    pub muted_until: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub async fn get_channel_notification_override(
@@ -496,7 +526,10 @@ pub async fn get_channel_notification_override(
     axum::extract::Path(channel_id): axum::extract::Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
     let row = sqlx::query_as::<_, ChannelNotifOverride>(
-        "SELECT id, channel_id, level, muted FROM notification_overrides_channel
+        "SELECT id, channel_id, level,
+                (muted AND (muted_until IS NULL OR muted_until > NOW())) AS muted,
+                CASE WHEN muted THEN muted_until END AS muted_until
+         FROM notification_overrides_channel
          WHERE user_id=$1 AND channel_id=$2"
     )
     .bind(claims.sub)
@@ -505,8 +538,8 @@ pub async fn get_channel_notification_override(
     .await?;
 
     Ok(Json(match row {
-        Some(r) => serde_json::json!({ "level": r.level, "muted": r.muted }),
-        None => serde_json::json!({ "level": "inherit", "muted": false }),
+        Some(r) => serde_json::json!({ "level": r.level, "muted": r.muted, "muted_until": r.muted_until }),
+        None => serde_json::json!({ "level": "inherit", "muted": false, "muted_until": null }),
     }))
 }
 
@@ -514,6 +547,8 @@ pub async fn get_channel_notification_override(
 pub struct SetChannelNotifOverride {
     pub level: String,
     pub muted: bool,
+    /// Avec `muted` : 15, 60, 480 ou 1440 min, 0 = jusqu'à réactivation, absent = inchangé.
+    pub mute_minutes: Option<i32>,
 }
 
 pub async fn set_channel_notification_override(
@@ -525,17 +560,21 @@ pub async fn set_channel_notification_override(
     if !["all", "mentions", "nothing", "inherit"].contains(&body.level.as_str()) {
         return Err(crate::error::AppError::BadRequest("level invalide".into()));
     }
+    let mute_minutes = valid_mute_minutes(body.mute_minutes)?;
     if body.level == "inherit" && !body.muted {
         // Supprimer le record au lieu d'insérer inherit/unmuted (nettoyage)
         sqlx::query("DELETE FROM notification_overrides_channel WHERE user_id=$1 AND channel_id=$2")
             .bind(claims.sub).bind(channel_id).execute(&state.db).await?;
     } else {
         sqlx::query(
-            "INSERT INTO notification_overrides_channel (user_id, channel_id, level, muted)
-             VALUES ($1,$2,$3,$4)
-             ON CONFLICT (user_id, channel_id) DO UPDATE SET level=EXCLUDED.level, muted=EXCLUDED.muted"
+            "INSERT INTO notification_overrides_channel (user_id, channel_id, level, muted, muted_until)
+             VALUES ($1, $2, $3, $4, CASE WHEN $4 AND $5 > 0 THEN NOW() + make_interval(mins => $5) END)
+             ON CONFLICT (user_id, channel_id) DO UPDATE SET level=EXCLUDED.level, muted=EXCLUDED.muted,
+                 muted_until = CASE WHEN EXCLUDED.muted AND $5::int IS NULL AND notification_overrides_channel.muted
+                                         AND notification_overrides_channel.muted_until > NOW()
+                                    THEN notification_overrides_channel.muted_until ELSE EXCLUDED.muted_until END"
         )
-        .bind(claims.sub).bind(channel_id).bind(&body.level).bind(body.muted)
+        .bind(claims.sub).bind(channel_id).bind(&body.level).bind(body.muted).bind(mute_minutes)
         .execute(&state.db).await?;
     }
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -546,7 +585,10 @@ pub async fn get_all_channel_notification_overrides(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ChannelNotifOverride>>> {
     let rows = sqlx::query_as::<_, ChannelNotifOverride>(
-        "SELECT id, channel_id, level, muted FROM notification_overrides_channel WHERE user_id=$1"
+        "SELECT id, channel_id, level,
+                (muted AND (muted_until IS NULL OR muted_until > NOW())) AS muted,
+                CASE WHEN muted THEN muted_until END AS muted_until
+         FROM notification_overrides_channel WHERE user_id=$1"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)

@@ -6,6 +6,8 @@ mod livekit;
 mod middleware;
 mod models;
 mod state;
+mod notify;
+mod push;
 
 use axum::{
     middleware as axum_middleware,
@@ -28,6 +30,11 @@ use crate::{config::Config, state::AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // `forgechat generate-vapid-keys` : paire VAPID pour le .env, sans démarrer le serveur.
+    if std::env::args().nth(1).as_deref() == Some("generate-vapid-keys") {
+        push::print_new_vapid_keys();
+        return Ok(());
+    }
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "forgechat=debug,tower_http=info".into()),
@@ -749,6 +756,10 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/tasks/:task_id", delete(handlers::moderation::delete_task))
         // User mentions
         .route("/user/mentions", get(handlers::reads::get_user_mentions))
+        // Web Push
+        .route("/push/vapid-public-key", get(push::get_public_key))
+        .route("/push/subscribe", post(push::subscribe))
+        .route("/push/unsubscribe", post(push::unsubscribe))
         .route("/users/:id/mutual-servers", get(handlers::users::get_mutual_servers))
         .route("/users/:id/achievements", get(handlers::users::get_user_achievements))
         // User status + activity feed
