@@ -536,7 +536,7 @@ async fn notify_call_taken(
 /// N9 — limiteur de débit Redis générique, même motif que `TYPING_START` /
 /// `DM_CALL_INIT` : compteur INCR + EXPIRE sur la fenêtre.
 /// Retourne `true` si l'action est autorisée.
-async fn rate_ok(state: &AppState, key: String, limit: i64, window_s: i64) -> bool {
+pub(crate) async fn rate_ok(state: &AppState, key: String, limit: i64, window_s: i64) -> bool {
     use redis::AsyncCommands;
     let mut redis = state.redis.lock().await;
     let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
@@ -1370,6 +1370,16 @@ async fn handle_ws_message(
                     "user_id": user_id,
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+            }
+        }
+
+        Some("GROUP_CALL_JOIN") => {
+            crate::handlers::group_calls::join(state, user_id, session_id, cached_username, &msg).await;
+        }
+
+        Some("GROUP_CALL_LEAVE") => {
+            if let Some(group_id) = msg["group_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
+                crate::handlers::group_calls::leave(state, group_id, user_id).await;
             }
         }
 

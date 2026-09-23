@@ -788,6 +788,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id/members", post(handlers::group_dms::add_group_dm_member))
         .route("/dms/groups/:group_id/members/:user_id", delete(handlers::group_dms::remove_group_dm_member))
         .route("/dms/groups/:group_id/rename", patch(handlers::group_dms::rename_group_dm))
+        .route("/dms/groups/:group_id/owner", patch(handlers::group_dms::transfer_group_dm_owner))
         .route("/friends/blocked", get(handlers::friends::get_blocked))
         .route("/friends/block/:user_id", post(handlers::friends::block_user))
         .route("/friends/block/:user_id", delete(handlers::friends::unblock_user))

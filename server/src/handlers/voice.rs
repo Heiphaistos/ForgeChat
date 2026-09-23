@@ -210,11 +210,13 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
     }
     let Ok(ev) = serde_json::from_slice::<serde_json::Value>(&body) else { return StatusCode::BAD_REQUEST };
     let room = ev["room"]["name"].as_str().unwrap_or("");
+    // Salon vocal de serveur ou appel de groupe privé (même délai de grâce).
+    let group_call = room.starts_with("gdm-");
     let (Some(channel_id), Some(user_id)) = (
-        room.strip_prefix("voice-").and_then(|c| c.parse::<Uuid>().ok()),
+        room.strip_prefix("voice-").or_else(|| room.strip_prefix("gdm-")).and_then(|c| c.parse::<Uuid>().ok()),
         ev["participant"]["identity"].as_str().and_then(|u| u.parse::<Uuid>().ok()),
     ) else {
-        return StatusCode::OK; // appels privés et événements de salle : rien à faire
+        return StatusCode::OK; // appels 1:1 et événements de salle : rien à faire
     };
     let key = (user_id, channel_id);
     match ev["event"].as_str() {
@@ -231,6 +233,10 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
                     return;
                 }
                 sfu_absents().lock().unwrap().remove(&key);
+                if group_call {
+                    crate::handlers::group_calls::leave(&state, channel_id, user_id).await;
+                    return;
+                }
                 let in_room = state.user_voice.read().await.get(&user_id) == Some(&channel_id);
                 if in_room {
                     tracing::warn!(user_id = %user_id, channel_id = %channel_id, "présence fantôme retirée : absent du SFU depuis {SFU_GRACE_S} s");

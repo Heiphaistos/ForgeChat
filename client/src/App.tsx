@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
+import { useGroupCall } from './store/groupCall'
+import { GroupCallRinger } from './components/voice/GroupCallPanel'
 import { usePresence } from './store/presence'
 import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
@@ -90,6 +92,7 @@ function AppInner() {
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const initDmCallListeners = useCallStore(s => s.initGlobalListeners)
+  const initGroupCallListeners = useGroupCall(s => s.initGlobalListeners)
   const toggleMute = useVoice(s => s.toggleMute)
   const toggleDeafen = useVoice(s => s.toggleDeafen)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
@@ -297,7 +300,8 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const off = initDmCallListeners()
-    return off
+    const offGroup = initGroupCallListeners()
+    return () => { off(); offGroup() }
   }, [user?.id])
 
   useEffect(() => {
@@ -1050,6 +1054,7 @@ function AppInner() {
             seulement sur les routes wrappées par MainLayout. */}
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
+        {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
