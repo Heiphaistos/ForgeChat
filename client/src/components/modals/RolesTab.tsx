@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, Save, Shield, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Save, Shield, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
@@ -243,6 +243,24 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
 
+  // Plus haut en premier ; @everyone reste toujours en bas (position 0) et ne bouge pas.
+  const sortedRoles = useMemo(() => [...roles].sort((a, b) => b.position - a.position), [roles])
+  const orderable = useMemo(() => sortedRoles.filter(r => !r.is_everyone), [sortedRoles])
+
+  // Le serveur refuse de déplacer un rôle au niveau de votre rôle le plus haut ou au-dessus.
+  const reorder = useMutation({
+    mutationFn: (roleIds: string[]) => api.patch(`/servers/${serverId}/roles/order`, { role_ids: roleIds }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roles', serverId] }),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
+  const move = (idx: number, delta: number) => {
+    const ids = orderable.map(r => r.id)
+    const j = idx + delta
+    if (j < 0 || j >= ids.length) return
+    ;[ids[idx], ids[j]] = [ids[j], ids[idx]]
+    reorder.mutate(ids)
+  }
+
   const isAdmin = hasBit(editPerms, ADMIN_BIT)
 
   const totalEnabled = useMemo(
@@ -272,18 +290,35 @@ export default function RolesTab({ serverId }: { serverId: string }) {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto overscroll-contain space-y-0.5">
-          {(roles as Role[]).sort((a, b) => b.position - a.position).map(r => (
-            <button key={r.id} onClick={() => selectRole(r)}
-              className={`w-full text-left px-2.5 py-2 rounded-lg text-sm flex items-center gap-2 transition group
-                ${selected?.id === r.id ? 'bg-fc-accent/20 text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
-            >
-              <div className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: r.color ? colorIntToHex(r.color) : '#99aab5' }} />
-              <span className="truncate flex-1">{r.name}</span>
-              {r.hoisted && <span className="text-[9px] text-fc-muted/60 group-hover:text-fc-muted">H</span>}
-              {r.mentionable && <span className="text-[9px] text-fc-muted/60 group-hover:text-fc-muted">@</span>}
-            </button>
-          ))}
+          {sortedRoles.map(r => {
+            const idx = orderable.findIndex(o => o.id === r.id)
+            return (
+            <div key={r.id} className="flex items-center gap-0.5 group">
+              <button onClick={() => selectRole(r)}
+                className={`flex-1 min-w-0 text-left px-2.5 py-2 rounded-lg text-sm flex items-center gap-2 transition
+                  ${selected?.id === r.id ? 'bg-fc-accent/20 text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
+              >
+                <div className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: r.color ? colorIntToHex(r.color) : '#99aab5' }} />
+                <span className="truncate flex-1">{r.name}</span>
+                {r.hoisted && <span className="text-[9px] text-fc-muted/60 group-hover:text-fc-muted">H</span>}
+                {r.mentionable && <span className="text-[9px] text-fc-muted/60 group-hover:text-fc-muted">@</span>}
+              </button>
+              {idx >= 0 && (
+                <div className="flex flex-col">
+                  <button onClick={() => move(idx, -1)} disabled={idx === 0 || reorder.isPending}
+                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title="Monter" aria-label={`Monter ${r.name}`}>
+                    <ChevronUp size={12} />
+                  </button>
+                  <button onClick={() => move(idx, 1)} disabled={idx === orderable.length - 1 || reorder.isPending}
+                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title="Descendre" aria-label={`Descendre ${r.name}`}>
+                    <ChevronDown size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+            )
+          })}
         </div>
       </div>
 

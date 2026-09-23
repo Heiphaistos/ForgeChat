@@ -46,6 +46,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; Icon: any }>
   MESSAGE_PIN:     { label: 'Message épinglé',       color: 'text-blue-400',   Icon: Hash },
   MESSAGE_UNPIN:   { label: 'Message désépinglé',    color: 'text-fc-muted',   Icon: Hash },
   SERVER_UPDATE:   { label: 'Serveur modifié',       color: 'text-blue-400',   Icon: Settings },
+  OWNER_TRANSFER:  { label: 'Propriété transférée', color: 'text-red-400',    Icon: Crown },
 }
 
 const ACTION_OPTIONS = [

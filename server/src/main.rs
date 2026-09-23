@@ -548,6 +548,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Roles
         .route("/servers/:server_id/roles", get(handlers::roles::get_roles))
         .route("/servers/:server_id/roles", post(handlers::roles::create_role))
+        .route("/servers/:server_id/roles/order", patch(handlers::roles::reorder_roles))
+        .route("/servers/:server_id/transfer", post(handlers::roles::transfer_ownership))
         .route("/servers/:server_id/roles/:role_id", patch(handlers::roles::update_role))
         .route("/servers/:server_id/roles/:role_id", delete(handlers::roles::delete_role))
         .route("/servers/:server_id/roles/:role_id/members", get(handlers::roles::get_role_members))

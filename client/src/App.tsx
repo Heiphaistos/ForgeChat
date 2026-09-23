@@ -827,7 +827,12 @@ function AppInner() {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
     const offRoleUpdate = on('ROLE_UPDATE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['roles', d.server_id] })
+        // Réordonnancement : le classement des membres par rôle affiché change.
+        if (d.reordered) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+      }
     })
     const offMemberRoleUpdate = on('MEMBER_ROLE_UPDATE', (d: any) => {
       if (d.server_id) {
