@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import NativeVideo from './NativeVideo'
 import { useRef, useState } from 'react'
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Maximize2, PictureInPicture2, MonitorOff } from 'lucide-react'
 import { useVoice } from '../../store/voice'
@@ -38,6 +39,8 @@ export default function FloatingCallPiP() {
   const dmCallType = useCallStore(s => s.callType)
   const dmLocalStream = useCallStore(s => s.localStream)
   const dmRemoteStream = useCallStore(s => s.remoteStream)
+  const dmRemoteUrl = useCallStore(s => s.remoteVideoUrl)
+  const dmLocalUrl = useCallStore(s => s.localVideoUrl)
   const dmMicMuted = useCallStore(s => s.micMuted)
   const dmCamOff = useCallStore(s => s.camOff)
   const toggleDmMic = useCallStore(s => s.toggleMic)
@@ -55,6 +58,7 @@ export default function FloatingCallPiP() {
     return (
       <Widget
         stream={stream}
+        url={stream ? null : dmRemoteUrl ?? dmLocalUrl}
         label="Appel vidéo"
         onExpand={() => nav(`/dms/${dmId}`)}
         micMuted={dmMicMuted}
@@ -76,9 +80,12 @@ export default function FloatingCallPiP() {
       : screenPeer?.screenStream
         ?? (voiceVideoEnabled ? voiceLocalStream : voicePeers.find(p => p.videoEnabled && p.stream)?.stream)
         ?? null
+    // Application Linux : flux vidéo locaux du vocal natif.
+    const url = stream ? null : voicePeers.find(p => p.screenUrl)?.screenUrl ?? voicePeers.find(p => p.videoUrl)?.videoUrl ?? null
     return (
       <Widget
         stream={stream}
+        url={url}
         label={voiceChannelName ?? 'Salon vocal'}
         onExpand={() => { if (voiceServerId && voiceChannelId) nav(`/servers/${voiceServerId}/channels/${voiceChannelId}`) }}
         micMuted={voiceMuted}
@@ -95,9 +102,10 @@ export default function FloatingCallPiP() {
 }
 
 function Widget({
-  stream, label, onExpand, micMuted, onToggleMic, videoEnabled, onToggleVideo, onHangup, onStopShare,
+  stream, url = null, label, onExpand, micMuted, onToggleMic, videoEnabled, onToggleVideo, onHangup, onStopShare,
 }: {
   stream: MediaStream | null
+  url?: string | null
   label: string
   onExpand: () => void
   micMuted: boolean
@@ -136,6 +144,8 @@ function Widget({
             muted
             className="w-full h-full object-cover"
           />
+        ) : url ? (
+          <NativeVideo url={url} fit="cover" className="w-full h-full" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-white/60 text-xs px-2 text-center">{label}</div>
         )}

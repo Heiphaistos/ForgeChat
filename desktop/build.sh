@@ -11,6 +11,15 @@ command -v node  >/dev/null || { echo "[ERREUR] Node.js non trouve."; exit 1; }
 command -v cargo >/dev/null || { echo "[ERREUR] Cargo non trouve."; exit 1; }
 pkg-config --exists webkit2gtk-4.1 || { echo "[ERREUR] libwebkit2gtk-4.1-dev manquant (apt install libwebkit2gtk-4.1-dev)."; exit 1; }
 
+# Vocal natif (SDK Rust LiveKit) : le libwebrtc précompilé embarque une libc++
+# qui exige clang 21 ou plus récent (« hermetic libc++ ... requires clang 21 »).
+# Ubuntu 22.04 n'a que clang 14 : installer par https://apt.llvm.org/llvm.sh 21
+# puis libc++-21-dev.
+command -v clang++-21 >/dev/null || { echo "[ERREUR] clang 21 manquant : wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 21 && sudo apt install libc++-21-dev"; exit 1; }
+export CC=clang-21 CXX=clang++-21
+# Compiler hors de /mnt/c (WSL) : plusieurs fois plus rapide.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/forgechat-target}"
+
 # Version lue depuis tauri.conf.json (source de verite utilisee par Tauri pour
 # nommer les artefacts de build) plutot que codee en dur -- un litteral fige
 # ici se perime a chaque bump de version (meme bug que build.bat, cf. sa doc :
@@ -40,7 +49,7 @@ npx tauri build --bundles deb,appimage
 
 echo "[4/4] Copie des artefacts dans dist-desktop/..."
 mkdir -p "$OUT"
-BUNDLE="$SCRIPT_DIR/src-tauri/target/release/bundle"
+BUNDLE="$CARGO_TARGET_DIR/release/bundle"
 
 # Matcher explicitement sur $VERSION -- bundle/{deb,appimage}/ accumule les
 # artefacts des builds precedents (Tauri ne nettoie pas), donc un simple

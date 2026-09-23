@@ -40,7 +40,7 @@ Autres mesures :
 | D2 | **ForgeChat garde l'autorité.** Présence, permissions, mot de passe, places restent sur le WebSocket. Le serveur délivre un jeton LiveKit seulement après ces contrôles et éjecte du SFU à la sortie. | Service de jetons séparé (`lk-jwt-service` d'Element Call) : inutile, le serveur Axum signe lui-même. |
 | D3 | Un seul port UDP multiplexé (65100) dans la plage déjà ouverte chez IONOS ; coturn borné à 65000 ; repli ICE/TCP 7881 et TURN/TLS 5349 existant. | Plage 50000-60000 : conflit avec coturn et ouverture IONOS à refaire. |
 | D4 | Appels privés migrés sur le même SFU (salle `dm-<a>-<b>`). | Garder le pair-à-pair en 1:1 : même panne en réseau local. |
-| D5 | Linux : ouverture automatique du salon dans le navigateur du système, avec message explicite. | Média natif via le SDK Rust de LiveKit : voir § 6. |
+| D5 | **Linux : vocal natif** dans le processus Rust (SDK `livekit` 0.9.1). Son par le module audio de WebRTC (PulseAudio/ALSA, annulation d'écho, suppression de bruit, gain automatique). Vidéo reçue poussée en JPEG par un WebSocket local et dessinée dans un `<canvas>`. Caméra V4L2 et partage d'écran (portail PipeWire) publiés nativement. | Ouvrir le salon dans le navigateur (première version, abandonnée : l'application ne servait plus à rien). Flux MJPEG dans un `<img>` : fait planter WebKitGTK 2.50.4 (mesuré). |
 | D6 | Fenêtres détachées par `window.open` sur la même origine : elles partagent les flux de la fenêtre principale, sans nouvelle connexion. Sous Tauri, `on_new_window` n'autorise que `about:blank`. | Document Picture-in-Picture : une seule fenêtre par onglet. Une connexion SFU par fenêtre : double débit. |
 
 ## 4. Livré
@@ -85,11 +85,11 @@ Autres mesures :
 |---|---|---|
 | Haute | **Recette sur les deux PC réels de Momo** | Seul scénario que l'automatisation ne reproduit pas. Recharger les deux pages (Ctrl+F5) avant. |
 | Fait | Application de bureau 3.26.0 | Publiée sur les quatre cibles (empreintes recoupées). Les 3.25.0 et antérieures parlent encore pair-à-pair : elles n'entendent pas les clients à jour, la mise à jour automatique leur est proposée au lancement. |
-| Moyenne | Vocal natif sous Linux | SDK Rust `livekit` dans le processus Tauri : micro et haut-parleurs via `cpal` (faisable), vidéo reçue à rendre dans la vue web (lourd). Changement d'architecture de l'app Linux : décision de Momo. |
-| Moyenne | Regarder un stream sur demande | `autoSubscribe: false` pour les partages, aperçu figé et bouton « Regarder » : économise la bande passante des spectateurs passifs, comme Discord. |
-| Basse | Supprimer le relais `VOICE_SIGNAL` | Gardé tant que des applications de bureau antérieures à 3.26.0 circulent. |
-| Basse | Webhooks LiveKit | Nettoyer la présence d'un participant qui a quitté le SFU sans quitter ForgeChat. |
-| Basse | Chiffrement de bout en bout | Supporté par LiveKit mais marqué expérimental ; incompatible avec l'enregistrement côté serveur. |
+| Fait | Vocal natif sous Linux | Recette réelle (application Linux dans WSLg pilotée par `tauri-driver`, pair web Playwright) : SFU connecté, son reçu, caméra et écran du pair dessinés, micro coupé effectif. Non testable dans WSL : caméra et écran **publiés** depuis Linux. Volume par personne limité à coupé/audible (le module audio natif ne règle pas le volume par participant). |
+| Fait | Regarder un stream sur demande | Tuile LIVE avec bouton « Regarder », bouton « Arrêter de regarder », réglage « Regarder automatiquement les streams » (activé par défaut). Vérifié : aucune vidéo d'écran téléchargée avant le clic. Côté Linux natif, tous les streams restent reçus. |
+| Fait | Supprimer le relais `VOICE_SIGNAL` | Retiré du serveur 3.254.0. |
+| Fait | Webhooks LiveKit | Signature et empreinte du corps vérifiées (testé : refus d'un corps modifié d'un octet). Absent du SFU depuis 20 s, retiré du salon : vérifié en production (retiré en 20 s). |
+| Non fait, volontairement | Chiffrement de bout en bout | LiveKit le marque expérimental, et la clé doit être échangée entre clients sans passer par le serveur : une clé distribuée par ForgeChat ne protégerait de rien. Demande un protocole d'échange de clés (MLS ou équivalent) : chantier à part entière. |
 
 ## 7. Scénarios de recette
 
@@ -100,5 +100,5 @@ Autres mesures :
 5. Détacher le stream et une caméra : deux fenêtres, déplaçables sur un autre écran, qui suivent l'appel.
 6. Redéployer le serveur pendant l'appel : le son ne coupe pas.
 7. Appel privé entre les deux PC : son et vidéo.
-8. Application Linux : cliquer sur un salon vocal ouvre la page dans le navigateur, avec le message.
+8. Application Linux : rejoindre un salon vocal depuis l'application elle-même, son et vidéo dans les deux sens.
 9. Volume d'une personne à 180 % : plus fort, sans erreur.
