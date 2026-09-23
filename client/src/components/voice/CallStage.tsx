@@ -16,7 +16,7 @@ export interface StageTile {
   username: string
   isLocal: boolean
   stream: MediaStream | null
-  /** Application Linux : flux MJPEG local. */
+  /** Application Linux : flux vidéo local. */
   url?: string | null
 }
 

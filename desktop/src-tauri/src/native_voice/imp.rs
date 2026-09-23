@@ -112,14 +112,23 @@ fn pump_video(server: Arc<VideoServer>, key: String, track: RemoteVideoTrack) {
     let _ = std::thread::Builder::new().name("fc-video-rx".into()).spawn(move || {
         let mut stream = NativeVideoStream::new(track.rtc_track());
         let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        // Compteurs journalisés toutes les 10 s : seul moyen de diagnostiquer une
+        // vidéo saccadée chez un utilisateur Linux.
+        let (mut received, mut published, mut since) = (0u32, 0u32, std::time::Instant::now());
         while let Some(frame) = futures::executor::block_on(stream.next()) {
+            received += 1;
+            if since.elapsed() >= std::time::Duration::from_secs(10) {
+                eprintln!("[ForgeChat] vidéo {key} : {received} images reçues, {published} affichées en 10 s ({}x{})", frame.buffer.width(), frame.buffer.height());
+                (received, published, since) = (0, 0, std::time::Instant::now());
+            }
             // 30 images/s au plus : la vue web n'en affiche pas davantage.
             if last.elapsed() < std::time::Duration::from_millis(33) {
                 continue;
             }
             last = std::time::Instant::now();
-            if let Some(jpeg) = video::i420_to_jpeg(&frame.buffer.to_i420()) {
+            if let Some(jpeg) = video::i420_to_jpeg(frame.buffer.to_i420()) {
                 server.publish(&key, jpeg);
+                published += 1;
             }
         }
         server.remove(&key);
@@ -178,6 +187,9 @@ async fn run_events(app: AppHandle, room: Arc<Room>, server: Arc<VideoServer>, m
 }
 
 pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool) -> Result<(), String> {
+    // Mesuré : sans fournisseur installé, rustls panique dans le thread tokio et
+    // la commande ne répond jamais (le front restait sur « Connexion… »).
+    let _ = rustls::crypto::ring::default_provider().install_default();
     disconnect().await;
 
     let audio = PlatformAudio::new().map_err(|e| format!("audio du système indisponible : {e}"))?;

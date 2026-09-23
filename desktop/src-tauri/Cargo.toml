@@ -57,3 +57,7 @@ futures = "0.3"
 tokio = { version = "1", features = ["sync"] }
 nokhwa = { version = "0.10", default-features = false, features = ["input-v4l"] }
 zune-jpeg = "0.5"
+tungstenite = "0.29"
+# ring ET aws-lc-rs sont compilés (dépendances croisées) : rustls refuse alors de
+# choisir et panique à la première connexion TLS. On installe ring explicitement.
+rustls = { version = "0.23", default-features = false, features = ["ring"] }

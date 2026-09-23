@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import NativeVideo from '../components/voice/NativeVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
@@ -627,12 +628,12 @@ export default function DMPage() {
                   voix du correspondant sort deux fois — volume doublé et écho métallique
                   sur tout appel vidéo (défaut A5). Le son reste sur l'élément audio
                   persistant, comme pour VoiceVideoPage. */}
-              {/* Application Linux : flux MJPEG locaux fournis par le vocal natif. */}
+              {/* Application Linux : flux vidéo locaux fournis par le vocal natif. */}
               {remoteVideoUrl
-                ? <img src={remoteVideoUrl} alt="" className="w-full max-h-56 object-contain" />
+                ? <NativeVideo url={remoteVideoUrl} fit="contain" className="w-full h-56" />
                 : <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full max-h-56 object-contain" />}
               {localVideoUrl
-                ? <img src={localVideoUrl} alt="" className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />
+                ? <NativeVideo url={localVideoUrl} fit="cover" className="absolute bottom-2 right-2 w-24 h-16 rounded-lg border border-white/20" />
                 : <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />}
               {callState === 'connected' && (remoteStream || remoteVideoUrl) && (
                 <span

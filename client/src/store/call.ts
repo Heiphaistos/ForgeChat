@@ -39,7 +39,7 @@ interface CallStore {
   callType: 'voice' | 'video'
   localStream: MediaStream | null
   remoteStream: MediaStream | null
-  /** Application Linux : vidéo du correspondant et aperçu local en MJPEG local. */
+  /** Application Linux : vidéo du correspondant et aperçu local en vidéo local. */
   remoteVideoUrl: string | null
   localVideoUrl: string | null
   micMuted: boolean

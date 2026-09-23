@@ -1,6 +1,7 @@
 // Tuiles d'appel : caméra (ou avatar) d'un participant, et écran partagé.
 // Elles remplissent leur conteneur ; la taille est décidée par CallStage.
 import { MicOff, Monitor, Volume2, Maximize2, ExternalLink } from 'lucide-react'
+import NativeVideo from './NativeVideo'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
 export function PeerTile({
@@ -14,7 +15,7 @@ export function PeerTile({
   onPopOut?: () => void; connectionLost?: boolean
   /** Vignette de bandeau : avatar et textes réduits. */
   compact?: boolean
-  /** Application Linux : flux MJPEG local à la place d'un MediaStream. */
+  /** Application Linux : flux vidéo local (WebSocket) à la place d'un MediaStream. */
   videoUrl?: string | null
 }) {
   const hasStream = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
@@ -40,7 +41,7 @@ export function PeerTile({
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
       {hasVideo && !hasStream && videoUrl ? (
-        <img src={videoUrl} alt="" className="w-full h-full object-cover"
+        <NativeVideo url={videoUrl} fit="cover" className="w-full h-full"
           style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
       ) : hasVideo ? (
         <video ref={attachStream} autoPlay playsInline
@@ -108,7 +109,7 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
           propre réglage de volume, distinct de celui de la voix du pair. */}
       {stream
         ? <video ref={attachStream} autoPlay playsInline muted className="w-full h-full object-contain" />
-        : url && <img src={url} alt="" className="w-full h-full object-contain" />}
+        : url && <NativeVideo url={url} fit="contain" className="w-full h-full" />}
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
         <div className="flex items-center gap-1">
           <Monitor size={11} className="text-fc-green" />

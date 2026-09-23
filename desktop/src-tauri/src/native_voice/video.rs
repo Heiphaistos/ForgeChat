@@ -1,9 +1,12 @@
 //! Vidéo du vocal natif Linux.
 //!
 //! - Conversions YUV/RGB (images reçues et caméra).
-//! - Serveur MJPEG local : la vue web affiche chaque flux avec un simple
-//!   `<img src="http://127.0.0.1:PORT/v/CLE?k=SECRET">`. WebKitGTK n'a pas
-//!   WebRTC, mais il lit le MJPEG nativement dans une balise image.
+//! - Serveur vidéo local : chaque image JPEG est poussée par WebSocket
+//!   (`ws://127.0.0.1:PORT/w/CLE?k=SECRET`) et dessinée dans un <canvas>.
+//!   Mesuré le 2026-09-23 : un flux MJPEG (`multipart/x-mixed-replace`) dans un
+//!   <img> fait planter le processus web de WebKitGTK 2.50.4 dans l'application
+//!   (erreur de segmentation dans libwebkit2gtk), plantage absent dès que ce
+//!   chargement est bloqué. Le WebSocket évite ce chemin de décodage.
 //! - Captures caméra (V4L2) et écran (capture native de libwebrtc,
 //!   portail PipeWire sous Wayland), publiées vers le SFU.
 
@@ -24,7 +27,8 @@ use livekit::webrtc::video_source::native::NativeVideoSource;
 
 /// Largeur maximale des images servies à la vue web : au-delà, l'encodage JPEG
 /// coûte plus qu'il n'apporte sur une tuile ou une fenêtre détachée.
-pub const MAX_PREVIEW_WIDTH: u32 = 1920;
+/// Mesuré : en 1920 px avec une conversion scalaire, 17 images en 10 s.
+pub const MAX_PREVIEW_WIDTH: u32 = 1280;
 const JPEG_QUALITY: u8 = 75;
 
 // ── Conversions ──────────────────────────────────────────────────────────────
@@ -125,9 +129,30 @@ pub fn i420_to_jpeg_max(buf: &I420Buffer, max_width: u32) -> Option<Vec<u8>> {
     encode_jpeg(&rgb, w / step as u32, h / step as u32)
 }
 
-/// Image reçue du SFU, pour une tuile ou une fenêtre détachée.
-pub fn i420_to_jpeg(buf: &I420Buffer) -> Option<Vec<u8>> {
-    i420_to_jpeg_max(buf, MAX_PREVIEW_WIDTH)
+/// Image reçue du SFU, pour une tuile ou une fenêtre détachée : réduction et
+/// conversion par libyuv (SIMD), bien plus rapides que la version scalaire.
+pub fn i420_to_jpeg(mut buf: I420Buffer) -> Option<Vec<u8>> {
+    let (w, h) = (buf.width(), buf.height());
+    if w < 2 || h < 2 {
+        return None;
+    }
+    let mut buf = if w > MAX_PREVIEW_WIDTH {
+        let nh = ((h as u64 * MAX_PREVIEW_WIDTH as u64 / w as u64) as i32).max(2) & !1;
+        buf.scale(MAX_PREVIEW_WIDTH as i32, nh)
+    } else {
+        buf
+    };
+    let (w, h) = (buf.width(), buf.height());
+    let (sy, su, sv) = buf.strides();
+    let (y, u, v) = buf.data_mut();
+    // « ABGR » de libyuv = octets R, G, B, A en mémoire.
+    let mut rgba = vec![0u8; (w * h * 4) as usize];
+    yuv_helper::i420_to_abgr(y, sy, u, su, v, sv, &mut rgba, w * 4, w as i32, h as i32);
+    let mut out = Vec::with_capacity((w * h / 4) as usize);
+    jpeg_encoder::Encoder::new(&mut out, JPEG_QUALITY)
+        .encode(&rgba, w as u16, h as u16, jpeg_encoder::ColorType::Rgba)
+        .ok()?;
+    Some(out)
 }
 
 // ── Serveur MJPEG local ──────────────────────────────────────────────────────
@@ -171,8 +196,9 @@ impl VideoServer {
         Ok(server)
     }
 
+    /// Adresse WebSocket d'un flux, donnée à la vue web.
     pub fn url(&self, key: &str) -> String {
-        format!("http://127.0.0.1:{}/v/{}?k={}", self.port, key, self.secret)
+        format!("ws://127.0.0.1:{}/w/{}?k={}", self.port, key, self.secret)
     }
 
     pub fn publish(&self, key: &str, jpeg: Vec<u8>) {
@@ -188,68 +214,90 @@ impl VideoServer {
     }
 
     fn serve(&self, mut stream: TcpStream) {
+        // Lecture SANS consommer : la poignée de main WebSocket doit relire la requête.
         let mut req = [0u8; 2048];
-        let n = stream.read(&mut req).unwrap_or(0);
+        let n = stream.peek(&mut req).unwrap_or(0);
         let line = String::from_utf8_lossy(&req[..n]);
-        let path = line.split_whitespace().nth(1).unwrap_or("");
-        let (page, rest) = match (path.strip_prefix("/v/"), path.strip_prefix("/p/")) {
-            (Some(r), _) => (false, r),
-            (_, Some(r)) => (true, r),
-            _ => return self.reply(stream, "404 Not Found"),
+        let path = line.split_whitespace().nth(1).unwrap_or("").to_string();
+        let (ws, rest) = match (path.strip_prefix("/w/"), path.strip_prefix("/p/")) {
+            (Some(r), _) => (true, r.to_string()),
+            (_, Some(r)) => (false, r.to_string()),
+            _ => {
+                let _ = stream.read(&mut req);
+                return self.reply(stream, "404 Not Found");
+            }
         };
-        let (key, query) = rest.split_once('?').unwrap_or((rest, ""));
+        let (key, query) = rest.split_once('?').unwrap_or((rest.as_str(), ""));
         // Refuse toute autre application locale qui tenterait de lire les flux.
         if query != format!("k={}", self.secret) {
+            let _ = stream.read(&mut req);
             return self.reply(stream, "403 Forbidden");
         }
-        if page {
-            // Page d'une fenêtre détachée : le flux en plein cadre, double-clic plein écran.
-            let body = format!(
-                "<!doctype html><meta charset=utf-8><title>ForgeChat</title>\
-                 <body style=\"margin:0;background:#000;height:100vh;display:flex\">\
-                 <img src=\"/v/{key}?k={s}\" style=\"width:100%;height:100%;object-fit:contain\" \
-                 ondblclick=\"document.fullscreenElement?document.exitFullscreen():this.requestFullscreen()\">",
-                s = self.secret
-            );
-            let _ = stream.write_all(format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(), body
-            ).as_bytes());
-            return;
+        if ws {
+            self.stream_ws(stream, key);
+        } else {
+            let _ = stream.read(&mut req);
+            self.page(stream, key);
         }
-        let head = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=fcframe\r\n\
-                    Cache-Control: no-store\r\nConnection: close\r\n\r\n";
-        if stream.write_all(head.as_bytes()).is_err() {
-            return;
-        }
+    }
+
+    /// Pousse chaque nouvelle image du flux `key` en message binaire.
+    fn stream_ws(&self, stream: TcpStream, key: &str) {
+        let Ok(mut ws) = tungstenite::accept(stream) else { return };
         let mut last_seq = 0u64;
+        // La vue ouvre le canal dès l'annonce de la piste, souvent AVANT la première
+        // image : on l'attend (30 s) au lieu de fermer aussitôt (caméra jamais affichée).
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
         loop {
             let frame = {
                 let mut map = self.frames.latest.lock().unwrap();
                 loop {
                     match map.get(key) {
-                        None => return, // flux terminé : l'<img> passe en erreur, l'UI retombe sur l'avatar
+                        None if last_seq == 0 && std::time::Instant::now() < deadline => {
+                            map = self.frames.changed.wait_timeout(map, Duration::from_millis(500)).unwrap().0;
+                        }
+                        None => break None, // flux terminé
                         Some((seq, data)) if *seq != last_seq => break Some((*seq, data.clone())),
                         Some(_) => {
                             let (m, timeout) = self.frames.changed.wait_timeout(map, Duration::from_secs(10)).unwrap();
                             map = m;
                             if timeout.timed_out() && !map.contains_key(key) {
-                                return;
+                                break None;
                             }
                         }
                     }
                 }
             };
-            let Some((seq, data)) = frame else { return };
+            let Some((seq, data)) = frame else {
+                let _ = ws.close(None);
+                return;
+            };
             last_seq = seq;
-            let part = format!("--fcframe\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n", data.len());
-            if stream.write_all(part.as_bytes()).is_err()
-                || stream.write_all(&data).is_err()
-                || stream.write_all(b"\r\n").is_err()
-            {
+            if ws.send(tungstenite::Message::Binary(data.as_ref().clone().into())).is_err() {
                 return;
             }
         }
+    }
+
+    /// Page d'une fenêtre détachée : le flux en plein cadre, double-clic plein écran.
+    fn page(&self, mut stream: TcpStream, key: &str) {
+        let body = format!(
+            "<!doctype html><meta charset=utf-8><title>ForgeChat</title>\
+             <body style=\"margin:0;background:#000;height:100vh;overflow:hidden\">\
+             <canvas id=c style=\"width:100vw;height:100vh;display:block\"></canvas><script>\
+             const c=document.getElementById('c'),g=c.getContext('2d');\
+             c.ondblclick=()=>document.fullscreenElement?document.exitFullscreen():c.requestFullscreen();\
+             const w=new WebSocket('ws://'+location.host+'/w/{key}?k={s}');w.binaryType='blob';\
+             w.onmessage=async e=>{{const b=await createImageBitmap(e.data);const W=c.clientWidth*devicePixelRatio,H=c.clientHeight*devicePixelRatio;\
+             if(c.width!==W||c.height!==H){{c.width=W;c.height=H}}const r=Math.min(W/b.width,H/b.height),dw=b.width*r,dh=b.height*r;\
+             g.fillStyle='#000';g.fillRect(0,0,W,H);g.drawImage(b,(W-dw)/2,(H-dh)/2,dw,dh);b.close()}};\
+             w.onclose=()=>window.close();</script>",
+            s = self.secret
+        );
+        let _ = stream.write_all(format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(), body
+        ).as_bytes());
     }
 
     fn reply(&self, mut stream: TcpStream, status: &str) {
@@ -419,6 +467,34 @@ mod tests {
     }
 
     #[test]
+    fn une_image_1080p_est_reduite_a_1280_et_encodee() {
+        let rgb: Vec<u8> = (0..1920 * 1080).flat_map(|_| [30u8, 144, 255]).collect();
+        let jpeg = i420_to_jpeg(rgb_to_i420(&rgb, 1920, 1080)).unwrap();
+        let mut dec = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(&jpeg));
+        let pixels = dec.decode().unwrap();
+        let info = dec.info().unwrap();
+        assert_eq!((info.width, info.height), (1280, 720));
+        let (r, g, b) = (pixels[0] as i32, pixels[1] as i32, pixels[2] as i32);
+        assert!((r - 30).abs() < 16 && (g - 144).abs() < 16 && (b - 255).abs() < 16, "{r},{g},{b}");
+    }
+
+    #[test]
+    fn le_canal_attend_la_premiere_image() {
+        let s = VideoServer::start().unwrap();
+        let url = s.url("tard");
+        let t = std::thread::spawn(move || {
+            let (mut ws, _) = tungstenite::connect(url).unwrap();
+            ws.read().unwrap()
+        });
+        std::thread::sleep(Duration::from_millis(700));
+        s.publish("tard", vec![7, 7]);
+        match t.join().unwrap() {
+            tungstenite::Message::Binary(b) => assert_eq!(b.as_ref(), &[7, 7]),
+            m => panic!("reçu {m:?}"),
+        }
+    }
+
+    #[test]
     fn yuyv_gris_donne_un_i420_gris() {
         let src: Vec<u8> = (0..4 * 4).flat_map(|_| [128u8, 128u8]).collect();
         let buf = yuyv_to_i420(&src, 4, 4);
@@ -428,19 +504,24 @@ mod tests {
     }
 
     #[test]
-    fn le_serveur_refuse_un_mauvais_secret_et_sert_le_bon() {
+    fn le_serveur_refuse_un_mauvais_secret_et_pousse_les_images() {
         let s = VideoServer::start().unwrap();
         s.publish("t", vec![0xFF, 0xD8, 0xFF, 0xD9]);
-        let get = |path: &str| {
-            let mut c = TcpStream::connect(("127.0.0.1", s.port)).unwrap();
-            c.write_all(format!("GET {path} HTTP/1.1\r\n\r\n").as_bytes()).unwrap();
-            c.set_read_timeout(Some(Duration::from_millis(500))).unwrap();
-            let mut buf = vec![0u8; 512];
-            let n = c.read(&mut buf).unwrap_or(0);
-            String::from_utf8_lossy(&buf[..n]).to_string()
-        };
-        assert!(get("/v/t?k=faux").starts_with("HTTP/1.1 403"));
-        let ok = get(&format!("/v/t?k={}", s.secret));
-        assert!(ok.contains("multipart/x-mixed-replace"), "{ok}");
+        let mut c = TcpStream::connect(("127.0.0.1", s.port)).unwrap();
+        c.write_all(b"GET /w/t?k=faux HTTP/1.1\r\n\r\n").unwrap();
+        let mut buf = vec![0u8; 256];
+        let n = c.read(&mut buf).unwrap_or(0);
+        assert!(String::from_utf8_lossy(&buf[..n]).starts_with("HTTP/1.1 403"));
+
+        let (mut ws, _) = tungstenite::connect(s.url("t")).unwrap();
+        match ws.read().unwrap() {
+            tungstenite::Message::Binary(b) => assert_eq!(b.as_ref(), &[0xFF, 0xD8, 0xFF, 0xD9]),
+            m => panic!("attendu une image, reçu {m:?}"),
+        }
+        s.publish("t", vec![1, 2, 3]);
+        match ws.read().unwrap() {
+            tungstenite::Message::Binary(b) => assert_eq!(b.as_ref(), &[1, 2, 3]),
+            m => panic!("attendu la 2e image, reçu {m:?}"),
+        }
     }
 }

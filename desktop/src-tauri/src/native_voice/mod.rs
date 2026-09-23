@@ -64,18 +64,18 @@ pub async fn nv_set_peer_audio(identity: String, enabled: bool) -> Result<(), St
     { let _ = (identity, enabled); Err(ABSENT.into()) }
 }
 
-/// Fenêtre détachée pour un flux vidéo local (`http://127.0.0.1:PORT/v/…`).
+/// Fenêtre détachée pour un flux vidéo local (`ws://127.0.0.1:PORT/w/…`).
 /// La vue web Linux ne peut pas partager de flux entre fenêtres : chaque
-/// fenêtre relit simplement le flux MJPEG du serveur local.
+/// fenêtre relit simplement le flux du serveur local.
 #[tauri::command]
 pub async fn nv_popout(app: tauri::AppHandle, url: String, title: String) -> Result<(), String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static N: AtomicU32 = AtomicU32::new(0);
     // Seul le serveur vidéo local est accepté : jamais une URL arbitraire.
     let page = url
-        .strip_prefix("http://127.0.0.1:")
-        .filter(|rest| rest.contains("/v/"))
-        .map(|rest| format!("http://127.0.0.1:{}", rest.replacen("/v/", "/p/", 1)))
+        .strip_prefix("ws://127.0.0.1:")
+        .filter(|rest| rest.contains("/w/"))
+        .map(|rest| format!("http://127.0.0.1:{}", rest.replacen("/w/", "/p/", 1)))
         .ok_or("URL de flux invalide")?;
     let label = format!("popout-{}", N.fetch_add(1, Ordering::Relaxed));
     tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::External(page.parse().map_err(|e| format!("{e}"))?))

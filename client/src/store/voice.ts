@@ -37,7 +37,7 @@ export interface VoicePeer {
   screenSharing: boolean
   prioritySpeaker?: boolean
   connectionLost?: boolean
-  /** Application Linux : vidéo reçue sous forme de flux MJPEG local (pas de MediaStream). */
+  /** Application Linux : vidéo reçue sous forme de flux vidéo local (pas de MediaStream). */
   videoUrl?: string | null
   screenUrl?: string | null
 }
