@@ -42,6 +42,12 @@ const quickEmojisList = () => [...new Set([...getRecentEmojis(), ...QUICK_EMOJIS
 
 const EMPTY_MESSAGES: any[] = []
 const EMPTY_ARR: string[] = []
+// P2-8 : les N dernières lignes sont toujours rendues normalement, pour que le
+// collage en bas, le saut vers un message (around, ~50 messages) et l'ancrage
+// « Nouveaux messages » calculent sur des hauteurs réelles ; les plus anciennes
+// passent en content-visibility:auto. Le store plafonne déjà à 500 messages par
+// salon (chat.ts). Vraie virtualisation : @tanstack/react-virtual recommandé.
+const ALWAYS_RENDERED = 60
 
 // Position de scroll mémorisée par canal (durée de vie de l'app, pas persistée)
 // pour reprendre la lecture où on l'avait laissée en revenant dans un canal
@@ -749,6 +755,7 @@ export default function MessageList({
               isGrouped={!!isGrouped}
               isFirstUnread={isFirstUnread}
               isLiveMsg={isLiveMsg}
+              deferRender={i < messages.length - ALWAYS_RENDERED}
               showDateDivider={showDateDivider}
               dateLabel={dateLabel}
               isHighlighted={highlightId === msg.id}

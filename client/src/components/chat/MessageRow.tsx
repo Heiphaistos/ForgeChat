@@ -16,6 +16,8 @@ export interface MessageRowProps {
   isGrouped: boolean
   isFirstUnread: boolean
   isLiveMsg: boolean
+  /** Ligne loin du bas : rendu différé par le navigateur tant qu'elle est hors écran */
+  deferRender?: boolean
   showDateDivider: boolean
   dateLabel: string
   isHighlighted: boolean
@@ -78,7 +80,7 @@ export interface MessageRowProps {
 }
 
 function MessageRow({
-  msg, isOwn, isGrouped, isFirstUnread, isLiveMsg, showDateDivider, dateLabel,
+  msg, isOwn, isGrouped, isFirstUnread, isLiveMsg, deferRender, showDateDivider, dateLabel,
   isHighlighted, isEditing, compact, ultraCompact, showTimestamps, formatTs, formatShortTs,
   customEmojiMap, linkPreviewEnabled, explicitFilter = 'none', noRoleAuthorIds, serverId, channelId, canManageMessages,
   quickEmojis, showEmojiPicker, showReactionPicker, isReminderOpen, translation, isTranslating,
@@ -106,7 +108,12 @@ function MessageRow({
   )
 
   return (
-    <div className={isLiveMsg ? 'msg-enter' : undefined}>
+    <div
+      className={isLiveMsg ? 'msg-enter' : undefined}
+      // content-visibility : le navigateur saute la mise en page et le rendu des
+      // lignes hors écran ; `auto` mémorise leur dernière hauteur réelle.
+      style={deferRender ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 72px' } : undefined}
+    >
       {showDateDivider && (
         <div className="flex items-center gap-3 my-3 px-2 select-none" role="separator" aria-label={dateLabel} data-date-label={dateLabel}>
           <div className="flex-1 h-px bg-fc-hover/70" />
