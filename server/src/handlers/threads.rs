@@ -179,13 +179,14 @@ pub async fn create_thread(
     .fetch_one(&mut *tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3)"
+    // Id renvoyé au client pour qu'il y rattache ses pièces jointes.
+    let first_message_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING id"
     )
     .bind(thread.id)
     .bind(claims.sub)
     .bind(first_msg.trim())
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query(
@@ -214,7 +215,7 @@ pub async fn create_thread(
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
-    Ok(Json(serde_json::json!({ "thread": thread })))
+    Ok(Json(serde_json::json!({ "thread": thread, "first_message_id": first_message_id })))
 }
 
 /// POST .../threads/:thread_id/ack : marque le fil lu jusqu'à son dernier message.

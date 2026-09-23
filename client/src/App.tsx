@@ -8,6 +8,7 @@ import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
+import { useThreadNotifications } from './hooks/useThreadNotifications'
 import { useUpdateNotifier } from './hooks/useUpdateNotifier'
 import api from './api/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -99,6 +100,7 @@ function AppInner() {
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('fc_onboarding_done'))
   const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
+  useThreadNotifications()
   const qcHook = useQueryClient()
   // Peuple le cache ['user-settings'] dès le montage (pas seulement quand l'utilisateur
   // ouvre Paramètres) -- nécessaire pour que sendNativeNotification puisse lire

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, MessagesSquare, Plus } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ThreadItem from '../threads/ThreadItem'
@@ -17,6 +17,8 @@ interface ThreadData {
   creator_username?: string
   parent_message_id?: string | null
 }
+
+const PAGE_SIZE = 50
 
 interface Props {
   serverId: string
@@ -47,12 +49,18 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
     return () => { offCreate(); offUpdate() }
   }, [channelId, on, qc])
 
-  const { data: threads = [], isLoading } = useQuery<ThreadData[]>({
-    queryKey: ['threads', channelId],
-    queryFn: () =>
-      api.get(`/servers/${serverId}/channels/${channelId}/threads`).then(r => r.data),
+  // Fils par pages de 50, du plus actif au moins actif (curseur = dernier fil reçu)
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['threads', channelId, 'list'],
+    queryFn: ({ pageParam }) =>
+      api.get<ThreadData[]>(`/servers/${serverId}/channels/${channelId}/threads`, {
+        params: { limit: PAGE_SIZE, ...(pageParam ? { before: pageParam } : {}) },
+      }).then(r => r.data),
+    initialPageParam: null as string | null,
+    getNextPageParam: last => (last.length === PAGE_SIZE ? last[last.length - 1]?.id ?? null : null),
     staleTime: 10_000,
   })
+  const threads = data?.pages.flat() ?? []
 
   const createThread = useMutation({
     mutationFn: (payload: { title: string; first_message: string }) =>
@@ -221,6 +229,17 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
             onSelect={onSelectThread}
           />
         ))}
+
+        {hasNextPage && (
+          <button
+            type="button"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="w-full py-2 text-xs text-fc-accent hover:underline disabled:opacity-50"
+          >
+            {isFetchingNextPage ? 'Chargement…' : 'Afficher plus de fils'}
+          </button>
+        )}
       </div>
 
       {/* Footer — bouton nouveau fil */}
