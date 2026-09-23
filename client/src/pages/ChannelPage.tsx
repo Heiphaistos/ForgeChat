@@ -66,6 +66,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 768)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
+  // Lien ?thread=<id> (notification de fil) : ouvre ce fil directement
+  const threadParam = searchParams.get('thread')
+  useEffect(() => {
+    if (threadParam) { setActiveThreadId(null); setActiveDirectThreadId(threadParam) }
+  }, [threadParam, channelId])
   const [showThreadSidebar, setShowThreadSidebar] = useState(false)
   const [showPinned, setShowPinned] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -755,6 +760,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       {/* Thread panel (depuis message) */}
       {activeThreadId && (
         <ThreadPanel
+          key={activeThreadId}
           serverId={serverId}
           channelId={channelId}
           parentMessageId={activeThreadId}
@@ -765,9 +771,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       {/* Thread panel (depuis sidebar fils) */}
       {activeDirectThreadId && !activeThreadId && (
         <ThreadPanel
+          key={activeDirectThreadId}
           serverId={serverId}
           channelId={channelId}
-          parentMessageId={activeDirectThreadId}
+          threadId={activeDirectThreadId}
           onClose={() => setActiveDirectThreadId(null)}
         />
       )}

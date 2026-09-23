@@ -1,5 +1,5 @@
-﻿use axum::{
-    extract::{Path, State},
+use axum::{
+    extract::{Path, Query, State},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use crate::{
 };
 
 use super::servers::require_member_and_channel;
+use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct Thread {
@@ -34,6 +35,7 @@ pub struct ThreadMessage {
     pub thread_id: Uuid,
     pub user_id: Uuid,
     pub content: String,
+    pub reply_to: Option<Uuid>,
     pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -47,25 +49,70 @@ pub struct CreateThreadReq {
 
 #[derive(Debug, Deserialize)]
 pub struct SendThreadMessageReq {
+    #[serde(default)]
     pub content: String,
+    pub reply_to: Option<Uuid>,
+    /// Le client joint des fichiers juste après : le texte peut alors être vide.
+    #[serde(default)]
+    pub has_attachments: bool,
+}
+
+/// Pagination par curseur : `before` = id du dernier élément déjà reçu.
+/// Le curseur réel est le couple (horodatage, id), stable même si plusieurs
+/// éléments partagent le même horodatage (import en masse).
+#[derive(Debug, Deserialize)]
+pub struct CursorQuery {
+    pub before: Option<Uuid>,
+    pub limit: Option<i64>,
+}
+
+impl CursorQuery {
+    pub fn limit(&self) -> i64 { self.limit.unwrap_or(50).clamp(1, 100) }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListThreadsQuery {
+    pub before: Option<Uuid>,
+    pub limit: Option<i64>,
+    /// Recherche du fil ouvert depuis un message du salon
+    pub parent_message_id: Option<Uuid>,
+    /// Recherche d'un fil précis (ouverture depuis la liste ou une notification)
+    pub thread_id: Option<Uuid>,
 }
 
 pub async fn list_threads(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    Query(q): Query<ListThreadsQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    let limit = q.limit.unwrap_or(50).clamp(1, 100);
 
+    // unread_count : messages des autres postés après le dernier lu. Sans ligne
+    // thread_reads (fil jamais suivi), la comparaison avec NULL ne compte rien.
     let threads = sqlx::query(
-        "SELECT t.*, COALESCE(t.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(t.webhook_avatar_url, u.avatar), '') as creator_avatar
+        "SELECT t.*, COALESCE(t.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(t.webhook_avatar_url, u.avatar), '') as creator_avatar,
+                COALESCE(t.last_reply_at, t.created_at) AS last_activity,
+                (SELECT COUNT(*) FROM thread_messages tm
+                  WHERE tm.thread_id = t.id AND tm.user_id <> $2 AND tm.created_at > tr.last_read_at) AS unread_count
          FROM threads t
          JOIN users u ON u.id = t.creator_id
+         LEFT JOIN thread_reads tr ON tr.thread_id = t.id AND tr.user_id = $2
          WHERE t.channel_id = $1
-         ORDER BY COALESCE(t.last_reply_at, t.created_at) DESC
-         LIMIT 50"
+           AND ($3::uuid IS NULL OR t.parent_message_id = $3)
+           AND ($4::uuid IS NULL OR t.id = $4)
+           AND ($5::uuid IS NULL OR (COALESCE(t.last_reply_at, t.created_at), t.id) <
+                (SELECT COALESCE(c.last_reply_at, c.created_at), c.id FROM threads c WHERE c.id = $5 AND c.channel_id = $1))
+         ORDER BY COALESCE(t.last_reply_at, t.created_at) DESC, t.id DESC
+         LIMIT $6"
     )
     .bind(channel_id)
+    .bind(claims.sub)
+    .bind(q.parent_message_id)
+    .bind(q.thread_id)
+    .bind(q.before)
+    .bind(limit)
     .fetch_all(&state.db)
     .await?;
 
@@ -80,7 +127,9 @@ pub async fn list_threads(
             "creator_username": r.get::<String, _>("creator_username"),
             "creator_avatar": r.get::<Option<String>, _>("creator_avatar"),
             "message_count": r.get::<i32, _>("message_count"),
+            "unread_count": r.get::<i64, _>("unread_count"),
             "last_reply_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_reply_at"),
+            "last_activity": r.get::<chrono::DateTime<chrono::Utc>, _>("last_activity"),
             "archived": r.get::<bool, _>("archived"),
             "locked": r.get::<bool, _>("locked"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
@@ -130,18 +179,29 @@ pub async fn create_thread(
     .fetch_one(&mut *tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3)"
+    // Id renvoyé au client pour qu'il y rattache ses pièces jointes.
+    let first_message_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING id"
     )
     .bind(thread.id)
     .bind(claims.sub)
     .bind(first_msg.trim())
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
 
     sqlx::query(
         "UPDATE threads SET message_count = 1 WHERE id = $1"
     )
+    .bind(thread.id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Le créateur suit son fil : ses non-lus partent de maintenant.
+    sqlx::query(
+        "INSERT INTO thread_reads (user_id, thread_id, last_read_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id, thread_id) DO NOTHING"
+    )
+    .bind(claims.sub)
     .bind(thread.id)
     .execute(&mut *tx)
     .await?;
@@ -155,13 +215,40 @@ pub async fn create_thread(
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
-    Ok(Json(serde_json::json!({ "thread": thread })))
+    Ok(Json(serde_json::json!({ "thread": thread, "first_message_id": first_message_id })))
+}
+
+/// POST .../threads/:thread_id/ack : marque le fil lu jusqu'à son dernier message.
+pub async fn ack_thread(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // GREATEST : un ack en retard ne fait jamais reculer la position de lecture.
+    let done = sqlx::query(
+        "INSERT INTO thread_reads (user_id, thread_id, last_read_at)
+         SELECT $1, t.id, COALESCE((SELECT MAX(tm.created_at) FROM thread_messages tm WHERE tm.thread_id = t.id), NOW())
+         FROM threads t WHERE t.id = $2 AND t.channel_id = $3
+         ON CONFLICT (user_id, thread_id)
+         DO UPDATE SET last_read_at = GREATEST(thread_reads.last_read_at, EXCLUDED.last_read_at)"
+    )
+    .bind(claims.sub)
+    .bind(thread_id)
+    .bind(channel_id)
+    .execute(&state.db)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Err(AppError::NotFound("Thread introuvable".into()));
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn get_thread_messages(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
+    Query(q): Query<CursorQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
     let thread_ok = sqlx::query_scalar::<_, bool>(
@@ -171,16 +258,26 @@ pub async fn get_thread_messages(
     .fetch_one(&state.db).await?;
     if !thread_ok { return Err(AppError::NotFound("Thread introuvable".into())); }
 
-    let rows = sqlx::query(
-        "SELECT tm.*, COALESCE(tm.webhook_display_name, u.username) AS username, NULLIF(COALESCE(tm.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator
+    // Page la plus récente (ou antérieure au curseur), renvoyée en ordre chronologique.
+    let mut rows = sqlx::query(
+        "SELECT tm.*, COALESCE(tm.webhook_display_name, u.username) AS username, NULLIF(COALESCE(tm.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator,
+                rm.content AS reply_to_content, COALESCE(rm.webhook_display_name, ru.username) AS reply_to_username
          FROM thread_messages tm
          JOIN users u ON u.id = tm.user_id
+         LEFT JOIN thread_messages rm ON rm.id = tm.reply_to AND rm.thread_id = tm.thread_id
+         LEFT JOIN users ru ON ru.id = rm.user_id
          WHERE tm.thread_id = $1
-         ORDER BY tm.created_at ASC"
+           AND ($2::uuid IS NULL OR (tm.created_at, tm.id) <
+                (SELECT c.created_at, c.id FROM thread_messages c WHERE c.id = $2 AND c.thread_id = $1))
+         ORDER BY tm.created_at DESC, tm.id DESC
+         LIMIT $3"
     )
     .bind(thread_id)
+    .bind(q.before)
+    .bind(q.limit())
     .fetch_all(&state.db)
     .await?;
+    rows.reverse();
 
     // Reactions groupees par message
     let msg_ids: Vec<Uuid> = { use sqlx::Row; rows.iter().map(|r| r.get::<Uuid, _>("id")).collect() };
@@ -206,14 +303,19 @@ pub async fn get_thread_messages(
             "users": r.get::<Vec<String>, _>("users"),
         }));
     }
+    let mut att_map = attachments_by_owner(&state, AttachmentOwner::ThreadMessage, &msg_ids).await;
 
     let result: Vec<serde_json::Value> = rows.iter().map(|r| {
         use sqlx::Row;
+        let id = r.get::<Uuid, _>("id");
         serde_json::json!({
-            "id": r.get::<Uuid, _>("id"),
+            "id": id,
             "thread_id": r.get::<Uuid, _>("thread_id"),
             "user_id": r.get::<Uuid, _>("user_id"),
             "content": r.get::<String, _>("content"),
+            "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
+            "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
+            "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "author": {
@@ -222,7 +324,8 @@ pub async fn get_thread_messages(
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "discriminator": r.get::<String, _>("discriminator"),
             },
-            "reactions": react_map.get(&r.get::<Uuid, _>("id")).cloned().unwrap_or_default(),
+            "reactions": react_map.get(&id).cloned().unwrap_or_default(),
+            "attachments": att_map.remove(&id).unwrap_or_default(),
         })
     }).collect();
 
@@ -293,7 +396,7 @@ pub async fn send_thread_message(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let content_trimmed = body.content.trim().to_string();
-    if content_trimmed.is_empty() {
+    if content_trimmed.is_empty() && !body.has_attachments {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if content_trimmed.chars().count() > 4000 {
@@ -312,7 +415,7 @@ pub async fn send_thread_message(
 
     use sqlx::Row;
     let thread_row = sqlx::query(
-        "SELECT locked, archived FROM threads WHERE id=$1 AND channel_id=$2"
+        "SELECT locked, archived, title, creator_id FROM threads WHERE id=$1 AND channel_id=$2"
     )
     .bind(thread_id)
     .bind(channel_id)
@@ -324,16 +427,34 @@ pub async fn send_thread_message(
         return Err(AppError::Forbidden);
     }
 
-    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content_trimmed).await {
-        return Err(err);
+    // Réponse : le message cité doit appartenir au même fil.
+    let reply_ctx = match body.reply_to {
+        None => None,
+        Some(rid) => Some(sqlx::query(
+            "SELECT tm.content, COALESCE(tm.webhook_display_name, u.username) AS username
+             FROM thread_messages tm JOIN users u ON u.id = tm.user_id
+             WHERE tm.id = $1 AND tm.thread_id = $2"
+        )
+        .bind(rid)
+        .bind(thread_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::BadRequest("Message cité introuvable dans ce fil".into()))?),
+    };
+
+    if !content_trimmed.is_empty() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content_trimmed).await {
+            return Err(err);
+        }
     }
 
     let msg = sqlx::query_as::<_, ThreadMessage>(
-        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
+        "INSERT INTO thread_messages (thread_id, user_id, content, reply_to) VALUES ($1, $2, $3, $4) RETURNING *"
     )
     .bind(thread_id)
     .bind(claims.sub)
     .bind(&content_trimmed)
+    .bind(body.reply_to)
     .fetch_one(&state.db)
     .await?;
 
@@ -344,16 +465,53 @@ pub async fn send_thread_message(
     .execute(&state.db)
     .await?;
 
-    // Broadcast en temps réel aux membres du serveur
+    // L'auteur a lu son propre message : il suit désormais le fil.
+    sqlx::query(
+        "INSERT INTO thread_reads (user_id, thread_id, last_read_at) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, thread_id)
+         DO UPDATE SET last_read_at = GREATEST(thread_reads.last_read_at, EXCLUDED.last_read_at)"
+    )
+    .bind(claims.sub)
+    .bind(thread_id)
+    .bind(msg.created_at)
+    .execute(&state.db)
+    .await?;
+
+    // Destinataires d'une notification : auteur du fil + tous ceux qui y ont écrit.
+    // Le client filtre (pas soi-même, pas si le fil est déjà ouvert).
+    let creator_id: Uuid = thread_row.get("creator_id");
+    let notify_user_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT user_id FROM thread_messages WHERE thread_id = $1
+         UNION SELECT $2::uuid"
+    )
+    .bind(thread_id)
+    .bind(creator_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let author_username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+
+    let mut msg_json = serde_json::to_value(&msg).map_err(|e| AppError::Internal(e.into()))?;
+    msg_json["author_username"] = serde_json::json!(author_username);
+    msg_json["reply_to_content"] = serde_json::json!(reply_ctx.as_ref().map(|r| r.get::<String, _>("content")));
+    msg_json["reply_to_username"] = serde_json::json!(reply_ctx.as_ref().map(|r| r.get::<String, _>("username")));
+
+    // Broadcast en temps réel aux membres qui voient le salon
     let event = serde_json::json!({
         "type": "THREAD_MESSAGE",
         "thread_id": thread_id,
+        "thread_title": thread_row.get::<String, _>("title"),
         "channel_id": channel_id,
-        "message": msg,
+        "server_id": server_id,
+        "message": msg_json,
+        "notify_user_ids": notify_user_ids,
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
-    Ok(Json(serde_json::json!({ "message": msg })))
+    Ok(Json(serde_json::json!({ "message": msg_json })))
 }
 
 pub async fn archive_thread(
@@ -496,6 +654,14 @@ pub async fn delete_thread_message(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
+    // Fichiers joints : récupérés avant la cascade pour les supprimer du disque.
+    let attachment_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT url FROM attachments WHERE thread_message_id=$1"
+    )
+    .bind(msg_id)
+    .fetch_all(&state.db)
+    .await?;
+
     sqlx::query("DELETE FROM thread_messages WHERE id=$1 AND thread_id=$2")
         .bind(msg_id)
         .bind(thread_id)
@@ -506,6 +672,7 @@ pub async fn delete_thread_message(
         .bind(thread_id)
         .execute(&state.db)
         .await?;
+    remove_upload_files(&state, attachment_urls);
 
     state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "THREAD_MESSAGE_DELETE",

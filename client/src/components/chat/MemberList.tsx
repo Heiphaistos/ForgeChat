@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useNavigate } from 'react-router-dom'
@@ -14,6 +14,17 @@ interface Props {
   serverId: string
   onClose?: () => void
 }
+
+// Virtualisation maison : hauteurs fixes, seules les lignes proches de la zone
+// visible sont montées (un serveur de plusieurs milliers de membres restait
+// entièrement dans le DOM).
+const ROW_H = 48
+const HEADER_H = 32
+const OVERSCAN_PX = 400
+
+type ListItem =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'member'; key: string; m: any }
 
 const STATUS_COLORS: Record<string, string> = {
   online: 'bg-fc-green',
@@ -38,7 +49,8 @@ function MemberRow({ m, onClick, onContextMenu, onLongPress }: { m: any; onClick
     <div
       role="listitem"
       aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? ' (propriétaire)' : ''}`}
-      className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
+      style={{ height: ROW_H }}
+      className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover group cursor-pointer transition"
       onClick={onClick}
       onContextMenu={onContextMenu}
       onTouchStart={e => {
@@ -92,11 +104,15 @@ export default function MemberList({ serverId, onClose }: Props) {
   const { data: members = [] } = useQuery({
     queryKey: ['members', serverId],
     queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
-    refetchInterval: 30_000,
-    staleTime: 30_000,
+    // Plus de rechargement périodique : la présence arrive par WS (usePresence) et
+    // App.tsx invalide ['members', serverId] sur MEMBER_JOIN/LEAVE/REMOVE/KICKED/
+    // BANNED/UNBAN/ROLE_UPDATE/NICKNAME_UPDATE/TIMEOUT et USER_UPDATE.
+    staleTime: 5 * 60_000,
   })
 
   const presenceStatuses = usePresence(s => s.statuses)
+  // Activité en direct (WS) : remplace l'ancien rechargement toutes les 30 s
+  const presenceActivities = usePresence(s => s.activities)
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const ctxMenu = useContextMenu()
   const nav = useNavigate()
@@ -106,10 +122,14 @@ export default function MemberList({ serverId, onClose }: Props) {
   const [popup, setPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
 
   const { online, offline } = useMemo(() => {
-    const withStatus = (members as any[]).map((m: any) => ({
-      ...m,
-      liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
-    }))
+    const withStatus = (members as any[]).map((m: any) => {
+      const act = presenceActivities[m.user_id]
+      return {
+        ...m,
+        ...(act ? { activity_type: act.activity_type, activity_name: act.activity_name } : {}),
+        liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
+      }
+    })
     return {
       online: withStatus.filter((m: any) =>
         m.liveStatus === 'online' || m.liveStatus === 'idle' || m.liveStatus === 'dnd'
@@ -118,7 +138,7 @@ export default function MemberList({ serverId, onClose }: Props) {
         m.liveStatus === 'offline' || m.liveStatus === 'invisible'
       ),
     }
-  }, [members, presenceStatuses])
+  }, [members, presenceStatuses, presenceActivities])
 
   const menuItems = (m: any) => [
     { label: 'Voir le profil', onClick: () => nav(`/users/${m.user_id}`) },
@@ -156,12 +176,60 @@ export default function MemberList({ serverId, onClose }: Props) {
   const [search, setSearch] = useState('')
   const swipe = useSwipeRightToClose(() => onClose?.())
   const query = search.trim().toLowerCase()
-  const filteredOnline = query ? online.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : online
-  const filteredOffline = query ? offline.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : offline
+  const filteredOnline = useMemo(
+    () => query ? online.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : online,
+    [online, query])
+  const filteredOffline = useMemo(
+    () => query ? offline.filter((m: any) => (m.nickname ?? m.username).toLowerCase().includes(query)) : offline,
+    [offline, query])
+
+  // Liste aplatie (titres de groupe + membres) avec la position verticale de chaque élément
+  const { items, offsets, totalHeight } = useMemo(() => {
+    const items: ListItem[] = []
+    if (filteredOnline.length > 0) {
+      items.push({ kind: 'header', key: 'h-online', label: `En ligne — ${filteredOnline.length}` })
+      for (const m of filteredOnline) items.push({ kind: 'member', key: m.user_id, m })
+    }
+    if (filteredOffline.length > 0) {
+      items.push({ kind: 'header', key: 'h-offline', label: `Hors ligne — ${filteredOffline.length}` })
+      for (const m of filteredOffline) items.push({ kind: 'member', key: m.user_id, m })
+    }
+    const offsets: number[] = []
+    let y = 0
+    for (const it of items) { offsets.push(y); y += it.kind === 'header' ? HEADER_H : ROW_H }
+    return { items, offsets, totalHeight: y }
+  }, [filteredOnline, filteredOffline])
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const [view, setView] = useState({ top: 0, height: 1200 })
+  const measure = useCallback(() => {
+    const el = scrollRef.current
+    const list = listRef.current
+    if (!el || !list) return
+    setView({ top: el.scrollTop - list.offsetTop, height: el.clientHeight })
+  }, [])
+  useLayoutEffect(() => {
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [measure])
+
+  const minY = view.top - OVERSCAN_PX
+  const maxY = view.top + view.height + OVERSCAN_PX
+  const visible: number[] = []
+  for (let i = 0; i < items.length; i++) {
+    const h = items[i].kind === 'header' ? HEADER_H : ROW_H
+    if (offsets[i] + h < minY) continue
+    if (offsets[i] > maxY) break
+    visible.push(i)
+  }
 
   return (
     <div
       {...swipe}
+      ref={scrollRef}
+      onScroll={measure}
       role="complementary"
       aria-label="Liste des membres"
       className="absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
@@ -187,30 +255,26 @@ export default function MemberList({ serverId, onClose }: Props) {
           className="w-full bg-fc-bg/60 text-fc-text placeholder-fc-muted text-xs px-2.5 py-1.5 rounded outline-none focus:ring-1 focus:ring-fc-accent/50 transition"
         />
       </div>
-      {filteredOnline.length > 0 && (
-        <div role="group" aria-label={`En ligne — ${filteredOnline.length}`}>
-          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1" aria-hidden>
-            En ligne — {filteredOnline.length}
-          </div>
-          <div role="list">
-            {filteredOnline.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onClick={e => setPopup({ userId: m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
-            ))}
-          </div>
-        </div>
-      )}
-      {filteredOffline.length > 0 && (
-        <div role="group" aria-label={`Hors ligne — ${filteredOffline.length}`}>
-          <div className="px-2 py-1 text-xs font-semibold text-fc-muted uppercase tracking-wide mt-3 mb-1" aria-hidden>
-            Hors ligne — {filteredOffline.length}
-          </div>
-          <div role="list">
-            {filteredOffline.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onClick={e => setPopup({ userId: m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
-            ))}
-          </div>
-        </div>
-      )}
+      <div ref={listRef} role="list" aria-label="Membres" style={{ position: 'relative', height: totalHeight }}>
+        {visible.map(i => {
+          const it = items[i]
+          return (
+            <div key={it.key} style={{ position: 'absolute', top: offsets[i], left: 0, right: 0 }}>
+              {it.kind === 'header' ? (
+                <div
+                  role="listitem"
+                  style={{ height: HEADER_H }}
+                  className="px-2 pb-1 flex items-end text-xs font-semibold text-fc-muted uppercase tracking-wide"
+                >
+                  {it.label}
+                </div>
+              ) : (
+                <MemberRow m={it.m} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
+              )}
+            </div>
+          )
+        })}
+      </div>
       {query && filteredOnline.length === 0 && filteredOffline.length === 0 && (
         <p className="text-xs text-fc-muted px-2 py-4 text-center">Aucun membre trouvé</p>
       )}

@@ -20,6 +20,8 @@ type PendingSubTab = 'received' | 'sent'
 
 interface FriendRow {
   id: string
+  /** Surnom privé donné à cet ami (friend_nicknames) */
+  custom_nickname?: string | null
   friend_id: string
   status: 'accepted' | 'pending'
   direction?: 'received' | 'sent'
@@ -316,7 +318,7 @@ export default function FriendsPage() {
 
         <div className="flex-1 min-w-0">
           <div className="font-medium text-white text-sm leading-tight">
-            {f.username}
+            {f.custom_nickname || f.username}
             <span className="text-fc-muted font-normal text-xs ml-0.5">
               #{f.discriminator}
             </span>

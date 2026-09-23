@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus, Archive, ArchiveRestore, Lock } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus, Archive, ArchiveRestore, Lock, CornerUpLeft } from 'lucide-react'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
-import MediaContent, { useMediaUpload } from './MediaContent'
+import MediaContent from './MediaContent'
+import { AttachmentList, PendingFiles, usePendingFiles, uploadPendingFiles } from './ThreadAttachments'
+import { setOpenThread } from '../../hooks/useThreadNotifications'
 import EmojiPicker from './EmojiPicker'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
 import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
@@ -19,25 +21,33 @@ import toast from 'react-hot-toast'
 interface Props {
   serverId: string
   channelId: string
-  parentMessageId: string
+  /** Fil ouvert depuis un message du salon (créé au premier envoi s'il n'existe pas) */
+  parentMessageId?: string
+  /** Fil ouvert directement (liste des fils, notification) */
+  threadId?: string
   onClose: () => void
 }
+
+const PAGE_SIZE = 50
 
 // Brouillons par message parent — module-level, survivent à la fermeture du fil
 const threadDrafts = new Map<string, string>()
 
-export default function ThreadPanel({ serverId, channelId, parentMessageId, onClose }: Props) {
+export default function ThreadPanel({ serverId, channelId, parentMessageId, threadId: directThreadId, onClose }: Props) {
+  // Clé de brouillon : le message parent, ou le fil ouvert directement
+  const draftKey = parentMessageId ?? directThreadId ?? ''
   const { user } = useAuth()
   const { on, send } = useWs()
   const { formatShort } = useFormatDate()
-  const [input, setInput] = useState(() => threadDrafts.get(parentMessageId) ?? '')
+  const [input, setInput] = useState(() => threadDrafts.get(draftKey) ?? '')
   // Brouillon conservé si on ferme/rouvre le fil (purgé à l'envoi via setInput(''))
   useEffect(() => {
-    if (input.trim()) threadDrafts.set(parentMessageId, input)
-    else threadDrafts.delete(parentMessageId)
-  }, [input, parentMessageId])
-  const mediaUpload = useMediaUpload(serverId, channelId)
-  const [threadId, setThreadId] = useState<string | null>(null)
+    if (input.trim()) threadDrafts.set(draftKey, input)
+    else threadDrafts.delete(draftKey)
+  }, [input, draftKey])
+  const pending = usePendingFiles()
+  const [replyTo, setReplyTo] = useState<{ id: string; username: string; content: string } | null>(null)
+  const [threadId, setThreadId] = useState<string | null>(directThreadId ?? null)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null)
@@ -47,7 +57,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const [floatingDate, setFloatingDate] = useState<string | null>(null)
   const floatingDateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openTime = useRef(Date.now())
-  useEffect(() => { openTime.current = Date.now() }, [parentMessageId])
+  useEffect(() => { openTime.current = Date.now() }, [draftKey])
   useEffect(() => () => { if (floatingDateTimer.current) clearTimeout(floatingDateTimer.current) }, [])
   // Fermer le clavier virtuel quand on scrolle verticalement la liste (mobile)
   const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
@@ -67,28 +77,79 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   })
   const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
 
-  const { data: threads = [], isLoading } = useQuery<any[]>({
-    queryKey: ['threads', channelId],
-    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/threads`).then(r => r.data),
+  // Recherche ciblée du fil (la liste des fils est paginée : il peut ne pas y figurer).
+  // Clé préfixée par ['threads', channelId] : les invalidations existantes la couvrent.
+  const lookup = threadId ?? directThreadId
+  const { data: found = [], isLoading } = useQuery<any[]>({
+    queryKey: ['threads', channelId, 'one', lookup ?? parentMessageId],
+    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/threads`, {
+      params: lookup ? { thread_id: lookup } : { parent_message_id: parentMessageId },
+    }).then(r => r.data),
+    enabled: !!(lookup || parentMessageId),
   })
-
-  const thread = threads.find((t: any) => t.parent_message_id === parentMessageId)
+  const thread = found[0]
 
   useEffect(() => {
     if (thread) setThreadId(thread.id)
   }, [thread?.id])
 
-  const { data: messages = [] } = useQuery<any[]>({
+  // Messages par pages de 50, du plus récent au plus ancien (curseur = id le plus ancien)
+  const {
+    data: msgPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['thread-messages', threadId],
-    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`).then(r => r.data),
+    queryFn: ({ pageParam }) => api.get<any[]>(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
+      params: { limit: PAGE_SIZE, ...(pageParam ? { before: pageParam } : {}) },
+    }).then(r => r.data),
+    initialPageParam: null as string | null,
+    getNextPageParam: last => (last.length === PAGE_SIZE ? last[0]?.id ?? null : null),
     enabled: !!threadId,
   })
+  const messages: any[] = msgPages ? [...msgPages.pages].reverse().flat() : []
+  const lastMsgId: string | undefined = messages[messages.length - 1]?.id
+
+  // Charger l'historique en conservant la position de lecture
+  const listRef = useRef<HTMLDivElement>(null)
+  const prevScrollHeight = useRef<number | null>(null)
+  const loadOlder = () => {
+    if (!hasNextPage || isFetchingNextPage) return
+    prevScrollHeight.current = listRef.current?.scrollHeight ?? null
+    fetchNextPage()
+  }
+  useLayoutEffect(() => {
+    const el = listRef.current
+    if (el && prevScrollHeight.current != null) {
+      el.scrollTop += el.scrollHeight - prevScrollHeight.current
+      prevScrollHeight.current = null
+    }
+  }, [messages.length])
+
+  // Fil affiché : pas de notification globale pour lui, et lu jusqu'au dernier message
+  useEffect(() => {
+    if (!threadId) return
+    setOpenThread(threadId)
+    return () => setOpenThread(null)
+  }, [threadId])
+  useEffect(() => {
+    if (!threadId || !lastMsgId) return
+    api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/ack`)
+      .then(() => qc.invalidateQueries({ queryKey: ['threads', channelId] }))
+      .catch(() => {})
+  }, [threadId, lastMsgId, serverId, channelId, qc])
 
   // Temps réel — écouter les nouveaux messages du thread via WS
   useEffect(() => {
     if (!threadId) return
     const offMsg = on('THREAD_MESSAGE', (d: any) => {
-      if (d.thread_id === threadId || d.parent_id === parentMessageId) {
+      if (d.thread_id === threadId) {
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
+    })
+    const offAtt = on('THREAD_ATTACHMENT_ADDED', (d: any) => {
+      if (d.thread_id === threadId) {
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
@@ -123,8 +184,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offMsg(); offUpdate(); offEdit(); offDelete(); offReact(); offTyping() }
-  }, [threadId, parentMessageId, channelId, on, qc])
+    return () => { offMsg(); offAtt(); offUpdate(); offEdit(); offDelete(); offReact(); offTyping() }
+  }, [threadId, channelId, on, qc])
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
 
@@ -169,10 +230,17 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
     onError: () => toast.error('Impossible de supprimer'),
   })
 
-  // Scroll to bottom quand les messages changent
+  // Défiler en bas quand un message arrive en fin de fil (pas au chargement de l'historique)
+  // (instantané au premier affichage : un défilement animé depuis le haut
+  // déclencherait le chargement de l'historique)
+  const hadMessages = useRef(false)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+    bottomRef.current?.scrollIntoView({ behavior: hadMessages.current ? 'smooth' : 'auto' })
+    if (lastMsgId) hadMessages.current = true
+  }, [lastMsgId])
+
+  const attachUrl = (tid: string, msgId: string) =>
+    `/servers/${serverId}/channels/${channelId}/threads/${tid}/messages/${msgId}/attachments`
 
   const createThread = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/threads`, {
@@ -180,14 +248,20 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       first_message: input.trim(),
       parent_message_id: parentMessageId,
     }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       const tid = res.data.thread?.id
-      if (tid) setThreadId(tid)
-      qc.invalidateQueries({ queryKey: ['threads', channelId] })
+      const files = pending.files
       setInput('')
       setNewTitle('')
       setCreating(false)
+      pending.clear()
+      if (tid) setThreadId(tid)
+      qc.invalidateQueries({ queryKey: ['threads', channelId] })
       toast.success('Thread créé !')
+      if (tid && res.data.first_message_id && files.length > 0) {
+        await uploadPendingFiles(attachUrl(tid, res.data.first_message_id), files).catch(() => {})
+        qc.invalidateQueries({ queryKey: ['thread-messages', tid] })
+      }
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
@@ -195,10 +269,20 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
   const sendMessage = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
       content: input.trim(),
+      reply_to: replyTo?.id,
+      has_attachments: pending.files.length > 0,
     }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+    onSuccess: async (res) => {
+      const files = pending.files
+      const msgId: string | undefined = res.data?.message?.id
       setInput('')
+      setReplyTo(null)
+      pending.clear()
+      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      if (threadId && msgId && files.length > 0) {
+        await uploadPendingFiles(attachUrl(threadId, msgId), files).catch(() => {})
+        qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+      }
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
@@ -220,8 +304,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
 
   const isLocked = !!thread?.locked || !!thread?.archived
 
+  const canSend = !!input.trim() || (!!threadId && pending.files.length > 0)
   const handleSend = () => {
-    if (!input.trim()) return
+    if (!canSend) return
     // Limite serveur : 4000 caractères
     if (input.trim().length > 4000) {
       toast.error(`Message trop long : ${input.trim().length}/4000 caractères`)
@@ -304,11 +389,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
 
       {/* Messages */}
       <div
+        ref={listRef}
         className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3"
         onScroll={e => {
           // Pastille de date flottante : jour du dernier séparateur passé au-dessus
           // du viewport (ignoré pendant le scroll initial programmatique)
           if (Date.now() - openTime.current < 800) return
+          // Défilement infini vers l'historique (hors défilement initial vers le bas)
+          if (e.currentTarget.scrollTop < 60) loadOlder()
           const el = e.currentTarget
           const topEdge = el.getBoundingClientRect().top + 8
           let label: string | null = null
@@ -353,6 +441,20 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           <div className="text-center text-fc-muted text-sm py-8">
             <MessagesSquare size={32} className="mx-auto mb-2 opacity-30" />
             <p>Pas encore de thread</p>
+          </div>
+        )}
+
+        {hasNextPage && (
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={loadOlder}
+              disabled={isFetchingNextPage}
+              className="text-xs text-fc-accent hover:underline disabled:opacity-50 flex items-center gap-1"
+            >
+              {isFetchingNextPage && <Loader2 size={12} className="animate-spin" aria-hidden />}
+              Charger les messages précédents
+            </button>
           </div>
         )}
 
@@ -427,10 +529,18 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                   {msg.edited_at && (
                     <span className="text-[9px] text-fc-muted/60" title="Message modifié">(modifié)</span>
                   )}
+                  {editingMsgId !== msg.id && !isLocked && (
+                    <button
+                      onClick={() => setReplyTo({ id: msg.id, username: msg.author?.username ?? '', content: msg.content ?? '' })}
+                      className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition text-fc-muted hover:text-white ${isMe ? '' : 'ml-auto'}`}
+                      title="Répondre"
+                      aria-label="Répondre au message"
+                    ><CornerUpLeft size={12} aria-hidden /></button>
+                  )}
                   {editingMsgId !== msg.id && (
                     <button
                       onClick={() => setReactionPickerFor(cur => cur === msg.id ? null : msg.id)}
-                      className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${isMe ? '' : 'ml-auto'} ${reactionPickerFor === msg.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                      className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${reactionPickerFor === msg.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
                       title="Réagir"
                       aria-label="Réagir au message"
                     ><SmilePlus size={12} aria-hidden /></button>
@@ -484,7 +594,16 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                   </div>
                 ) : (
                   <>
+                    {msg.reply_to && (
+                      <div className="flex items-center gap-1 text-[11px] text-fc-muted mb-0.5 min-w-0">
+                        <CornerUpLeft size={10} className="flex-shrink-0" aria-hidden />
+                        {msg.reply_to_username
+                          ? <span className="truncate"><span className="font-semibold">{msg.reply_to_username}</span> {msg.reply_to_content}</span>
+                          : <span className="italic">Message supprimé</span>}
+                      </div>
+                    )}
                     <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
+                    <AttachmentList attachments={msg.attachments} />
                     {linkPreviewEnabled && msg.content && (() => {
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
@@ -541,6 +660,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
             {Object.values(typingUsers).map(t => t.username).join(', ')} {Object.keys(typingUsers).length > 1 ? 'écrivent' : 'écrit'}…
           </div>
         )}
+        {replyTo && (
+          <div className="flex items-center gap-1.5 text-[11px] text-fc-muted mb-1 px-1 min-w-0">
+            <CornerUpLeft size={11} className="flex-shrink-0" aria-hidden />
+            <span className="truncate flex-1">Réponse à <span className="font-semibold text-fc-text">{replyTo.username}</span></span>
+            <button type="button" onClick={() => setReplyTo(null)} aria-label="Annuler la réponse" className="hover:text-white"><X size={12} aria-hidden /></button>
+          </div>
+        )}
+        <PendingFiles files={pending.files} onRemove={pending.remove} />
         <div className="flex gap-2 items-end">
           <textarea
             data-composer="thread"
@@ -554,14 +681,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 )
                 if (last) { e.preventDefault(); setEditingMsgId(last.id); setEditContent(last.content ?? ''); return }
               }
+              if (e.key === 'Escape' && replyTo) { setReplyTo(null); return }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 handleSend()
               }
             }}
-            onPaste={e => mediaUpload.onPaste(e, url => setInput(c => (c ? c + '\n' : '') + url))}
-            onDrop={e => mediaUpload.onDrop(e, url => setInput(c => (c ? c + '\n' : '') + url))}
-            onDragOver={mediaUpload.onDragOver}
+            onPaste={pending.onPaste}
+            onDrop={pending.onDrop}
+            onDragOver={pending.onDragOver}
             placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
             enterKeyHint="send"
             autoCapitalize="sentences"
@@ -570,17 +698,16 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
           />
           <button
             type="button"
-            onClick={() => mediaUpload.pick(url => setInput(c => (c ? c + '\n' : '') + url))}
-            disabled={mediaUpload.uploading}
-            title="Joindre une image ou vidéo"
-            aria-label="Joindre une image ou vidéo"
+            onClick={pending.pick}
+            title="Joindre des fichiers"
+            aria-label="Joindre des fichiers"
             className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
           >
-            {mediaUpload.uploading ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Paperclip size={16} aria-hidden />}
+            <Paperclip size={16} aria-hidden />
           </button>
           <button
             onClick={handleSend}
-            disabled={!input.trim() || createThread.isPending || sendMessage.isPending}
+            disabled={!canSend || createThread.isPending || sendMessage.isPending}
             className="p-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg transition disabled:opacity-50 flex-shrink-0"
             title="Envoyer"
           >

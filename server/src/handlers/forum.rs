@@ -1,5 +1,5 @@
-﻿use axum::{
-    extract::{Path, State},
+use axum::{
+    extract::{Path, Query, State},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,8 @@ use crate::{
 };
 
 use super::servers::require_member_and_channel;
+use super::threads::CursorQuery;
+use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct ForumPost {
@@ -48,13 +50,18 @@ pub struct CreatePostReq {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateReplyReq {
+    #[serde(default)]
     pub content: String,
+    /// Le client joint des fichiers juste après : le texte peut alors être vide.
+    #[serde(default)]
+    pub has_attachments: bool,
 }
 
 pub async fn list_posts(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+    Query(q): Query<CursorQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
@@ -65,10 +72,12 @@ pub async fn list_posts(
     .fetch_one(&state.db)
     .await?;
 
-    let order_by = if default_sort == "creation_date" {
-        "fp.pinned DESC, fp.created_at DESC"
+    // Clé de tri figée (jamais issue de l'entrée utilisateur). Curseur composite
+    // (épinglé, clé, id) aligné sur l'ORDER BY : aucun post sauté ni dupliqué.
+    let (key, ckey) = if default_sort == "creation_date" {
+        ("fp.created_at", "c.created_at")
     } else {
-        "fp.pinned DESC, COALESCE(fp.last_reply_at, fp.created_at) DESC"
+        ("COALESCE(fp.last_reply_at, fp.created_at)", "COALESCE(c.last_reply_at, c.created_at)")
     };
 
     let rows = sqlx::query(&format!(
@@ -76,10 +85,14 @@ pub async fn list_posts(
          FROM forum_posts fp
          JOIN users u ON u.id = fp.creator_id
          WHERE fp.channel_id = $1
-         ORDER BY {order_by}
-         LIMIT 50"
+           AND ($2::uuid IS NULL OR (fp.pinned, {key}, fp.id) <
+                (SELECT c.pinned, {ckey}, c.id FROM forum_posts c WHERE c.id = $2 AND c.channel_id = $1))
+         ORDER BY fp.pinned DESC, {key} DESC, fp.id DESC
+         LIMIT $3"
     ))
     .bind(channel_id)
+    .bind(q.before)
+    .bind(q.limit())
     .fetch_all(&state.db)
     .await?;
 
@@ -185,6 +198,7 @@ pub async fn get_post(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
+    Query(q): Query<CursorQuery>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
@@ -200,16 +214,23 @@ pub async fn get_post(
     .await?
     .ok_or_else(|| AppError::NotFound("Post introuvable".into()))?;
 
-    let reply_rows = sqlx::query(
+    // Page de réponses la plus récente (ou antérieure au curseur), en ordre chronologique.
+    let mut reply_rows = sqlx::query(
         "SELECT fr.*, COALESCE(fr.webhook_display_name, u.username) AS username, NULLIF(COALESCE(fr.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator
          FROM forum_replies fr
          JOIN users u ON u.id = fr.user_id
          WHERE fr.post_id = $1
-         ORDER BY fr.created_at ASC"
+           AND ($2::uuid IS NULL OR (fr.created_at, fr.id) <
+                (SELECT c.created_at, c.id FROM forum_replies c WHERE c.id = $2 AND c.post_id = $1))
+         ORDER BY fr.created_at DESC, fr.id DESC
+         LIMIT $3"
     )
     .bind(post_id)
+    .bind(q.before)
+    .bind(q.limit())
     .fetch_all(&state.db)
     .await?;
+    reply_rows.reverse();
 
     use sqlx::Row;
 
@@ -236,6 +257,8 @@ pub async fn get_post(
             "users": r.get::<Vec<String>, _>("users"),
         }));
     }
+
+    let mut att_map = attachments_by_owner(&state, AttachmentOwner::ForumReply, &reply_ids).await;
 
     let post = serde_json::json!({
         "id": post_row.get::<Uuid, _>("id"),
@@ -267,6 +290,7 @@ pub async fn get_post(
                 "discriminator": r.get::<String, _>("discriminator"),
             },
             "reactions": react_map.get(&r.get::<Uuid, _>("id")).cloned().unwrap_or_default(),
+            "attachments": att_map.remove(&r.get::<Uuid, _>("id")).unwrap_or_default(),
         })
     }).collect();
 
@@ -342,7 +366,7 @@ pub async fn reply_to_post(
     if is_timed_out { return Err(AppError::Forbidden); }
 
     let content_raw = body.content.trim().to_string();
-    if content_raw.is_empty() {
+    if content_raw.is_empty() && !body.has_attachments {
         return Err(AppError::BadRequest("Réponse vide".into()));
     }
     if content_raw.chars().count() > 4000 {
@@ -353,8 +377,10 @@ pub async fn reply_to_post(
     // Jamais vérifié sur ce chemin -- une réponse de forum contournait entièrement le
     // filtre AutoMod du serveur. Fait avant d'ouvrir la transaction ci-dessous pour ne
     // pas garder le verrou FOR UPDATE plus longtemps que nécessaire.
-    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content).await {
-        return Err(err);
+    if !content.is_empty() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &content).await {
+            return Err(err);
+        }
     }
 
     // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
@@ -483,11 +509,20 @@ pub async fn delete_post(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
+    // Fichiers joints aux réponses : récupérés avant la cascade pour les supprimer du disque.
+    let attachment_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT a.url FROM attachments a JOIN forum_replies fr ON fr.id = a.forum_reply_id WHERE fr.post_id = $1"
+    )
+    .bind(post_id)
+    .fetch_all(&state.db)
+    .await?;
+
     sqlx::query("DELETE FROM forum_posts WHERE id = $1 AND channel_id = $2")
         .bind(post_id)
         .bind(channel_id)
         .execute(&state.db)
         .await?;
+    remove_upload_files(&state, attachment_urls);
 
     let event = serde_json::json!({ "type": "FORUM_POST_DELETE", "channel_id": channel_id, "post_id": post_id });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
@@ -517,12 +552,14 @@ pub async fn edit_reply(
     let rows = sqlx::query(
         "UPDATE forum_replies SET content=$1, edited_at=NOW()
          WHERE id=$2 AND post_id=$3 AND user_id=$4
+           AND post_id IN (SELECT id FROM forum_posts WHERE channel_id=$5)
          RETURNING id"
     )
     .bind(&content)
     .bind(reply_id)
     .bind(post_id)
     .bind(claims.sub)
+    .bind(channel_id)
     .execute(&state.db)
     .await?;
 
@@ -551,11 +588,15 @@ pub async fn delete_reply(
 
     // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
     use sqlx::Row;
+    // Le post doit appartenir au salon de l'URL : sinon un modérateur de SON
+    // serveur supprimait les réponses de forum d'un autre serveur.
     let reply_row = sqlx::query(
-        "SELECT user_id FROM forum_replies WHERE id=$1 AND post_id=$2"
+        "SELECT fr.user_id FROM forum_replies fr JOIN forum_posts fp ON fp.id = fr.post_id
+         WHERE fr.id=$1 AND fr.post_id=$2 AND fp.channel_id=$3"
     )
     .bind(reply_id)
     .bind(post_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Réponse introuvable".into()))?;
@@ -567,11 +608,19 @@ pub async fn delete_reply(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
+    let attachment_urls: Vec<String> = sqlx::query_scalar(
+        "SELECT url FROM attachments WHERE forum_reply_id=$1"
+    )
+    .bind(reply_id)
+    .fetch_all(&state.db)
+    .await?;
+
     sqlx::query("DELETE FROM forum_replies WHERE id=$1 AND post_id=$2")
         .bind(reply_id)
         .bind(post_id)
         .execute(&state.db)
         .await?;
+    remove_upload_files(&state, attachment_urls);
 
     // Décrémenter reply_count
     sqlx::query(
