@@ -318,7 +318,17 @@ export async function connectMedia(url: string, token: string, roomName: string,
   ctx.set({ mediaStatus: 'connecting' })
 
   room
-    .on(RoomEvent.TrackPublished, (pub, p) => applySubscription(pub, p.identity))
+    .on(RoomEvent.TrackPublished, (pub, p) => {
+      applySubscription(pub, p.identity)
+      if (pub.source === Track.Source.ScreenShare) patchPeer(p.identity, { screenSharing: true })
+    })
+    // Le SFU fait foi : si le partage s'arrête sans que l'état ForgeChat suive
+    // (onglet fermé, bouton « Arrêter le partage » du navigateur, coupure), la
+    // tuile restait affichée en noir chez les autres.
+    .on(RoomEvent.TrackUnpublished, (pub, p) => {
+      if (pub.source === Track.Source.ScreenShare) patchPeer(p.identity, { screenSharing: false, screenStream: null })
+      rebuildPeer(p)
+    })
     .on(RoomEvent.TrackSubscribed, (_t, _pub, p) => rebuildPeer(p))
     .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => rebuildPeer(p))
     .on(RoomEvent.TrackMuted, (_pub, p) => { if (p !== room.localParticipant) rebuildPeer(p as RemoteParticipant) })

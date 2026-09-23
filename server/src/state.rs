@@ -34,6 +34,9 @@ pub struct VoiceStateData {
     pub deafened: bool,
     pub video: bool,
     pub screen: bool,
+    /// Enregistre la conversation : tout le salon doit le voir (consentement).
+    #[serde(default)]
+    pub recording: bool,
 }
 
 /// Instantané sérialisé dans Redis. La mémoire process reste la source de

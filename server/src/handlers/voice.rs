@@ -154,6 +154,7 @@ pub async fn get_voice_state(
                     "deafened": vs.map(|v| v.deafened).unwrap_or(false),
                     "video": vs.map(|v| v.video).unwrap_or(false),
                     "screen": vs.map(|v| v.screen).unwrap_or(false),
+                    "recording": vs.map(|v| v.recording).unwrap_or(false),
                     "hand_raised": hands.contains(&uid),
                 })
             })

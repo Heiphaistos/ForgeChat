@@ -80,11 +80,19 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   })
 
   const voteMutation = useMutation({
-    mutationFn: (optionId: string) =>
-      api.post(
+    // Vote modifiable tant que le sondage n'est pas terminé (comme Discord) :
+    // choix unique = on remplace (re-cliquer son choix le retire), choix
+    // multiple = on ajoute ou retire l'option cliquée.
+    mutationFn: (optionId: string) => {
+      const mine = poll?.options.filter(o => o.voted).map(o => o.id) ?? []
+      const option_ids = mine.includes(optionId)
+        ? mine.filter(id => id !== optionId)
+        : poll?.multiple_choice ? [...mine, optionId] : [optionId]
+      return api.post(
         `/servers/${serverId}/channels/${channelId}/polls/${pollId}/vote`,
-        { option_ids: [optionId] }
-      ),
+        { option_ids }
+      )
+    },
     onMutate: (optionId) => {
       setPendingOptionId(optionId)
     },
@@ -124,7 +132,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
 
   const isExpired = poll.ends_at ? new Date(poll.ends_at) < new Date() : false
   const hasVoted = poll.options.some(o => o.voted)
-  const canVote = !hasVoted && !isExpired
+  const canVote = !isExpired
   const isCreator = user?.id === poll.creator_id
   const canClose = isCreator && !isExpired
 
@@ -185,21 +193,23 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   <button
                     onClick={() => voteMutation.mutate(option.id)}
                     disabled={voteMutation.isPending}
-                    aria-label={`Voter pour : ${option.text}`}
+                    aria-label={isMyVote ? `Retirer mon vote : ${option.text}` : `Voter pour : ${option.text}`}
+                    aria-pressed={isMyVote}
                     className={`flex-1 text-left text-sm px-2 py-1 rounded transition
                       ${isPending
                         ? 'text-fc-accent'
                         : 'text-fc-text hover:text-white hover:bg-fc-hover/50'}
                       disabled:opacity-60`}
                   >
-                    {isPending ? (
-                      <span className="flex items-center gap-1.5">
-                        <Loader2 size={11} className="animate-spin" aria-hidden />
+                    <span className="flex items-center gap-1.5">
+                      {isPending
+                        ? <Loader2 size={11} className="animate-spin" aria-hidden />
+                        : isMyVote && <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />}
+                      <span className={isMyVote ? 'text-white font-medium' : undefined}>
+                        {isMyVote && <span className="sr-only">Votre vote : </span>}
                         {option.text}
                       </span>
-                    ) : (
-                      option.text
-                    )}
+                    </span>
                   </button>
                 ) : (
                   <div className="flex-1 flex items-center gap-1.5 text-sm px-2 py-1">
@@ -237,7 +247,11 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
         <p className="text-xs text-red-400/80 mt-2 text-center">Ce sondage est terminé.</p>
       )}
       {hasVoted && !isExpired && (
-        <p className="text-xs text-fc-muted mt-2 text-center">Vous avez déjà voté.</p>
+        <p className="text-xs text-fc-muted mt-2 text-center">
+          {poll.multiple_choice
+            ? "Cliquez sur une option pour l'ajouter ou la retirer."
+            : 'Cliquez sur une autre option pour changer votre vote.'}
+        </p>
       )}
     </div>
   )

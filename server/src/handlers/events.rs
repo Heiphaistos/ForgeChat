@@ -80,7 +80,7 @@ pub async fn list_events(
         let (start, end) = month_range;
         let sql = "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
                 e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
-                COUNT(a.user_id) AS attendee_count,
+                COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $2 THEN a.status END) AS user_rsvp
          FROM server_events e
          LEFT JOIN event_attendees a ON a.event_id = e.id
@@ -109,7 +109,7 @@ pub async fn list_events(
     let sql = format!(
         "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
                 e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
-                COUNT(a.user_id) AS attendee_count,
+                COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $2 THEN a.status END) AS user_rsvp
          FROM server_events e
          LEFT JOIN event_attendees a ON a.event_id = e.id
@@ -220,7 +220,7 @@ pub async fn get_event(
     let event = sqlx::query_as::<_, ServerEvent>(
         "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
                 e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
-                COUNT(a.user_id) AS attendee_count,
+                COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $3 THEN a.status END) AS user_rsvp
          FROM server_events e
          LEFT JOIN event_attendees a ON a.event_id = e.id
@@ -364,8 +364,8 @@ pub async fn attend_event(
     }
 
     // Vérifier que l'event existe et que l'user est membre du serveur
-    let server_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT server_id FROM server_events WHERE id = $1"
+    let (server_id, ended) = sqlx::query_as::<_, (Uuid, bool)>(
+        "SELECT server_id, COALESCE(end_time < NOW(), false) FROM server_events WHERE id = $1"
     )
     .bind(event_id)
     .fetch_optional(&state.db)
@@ -373,6 +373,10 @@ pub async fn attend_event(
     .ok_or_else(|| AppError::NotFound("Événement introuvable".into()))?;
 
     ensure_member(&state, server_id, claims.sub).await?;
+    // Réponse modifiable jusqu'à la fin de l'événement, figée ensuite.
+    if ended {
+        return Err(AppError::BadRequest("Événement terminé".into()));
+    }
 
     // Vérifier la limite max_attendees pour le statut "going"
     if body.status == "going" {

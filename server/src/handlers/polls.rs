@@ -254,12 +254,11 @@ pub async fn vote_poll(
             return Err(AppError::BadRequest("Sondage terminé".into()));
         }
     }
-    if !multiple_choice && body.option_ids.len() != 1 {
+    // Salon privé : on ne vote pas dans un sondage qu'on ne peut pas voir.
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, poll_channel_id).await?;
+    // Liste vide = retirer son vote. Le vote reste modifiable jusqu'à la fin du sondage.
+    if !multiple_choice && body.option_ids.len() > 1 {
         return Err(AppError::BadRequest("Un seul choix autorisé".into()));
-    }
-
-    if body.option_ids.is_empty() {
-        return Err(AppError::BadRequest("Au moins une option requise".into()));
     }
 
     // Vérifier que tous les option_ids appartiennent bien à ce sondage (IDOR protection)

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { useWs } from './ws'
 import { useAuth } from './auth'
 import api from '../api/client'
+import toast from 'react-hot-toast'
 import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
 import { isNativeVoice, nativeSetDeafen, nativeSetPeerAudio, nativeSetCamera, nativeSetScreen } from '../lib/nativeVoice'
 import {
@@ -36,6 +37,8 @@ export interface VoicePeer {
   videoEnabled: boolean
   screenSharing: boolean
   prioritySpeaker?: boolean
+  /** Enregistre la conversation : affiché à tout le salon. */
+  recording?: boolean
   connectionLost?: boolean
   /** Application Linux : vidéo reçue sous forme de flux vidéo local (pas de MediaStream). */
   videoUrl?: string | null
@@ -71,6 +74,8 @@ interface VoiceStore {
   deafened: boolean
   videoEnabled: boolean
   screenSharing: boolean
+  /** J'enregistre le salon (annoncé aux autres). */
+  recording: boolean
   error: string | null
   notice: string | null
   roomParticipants: Record<string, VoiceRoomParticipant[]>
@@ -100,6 +105,7 @@ interface VoiceStore {
   toggleVideo(): Promise<void>
   shareScreen(): Promise<void>
   stopScreenShare(): Promise<void>
+  setRecording(on: boolean): void
   clearError(): void
   clearNotice(): void
   initGlobalListeners(): () => void
@@ -222,6 +228,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       deafened: s.deafened,
       video: s.videoEnabled,
       screen: s.screenSharing,
+      recording: s.recording,
     })
   }
 
@@ -243,6 +250,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     deafened: false,
     videoEnabled: false,
     screenSharing: false,
+    recording: false,
     error: null,
     notice: null,
     roomParticipants: {},
@@ -323,6 +331,12 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
       const offVoiceState = ws.on('VOICE_STATE_UPDATE', (d: any) => {
         const isPriority = d.priority_speaker === true
+        // Comme Discord/Teams : tout le salon est prévenu qu'on l'enregistre.
+        const before = get().peers.find(p => p.userId === d.user_id)
+        if (before && !!d.recording !== !!before.recording) {
+          if (d.recording) toast(`🔴 ${before.username} a commencé à enregistrer la conversation`, { duration: 8000 })
+          else toast(`${before.username} a arrêté l'enregistrement`, { duration: 4000 })
+        }
         set(s => {
           const current = s.roomParticipants[d.channel_id] ?? []
           let newActivePriority = s.activePrioritySpeaker
@@ -336,7 +350,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               [d.channel_id]: current.map(p => p.userId === d.user_id ? { ...p, muted: d.muted, video: d.video, screen: d.screen } : p),
             },
             peers: s.peers.map(p => p.userId === d.user_id
-              ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null }
+              ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording }
               : p),
           }
         })
@@ -434,6 +448,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
           muted: listenOnly,
           deafened: false,
           screenSharing: false,
+          recording: false,
           peers: [],
           noiseEngine: engine,
           notice: noiseError,
@@ -475,7 +490,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
               username: peer.username, avatar: peer.avatar,
               discriminator: peer.discriminator, muted: peer.muted,
               videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false,
+              recording: !!peer.recording,
             }, ctx)
+            if (peer.recording) toast(`🔴 ${peer.username ?? 'Un membre'} enregistre cette conversation`, { duration: 8000 })
           }
           const lk = d.livekit
           if (!lk?.url || !lk?.token || !lk?.room) {
@@ -588,7 +605,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
         localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
         localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
-        videoEnabled: false, screenSharing: false, error: null, notice: null,
+        videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
         pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
         // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
         // à la sortie du salon (et sont persistées).
@@ -700,6 +717,12 @@ export const useVoice = create<VoiceStore>((set, get) => {
         warn('shareScreen', e)
         set({ error: 'Impossible de partager l\'écran' })
       }
+    },
+
+    setRecording: (on) => {
+      if (get().recording === on) return
+      set({ recording: on })
+      broadcastState()
     },
 
     stopScreenShare: async () => {

@@ -179,7 +179,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     localVideoUrl, localScreenUrl, nativeSpeakers, autoWatchStreams, watchStream,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
-    roomParticipants, notice, clearNotice,
+    roomParticipants, notice, clearNotice, recording: isRecording, setRecording,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
@@ -220,7 +220,6 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({})
   const [showStats, setShowStats] = useState(false)
   const [blurBackground, setBlurBackground] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
   const [showCaptions, setShowCaptions] = useState(false)
   const [showSoundboard, setShowSoundboard] = useState(false)
   const [showWhiteboard, setShowWhiteboard] = useState(false)
@@ -278,12 +277,24 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recChunksRef = useRef<Blob[]>([])
 
+  const recCtxRef = useRef<AudioContext | null>(null)
+
+  // Enregistre TOUTE la conversation (micro local + chaque participant + son des
+  // partages), pas seulement son propre micro. Le salon est prévenu par le
+  // serveur (drapeau `recording` de VOICE_STATE), comme sur Discord/Teams.
+  // ponytail: les participants arrivés après le début ne sont pas ajoutés au mixage.
   const startRecording = useCallback(() => {
-    if (!localStream) return
+    const sources = [localStream, ...peers.flatMap(p => [p.stream, p.screenStream])]
+      .filter((st): st is MediaStream => !!st && st.getAudioTracks().length > 0)
+    if (!sources.length) { toast.error('Aucun son à enregistrer'); return }
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
       .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
     try {
-      const recorder = new MediaRecorder(localStream, mimeType ? { mimeType } : undefined)
+      const ctx = new AudioContext()
+      const dest = ctx.createMediaStreamDestination()
+      for (const st of sources) ctx.createMediaStreamSource(new MediaStream(st.getAudioTracks())).connect(dest)
+      recCtxRef.current = ctx
+      const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined)
       recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
       recorder.onstop = () => {
         const blob = new Blob(recChunksRef.current, { type: mimeType || 'audio/webm' })
@@ -292,26 +303,30 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         a.href = url
         const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm'
         a.download = `forgechat-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${ext}`
+        document.body.appendChild(a)
         a.click()
-        URL.revokeObjectURL(url)
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
         recChunksRef.current = []
+        void recCtxRef.current?.close()
+        recCtxRef.current = null
       }
       recorder.start(1000)
       recorderRef.current = recorder
-      setIsRecording(true)
-      toast.success('Enregistrement démarré')
+      setRecording(true)
+      toast.success('Enregistrement démarré : les participants sont prévenus')
     } catch {
       toast.error("Impossible de démarrer l'enregistrement")
     }
-  }, [localStream])
+  }, [localStream, peers, setRecording])
 
   const stopRecording = useCallback(() => {
     recorderRef.current?.stop()
     recorderRef.current = null
-    setIsRecording(false)
-  }, [])
+    setRecording(false)
+  }, [setRecording])
 
-  useEffect(() => () => { recorderRef.current?.stop() }, [])
+  useEffect(() => () => { recorderRef.current?.stop(); useVoice.getState().setRecording(false) }, [])
 
   // Les raccourcis vocaux (caméra, partage, push-to-talk) sont montés au niveau
   // racine dans App.tsx : ici ils mouraient dès qu'on quittait la page d'appel,
@@ -410,6 +425,15 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <span className="text-sm font-semibold text-white truncate max-w-[120px] md:max-w-none">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
           <CallQualityIndicator />
+          {(isRecording || peers.some(p => p.recording)) && (
+            <span
+              className="flex items-center gap-1 text-[11px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 animate-pulse"
+              title={[...(isRecording ? ['Vous'] : []), ...peers.filter(p => p.recording).map(p => p.username)].join(', ') + ' enregistre la conversation'}
+              role="status"
+            >
+              ● REC
+            </span>
+          )}
         </div>
 
         {/* View mode switcher — masqué sur mobile */}

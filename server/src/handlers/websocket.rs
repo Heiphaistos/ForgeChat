@@ -963,6 +963,7 @@ async fn handle_ws_message(
                         "deafened": vs.as_ref().map(|v| v.deafened).unwrap_or(false),
                         "video": vs.as_ref().map(|v| v.video).unwrap_or(false),
                         "screen": vs.as_ref().map(|v| v.screen).unwrap_or(false),
+                        "recording": vs.as_ref().map(|v| v.recording).unwrap_or(false),
                         "hand_raised": hand_raised_ids.contains(peer_id),
                     }));
                 }
@@ -1049,6 +1050,7 @@ async fn handle_ws_message(
             let deafened = msg["deafened"].as_bool().unwrap_or(false);
             let video = msg["video"].as_bool().unwrap_or(false);
             let screen = msg["screen"].as_bool().unwrap_or(false);
+            let recording = msg["recording"].as_bool().unwrap_or(false);
 
             // Vérifier que l'utilisateur est dans ce canal vocal.
             // IMPORTANT : lire user_voice (peuplé par voice_join), PAS voice_states —
@@ -1107,7 +1109,7 @@ async fn handle_ws_message(
             };
 
             state.voice_states.write().await.insert(user_id, VoiceStateData {
-                channel_id, muted, deafened, video, screen,
+                channel_id, muted, deafened, video, screen, recording,
             });
             state.persist_voice_to_redis().await;
 
@@ -1119,6 +1121,7 @@ async fn handle_ws_message(
                 "deafened": deafened,
                 "video": video,
                 "screen": screen,
+                "recording": recording,
                 "priority_speaker": priority_speaker,
             });
             // N10 — ciblé sur les membres du serveur qui voient ce canal
