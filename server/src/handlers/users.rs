@@ -26,7 +26,7 @@ pub async fn get_me(
     .await?
     .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
 
-    Ok(Json(user.into()))
+    Ok(Json(user.into_self_public()))
 }
 
 pub async fn get_user(
@@ -42,7 +42,7 @@ pub async fn get_user(
     .await?
     .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
 
-    let mut public: UserPublic = user.into();
+    let mut public: UserPublic = if user_id == claims.sub { user.into_self_public() } else { user.into() };
 
     // `activity_visibility` (user_settings du TARGET, everyone/friends/nobody) était
     // stocké et relu correctement dans les Réglages mais jamais consulté ici -- l'activité
@@ -131,6 +131,14 @@ pub async fn update_me(
             return Err(AppError::BadRequest("Bio : 190 caractères max".into()));
         }
     }
+    // P1-3 — statut CHOISI ; le statut en direct est recalculé ensuite. Aucune
+    // validation avant : n'importe quelle chaîne était stockée telle quelle.
+    if let Some(ref st) = body.status {
+        if !crate::handlers::presence::CHOOSABLE.contains(&st.as_str()) {
+            return Err(AppError::BadRequest("Statut invalide (online|idle|dnd|invisible)".into()));
+        }
+    }
+    let status_changed = body.status.is_some();
     if let Some(ref cs) = body.custom_status {
         if cs.chars().count() > 128 {
             return Err(AppError::BadRequest("Statut personnalisé : 128 caractères max".into()));
@@ -152,8 +160,8 @@ pub async fn update_me(
         "UPDATE users SET
             username = COALESCE($2, username),
             bio = COALESCE($3, bio),
-            custom_status = COALESCE($4, custom_status),
-            status = COALESCE($5, status),
+            custom_status = CASE WHEN $4::TEXT IS NOT NULL THEN NULLIF($4, '') ELSE custom_status END,
+            preferred_status = COALESCE($5, preferred_status),
             banner = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE banner END,
             activity_type = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($7, '') ELSE activity_type END,
             activity_name = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($8, '') ELSE activity_name END,
@@ -199,6 +207,10 @@ pub async fn update_me(
     .fetch_optional(&state.db)
     .await?
     .unwrap_or_else(|| "everyone".to_string());
+
+    if status_changed {
+        crate::handlers::presence::refresh(&state, claims.sub).await;
+    }
 
     let public_full = UserPublic::from(user.clone());
     let mut public_no_activity = public_full.clone();
@@ -252,7 +264,7 @@ pub async fn update_me(
         }
     }
 
-    Ok(Json(user.into()))
+    Ok(Json(user.into_self_public()))
 }
 
 pub async fn upload_avatar(
@@ -779,78 +791,75 @@ pub struct UpdateStatusRequest {
     pub custom_status_emoji: Option<String>,
 }
 
-/// PATCH /api/user/status
+/// PATCH /api/user/status — statut choisi et/ou statut personnalisé.
+/// Une chaîne vide efface le statut personnalisé (ou son émoji).
 pub async fn update_status(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(req): Json<UpdateStatusRequest>,
 ) -> Result<Json<serde_json::Value>> {
     if let Some(ref s) = req.status {
-        if !["online", "away", "dnd", "invisible"].contains(&s.as_str()) {
-            return Err(AppError::BadRequest("Statut invalide (online|away|dnd|invisible)".into()));
+        if !crate::handlers::presence::CHOOSABLE.contains(&s.as_str()) {
+            return Err(AppError::BadRequest("Statut invalide (online|idle|dnd|invisible)".into()));
         }
     }
 
-    let custom_status = req.custom_status.map(|s| s.chars().take(128).collect::<String>());
-    let custom_status_emoji = req.custom_status_emoji.map(|s| s.chars().take(2).collect::<String>());
+    let custom_status = req.custom_status.map(|s| s.trim().chars().take(128).collect::<String>());
+    let custom_status_emoji = req.custom_status_emoji.map(|s| s.trim().chars().take(8).collect::<String>());
 
-    sqlx::query(
+    // P1-9 — `COALESCE` empêchait d'effacer : une chaîne vide vaut désormais NULL.
+    let row = sqlx::query(
         "UPDATE users SET
-            status = COALESCE($1, status),
-            custom_status = COALESCE($2, custom_status),
-            custom_status_emoji = COALESCE($3, custom_status_emoji),
+            preferred_status = COALESCE($1, preferred_status),
+            custom_status = CASE WHEN $2::TEXT IS NOT NULL THEN NULLIF($2, '') ELSE custom_status END,
+            custom_status_emoji = CASE WHEN $3::TEXT IS NOT NULL THEN NULLIF($3, '') ELSE custom_status_emoji END,
             updated_at = NOW()
-         WHERE id = $4"
+         WHERE id = $4
+         RETURNING preferred_status, custom_status, custom_status_emoji"
     )
     .bind(&req.status)
     .bind(&custom_status)
     .bind(&custom_status_emoji)
     .bind(claims.sub)
-    .execute(&state.db)
+    .fetch_one(&state.db)
     .await?;
 
-    // Les utilisateurs invisibles apparaissent hors-ligne pour les autres
-    let broadcast_status = match req.status.as_deref() {
-        Some("invisible") => "offline",
-        Some(s) => s,
-        None => "online",
-    };
-    let event_for_others = serde_json::json!({
-        "type": "PRESENCE_UPDATE",
-        "user_id": claims.sub,
-        "status": broadcast_status,
-        "custom_status": &custom_status,
-        "custom_status_emoji": &custom_status_emoji,
-    });
-    // L'utilisateur lui-même reçoit son vrai statut (pour afficher la bonne icône dans le panneau)
-    let event_for_self = serde_json::json!({
-        "type": "PRESENCE_UPDATE",
-        "user_id": claims.sub,
-        "status": req.status,
-        "custom_status": &custom_status,
-        "custom_status_emoji": &custom_status_emoji,
-    });
-
-    // Broadcaster aux membres de tous les serveurs de l'utilisateur
     use sqlx::Row;
-    let server_ids: Vec<Uuid> = sqlx::query(
+    let preferred: String = row.get("preferred_status");
+    let custom_status: Option<String> = row.get("custom_status");
+    let custom_status_emoji: Option<String> = row.get("custom_status_emoji");
+
+    if req.status.is_some() {
+        crate::handlers::presence::refresh(&state, claims.sub).await;
+    }
+
+    // Statut personnalisé : membres des serveurs communs + ses autres sessions.
+    // Le statut en direct passe par presence::refresh (jamais « invisible » ici).
+    let event = serde_json::json!({
+        "type": "PRESENCE_UPDATE",
+        "user_id": claims.sub,
+        "custom_status": &custom_status,
+        "custom_status_emoji": &custom_status_emoji,
+    })
+    .to_string();
+    let server_ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default()
-    .iter()
-    .map(|r| r.get::<Uuid, _>("server_id"))
-    .collect();
-
+    .unwrap_or_default();
     for sid in server_ids {
-        state.broadcast_to_server_members(sid, event_for_others.to_string()).await;
+        state.broadcast_to_server_members(sid, event.clone()).await;
     }
-    // Notifier l'utilisateur lui-même avec son vrai statut
-    state.broadcast_to_user(claims.sub, event_for_self.to_string()).await;
+    state.broadcast_to_user(claims.sub, event).await;
 
-    Ok(Json(serde_json::json!({ "ok": true })))
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "status": preferred,
+        "custom_status": custom_status,
+        "custom_status_emoji": custom_status_emoji,
+    })))
 }
 
 // ─── Activity Feed ────────────────────────────────────────────────────────────

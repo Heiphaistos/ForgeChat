@@ -26,6 +26,8 @@ import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../co
 import { popOut } from '../lib/popout'
 import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
+import { useContextMenu } from '../components/ui/ContextMenu'
+import { useMemberModeration } from '../components/chat/MemberModeration'
 
 
 interface Props {
@@ -171,6 +173,15 @@ function VoiceLobby({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
+  // Modération vocale (P2-2) : clic droit sur la tuile d'un participant.
+  const tileMenu = useContextMenu()
+  const moderation = useMemberModeration(serverId)
+  const openTileMenu = (e: React.MouseEvent, userId: string) => {
+    const items = moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))
+    if (items.length === 0) return
+    e.preventDefault()
+    tileMenu.open(e, items)
+  }
   const { send, on } = useWs()
   const location = useLocation()
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
@@ -412,6 +423,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         connectionLost={(p as { connectionLost?: boolean }).connectionLost === true}
         onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
         onPopOut={() => detach(p.userId, 'camera', p.username, t.url)}
+        onContextMenu={e => openTileMenu(e, p.userId)}
         onExpand={o.expand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
     )
   }
@@ -669,6 +681,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />
       )}
+      {tileMenu.node}
+      {moderation.node}
     </div>
   )
 }

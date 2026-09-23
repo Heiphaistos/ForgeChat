@@ -87,7 +87,7 @@ pub async fn join(
     let room = crate::livekit::room_for_group(group_id);
     let token = crate::livekit::join_token(
         lk, &room, &user_id.to_string(), username,
-        crate::livekit::Publish { microphone: true, camera: true, screen: true },
+        crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false },
     );
     state.broadcast_to_user(user_id, serde_json::json!({
         "type": "GROUP_CALL_MEDIA",

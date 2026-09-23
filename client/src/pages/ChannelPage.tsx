@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useContext, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight, Lock } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
 import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
@@ -317,7 +317,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }, [channelId, serverId, isSplit])
 
   // Tous les hooks doivent être AVANT tout return conditionnel (React Rules of Hooks)
-  const { canPost, canManageMessages, canManageChannels } = useMemo(() => {
+  const { canPost, canSendBase, canManageMessages, canManageChannels } = useMemo(() => {
+    const SEND_MESSAGES_BIT = 1 << 1
     const MANAGE_MESSAGES_BIT = 1 << 3
     const MANAGE_CHANNELS_BIT = 1 << 4
     const ADMINISTRATOR_BIT = 1 << 31
@@ -331,6 +332,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     const hasAdmin = isOwner || !!(myPerms & ADMINISTRATOR_BIT)
     return {
       canPost: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
+      canSendBase: hasAdmin || !!(myPerms & SEND_MESSAGES_BIT),
       canManageMessages: hasAdmin || !!(myPerms & MANAGE_MESSAGES_BIT),
       canManageChannels: hasAdmin || !!(myPerms & MANAGE_CHANNELS_BIT),
     }
@@ -733,7 +735,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <span>Seuls les modérateurs peuvent publier dans ce canal d'annonces.</span>
           </div>
         )}
-        {(!isAnnouncement || canPost) && <MessageInput
+        {/* Salon sans SEND_MESSAGES (overrides compris, calculé par le serveur ;
+            repli sur le masque des rôles) : zone de saisie grisée au lieu d'un 403. */}
+        {(!isAnnouncement || canPost) && !(currentChannel?.can_send ?? canSendBase) && (
+          <div className="mx-4 mb-4 mt-1 flex items-center gap-2 px-4 py-3 rounded-lg bg-fc-input/50 text-fc-muted text-sm cursor-not-allowed select-none" aria-disabled="true">
+            <Lock size={15} className="flex-shrink-0" />
+            <span>Vous n'avez pas la permission d'envoyer des messages dans ce salon.</span>
+          </div>
+        )}
+        {(!isAnnouncement || canPost) && (currentChannel?.can_send ?? canSendBase) && <MessageInput
           channelId={channelId}
           serverId={serverId}
           placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}

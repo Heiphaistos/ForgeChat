@@ -52,6 +52,14 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
     handlers::discord_import::recover_interrupted(&state).await;
+    // P1-3 — aucune session WebSocket n'existe au démarrage : un arrêt brutal
+    // laissait des utilisateurs « en ligne » jusqu'à leur prochaine connexion.
+    if let Err(e) = sqlx::query("UPDATE users SET status='offline' WHERE status <> 'offline'")
+        .execute(&state.db)
+        .await
+    {
+        tracing::warn!("Remise hors ligne des statuts au démarrage : {e}");
+    }
 
     // Tâche de nettoyage des pièces jointes expirées (toutes les heures)
     let cleanup_state = state.clone();
@@ -90,37 +98,9 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(30));
         loop {
             interval.tick().await;
-            // LEFT JOIN les deux tables possibles (message_id peut être un id de
-            // messages OU de dm_messages, cf. set_reminder) -- un INNER JOIN sur
-            // `messages` seul excluait silencieusement tout rappel DM ici, même
-            // ceux insérés avec succès après le fix de l'ownership check.
-            let due = sqlx::query(
-                "SELECT r.id, r.user_id, r.message_id, COALESCE(m.content, dm.content) as content \
-                 FROM message_reminders r \
-                 LEFT JOIN messages m ON m.id = r.message_id \
-                 LEFT JOIN dm_messages dm ON dm.id = r.message_id \
-                 WHERE r.remind_at <= NOW() AND r.sent = FALSE \
-                 LIMIT 50"
-            ).fetch_all(&reminder_state.db).await.unwrap_or_default();
-
-            for r in due {
-                use sqlx::Row;
-                let event = serde_json::json!({
-                    "type": "REMINDER",
-                    "message_id": r.get::<uuid::Uuid, _>("message_id").to_string(),
-                    "content": r.get::<Option<String>, _>("content"),
-                });
-                reminder_state.broadcast_to_user(r.get::<uuid::Uuid, _>("user_id"), event.to_string()).await;
-                // Si ce UPDATE échoue silencieusement, `sent` reste FALSE -> le prochain
-                // tick (30s) reprend ce même rappel dans la requête SELECT ci-dessus et le
-                // rebroadcast en boucle indéfiniment (spam de rappels dupliqués côté client).
-                if let Err(e) = sqlx::query("UPDATE message_reminders SET sent = TRUE WHERE id = $1")
-                    .bind(r.get::<uuid::Uuid, _>("id"))
-                    .execute(&reminder_state.db).await
-                {
-                    tracing::error!("Échec marquage rappel comme envoyé: {}", e);
-                }
-            }
+            // P1-8 — seulement les utilisateurs connectés : un rappel échu hors
+            // ligne n'est plus perdu, la reconnexion WebSocket le livre.
+            handlers::reminders::deliver_due(&reminder_state, None).await;
         }
     });
 
@@ -490,6 +470,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:id/leave", post(handlers::servers::leave_server))
         .route("/servers/:id/members", get(handlers::servers::get_members))
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))
+        .route("/servers/:server_id/members/:user_id", get(handlers::servers::get_member))
+        .route("/servers/:server_id/members/:user_id/voice", patch(handlers::voice_moderation::moderate_voice))
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))

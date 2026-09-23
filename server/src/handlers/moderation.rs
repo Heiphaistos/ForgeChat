@@ -13,27 +13,13 @@ use crate::{
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/// Modérateur = propriétaire, ADMINISTRATOR ou MANAGE_MESSAGES (rôles et
+/// @everyone compris). Même calcul que les autres gardes : le client en déduit
+/// l'affichage de « Timeout » et « Notes de modération ».
 async fn ensure_moderator(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<()> {
-    let is_mod = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(
-           SELECT 1 FROM server_members sm
-           LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
-           LEFT JOIN roles r ON r.id = mr.role_id
-           WHERE sm.server_id = $1 AND sm.user_id = $2
-           AND (sm.user_id = (SELECT owner_id FROM servers WHERE id = $1)
-                OR (r.permissions & 8) <> 0
-                OR (r.permissions & 2147483648) <> 0)
-         )"
-    )
-    .bind(server_id)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
-
-    if !is_mod {
-        return Err(AppError::Forbidden);
-    }
-    Ok(())
+    crate::handlers::servers::require_permission(
+        state, user_id, server_id, crate::models::role::Permissions::MANAGE_MESSAGES,
+    ).await
 }
 
 async fn ensure_member(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<()> {

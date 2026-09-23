@@ -105,32 +105,13 @@ async fn handle_socket(
         tx
     };
 
-    // Lire le statut préféré : les utilisateurs "invisible" restent invisibles au connect
-    let preferred_status: String = {
-        use sqlx::Row;
-        sqlx::query("SELECT status FROM users WHERE id=$1")
-            .bind(user_id)
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .map(|r| r.get::<String, _>("status"))
-            .unwrap_or_else(|| "online".to_string())
-    };
+    // S'abonner AVANT tout envoi : un `send` sans récepteur est perdu, et le
+    // PRESENCE_INIT du premier onglet n'arrivait jamais.
+    let mut rx = tx.subscribe();
 
-    let is_invisible = preferred_status == "invisible";
-    // Invisible → on garde le statut invisible en DB ; sinon → online
-    let db_status = if is_invisible { "invisible" } else { "online" };
-    let _ = sqlx::query("UPDATE users SET status=$1 WHERE id=$2")
-        .bind(db_status)
-        .bind(user_id)
-        .execute(&state.db)
-        .await;
-
-    // Broadcast "offline" aux autres si invisible, "online" sinon
-    if !is_invisible {
-        broadcast_presence(&state, user_id, "online").await;
-    }
+    // P1-3 — statut en direct recalculé depuis le statut choisi (plus
+    // d'écrasement de « ne pas déranger » / « invisible » à la connexion).
+    crate::handlers::presence::refresh(&state, user_id).await;
 
     // Envoyer au nouveau client le snapshot de présence — filtré aux amis + membres de serveurs communs
     {
@@ -140,7 +121,7 @@ async fn handle_socket(
             let rows = sqlx::query(
                 "SELECT DISTINCT u.id, u.status, u.activity_type, u.activity_name, u.activity_detail
                  FROM users u
-                 WHERE u.id = ANY($1) AND u.id != $2 AND u.status != 'invisible'
+                 WHERE u.id = ANY($1) AND u.id != $2 AND u.status <> 'offline'
                    AND (
                        EXISTS(
                            SELECT 1 FROM server_members sm1
@@ -194,7 +175,8 @@ async fn handle_socket(
         ))
         .await;
 
-    let mut rx = tx.subscribe();
+    // P1-8 — rappels échus pendant l'absence : livrés dès la reconnexion.
+    crate::handlers::reminders::deliver_due(&state, Some(user_id)).await;
 
     let send_task = tokio::spawn(async move {
         loop {
@@ -257,12 +239,12 @@ async fn handle_socket(
     // plus l'onglet en appel).
     cleanup_voice(&state, user_id, Some(session_id)).await;
 
+    // P1-3 — hors ligne si c'était la dernière session, sinon l'absence
+    // agrégée peut changer (une session active vient de partir).
+    crate::handlers::presence::forget_session(&state, user_id, session_id).await;
+    crate::handlers::presence::refresh(&state, user_id).await;
+
     if is_last {
-        let _ = sqlx::query("UPDATE users SET status='offline' WHERE id=$1")
-            .bind(user_id)
-            .execute(&state.db)
-            .await;
-        broadcast_presence(&state, user_id, "offline").await;
         cleanup_stage(&state, user_id).await;
 
         // Appels DM encore en sonnerie : l'appelant a disparu sans HANGUP (crash,
@@ -292,73 +274,6 @@ async fn handle_socket(
     }
 
     tracing::info!("WS déconnecté: {}", user_id);
-}
-
-async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
-    use sqlx::Row;
-
-    let connected: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
-    if connected.is_empty() { return; }
-
-    // Envoyer uniquement aux utilisateurs connectés qui partagent un serveur ou sont amis
-    // (privacy + perf : évite O(n) pour chaque connect/disconnect)
-    let relevant: Vec<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT DISTINCT other_id FROM (
-             SELECT sm2.user_id AS other_id
-             FROM server_members sm1
-             JOIN server_members sm2 ON sm1.server_id = sm2.server_id
-             WHERE sm1.user_id = $1 AND sm2.user_id != $1
-               AND sm2.user_id = ANY($2)
-             UNION
-             SELECT CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END AS other_id
-             FROM friendships f
-             WHERE (f.user_id = $1 OR f.friend_id = $1)
-               AND f.status = 'accepted'
-               AND CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END = ANY($2)
-         ) x"
-    )
-    .bind(user_id)
-    .bind(&connected)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
-    if relevant.is_empty() { return; }
-
-    // Récupérer l'activité pour l'inclure dans le broadcast
-    let activity_row = sqlx::query(
-        "SELECT activity_type, activity_name, activity_detail FROM users WHERE id=$1"
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten();
-
-    let event = if let Some(row) = activity_row {
-        serde_json::json!({
-            "type": "PRESENCE_UPDATE",
-            "user_id": user_id,
-            "status": status,
-            "activity_type": row.get::<Option<String>, _>("activity_type"),
-            "activity_name": row.get::<Option<String>, _>("activity_name"),
-            "activity_detail": row.get::<Option<String>, _>("activity_detail"),
-        })
-    } else {
-        serde_json::json!({
-            "type": "PRESENCE_UPDATE",
-            "user_id": user_id,
-            "status": status,
-        })
-    }
-    .to_string();
-
-    let clients = state.clients.read().await;
-    for uid in relevant {
-        if let Some(tx) = clients.get(&uid) {
-            let _ = tx.send(event.clone());
-        }
-    }
 }
 
 /// Sortie du vocal. `session` = la session WS qui part (`None` = VOICE_LEAVE
@@ -553,7 +468,7 @@ async fn channel_perms(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Opt
     state.effective_channel_permissions(user_id, channel_id).await
 }
 
-fn has_perm(perms: i64, bit: i64) -> bool {
+pub(crate) fn has_perm(perms: i64, bit: i64) -> bool {
     perms & Permissions::ADMINISTRATOR != 0 || perms & bit != 0
 }
 
@@ -583,7 +498,7 @@ async fn perm_is_administered(state: &AppState, server_id: Uuid, channel_id: Uui
 }
 
 /// `has_perm` + garde-fou de rétrocompatibilité (voir `perm_is_administered`).
-async fn voice_perm_ok(
+pub(crate) async fn voice_perm_ok(
     state: &AppState, server_id: Uuid, channel_id: Uuid, perms: i64, bit: i64,
 ) -> bool {
     has_perm(perms, bit) || !perm_is_administered(state, server_id, channel_id, bit).await
@@ -642,6 +557,14 @@ async fn handle_ws_message(
             if let Some(tx) = read.get(&user_id) {
                 let _ = tx.send(serde_json::json!({ "type": "HEARTBEAT_ACK" }).to_string());
             }
+        }
+
+        // P1-3 — inactivité d'une session (10 min sans activité côté client).
+        // L'utilisateur n'est « absent » que si toutes ses sessions le sont.
+        Some("PRESENCE_IDLE") => {
+            let Some(idle) = msg["idle"].as_bool() else { return; };
+            if !rate_ok(state, format!("rl:idle:{}", session_id), 20, 60).await { return; }
+            crate::handlers::presence::set_session_idle(state, user_id, session_id, idle).await;
         }
 
         // Accusé de lecture DM — déclenche DM_READ_RECEIPT chez l'autre participant
@@ -797,10 +720,10 @@ async fn handle_ws_message(
                 }).to_string()).await;
                 return;
             }
-            // Un membre en timeout peut écouter mais pas parler (comme Discord).
-            let timed_out = crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err();
-            let can_speak = !timed_out && voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await;
-            let can_stream = !timed_out && voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await;
+            // Timeout, SPEAK_VOICE / STREAM, muet et sourdine imposés (P2-2).
+            let rights = crate::handlers::voice_moderation::voice_rights(state, user_id, server_id, channel_id, perms).await;
+            // P2-2 — déplacé par un modérateur : ni mot de passe ni limite de places.
+            let moved = crate::handlers::voice_moderation::take_move_grant(state, user_id, channel_id).await;
             let listen_only = msg["listen_only"].as_bool().unwrap_or(false);
             let Some(livekit) = state.livekit.clone() else {
                 state.broadcast_to_user(user_id, serde_json::json!({
@@ -834,7 +757,7 @@ async fn handle_ws_message(
                 let server_id_col: Option<Uuid> = row.get("server_id");
 
                 // Vérification mot de passe vocal
-                if let Some(ref hash) = password_hash {
+                if let Some(hash) = password_hash.as_ref().filter(|_| !moved) {
                     let provided = msg["password"].as_str().unwrap_or("");
                     let ok = bcrypt::verify(provided, hash).unwrap_or(false);
                     if !ok {
@@ -899,7 +822,7 @@ async fn handle_ws_message(
                 }
             }
 
-            let max_users = user_limit.map(|l| l as usize);
+            let max_users = user_limit.filter(|_| !moved).map(|l| l as usize);
             // Changement de salon sans VOICE_LEAVE : sortir proprement de l'ancien
             // (VOICE_USER_LEFT, fin de LIVE, éjection du SFU, salon temporaire vidé).
             // Avant, l'utilisateur restait affiché dans l'ancien salon.
@@ -946,9 +869,15 @@ async fn handle_ws_message(
             let mut existing_peers = Vec::new();
             for peer_id in &existing_ids {
                 if let Ok(row) = sqlx::query(
-                    "SELECT username, avatar, discriminator FROM users WHERE id=$1"
+                    "SELECT u.username, u.avatar, u.discriminator,
+                            COALESCE(sm.voice_muted, FALSE) AS voice_muted,
+                            COALESCE(sm.voice_deafened, FALSE) AS voice_deafened
+                     FROM users u
+                     LEFT JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $2
+                     WHERE u.id=$1"
                 )
                 .bind(peer_id)
+                .bind(server_id)
                 .fetch_one(&state.db)
                 .await
                 {
@@ -965,6 +894,8 @@ async fn handle_ws_message(
                         "screen": vs.as_ref().map(|v| v.screen).unwrap_or(false),
                         "recording": vs.as_ref().map(|v| v.recording).unwrap_or(false),
                         "hand_raised": hand_raised_ids.contains(peer_id),
+                        "server_muted": row.get::<bool, _>("voice_muted"),
+                        "server_deafened": row.get::<bool, _>("voice_deafened"),
                     }));
                 }
             }
@@ -979,7 +910,10 @@ async fn handle_ws_message(
                     .map(|m| m.values().cloned().collect::<Vec<_>>())
                     .unwrap_or_default(),
                 // N8 — le client sait s'il peut ouvrir son micro
-                "can_speak": can_speak,
+                "can_speak": rights.microphone(),
+                // P2-2 — muet / sourdine imposés, non levables par l'utilisateur
+                "server_muted": rights.server_muted,
+                "server_deafened": rights.server_deafened,
                 // Accès au serveur média, délivré seulement après tous les contrôles ci-dessus.
                 "livekit": {
                     "url": livekit.public_url,
@@ -989,11 +923,7 @@ async fn handle_ws_message(
                         &crate::livekit::room_for_channel(effective_channel_id),
                         &user_id.to_string(),
                         &joiner_name,
-                        crate::livekit::Publish {
-                            microphone: can_speak && !listen_only,
-                            camera: can_speak && !listen_only,
-                            screen: can_stream && !listen_only,
-                        },
+                        rights.publish(listen_only),
                     ),
                 },
             }).to_string()).await;
@@ -1014,6 +944,8 @@ async fn handle_ws_message(
                     "username": row.get::<String, _>("username"),
                     "avatar": row.get::<Option<String>, _>("avatar"),
                     "discriminator": row.get::<String, _>("discriminator"),
+                    "server_muted": rights.server_muted,
+                    "server_deafened": rights.server_deafened,
                 });
                 // N10 — ciblé sur les membres du serveur qui voient ce canal
                 // (la sidebar du serveur concerné en a besoin), plus toute l'instance.
@@ -1101,6 +1033,11 @@ async fn handle_ws_message(
                 }
                 true
             };
+
+            // P2-2 — muet / sourdine imposés par un modérateur : non levables.
+            let (server_muted, server_deafened) = crate::handlers::voice_moderation::imposed(state, server_id, user_id).await;
+            let muted = muted || server_muted || server_deafened;
+            let deafened = deafened || server_deafened;
 
             // Récupérer l'ancien état screen pour détecter changements Go Live
             let prev_screen = {
@@ -1501,7 +1438,7 @@ async fn handle_ws_message(
                 "url": lk.public_url,
                 "room": room,
                 "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
-                    crate::livekit::Publish { microphone: true, camera: true, screen: true }),
+                    crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }),
             }));
             let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
                 .bind(to).fetch_optional(&state.db).await.ok().flatten()

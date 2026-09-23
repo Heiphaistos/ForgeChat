@@ -17,6 +17,7 @@ import {
   type MeshCtx, type MediaStatus,
 } from './voiceSfu'
 import type { ConnectionQuality } from 'livekit-client'
+import { initVoiceModeration } from './voiceModeration'
 
 export { getRoom } from './voiceSfu'
 export type { MediaStatus }
@@ -39,6 +40,9 @@ export interface VoicePeer {
   prioritySpeaker?: boolean
   /** Enregistre la conversation : affiché à tout le salon. */
   recording?: boolean
+  /** Muet / sourdine imposés par un modérateur (P2-2). */
+  serverMuted?: boolean
+  serverDeafened?: boolean
   connectionLost?: boolean
   /** Application Linux : vidéo reçue sous forme de flux vidéo local (pas de MediaStream). */
   videoUrl?: string | null
@@ -52,6 +56,8 @@ export interface VoiceRoomParticipant {
   muted: boolean
   video: boolean
   screen: boolean
+  serverMuted?: boolean
+  serverDeafened?: boolean
 }
 
 export interface ActiveStream {
@@ -97,6 +103,11 @@ interface VoiceStore {
   /** Streams regardés à la demande (identifiants), quand la lecture auto est coupée. */
   watchedStreams: string[]
   autoWatchStreams: boolean
+  /** Muet / sourdine imposés à MOI par un modérateur : non levables ici. */
+  serverMuted: boolean
+  serverDeafened: boolean
+  /** Identités qui parlent (SFU) : sert à l'atténuation PRIORITY_SPEAKER. */
+  sfuSpeakers: string[]
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
@@ -188,7 +199,7 @@ function screenConstraints() {
 }
 
 function micShouldBeOpen(s: VoiceStore): boolean {
-  if (s.listenOnly) return false
+  if (s.listenOnly || s.serverMuted || s.serverDeafened) return false
   if (s.pttMode) return s.pttActive
   return !s.muted
 }
@@ -232,6 +243,23 @@ export const useVoice = create<VoiceStore>((set, get) => {
     })
   }
 
+  const applyDeafen = (on: boolean) => {
+    if (isNativeVoice()) void nativeSetDeafen(on).catch(e => warn('sourdine native', e))
+    get().peers.forEach(peer => {
+      peer.stream?.getAudioTracks().forEach(t => { t.enabled = !on })
+      peer.screenStream?.getAudioTracks().forEach(t => { t.enabled = !on })
+    })
+    set({ deafened: on })
+  }
+
+  /** Muet / sourdine imposés : micro coupé, écoute coupée, non levables. */
+  const applyImposed = (muted: boolean, deafened: boolean) => {
+    set({ serverMuted: muted, serverDeafened: deafened })
+    if (muted || deafened) set({ muted: true })
+    if (deafened) applyDeafen(true)
+    syncMic()
+  }
+
   const refreshLocal = () => {
     const ls = getLocalStream()
     set({ localStream: ls ? new MediaStream(ls.getTracks()) : null })
@@ -269,6 +297,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
     nativeSpeakers: [],
     watchedStreams: [],
     autoWatchStreams: getAutoWatch(),
+    serverMuted: false,
+    serverDeafened: false,
+    sfuSpeakers: [],
 
     // ── Listeners globaux (sidebar, badges LIVE) ─────────────────────────────
     initGlobalListeners: () => {
@@ -285,6 +316,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
             rooms[channel.channel_id] = (channel.participants ?? []).map((p: any) => ({
               userId: p.user_id, username: p.username, avatar: p.avatar,
               muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
+              serverMuted: p.server_muted ?? false, serverDeafened: p.server_deafened ?? false,
             }))
             for (const p of channel.participants ?? []) {
               if (p.screen) streams[p.user_id] = { userId: p.user_id, username: p.username, channelId: channel.channel_id }
@@ -308,7 +340,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               ...s.roomParticipants,
               [d.channel_id]: [
                 ...current.filter(p => p.userId !== d.user_id),
-                { userId: d.user_id, username: d.username, avatar: d.avatar, muted: d.muted ?? false, video: d.video ?? false, screen: d.screen ?? false },
+                { userId: d.user_id, username: d.username, avatar: d.avatar, muted: d.muted ?? false, video: d.video ?? false, screen: d.screen ?? false, serverMuted: d.server_muted ?? false, serverDeafened: d.server_deafened ?? false },
               ],
             },
           }
@@ -374,8 +406,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
       })
 
       const offOpen = ws.onOpen(() => { void bootstrap() })
+      const offModeration = initVoiceModeration(get, set, (m, d) => { applyImposed(m, d); broadcastState() })
 
-      return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd(); offOpen() }
+      return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd(); offOpen(); offModeration() }
     },
 
     // ── Join ────────────────────────────────────────────────────────────────
@@ -476,10 +509,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
                 ...(d.peers ?? []).filter((p: any) => String(p.user_id) !== me?.id).map((p: any) => ({
                   userId: p.user_id, username: p.username, avatar: p.avatar,
                   muted: p.muted ?? false, video: p.video ?? false, screen: p.screen ?? false,
+                  serverMuted: p.server_muted ?? false, serverDeafened: p.server_deafened ?? false,
                 })),
               ],
             },
           }))
+          // Muet / sourdine imposés par un modérateur : appliqués dès l'entrée.
+          applyImposed(d.server_muted === true, d.server_deafened === true)
           // Réponse à un re-VOICE_JOIN (reconnexion WS) : retirer ceux partis entre-temps.
           const present = new Set((d.peers ?? []).map((p: any) => String(p.user_id)))
           set(st => ({ peers: st.peers.filter(p => present.has(p.userId)) }))
@@ -491,6 +527,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               discriminator: peer.discriminator, muted: peer.muted,
               videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false,
               recording: !!peer.recording,
+              serverMuted: peer.server_muted ?? false, serverDeafened: peer.server_deafened ?? false,
             }, ctx)
             if (peer.recording) toast(`🔴 ${peer.username ?? 'Un membre'} enregistre cette conversation`, { duration: 8000 })
           }
@@ -607,12 +644,18 @@ export const useVoice = create<VoiceStore>((set, get) => {
         localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
         videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
         pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
+        serverMuted: false, serverDeafened: false, sfuSpeakers: [],
         // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
         // à la sortie du salon (et sont persistées).
       })
     },
 
     toggleMute: () => {
+      const s0 = get()
+      if (s0.muted && (s0.serverMuted || s0.serverDeafened)) {
+        set({ notice: 'Un modérateur vous a rendu muet sur ce serveur.' })
+        return
+      }
       set(s => ({ muted: !s.muted }))
       syncMic()
       broadcastState()
@@ -620,12 +663,11 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
     toggleDeafen: () => {
       const next = !get().deafened
-      if (isNativeVoice()) void nativeSetDeafen(next).catch(e => warn('sourdine native', e))
-      get().peers.forEach(peer => {
-        peer.stream?.getAudioTracks().forEach(t => { t.enabled = !next })
-        peer.screenStream?.getAudioTracks().forEach(t => { t.enabled = !next })
-      })
-      set({ deafened: next })
+      if (!next && get().serverDeafened) {
+        set({ notice: 'Un modérateur vous a mis en sourdine sur ce serveur.' })
+        return
+      }
+      applyDeafen(next)
       broadcastState()
     },
 

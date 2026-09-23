@@ -335,6 +335,8 @@ export async function connectMedia(url: string, token: string, roomName: string,
     .on(RoomEvent.TrackUnmuted, (_pub, p) => { if (p !== room.localParticipant) rebuildPeer(p as RemoteParticipant) })
     .on(RoomEvent.ParticipantConnected, (p) => { rebuildPeer(p); applyWhisper() })
     .on(RoomEvent.ParticipantDisconnected, (p) => patchPeer(p.identity, { stream: null, screenStream: null, connectionLost: true }))
+    // PRIORITY_SPEAKER : les autres ne sont atténués que pendant qu'il parle.
+    .on(RoomEvent.ActiveSpeakersChanged, (speakers) => ctx.set({ sfuSpeakers: speakers.map(p => p.identity) }))
     .on(RoomEvent.Reconnecting, () => { ctx.set({ mediaStatus: 'reconnecting' }); report('reconnecting') })
     .on(RoomEvent.Reconnected, () => { ctx.set({ mediaStatus: 'connected' }); report('reconnected') })
     .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
