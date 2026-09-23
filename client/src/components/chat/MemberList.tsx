@@ -137,7 +137,10 @@ export default function MemberList({ serverId, onClose }: Props) {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
       if (el) {
         const pos = el.selectionStart ?? el.value.length
-        const mention = `@${m.nickname ?? m.username} `
+        // Pseudo (et non le surnom) + jeton <@id> enregistré par MessageInput :
+        // le message part avec une vraie mention qui notifie.
+        window.dispatchEvent(new CustomEvent('forgechat:mention-picked', { detail: { name: m.username, token: `<@${m.user_id}>` } }))
+        const mention = `@${m.username} `
         const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
         el.focus()
         const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set

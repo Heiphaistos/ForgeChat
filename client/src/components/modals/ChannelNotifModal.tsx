@@ -4,6 +4,7 @@ import { Bell, BellOff, BellRing, X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useChannelNotif } from '../../store/channelNotif'
+import { MuteSelect, muteRequest, type MuteChoice } from './muteOptions'
 
 interface Props {
   channelId: string
@@ -23,7 +24,8 @@ const LEVELS: { value: Level; label: string; desc: string; icon: React.ReactNode
 
 export default function ChannelNotifModal({ channelId, channelName, onClose, anchorRef }: Props) {
   const [level, setLevel] = useState<Level>('inherit')
-  const [muted, setMuted] = useState(false)
+  const [mute, setMute] = useState<MuteChoice>('off')
+  const [current, setCurrent] = useState<{ muted: boolean; until: number | null }>({ muted: false, until: null })
   const [saving, setSaving] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   // Store partagé consulté par App.tsx pour décider des notifications en direct --
@@ -35,7 +37,12 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
 
   useEffect(() => {
     api.get(`/user/channel-notif/${channelId}`)
-      .then(r => { setLevel(r.data.level ?? 'inherit'); setMuted(r.data.muted ?? false) })
+      .then(r => {
+        setLevel(r.data.level ?? 'inherit')
+        const until = r.data.muted_until ? new Date(r.data.muted_until).getTime() : null
+        setCurrent({ muted: !!r.data.muted, until })
+        setMute(r.data.muted ? 'keep' : 'off')
+      })
       .catch(() => null)
   }, [channelId])
 
@@ -53,8 +60,9 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
   const save = async () => {
     setSaving(true)
     try {
-      await api.post(`/user/channel-notif/${channelId}`, { level, muted })
-      setStoreMuted(channelId, muted)
+      const { body, until } = muteRequest(mute, current.until)
+      await api.post(`/user/channel-notif/${channelId}`, { level, ...body })
+      setStoreMuted(channelId, body.muted, until)
       setStoreLevel(channelId, level)
       toast.success('Préférences sauvegardées')
       onClose()
@@ -109,19 +117,10 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
         ))}
       </div>
 
-      <label htmlFor="cn-mute" className="flex items-center gap-2.5 px-2.5 py-2 rounded hover:bg-fc-hover transition cursor-pointer mb-3">
-        <input
-          id="cn-mute"
-          type="checkbox"
-          checked={muted}
-          onChange={e => setMuted(e.target.checked)}
-          className="rounded accent-fc-accent"
-        />
-        <div>
-          <div className="text-sm text-white">Mettre en sourdine</div>
-          <div className="text-[11px] text-fc-muted">Aucun son ni badge</div>
-        </div>
-      </label>
+      <label htmlFor="cn-mute" className="block text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-1">Sourdine</label>
+      <div className="mb-3">
+        <MuteSelect id="cn-mute" value={mute} onChange={setMute} currentUntil={current.until} wasMuted={current.muted} />
+      </div>
 
       <button
         onClick={save}

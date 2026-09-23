@@ -6,6 +6,7 @@ import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
+import ServerNotifModal from '../modals/ServerNotifModal'
 import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
@@ -128,17 +129,8 @@ export default function ServerSidebar() {
     const srv = Object.values(s.serverCounts).reduce((a, b) => a + b, 0)
     return Math.max(0, total - srv)
   })
-  // Serveurs avec mentions non lues (cache partagé avec NotificationBell/ChannelSidebar)
-  const { data: mentionsData = [] } = useQuery<any[]>({
-    queryKey: ['user_mentions'],
-    queryFn: () => api.get('/user/mentions').then(r => r.data),
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
-  })
-  const mentionServers = useMemo(
-    () => new Set(mentionsData.map((m: any) => m.server_id)),
-    [mentionsData]
-  )
+  // Mentions non lues par serveur (pastille rouge chiffrée, même serveur en sourdine)
+  const serverMentionCounts = useUnread(s => s.serverMentionCounts)
   const [showCreate, setShowCreate] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
@@ -161,7 +153,7 @@ export default function ServerSidebar() {
 
   const me = useAuth(s => s.user)
   const isServerMuted = useChannelNotif(s => s.isServerMuted)
-  const setServerMuted = useChannelNotif(s => s.setServerMuted)
+  const [notifServer, setNotifServer] = useState<{ id: string; name: string } | null>(null)
 
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
@@ -417,21 +409,17 @@ export default function ServerSidebar() {
             ? <img src={mediaUrl(s.icon)} alt={s.name} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : s.name.charAt(0).toUpperCase()}
         </button>
-        {hasUnread && (
-          <span role="status" aria-label={`${serverCounts[s.id]} message${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} non lu${(serverCounts[s.id] ?? 0) > 1 ? 's' : ''} sur ${s.name}`} className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-red rounded-full border-2 border-fc-bg" />
-        )}
-        {/* Badge @ — mention non lue quelque part dans ce serveur */}
-        {mentionServers.has(s.id) && (
+        {/* Non-lu = pilule blanche à gauche (ci-dessus) ; mentions = pastille rouge chiffrée */}
+        {(serverMentionCounts[s.id] ?? 0) > 0 && (
           <span
             role="status"
-            aria-label={`Vous êtes mentionné sur ${s.name}`}
-            title="Vous êtes mentionné"
-            className="absolute top-0 right-2 min-w-[15px] h-[15px] bg-yellow-500 text-black text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
+            aria-label={`${serverMentionCounts[s.id]} mention${serverMentionCounts[s.id] > 1 ? 's' : ''} non lue${serverMentionCounts[s.id] > 1 ? 's' : ''} sur ${s.name}`}
+            className="absolute bottom-0 right-1 min-w-[18px] h-[18px] px-1 bg-fc-red text-white text-[10px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
           >
-            <span aria-hidden>@</span>
+            <span aria-hidden>{serverMentionCounts[s.id] > 99 ? '99+' : serverMentionCounts[s.id]}</span>
           </span>
         )}
-        {muted && (
+        {muted && !(serverMentionCounts[s.id] > 0) && (
           <span className="absolute bottom-0 right-2 w-3.5 h-3.5 bg-fc-muted/80 rounded-full border-2 border-fc-bg flex items-center justify-center">
             <BellOff size={7} className="text-white" />
           </span>
@@ -646,26 +634,13 @@ export default function ServerSidebar() {
             </button>
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
-              onClick={async () => {
-                const muted = isServerMuted(contextMenu.serverId)
-                try {
-                  await api.post('/user/notification-overrides', {
-                    server_id: contextMenu.serverId,
-                    level: 'all',
-                    muted: !muted,
-                  })
-                  setServerMuted(contextMenu.serverId, !muted)
-                  toast.success(muted ? 'Notifications réactivées' : 'Serveur mis en sourdine')
-                } catch {
-                  toast.error('Impossible de modifier les notifications')
-                }
+              onClick={() => {
+                const sv = (servers as { id: string; name: string }[]).find(x => x.id === contextMenu.serverId)
+                setNotifServer({ id: contextMenu.serverId, name: sv?.name ?? '' })
                 setContextMenu(null)
               }}
             >
-              {isServerMuted(contextMenu.serverId)
-                ? <><Bell size={12} /> Réactiver les notifications</>
-                : <><BellOff size={12} /> Mettre en sourdine</>
-              }
+              {isServerMuted(contextMenu.serverId) ? <BellOff size={12} /> : <Bell size={12} />} Paramètres de notification
             </button>
 
             {/* Dossiers */}
@@ -737,6 +712,9 @@ export default function ServerSidebar() {
         />
       )}
 
+      {notifServer && (
+        <ServerNotifModal serverId={notifServer.id} serverName={notifServer.name} onClose={() => setNotifServer(null)} />
+      )}
       {showTemplateModal && (
         <ServerTemplateModal onClose={() => setShowTemplateModal(false)} />
       )}
