@@ -269,7 +269,7 @@ export default function MemberList({ serverId, onClose }: Props) {
                   {it.label}
                 </div>
               ) : (
-                <MemberRow m={it.m} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
+                <MemberRow m={it.m} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
               )}
             </div>
           )

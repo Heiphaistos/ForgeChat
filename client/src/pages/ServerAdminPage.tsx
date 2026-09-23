@@ -56,7 +56,7 @@ function ModerationTab({ serverId }: { serverId: string }) {
     queryFn: () => api.get(`/servers/${serverId}/channels`).then(r => r.data),
   })
 
-  const textChannels = channels.filter(c => c.type === 'text')
+  const textChannels = channels.filter(c => c.type === 'text' || c.type === 'announcement')
 
   const purge = useMutation({
     mutationFn: () => api.post(`/channels/${purgeChannelId}/purge`, {
@@ -65,7 +65,7 @@ function ModerationTab({ serverId }: { serverId: string }) {
       limit: purgeLimit,
     }),
     onSuccess: (r) => toast.success(`${r.data.deleted} messages supprimés`),
-    onError: () => toast.error('Erreur lors de la purge'),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Erreur lors de la purge'),
   })
 
   return (

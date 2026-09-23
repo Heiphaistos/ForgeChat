@@ -108,8 +108,9 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
     ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, maxHeight: '80dvh' }
     : {
         position: 'fixed',
-        left: Math.max(8, Math.min(anchorX, window.innerWidth - 280)),
-        top: Math.max(8, Math.min(anchorY, window.innerHeight - 300)),
+        left: Math.max(8, Math.min(anchorX, window.innerWidth - 356)),
+        top: Math.max(8, Math.min(anchorY, window.innerHeight - 520)),
+        maxHeight: 'calc(100dvh - 16px)',
         zIndex: 9999,
       }
 
@@ -126,10 +127,10 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
       style={style}
       className={isSheet
         ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
-        : 'w-64 bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-hidden'}
+        : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto'}
     >
       {/* Banner */}
-      <div className="h-16 relative overflow-hidden" aria-hidden>
+      <div className="h-28 relative" aria-hidden>
         {user?.banner
           ? <img src={mediaUrl(user.banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
@@ -138,15 +139,15 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
             />
         }
         {/* Avatar */}
-        <div className="absolute -bottom-6 left-4">
-          <div className="w-16 h-16 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-xl text-white overflow-hidden">
+        <div className="absolute -bottom-12 left-4">
+          <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {user?.avatar
               ? <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (
             <div
-              className={`absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full border-2 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`}
+              className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-4 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`}
               aria-label={STATUS_LABEL[user.status] ?? 'Hors ligne'}
               title={STATUS_LABEL[user.status] ?? 'Hors ligne'}
             />
@@ -154,10 +155,10 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         </div>
       </div>
 
-      <div className="pt-8 px-4 pb-4">
+      <div className="pt-14 px-4 pb-4">
         {user ? (
           <>
-            <div className="font-bold text-white text-base">{member?.nickname ?? user.username}</div>
+            <div className="font-bold text-white text-xl">{member?.nickname ?? user.username}</div>
             {member?.nickname && <div className="text-xs text-fc-muted">{user.username}</div>}
             <div className="text-xs text-fc-muted mb-1">#{user.discriminator}</div>
             <div className="text-xs text-fc-muted mb-3">
