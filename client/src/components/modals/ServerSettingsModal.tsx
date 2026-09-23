@@ -16,6 +16,7 @@ import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
 import StatsTab from './StatsTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
+import SaveAsTemplateButton from './SaveAsTemplateButton'
 
 interface Server {
   id: string
@@ -353,6 +354,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
             </div>
           ))}
           <div className="mt-4 border-t border-fc-hover pt-4">
+            <SaveAsTemplateButton serverId={server.id} serverName={server.name} />
             <button onClick={() => deleteServer.mutate()} disabled={deleteConfirm !== server.name}
               className="w-full text-left px-2 py-1.5 rounded text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2 disabled:opacity-40"
             >

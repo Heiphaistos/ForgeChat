@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import api, { mediaUrl } from '../api/client'
 import { useNavigate } from 'react-router-dom'
+import UserPrivateNotes from './UserPrivateNotes'
 
 const ACTIVITY_ICONS: Record<string, string> = {
   playing: '🎮',
@@ -179,6 +180,10 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">À propos</div>
                 <div className="text-sm text-fc-text">{user.bio}</div>
               </div>
+            )}
+
+            {profile && profile.relationship !== 'self' && (
+              <UserPrivateNotes userId={userId} isFriend={profile.relationship === 'friend'} />
             )}
 
             <div className="flex items-center gap-1.5 text-xs text-fc-muted mb-4">
