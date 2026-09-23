@@ -93,6 +93,7 @@ pub async fn get_unread_counts(
              LEFT JOIN lr ON lr.channel_id = m.channel_id
              WHERE m.user_id != $1
                AND m.created_at > COALESCE(lr.read_at, NOW() - INTERVAL '30 days')
+               AND (m.expires_at IS NULL OR m.expires_at > NOW())
              GROUP BY m.channel_id, c.server_id"
         )
         .bind(claims.sub)
@@ -129,6 +130,10 @@ pub async fn get_unread_counts(
     );
 
     let rows = rows_result?;
+    // Les salons masqués (VIEW_CHANNEL refusé) apparaissaient avec leur nombre de
+    // non-lus : fuite de leur existence et de leur activité, et badges impossibles à effacer.
+    let hidden = state.hidden_channels(claims.sub, None, None).await?;
+    let rows: Vec<_> = rows.into_iter().filter(|r| !hidden.contains(&r.get::<Uuid, _>("channel_id"))).collect();
     let dm_rows = dm_rows.unwrap_or_default();
     let gdm_rows = gdm_rows.unwrap_or_default();
 

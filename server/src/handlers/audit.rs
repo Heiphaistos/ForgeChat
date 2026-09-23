@@ -35,7 +35,7 @@ pub async fn get_audit_log(
     _check_manage(claims.sub, server_id, &state).await?;
 
     use sqlx::Row;
-    let limit = q.limit.unwrap_or(50).min(200);
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
 
     let rows = if let Some(action) = &q.action {
         sqlx::query(

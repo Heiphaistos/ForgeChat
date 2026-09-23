@@ -134,7 +134,7 @@ pub async fn register(
     .fetch_one(&state.db)
     .await?;
 
-    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
+    let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
@@ -213,7 +213,7 @@ pub async fn verify_email(
         let _: () = redis.del(&key).await.unwrap_or(());
     }
 
-    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
+    let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
@@ -251,8 +251,8 @@ pub async fn login(
         .map(|u| u.password_hash.as_str())
         .unwrap_or(DUMMY_HASH);
 
-    let valid = verify(&body.password, hash_to_check)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    // Hachage illisible (compte « Utilisateur supprimé ») = refus, pas une erreur 500.
+    let valid = verify(&body.password, hash_to_check).unwrap_or(false);
 
     let user = user_opt.filter(|_| valid).ok_or(AppError::Unauthorized)?;
 
@@ -285,13 +285,11 @@ pub async fn login(
         .execute(&state.db)
         .await?;
 
-    let access_token = create_token(user.id, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(|e| AppError::Internal(e))?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
     // Enregistrer la session
-    {
+    let sid: Option<Uuid> = {
         // hash_token() (même fonction que pour refresh_tokens.token_hash, base64) --
         // avant ce fix, ce bloc calculait son propre hash hex-encodé en dur, donc
         // user_sessions.refresh_token_hash ne matchait JAMAIS refresh_tokens.token_hash
@@ -307,16 +305,19 @@ pub async fn login(
             .and_then(|v| v.to_str().ok())
             .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
             .unwrap_or_else(|| addr.ip().to_string());
-        let _ = sqlx::query(
-            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info, ip_address) VALUES ($1, $2, $3, $4)"
+        sqlx::query_scalar(
+            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info, ip_address) VALUES ($1, $2, $3, $4) RETURNING id"
         )
         .bind(user.id)
         .bind(&token_hash)
         .bind(&device)
         .bind(&ip)
-        .execute(&state.db)
-        .await;
-    }
+        .fetch_one(&state.db)
+        .await
+        .ok()
+    };
+    let access_token = create_token(user.id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
+        .map_err(|e| AppError::Internal(e))?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into() };
     let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
@@ -365,16 +366,18 @@ pub async fn refresh(
     // ce champ n'était sinon jamais réécrit après la création de la session, gelé
     // à l'heure du login au lieu de refléter une vraie activité récente.
     let new_hash = hash_token(&new_refresh_token);
-    let _ = sqlx::query(
-        "UPDATE user_sessions SET refresh_token_hash=$1, last_seen=NOW() WHERE refresh_token_hash=$2 AND user_id=$3"
+    let sid: Option<Uuid> = sqlx::query_scalar(
+        "UPDATE user_sessions SET refresh_token_hash=$1, last_seen=NOW() WHERE refresh_token_hash=$2 AND user_id=$3 RETURNING id"
     )
     .bind(&new_hash)
     .bind(&token_hash)
     .bind(row.0)
-    .execute(&state.db)
-    .await;
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
 
-    let access_token = create_token(row.0, &state.config.jwt_secret, &state.config.jwt_issuer)
+    let access_token = create_token(row.0, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
 
     let secure = is_secure(&state);
@@ -475,6 +478,9 @@ pub async fn change_password(
         .bind(&new_hash)
         .execute(&state.db)
         .await?;
+    // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but
+    // d'un changement de mot de passe après un vol de session.
+    crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -580,6 +586,7 @@ pub async fn list_sessions(
         use sqlx::Row;
         serde_json::json!({
             "id": s.get::<uuid::Uuid, _>("id").to_string(),
+            "current": claims.sid == Some(s.get::<uuid::Uuid, _>("id")),
             "device": s.get::<Option<String>, _>("device_info"),
             "ip": s.get::<Option<String>, _>("ip_address"),
             "last_seen": s.get::<chrono::DateTime<chrono::Utc>, _>("last_seen").to_rfc3339(),

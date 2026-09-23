@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::serde_helpers::deserialize_double_option;
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct Channel {
     pub id: Uuid,
@@ -60,7 +62,9 @@ pub struct UpdateChannelRequest {
     pub position: Option<i32>,
     pub slowmode_delay: Option<i32>,
     pub is_nsfw: Option<bool>,
-    pub user_limit: Option<i32>,
+    /// null ou 0 = sans limite.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub user_limit: Option<Option<i32>>,
     /// Mot de passe en clair — sera hashé côté serveur
     pub voice_password: Option<String>,
     /// Passer `true` pour supprimer le mot de passe
@@ -68,7 +72,8 @@ pub struct UpdateChannelRequest {
     /// Toggle canal auto-create (crée un vocal temporaire au join)
     pub is_auto_create: Option<bool>,
     /// Nom template pour les canaux temporaires créés (défaut: "{username}'s Channel")
-    pub auto_create_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub auto_create_name: Option<Option<String>>,
     pub bitrate: Option<i32>,
     /// Forum uniquement
     pub default_sort: Option<String>,

@@ -9,7 +9,7 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::servers::{require_member, require_member_and_channel, require_permission, require_permission_and_channel},
+    handlers::servers::{require_member_and_channel, require_permission, require_permission_and_channel},
     models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
@@ -24,7 +24,8 @@ pub async fn get_messages(
 ) -> Result<Json<Vec<MessageWithAuthor>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
-    let limit = params.limit.unwrap_or(50).min(100);
+    // Borné des deux côtés : une limite négative donnait « LIMIT -1 » et une erreur 500.
+    let limit = params.limit.unwrap_or(50).clamp(1, 100);
     // La branche `around` construit déjà son résultat en ordre chronologique
     // croissant (before_rows inversé + after_rows) -- le `.reverse()` final plus
     // bas ne doit s'appliquer qu'aux branches `before`/défaut (qui sortent de la
@@ -48,7 +49,7 @@ pub async fn get_messages(
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
-             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at < $2
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
@@ -62,7 +63,7 @@ pub async fn get_messages(
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
-             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at >= $2
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
@@ -90,7 +91,7 @@ pub async fn get_messages(
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
-             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND m.created_at < $2
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
@@ -104,7 +105,7 @@ pub async fn get_messages(
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
-             LEFT JOIN messages rm ON rm.id = m.reply_to
+             LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at DESC LIMIT $2"
@@ -195,19 +196,24 @@ pub async fn send_message(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<SendMessageRequest>,
 ) -> Result<Json<MessageWithAuthor>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // Visibilité, SEND_MESSAGES (overrides compris), ATTACH_FILES, annonces, timeout.
+    crate::handlers::servers::require_can_post(
+        &state, claims.sub, server_id, channel_id, body.has_attachments.unwrap_or(false),
+    ).await?;
 
-    // Canaux d'annonces : seuls les gestionnaires peuvent publier
-    let chan_type: Option<String> = sqlx::query_scalar(
-        "SELECT type FROM channels WHERE id=$1"
-    )
-    .bind(channel_id)
-    .fetch_optional(&state.db)
-    .await?;
-    if chan_type.as_deref() == Some("announcement") {
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES)
-            .await
-            .map_err(|_| AppError::Forbidden)?;
+    // Une réponse ne peut citer qu'un message du MÊME salon : sinon l'aperçu de
+    // réponse renvoyait le contenu de n'importe quel message dont on connaît l'id.
+    if let Some(reply_id) = body.reply_to {
+        let same_channel: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+        )
+        .bind(reply_id)
+        .bind(channel_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !same_channel {
+            return Err(AppError::BadRequest("Le message cité n'appartient pas à ce salon".into()));
+        }
     }
 
     // Refuser si content vide ET pas de pièces jointes annoncées
@@ -221,18 +227,6 @@ pub async fn send_message(
         if c.chars().count() > 4000 {
             return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
         }
-    }
-
-    // Vérifier si l'utilisateur est en timeout dans ce serveur (server_id déjà validé par require_*)
-    let is_timed_out = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
-    )
-    .bind(server_id)
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    if is_timed_out {
-        return Err(AppError::Forbidden);
     }
 
     // Enforcement du slowmode
@@ -303,7 +297,9 @@ pub async fn send_message(
             .map_err(|_| AppError::Forbidden)?;
     }
 
-    let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s));
+    // Messages éphémères : 10 s à 7 jours. Une valeur énorme faisait paniquer le
+    // calcul de date, une valeur négative supprimait le message à l'envoi.
+    let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s.clamp(10, 7 * 86_400)));
 
     let msg = sqlx::query(
         "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at)
@@ -382,7 +378,7 @@ pub async fn send_message(
         "message": full_msg,
         "pending_attachments": pending_attachments,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     // Bot slash commands : "/cmd args" est envoyé comme un message normal par le
     // client (voir MessageInput.tsx) — c'est ici qu'on détecte et dispatch aux bots.
@@ -409,6 +405,7 @@ pub async fn edit_message(
     Json(body): Json<EditMessageRequest>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     let owner = sqlx::query_scalar::<_, bool>(
         "SELECT user_id=$2 FROM messages WHERE id=$1 AND channel_id=$3"
@@ -462,7 +459,7 @@ pub async fn edit_message(
         "content": body.content,
         "edited_at": chrono::Utc::now(),
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -517,7 +514,7 @@ pub async fn delete_message(
         "message_id": message_id,
         "channel_id": channel_id,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     if msg_user != claims.sub {
         log_event(
@@ -539,8 +536,13 @@ pub async fn add_reaction(
     if emoji.is_empty() || emoji.chars().count() > 64 {
         return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
     }
-    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::ADD_REACTIONS).await
-        .map_err(|_| AppError::Forbidden)?;
+    // Salon visible, ADD_REACTIONS après overrides du salon, pas en timeout.
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    let (_, perms) = state.effective_channel_permissions(claims.sub, channel_id).await.ok_or(AppError::Forbidden)?;
+    if perms & Permissions::ADD_REACTIONS == 0 {
+        return Err(AppError::Forbidden);
+    }
+    crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     // Vérifier que le message appartient bien au canal
     let msg_in_channel: bool = sqlx::query_scalar(
@@ -565,7 +567,7 @@ pub async fn add_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -602,7 +604,7 @@ pub async fn remove_reaction(
         "user_id": claims.sub,
         "emoji": emoji,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -613,6 +615,14 @@ pub async fn pin_message(
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_MESSAGES).await?;
+    // Le message doit appartenir à CE salon : sinon on épinglait le message d'un
+    // autre serveur (ou d'un salon privé) dans le sien, puis on le lisait via les épingles.
+    let in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !in_channel {
+        return Err(AppError::NotFound("Message introuvable dans ce salon".into()));
+    }
 
     sqlx::query(
         "INSERT INTO pinned_messages (channel_id, message_id, pinned_by) VALUES ($1, $2, $3)
@@ -624,8 +634,9 @@ pub async fn pin_message(
     .execute(&state.db)
     .await?;
 
-    sqlx::query("UPDATE messages SET pinned=true WHERE id=$1")
+    sqlx::query("UPDATE messages SET pinned=true WHERE id=$1 AND channel_id=$2")
         .bind(message_id)
+        .bind(channel_id)
         .execute(&state.db)
         .await?;
 
@@ -636,7 +647,7 @@ pub async fn pin_message(
         "pinned": true,
         "pinned_by": claims.sub,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
     log_event(&state, server_id, "MESSAGE_PIN", Some(claims.sub), None, Some(message_id), None,
         Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
@@ -656,8 +667,9 @@ pub async fn unpin_message(
         .execute(&state.db)
         .await?;
 
-    sqlx::query("UPDATE messages SET pinned=false WHERE id=$1")
+    sqlx::query("UPDATE messages SET pinned=false WHERE id=$1 AND channel_id=$2")
         .bind(message_id)
+        .bind(channel_id)
         .execute(&state.db)
         .await?;
 
@@ -667,7 +679,7 @@ pub async fn unpin_message(
         "message_id": message_id,
         "pinned": false,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
     log_event(&state, server_id, "MESSAGE_UNPIN", Some(claims.sub), None, Some(message_id), None,
         Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
@@ -694,7 +706,7 @@ pub async fn search_messages(
                 rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
-         LEFT JOIN messages rm ON rm.id = m.reply_to
+         LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
          LEFT JOIN users ru ON ru.id = rm.user_id
          WHERE m.channel_id=$1 AND LOWER(m.content) LIKE $2
          ORDER BY m.created_at DESC LIMIT 50"
@@ -800,7 +812,8 @@ pub async fn forward_message(
     // d'appartenance intégrée) plutôt que d'exiger server_id/channel_id du client,
     // qui n'existent pas en contexte DM.
     let server_src = sqlx::query(
-        "SELECT m.content, COALESCE(m.webhook_display_name, u.username) as author_username
+        "SELECT m.content, COALESCE(m.webhook_display_name, u.username) as author_username,
+                m.channel_id, c.server_id
          FROM messages m
          JOIN users u ON u.id = m.user_id
          JOIN channels c ON c.id = m.channel_id
@@ -813,6 +826,10 @@ pub async fn forward_message(
     .await?;
 
     let (src_content, src_author): (Option<String>, String) = if let Some(row) = server_src {
+        // Le salon source doit être VISIBLE : transférer un message d'un salon
+        // privé en révélait le contenu dans un salon public.
+        let (src_channel, src_server): (Uuid, Uuid) = (row.get("channel_id"), row.get("server_id"));
+        require_member_and_channel(&state, claims.sub, src_server, src_channel).await?;
         (row.try_get("content").ok().flatten(), row.get("author_username"))
     } else {
         let dm_row = sqlx::query(
@@ -841,8 +858,14 @@ pub async fn forward_message(
     let dest_server_id = dest_server_id
         .ok_or_else(|| AppError::NotFound("Canal de destination introuvable".into()))?;
 
-    // L'user doit être membre du serveur de destination
-    require_member(&state, claims.sub, dest_server_id).await?;
+    // Mêmes règles qu'un envoi normal : salon masqué, lecture seule, annonces,
+    // timeout, AutoMod. Le transfert contournait tout.
+    crate::handlers::servers::require_can_post(&state, claims.sub, dest_server_id, body.channel_id, false).await?;
+    if let Some(content) = src_content.as_deref() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, dest_server_id, claims.sub, content).await {
+            return Err(err);
+        }
+    }
 
     // Insérer le message forwardé dans le canal cible
     let new_msg = sqlx::query(
@@ -895,13 +918,13 @@ pub async fn forward_message(
         poll_id: None,
     };
 
-    // Broadcast to destination channel's server members (dest_server_id already known from earlier)
+    // Diffusion aux seuls membres qui voient le salon de destination.
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "server_id": dest_server_id,
         "message": full_msg
     });
-    state.broadcast_to_server_members(dest_server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(body.channel_id, event.to_string()).await;
 
     Ok(Json(full_msg))
 }

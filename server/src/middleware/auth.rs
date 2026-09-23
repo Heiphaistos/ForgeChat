@@ -28,14 +28,26 @@ pub struct Claims {
     pub sub: Uuid,
     pub exp: i64,
     pub iss: String,
+    /// Date d'émission. Absente des jetons émis avant son ajout (0 par défaut) :
+    /// ils sont alors traités comme antérieurs à toute révocation.
+    #[serde(default)]
+    pub iat: i64,
+    /// Session (ligne user_sessions) qui a émis ce jeton : permet à la page
+    /// « Sessions » de marquer l'appareil courant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sid: Option<Uuid>,
 }
 
-pub fn create_token(user_id: Uuid, secret: &str, issuer: &str) -> anyhow::Result<String> {
-    let exp = chrono::Utc::now()
-        .checked_add_signed(chrono::Duration::hours(24))
+pub fn create_token(user_id: Uuid, sid: Option<Uuid>, secret: &str, issuer: &str) -> anyhow::Result<String> {
+    // 1 h (règle projet : 15 min à 1 h) : le client se renouvelle seul sur un 401
+    // grâce au jeton de rafraîchissement. À 24 h, une session révoquée ou un jeton
+    // volé restait utilisable une journée entière.
+    let now = chrono::Utc::now();
+    let exp = now
+        .checked_add_signed(chrono::Duration::hours(1))
         .ok_or_else(|| anyhow::anyhow!("Erreur calcul expiration token"))?
         .timestamp();
-    let claims = Claims { sub: user_id, exp, iss: issuer.to_string() };
+    let claims = Claims { sub: user_id, exp, iss: issuer.to_string(), iat: now.timestamp(), sid };
     Ok(encode(
         &Header::default(),
         &claims,
@@ -94,9 +106,35 @@ pub async fn require_auth(
             return Err(AppError::Unauthorized);
         }
     }
+    if is_revoked(&state, &claims).await {
+        return Err(AppError::Unauthorized);
+    }
 
     let mut req = req;
     req.extensions_mut().insert(claims);
     req.extensions_mut().insert(RawToken(token));
     Ok(next.run(req).await)
+}
+
+/// Clé Redis : tous les jetons d'un compte émis AVANT cet instant sont révoqués
+/// (changement de mot de passe, « déconnecter partout »). Gardée 2 h, soit plus
+/// que la durée de vie d'un jeton d'accès.
+fn revoke_key(user_id: Uuid) -> String {
+    format!("jwtrevoke:{user_id}")
+}
+
+pub async fn revoke_all_tokens(state: &AppState, user_id: Uuid) {
+    use redis::AsyncCommands;
+    let mut redis = state.redis.lock().await;
+    let _: () = redis
+        .set_ex(revoke_key(user_id), chrono::Utc::now().timestamp(), 2 * 3600)
+        .await
+        .unwrap_or(());
+}
+
+pub async fn is_revoked(state: &AppState, claims: &Claims) -> bool {
+    use redis::AsyncCommands;
+    let mut redis = state.redis.lock().await;
+    let since: Option<i64> = redis.get(revoke_key(claims.sub)).await.unwrap_or(None);
+    since.is_some_and(|ts| claims.iat < ts)
 }

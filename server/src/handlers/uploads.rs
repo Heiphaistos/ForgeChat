@@ -8,7 +8,6 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::require_member_and_channel,
     middleware::auth::Claims,
     models::role::Permissions,
     state::AppState,
@@ -31,7 +30,7 @@ pub async fn upload_file(
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
     mut multipart: Multipart,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
 
     // Vérifier que le message appartient à l'utilisateur courant et est dans ce canal (IDOR protection)
     let msg_owned = sqlx::query_scalar::<_, bool>(
@@ -137,7 +136,8 @@ pub async fn upload_file(
 
         let url = format!("/uploads/{}", filename);
         let size = data.len() as i64;
-        let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h));
+        // Pièce jointe éphémère : 1 h à 30 jours (même raison que les messages éphémères).
+        let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 30)));
 
         let attachment = sqlx::query(
             "INSERT INTO attachments (message_id, filename, content_type, size, url, expires_at)
@@ -188,7 +188,7 @@ pub async fn forum_upload(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
 
     const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"];
 

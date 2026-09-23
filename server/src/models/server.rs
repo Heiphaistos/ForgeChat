@@ -50,11 +50,16 @@ pub struct UpdateServerRequest {
     pub is_public: Option<bool>,
     pub welcome_message: Option<String>,
     pub banner: Option<String>,
-    pub system_channel_id: Option<Uuid>,
-    pub afk_channel_id: Option<Uuid>,
+    // null = vider (salon système/AFK/règles retiré, URL personnalisée supprimée).
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub system_channel_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub afk_channel_id: Option<Option<Uuid>>,
     pub afk_timeout: Option<i32>,
-    pub rules_channel_id: Option<Uuid>,
-    pub vanity_url: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub rules_channel_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub vanity_url: Option<Option<String>>,
     pub content_filter: Option<String>,
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub server_category: Option<Option<String>>,

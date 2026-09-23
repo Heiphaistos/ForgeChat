@@ -54,13 +54,23 @@ async fn handle_socket(
             }
         }
     } else {
-        match crate::middleware::auth::verify_token(&token, &secret, &issuer) {
-            Some(c) => c.sub,
-            None => {
-                tracing::warn!("WebSocket: token invalide");
-                return;
-            }
+        // Mêmes contrôles que l'API : un jeton révoqué (déconnexion, mot de passe
+        // changé) ouvrait encore la WebSocket et recevait tous les DM pendant 24 h.
+        let Some(c) = crate::middleware::auth::verify_token(&token, &secret, &issuer) else {
+            tracing::warn!("WebSocket: token invalide");
+            return;
+        };
+        let blocked: Option<String> = {
+            use redis::AsyncCommands;
+            let key = format!("jwtblock:{}", crate::middleware::auth::hash_token(&token));
+            let mut redis = state.redis.lock().await;
+            redis.get(&key).await.unwrap_or(None)
+        };
+        if blocked.is_some() || crate::middleware::auth::is_revoked(&state, &c).await {
+            tracing::warn!("WebSocket: token révoqué");
+            return;
         }
+        c.sub
     };
 
     // N5 — identité de CONNEXION, distincte de l'identité d'utilisateur.
@@ -80,14 +90,18 @@ async fn handle_socket(
         .unwrap_or_default();
 
     // Réutiliser le sender existant pour supporter plusieurs onglets/appareils simultanés
+    // Les deux verrous sont tenus ENSEMBLE, toujours dans le même ordre (clients
+    // puis compteur) que la déconnexion : sinon, pendant un rechargement, la socket
+    // qui se ferme pouvait retirer l'émetteur que celle qui s'ouvre venait de
+    // récupérer, et ce nouvel onglet ne recevait plus aucun événement.
     let tx = {
         let mut clients = state.clients.write().await;
+        let mut counts = state.conn_counts.write().await;
         let tx = clients.entry(user_id).or_insert_with(|| {
             let (tx, _) = broadcast::channel::<String>(512);
             tx
         }).clone();
-        drop(clients);
-        *state.conn_counts.write().await.entry(user_id).or_insert(0) += 1;
+        *counts.entry(user_id).or_insert(0) += 1;
         tx
     };
 
@@ -226,13 +240,15 @@ async fn handle_socket(
 
     // Nettoyage à la déconnexion — seulement si c'est le dernier onglet/appareil
     let is_last = {
+        let mut clients = state.clients.write().await;
         let mut counts = state.conn_counts.write().await;
         let count = counts.entry(user_id).or_insert(0);
         *count = count.saturating_sub(1);
         let last = *count == 0;
-        if last { counts.remove(&user_id); }
-        drop(counts);
-        if last { state.clients.write().await.remove(&user_id); }
+        if last {
+            counts.remove(&user_id);
+            clients.remove(&user_id);
+        }
         last
     };
 
@@ -448,6 +464,7 @@ pub(crate) async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Opti
                 if let Some(server_id) = server_id_opt {
                     let del_event = serde_json::json!({
                         "type": "CHANNEL_DELETE",
+                        "server_id": server_id,
                         "channel_id": channel_id,
                     });
                     state.broadcast_to_server_members(server_id, del_event.to_string()).await;
@@ -585,65 +602,9 @@ async fn handle_ws_message(
 
     match msg["type"].as_str() {
         // ────────── Canal texte ──────────
-        Some("SUBSCRIBE_CHANNEL") => {
-            if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
-                // Vérifier que l'utilisateur est membre du serveur auquel appartient ce channel
-                let member_ok = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM channels c
-                        JOIN server_members sm ON sm.server_id = c.server_id
-                        WHERE c.id = $1 AND sm.user_id = $2
-                    )"
-                )
-                .bind(channel_id)
-                .bind(user_id)
-                .fetch_one(&state.db)
-                .await
-                .unwrap_or(false);
-
-                // Autoriser aussi les DM channels et group DM channels
-                let dm_ok = if !member_ok {
-                    let dm1: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id = $1 AND (user1_id = $2 OR user2_id = $2))"
-                    )
-                    .bind(channel_id).bind(user_id)
-                    .fetch_one(&state.db).await.unwrap_or(false);
-
-                    if dm1 { dm1 } else {
-                        sqlx::query_scalar::<_, bool>(
-                            "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id = $1 AND user_id = $2)"
-                        )
-                        .bind(channel_id).bind(user_id)
-                        .fetch_one(&state.db).await.unwrap_or(false)
-                    }
-                } else {
-                    false
-                };
-
-                if !member_ok && !dm_ok {
-                    tracing::warn!("WS SUBSCRIBE_CHANNEL refusé: user {} canal {}", user_id, channel_id);
-                } else {
-                    let tx = state.get_or_create_channel_tx(channel_id).await;
-                    let read = state.clients.read().await;
-                    if let Some(user_tx) = read.get(&user_id) {
-                        let mut rx = tx.subscribe();
-                        let user_tx = user_tx.clone();
-                        tokio::spawn(async move {
-                            loop {
-                                match rx.recv().await {
-                                    Ok(msg) => {
-                                        if user_tx.send(msg).is_err() { break; }
-                                    }
-                                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-        }
-
+        // SUBSCRIBE_CHANNEL supprimé : chaque appel lançait une tâche qui ne se
+        // terminait jamais, sur un canal où rien n'était publié (fuite mémoire).
+        // Les événements de salon passent par broadcast_to_channel_members.
         Some("TYPING_START") => {
             if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
                 // Rate limit: 1 TYPING_START par 3s par (user, channel) via Redis
@@ -836,8 +797,10 @@ async fn handle_ws_message(
                 }).to_string()).await;
                 return;
             }
-            let can_speak = voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await;
-            let can_stream = voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await;
+            // Un membre en timeout peut écouter mais pas parler (comme Discord).
+            let timed_out = crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err();
+            let can_speak = !timed_out && voice_perm_ok(state, server_id, channel_id, perms, Permissions::SPEAK_VOICE).await;
+            let can_stream = !timed_out && voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await;
             let listen_only = msg["listen_only"].as_bool().unwrap_or(false);
             let Some(livekit) = state.livekit.clone() else {
                 state.broadcast_to_user(user_id, serde_json::json!({
@@ -926,6 +889,7 @@ async fn handle_ws_message(
                             // Notifier tous les clients du nouveau canal
                             let create_event = serde_json::json!({
                                 "type": "CHANNEL_CREATE",
+                                "server_id": server_id,
                                 "channel": new_ch,
                             });
                             // Broadcast au channel du serveur (abonnés)
@@ -936,6 +900,13 @@ async fn handle_ws_message(
             }
 
             let max_users = user_limit.map(|l| l as usize);
+            // Changement de salon sans VOICE_LEAVE : sortir proprement de l'ancien
+            // (VOICE_USER_LEFT, fin de LIVE, éjection du SFU, salon temporaire vidé).
+            // Avant, l'utilisateur restait affiché dans l'ancien salon.
+            let previous = state.user_voice.read().await.get(&user_id).copied();
+            if previous.is_some_and(|p| p != effective_channel_id) {
+                cleanup_voice(state, user_id, None).await;
+            }
             let Some(existing_ids) = state.voice_join(user_id, effective_channel_id, max_users).await else {
                 // N16 — le client affiche « Canal plein (current/limit) » : sans
                 // `current` il imprimait `undefined`.
@@ -1378,6 +1349,17 @@ async fn handle_ws_message(
                     )"
                 ).bind(channel_id).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
                 if !is_member { return; }
+                // Tableau blanc des salons vocaux uniquement, salon visible, trait borné :
+                // un client pouvait relayer 64 Ko x 300 fois par 10 s vers tout un salon.
+                if state.hidden_channels(user_id, None, Some(channel_id)).await.map(|h| h.contains(&channel_id)).unwrap_or(true) {
+                    return;
+                }
+                let is_voice: bool = sqlx::query_scalar(
+                    "SELECT type IN ('voice', 'video', 'stage') FROM channels WHERE id=$1"
+                ).bind(channel_id).fetch_optional(&state.db).await.ok().flatten().unwrap_or(false);
+                if !is_voice || msg["points"].as_array().is_some_and(|p| p.len() > 2000) {
+                    return;
+                }
                 let event = serde_json::json!({
                     "type": msg["type"].as_str().unwrap_or("WHITEBOARD_DRAW"),
                     "channel_id": msg["channel_id"],

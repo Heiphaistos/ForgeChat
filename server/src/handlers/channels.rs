@@ -111,7 +111,7 @@ pub async fn create_channel(
     .fetch_one(&state.db)
     .await?;
 
-    let event = serde_json::json!({ "type": "CHANNEL_CREATE", "channel": &channel });
+    let event = serde_json::json!({ "type": "CHANNEL_CREATE", "server_id": server_id, "channel": &channel });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     log_event(
@@ -166,10 +166,10 @@ pub async fn update_channel(
                 position = COALESCE($4, position),
                 slowmode_delay = COALESCE($5, slowmode_delay),
                 is_nsfw = COALESCE($6, is_nsfw),
-                user_limit = COALESCE($7, user_limit),
+                user_limit = CASE WHEN $15 THEN NULLIF($7, 0) ELSE user_limit END,
                 voice_password_hash = $8,
                 is_auto_create = COALESCE($9, is_auto_create),
-                auto_create_name = COALESCE($10, auto_create_name),
+                auto_create_name = CASE WHEN $16 THEN $10 ELSE auto_create_name END,
                 bitrate = COALESCE($11, bitrate),
                 default_sort = COALESCE($12, default_sort),
                 require_tag = COALESCE($13, require_tag)
@@ -181,14 +181,16 @@ pub async fn update_channel(
         .bind(body.position)
         .bind(body.slowmode_delay)
         .bind(body.is_nsfw)
-        .bind(body.user_limit)
+        .bind(body.user_limit.flatten())
         .bind(new_hash)
         .bind(body.is_auto_create)
-        .bind(body.auto_create_name)
+        .bind(body.auto_create_name.clone().flatten())
         .bind(body.bitrate)
         .bind(&body.default_sort)
         .bind(body.require_tag)
         .bind(server_id)
+        .bind(body.user_limit.is_some())
+        .bind(body.auto_create_name.is_some())
         .fetch_one(&state.db)
         .await?
     } else {
@@ -200,9 +202,9 @@ pub async fn update_channel(
                 position = COALESCE($4, position),
                 slowmode_delay = COALESCE($5, slowmode_delay),
                 is_nsfw = COALESCE($6, is_nsfw),
-                user_limit = COALESCE($7, user_limit),
+                user_limit = CASE WHEN $14 THEN NULLIF($7, 0) ELSE user_limit END,
                 is_auto_create = COALESCE($8, is_auto_create),
-                auto_create_name = COALESCE($9, auto_create_name),
+                auto_create_name = CASE WHEN $15 THEN $9 ELSE auto_create_name END,
                 bitrate = COALESCE($10, bitrate),
                 default_sort = COALESCE($11, default_sort),
                 require_tag = COALESCE($12, require_tag)
@@ -214,13 +216,15 @@ pub async fn update_channel(
         .bind(body.position)
         .bind(body.slowmode_delay)
         .bind(body.is_nsfw)
-        .bind(body.user_limit)
+        .bind(body.user_limit.flatten())
         .bind(body.is_auto_create)
-        .bind(body.auto_create_name)
+        .bind(body.auto_create_name.clone().flatten())
         .bind(body.bitrate)
         .bind(&body.default_sort)
         .bind(body.require_tag)
         .bind(server_id)
+        .bind(body.user_limit.is_some())
+        .bind(body.auto_create_name.is_some())
         .fetch_one(&state.db)
         .await?
     };
@@ -261,7 +265,7 @@ pub async fn delete_channel(
         .execute(&state.db)
         .await?;
 
-    let event = serde_json::json!({ "type": "CHANNEL_DELETE", "channel_id": channel_id });
+    let event = serde_json::json!({ "type": "CHANNEL_DELETE", "server_id": server_id, "channel_id": channel_id });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 
     log_event(
@@ -347,7 +351,7 @@ pub async fn get_pinned(
         "SELECT m.*, u.username, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar FROM messages m
          JOIN pinned_messages pm ON pm.message_id = m.id
          JOIN users u ON u.id = m.user_id
-         WHERE pm.channel_id=$1
+         WHERE pm.channel_id=$1 AND m.channel_id=$1
            AND EXISTS (SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)
          ORDER BY pm.pinned_at DESC"
     )
@@ -652,7 +656,7 @@ pub async fn purge_messages(
     let deleted = if let Some(before_date) = before {
         if let Some(aid) = author_id {
             sqlx::query(
-                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 LIMIT $4),
+                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 ORDER BY created_at DESC LIMIT $4),
                       deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
                  SELECT COUNT(*) as n FROM deleted"
             )
@@ -660,7 +664,7 @@ pub async fn purge_messages(
             .fetch_one(&state.db).await
         } else {
             sqlx::query(
-                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz LIMIT $3),
+                "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz ORDER BY created_at DESC LIMIT $3),
                       deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
                  SELECT COUNT(*) as n FROM deleted"
             )
@@ -669,7 +673,7 @@ pub async fn purge_messages(
         }
     } else if let Some(aid) = author_id {
         sqlx::query(
-            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND user_id=$2 LIMIT $3),
+            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT $3),
                   deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
              SELECT COUNT(*) as n FROM deleted"
         )
@@ -677,7 +681,7 @@ pub async fn purge_messages(
         .fetch_one(&state.db).await
     } else {
         sqlx::query(
-            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 LIMIT $2),
+            "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 ORDER BY created_at DESC LIMIT $2),
                   deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
              SELECT COUNT(*) as n FROM deleted"
         )

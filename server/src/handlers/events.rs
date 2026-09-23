@@ -243,7 +243,9 @@ pub struct UpdateEvent {
     pub description: Option<serde_json::Value>,
     pub event_type: Option<String>,
     pub start_time: Option<chrono::DateTime<chrono::Utc>>,
-    pub end_time: Option<serde_json::Value>,
+    /// null = retirer la date de fin.
+    #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
+    pub end_time: Option<Option<chrono::DateTime<chrono::Utc>>>,
     #[allow(dead_code)]
     pub channel_id: Option<serde_json::Value>,
     pub image_url: Option<serde_json::Value>,
@@ -265,13 +267,19 @@ pub async fn update_event(
         }
     }
 
+    if let (Some(start), Some(Some(end))) = (body.start_time, body.end_time) {
+        if end <= start {
+            return Err(AppError::BadRequest("end_time doit être après start_time".into()));
+        }
+    }
+
     let affected = sqlx::query(
         "UPDATE server_events SET
            name = COALESCE($3, name),
            description = CASE WHEN $4::TEXT IS NOT NULL THEN $4::TEXT ELSE description END,
            event_type = COALESCE($5, event_type),
            start_time = COALESCE($6, start_time),
-           end_time = CASE WHEN $7::TIMESTAMPTZ IS NOT NULL THEN $7::TIMESTAMPTZ ELSE end_time END,
+           end_time = CASE WHEN $11 THEN $7::TIMESTAMPTZ ELSE end_time END,
            image_url = CASE WHEN $8::TEXT IS NOT NULL THEN $8::TEXT ELSE image_url END,
            max_attendees = CASE WHEN $9::INTEGER IS NOT NULL THEN $9::INTEGER ELSE max_attendees END
          WHERE id = $1 AND server_id = $2 AND creator_id = $10"
@@ -282,14 +290,11 @@ pub async fn update_event(
     .bind(body.description.as_ref().and_then(|v| v.as_str()))
     .bind(body.event_type.as_deref())
     .bind(body.start_time)
-    .bind(
-        body.end_time.as_ref()
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<chrono::DateTime<chrono::Utc>>().ok())
-    )
+    .bind(body.end_time.flatten())
     .bind(body.image_url.as_ref().and_then(|v| v.as_str()))
     .bind(body.max_attendees.as_ref().and_then(|v| v.as_i64()).map(|n| n as i32))
     .bind(claims.sub)
+    .bind(body.end_time.is_some())
     .execute(&state.db)
     .await?;
 

@@ -36,7 +36,7 @@ pub async fn create_scheduled(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateScheduledRequest>,
 ) -> Result<Json<ScheduledMessage>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     if body.content.trim().is_empty() {
         return Err(AppError::BadRequest("Contenu vide".into()));
@@ -49,6 +49,14 @@ pub async fn create_scheduled(
     }
     if body.send_at > Utc::now() + chrono::Duration::days(30) {
         return Err(AppError::BadRequest("Planification max 30 jours dans le futur".into()));
+    }
+    // Plafond : sans lui, 5 000 messages programmés pour la même minute partaient
+    // d'un bloc, en contournant l'anti-spam (5 messages / 3 s) et le slowmode.
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM scheduled_messages WHERE user_id=$1 AND sent = FALSE"
+    ).bind(claims.sub).fetch_one(&state.db).await?;
+    if pending >= 25 {
+        return Err(AppError::BadRequest("Limite de 25 messages programmés en attente atteinte".into()));
     }
 
     // Même enforcement timeout que messages.rs/forum.rs/threads.rs/polls.rs/tickets.rs :

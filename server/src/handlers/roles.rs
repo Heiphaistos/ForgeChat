@@ -74,8 +74,7 @@ pub async fn create_role(
     let name = body.name.trim().chars().take(100).collect::<String>();
     if name.is_empty() { return Err(AppError::BadRequest("Nom de rôle requis".into())); }
 
-    const VALID_PERMS: i64 = 0x3FFFF; // bits 0-17 définis
-    let perms = body.permissions.unwrap_or(0) & VALID_PERMS;
+    let perms = body.permissions.unwrap_or(0) & Permissions::ALL;
 
     // Élévation de privilège : MANAGE_ROLES seul permettait de créer un rôle avec
     // N'IMPORTE QUELLE permission du masque (BAN_MEMBERS, MANAGE_SERVER, KICK_MEMBERS...)
@@ -88,9 +87,16 @@ pub async fn create_role(
         return Err(AppError::Forbidden);
     }
 
+    // Comme Discord : un nouveau rôle arrive tout en bas, juste au-dessus de
+    // @everyone (position 1) ; les autres montent d'un cran. Avant, tous les rôles
+    // restaient en position 0 et aucune hiérarchie n'était possible.
+    sqlx::query("UPDATE roles SET position = position + 1 WHERE server_id=$1 AND NOT is_everyone")
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
     let role = sqlx::query_as::<_, Role>(
-        "INSERT INTO roles (server_id, name, color, permissions, mentionable, hoisted)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        "INSERT INTO roles (server_id, name, color, permissions, mentionable, hoisted, position)
+         VALUES ($1, $2, $3, $4, $5, $6, 1) RETURNING *"
     )
     .bind(server_id)
     .bind(&name)
@@ -129,8 +135,19 @@ pub async fn update_role(
         if n.is_empty() { return Err(AppError::BadRequest("Nom de rôle invalide".into())); }
     }
 
-    const VALID_PERMS: i64 = 0x3FFFF;
-    let perms = body.permissions.map(|p| p & VALID_PERMS);
+    // Hiérarchie : on ne touche qu'à un rôle situé sous son propre rôle le plus
+    // haut, et on ne peut pas le hisser à son niveau ou au-dessus.
+    crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
+    if let Some(pos) = body.position {
+        let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2)")
+            .bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+        let top = crate::handlers::servers::top_role_position(&state, claims.sub, server_id).await?;
+        if pos < 1 || (!is_owner && pos >= top) {
+            return Err(AppError::BadRequest("Position de rôle hors de votre hiérarchie".into()));
+        }
+    }
+
+    let perms = body.permissions.map(|p| p & Permissions::ALL);
 
     // Même garde anti-élévation que create_role, mais relative aux bits DÉJÀ présents sur
     // le rôle (pas à zéro) : le client renvoie le masque complet à chaque édition (ex.
@@ -193,6 +210,7 @@ pub async fn delete_role(
     Path((server_id, role_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
 
     sqlx::query("DELETE FROM roles WHERE id=$1 AND server_id=$2 AND is_everyone=false")
         .bind(role_id)
@@ -221,6 +239,10 @@ pub async fn assign_role(
     Path((server_id, user_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
+    if user_id != claims.sub {
+        crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;
+    }
 
     // Vérifier que la cible est membre du serveur (IDOR fix)
     let is_member = sqlx::query_scalar::<_, bool>(
@@ -290,6 +312,10 @@ pub async fn remove_role(
     Path((server_id, user_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
+    if user_id != claims.sub {
+        crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;
+    }
 
     sqlx::query(
         "DELETE FROM member_roles WHERE user_id=$1 AND server_id=$2 AND role_id=$3"

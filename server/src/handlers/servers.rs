@@ -194,11 +194,11 @@ pub async fn update_server(
             is_public = COALESCE($4, is_public),
             welcome_message = COALESCE($5, welcome_message),
             banner = COALESCE($6, banner),
-            system_channel_id = COALESCE($7, system_channel_id),
-            afk_channel_id = COALESCE($8, afk_channel_id),
+            system_channel_id = CASE WHEN $15 THEN $7 ELSE system_channel_id END,
+            afk_channel_id = CASE WHEN $16 THEN $8 ELSE afk_channel_id END,
             afk_timeout_minutes = COALESCE($9, afk_timeout_minutes),
-            rules_channel_id = COALESCE($10, rules_channel_id),
-            vanity_url = COALESCE($11, vanity_url),
+            rules_channel_id = CASE WHEN $17 THEN $10 ELSE rules_channel_id END,
+            vanity_url = CASE WHEN $18 THEN $11 ELSE vanity_url END,
             content_filter = COALESCE($12, content_filter),
             server_category = CASE WHEN $13 THEN $14 ELSE server_category END
          WHERE id=$1 RETURNING *"
@@ -209,14 +209,18 @@ pub async fn update_server(
     .bind(body.is_public)
     .bind(body.welcome_message)
     .bind(body.banner)
-    .bind(body.system_channel_id)
-    .bind(body.afk_channel_id)
+    .bind(body.system_channel_id.flatten())
+    .bind(body.afk_channel_id.flatten())
     .bind(body.afk_timeout)
-    .bind(body.rules_channel_id)
-    .bind(body.vanity_url)
+    .bind(body.rules_channel_id.flatten())
+    .bind(body.vanity_url.clone().flatten())
     .bind(body.content_filter)
     .bind(category_provided)
     .bind(category_value)
+    .bind(body.system_channel_id.is_some())
+    .bind(body.afk_channel_id.is_some())
+    .bind(body.rules_channel_id.is_some())
+    .bind(body.vanity_url.is_some())
     .fetch_one(&state.db)
     .await?;
 
@@ -451,6 +455,7 @@ pub async fn leave_server(
     .bind(server_id)
     .execute(&state.db)
     .await?;
+    purge_membership(&state, claims.sub, server_id).await;
 
     sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
         .bind(server_id)
@@ -527,6 +532,7 @@ pub async fn kick_member(
     if user_id == owner_id {
         return Err(AppError::Forbidden);
     }
+    require_outranks(&state, claims.sub, user_id, server_id).await?;
 
     let kick_result = sqlx::query(
         "DELETE FROM server_members WHERE user_id=$1 AND server_id=$2"
@@ -535,6 +541,7 @@ pub async fn kick_member(
     .bind(server_id)
     .execute(&state.db)
     .await?;
+    purge_membership(&state, user_id, server_id).await;
 
     if kick_result.rows_affected() > 0 {
         sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
@@ -585,10 +592,13 @@ pub async fn ban_member(
     if user_id == owner_id {
         return Err(AppError::Forbidden);
     }
+    require_outranks(&state, claims.sub, user_id, server_id).await?;
 
     let reason = body["reason"].as_str().map(String::from);
+    // Bornée à 1 h .. 1 an : une valeur énorme faisait paniquer le calcul de date,
+    // une valeur négative créait un bannissement déjà expiré.
     let expires_at = body["duration_hours"].as_i64().map(|h| {
-        chrono::Utc::now() + chrono::Duration::hours(h)
+        chrono::Utc::now() + chrono::Duration::hours(h.clamp(1, 24 * 365))
     });
 
     sqlx::query(
@@ -609,6 +619,7 @@ pub async fn ban_member(
     .bind(server_id)
     .execute(&state.db)
     .await?;
+    purge_membership(&state, user_id, server_id).await;
 
     if ban_del.rows_affected() > 0 {
         sqlx::query("UPDATE servers SET member_count = GREATEST(member_count - 1, 0) WHERE id=$1")
@@ -889,6 +900,126 @@ pub async fn require_member_and_channel(
 }
 
 /// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
+// ─── Hiérarchie des rôles (comme Discord) ─────────────────────────────────────
+
+/// Position du rôle le plus haut d'un membre ; -1 s'il n'a que @everyone.
+pub async fn top_role_position(state: &AppState, user_id: Uuid, server_id: Uuid) -> Result<i32> {
+    let top: Option<i32> = sqlx::query_scalar(
+        "SELECT MAX(r.position) FROM member_roles mr JOIN roles r ON r.id = mr.role_id
+         WHERE mr.user_id=$1 AND mr.server_id=$2 AND NOT r.is_everyone"
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(top.unwrap_or(-1))
+}
+
+async fn is_server_owner(state: &AppState, user_id: Uuid, server_id: Uuid) -> Result<bool> {
+    Ok(sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2)")
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await?)
+}
+
+/// L'acteur doit être STRICTEMENT au-dessus de la cible (expulser, bannir,
+/// timeout, changer ses rôles). Avant : un modérateur pouvait bannir les
+/// administrateurs. Le propriétaire n'est jamais une cible et passe partout.
+pub async fn require_outranks(state: &AppState, actor: Uuid, target: Uuid, server_id: Uuid) -> Result<()> {
+    if is_server_owner(state, target, server_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    if is_server_owner(state, actor, server_id).await? {
+        return Ok(());
+    }
+    if top_role_position(state, actor, server_id).await? > top_role_position(state, target, server_id).await? {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest("Ce membre a un rôle égal ou supérieur au vôtre".into()))
+    }
+}
+
+/// Un rôle ne peut être modifié, supprimé, donné ou retiré que s'il est
+/// strictement sous le rôle le plus haut de l'acteur.
+pub async fn require_role_below(state: &AppState, actor: Uuid, role_id: Uuid, server_id: Uuid) -> Result<()> {
+    if is_server_owner(state, actor, server_id).await? {
+        return Ok(());
+    }
+    let pos: Option<i32> = sqlx::query_scalar("SELECT position FROM roles WHERE id=$1 AND server_id=$2")
+        .bind(role_id)
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let pos = pos.ok_or_else(|| AppError::NotFound("Rôle introuvable".into()))?;
+    if pos < top_role_position(state, actor, server_id).await? {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest("Ce rôle est égal ou supérieur à votre rôle le plus haut".into()))
+    }
+}
+
+/// Départ d'un membre (expulsion, bannissement, départ volontaire) : ses rôles
+/// ne doivent pas l'attendre s'il revient, et il sort du vocal du serveur.
+pub async fn purge_membership(state: &AppState, user_id: Uuid, server_id: Uuid) {
+    let _ = sqlx::query("DELETE FROM member_roles WHERE user_id=$1 AND server_id=$2")
+        .bind(user_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await;
+    let voice_channel = state.user_voice.read().await.get(&user_id).copied();
+    if let Some(ch) = voice_channel {
+        if state.channel_server_id(ch).await == Some(server_id) {
+            crate::handlers::websocket::cleanup_voice(state, user_id, None).await;
+        }
+    }
+}
+
+/// Garde UNIQUE de toute écriture dans un salon de serveur : message, fil,
+/// réponse de forum, fichier, transfert, message programmé.
+///
+/// Avant : chaque chemin vérifiait seulement l'appartenance au serveur, si bien
+/// qu'un salon « lecture seule » (SEND_MESSAGES retiré par override) restait
+/// inscriptible, ATTACH_FILES n'était jamais appliqué, et le timeout ou les
+/// salons d'annonces n'étaient contrôlés que par `send_message`.
+pub async fn require_can_post(
+    state: &AppState, user_id: Uuid, server_id: Uuid, channel_id: Uuid, with_files: bool,
+) -> Result<()> {
+    use crate::models::role::Permissions;
+    require_member_and_channel(state, user_id, server_id, channel_id).await?;
+    let (_, perms) = state
+        .effective_channel_permissions(user_id, channel_id)
+        .await
+        .ok_or(AppError::Forbidden)?;
+    let has = |p: i64| perms & p != 0;
+    if !has(Permissions::SEND_MESSAGES) {
+        return Err(AppError::Forbidden);
+    }
+    if with_files && !has(Permissions::ATTACH_FILES) {
+        return Err(AppError::Forbidden);
+    }
+    let chan_type: Option<String> = sqlx::query_scalar("SELECT type FROM channels WHERE id=$1")
+        .bind(channel_id)
+        .fetch_optional(&state.db)
+        .await?;
+    if chan_type.as_deref() == Some("announcement") && !has(Permissions::MANAGE_MESSAGES) {
+        return Err(AppError::Forbidden);
+    }
+    require_not_timed_out(state, user_id, server_id).await
+}
+
+/// Un membre en timeout ne peut rien publier ni réagir (comme Discord).
+pub async fn require_not_timed_out(state: &AppState, user_id: Uuid, server_id: Uuid) -> Result<()> {
+    let timed_out = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    if timed_out { Err(AppError::Forbidden) } else { Ok(()) }
+}
+
 pub async fn require_channel_in_server(
     state: &AppState, channel_id: Uuid, server_id: Uuid,
 ) -> Result<()> {
@@ -1212,6 +1343,8 @@ pub async fn boost_server(
         "type": "SERVER_BOOST",
         "server_id": server_id,
         "user_id": claims.sub,
+        "username": sqlx::query_scalar::<_, String>("SELECT username FROM users WHERE id=$1")
+            .bind(claims.sub).fetch_optional(&state.db).await?,
         "boost_count": boost_count as i64,
         "boost_level": boost_level,
     }).to_string()).await;

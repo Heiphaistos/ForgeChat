@@ -494,9 +494,10 @@ pub async fn get_dm_messages(
         sqlx::query(
             "SELECT dm.id, dm.content, dm.sender_id, u.username as sender_username
              FROM dm_messages dm JOIN users u ON u.id = dm.sender_id
-             WHERE dm.id = ANY($1)"
+             WHERE dm.id = ANY($1) AND dm.dm_channel_id = $2"
         )
         .bind(&reply_ids)
+        .bind(dm_id)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default()
@@ -692,7 +693,9 @@ pub async fn accept_friend_invite(
             .execute(&state.db)
             .await?;
 
-        let event = serde_json::json!({ "type": "FRIEND_ACCEPTED", "user_id": claims.sub });
+        let from_username: Option<String> = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+            .bind(claims.sub).fetch_optional(&state.db).await?;
+        let event = serde_json::json!({ "type": "FRIEND_ACCEPTED", "from_id": claims.sub, "from_username": from_username });
         state.broadcast_to_user(inviter_id, event.to_string()).await;
     }
 
@@ -748,7 +751,15 @@ pub async fn send_dm(
     }
 
     let content_raw = body["content"].as_str().unwrap_or("").trim().to_string();
-    let reply_to: Option<Uuid> = body["reply_to"].as_str().and_then(|s| s.parse().ok());
+    let mut reply_to: Option<Uuid> = body["reply_to"].as_str().and_then(|s| s.parse().ok());
+    // Une réponse ne peut citer qu'un message de CETTE conversation : sinon
+    // l'aperçu de réponse renvoyait le contenu du message privé de n'importe qui.
+    if let Some(rid) = reply_to {
+        let same_dm: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2)"
+        ).bind(rid).bind(dm_id).fetch_one(&state.db).await?;
+        if !same_dm { reply_to = None; }
+    }
     let has_attachments = body["has_attachments"].as_bool().unwrap_or(false);
 
     if content_raw.is_empty() && !has_attachments {
@@ -1877,6 +1888,8 @@ pub async fn invite_bulk(
         let event = serde_json::json!({
             "type": "FRIEND_REQUEST",
             "from_id": claims.sub,
+            "from_username": sqlx::query_scalar::<_, String>("SELECT username FROM users WHERE id=$1")
+                .bind(claims.sub).fetch_optional(&state.db).await?,
         });
         state.broadcast_to_user(target_id, event.to_string()).await;
 

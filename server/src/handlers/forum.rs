@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use super::servers::{require_member, require_member_and_channel};
+use super::servers::require_member_and_channel;
 
 #[derive(Debug, Serialize, FromRow)]
 pub struct ForumPost {
@@ -111,7 +111,7 @@ pub async fn create_post(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreatePostReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -176,7 +176,7 @@ pub async fn create_post(
     .await?;
 
     let event = serde_json::json!({ "type": "FORUM_POST_CREATE", "channel_id": channel_id, "post": post });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "post": post })))
 }
@@ -280,6 +280,7 @@ pub async fn toggle_reply_reaction(
     Path((server_id, channel_id, post_id, reply_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     let reply_ok: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM forum_replies fr JOIN forum_posts fp ON fp.id = fr.post_id
@@ -322,7 +323,7 @@ pub async fn toggle_reply_reaction(
         "count": count,
         "user_id": claims.sub,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "added": added, "count": count })))
 }
@@ -333,7 +334,7 @@ pub async fn reply_to_post(
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<CreateReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -395,7 +396,7 @@ pub async fn reply_to_post(
     tx.commit().await?;
 
     let event = serde_json::json!({ "type": "FORUM_REPLY_CREATE", "channel_id": channel_id, "post_id": post_id, "reply": reply });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "reply": reply })))
 }
@@ -406,7 +407,7 @@ pub async fn update_post(
     Path((server_id, channel_id, post_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member(&state, claims.sub, server_id).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let post = sqlx::query(
         "SELECT creator_id FROM forum_posts WHERE id = $1 AND channel_id = $2"
@@ -451,7 +452,7 @@ pub async fn update_post(
     .await?;
 
     let event = serde_json::json!({ "type": "FORUM_POST_UPDATE", "channel_id": channel_id, "post_id": post_id });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -489,7 +490,7 @@ pub async fn delete_post(
         .await?;
 
     let event = serde_json::json!({ "type": "FORUM_POST_DELETE", "channel_id": channel_id, "post_id": post_id });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -536,7 +537,7 @@ pub async fn edit_reply(
         "reply_id": reply_id,
         "content": content,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -586,7 +587,7 @@ pub async fn delete_reply(
         "post_id": post_id,
         "reply_id": reply_id,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

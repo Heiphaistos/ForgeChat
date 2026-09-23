@@ -145,7 +145,7 @@ pub async fn create_ticket(
     .await?;
 
     let event = serde_json::json!({ "type": "TICKET_CREATE", "server_id": server_id, "ticket": ticket });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    broadcast_ticket(&state, server_id, &event).await;
 
     Ok(Json(ticket))
 }
@@ -227,7 +227,7 @@ pub async fn update_ticket(
     .ok_or_else(|| AppError::NotFound("Ticket introuvable".into()))?;
 
     let event = serde_json::json!({ "type": "TICKET_UPDATE", "server_id": server_id, "ticket": ticket });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    broadcast_ticket(&state, server_id, &event).await;
 
     Ok(Json(ticket))
 }
@@ -277,4 +277,37 @@ pub async fn create_category(
         "type": "TICKET_CATEGORY_CREATE", "server_id": server_id, "category": cat
     }).to_string()).await;
     Ok((StatusCode::CREATED, Json(cat)))
+}
+
+/// Un ticket n'est visible que de son créateur, de la personne assignée et des
+/// gestionnaires du serveur (`list_tickets` applique déjà cette règle) : les
+/// événements temps réel partaient pourtant, ticket complet, à tout le serveur.
+async fn broadcast_ticket(state: &AppState, server_id: Uuid, event: &serde_json::Value) {
+    use crate::models::role::Permissions;
+    let mut targets: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    for key in ["creator_id", "assigned_to"] {
+        if let Some(id) = event["ticket"][key].as_str().and_then(|v| v.parse::<Uuid>().ok()) {
+            targets.insert(id);
+        }
+    }
+    let managers: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT sm.user_id FROM server_members sm
+         LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+         LEFT JOIN roles r ON r.id = mr.role_id
+         WHERE sm.server_id = $1
+         GROUP BY sm.user_id, sm.is_owner
+         HAVING sm.is_owner
+             OR (COALESCE(BIT_OR(r.permissions), 0)
+                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$1 AND is_everyone), 0)) & $2 <> 0"
+    )
+    .bind(server_id)
+    .bind(Permissions::MANAGE_SERVER | Permissions::ADMINISTRATOR)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    targets.extend(managers);
+    let text = event.to_string();
+    for uid in targets {
+        state.broadcast_to_user(uid, text.clone()).await;
+    }
 }

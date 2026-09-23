@@ -202,6 +202,7 @@ pub async fn create_timeout(
     if is_owner {
         return Err(AppError::Forbidden);
     }
+    crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;
 
     let timeout = sqlx::query_as::<_, UserTimeout>(
         "INSERT INTO user_timeouts (server_id, user_id, moderator_id, reason, expires_at)
@@ -230,6 +231,14 @@ pub async fn create_timeout(
         "reason": timeout.reason,
     });
     state.broadcast_to_user(user_id, event.to_string()).await;
+    // En vocal : sortie du salon ; en revenant, le jeton du SFU n'autorisera plus
+    // ni micro ni partage tant que le timeout court.
+    let voice_channel = state.user_voice.read().await.get(&user_id).copied();
+    if let Some(ch) = voice_channel {
+        if state.channel_server_id(ch).await == Some(server_id) {
+            crate::handlers::websocket::cleanup_voice(&state, user_id, None).await;
+        }
+    }
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "MEMBER_TIMEOUT",
         "server_id": server_id,

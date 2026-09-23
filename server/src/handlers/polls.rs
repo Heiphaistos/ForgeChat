@@ -53,7 +53,7 @@ pub async fn create_poll(
         return Err(AppError::BadRequest("Entre 2 et 10 options requises".into()));
     }
 
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"

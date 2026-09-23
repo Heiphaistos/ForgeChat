@@ -52,7 +52,6 @@ pub struct AppState {
     pub config: Config,
     pub clients: ClientMap,
     pub conn_counts: ConnCountMap,
-    pub channel_subs: Arc<RwLock<HashMap<Uuid, broadcast::Sender<String>>>>,
     // Salons vocaux : channel_id → {user_id}
     pub voice_rooms: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
     // Utilisateur courant dans quel salon : user_id → channel_id
@@ -96,7 +95,6 @@ impl AppState {
             config,
             clients: Arc::new(RwLock::new(HashMap::new())),
             conn_counts: Arc::new(RwLock::new(HashMap::new())),
-            channel_subs: Arc::new(RwLock::new(HashMap::new())),
             voice_rooms: Arc::new(RwLock::new(HashMap::new())),
             user_voice: Arc::new(RwLock::new(HashMap::new())),
             voice_states: Arc::new(RwLock::new(HashMap::new())),
@@ -176,22 +174,6 @@ impl AppState {
         );
     }
 
-    pub async fn get_or_create_channel_tx(&self, channel_id: Uuid) -> broadcast::Sender<String> {
-        {
-            let read = self.channel_subs.read().await;
-            if let Some(tx) = read.get(&channel_id) {
-                return tx.clone();
-            }
-        }
-        let mut write = self.channel_subs.write().await;
-        // Double-check sous le verrou exclusif pour éviter la race TOCTOU
-        if let Some(tx) = write.get(&channel_id) {
-            return tx.clone();
-        }
-        let (tx, _) = broadcast::channel(256);
-        write.insert(channel_id, tx.clone());
-        tx
-    }
 
     pub async fn broadcast_to_user(&self, user_id: Uuid, event: String) {
         let read = self.clients.read().await;
@@ -308,8 +290,11 @@ impl AppState {
         rows.iter()
             .filter_map(|r| {
                 let uid: Uuid = r.get("user_id");
+                // Même base que `hidden_channels` : VIEW_CHANNEL est acquis sauf refus
+                // explicite par override. Sans cet alignement, un salon lisible en REST
+                // ne recevait plus aucun message en direct dès qu'il portait un override.
                 let perms = apply_channel_overrides(
-                    r.get::<i64, _>("combined_perms"),
+                    r.get::<i64, _>("combined_perms") | view,
                     r.get::<bool, _>("is_owner"),
                     uid,
                     roles_by_user.get(&uid),

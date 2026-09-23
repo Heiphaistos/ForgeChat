@@ -447,6 +447,6 @@ pub async fn dispatch_slash_command(
             "server_id": server_id,
             "user_id": user_id,
         });
-        state.broadcast_to_server_members(server_id, event.to_string()).await;
+        state.broadcast_to_channel_members(channel_id, event.to_string()).await;
     }
 }

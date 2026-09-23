@@ -96,7 +96,7 @@ pub async fn create_thread(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateThreadReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     if body.first_message.trim().is_empty() {
         return Err(AppError::BadRequest("Message vide".into()));
@@ -153,7 +153,7 @@ pub async fn create_thread(
         "channel_id": channel_id,
         "thread": thread,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "thread": thread })))
 }
@@ -236,6 +236,7 @@ pub async fn toggle_thread_reaction(
     Path((server_id, channel_id, thread_id, msg_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     let msg_ok: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM thread_messages tm JOIN threads t ON t.id = tm.thread_id
@@ -278,7 +279,7 @@ pub async fn toggle_thread_reaction(
         "count": count,
         "user_id": claims.sub,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "added": added, "count": count })))
 }
@@ -289,7 +290,7 @@ pub async fn send_thread_message(
     Path((server_id, channel_id, thread_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<SendThreadMessageReq>,
 ) -> Result<Json<serde_json::Value>> {
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let content_trimmed = body.content.trim().to_string();
     if content_trimmed.is_empty() {
@@ -350,7 +351,7 @@ pub async fn send_thread_message(
         "channel_id": channel_id,
         "message": msg,
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "message": msg })))
 }
@@ -409,7 +410,7 @@ pub async fn archive_thread(
         .await?
     };
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "THREAD_UPDATE",
         "thread_id": thread.id,
         "channel_id": channel_id,
@@ -441,12 +442,14 @@ pub async fn edit_thread_message(
 
     let rows = sqlx::query(
         "UPDATE thread_messages SET content=$1, edited_at=NOW()
-         WHERE id=$2 AND thread_id=$3 AND user_id=$4"
+         WHERE id=$2 AND thread_id=$3 AND user_id=$4
+           AND thread_id IN (SELECT id FROM threads WHERE channel_id=$5)"
     )
     .bind(&content)
     .bind(msg_id)
     .bind(thread_id)
     .bind(claims.sub)
+    .bind(channel_id)
     .execute(&state.db)
     .await?;
 
@@ -454,7 +457,7 @@ pub async fn edit_thread_message(
         return Err(AppError::Forbidden);
     }
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "THREAD_MESSAGE_EDIT",
         "thread_id": thread_id,
         "channel_id": channel_id,
@@ -474,10 +477,14 @@ pub async fn delete_thread_message(
 
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT user_id FROM thread_messages WHERE id=$1 AND thread_id=$2"
+        // Le fil doit appartenir au salon passé dans l'URL : sinon un modérateur de
+        // SON serveur supprimait les messages de fil d'un autre serveur.
+        "SELECT tm.user_id FROM thread_messages tm JOIN threads t ON t.id = tm.thread_id
+         WHERE tm.id=$1 AND tm.thread_id=$2 AND t.channel_id=$3"
     )
     .bind(msg_id)
     .bind(thread_id)
+    .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
@@ -494,8 +501,13 @@ pub async fn delete_thread_message(
         .bind(thread_id)
         .execute(&state.db)
         .await?;
+    // Le compteur affiché dans la liste des fils ne baissait jamais.
+    sqlx::query("UPDATE threads SET message_count = GREATEST(message_count - 1, 0) WHERE id=$1")
+        .bind(thread_id)
+        .execute(&state.db)
+        .await?;
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "THREAD_MESSAGE_DELETE",
         "thread_id": thread_id,
         "channel_id": channel_id,

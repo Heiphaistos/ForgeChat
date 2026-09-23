@@ -61,4 +61,15 @@ impl Permissions {
     /// Partage d'écran / Go Live — déclaré côté UI depuis toujours (RolesTab bit 40)
     pub const STREAM: i64 = 1 << 40;
     pub const ADMINISTRATOR: i64 = 1 << 31;
+
+    /// Toutes les permissions connues. Remplace l'ancien masque `0x3FFFF`
+    /// (bits 0-17) qui EFFAÇAIT administrateur, orateur prioritaire et partage
+    /// d'écran à chaque modification d'un rôle (simple renommage compris).
+    pub const ALL: i64 = Self::VIEW_CHANNEL | Self::SEND_MESSAGES | Self::READ_HISTORY
+        | Self::MANAGE_MESSAGES | Self::MANAGE_CHANNELS | Self::MANAGE_ROLES
+        | Self::KICK_MEMBERS | Self::BAN_MEMBERS | Self::MANAGE_SERVER
+        | Self::MENTION_EVERYONE | Self::ATTACH_FILES | Self::EMBED_LINKS
+        | Self::ADD_REACTIONS | Self::CONNECT_VOICE | Self::SPEAK_VOICE
+        | Self::MUTE_MEMBERS | Self::DEAFEN_MEMBERS | Self::MOVE_MEMBERS
+        | Self::PRIORITY_SPEAKER | Self::STREAM | Self::ADMINISTRATOR;
 }
