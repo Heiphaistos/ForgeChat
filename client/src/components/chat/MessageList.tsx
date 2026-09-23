@@ -923,6 +923,7 @@ export default function MessageList({
       {popup && (
         <UserPopup
           userId={popup.userId}
+          serverId={serverId}
           anchorX={popup.x}
           anchorY={popup.y}
           onClose={() => setPopup(null)}

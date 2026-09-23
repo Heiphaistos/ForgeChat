@@ -139,7 +139,7 @@ pub async fn register(
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     let headers = auth_cookie_headers(&auth, is_secure(&state));
     Ok((headers, Json(auth)))
 }
@@ -218,7 +218,7 @@ pub async fn verify_email(
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     let headers = auth_cookie_headers(&auth, is_secure(&state));
     Ok((headers, Json(auth)))
 }
@@ -280,10 +280,8 @@ pub async fn login(
 
     reset_login_rate_limit(&state, &client_ip).await;
 
-    sqlx::query("UPDATE users SET status='online', updated_at=NOW() WHERE id=$1")
-        .bind(user.id)
-        .execute(&state.db)
-        .await?;
+    // Le statut en direct est posé par la connexion WebSocket (presence.rs) :
+    // l'écrire ici à « online » rendait visible un utilisateur invisible.
 
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
@@ -319,7 +317,7 @@ pub async fn login(
     let access_token = create_token(user.id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
 
-    let auth = AuthResponse { access_token, refresh_token, user: user.into() };
+    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
     Ok((resp_headers, Json(auth)))
 }

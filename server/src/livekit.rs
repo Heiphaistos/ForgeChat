@@ -46,6 +46,18 @@ pub struct Publish {
     pub microphone: bool,
     pub camera: bool,
     pub screen: bool,
+    /// Sourdine imposée par un modérateur : ne reçoit aucun flux.
+    pub deafened: bool,
+}
+
+impl Publish {
+    fn sources(&self) -> Vec<&'static str> {
+        let mut sources = Vec::new();
+        if self.microphone { sources.push("microphone"); }
+        if self.camera { sources.push("camera"); }
+        if self.screen { sources.extend(["screen_share", "screen_share_audio"]); }
+        sources
+    }
 }
 
 #[derive(Serialize)]
@@ -108,10 +120,7 @@ pub fn room_for_dm(a: uuid::Uuid, b: uuid::Uuid) -> String {
 
 /// Jeton de participation à une salle.
 pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, publish: Publish) -> Option<String> {
-    let mut sources = Vec::new();
-    if publish.microphone { sources.push("microphone"); }
-    if publish.camera { sources.push("camera"); }
-    if publish.screen { sources.extend(["screen_share", "screen_share_audio"]); }
+    let sources = publish.sources();
     let t = now();
     sign(cfg, &Claims {
         iss: &cfg.api_key,
@@ -124,7 +133,7 @@ pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, p
             room_join: true,
             room_admin: false,
             can_publish: Some(!sources.is_empty()),
-            can_subscribe: Some(true),
+            can_subscribe: Some(!publish.deafened),
             // Canal de données : réactions et indicateurs légers entre pairs.
             can_publish_data: Some(true),
             can_publish_sources: Some(sources),
@@ -154,11 +163,10 @@ pub fn verify_webhook(cfg: &LiveKitConfig, authorization: &str, body: &[u8]) -> 
     data.claims["sha256"].as_str() == Some(expected.as_str())
 }
 
-/// Retire un participant du SFU (sortie, éjection, perte de permission).
-/// Sans cela, un client exclu côté ForgeChat resterait connecté au média.
-pub async fn remove_participant(http: &reqwest::Client, cfg: &LiveKitConfig, room: &str, identity: &str) {
+/// Jeton d'administration d'une salle, pour l'API RoomService.
+fn admin_token(cfg: &LiveKitConfig, room: &str) -> Option<String> {
     let t = now();
-    let Some(admin) = sign(cfg, &Claims {
+    sign(cfg, &Claims {
         iss: &cfg.api_key,
         sub: "forgechat-server",
         name: None,
@@ -174,21 +182,62 @@ pub async fn remove_participant(http: &reqwest::Client, cfg: &LiveKitConfig, roo
             can_publish_sources: None,
             can_update_own_metadata: None,
         },
-    }) else { return };
-    let url = format!("{}/twirp/livekit.RoomService/RemoveParticipant", cfg.internal_url.trim_end_matches('/'));
+    })
+}
+
+/// Appel Twirp `livekit.RoomService/<method>`. `true` si le SFU a accepté
+/// (ou si le participant n'y est déjà plus : 404).
+async fn room_service(http: &reqwest::Client, cfg: &LiveKitConfig, method: &str, room: &str, identity: &str, body: serde_json::Value) -> bool {
+    let Some(admin) = admin_token(cfg, room) else { return false };
+    let url = format!("{}/twirp/livekit.RoomService/{method}", cfg.internal_url.trim_end_matches('/'));
     let res = http
         .post(url)
         .bearer_auth(admin)
-        .json(&serde_json::json!({ "room": room, "identity": identity }))
+        .json(&body)
         .timeout(std::time::Duration::from_secs(5))
         .send()
         .await;
     match res {
-        // 404 : déjà parti du SFU (fermeture d'onglet), rien à faire.
-        Ok(r) if r.status().is_success() || r.status() == reqwest::StatusCode::NOT_FOUND => {}
-        Ok(r) => tracing::warn!(room, identity, status = %r.status(), "LiveKit RemoveParticipant refusé"),
-        Err(e) => tracing::warn!(room, identity, "LiveKit RemoveParticipant injoignable : {e}"),
+        Ok(r) if r.status().is_success() || r.status() == reqwest::StatusCode::NOT_FOUND => true,
+        Ok(r) => {
+            tracing::warn!(room, identity, method, status = %r.status(), "LiveKit RoomService refusé");
+            false
+        }
+        Err(e) => {
+            tracing::warn!(room, identity, method, "LiveKit RoomService injoignable : {e}");
+            false
+        }
     }
+}
+
+/// Retire un participant du SFU (sortie, éjection, perte de permission).
+/// Sans cela, un client exclu côté ForgeChat resterait connecté au média.
+pub async fn remove_participant(http: &reqwest::Client, cfg: &LiveKitConfig, room: &str, identity: &str) {
+    room_service(http, cfg, "RemoveParticipant", room, identity,
+        serde_json::json!({ "room": room, "identity": identity })).await;
+}
+
+/// Corps de `UpdateParticipant` : nouvelles permissions du participant.
+/// Le SFU dépublie aussitôt une piste dont la source n'est plus autorisée
+/// (micro d'un membre rendu muet par un modérateur) et coupe les abonnements
+/// si `canSubscribe` tombe (sourdine serveur).
+fn update_body(room: &str, identity: &str, publish: Publish) -> serde_json::Value {
+    let sources: Vec<String> = publish.sources().iter().map(|s| s.to_uppercase()).collect();
+    serde_json::json!({
+        "room": room,
+        "identity": identity,
+        "permission": {
+            "canSubscribe": !publish.deafened,
+            "canPublish": !sources.is_empty(),
+            "canPublishData": true,
+            "canPublishSources": sources,
+        },
+    })
+}
+
+/// Applique au participant déjà connecté les droits recalculés (modération vocale).
+pub async fn update_participant(http: &reqwest::Client, cfg: &LiveKitConfig, room: &str, identity: &str, publish: Publish) -> bool {
+    room_service(http, cfg, "UpdateParticipant", room, identity, update_body(room, identity, publish)).await
 }
 
 #[cfg(test)]
@@ -216,7 +265,7 @@ mod tests {
 
     #[test]
     fn le_jeton_porte_la_salle_et_les_sources_autorisees() {
-        let tok = join_token(&cfg(), "voice-1", "user-1", "Momo", Publish { microphone: true, camera: true, screen: false }).unwrap();
+        let tok = join_token(&cfg(), "voice-1", "user-1", "Momo", Publish { microphone: true, camera: true, screen: false, deafened: false }).unwrap();
         let c = lire(&tok);
         assert_eq!(c["sub"], "user-1");
         assert_eq!(c["video"]["room"], "voice-1");
@@ -259,6 +308,15 @@ mod tests {
         let b = uuid::Uuid::new_v4();
         assert_eq!(room_for_dm(a, b), room_for_dm(b, a));
         assert_ne!(room_for_dm(a, b), room_for_dm(a, uuid::Uuid::new_v4()));
+    }
+
+    #[test]
+    fn la_moderation_retire_le_micro_et_l_ecoute() {
+        let b = update_body("voice-1", "u", Publish { microphone: false, camera: true, screen: false, deafened: true });
+        assert_eq!(b["permission"]["canPublishSources"], serde_json::json!(["CAMERA"]));
+        assert_eq!(b["permission"]["canSubscribe"], false);
+        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish { deafened: true, ..Publish::default() }).unwrap());
+        assert_eq!(c["video"]["canSubscribe"], false);
     }
 
     #[test]

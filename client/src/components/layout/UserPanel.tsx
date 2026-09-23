@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../store/auth'
 import { useVoice } from '../../store/voice'
+import { usePresence } from '../../store/presence'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
@@ -52,18 +53,20 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const saveCustomStatus = async () => {
+  // Chaîne vide = effacer (le serveur la stocke en NULL). Avant, `null` était
+  // ignoré par le serveur : un statut personnalisé ne s'effaçait jamais.
+  const saveCustomStatus = async (text = customStatus, emoji = customEmoji) => {
     setSaving(true)
     try {
       await api.patch('/user/status', {
-        custom_status: customStatus.trim() || null,
-        custom_status_emoji: customEmoji.trim() || null,
+        custom_status: text.trim(),
+        custom_status_emoji: emoji.trim(),
       })
       updateMe({
-        custom_status: customStatus.trim() || null,
-        custom_status_emoji: customEmoji.trim() || null,
+        custom_status: text.trim() || null,
+        custom_status_emoji: emoji.trim() || null,
       })
-      toast.success('Statut mis à jour')
+      toast.success(text.trim() || emoji.trim() ? 'Statut mis à jour' : 'Statut effacé')
       onClose()
     } catch {
       toast.error('Erreur lors de la mise à jour')
@@ -154,7 +157,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             value={customEmoji}
             onChange={e => setCustomEmoji(e.target.value)}
             placeholder="😊"
-            maxLength={2}
+            maxLength={8}
             enterKeyHint="next"
             aria-label="Emoji du statut"
             className="w-10 fc-input text-center text-base py-1 flex-shrink-0"
@@ -170,17 +173,26 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             autoComplete="off"
             aria-label="Texte du statut personnalisé"
             className="flex-1 fc-input text-xs py-1"
-            onKeyDown={e => { if (e.key === 'Enter') saveCustomStatus() }}
+            onKeyDown={e => { if (e.key === 'Enter') void saveCustomStatus() }}
           />
         </div>
         <div className="flex gap-2">
           <button
-            onClick={saveCustomStatus}
+            onClick={() => void saveCustomStatus()}
             disabled={saving}
             className="flex-1 btn-primary text-xs py-1.5 disabled:opacity-50"
           >
             {saving ? '...' : 'Sauvegarder'}
           </button>
+          {(user?.custom_status || user?.custom_status_emoji) && (
+            <button
+              onClick={() => { setCustomStatus(''); setCustomEmoji(''); void saveCustomStatus('', '') }}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs rounded bg-fc-hover hover:bg-red-500/20 text-fc-muted hover:text-red-300 transition disabled:opacity-50"
+            >
+              Effacer
+            </button>
+          )}
           <button
             onClick={() => { nav('/settings'); onClose() }}
             className="px-3 py-1.5 text-xs rounded bg-fc-hover hover:bg-fc-hover/70 text-fc-muted hover:text-white transition"
@@ -203,6 +215,10 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
   const nav = useNavigate()
   const { joined, muted, deafened, toggleMute, toggleDeafen } = useVoice()
   const [showStatusPopup, setShowStatusPopup] = useState(false)
+  // Absence automatique (toutes les sessions inactives) : calculée par le
+  // serveur, reçue comme n'importe quelle présence.
+  const liveStatus = usePresence(s => (user ? s.statuses[user.id] : undefined))
+  const shownStatus = user?.status === 'online' && liveStatus === 'idle' ? 'idle' : user?.status ?? 'offline'
 
   const toggleFocus = async () => {
     if (!user) return
@@ -236,13 +252,13 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
               ? <img src={mediaUrl(user.avatar)} alt="" loading="eager" decoding="async" className="w-full h-full rounded-full object-cover" />
               : user.username.charAt(0).toUpperCase()}
           </div>
-          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[user.status] ?? 'bg-fc-muted'}`} />
+          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[shownStatus] ?? 'bg-fc-muted'}`} />
         </div>
         <div className="min-w-0">
           <div className="text-sm font-semibold text-white truncate">{user.username}</div>
           <div className="text-xs text-fc-muted truncate">
             {user.custom_status_emoji && <span className="mr-0.5">{user.custom_status_emoji}</span>}
-            {user.custom_status || STATUS_LABELS[user.status] || <span className="streamer-blur">#{user.discriminator}</span>}
+            {user.custom_status || STATUS_LABELS[shownStatus] || <span className="streamer-blur">#{user.discriminator}</span>}
           </div>
         </div>
       </button>

@@ -132,9 +132,15 @@ pub async fn get_voice_state(
             .unwrap_or_default();
 
         let users = sqlx::query(
-            "SELECT id, username, avatar, discriminator FROM users WHERE id = ANY($1)"
+            "SELECT u.id, u.username, u.avatar, u.discriminator,
+                    COALESCE(sm.voice_muted, FALSE) AS voice_muted,
+                    COALESCE(sm.voice_deafened, FALSE) AS voice_deafened
+             FROM users u
+             LEFT JOIN server_members sm ON sm.user_id = u.id AND sm.server_id = $2
+             WHERE u.id = ANY($1)"
         )
         .bind(&members)
+        .bind(server_id)
         .fetch_all(&state.db)
         .await
         .unwrap_or_default();
@@ -155,6 +161,8 @@ pub async fn get_voice_state(
                     "video": vs.map(|v| v.video).unwrap_or(false),
                     "screen": vs.map(|v| v.screen).unwrap_or(false),
                     "hand_raised": hands.contains(&uid),
+                    "server_muted": u.get::<bool, _>("voice_muted"),
+                    "server_deafened": u.get::<bool, _>("voice_deafened"),
                 })
             })
             .collect();

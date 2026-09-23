@@ -594,6 +594,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
       {userPopup && (
         <UserPopup
           userId={userPopup.userId}
+          serverId={serverId}
           anchorX={userPopup.x}
           anchorY={userPopup.y}
           onClose={() => setUserPopup(null)}

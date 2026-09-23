@@ -129,7 +129,33 @@ pub async fn update_channel(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateChannelRequest>,
 ) -> Result<Json<Channel>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    // P3-3 — le créateur d'un salon temporaire (« rejoindre pour créer ») peut
+    // le renommer, fixer sa limite de places et le verrouiller par mot de
+    // passe, comme un salon temporaire TeamSpeak. Rien d'autre sans MANAGE_CHANNELS.
+    if let Err(e) = require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await {
+        let owner_fields_only = body.topic.is_none() && body.position.is_none()
+            && body.slowmode_delay.is_none() && body.is_nsfw.is_none()
+            && body.is_auto_create.is_none() && body.auto_create_name.is_none()
+            && body.bitrate.is_none() && body.default_sort.is_none() && body.require_tag.is_none();
+        let temp_owner: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM channels
+             WHERE id=$1 AND server_id=$2 AND is_temporary AND created_by_auto=$3)"
+        )
+        .bind(channel_id)
+        .bind(server_id)
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+        if !(temp_owner && owner_fields_only) {
+            return Err(e);
+        }
+    }
+
+    if let Some(Some(limit)) = body.user_limit {
+        if !(0..=99).contains(&limit) {
+            return Err(AppError::BadRequest("Limite de places : 0 à 99".into()));
+        }
+    }
 
     if let Some(ref name) = body.name {
         let trimmed = name.trim();

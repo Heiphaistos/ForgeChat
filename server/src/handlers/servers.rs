@@ -140,10 +140,40 @@ pub async fn get_server(
         .collect();
 
     let forbidden = state.hidden_channels(claims.sub, Some(server_id), None).await?;
+
+    // P1-9 — droit d'écrire de l'utilisateur sur chaque salon, overrides compris
+    // (même calcul que `require_can_post`) : la zone de saisie d'un salon en
+    // lecture seule était active et chaque envoi finissait en 403.
+    let mut overrides: std::collections::HashMap<Uuid, Vec<(Uuid, String, i64, i64)>> = Default::default();
+    for r in sqlx::query(
+        "SELECT cp.channel_id, cp.target_id, cp.target_type, cp.allow, cp.deny
+         FROM channel_permissions cp JOIN channels c ON c.id = cp.channel_id
+         WHERE c.server_id = $1"
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?
+    {
+        overrides.entry(r.get("channel_id")).or_default()
+            .push((r.get("target_id"), r.get("target_type"), r.get("allow"), r.get("deny")));
+    }
+    let my_roles: std::collections::HashSet<Uuid> = my_role_ids.iter().copied().collect();
+    let everyone_role = roles.iter().find(|r| r.is_everyone).map(|r| r.id);
+    let base_perms = roles.iter()
+        .filter(|r| r.is_everyone || my_roles.contains(&r.id))
+        .fold(0i64, |acc, r| acc | r.permissions);
+    let is_owner = server.owner_id == claims.sub;
+
     let channels_json: Vec<serde_json::Value> = channels.iter().filter(|c| !forbidden.contains(&c.id)).map(|c| {
+        let perms = crate::state::apply_channel_overrides(
+            base_perms, is_owner, claims.sub, Some(&my_roles), everyone_role,
+            overrides.get(&c.id).map(Vec::as_slice).unwrap_or(&[]),
+        );
         let mut v = serde_json::to_value(c).unwrap_or_default();
         if let serde_json::Value::Object(ref mut m) = v {
             m.insert("hidden".to_string(), serde_json::json!(hidden_ids.contains(&c.id)));
+            m.insert("can_send".to_string(), serde_json::json!(perms & crate::models::role::Permissions::SEND_MESSAGES != 0));
+            m.insert("has_voice_password".to_string(), serde_json::json!(c.voice_password_hash.is_some()));
         }
         v
     }).collect();
@@ -480,7 +510,12 @@ pub async fn get_members(
     require_member(&state, claims.sub, server_id).await?;
 
     let members = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.status, u.custom_status
+        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.status, u.custom_status,
+                COALESCE((SELECT array_agg(mr.role_id) FROM member_roles mr
+                          WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id),
+                         '{}'::uuid[]) AS role_ids,
+                (SELECT t.expires_at FROM user_timeouts t
+                 WHERE t.server_id = sm.server_id AND t.user_id = sm.user_id AND t.expires_at > NOW()) AS timeout_until
          FROM server_members sm
          JOIN users u ON u.id = sm.user_id
          WHERE sm.server_id=$1
@@ -504,11 +539,65 @@ pub async fn get_members(
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "status": r.get::<String, _>("status"),
                 "custom_status": r.get::<Option<String>, _>("custom_status"),
+                // Hiérarchie : le client n'affiche Expulser / Bannir / Timeout
+                // que sur les membres placés sous le rôle le plus haut du modérateur.
+                "role_ids": r.get::<Vec<Uuid>, _>("role_ids"),
+                "voice_muted": r.get::<bool, _>("voice_muted"),
+                "voice_deafened": r.get::<bool, _>("voice_deafened"),
+                "timeout_until": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("timeout_until"),
             })
         })
         .collect();
 
     Ok(Json(result))
+}
+
+/// GET /servers/:server_id/members/:user_id — fiche d'un membre dans ce
+/// serveur (date d'arrivée, surnom, rôles), pour la carte de profil. Réservée
+/// aux membres du serveur.
+pub async fn get_member(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    require_member(&state, claims.sub, server_id).await?;
+
+    let row = sqlx::query(
+        "SELECT sm.nickname, sm.joined_at, sm.is_owner, sm.voice_muted, sm.voice_deafened,
+                (SELECT expires_at FROM user_timeouts t
+                 WHERE t.server_id = sm.server_id AND t.user_id = sm.user_id AND t.expires_at > NOW()) AS timeout_until
+         FROM server_members sm
+         WHERE sm.server_id = $1 AND sm.user_id = $2"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Membre introuvable".into()))?;
+
+    let roles = sqlx::query_as::<_, crate::models::role::Role>(
+        "SELECT r.* FROM roles r
+         JOIN member_roles mr ON mr.role_id = r.id
+         WHERE mr.server_id = $1 AND mr.user_id = $2 AND NOT r.is_everyone
+         ORDER BY r.position DESC"
+    )
+    .bind(server_id)
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "user_id": user_id,
+        "server_id": server_id,
+        "nickname": row.get::<Option<String>, _>("nickname"),
+        "joined_at": row.get::<chrono::DateTime<chrono::Utc>, _>("joined_at"),
+        "is_owner": row.get::<bool, _>("is_owner"),
+        "voice_muted": row.get::<bool, _>("voice_muted"),
+        "voice_deafened": row.get::<bool, _>("voice_deafened"),
+        "timeout_until": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("timeout_until"),
+        "roles": roles,
+    })))
 }
 
 pub async fn kick_member(

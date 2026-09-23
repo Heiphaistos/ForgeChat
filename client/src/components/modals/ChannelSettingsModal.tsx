@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useAuth } from '../../store/auth'
 
 const SLOWMODE_OPTIONS = [
   { label: 'Désactivé', value: 0 },
@@ -54,6 +55,8 @@ interface Channel {
   user_limit?: number
   is_nsfw: boolean
   has_voice_password?: boolean
+  is_temporary?: boolean
+  created_by_auto?: string | null
   is_auto_create?: boolean
   auto_create_name?: string | null
   bitrate?: number
@@ -289,8 +292,22 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     }
   }, [channel.id, channel.type])
 
+  // P3-3 — créateur d'un salon temporaire : nom, limite de places et
+  // verrou (mot de passe) seulement ; le serveur refuse tout autre champ.
+  const meId = useAuth(s => s.user?.id)
+  const ownsTemp = !!channel.is_temporary && !!meId && channel.created_by_auto === meId
+
   const save = useMutation({
     mutationFn: () => {
+      if (ownsTemp) {
+        const payload: Record<string, unknown> = {
+          name: name.trim() || undefined,
+          user_limit: userLimit > 0 ? userLimit : null,
+        }
+        if (removePassword) payload.remove_voice_password = true
+        else if (voicePassword.trim()) payload.voice_password = voicePassword.trim()
+        return api.patch(`/servers/${serverId}/channels/${channel.id}`, payload)
+      }
       const payload: Record<string, unknown> = {
         name: name.trim() || undefined,
         // Chaîne vide et non `null` : le serveur fait COALESCE et ignorerait `null`.
@@ -492,7 +509,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                       className="w-full accent-fc-accent" />
                   </div>
 
-                  {channel.type !== 'stage' && (
+                  {channel.type !== 'stage' && !ownsTemp && (
                     <div>
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
                         Débit audio — <span className="text-white">{Math.round(bitrate / 1000)} kbps</span>
@@ -508,7 +525,9 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
                   {channel.type === 'voice' && (
                     <div>
-                      <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Mot de passe vocal</label>
+                      <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
+                        {ownsTemp ? 'Verrouiller (mot de passe)' : 'Mot de passe vocal'}
+                      </label>
                       {hasExistingPassword && (
                         <label className="flex items-center gap-2 text-xs text-fc-muted mb-2 cursor-pointer">
                           <input type="checkbox" checked={removePassword} onChange={e => setRemovePassword(e.target.checked)} className="accent-red-400" />
@@ -525,7 +544,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                     </div>
                   )}
 
-                  <div className="p-4 bg-fc-bg/50 rounded-xl border border-fc-hover space-y-3">
+                  {!ownsTemp && <div className="p-4 bg-fc-bg/50 rounded-xl border border-fc-hover space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-white">Canal auto-create</div>
@@ -541,17 +560,17 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                         className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-xs"
                       />
                     )}
-                  </div>
+                  </div>}
                 </>
               )}
 
-              <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-xl border border-fc-hover">
+              {!ownsTemp && <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-xl border border-fc-hover">
                 <div>
                   <div className="text-sm font-medium text-white">Canal NSFW</div>
                   <div className="text-xs text-fc-muted">Contenu réservé aux adultes</div>
                 </div>
                 <Toggle value={isNsfw} onChange={setIsNsfw} />
-              </div>
+              </div>}
             </div>
           )}
 

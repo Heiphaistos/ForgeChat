@@ -53,6 +53,8 @@ export default function PersistentVoiceAudio() {
   const screenVolumes = useVoice(s => s.screenVolumes)
   const deafened = useVoice(s => s.deafened)
   const activePrioritySpeaker = useVoice(s => s.activePrioritySpeaker)
+  // Orateur prioritaire EN TRAIN DE PARLER (détection du SFU), pas seulement micro ouvert.
+  const priorityTalking = useVoice(s => !!s.activePrioritySpeaker && s.sfuSpeakers.includes(s.activePrioritySpeaker))
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elementsRef = useRef(new Set<HTMLAudioElement>())
 
@@ -89,7 +91,7 @@ export default function PersistentVoiceAudio() {
     <>
       <div style={{ display: 'none' }} aria-hidden="true">
         {peers.map(p => {
-          const ducked = activePrioritySpeaker && activePrioritySpeaker !== p.userId ? 0.3 : 1
+          const ducked = priorityTalking && activePrioritySpeaker !== p.userId ? 0.3 : 1
           const micVolume = ((userVolumes[p.userId] ?? 100) / 100) * ducked
           const screenVolume = (screenVolumes[p.userId] ?? 100) / 100
           return (

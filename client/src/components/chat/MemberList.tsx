@@ -7,8 +7,8 @@ import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
-import { confirm } from '../ui/ConfirmModal'
-import { useAuth } from '../../store/auth'
+import UserPopup from '../UserPopup'
+import { useMemberModeration } from './MemberModeration'
 
 interface Props {
   serverId: string
@@ -31,7 +31,7 @@ const STATUS_LABELS: Record<string, string> = {
   invisible: 'Invisible',
 }
 
-function MemberRow({ m, onContextMenu, onLongPress }: { m: any; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
+function MemberRow({ m, onClick, onContextMenu, onLongPress }: { m: any; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
   const statusLabel = STATUS_LABELS[m.liveStatus] ?? 'Hors ligne'
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   return (
@@ -39,6 +39,7 @@ function MemberRow({ m, onContextMenu, onLongPress }: { m: any; onContextMenu: (
       role="listitem"
       aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? ' (propriétaire)' : ''}`}
       className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover group cursor-pointer transition"
+      onClick={onClick}
       onContextMenu={onContextMenu}
       onTouchStart={e => {
         const { clientX, clientY } = e.touches[0]
@@ -99,13 +100,10 @@ export default function MemberList({ serverId, onClose }: Props) {
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const ctxMenu = useContextMenu()
   const nav = useNavigate()
-  const me = useAuth(s => s.user)
-
-  const meAsMember = useMemo(
-    () => (members as any[]).find((m: any) => m.user_id === me?.id),
-    [members, me?.id]
-  )
-  const canManageMembers = meAsMember?.is_owner === true
+  // Expulser / Bannir / Timeout / Notes / vocal selon les permissions réelles
+  // et la hiérarchie (avant : « Expulser » réservé au seul propriétaire).
+  const moderation = useMemberModeration(serverId)
+  const [popup, setPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
 
   const { online, offline } = useMemo(() => {
     const withStatus = (members as any[]).map((m: any) => ({
@@ -149,13 +147,7 @@ export default function MemberList({ serverId, onClose }: Props) {
     }},
     { separator: true as const },
     { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
-    ...(canManageMembers && me?.id !== m.user_id ? [
-      { separator: true as const },
-      { label: 'Expulser', danger: true as const, onClick: async () => {
-        if (await confirm({ message: `Expulser ${m.nickname ?? m.username} ?`, danger: true, confirmLabel: 'Expulser' }))
-          api.post(`/servers/${serverId}/members/${m.user_id}/kick`)
-      }},
-    ] : []),
+    ...moderation.itemsFor(m.user_id),
   ]
 
   const [search, setSearch] = useState('')
@@ -199,7 +191,7 @@ export default function MemberList({ serverId, onClose }: Props) {
           </div>
           <div role="list">
             {filteredOnline.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
+              <MemberRow key={m.user_id} m={m} onClick={e => setPopup({ userId: m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
@@ -211,7 +203,7 @@ export default function MemberList({ serverId, onClose }: Props) {
           </div>
           <div role="list">
             {filteredOffline.map((m: any) => (
-              <MemberRow key={m.user_id} m={m} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
+              <MemberRow key={m.user_id} m={m} onClick={e => setPopup({ userId: m.user_id, x: e.clientX - 280, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(m))} />
             ))}
           </div>
         </div>
@@ -220,6 +212,10 @@ export default function MemberList({ serverId, onClose }: Props) {
         <p className="text-xs text-fc-muted px-2 py-4 text-center">Aucun membre trouvé</p>
       )}
       {ctxMenu.node}
+      {moderation.node}
+      {popup && (
+        <UserPopup userId={popup.userId} serverId={serverId} anchorX={popup.x} anchorY={popup.y} onClose={() => setPopup(null)} />
+      )}
     </div>
   )
 }

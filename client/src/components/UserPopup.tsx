@@ -45,12 +45,14 @@ const STATUS_LABEL: Record<string, string> = {
 
 interface Props {
   userId: string
+  /** Serveur courant : ajoute surnom, date d'arrivée et rôles du membre. */
+  serverId?: string
   anchorX: number
   anchorY: number
   onClose: () => void
 }
 
-export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) {
+export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -66,6 +68,13 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
     queryKey: ['profile', userId],
     queryFn: () => api.get(`/users/${userId}/profile`).then(r => r.data),
     enabled: !!userId,
+    staleTime: 30_000,
+  })
+
+  const { data: member } = useQuery({
+    queryKey: ['member', serverId, userId],
+    queryFn: () => api.get(`/servers/${serverId}/members/${userId}`).then(r => r.data),
+    enabled: !!serverId && !!userId,
     staleTime: 30_000,
   })
 
@@ -147,7 +156,8 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
       <div className="pt-8 px-4 pb-4">
         {user ? (
           <>
-            <div className="font-bold text-white text-base">{user.username}</div>
+            <div className="font-bold text-white text-base">{member?.nickname ?? user.username}</div>
+            {member?.nickname && <div className="text-xs text-fc-muted">{user.username}</div>}
             <div className="text-xs text-fc-muted mb-1">#{user.discriminator}</div>
             <div className="text-xs text-fc-muted mb-3">
               {STATUS_LABEL[user.status] ?? 'Hors ligne'}
@@ -185,6 +195,27 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
               <Calendar size={12} />
               Membre depuis {format(new Date(user.created_at), 'MMM yyyy', { locale: fr })}
             </div>
+
+            {member && (
+              <div className="mb-4 -mt-2 space-y-2">
+                <div className="text-xs text-fc-muted">
+                  Sur ce serveur depuis le {format(new Date(member.joined_at), 'd MMM yyyy', { locale: fr })}
+                </div>
+                {(member.roles ?? []).length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Rôles</div>
+                    <div className="flex flex-wrap gap-1">
+                      {member.roles.map((r: any) => (
+                        <span key={r.id} className="flex items-center gap-1 text-[11px] text-fc-text bg-fc-channel rounded px-1.5 py-0.5">
+                          <span className="w-2 h-2 rounded-full" style={{ background: r.color ? `#${Number(r.color).toString(16).padStart(6, '0')}` : '#99aab5' }} />
+                          {r.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="border-t border-fc-hover pt-3 flex flex-col gap-2">
               <button

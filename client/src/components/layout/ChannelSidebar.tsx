@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Radio, ChevronRight,
-  Mic, MicOff, Monitor, Clock, Lock, PlusCircle, Timer,
+  Mic, MicOff, VolumeX, Monitor, Clock, Lock, PlusCircle, Timer,
   Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
@@ -29,6 +29,10 @@ import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
+import { useMemberModeration } from '../chat/MemberModeration'
+
+/** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
+const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
 
 // Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
 const PRESENCE_COLOR: Record<string, string> = {
@@ -286,6 +290,20 @@ export default function ChannelSidebar() {
   const chLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const roomParticipants = useVoice(s => s.roomParticipants)
+  // Modération vocale (P2-2) : menu contextuel sur un participant et
+  // glisser-déposer vers un autre salon vocal (MOVE_MEMBERS).
+  const moderation = useMemberModeration(serverId)
+  const [voiceDropTarget, setVoiceDropTarget] = useState<string | null>(null)
+  const isVoiceMemberDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(VOICE_MEMBER_MIME)
+  const dropVoiceMember = (e: React.DragEvent, channelId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setVoiceDropTarget(null)
+    const userId = e.dataTransfer.getData(VOICE_MEMBER_MIME)
+    if (!userId || !serverId || (roomParticipants[channelId] ?? []).some(p => p.userId === userId)) return
+    api.patch(`/servers/${serverId}/members/${userId}/voice`, { channel_id: channelId })
+      .catch((err: any) => toast.error(err?.response?.data?.error ?? 'Déplacement refusé'))
+  }
   const activeStreams = useVoice(s => s.activeStreams)
   const voiceChannelId = useVoice(s => s.channelId)
   const voiceJoin = useVoice(s => s.join)
@@ -848,10 +866,21 @@ export default function ChannelSidebar() {
         key={ch.id}
         draggable={isOwnerOrAdmin}
         onDragStart={isOwnerOrAdmin ? e => handleChannelDragStart(e, ch.id) : undefined}
-        onDragOver={isOwnerOrAdmin ? e => handleChannelDragOver(e, ch.id) : undefined}
-        onDrop={isOwnerOrAdmin ? e => handleChannelDrop(e, ch.id, groupChannels, categoryKey) : undefined}
+        onDragOver={e => {
+          if (isVoiceMemberDrag(e)) {
+            if (!isVoiceCh || ch.is_auto_create || ch.type === 'stage') return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            setVoiceDropTarget(ch.id)
+          } else if (isOwnerOrAdmin) handleChannelDragOver(e, ch.id)
+        }}
+        onDragLeave={() => { if (voiceDropTarget === ch.id) setVoiceDropTarget(null) }}
+        onDrop={e => {
+          if (isVoiceMemberDrag(e)) dropVoiceMember(e, ch.id)
+          else if (isOwnerOrAdmin) handleChannelDrop(e, ch.id, groupChannels, categoryKey)
+        }}
         onDragEnd={isOwnerOrAdmin ? handleChannelDragEnd : undefined}
-        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
+        className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${voiceDropTarget === ch.id ? 'ring-1 ring-fc-accent rounded' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
         onContextMenu={e => {
           const channelMuted = isChannelMuted(ch.id)
           ctxMenu.open(e, [
@@ -1036,14 +1065,31 @@ export default function ChannelSidebar() {
         {isVoiceCh && participants.length > 0 && (
           <div className="ml-5 mb-0.5 space-y-0.5">
             {participants.map(p => (
-              <div key={p.userId} className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80">
+              <div
+                key={p.userId}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80 hover:bg-fc-hover/40"
+                draggable={moderation.canMove}
+                onDragStart={moderation.canMove ? e => {
+                  e.stopPropagation()
+                  e.dataTransfer.setData(VOICE_MEMBER_MIME, p.userId)
+                  e.dataTransfer.effectAllowed = 'move'
+                } : undefined}
+                onContextMenu={e => {
+                  const items = moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))
+                  if (items.length === 0) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  ctxMenu.open(e, items)
+                }}
+              >
                 <div className="w-5 h-5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white">
                   {p.avatar
                     ? <img src={mediaUrl(p.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : p.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-[11px] truncate flex-1">{p.username}</span>
-                {p.muted && <MicOff size={9} className="text-red-400 flex-shrink-0" />}
+                {p.serverDeafened && <VolumeX size={9} className="text-red-500 flex-shrink-0" aria-label="Sourdine imposée par un modérateur" />}
+                {p.muted && <MicOff size={9} className={`${p.serverMuted ? 'text-red-500' : 'text-red-400'} flex-shrink-0`} aria-label={p.serverMuted ? 'Rendu muet par un modérateur' : 'Micro coupé'} />}
                 {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
                 {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
               </div>
@@ -1348,6 +1394,7 @@ export default function ChannelSidebar() {
         />
       )}
       {ctxMenu.node}
+      {moderation.node}
     </>
   )
 }

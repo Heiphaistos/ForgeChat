@@ -28,6 +28,23 @@ pub struct User {
     #[sqlx(default)]
     pub totp_enabled: bool,
     pub pronouns: Option<String>,
+    /// Statut choisi (online/idle/dnd/invisible) ; `status` est le statut en direct.
+    #[sqlx(default)]
+    #[serde(skip_serializing, default)]
+    pub preferred_status: String,
+}
+
+impl User {
+    /// Fiche de l'utilisateur lui-même : il voit le statut qu'il a CHOISI
+    /// (« invisible », « ne pas déranger »), pas celui que voient les autres.
+    pub fn into_self_public(self) -> UserPublic {
+        let preferred = self.preferred_status.clone();
+        let mut public = UserPublic::from(self);
+        if !preferred.is_empty() {
+            public.status = preferred;
+        }
+        public
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

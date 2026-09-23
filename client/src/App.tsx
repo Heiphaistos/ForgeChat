@@ -302,7 +302,8 @@ function AppInner() {
   useEffect(() => {
     const offUpdate = on('PRESENCE_UPDATE', (d: any) => {
       if (d.user_id && d.status) setStatus(d.user_id, d.status)
-      if (d.user_id) setActivityGlobal(d.user_id, {
+      // Un changement de statut personnalisé ne porte pas l'activité : ne pas l'effacer.
+      if (d.user_id && 'activity_type' in d) setActivityGlobal(d.user_id, {
         activity_type: d.activity_type,
         activity_name: d.activity_name,
         activity_detail: d.activity_detail,
@@ -428,35 +429,28 @@ function AppInner() {
     return () => { offJoin(); offLeave(); offMsg() }
   }, [user?.id, user?.focus_mode, isChannelMuted, isServerMuted, getChannelNotifLevel, playJoin, playLeave, playMessage, playMention])
 
-  // Statut "Absent" automatique après 10 min d'inactivité — uniquement si le
-  // statut est "online" (ne jamais écraser un dnd/invisible choisi manuellement) ;
-  // retour "online" à la première activité seulement si c'est l'auto-idle qui l'a mis
-  const autoIdleRef = useRef(false)
+  // Absence automatique : chaque onglet/appareil signale son inactivité au
+  // serveur (10 min sans activité), qui n'affiche « Absent » que si TOUTES les
+  // sessions sont inactives. Le statut choisi (dnd, invisible) n'est jamais
+  // modifié : avant, un onglet oublié passait tout le compte en « absent ».
   useEffect(() => {
     if (!user) return
     const IDLE_AFTER = 10 * 60_000
     let timer: ReturnType<typeof setTimeout> | undefined
-    const goIdle = () => {
-      if (useAuth.getState().user?.status !== 'online') return
-      autoIdleRef.current = true
-      api.patch('/users/me', { status: 'idle' })
-        .then(() => useAuth.getState().updateMe({ status: 'idle' }))
-        .catch(() => { autoIdleRef.current = false })
+    let idle = false
+    const report = (next: boolean) => {
+      if (idle === next) return
+      idle = next
+      useWs.getState().send({ type: 'PRESENCE_IDLE', idle: next })
     }
-    const arm = () => { clearTimeout(timer); timer = setTimeout(goIdle, IDLE_AFTER) }
-    const onActivity = () => {
-      if (autoIdleRef.current && useAuth.getState().user?.status === 'idle') {
-        autoIdleRef.current = false
-        api.patch('/users/me', { status: 'online' })
-          .then(() => useAuth.getState().updateMe({ status: 'online' }))
-          .catch(() => {})
-      }
-      arm()
-    }
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => report(true), IDLE_AFTER) }
+    const onActivity = () => { report(false); arm() }
+    // Nouvelle connexion WS = nouvelle session côté serveur, réputée active.
+    const offOpen = useWs.getState().onOpen(() => { idle = false; arm() })
     const events: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'mousedown', 'touchstart']
     events.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }))
     arm()
-    return () => { clearTimeout(timer); events.forEach(ev => window.removeEventListener(ev, onActivity)) }
+    return () => { clearTimeout(timer); offOpen(); events.forEach(ev => window.removeEventListener(ev, onActivity)) }
   }, [user?.id])
 
   // Demander permission notifications au login

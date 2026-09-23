@@ -8,7 +8,7 @@ import NativeVideo from './NativeVideo'
 export function PeerTile({
   peer, stream, muted = false, isLocal = false, speaking = false,
   handRaised = false, blurEnabled = false, onExpand, onVolume, onPopOut, connectionLost = false, compact = false,
-  videoUrl = null,
+  videoUrl = null, onContextMenu,
 }: {
   peer: { username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
@@ -18,6 +18,8 @@ export function PeerTile({
   compact?: boolean
   /** Application Linux : flux vidéo local (WebSocket) à la place d'un MediaStream. */
   videoUrl?: string | null
+  /** Menu de modération vocale sur le participant. */
+  onContextMenu?: (e: React.MouseEvent) => void
 }) {
   const hasStream = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
   const hasVideo = peer.videoEnabled && (hasStream || !!videoUrl)
@@ -38,7 +40,7 @@ export function PeerTile({
     // Remplit son conteneur : c'est la disposition qui fixe la taille. L'ancien
     // aspect-video forçait une hauteur plus grande que la ligne de grille, et la
     // tuile suivante recouvrait le bas (nom et contrôles) de la précédente.
-    <div className={`relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center transition-all
+    <div onContextMenu={onContextMenu} className={`relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
       {hasVideo && !hasStream && videoUrl ? (

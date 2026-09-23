@@ -70,6 +70,13 @@ pub struct AppState {
     pub voice_sessions: Arc<RwLock<HashMap<Uuid, Uuid>>>,
     // N1 : canaux temporaires fraîchement créés (channel_id → instant de création)
     pub temp_channels_created: Arc<RwLock<HashMap<Uuid, Instant>>>,
+    // Présence (P1-3) : sessions WS inactives par utilisateur. L'utilisateur
+    // n'apparaît « absent » que si TOUTES ses sessions le sont.
+    pub idle_sessions: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
+    // Modération vocale (P2-2) : membre déplacé par un modérateur → salon cible
+    // et instant. Son VOICE_JOIN suivant vers ce salon passe outre mot de passe
+    // et limite de places, comme un déplacement Discord / TeamSpeak.
+    pub voice_move_grants: Arc<RwLock<HashMap<Uuid, (Uuid, Instant)>>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
     /// Serveur média (SFU). `None` = vocal indisponible (variables LIVEKIT_* absentes).
@@ -103,6 +110,8 @@ impl AppState {
             voice_hand_raises: Arc::new(RwLock::new(HashMap::new())),
             voice_sessions: Arc::new(RwLock::new(HashMap::new())),
             temp_channels_created: Arc::new(RwLock::new(HashMap::new())),
+            idle_sessions: Arc::new(RwLock::new(HashMap::new())),
+            voice_move_grants: Arc::new(RwLock::new(HashMap::new())),
             http_client,
             livekit: crate::livekit::LiveKitConfig::from_env(),
         };
