@@ -176,7 +176,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
     peers, localStream, localScreenStream, muted, deafened, videoEnabled, screenSharing,
-    localVideoUrl, localScreenUrl, nativeSpeakers,
+    localVideoUrl, localScreenUrl, nativeSpeakers, autoWatchStreams, watchStream,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
     roomParticipants, notice, clearNotice,
@@ -346,7 +346,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   type Tile = { key: string; kind: 'camera' | 'screen'; peer: typeof allPeers[number]; stream: MediaStream | null; url?: string | null }
   const allTiles: Tile[] = allPeers.flatMap(p => {
     const tiles: Tile[] = [{ key: `${p.userId}-cam`, kind: 'camera', peer: p, stream: p.stream, url: p.videoUrl }]
-    if (p.screenStream || p.screenUrl) tiles.push({ key: `${p.userId}-screen`, kind: 'screen', peer: p, stream: p.screenStream, url: p.screenUrl })
+    // Stream à la demande : la tuile existe dès que la personne partage, même non regardée.
+    if (p.screenStream || p.screenUrl || (p.screenSharing && !p.isLocal)) tiles.push({ key: `${p.userId}-screen`, kind: 'screen', peer: p, stream: p.screenStream, url: p.screenUrl })
     return tiles
   })
 
@@ -379,9 +380,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const renderTile = (t: StageTile, o: RenderOpts) => {
     const p = peerById.get(t.userId)
     if (!p) return null
-    if (t.kind === 'screen' && (t.stream || t.url)) {
+    if (t.kind === 'screen') {
       return (
         <ScreenTile stream={t.stream} url={t.url} label={p.username} compact={o.compact}
+          onWatch={p.isLocal ? undefined : () => watchStream(p.userId, true)}
+          onStopWatching={p.isLocal || autoWatchStreams || !t.stream ? undefined : () => watchStream(p.userId, false)}
           onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
           onPopOut={() => detach(p.userId, 'screen', p.username, t.url)}
           onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${p.username}` }) : undefined} />

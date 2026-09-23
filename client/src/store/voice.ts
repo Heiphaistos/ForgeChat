@@ -9,7 +9,7 @@ import {
   type NoiseEngine, type ProcessedAudio,
 } from '../lib/audio'
 import {
-  addPeer, removePeer, connectMedia, disconnectMedia,
+  addPeer, removePeer, connectMedia, disconnectMedia, watchStream as sfuWatchStream, getAutoWatch, setAutoWatch as sfuSetAutoWatch,
   setLocalStream, replaceMicTrack, applyMicEnabled, addCameraTrack, removeCameraTrack,
   startScreenTracks, stopScreenTracks, clearLocalMedia, getLocalStream, getRawMicTrack,
   getMicTrack, refreshAllSenderQuality, setWhisper, warn,
@@ -89,6 +89,9 @@ interface VoiceStore {
   localVideoUrl: string | null
   localScreenUrl: string | null
   nativeSpeakers: string[]
+  /** Streams regardés à la demande (identifiants), quand la lecture auto est coupée. */
+  watchedStreams: string[]
+  autoWatchStreams: boolean
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
   leave(): void
@@ -111,6 +114,8 @@ interface VoiceStore {
   setVideoInput(deviceId: string): Promise<void>
   applyQualityPrefs(): Promise<void>
   setWhisperTargets(targets: string[] | null): void
+  watchStream(userId: string, on: boolean): void
+  setAutoWatchStreams(on: boolean): void
 }
 
 // ── État non réactif ─────────────────────────────────────────────────────────
@@ -254,6 +259,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
     localVideoUrl: null,
     localScreenUrl: null,
     nativeSpeakers: [],
+    watchedStreams: [],
+    autoWatchStreams: getAutoWatch(),
 
     // ── Listeners globaux (sidebar, badges LIVE) ─────────────────────────────
     initGlobalListeners: () => {
@@ -579,7 +586,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
       set({
         joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
-        localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [],
+        localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
         localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
         videoEnabled: false, screenSharing: false, error: null, notice: null,
         pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
@@ -809,6 +816,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
     applyQualityPrefs: async () => {
       await refreshAllSenderQuality()
+    },
+
+    // ── Stream à la demande ─────────────────────────────────────────────────
+    watchStream: (userId, on) => sfuWatchStream(userId, on),
+    setAutoWatchStreams: (on) => {
+      sfuSetAutoWatch(on)
+      set({ autoWatchStreams: on })
     },
 
     // ── Whisper ─────────────────────────────────────────────────────────────

@@ -133,6 +133,27 @@ pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, p
     })
 }
 
+/// Authentifie un webhook LiveKit : l'en-tête `Authorization` porte un JWT
+/// HS256 signé avec le secret d'API, dont la revendication `sha256` est
+/// l'empreinte SHA-256 (base64) du corps exact reçu.
+pub fn verify_webhook(cfg: &LiveKitConfig, authorization: &str, body: &[u8]) -> bool {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    let token = authorization.trim().trim_start_matches("Bearer ").trim();
+    let mut v = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+    v.set_issuer(&[cfg.api_key.as_str()]);
+    v.set_required_spec_claims(&["iss"]);
+    let Ok(data) = jsonwebtoken::decode::<serde_json::Value>(
+        token,
+        &jsonwebtoken::DecodingKey::from_secret(cfg.api_secret.as_bytes()),
+        &v,
+    ) else {
+        return false;
+    };
+    let expected = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(body));
+    data.claims["sha256"].as_str() == Some(expected.as_str())
+}
+
 /// Retire un participant du SFU (sortie, éjection, perte de permission).
 /// Sans cela, un client exclu côté ForgeChat resterait connecté au média.
 pub async fn remove_participant(http: &reqwest::Client, cfg: &LiveKitConfig, room: &str, identity: &str) {
@@ -203,6 +224,33 @@ mod tests {
         assert_eq!(c["video"]["canPublish"], true);
         assert_eq!(c["video"]["canPublishSources"], serde_json::json!(["microphone", "camera"]));
         assert!(c["video"].get("roomAdmin").is_none());
+    }
+
+    fn signe_webhook(body: &[u8], secret: &str, iss: &str) -> String {
+        use base64::Engine;
+        use sha2::{Digest, Sha256};
+        let claims = serde_json::json!({
+            "iss": iss,
+            "exp": now() + 60,
+            "sha256": base64::engine::general_purpose::STANDARD.encode(Sha256::digest(body)),
+        });
+        jsonwebtoken::encode(&jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256), &claims,
+            &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes())).unwrap()
+    }
+
+    #[test]
+    fn un_webhook_n_est_accepte_que_signe_et_intact() {
+        let c = cfg();
+        let body = br#"{"event":"participant_left"}"#;
+        let ok = signe_webhook(body, &c.api_secret, &c.api_key);
+        assert!(verify_webhook(&c, &ok, body));
+        assert!(verify_webhook(&c, &format!("Bearer {ok}"), body));
+        // corps modifié d'un octet
+        assert!(!verify_webhook(&c, &ok, br#"{"event":"participant_lefT"}"#));
+        // mauvais secret, mauvais émetteur, jeton absent
+        assert!(!verify_webhook(&c, &signe_webhook(body, "autre-secret-assez-long-pour-hs256", &c.api_key), body));
+        assert!(!verify_webhook(&c, &signe_webhook(body, &c.api_secret, "APIautre"), body));
+        assert!(!verify_webhook(&c, "", body));
     }
 
     #[test]

@@ -207,6 +207,39 @@ export function addPeer(userId: string, info: Partial<VoicePeer>, ctx: MeshCtx) 
   applyWhisper()
 }
 
+// ── Stream à la demande ──────────────────────────────────────────────────────
+// Un partage d'écran n'est téléchargé que si on le regarde (comme Discord) :
+// un spectateur passif ne consomme plus 4 Mb/s par stream affiché nulle part.
+const WATCH_KEY = 'fc_auto_watch'
+const _watched = new Set<string>()
+
+export function getAutoWatch(): boolean {
+  return localStorage.getItem(WATCH_KEY) !== 'false'
+}
+
+export function setAutoWatch(on: boolean) {
+  try { localStorage.setItem(WATCH_KEY, on ? 'true' : 'false') } catch { /* mode privé */ }
+}
+
+const isScreenSource = (s: Track.Source) => s === Track.Source.ScreenShare || s === Track.Source.ScreenShareAudio
+
+/** Décide de l'abonnement d'une piste distante. */
+function applySubscription(pub: RemoteTrackPublication, identity: string) {
+  const want = !isScreenSource(pub.source) || getAutoWatch() || _watched.has(identity)
+  if (pub.isSubscribed !== want) pub.setSubscribed(want)
+}
+
+/** Regarder (ou arrêter de regarder) le partage d'écran d'un participant. */
+export function watchStream(userId: string, on: boolean) {
+  if (on) _watched.add(userId)
+  else _watched.delete(userId)
+  const p = _room?.remoteParticipants.get(userId)
+  p?.trackPublications.forEach(pub => {
+    if (isScreenSource(pub.source)) pub.setSubscribed(on)
+  })
+  _ctx?.set((s: any) => ({ watchedStreams: [..._watched] }))
+}
+
 export function removePeer(userId: string, ctx: MeshCtx) {
   ctx.set((s: any) => ({ peers: s.peers.filter((p: VoicePeer) => p.userId !== userId) }))
 }
@@ -285,6 +318,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
   ctx.set({ mediaStatus: 'connecting' })
 
   room
+    .on(RoomEvent.TrackPublished, (pub, p) => applySubscription(pub, p.identity))
     .on(RoomEvent.TrackSubscribed, (_t, _pub, p) => rebuildPeer(p))
     .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => rebuildPeer(p))
     .on(RoomEvent.TrackMuted, (_pub, p) => { if (p !== room.localParticipant) rebuildPeer(p as RemoteParticipant) })
@@ -308,7 +342,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
     })
 
   try {
-    await room.connect(url, token, { autoSubscribe: true, rtcConfig: await getIceConfig() })
+    await room.connect(url, token, { autoSubscribe: false, rtcConfig: await getIceConfig() })
   } catch (e) {
     warn('connexion au serveur média', e)
     report('connect_failed', { error: String(e) })
@@ -322,7 +356,10 @@ export async function connectMedia(url: string, token: string, roomName: string,
 
   ctx.set({ mediaStatus: 'connected' })
   report('connected')
-  room.remoteParticipants.forEach(p => rebuildPeer(p))
+  room.remoteParticipants.forEach(p => {
+    p.trackPublications.forEach(pub => applySubscription(pub, p.identity))
+    rebuildPeer(p)
+  })
 
   try {
     if (_micTrack) {
@@ -348,6 +385,7 @@ export async function disconnectMedia() {
   _room = null
   _roomName = null
   _micPub = _camPub = _screenPub = _screenAudioPub = null
+  _watched.clear()
   expose()
   if (room) await room.disconnect(true).catch(e => warn('déconnexion SFU', e))
   _ctx?.set({ mediaStatus: 'idle', mediaQuality: null })

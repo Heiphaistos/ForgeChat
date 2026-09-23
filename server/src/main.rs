@@ -228,6 +228,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook))
         // Webhook GitHub entrant (sans JWT — push/PR/issues)
         .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook))
+        // Événements du SFU (sans JWT — signés par LiveKit, vérifiés dans le handler)
+        .route("/api/livekit/webhook", post(handlers::voice::livekit_webhook))
         // Routes protégées
         .nest("/api", protected_routes(state.clone()))
         // Fichiers uploadés — avec en-têtes de sécurité pour éviter le sniffing de type MIME

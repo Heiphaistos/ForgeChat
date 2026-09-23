@@ -40,7 +40,6 @@ let _lastAck = 0
 // Un signal WebRTC périmé est pire qu'aucun signal : on jette ce qui a dépassé
 // sa fenêtre utile au lieu de le rejouer à la reconnexion.
 const MAX_AGE: Record<string, number> = {
-  VOICE_SIGNAL: 3_000,
   VOICE_STATE: 10_000,
   TYPING_START: 3_000,
 }

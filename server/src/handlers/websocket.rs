@@ -347,7 +347,7 @@ async fn broadcast_presence(state: &AppState, user_id: Uuid, status: &str) {
 
 /// Sortie du vocal. `session` = la session WS qui part (`None` = VOICE_LEAVE
 /// explicite d'une session dont on vérifie déjà la propriété en amont).
-async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Option<Uuid>) {
+pub(crate) async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Option<Uuid>) {
     // N5 — ne rien faire si ce n'est pas la session qui détient le vocal.
     if let Some(sid) = session {
         let owner = state.voice_sessions.read().await.get(&user_id).copied();
@@ -1180,49 +1180,9 @@ async fn handle_ws_message(
             }
         }
 
-        Some("VOICE_SIGNAL") => {
-            let Some(to) = msg["to"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
-                tracing::warn!(user_id = %user_id, "VOICE_SIGNAL rejeté : destinataire absent ou invalide");
-                return;
-            };
-            // N9 — 100 signaux par 10 s et par paire émetteur→destinataire.
-            // Généreux : une négociation complète (offer + answer + ICE) en
-            // consomme une dizaine.
-            if !rate_ok(state, format!("rl:vsig:{}:{}", user_id, to), 100, 10).await {
-                tracing::warn!(user_id = %user_id, to = %to, "VOICE_SIGNAL rejeté : rate limit");
-                return;
-            }
-            // Autoriser si canal DM commun OU les deux utilisateurs sont dans le même canal vocal
-            let same_voice_channel = {
-                let uv = state.user_voice.read().await;
-                match (uv.get(&user_id), uv.get(&to)) {
-                    (Some(a), Some(b)) => a == b,
-                    _ => false,
-                }
-            };
-            let authorized = if same_voice_channel {
-                true
-            } else {
-                sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM dm_channels
-                        WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1)
-                    )"
-                )
-                .bind(user_id).bind(to)
-                .fetch_one(&state.db).await.unwrap_or(false)
-            };
-            if !authorized {
-                tracing::warn!(user_id = %user_id, to = %to, "VOICE_SIGNAL rejeté : ni canal vocal commun ni DM commun");
-                return;
-            }
-            let signal = serde_json::json!({
-                "type": "VOICE_SIGNAL",
-                "from": user_id,
-                "payload": msg["payload"],
-            });
-            state.broadcast_to_user(to, signal.to_string()).await;
-        }
+        // VOICE_SIGNAL (négociation pair-à-pair) supprimé : tout le média passe par
+        // le SFU LiveKit depuis la 3.251.0. Un client antérieur l'envoyant encore
+        // tombe dans le cas « type inconnu », sans effet.
 
         // ────────── Canal Scène (Stage) ──────────
         // État en mémoire (state.stage_speakers / state.stage_hand_raises), même

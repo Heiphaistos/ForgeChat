@@ -1,4 +1,4 @@
-use axum::{extract::State, Extension, Json};
+use axum::{extract::State, http::{HeaderMap, StatusCode}, Extension, Json};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
@@ -184,4 +184,61 @@ pub async fn post_voice_telemetry(
     }
     tracing::info!(target: "voice_telemetry", user_id = %claims.sub, stats = %payload, "voice telemetry");
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Délai laissé à un participant sorti du SFU pour y revenir (reconnexion
+/// complète du SDK, changement de réseau) avant d'effacer sa présence.
+const SFU_GRACE_S: u64 = 20;
+
+fn sfu_absents() -> &'static std::sync::Mutex<std::collections::HashMap<(Uuid, Uuid), u64>> {
+    static M: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<(Uuid, Uuid), u64>>> = std::sync::OnceLock::new();
+    M.get_or_init(Default::default)
+}
+
+/// POST /api/livekit/webhook — événements du SFU (sans JWT ForgeChat : signé par LiveKit).
+///
+/// Présence fantôme : un onglet figé ou une coupure du média peut laisser un
+/// utilisateur « dans le salon » côté ForgeChat alors qu'il n'est plus sur le
+/// SFU (ni son ni image, mais toujours affiché). S'il n'y est pas revenu au bout
+/// de `SFU_GRACE_S`, on le retire du salon comme une sortie normale.
+pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, body: bytes::Bytes) -> StatusCode {
+    let Some(lk) = state.livekit.clone() else { return StatusCode::NOT_FOUND };
+    let auth = headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).unwrap_or("");
+    if !crate::livekit::verify_webhook(&lk, auth, &body) {
+        tracing::warn!("webhook LiveKit refusé : signature invalide");
+        return StatusCode::UNAUTHORIZED;
+    }
+    let Ok(ev) = serde_json::from_slice::<serde_json::Value>(&body) else { return StatusCode::BAD_REQUEST };
+    let room = ev["room"]["name"].as_str().unwrap_or("");
+    let (Some(channel_id), Some(user_id)) = (
+        room.strip_prefix("voice-").and_then(|c| c.parse::<Uuid>().ok()),
+        ev["participant"]["identity"].as_str().and_then(|u| u.parse::<Uuid>().ok()),
+    ) else {
+        return StatusCode::OK; // appels privés et événements de salle : rien à faire
+    };
+    let key = (user_id, channel_id);
+    match ev["event"].as_str() {
+        Some("participant_joined") => {
+            sfu_absents().lock().unwrap().remove(&key);
+        }
+        Some("participant_left") => {
+            let marker = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
+            sfu_absents().lock().unwrap().insert(key, marker);
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(SFU_GRACE_S)).await;
+                let still_absent = sfu_absents().lock().unwrap().get(&key) == Some(&marker);
+                if !still_absent {
+                    return;
+                }
+                sfu_absents().lock().unwrap().remove(&key);
+                let in_room = state.user_voice.read().await.get(&user_id) == Some(&channel_id);
+                if in_room {
+                    tracing::warn!(user_id = %user_id, channel_id = %channel_id, "présence fantôme retirée : absent du SFU depuis {SFU_GRACE_S} s");
+                    crate::handlers::websocket::cleanup_voice(&state, user_id, None).await;
+                }
+            });
+        }
+        _ => {}
+    }
+    StatusCode::OK
 }

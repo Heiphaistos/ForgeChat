@@ -17,6 +17,8 @@ export default function VideoSection() {
   const [screenHeight, setScreenHeight] = useState(() => localStorage.getItem('fc_screen_height') ?? '1080')
   const [screenFps, setScreenFps] = useState(() => localStorage.getItem('fc_screen_fps') ?? '30')
   const [screenBitrate, setScreenBitrate] = useState(() => localStorage.getItem('fc_screen_bitrate') ?? '4000000')
+  const autoWatchStreams = useVoice(s => s.autoWatchStreams)
+  const setAutoWatchStreams = useVoice(s => s.setAutoWatchStreams)
   const [screenHint, setScreenHint] = useState(() => localStorage.getItem('fc_screen_hint') ?? 'motion')
 
   const savePref = (key: string, value: string, setter: (v: string) => void) => {
@@ -245,6 +247,13 @@ export default function VideoSection() {
         <p className="text-xs text-fc-muted mt-1 flex items-center gap-1">
           <Monitor size={12} /> Le son du partage n'est transmis que pour un onglet ou l'écran entier — une fenêtre seule ne peut pas partager son audio.
         </p>
+      </Field>
+      <Field label="Streams des autres">
+        <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" checked={autoWatchStreams} onChange={e => setAutoWatchStreams(e.target.checked)} className="accent-fc-accent" />
+          Regarder automatiquement les streams
+        </label>
+        <p className="text-xs text-fc-muted mt-1">Désactivé, un stream n'est téléchargé qu'après un clic sur « Regarder » : utile sur une connexion lente ou avec plusieurs streams à la fois.</p>
       </Field>
     </div>
   )

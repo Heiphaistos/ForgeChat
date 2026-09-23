@@ -1,6 +1,6 @@
 // Tuiles d'appel : caméra (ou avatar) d'un participant, et écran partagé.
 // Elles remplissent leur conteneur ; la taille est décidée par CallStage.
-import { MicOff, Monitor, Volume2, Maximize2, ExternalLink } from 'lucide-react'
+import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import NativeVideo from './NativeVideo'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
@@ -97,9 +97,25 @@ export function PeerTile({
 }
 
 // ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
-export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPopOut, compact = false }: {
-  stream: MediaStream | null; url?: string | null; label: string; onExpand?: () => void; onVolume?: () => void; onPopOut?: () => void; compact?: boolean
+export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPopOut, onWatch, onStopWatching, compact = false }: {
+  stream: MediaStream | null; url?: string | null; label: string; onExpand?: () => void; onVolume?: () => void; onPopOut?: () => void
+  /** Stream non regardé : afficher le bouton « Regarder ». */
+  onWatch?: () => void
+  onStopWatching?: () => void
+  compact?: boolean
 }) {
+  if (!stream && !url && onWatch) {
+    return (
+      <div className="relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gradient-to-br from-gray-900 to-black flex flex-col items-center justify-center gap-2 ring-1 ring-fc-red/40">
+        <span className="px-2 py-0.5 rounded bg-fc-red text-white text-[10px] font-bold tracking-wide">LIVE</span>
+        <span className={`${compact ? 'text-[10px]' : 'text-sm'} text-white/80 truncate max-w-[90%]`}>Écran de {label}</span>
+        <button onClick={e => { e.stopPropagation(); onWatch() }}
+          className={`flex items-center gap-1.5 rounded-lg bg-fc-accent hover:bg-fc-accent/80 text-white font-medium ${compact ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-sm'}`}>
+          <Eye size={compact ? 11 : 14} aria-hidden /> Regarder
+        </button>
+      </div>
+    )
+  }
   const attachStream = (el: HTMLVideoElement | null) => {
     if (el && stream && el.srcObject !== stream) el.srcObject = stream
   }
@@ -119,6 +135,11 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
           {onVolume && (
             <button onClick={onVolume} aria-label={`Volume du partage de ${label}`} title="Volume du partage" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Volume2 size={11} aria-hidden />
+            </button>
+          )}
+          {onStopWatching && (
+            <button onClick={onStopWatching} aria-label={`Arrêter de regarder l'écran de ${label}`} title="Arrêter de regarder" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <EyeOff size={11} aria-hidden />
             </button>
           )}
           {onPopOut && (

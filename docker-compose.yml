@@ -74,16 +74,38 @@ services:
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
     image: livekit/livekit-server:v1.13.7
-    command: --config /etc/livekit.yaml
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       NODE_IP: ${LIVEKIT_NODE_IP:?LIVEKIT_NODE_IP requis (IP publique du VPS)}
+      # Configuration complète ici plutôt que dans un fichier : LiveKit ne lit
+      # qu'UNE source (fichier OU LIVEKIT_CONFIG), et le webhook doit nommer la
+      # clé d'API, qui vient de .env. Aucun secret dans ce texte.
+      LIVEKIT_CONFIG: |
+        port: 7880
+        logging:
+          level: info
+        rtc:
+          # Un seul port UDP multiplexé, dans la plage que le pare-feu IONOS
+          # laisse passer (49152-65535, mesuré : 7882 est bloqué). coturn est
+          # borné à 65000 pour ne jamais le prendre.
+          udp_port: 65100
+          # Repli ICE/TCP quand l'UDP est filtré chez le client.
+          tcp_port: 7881
+          use_external_ip: false
+          congestion_control:
+            enabled: true
+            allow_pause: true
+        room:
+          empty_timeout: 60
+          departure_timeout: 20
+        webhook:
+          api_key: ${LIVEKIT_API_KEY}
+          urls:
+            - http://server:8080/api/livekit/webhook
     ports:
       - "127.0.0.1:7880:7880"
       - "7881:7881"
       - "65100:65100/udp"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
     restart: unless-stopped
 
 volumes:
