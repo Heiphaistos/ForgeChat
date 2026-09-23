@@ -413,19 +413,19 @@ pub async fn get_dm_messages(
         let mut before_rows = sqlx::query(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
-             WHERE dm.dm_channel_id=$1 AND dm.created_at < $2
-             ORDER BY dm.created_at DESC LIMIT $3"
+             WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) < ($2, $4)
+             ORDER BY dm.created_at DESC, dm.id DESC LIMIT $3"
         )
-        .bind(dm_id).bind(ts).bind(half)
+        .bind(dm_id).bind(ts).bind(half).bind(around_id)
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
-             WHERE dm.dm_channel_id=$1 AND dm.created_at >= $2
-             ORDER BY dm.created_at ASC LIMIT $3"
+             WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) >= ($2, $4)
+             ORDER BY dm.created_at ASC, dm.id ASC LIMIT $3"
         )
-        .bind(dm_id).bind(ts).bind(limit - half + 1)
+        .bind(dm_id).bind(ts).bind(limit - half + 1).bind(around_id)
         .fetch_all(&state.db).await?;
 
         before_rows.reverse();
@@ -436,8 +436,8 @@ pub async fn get_dm_messages(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
-               AND dm.created_at < (SELECT created_at FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
-             ORDER BY dm.created_at DESC LIMIT $2"
+               AND (dm.created_at, dm.id) < (SELECT created_at, id FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
+             ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2"
         )
         .bind(dm_id)
         .bind(limit)
@@ -449,7 +449,7 @@ pub async fn get_dm_messages(
             "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
-             ORDER BY dm.created_at DESC LIMIT $2"
+             ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2"
         )
         .bind(dm_id)
         .bind(limit)
@@ -2118,7 +2118,7 @@ pub async fn search_dm_messages(
         "SELECT dm.id, dm.content, dm.created_at, u.username as author_username, u.avatar as author_avatar
          FROM dm_messages dm
          JOIN users u ON u.id = dm.sender_id
-         WHERE dm.dm_channel_id = $1 AND LOWER(dm.content) LIKE $2
+         WHERE dm.dm_channel_id = $1 AND dm.content ILIKE $2
          ORDER BY dm.created_at DESC LIMIT 50"
     )
     .bind(dm_id)

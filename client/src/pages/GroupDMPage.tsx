@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
+import { useGroupCall } from '../store/groupCall'
+import GroupCallPanel from '../components/voice/GroupCallPanel'
+import GroupMembersPanel from '../components/chat/GroupMembersPanel'
 import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import api, { mediaUrl } from '../api/client'
-import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin, Share2 } from 'lucide-react'
+import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin, Share2, Phone, Video } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -66,6 +69,7 @@ interface GroupDM {
   name: string
   owner_id: string
   members: GDMMember[]
+  call_participants?: string[]
 }
 
 export default function GroupDMPage() {
@@ -123,6 +127,12 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/dms/groups/${groupId}`).then(r => r.data),
     enabled: !!groupId,
   })
+  // Appel de groupe : participants connus au chargement, puis mis à jour par GROUP_CALL_UPDATE.
+  const joinGroupCall = useGroupCall(s => s.join)
+  const setCallActive = useGroupCall(s => s.setActive)
+  useEffect(() => {
+    if (group) setCallActive(group.id, group.call_participants ?? [])
+  }, [group, setCallActive])
 
   useEffect(() => {
     if (!group?.name) return
@@ -293,6 +303,9 @@ export default function GroupDMPage() {
       if (d.user_id === user?.id) { navigate('/'); return }
       queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
     })
+    const offOwner = on('GROUP_DM_OWNER_UPDATE', (d: any) => {
+      if (d.group_id === groupId) queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
+    })
     const offRename = on('GROUP_DM_RENAME', (d: any) => {
       if (d.group_id !== groupId) return
       queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
@@ -334,7 +347,7 @@ export default function GroupDMPage() {
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename(); offPin() }
+    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename(); offOwner(); offPin() }
   }, [groupId, on, user?.id])
 
   // Tracker si l'utilisateur est en bas du scroll
@@ -532,6 +545,22 @@ export default function GroupDMPage() {
             <p className="text-xs text-fc-muted">{group.members.length} membres</p>
           </div>
           <button
+            onClick={() => void joinGroupCall(group.id, 'voice')}
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
+            title="Appel vocal de groupe"
+            aria-label="Lancer ou rejoindre l'appel vocal du groupe"
+          >
+            <Phone size={18} />
+          </button>
+          <button
+            onClick={() => void joinGroupCall(group.id, 'video')}
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
+            title="Appel vidéo de groupe"
+            aria-label="Lancer ou rejoindre l'appel vidéo du groupe"
+          >
+            <Video size={18} />
+          </button>
+          <button
             onClick={() => setShowSearch(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted'}`}
             title="Rechercher"
@@ -568,6 +597,8 @@ export default function GroupDMPage() {
             <Users size={18} />
           </button>
         </div>
+
+        <GroupCallPanel groupId={group.id} members={group.members} />
 
         {/* Panneau de recherche */}
         {showSearch && (
@@ -680,7 +711,10 @@ export default function GroupDMPage() {
               <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowLeaveConfirm(false)}>
                 <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                   <h3 className="text-lg font-bold text-white mb-2">Quitter le groupe</h3>
-                  <p className="text-sm text-fc-muted mb-5">Tu ne pourras plus accéder aux messages de ce groupe sans y être réinvité.</p>
+                  <p className="text-sm text-fc-muted mb-5">
+                    Tu ne pourras plus accéder aux messages de ce groupe sans y être réinvité.
+                    {group.owner_id === user?.id && group.members.length > 1 && " La propriété passera au membre le plus ancien : pour choisir, cède-la d'abord depuis la liste des membres."}
+                  </p>
                   <div className="flex gap-3 justify-end">
                     <button onClick={() => setShowLeaveConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
                     <button onClick={() => { leaveGroup.mutate(); setShowLeaveConfirm(false) }} disabled={leaveGroup.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Quitter</button>
@@ -1136,29 +1170,7 @@ export default function GroupDMPage() {
 
       {/* Panneau membres */}
       {showMembers && (
-        <div className="absolute right-0 inset-y-0 z-20 w-full md:relative md:inset-auto md:z-auto md:w-56 border-l border-fc-hover bg-fc-bg/20 flex-shrink-0 overflow-y-auto overscroll-contain py-3 panel-slide-right">
-          <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-3 mb-2">
-            Membres ({group.members.length})
-          </p>
-          {group.members.map(m => (
-            <div key={m.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-fc-hover/40 transition">
-              <div className="relative flex-shrink-0">
-                <div className="w-7 h-7 rounded-full bg-fc-channel flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                  {m.avatar
-                    ? <img src={mediaUrl(m.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                    : m.username.charAt(0).toUpperCase()
-                  }
-                </div>
-                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-fc-bg ${
-                  m.status === 'online' ? 'bg-green-400' : m.status === 'idle' ? 'bg-yellow-400' : m.status === 'dnd' ? 'bg-red-500' : 'bg-gray-500'
-                }`} />
-              </div>
-              <span className={`text-sm truncate ${m.id === user?.id ? 'text-fc-accent font-medium' : 'text-fc-text'}`}>
-                {m.username}{m.id === user?.id ? ' (moi)' : ''}
-              </span>
-            </div>
-          ))}
-        </div>
+        <GroupMembersPanel groupId={group.id} ownerId={group.owner_id} members={group.members} meId={user?.id} />
       )}
 
       {/* Modale confirmation suppression */}

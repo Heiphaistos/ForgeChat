@@ -34,6 +34,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; Icon: React.
   ROLE_UPDATE:    { label: 'Rôle modifié',     color: 'text-purple-400', Icon: Crown },
   MESSAGE_DELETE: { label: 'Message supprimé', color: 'text-orange-400', Icon: MessageSquareX },
   SERVER_UPDATE:  { label: 'Serveur modifié',  color: 'text-green-400',  Icon: Settings },
+  OWNER_TRANSFER: { label: 'Propriété transférée', color: 'text-red-400', Icon: Crown },
   // legacy lowercase
   member_join:    { label: 'Membre rejoint',   color: 'text-green-400',  Icon: UserPlus },
   member_leave:   { label: 'Membre parti',     color: 'text-fc-muted',   Icon: UserMinus },
@@ -61,6 +62,7 @@ const ACTION_OPTIONS = [
   { value: 'ROLE_UPDATE',    label: 'Modifications de rôle' },
   { value: 'MESSAGE_DELETE', label: 'Suppressions de messages' },
   { value: 'SERVER_UPDATE',  label: 'Modifications serveur' },
+  { value: 'OWNER_TRANSFER', label: 'Transferts de propriété' },
 ]
 
 const PAGE_SIZE = 50
@@ -90,6 +92,7 @@ function buildDetails(entry: AuditEntry): string {
   if (act === 'ROLE_UPDATE'  || act === 'role_update')  return `a modifié un rôle`
   if (act === 'MESSAGE_DELETE' || act === 'message_delete') return `a supprimé un message`
   if (act === 'SERVER_UPDATE' || act === 'server_update') return `a modifié le serveur`
+  if (act === 'OWNER_TRANSFER') return `a transféré la propriété du serveur`
   if (act === 'MEMBER_JOIN'  || act === 'member_join')  return `a rejoint le serveur`
   if (act === 'MEMBER_LEAVE' || act === 'member_leave') return `a quitté le serveur`
   if (act === 'MEMBER_UNBAN' || act === 'member_unban') return `a débanni un membre`

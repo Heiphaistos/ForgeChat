@@ -177,6 +177,7 @@ pub async fn get_group_dm(
         "owner_id": group.get::<Uuid, _>("owner_id"),
         "created_at": group.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "members": members_json,
+        "call_participants": crate::handlers::group_calls::participants(&state, group_id).await,
     })))
 }
 
@@ -219,10 +220,10 @@ pub async fn get_group_messages(
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
-             WHERE m.dm_id=$1 AND m.created_at < $2
-             ORDER BY m.created_at DESC LIMIT $3"
+             WHERE m.dm_id=$1 AND (m.created_at, m.id) < ($2, $4)
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $3"
         )
-        .bind(group_id).bind(ts).bind(half)
+        .bind(group_id).bind(ts).bind(half).bind(around_id)
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
@@ -233,10 +234,10 @@ pub async fn get_group_messages(
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
-             WHERE m.dm_id=$1 AND m.created_at >= $2
-             ORDER BY m.created_at ASC LIMIT $3"
+             WHERE m.dm_id=$1 AND (m.created_at, m.id) >= ($2, $4)
+             ORDER BY m.created_at ASC, m.id ASC LIMIT $3"
         )
-        .bind(group_id).bind(ts).bind(limit - half + 1)
+        .bind(group_id).bind(ts).bind(limit - half + 1).bind(around_id)
         .fetch_all(&state.db).await?;
 
         before_rows.reverse();
@@ -252,8 +253,8 @@ pub async fn get_group_messages(
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
-               AND m.created_at < (SELECT created_at FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
-             ORDER BY m.created_at DESC LIMIT $2"
+               AND (m.created_at, m.id) < (SELECT created_at, id FROM group_dm_messages WHERE id=$3 AND dm_id=$1)
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $2"
         )
         .bind(group_id).bind(limit).bind(before_id)
         .fetch_all(&state.db).await?
@@ -267,7 +268,7 @@ pub async fn get_group_messages(
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
              LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.dm_id = $1
-             ORDER BY m.created_at DESC LIMIT $2"
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $2"
         )
         .bind(group_id).bind(limit)
         .fetch_all(&state.db).await?
@@ -651,7 +652,7 @@ pub async fn search_group_dm_messages(
                 u.username as author_username, u.avatar as author_avatar
          FROM group_dm_messages gdm
          JOIN users u ON u.id = gdm.sender_id
-         WHERE gdm.dm_id = $1 AND LOWER(gdm.content) LIKE $2
+         WHERE gdm.dm_id = $1 AND gdm.content ILIKE $2
          ORDER BY gdm.created_at DESC LIMIT 50"
     )
     .bind(group_id).bind(&pattern)
@@ -791,6 +792,7 @@ pub async fn leave_group_dm(
 
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
         .bind(group_id).bind(claims.sub).execute(&state.db).await?;
+    crate::handlers::group_calls::leave(&state, group_id, claims.sub).await;
 
     // Notifier les membres restants
     let remaining: Vec<Uuid> = sqlx::query_scalar(
@@ -808,18 +810,20 @@ pub async fn leave_group_dm(
         // owner_id continuait de pointer vers quelqu'un absent de group_dm_members et que
         // rien ne peut plus jamais satisfaire ce check. Transfert au membre restant le plus
         // ancien (group_dm_members.joined_at), pas de nouvelle colonne nécessaire.
+        let mut new_owner: Option<Uuid> = None;
         if was_owner {
-            let _ = sqlx::query(
+            new_owner = sqlx::query_scalar(
                 "UPDATE group_dm_channels SET owner_id = (
                     SELECT user_id FROM group_dm_members WHERE dm_id=$1 ORDER BY joined_at ASC LIMIT 1
-                 ) WHERE id=$1"
-            ).bind(group_id).execute(&state.db).await;
+                 ) WHERE id=$1 RETURNING owner_id"
+            ).bind(group_id).fetch_optional(&state.db).await.ok().flatten();
         }
 
         let event = serde_json::json!({
             "type": "GROUP_DM_MEMBER_LEAVE",
             "group_id": group_id,
             "user_id": claims.sub,
+            "new_owner_id": new_owner,
         }).to_string();
         for uid in remaining {
             state.broadcast_to_user(uid, event.clone()).await;
@@ -902,6 +906,8 @@ pub async fn remove_group_dm_member(
 
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
         .bind(group_id).bind(target_id).execute(&state.db).await?;
+    // L'exclu perd aussi l'accès à l'appel de groupe en cours.
+    crate::handlers::group_calls::leave(&state, group_id, target_id).await;
 
     let remaining: Vec<Uuid> = sqlx::query_scalar(
         "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
@@ -917,6 +923,38 @@ pub async fn remove_group_dm_member(
         state.broadcast_to_user(*uid, event.clone()).await;
     }
 
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// PATCH /dms/groups/:group_id/owner { user_id } : le propriétaire cède le groupe
+/// à un autre membre (à faire avant de partir pour choisir son successeur).
+pub async fn transfer_group_dm_owner(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(group_id): Path<Uuid>,
+    Json(body): Json<AddGroupDmMemberInput>,
+) -> Result<Json<serde_json::Value>> {
+    if body.user_id == claims.sub {
+        return Err(AppError::BadRequest("Vous êtes déjà propriétaire".into()));
+    }
+    // Une seule requête : propriétaire actuel ET cible membre du groupe.
+    let moved = sqlx::query(
+        "UPDATE group_dm_channels SET owner_id=$3 WHERE id=$1 AND owner_id=$2
+           AND EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$3)"
+    ).bind(group_id).bind(claims.sub).bind(body.user_id).execute(&state.db).await?;
+    if moved.rows_affected() != 1 { return Err(AppError::Forbidden); }
+
+    let all_members: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+    let event = serde_json::json!({
+        "type": "GROUP_DM_OWNER_UPDATE",
+        "group_id": group_id,
+        "owner_id": body.user_id,
+    }).to_string();
+    for uid in all_members {
+        state.broadcast_to_user(uid, event.clone()).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

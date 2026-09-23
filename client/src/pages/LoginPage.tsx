@@ -138,9 +138,9 @@ export default function LoginPage() {
             </p>
             <p className="text-fc-muted text-xs text-center mt-2">
               Mot de passe oublié ?{' '}
-              <a href="mailto:admin@heiphaistos.org" className="text-fc-accent hover:underline">
-                Contacter l'administrateur
-              </a>
+              <Link to="/forgot-password" className="text-fc-accent hover:underline">
+                Réinitialiser
+              </Link>
             </p>
             {!isTauri && (
               <p className="text-center mt-3">

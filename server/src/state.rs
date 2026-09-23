@@ -73,6 +73,8 @@ pub struct AppState {
     pub voice_sessions: Arc<RwLock<HashMap<Uuid, Uuid>>>,
     // N1 : canaux temporaires fraîchement créés (channel_id → instant de création)
     pub temp_channels_created: Arc<RwLock<HashMap<Uuid, Instant>>>,
+    // Appels de groupe privé en cours : group_id → {user_id}
+    pub group_calls: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
     /// Serveur média (SFU). `None` = vocal indisponible (variables LIVEKIT_* absentes).
@@ -106,6 +108,7 @@ impl AppState {
             voice_hand_raises: Arc::new(RwLock::new(HashMap::new())),
             voice_sessions: Arc::new(RwLock::new(HashMap::new())),
             temp_channels_created: Arc::new(RwLock::new(HashMap::new())),
+            group_calls: Arc::new(RwLock::new(HashMap::new())),
             http_client,
             livekit: crate::livekit::LiveKitConfig::from_env(),
         };

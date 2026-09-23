@@ -1,12 +1,21 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
+import { messageLink } from '../../utils/searchLink'
+
+const FILTER_HELP = [
+  ['from:pseudo', 'messages de cet auteur'],
+  ['in:salon', 'dans ce salon, groupe ou DM (en recherche partout)'],
+  ['has:fichier | image | lien', 'avec pièce jointe, image ou lien'],
+  ['before:2026-01-31', 'avant cette date'],
+  ['after:2026-01-01', 'après cette date'],
+]
 
 interface Props {
   serverId: string
@@ -19,6 +28,8 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   useEscapePanel(onClose)
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
+  // Portée : ce salon/DM, ou partout (salons visibles, DM et groupes).
+  const [everywhere, setEverywhere] = useState(false)
   // Navigation clavier dans les résultats (↑/↓ depuis le champ, Entrée pour ouvrir)
   const [selIdx, setSelIdx] = useState(-1)
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
@@ -26,25 +37,27 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   const nav = useNavigate()
   const { formatShortDate } = useFormatDate()
 
-  const jumpToMessage = (msgId: string) => {
-    if (serverId) {
-      nav(`/servers/${serverId}/channels/${channelId}?highlight=${msgId}`)
-    } else {
-      nav(`/dms/${channelId}?highlight=${msgId}`)
-    }
+  const jumpToMessage = (msg: any) => {
+    nav(messageLink(msg))
     onClose()
   }
 
-  const searchUrl = serverId
-    ? `/servers/${serverId}/channels/${channelId}/messages/search`
-    : `/dms/${channelId}/messages/search`
-
-  const { data: results = [], isFetching } = useQuery({
-    queryKey: ['search_messages', channelId, search],
-    queryFn: () =>
-      api.get(`${searchUrl}?q=${encodeURIComponent(search)}`).then(r => r.data),
+  // Recherche paginée par curseur, filtres analysés par le serveur.
+  const { data, isFetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['search_messages', everywhere ? 'all' : channelId, search],
+    queryFn: ({ pageParam }) => api.get('/search', {
+      params: {
+        q: search,
+        cursor: pageParam || undefined,
+        ...(everywhere ? {} : serverId ? { channel_id: channelId } : { dm_id: channelId }),
+      },
+    }).then(r => r.data as { messages: any[]; next_cursor: string | null }),
+    initialPageParam: '',
+    getNextPageParam: last => last.next_cursor ?? undefined,
     enabled: search.trim().length >= 2,
   })
+  const results = useMemo(() => data?.pages.flatMap(p => p.messages) ?? [], [data])
+  const highlightText = useMemo(() => search.split(/\s+/).filter(w => !/^[a-z]+:\S+/i.test(w)).join(' '), [search])
 
   // Réinitialiser la sélection à chaque nouvelle liste de résultats
   useEffect(() => { setSelIdx(-1) }, [results])
@@ -55,7 +68,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
   }, [selIdx])
 
   const handleSearch = () => {
-    if (query.trim().length >= 2) setSearch(query.trim())
+    if (query.trim().length >= 2) setSearch(query.trim().replace(/\s+/g, ' '))
   }
 
   return (
@@ -89,7 +102,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
                 e.preventDefault()
                 setSelIdx(i => Math.max(i - 1, -1))
               } else if (e.key === 'Enter') {
-                if (selIdx >= 0 && results[selIdx]) jumpToMessage(results[selIdx].id)
+                if (selIdx >= 0 && results[selIdx]) jumpToMessage(results[selIdx])
                 else handleSearch()
               } else if (e.key === 'Escape') onClose()
             }}
@@ -110,14 +123,18 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
             <Search size={14} aria-hidden />
           </button>
         </div>
+        <label className="flex items-center gap-1.5 mt-2 text-xs text-fc-muted cursor-pointer select-none">
+          <input type="checkbox" checked={everywhere} onChange={e => setEverywhere(e.target.checked)} className="accent-fc-accent" />
+          Chercher partout (salons, messages privés, groupes)
+        </label>
         {search && (
           <div className="flex items-center gap-1 mt-1.5 text-xs text-fc-muted">
             <Hash size={10} aria-hidden />
-            <span>{channelName}</span>
+            <span>{everywhere ? 'Partout' : channelName}</span>
             {isFetching && <Loader2 size={10} className="ml-auto animate-spin" aria-hidden />}
             {!isFetching && (
               <span aria-live="polite" aria-atomic="true" className="ml-auto">
-                {results.length} résultat(s)
+                {results.length}{hasNextPage ? '+' : ''} résultat(s)
               </span>
             )}
           </div>
@@ -129,7 +146,12 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
           <div className="text-center py-8">
             <Search size={28} className="mx-auto mb-2 text-fc-muted opacity-40" aria-hidden />
             <p className="text-sm text-fc-muted">Tapez votre recherche</p>
-            <p className="text-xs text-fc-muted mt-1 opacity-70">Minimum 2 caractères</p>
+            <p className="text-xs text-fc-muted mt-1 opacity-70">Minimum 2 caractères, ou un filtre</p>
+            <ul className="mt-4 text-left text-xs text-fc-muted space-y-1" aria-label="Filtres disponibles">
+              {FILTER_HELP.map(([k, d]) => (
+                <li key={k}><code className="text-fc-text bg-fc-bg px-1 rounded">{k}</code> {d}</li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -149,11 +171,11 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
                 role="option"
                 aria-selected={idx === selIdx}
                 tabIndex={0}
-                onClick={() => jumpToMessage(msg.id)}
+                onClick={() => jumpToMessage(msg)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    jumpToMessage(msg.id)
+                    jumpToMessage(msg)
                   }
                 }}
                 aria-label={`Message de ${msg.author_username}`}
@@ -169,16 +191,23 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
                       </div>
                   }
                   <span className="text-xs font-semibold text-white">{msg.author_username}</span>
+                  {everywhere && <span className="text-[10px] text-fc-muted truncate">{msg.kind === 'channel' ? '#' : ''}{msg.channel_name}</span>}
                   <span className="text-xs text-fc-muted ml-auto">
                     {formatShortDate(msg.created_at)}
                   </span>
                 </div>
                 <p className="text-xs text-fc-text leading-relaxed">
-                  {highlightQuery(stripMarkdown(msg.content ?? ''), search)}
+                  {highlightQuery(stripMarkdown(msg.content ?? ''), highlightText)}
                 </p>
               </div>
             ))}
           </div>
+        )}
+        {hasNextPage && (
+          <button onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}
+            className="w-full py-2 text-xs text-fc-accent hover:text-white hover:bg-fc-hover rounded transition disabled:opacity-50">
+            {isFetchingNextPage ? 'Chargement…' : 'Charger plus'}
+          </button>
         )}
       </div>
     </div>

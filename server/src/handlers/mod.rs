@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod password_reset;
 pub mod users;
 pub mod servers;
 pub mod channels;
@@ -9,6 +10,7 @@ pub mod uploads;
 pub mod websocket;
 pub mod friends;
 pub mod group_dms;
+pub mod group_calls;
 pub mod threads;
 pub mod forum;
 pub mod reads;

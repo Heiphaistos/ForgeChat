@@ -35,7 +35,7 @@ api.interceptors.response.use(
   async err => {
     const url: string = err.config?.url ?? ''
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
-    const publicPaths = ['/', '/login', '/register', '/verify-email']
+    const publicPaths = ['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password']
     const onPublicPage = typeof window !== 'undefined' && publicPaths.includes(window.location.pathname)
 
     // Garde anti-boucle : si la requête déjà rejouée après un refresh échoue ENCORE en

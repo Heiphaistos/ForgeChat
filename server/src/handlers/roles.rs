@@ -334,3 +334,128 @@ pub async fn remove_role(
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+/// PATCH /servers/:server_id/roles/order { role_ids: [haut → bas] }
+/// Liste complète des rôles hors @everyone. Hors propriétaire, les rôles au niveau
+/// du rôle le plus haut de l'acteur ou au-dessus doivent rester en tête : il ne
+/// réordonne que ceux qui sont sous lui (ils gardent leur ordre relatif, même à égalité).
+/// Positions renumérotées de façon contiguë, @everyone toujours en 0.
+pub async fn reorder_roles(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    let ids: Vec<Uuid> = body["role_ids"]
+        .as_array()
+        .ok_or_else(|| AppError::BadRequest("role_ids requis".into()))?
+        .iter()
+        .filter_map(|v| v.as_str().and_then(|s| Uuid::parse_str(s).ok()))
+        .collect();
+
+    let current: Vec<(Uuid, i32)> = sqlx::query_as(
+        "SELECT id, position FROM roles WHERE server_id=$1 AND NOT is_everyone",
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+    let mut sorted_ids = ids.clone();
+    sorted_ids.sort();
+    sorted_ids.dedup();
+    let mut current_ids: Vec<Uuid> = current.iter().map(|(id, _)| *id).collect();
+    current_ids.sort();
+    if sorted_ids.len() != ids.len() || sorted_ids != current_ids {
+        return Err(AppError::BadRequest("La liste doit contenir chaque rôle du serveur une fois".into()));
+    }
+
+    let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2)")
+        .bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    let top = if is_owner { i32::MAX } else {
+        crate::handlers::servers::top_role_position(&state, claims.sub, server_id).await?
+    };
+    // Rôles intouchables (>= rôle le plus haut de l'acteur) : ils doivent occuper la tête de liste.
+    let locked: std::collections::HashMap<Uuid, i32> =
+        current.iter().filter(|(_, p)| *p >= top).cloned().collect();
+    if ids[..locked.len()].iter().any(|id| !locked.contains_key(id)) {
+        return Err(AppError::BadRequest("Vous ne pouvez déplacer que des rôles sous votre rôle le plus haut".into()));
+    }
+    let movable = &ids[locked.len()..];
+    let n = movable.len() as i32;
+    // Rôles libres : n..1 dans l'ordre demandé. Rôles verrouillés : décalés en bloc
+    // au-dessus, ce qui conserve exactement leur ordre et leurs égalités.
+    let shift = locked.values().min().map(|m| n + 1 - m).unwrap_or(0);
+
+    let mut tx = state.db.begin().await?;
+    for (i, id) in movable.iter().enumerate() {
+        sqlx::query("UPDATE roles SET position=$1 WHERE id=$2 AND server_id=$3")
+            .bind(n - i as i32).bind(id).bind(server_id)
+            .execute(&mut *tx).await?;
+    }
+    if shift != 0 {
+        for (id, _) in &locked {
+            sqlx::query("UPDATE roles SET position = position + $1 WHERE id=$2 AND server_id=$3")
+                .bind(shift).bind(id).bind(server_id)
+                .execute(&mut *tx).await?;
+        }
+    }
+    sqlx::query("UPDATE roles SET position=0 WHERE server_id=$1 AND is_everyone")
+        .bind(server_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+
+    log_event(&state, server_id, "ROLE_UPDATE", Some(claims.sub), None, None, None,
+        Some(serde_json::json!({ "reordered": true }))).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "ROLE_UPDATE", "server_id": server_id, "reordered": true,
+    }).to_string()).await;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// POST /servers/:server_id/transfer { user_id, password }
+/// Réservé au propriétaire, mot de passe exigé (comme Discord exige la 2FA) ;
+/// la cible doit être un membre humain du serveur.
+pub async fn transfer_ownership(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    crate::handlers::servers::require_owner(&state, claims.sub, server_id).await?;
+    let target = body["user_id"].as_str().and_then(|s| Uuid::parse_str(s).ok())
+        .ok_or_else(|| AppError::BadRequest("user_id requis".into()))?;
+    if target == claims.sub {
+        return Err(AppError::BadRequest("Vous êtes déjà propriétaire".into()));
+    }
+    let password = body["password"].as_str().unwrap_or("");
+    let pw_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id=$1")
+        .bind(claims.sub).fetch_one(&state.db).await?;
+    if !bcrypt::verify(password, &pw_hash).unwrap_or(false) {
+        return Err(AppError::BadRequest("Mot de passe incorrect".into()));
+    }
+    let target_name: Option<String> = sqlx::query_scalar(
+        "SELECT u.username FROM server_members sm JOIN users u ON u.id = sm.user_id
+         WHERE sm.server_id=$1 AND sm.user_id=$2 AND NOT u.is_bot",
+    )
+    .bind(server_id).bind(target).fetch_optional(&state.db).await?;
+    let target_name = target_name.ok_or_else(|| AppError::BadRequest("Ce membre ne peut pas recevoir le serveur".into()))?;
+
+    let mut tx = state.db.begin().await?;
+    // Garde sur owner_id : deux transferts concurrents ne peuvent pas réussir tous les deux.
+    let moved = sqlx::query("UPDATE servers SET owner_id=$1 WHERE id=$2 AND owner_id=$3")
+        .bind(target).bind(server_id).bind(claims.sub)
+        .execute(&mut *tx).await?;
+    if moved.rows_affected() != 1 {
+        return Err(AppError::Forbidden);
+    }
+    sqlx::query("UPDATE server_members SET is_owner = (user_id = $1) WHERE server_id=$2 AND user_id IN ($1, $3)")
+        .bind(target).bind(server_id).bind(claims.sub)
+        .execute(&mut *tx).await?;
+    tx.commit().await?;
+
+    log_event(&state, server_id, "OWNER_TRANSFER", Some(claims.sub), None,
+        Some(target), Some(target_name.as_str()), None).await;
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "SERVER_UPDATE", "server_id": server_id, "owner_id": target,
+    }).to_string()).await;
+    Ok(Json(serde_json::json!({ "ok": true, "owner_id": target })))
+}

@@ -10,6 +10,8 @@ import { useUnread } from '../store/unread'
 import { stripMarkdown } from '../utils/mdShortcuts'
 import toast from 'react-hot-toast'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
+import { messageLink } from '../utils/searchLink'
+
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -142,7 +144,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       items.push({
         id: `msg-${msg.id}`, category: 'Messages', label: preview, sublabel: `par @${msg.author_username}`,
         icon: <MessageCircle size={14} className="text-fc-muted" />,
-        action: () => navigate(`/servers/${msg.server_id}/channels/${msg.channel_id}?highlight=${msg.id}`),
+        action: () => navigate(messageLink(msg)),
       })
     }
   }

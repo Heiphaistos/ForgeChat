@@ -51,11 +51,11 @@ pub async fn get_messages(
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1 AND m.created_at < $2
+             WHERE m.channel_id=$1 AND (m.created_at, m.id) < ($2, $4)
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
-             ORDER BY m.created_at DESC LIMIT $3"
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $3"
         )
-        .bind(channel_id).bind(ts).bind(half)
+        .bind(channel_id).bind(ts).bind(half).bind(around_id)
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
@@ -65,11 +65,11 @@ pub async fn get_messages(
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1 AND m.created_at >= $2
+             WHERE m.channel_id=$1 AND (m.created_at, m.id) >= ($2, $4)
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
-             ORDER BY m.created_at ASC LIMIT $3"
+             ORDER BY m.created_at ASC, m.id ASC LIMIT $3"
         )
-        .bind(channel_id).bind(ts).bind(limit - half + 1)
+        .bind(channel_id).bind(ts).bind(limit - half + 1).bind(around_id)
         .fetch_all(&state.db).await?;
 
         // Combine: before (reversed to ASC) + after (target first)
@@ -93,11 +93,11 @@ pub async fn get_messages(
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
-             WHERE m.channel_id=$1 AND m.created_at < $2
+             WHERE m.channel_id=$1 AND (m.created_at, m.id) < ($2, $4)
              AND (m.expires_at IS NULL OR m.expires_at > NOW())
-             ORDER BY m.created_at DESC LIMIT $3"
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $3"
         )
-        .bind(channel_id).bind(ts).bind(limit)
+        .bind(channel_id).bind(ts).bind(limit).bind(before)
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
@@ -108,7 +108,7 @@ pub async fn get_messages(
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
              LEFT JOIN users ru ON ru.id = rm.user_id
              WHERE m.channel_id=$1 AND (m.expires_at IS NULL OR m.expires_at > NOW())
-             ORDER BY m.created_at DESC LIMIT $2"
+             ORDER BY m.created_at DESC, m.id DESC LIMIT $2"
         )
         .bind(channel_id).bind(limit)
         .fetch_all(&state.db).await?
@@ -708,7 +708,7 @@ pub async fn search_messages(
          JOIN users u ON u.id = m.user_id
          LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
          LEFT JOIN users ru ON ru.id = rm.user_id
-         WHERE m.channel_id=$1 AND LOWER(m.content) LIKE $2
+         WHERE m.channel_id=$1 AND m.content ILIKE $2
          ORDER BY m.created_at DESC LIMIT 50"
     )
     .bind(channel_id)

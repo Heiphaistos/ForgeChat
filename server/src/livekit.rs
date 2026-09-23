@@ -106,6 +106,11 @@ pub fn room_for_dm(a: uuid::Uuid, b: uuid::Uuid) -> String {
     format!("dm-{x}-{y}")
 }
 
+/// Salle de l'appel d'un groupe privé.
+pub fn room_for_group(group_id: uuid::Uuid) -> String {
+    format!("gdm-{group_id}")
+}
+
 /// Jeton de participation à une salle.
 pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, publish: Publish) -> Option<String> {
     let mut sources = Vec::new();

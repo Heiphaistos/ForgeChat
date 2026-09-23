@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import { useAuth } from './store/auth'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
+import { useGroupCall } from './store/groupCall'
+import { GroupCallRinger } from './components/voice/GroupCallPanel'
 import { usePresence } from './store/presence'
 import { useUnread } from './store/unread'
 import { useVoice } from './store/voice'
@@ -37,6 +39,7 @@ const LandingPage = lazy(() => import('./pages/LandingPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
+const PasswordResetPage = lazy(() => import('./pages/PasswordResetPage'))
 const InvitePage = lazy(() => import('./pages/InvitePage'))
 const FriendInvitePage = lazy(() => import('./pages/FriendInvitePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -89,6 +92,7 @@ function AppInner() {
   const { increment: incrUnread, fetchAll: fetchUnread } = useUnread()
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const initDmCallListeners = useCallStore(s => s.initGlobalListeners)
+  const initGroupCallListeners = useGroupCall(s => s.initGlobalListeners)
   const toggleMute = useVoice(s => s.toggleMute)
   const toggleDeafen = useVoice(s => s.toggleDeafen)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
@@ -296,7 +300,8 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const off = initDmCallListeners()
-    return off
+    const offGroup = initGroupCallListeners()
+    return () => { off(); offGroup() }
   }, [user?.id])
 
   useEffect(() => {
@@ -826,7 +831,12 @@ function AppInner() {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
     const offRoleUpdate = on('ROLE_UPDATE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['roles', d.server_id] })
+        // Réordonnancement : le classement des membres par rôle affiché change.
+        if (d.reordered) qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+      }
     })
     const offMemberRoleUpdate = on('MEMBER_ROLE_UPDATE', (d: any) => {
       if (d.server_id) {
@@ -1014,6 +1024,8 @@ function AppInner() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<PasswordResetPage />} />
+          <Route path="/reset-password" element={<PasswordResetPage />} />
           <Route path="/invite/:code" element={<InvitePage />} />
           <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
           <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
@@ -1042,6 +1054,7 @@ function AppInner() {
             seulement sur les routes wrappées par MainLayout. */}
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
+        {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}

@@ -7,6 +7,7 @@ import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import RolesTab from './RolesTab'
+import TransferOwnershipSection from './TransferOwnershipSection'
 import MembersTab from './MembersTab'
 import BansTab from './BansTab'
 import TagsTab from './TagsTab'
@@ -19,6 +20,7 @@ import ServerEventsPage from '../../pages/ServerEventsPage'
 
 interface Server {
   id: string
+  owner_id?: string
   name: string
   icon?: string | null
   banner?: string | null
@@ -584,6 +586,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 </div>
 
                 <BoostSection server={server} />
+
+                <TransferOwnershipSection serverId={server.id} ownerId={server.owner_id ?? ''} />
 
                 <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-hover">
                   <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Zone de danger</div>
