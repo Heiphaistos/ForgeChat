@@ -16,7 +16,7 @@ export interface DesktopUpdateInfo {
   current_version: string
   notes: string
   pub_date: string
-  /** `windows-x86_64` | `windows-portable` | `linux-x86_64` | `linux-portable` */
+  /** `windows-x86_64` | `windows-portable` | `linux-x86_64` | `linux-rpm` | `linux-portable` */
   target: string
   /** true = l'exécutable est remplacé sur place, sans installeur ni UAC */
   portable: boolean

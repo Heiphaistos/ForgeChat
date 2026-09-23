@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-desktop"
-version = "3.28.0"
+version = "3.28.1"
 edition = "2021"
 
 [lib]

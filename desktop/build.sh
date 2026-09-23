@@ -44,8 +44,8 @@ echo "[2/4] Installation deps desktop..."
 cd "$SCRIPT_DIR"
 npm install --silent
 
-echo "[3/4] Compilation Tauri (deb + appimage)..."
-npx tauri build --bundles deb,appimage
+echo "[3/4] Compilation Tauri (deb + rpm + appimage)..."
+npx tauri build --bundles deb,rpm,appimage
 
 echo "[4/4] Copie des artefacts dans dist-desktop/..."
 mkdir -p "$OUT"
@@ -62,6 +62,17 @@ if [ -n "$DEB_SRC" ]; then
     echo "[OK] .deb       : dist-desktop/ForgeChat-v$VERSION-amd64.deb"
 else
     echo "[WARN] .deb non trouve dans $BUNDLE/deb/"
+fi
+
+# Fedora, openSUSE, RHEL : le .rpm utilise le WebKitGTK du systeme. L'AppImage
+# embarque celui d'Ubuntu 22.04, dont le melange avec les pilotes graphiques
+# d'une autre distribution donne une fenetre blanche.
+RPM_SRC=$(find "$BUNDLE/rpm" -name "*${VERSION}*.rpm" -print -quit 2>/dev/null || true)
+if [ -n "$RPM_SRC" ]; then
+    cp "$RPM_SRC" "$OUT/ForgeChat-v$VERSION-x86_64.rpm"
+    echo "[OK] .rpm       : dist-desktop/ForgeChat-v$VERSION-x86_64.rpm"
+else
+    echo "[WARN] .rpm non trouve dans $BUNDLE/rpm/"
 fi
 
 APPIMAGE_SRC=$(find "$BUNDLE/appimage" -name "*${VERSION}*.AppImage" -print -quit 2>/dev/null || true)

@@ -44,6 +44,7 @@ declare -A ARTEFACTS=(
     [windows-x86_64]="ForgeChat-Setup-v$VERSION.exe"
     [windows-portable]="ForgeChat-Portable-v$VERSION.exe"
     [linux-x86_64]="ForgeChat-v$VERSION-amd64.deb"
+    [linux-rpm]="ForgeChat-v$VERSION-x86_64.rpm"
     [linux-portable]="ForgeChat-v$VERSION-amd64.AppImage"
 )
 

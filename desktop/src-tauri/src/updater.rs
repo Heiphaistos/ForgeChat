@@ -133,6 +133,22 @@ fn est_installee() -> bool {
     }
 }
 
+/// Copie installée par le gestionnaire de paquets RPM (Fedora, openSUSE,
+/// RHEL) : il lui faut le `.rpm`, pas le `.deb`.
+fn installee_par_rpm() -> bool {
+    let Ok(exe) = exe_courant() else {
+        return false;
+    };
+    std::process::Command::new("rpm")
+        .arg("-qf")
+        .arg(&exe)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 /// Cible du manifeste correspondant à cette copie.
 fn cible() -> &'static str {
     let installee = est_installee();
@@ -142,6 +158,8 @@ fn cible() -> &'static str {
         } else {
             "windows-portable"
         }
+    } else if installee && installee_par_rpm() {
+        "linux-rpm"
     } else if installee {
         "linux-x86_64"
     } else {
@@ -484,8 +502,9 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
             .map_err(|e| {
                 format!(
                     "Paquet téléchargé et vérifié dans « {} », mais son ouverture a échoué ({e}). \
-                     Installez-le à la main : sudo apt install \"{}\"",
+                     Installez-le à la main : {} \"{}\"",
                     chemin.display(),
+                    if cible() == "linux-rpm" { "sudo dnf install" } else { "sudo apt install" },
                     chemin.display()
                 )
             })?;
@@ -714,7 +733,7 @@ mod tests {
     fn la_cible_est_une_des_quatre_publiees() {
         assert!(matches!(
             cible(),
-            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-portable"
+            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-portable"
         ));
     }
 

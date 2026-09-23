@@ -27,6 +27,7 @@ const FALLBACK: Release = {
     'windows-x86_64':   { url: `${DL_BASE}/ForgeChat-Setup-v${FALLBACK_VERSION}.exe` },
     'linux-x86_64':     { url: `${DL_BASE}/ForgeChat-v${FALLBACK_VERSION}-amd64.deb` },
     'linux-portable':   { url: `${DL_BASE}/ForgeChat-v${FALLBACK_VERSION}-amd64.AppImage` },
+    'linux-rpm':        { url: `${DL_BASE}/ForgeChat-v${FALLBACK_VERSION}-x86_64.rpm` },
   },
 }
 
@@ -199,6 +200,8 @@ export default function LandingPage() {
   const setup = release.platforms['windows-x86_64']
   const deb = release.platforms['linux-x86_64']
   const appimage = release.platforms['linux-portable']
+  // Absent des manifestes antérieurs à 3.28.1 : le bouton n'apparaît qu'une fois publié.
+  const rpm = release.platforms['linux-rpm']
   const majLe = dateMaj(release.pub_date)
   useEffect(() => {
     // Classe sur <html> : html ET body sont en overflow:hidden globalement (app chat),
@@ -353,7 +356,7 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto text-center">
           <h2 id="download-linux-title" className="text-xl sm:text-2xl font-bold text-white mb-3">Client Desktop Linux</h2>
           <p className="text-white/40 mb-8 text-sm sm:text-base">
-            Debian, Ubuntu et dérivées via le paquet <code className="text-white/60">.deb</code>,
+            Debian et Ubuntu via le <code className="text-white/60">.deb</code>, Fedora et openSUSE via le <code className="text-white/60">.rpm</code>,
             <br className="hidden sm:block" /> ou n'importe quelle distro via l'AppImage portable.
           </p>
 
@@ -369,6 +372,19 @@ export default function LandingPage() {
               </span>
             </a>
 
+            {rpm && (
+              <a href={rpm.url} download
+                className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
+                <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
+                  <Download size={18} />
+                </span>
+                <span className="text-left min-w-0">
+                  <span className="block text-sm font-bold">Paquet .rpm</span>
+                  <span className="block text-xs text-white/40 truncate">Fedora / openSUSE · {VERSION}{taille(rpm)}</span>
+                </span>
+              </a>
+            )}
+
             <a href={appimage.url} download
               className="flex items-center gap-3 sm:w-auto px-5 sm:px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl font-semibold transition group">
               <span aria-hidden className="p-2 bg-white/10 rounded-lg group-hover:bg-white/15 transition flex-shrink-0">
@@ -376,7 +392,7 @@ export default function LandingPage() {
               </span>
               <span className="text-left min-w-0">
                 <span className="block text-sm font-bold">AppImage</span>
-                <span className="block text-xs text-white/40 truncate">Portable, toute distro · {VERSION}{taille(appimage)}</span>
+                <span className="block text-xs text-white/40 truncate">Portable · si le paquet ne convient pas · {VERSION}{taille(appimage)}</span>
               </span>
             </a>
           </div>
