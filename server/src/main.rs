@@ -214,6 +214,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/verify-email", post(handlers::auth::verify_email))
         .route("/api/auth/login", post(handlers::auth::login))
         .route("/api/auth/refresh", post(handlers::auth::refresh))
+        .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password))
+        .route("/api/auth/reset-password", post(handlers::password_reset::reset_password))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
         // Invitation amis (lecture publique — affiche le profil de l'invitant)
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))

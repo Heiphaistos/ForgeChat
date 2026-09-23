@@ -37,6 +37,7 @@ const LandingPage = lazy(() => import('./pages/LandingPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
+const PasswordResetPage = lazy(() => import('./pages/PasswordResetPage'))
 const InvitePage = lazy(() => import('./pages/InvitePage'))
 const FriendInvitePage = lazy(() => import('./pages/FriendInvitePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -1014,6 +1015,8 @@ function AppInner() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<PasswordResetPage />} />
+          <Route path="/reset-password" element={<PasswordResetPage />} />
           <Route path="/invite/:code" element={<InvitePage />} />
           <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
           <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
