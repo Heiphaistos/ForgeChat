@@ -4,6 +4,13 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const SERVER_URL = isTauri ? 'https://forgechat.heiphaistos.org' : ''
 const baseURL = isTauri ? 'https://forgechat.heiphaistos.org/api' : '/api'
 
+// Le serveur renvoie des chemins relatifs `/uploads/...`. L'app bureau sert le client
+// depuis `tauri.localhost` : sans préfixe, avatars, pièces jointes et sons y pointeraient.
+export function mediaUrl(u: string | null | undefined): string | undefined {
+  if (!u) return undefined
+  return SERVER_URL && u.startsWith('/uploads/') ? SERVER_URL + u : u
+}
+
 const api = axios.create({
   baseURL,
   // Envoie les cookies httpOnly automatiquement (auth web)

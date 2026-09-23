@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
-import api from '../api/client'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import api, { mediaUrl } from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
@@ -19,9 +19,11 @@ export default function InvitePage() {
       .finally(() => setLoadingInfo(false))
   }, [code])
 
+  const qc = useQueryClient()
   const join = useMutation({
     mutationFn: () => api.post(`/servers/join/${code}`),
     onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['servers'] })
       toast.success(`Bienvenue sur ${res.data.name} !`)
       nav(`/servers/${res.data.id}`)
     },
@@ -60,7 +62,7 @@ export default function InvitePage() {
           className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4 overflow-hidden"
         >
           {serverInfo.server.icon
-            ? <img src={serverInfo.server.icon} alt={serverInfo.server.name} loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
+            ? <img src={mediaUrl(serverInfo.server.icon)} alt={serverInfo.server.name} loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
             : <span aria-hidden>{serverInfo.server.name.charAt(0)}</span>}
         </div>
         <p className="text-fc-muted text-sm mb-1">Tu as été invité(e) à rejoindre</p>

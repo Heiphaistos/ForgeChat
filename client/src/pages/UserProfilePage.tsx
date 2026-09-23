@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
@@ -139,7 +139,7 @@ function MutualServersSection({ userId }: { userId: string }) {
         <div key={srv.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-fc-hover/20 transition">
           <div className="w-8 h-8 rounded-lg bg-fc-bg flex items-center justify-center font-bold text-sm text-white overflow-hidden flex-shrink-0">
             {srv.icon ? (
-              <img src={srv.icon} alt={srv.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              <img src={mediaUrl(srv.icon)} alt={srv.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : (
               <span aria-hidden>{srv.name.charAt(0).toUpperCase()}</span>
             )}
@@ -248,7 +248,7 @@ export default function UserProfilePage() {
           <div className="relative h-48">
             {user.banner ? (
               <img
-                src={user.banner}
+                src={mediaUrl(user.banner)}
                 alt=""
                 loading="lazy"
                 decoding="async"
@@ -268,7 +268,7 @@ export default function UserProfilePage() {
               <div className="relative flex-shrink-0">
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>
                   )}

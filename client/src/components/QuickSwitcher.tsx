@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight, Users } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 
 const HISTORY_KEY = 'fc_search_history'
@@ -200,7 +200,7 @@ export default function QuickSwitcher({ onClose }: Props) {
                         onClick={() => { nav(`/users/${u.id}`); onClose() }}
                         className="w-full flex items-center gap-2 px-2 py-2 rounded hover:bg-fc-hover transition">
                         <div className="w-7 h-7 rounded-full bg-fc-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                          {u.avatar ? <img src={u.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : u.username.charAt(0).toUpperCase()}
+                          {u.avatar ? <img src={mediaUrl(u.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : u.username.charAt(0).toUpperCase()}
                         </div>
                         <span className="text-sm text-white">{u.username}</span>
                       </button>

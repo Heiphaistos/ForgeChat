@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import RolesTab from './RolesTab'
@@ -159,8 +159,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       name,
       description,
       is_public: isPublic,
-      welcome_message: welcomeMessage || null,
-      banner: bannerUrl || null,
+      // Chaîne vide et non `null` pour pouvoir vider : le serveur fait COALESCE.
+      welcome_message: welcomeMessage,
+      banner: bannerUrl,
       system_channel_id: systemChannelId || null,
       afk_channel_id: afkChannelId || null,
       afk_timeout: afkTimeout,
@@ -326,7 +327,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           ${mobileShowContent ? 'hidden md:flex' : 'flex'}`}>
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate flex items-center justify-between">
             <span>{server.name}</span>
-            <button onClick={onClose} className="text-fc-muted hover:text-white transition md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded">
+            <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded">
               <X size={16} />
             </button>
           </div>
@@ -370,7 +371,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 </button>
                 <h2 id="server-settings-modal-title" className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>
               </div>
-              <button onClick={onClose} className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
+              <button onClick={onClose} aria-label="Fermer" className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
                 <X size={20} />
               </button>
             </div>
@@ -382,7 +383,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Icône du serveur</label>
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center font-bold text-2xl text-white overflow-hidden flex-shrink-0">
-                      {iconPreview ? <img src={iconPreview} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
+                      {iconPreview ? <img src={mediaUrl(iconPreview)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <input ref={iconInputRef} type="file" accept="image/*" className="hidden"
@@ -436,7 +437,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Bannière du serveur</label>
                   {bannerUrl && (
                     <div className="mb-3 rounded-lg overflow-hidden h-[120px] bg-fc-channel">
-                      <img src={bannerUrl} alt="bannière" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      <img src={mediaUrl(bannerUrl)} alt="bannière" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -696,7 +697,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     <div className="space-y-2">
                       {emojis.map((emoji: any) => (
                         <div key={emoji.id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
-                          <img src={emoji.url} alt={emoji.name} loading="lazy" decoding="async" className="w-8 h-8 object-contain rounded" />
+                          <img src={mediaUrl(emoji.url)} alt={emoji.name} loading="lazy" decoding="async" className="w-8 h-8 object-contain rounded" />
                           <div className="flex-1">
                             <div className="text-white text-sm font-medium">:{emoji.name}:</div>
                           </div>
@@ -757,7 +758,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         <code className="flex-1 bg-fc-input px-3 py-2 rounded text-sm text-white font-mono break-all">
                           {createdToken.token}
                         </code>
-                        <button onClick={copyToken}
+                        <button onClick={copyToken} aria-label="Copier le jeton"
                           className={`p-2 rounded transition flex-shrink-0 ${copiedToken ? 'bg-fc-green text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
                         >
                           {copiedToken ? <Check size={16} /> : <Copy size={16} />}
@@ -780,7 +781,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         <div key={bot.bot_user_id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
                           <div className="w-10 h-10 rounded-full bg-indigo-500/30 flex items-center justify-center flex-shrink-0">
                             {bot.avatar
-                              ? <img src={bot.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover rounded-full" />
+                              ? <img src={mediaUrl(bot.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover rounded-full" />
                               : <Bot size={18} className="text-indigo-400" />}
                           </div>
                           <div className="flex-1 min-w-0">

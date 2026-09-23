@@ -16,6 +16,10 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
   const blobUrlRef = useRef<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  // Lu via un ref : le parent passe une fonction recréée à chaque rendu, qui
+  // relançait sinon l'effet (arrêt puis nouvel enregistrement) à chaque re-rendu.
+  const onCancelRef = useRef(onCancel)
+  onCancelRef.current = onCancel
 
   const stop = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current)
@@ -24,9 +28,11 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
     recorderRef.current = null
   }, [])
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (isCancelled: () => boolean) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Démonté pendant le dialogue d'autorisation : le nettoyage n'avait aucun flux à couper.
+      if (isCancelled()) { stream.getTracks().forEach(t => t.stop()); return }
       streamRef.current = stream
       const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
         .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
@@ -53,13 +59,15 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
         if (secs >= 120) stop()
       }, 1000)
     } catch {
-      onCancel()
+      if (!isCancelled()) onCancelRef.current()
     }
-  }, [onCancel, stop])
+  }, [stop])
 
   useEffect(() => {
-    start()
+    let cancelled = false
+    start(() => cancelled)
     return () => {
+      cancelled = true
       stop()
       streamRef.current?.getTracks().forEach(t => t.stop())
       if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)

@@ -37,6 +37,10 @@ const _outbox: Queued[] = []
 
 let _lastAck = 0
 
+// Incrémenté par disconnect() : un connect() en attente de son ticket, ou une socket
+// fermée volontairement, ne doit plus rouvrir la connexion d'une session terminée.
+let _generation = 0
+
 // Un signal WebRTC périmé est pire qu'aucun signal : on jette ce qui a dépassé
 // sa fenêtre utile au lieu de le rejouer à la reconnexion.
 const MAX_AGE: Record<string, number> = {
@@ -79,7 +83,9 @@ export const useWs = create<WsState>((set, get) => ({
 
     set({ _connecting: true })
 
+    const gen = _generation
     const ticket = await fetchWsTicket()
+    if (gen !== _generation) return
     if (!ticket) {
       const attempts = get()._reconnectAttempts
       const delay = backoffDelay(attempts)
@@ -152,9 +158,14 @@ export const useWs = create<WsState>((set, get) => ({
 
   disconnect: () => {
     const { socket, _reconnectTimeout, _heartbeatInterval } = get()
+    _generation++
+    _outbox.length = 0
     if (_reconnectTimeout) clearTimeout(_reconnectTimeout)
     if (_heartbeatInterval) clearInterval(_heartbeatInterval)
-    socket?.close()
+    if (socket) {
+      socket.onclose = null
+      socket.close()
+    }
     set({ socket: null, connected: false, _reconnectTimeout: null, _heartbeatInterval: null, _reconnectAttempts: 0, _connecting: false })
   },
 

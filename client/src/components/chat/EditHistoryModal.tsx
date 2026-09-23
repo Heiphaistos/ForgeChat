@@ -40,6 +40,7 @@ export default function EditHistoryModal({ messageId, onClose }: Props) {
           </h2>
           <button
             onClick={onClose}
+            aria-label="Fermer"
             className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
           >
             <X size={16} />

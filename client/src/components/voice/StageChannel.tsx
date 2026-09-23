@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Mic, Hand, UserPlus, UserMinus, LogOut, Users } from 'lucide-react'
 import { useWs } from '../../store/ws'
@@ -29,7 +30,7 @@ function Avatar({ user, size = 'md' }: { user: StageUser; size?: 'sm' | 'md' | '
   return (
     <div aria-hidden className={`${dims[size]} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0`}>
       {user.avatar
-        ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        ? <img src={mediaUrl(user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
         : <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>}
     </div>
   )

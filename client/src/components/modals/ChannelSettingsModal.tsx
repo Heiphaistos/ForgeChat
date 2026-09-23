@@ -293,7 +293,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     mutationFn: () => {
       const payload: Record<string, unknown> = {
         name: name.trim() || undefined,
-        topic: isText(channel.type) ? (topic.trim() || null) : undefined,
+        // Chaîne vide et non `null` : le serveur fait COALESCE et ignorerait `null`.
+        topic: isText(channel.type) ? topic.trim() : undefined,
         slowmode_delay: isText(channel.type) ? slowmode : undefined,
         user_limit: isVoice(channel.type) ? (userLimit > 0 ? userLimit : null) : undefined,
         is_nsfw: isNsfw,
@@ -330,16 +331,20 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   })
 
   const addForumTag = () => {
-    if (!newTag.trim()) return
-    api.post(`/channels/${channel.id}/tags`, { name: newTag.trim() }).then(() => {
-      setForumTags(t => [...t, newTag.trim()])
+    const tag = newTag.trim()
+    if (!tag) return
+    api.post(`/channels/${channel.id}/tags`, { name: tag }).then(() => {
+      setForumTags(t => [...t, tag])
       setNewTag('')
-    }).catch(() => setForumTags(t => [...t, newTag.trim()]))
+    }).catch((e: any) => toast.error(e.response?.data?.error ?? "Impossible d'ajouter le tag"))
   }
 
   const removeForumTag = (tag: string) => {
-    api.delete(`/channels/${channel.id}/tags/${encodeURIComponent(tag)}`).catch(() => {})
     setForumTags(t => t.filter(x => x !== tag))
+    api.delete(`/channels/${channel.id}/tags/${encodeURIComponent(tag)}`).catch((e: any) => {
+      setForumTags(t => t.includes(tag) ? t : [...t, tag])
+      toast.error(e.response?.data?.error ?? 'Impossible de supprimer le tag')
+    })
   }
 
   const TypeIcon = channel.type === 'voice' ? Volume2 : channel.type === 'video' ? Video
@@ -452,7 +457,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                       {forumTags.map(tag => (
                         <span key={tag} className="flex items-center gap-1 px-2.5 py-1 bg-fc-hover rounded-full text-xs text-white">
                           {tag}
-                          <button onClick={() => removeForumTag(tag)} className="text-fc-muted hover:text-red-400 transition">
+                          <button onClick={() => removeForumTag(tag)} aria-label={`Supprimer le tag ${tag}`} className="text-fc-muted hover:text-red-400 transition">
                             <X size={10} />
                           </button>
                         </span>
@@ -467,7 +472,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                         autoCapitalize="none"
                         className="flex-1 px-3 py-1.5 bg-fc-input rounded-lg text-white outline-none text-sm"
                       />
-                      <button onClick={addForumTag}
+                      <button onClick={addForumTag} aria-label="Ajouter le tag"
                         className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm transition">
                         <Plus size={14} />
                       </button>

@@ -4,7 +4,7 @@ import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
 
@@ -163,7 +163,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
               >
                 <div className="flex items-center gap-2 mb-1">
                   {msg.author_avatar
-                    ? <img src={msg.author_avatar} alt={msg.author_username} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                    ? <img src={mediaUrl(msg.author_avatar)} alt={msg.author_username} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                     : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0" aria-hidden>
                         {msg.author_username?.charAt(0).toUpperCase()}
                       </div>

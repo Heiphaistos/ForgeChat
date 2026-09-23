@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Plus, Trash2, Save, Shield, ChevronDown, ChevronRight } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 // Utilise des puissances de 2 comme nombres JS (safe jusqu'à 2**52 avec Number)
@@ -470,7 +470,7 @@ function RoleMembersTab({ serverId, roleId, roleName }: { serverId: string; role
       {(members as any[]).map((m: any) => (
         <div key={m.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-fc-hover/30 transition">
           {m.avatar
-            ? <img src={m.avatar} loading="lazy" decoding="async" className="w-8 h-8 rounded-full" alt="" />
+            ? <img src={mediaUrl(m.avatar)} loading="lazy" decoding="async" className="w-8 h-8 rounded-full" alt="" />
             : <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-white text-xs font-bold">
                 {m.username?.charAt(0)?.toUpperCase()}
               </div>

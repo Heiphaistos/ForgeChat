@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
 import ServerTemplateModal from '../modals/ServerTemplateModal'
@@ -414,7 +414,7 @@ export default function ServerSidebar() {
           title={s.name}
         >
           {s.icon
-            ? <img src={s.icon} alt={s.name} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+            ? <img src={mediaUrl(s.icon)} alt={s.name} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : s.name.charAt(0).toUpperCase()}
         </button>
         {hasUnread && (

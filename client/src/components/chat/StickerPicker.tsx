@@ -3,7 +3,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload, X, Loader2 } from 'lucide-react'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
                     className="w-14 h-14 rounded-xl border border-fc-hover bg-fc-bg overflow-hidden
                       hover:border-fc-accent hover:scale-105 active:scale-95 transition-transform"
                   >
-                    <img src={ss.url} alt={ss.name} className="w-full h-full object-contain" loading="lazy" />
+                    <img src={mediaUrl(ss.url)} alt={ss.name} className="w-full h-full object-contain" loading="lazy" />
                   </button>
                   {hovered === ss.id && (
                     <div aria-hidden className="absolute -top-7 left-1/2 -translate-x-1/2 bg-fc-bg border border-fc-hover

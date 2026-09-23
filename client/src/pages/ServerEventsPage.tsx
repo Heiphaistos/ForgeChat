@@ -258,12 +258,15 @@ export default function ServerEventsPage({ serverId }: Props) {
   })
 
   const updateEvent = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: EventFormData }) =>
+    mutationFn: ({ id, data, prevStart }: { id: string; data: EventFormData; prevStart: string }) =>
       api.put(`/servers/${serverId}/events/${id}`, {
         name: data.name.trim() || undefined,
-        description: data.description.trim() || undefined,
-        start_time: data.start_time ? new Date(data.start_time).toISOString() : undefined,
-        end_time: data.end_time ? new Date(data.end_time).toISOString() : undefined,
+        // Chaîne vide acceptée par le serveur : c'est ce qui permet de vider la description.
+        description: data.description.trim(),
+        // Le serveur refuse toute date de début passée : la renvoyer inchangée rendait
+        // impossible la moindre retouche d'un événement déjà commencé.
+        start_time: data.start_time && data.start_time !== prevStart ? new Date(data.start_time).toISOString() : undefined,
+        end_time: data.end_time ? new Date(data.end_time).toISOString() : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
@@ -511,7 +514,7 @@ export default function ServerEventsPage({ serverId }: Props) {
             end_time:    editing.end_time ? toDatetimeLocal(editing.end_time) : '',
           }}
           onClose={() => setEditing(null)}
-          onSubmit={data => updateEvent.mutate({ id: editing.id, data })}
+          onSubmit={data => updateEvent.mutate({ id: editing.id, data, prevStart: toDatetimeLocal(editing.start_time) })}
           loading={updateEvent.isPending}
         />
       )}

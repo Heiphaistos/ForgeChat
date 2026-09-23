@@ -1,3 +1,4 @@
+import { mediaUrl } from '../api/client'
 import hljs from 'highlight.js/lib/common'
 import { useState } from 'react'
 
@@ -235,7 +236,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       const url = customEmojis[name]
       if (url) {
         result.push(
-          <img key={match.index} src={url} alt={name} title={`:${name}:`}
+          <img key={match.index} src={mediaUrl(url)} alt={name} title={`:${name}:`}
             loading="lazy" decoding="async"
             className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
         )

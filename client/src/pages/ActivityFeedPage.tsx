@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ export type ActivityType =
   | 'server_join'
   | 'friend_join_server'
 
-interface ActivityItem {
+export interface ActivityItem {
   id: string
   type: ActivityType
   actor: { id: string; username: string; avatar?: string }
@@ -75,15 +75,15 @@ const TYPE_CONFIG: Record<
 
 // ─── Filtres ─────────────────────────────────────────────────────────────────
 
-type Filter = 'all' | 'friends' | 'servers'
+export type Filter = 'all' | 'friends' | 'servers'
 
-const FILTERS: { key: Filter; label: string }[] = [
+export const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Tout' },
   { key: 'friends', label: 'Amis' },
   { key: 'servers', label: 'Serveurs' },
 ]
 
-function filterItems(items: ActivityItem[], filter: Filter): ActivityItem[] {
+export function filterItems(items: ActivityItem[], filter: Filter): ActivityItem[] {
   switch (filter) {
     case 'friends': return items.filter(i => i.type === 'friend_join_server')
     case 'servers': return items.filter(i => i.type === 'server_join' || i.type === 'message_pin')
@@ -93,7 +93,7 @@ function filterItems(items: ActivityItem[], filter: Filter): ActivityItem[] {
 
 // ─── Composant item ──────────────────────────────────────────────────────────
 
-function ActivityRow({ item }: { item: ActivityItem }) {
+export function ActivityRow({ item }: { item: ActivityItem }) {
   const config = TYPE_CONFIG[item.type]
   if (!config) return null
 
@@ -108,7 +108,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <div className="relative flex-shrink-0">
         <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
           {item.actor.avatar
-            ? <img src={item.actor.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ? <img src={mediaUrl(item.actor.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : item.actor.username.charAt(0).toUpperCase()}
         </div>
         {/* Icône type superposée */}

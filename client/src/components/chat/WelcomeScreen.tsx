@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, Users } from 'lucide-react'
 
@@ -54,7 +55,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
       {server.banner ? (
         <div className="w-full h-[250px] flex-shrink-0 overflow-hidden">
           <img
-            src={server.banner}
+            src={mediaUrl(server.banner)}
             alt="Bannière du serveur"
             className="w-full h-full object-cover"
           />
@@ -71,7 +72,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
           className="-mt-20 mb-4 w-[90px] h-[90px] rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden shadow-xl flex-shrink-0"
         >
           {server.icon
-            ? <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ? <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : <span aria-hidden>{initials}</span>}
         </div>
 

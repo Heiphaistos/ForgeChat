@@ -17,7 +17,7 @@ import { useChat } from '../../store/chat'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import type { FileWithTtl } from './MessageInput'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 const EMPTY_MESSAGES: any[] = []
@@ -97,7 +97,7 @@ function ReadReceiptBar({
           title={`Lu par ${r.username}`}
         >
           {r.avatar
-            ? <img src={r.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ? <img src={mediaUrl(r.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : <span className="text-[7px] font-bold text-white">{r.username.charAt(0).toUpperCase()}</span>
           }
         </div>

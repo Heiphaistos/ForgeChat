@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, ChevronLeft } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { useMobile } from '../contexts/MobileContext'
@@ -127,7 +127,7 @@ function ServerCard({
         <div className="absolute inset-0 opacity-20 bg-gradient-to-t from-black to-transparent" />
         <div className="relative w-16 h-16 rounded-2xl bg-fc-bg flex items-center justify-center font-bold text-2xl text-white shadow-lg overflow-hidden border-2 border-fc-hover">
           {server.icon
-            ? <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ? <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : server.name.charAt(0).toUpperCase()}
         </div>
       </div>

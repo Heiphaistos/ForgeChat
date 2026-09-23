@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -150,7 +151,7 @@ function MessageRow({
                 title={`Profil de ${msg.author_username}`}
               >
                 {msg.author_avatar
-                  ? <img src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <img src={mediaUrl(msg.author_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author_username.charAt(0).toUpperCase()}
               </button>
             )}
@@ -276,7 +277,7 @@ function MessageRow({
                   {isImage(att.content_type) ? (
                     <div className="relative inline-block group/img max-w-full">
                       <img
-                        src={att.url}
+                        src={mediaUrl(att.url)}
                         alt={att.filename}
                         loading="lazy"
                         decoding="async"
@@ -317,7 +318,7 @@ function MessageRow({
                         </button>
                       ) : (
                         <video
-                          src={att.url}
+                          src={mediaUrl(att.url)}
                           controls
                           playsInline
                           preload="metadata"
@@ -336,7 +337,7 @@ function MessageRow({
                     </div>
                   ) : (
                     <a
-                      href={att.url}
+                      href={mediaUrl(att.url)}
                       download={att.filename}
                       className="flex items-center gap-2 bg-fc-input px-3 py-2 rounded max-w-full sm:max-w-xs hover:bg-fc-hover transition"
                     >
@@ -388,7 +389,7 @@ function MessageRow({
                         title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
                       >
                         {customEmojiMap[r.emoji]
-                          ? <img src={customEmojiMap[r.emoji]} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
+                          ? <img src={mediaUrl(customEmojiMap[r.emoji])} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
                           : <span>{r.emoji}</span>
                         }
                         <span className={`transition-transform duration-150 inline-block ${isPopping || isBumped ? 'scale-110' : 'scale-100'}`}>{r.count}</span>

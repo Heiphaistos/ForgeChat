@@ -139,7 +139,7 @@ export default function ConnectedAccountsSection() {
       {adding && platformMeta && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setAdding(null)}>
           <div
-            className="bg-fc-sidebar rounded-2xl p-6 w-96 shadow-2xl space-y-4"
+            className="bg-fc-sidebar rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-semibold text-white">

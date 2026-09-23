@@ -114,7 +114,7 @@ export default function AppearanceSection() {
     localStorage.getItem('fc_theme') || 'dark'
   )
 
-  const { data: settings } = useQuery({
+  const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 60_000,
@@ -152,7 +152,7 @@ export default function AppearanceSection() {
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => toast.success('Apparence sauvegardée'),
+    onSuccess: () => { toast.success('Apparence sauvegardée'); refetch() },
     onError: () => toast.error('Erreur de sauvegarde'),
   })
 

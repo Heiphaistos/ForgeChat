@@ -3,7 +3,7 @@ import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { renderMarkdown } from '../../utils/markdown'
 import toast from 'react-hot-toast'
@@ -87,7 +87,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
           >
             <div className="flex items-center gap-2 mb-1.5">
               {msg.author_avatar
-                ? <img src={msg.author_avatar} alt={msg.author_username} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                ? <img src={mediaUrl(msg.author_avatar)} alt={msg.author_username} loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                 : <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0" aria-hidden>
                     {msg.author_username?.charAt(0).toUpperCase()}
                   </div>

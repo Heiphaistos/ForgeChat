@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { Music2, Plus, Trash2, Volume2, X, Upload } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useWs } from '../../store/ws'
 
@@ -9,7 +9,7 @@ import { useWs } from '../../store/ws'
 interface Sound {
   id: string
   name: string
-  url: string
+  file_url: string
   emoji?: string
   duration?: number
 }
@@ -157,13 +157,13 @@ function SoundButton({
   const [playing, setPlaying] = useState(false)
 
   const play = useCallback(() => {
-    const audio = new Audio(sound.url)
+    const audio = new Audio(mediaUrl(sound.file_url))
     audio.volume = volume / 100
     audio.play().catch(() => null)
     setPlaying(true)
     audio.onended = () => setPlaying(false)
     send({ type: 'SOUNDBOARD_PLAY', sound_id: sound.id, channel_id: channelId })
-  }, [sound.url, sound.id, volume, channelId, send])
+  }, [sound.file_url, sound.id, volume, channelId, send])
 
   return (
     <div className="relative group">

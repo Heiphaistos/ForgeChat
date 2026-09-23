@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { X, Hash, Send, MessagesSquare, Pencil, Trash2, Check, Paperclip, Loader2, SmilePlus, Archive, ArchiveRestore, Lock } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
@@ -413,7 +413,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, onCl
                 className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {msg.author?.avatar
-                  ? <img src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <img src={mediaUrl(msg.author.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author?.username?.charAt(0).toUpperCase()}
               </button>
               <div className="flex-1 min-w-0">

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, AlertCircle } from 'lucide-react'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 
@@ -9,7 +9,7 @@ interface Task {
   id: string
   title: string
   description?: string
-  status: 'todo' | 'in_progress' | 'review' | 'done'
+  completed: boolean
   priority: 'low' | 'normal' | 'high' | 'urgent'
   assignee_id?: string
   assignee_username?: string
@@ -23,13 +23,12 @@ interface KanbanBoardProps {
   channelId: string
 }
 
-type Col = Task['status']
+// Le serveur ne stocke qu'un booléen `completed` : deux colonnes, pas de statut intermédiaire.
+type Col = 'todo' | 'done'
 
 const COLUMNS: { id: Col; label: string }[] = [
-  { id: 'todo',        label: 'Todo' },
-  { id: 'in_progress', label: 'En cours' },
-  { id: 'review',      label: 'En review' },
-  { id: 'done',        label: 'Terminé' },
+  { id: 'todo', label: 'À faire' },
+  { id: 'done', label: 'Terminé' },
 ]
 
 const PRIORITY_BADGE: Record<Task['priority'], { label: string; cls: string }> = {
@@ -164,7 +163,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
 
         {task.assignee_avatar ? (
           <img
-            src={task.assignee_avatar}
+            src={mediaUrl(task.assignee_avatar)}
             alt={task.assignee_username ?? ''}
             className="w-5 h-5 rounded-full ml-auto flex-shrink-0 object-cover"
             title={task.assignee_username}
@@ -211,7 +210,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
   }, [channelId, on, qc])
 
   const updateTask = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Task, 'status' | 'title' | 'priority' | 'due_date' | 'assignee_id'>> }) =>
+    mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Task, 'completed' | 'title' | 'priority' | 'due_date' | 'assignee_id'>> }) =>
       api.put(`/channels/${channelId}/tasks/${id}`, body),
     onMutate: async ({ id, body }) => {
       await qc.cancelQueries({ queryKey: ['tasks', channelId] })
@@ -242,12 +241,13 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
     const id = dragId.current
     if (!id) return
     const task = tasks.find(t => t.id === id)
-    if (!task || task.status === col) return
-    updateTask.mutate({ id, body: { status: col } })
+    const completed = col === 'done'
+    if (!task || task.completed === completed) return
+    updateTask.mutate({ id, body: { completed } })
     dragId.current = null
   }
 
-  const byCol = (col: Col) => tasks.filter(t => t.status === col)
+  const byCol = (col: Col) => tasks.filter(t => t.completed === (col === 'done'))
 
   if (isError) {
     return (
@@ -279,14 +279,15 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
                   {colTasks.length}
                 </span>
               </div>
-              <button
+              {/* Une tâche est créée non terminée : l'ajout n'a de sens que dans « À faire ». */}
+              {col.id === 'todo' && <button
                 onClick={() => setOpenCreateCol(openCreateCol === col.id ? null : col.id)}
                 className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
                 title="Ajouter une tâche"
                 aria-label="Ajouter une tâche"
               >
                 <Plus size={14} />
-              </button>
+              </button>}
             </div>
 
             {/* Form inline */}

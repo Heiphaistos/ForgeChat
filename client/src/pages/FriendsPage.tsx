@@ -7,7 +7,7 @@ import {
   Clock, MinusCircle, Upload, Menu, ChevronLeft,
   Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed,
 } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
@@ -81,7 +81,7 @@ function AvatarWithStatus({
     <div className="relative flex-shrink-0">
       <div className={`${avatarSize} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden`}>
         {avatar
-          ? <img src={avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+          ? <img src={mediaUrl(avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : username.charAt(0).toUpperCase()}
       </div>
       <div className={`absolute ${dotPos} rounded-full border-2 border-fc-channel ${STATUS_COLOR[status] ?? 'bg-fc-muted'}`} />
@@ -489,7 +489,7 @@ export default function FriendsPage() {
                     <div key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-fc-hover transition group">
                       <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden flex-shrink-0">
                         {s.avatar
-                          ? <img src={s.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          ? <img src={mediaUrl(s.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           : s.username.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -661,7 +661,7 @@ export default function FriendsPage() {
                   <div key={b.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition group">
                     <div className="w-10 h-10 rounded-full bg-fc-muted/30 flex items-center justify-center font-bold text-fc-muted overflow-hidden flex-shrink-0">
                       {b.avatar
-                        ? <img src={b.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-50" />
+                        ? <img src={mediaUrl(b.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover opacity-50" />
                         : b.username.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -716,7 +716,7 @@ export default function FriendsPage() {
                     >
                       <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0">
                         {c.other_user.avatar
-                          ? <img src={c.other_user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          ? <img src={mediaUrl(c.other_user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           : c.other_user.username.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">

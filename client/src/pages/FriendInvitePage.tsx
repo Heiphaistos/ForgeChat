@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import toast from 'react-hot-toast'
 import { UserPlus } from 'lucide-react'
 
@@ -19,6 +20,7 @@ interface InviteInfo {
 export default function FriendInvitePage() {
   const { code } = useParams<{ code: string }>()
   const nav = useNavigate()
+  const qc = useQueryClient()
   const { user } = useAuth()
   const [info, setInfo] = useState<InviteInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -39,6 +41,8 @@ export default function FriendInvitePage() {
     setAccepting(true)
     try {
       await api.post(`/friend-invite/${code}/accept`)
+      // FRIEND_ACCEPTED n'est envoyé qu'à l'inviteur : rafraîchir notre propre liste.
+      qc.invalidateQueries({ queryKey: ['friends'] })
       toast.success(`Tu es maintenant ami(e) avec ${info?.user.username} !`)
       nav('/')
     } catch (err: any) {
@@ -93,7 +97,7 @@ export default function FriendInvitePage() {
             className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-white text-3xl font-bold mx-auto overflow-hidden"
           >
             {info.user.avatar
-              ? <img src={info.user.avatar} alt={info.user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              ? <img src={mediaUrl(info.user.avatar)} alt={info.user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : <span aria-hidden>{info.user.username.charAt(0).toUpperCase()}</span>}
           </div>
           <div

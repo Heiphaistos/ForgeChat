@@ -5,6 +5,8 @@ import { useChat } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
 import { useWs } from './ws'
+import { useChannelNotif } from './channelNotif'
+import { queryClient } from '../main'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -69,7 +71,11 @@ export const useAuth = create<AuthState>()(
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
       useUnread.setState({ counts: {}, serverCounts: {} })
+      useChannelNotif.setState({ mutedChannels: new Set(), mutedServers: new Set(), channelLevels: new Map(), loaded: false })
       set(s => { s.user = null })
+      // Sans ça, le compte suivant connecté dans le même onglet voit les serveurs,
+      // MP et amis du précédent tant que le cache n'est pas périmé.
+      queryClient.clear()
     },
 
     fetchMe: async () => {

@@ -6,7 +6,7 @@ import { useWs } from '../store/ws'
 import { useUnread } from '../store/unread'
 import { useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { Users, Loader2, ChevronUp, Trash2, Pencil, Check, X, SmilePlus, Search, UserPlus, LogOut, Settings, Paperclip, ChevronLeft, Copy, Link2, CornerUpLeft, Pin, Share2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
@@ -823,7 +823,7 @@ export default function GroupDMPage() {
                   className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
                 >
                   {msg.sender_avatar
-                    ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ? <img src={mediaUrl(msg.sender_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : msg.sender_username.charAt(0).toUpperCase()
                   }
                 </button>
@@ -988,9 +988,9 @@ export default function GroupDMPage() {
                             {msg.attachments.map(att => {
                               const isImg = att.content_type.startsWith('image/')
                               return isImg ? (
-                                <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer">
+                                <a key={att.id} href={mediaUrl(att.url)} target="_blank" rel="noopener noreferrer">
                                   <img
-                                    src={att.url}
+                                    src={mediaUrl(att.url)}
                                     alt={att.filename}
                                     loading="lazy"
                                     decoding="async"
@@ -1002,7 +1002,7 @@ export default function GroupDMPage() {
                               ) : (
                                 <a
                                   key={att.id}
-                                  href={att.url}
+                                  href={mediaUrl(att.url)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center gap-2 px-3 py-2 bg-fc-channel rounded-xl text-xs text-fc-text hover:bg-fc-hover transition max-w-[200px]"
@@ -1145,7 +1145,7 @@ export default function GroupDMPage() {
               <div className="relative flex-shrink-0">
                 <div className="w-7 h-7 rounded-full bg-fc-channel flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                   {m.avatar
-                    ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ? <img src={mediaUrl(m.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : m.username.charAt(0).toUpperCase()
                   }
                 </div>

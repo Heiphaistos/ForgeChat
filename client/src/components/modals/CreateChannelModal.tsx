@@ -45,12 +45,13 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
   const [userLimit, setUserLimit] = useState(0)
   const qc = useQueryClient()
 
-  // Récupérer les catégories pour le sélecteur
-  const { data: serverData } = useQuery({
-    queryKey: ['server', serverId],
-    queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data),
+  // Les catégories sont dans une table à part, absente de GET /servers/:id.
+  // Même clé et même requête que ChannelSidebar pour partager le cache.
+  const { data: categories = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['categories', serverId],
+    queryFn: () => api.get(`/servers/${serverId}/categories`).then(r => r.data),
+    staleTime: 60_000,
   })
-  const categories: any[] = (serverData?.channels ?? []).filter((c: any) => c.type === 'category')
 
   const create = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/channels`, {
@@ -154,7 +155,7 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               <select id={`${uid}-cat`} value={categoryId ?? ''} onChange={e => setCategoryId(e.target.value || null)}
                 className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
                 <option value="">Aucune catégorie</option>
-                {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}

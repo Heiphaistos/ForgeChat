@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useNavigate } from 'react-router-dom'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
@@ -55,7 +55,7 @@ function MemberRow({ m, onContextMenu, onLongPress }: { m: any; onContextMenu: (
       <div className="relative flex-shrink-0">
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
-            ? <img src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+            ? <img src={mediaUrl(m.avatar)} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
         <div

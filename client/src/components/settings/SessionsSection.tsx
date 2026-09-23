@@ -10,6 +10,7 @@ interface Session {
   ip: string | null
   last_seen: string
   created_at: string
+  current?: boolean
 }
 
 function parseDevice(device: string | null): { label: string; Icon: typeof Monitor } {
@@ -41,12 +42,14 @@ export default function SessionsSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   })
   const revokeAll = useMutation({
-    mutationFn: () => Promise.all(sessions.slice(1).map(s => api.delete(`/users/me/sessions/${s.id}`))),
+    mutationFn: () => Promise.all(others.map(s => api.delete(`/users/me/sessions/${s.id}`))),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   })
 
-  const current = sessions[0]
-  const others = sessions.slice(1)
+  // La liste est triée par last_seen : la première n'est pas forcément celle-ci.
+  // Seul le drapeau `current` du serveur l'identifie ; sans lui, pas de « Tout révoquer ».
+  const current = sessions.find(s => s.current)
+  const others = sessions.filter(s => !s.current)
 
   if (isLoading) return (
     <div className="flex items-center justify-center py-12 text-fc-muted">
@@ -112,15 +115,15 @@ export default function SessionsSection() {
         <section>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide flex items-center gap-1.5">
-              <Monitor size={11} /> Autres sessions ({others.length})
+              <Monitor size={11} /> {current ? 'Autres sessions' : 'Sessions'} ({others.length})
             </h3>
-            <button
+            {current && <button
               onClick={() => revokeAll.mutate()}
               disabled={revokeAll.isPending}
               className="text-xs text-fc-red hover:text-red-300 transition disabled:opacity-50"
             >
               {revokeAll.isPending ? 'Révocation...' : 'Tout révoquer'}
-            </button>
+            </button>}
           </div>
           <div className="space-y-2">
             {others.map(s => {

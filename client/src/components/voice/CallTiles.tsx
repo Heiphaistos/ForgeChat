@@ -1,5 +1,6 @@
 // Tuiles d'appel : caméra (ou avatar) d'un participant, et écran partagé.
 // Elles remplissent leur conteneur ; la taille est décidée par CallStage.
+import { mediaUrl } from '../../api/client'
 import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import NativeVideo from './NativeVideo'
 
@@ -51,7 +52,7 @@ export function PeerTile({
       ) : (
         <div className="flex flex-col items-center gap-2">
           {peer.avatar
-            ? <img src={peer.avatar} alt="" loading="lazy" decoding="async" className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} rounded-full object-cover border-2 border-fc-accent/50`} />
+            ? <img src={mediaUrl(peer.avatar)} alt="" loading="lazy" decoding="async" className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} rounded-full object-cover border-2 border-fc-accent/50`} />
             : <div className={`${compact ? 'w-8 h-8 text-sm' : 'w-16 h-16 text-2xl'} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white`}>
                 {peer.username.charAt(0).toUpperCase()}
               </div>}

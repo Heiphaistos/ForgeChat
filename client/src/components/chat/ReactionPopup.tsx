@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 interface ReactionUser {
@@ -75,7 +76,7 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
           <div key={u.user_id} role="listitem" className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
               {u.avatar
-                ? <img src={u.avatar} alt={u.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                ? <img src={mediaUrl(u.avatar)} alt={u.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 : <span aria-hidden>{u.username.charAt(0).toUpperCase()}</span>}
             </div>
             <span className="text-xs text-fc-text truncate">{u.username}</span>

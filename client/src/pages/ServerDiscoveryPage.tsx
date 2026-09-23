@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, Tag, ChevronLeft } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { useMobile } from '../contexts/MobileContext'
@@ -87,7 +87,7 @@ function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
       <div className="relative h-28 overflow-hidden flex-shrink-0">
         {server.banner ? (
           <img
-            src={server.banner}
+            src={mediaUrl(server.banner)}
             alt=""
             loading="lazy"
             decoding="async"
@@ -102,7 +102,7 @@ function ServerCard({ server, onJoin, isJoining }: ServerCardProps) {
         <div className="absolute -bottom-5 left-4">
           <div className="w-12 h-12 rounded-xl bg-fc-bg border-2 border-fc-channel flex items-center justify-center font-bold text-lg text-white shadow-lg overflow-hidden">
             {server.icon ? (
-              <img src={server.icon} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             ) : (
               initial
             )}

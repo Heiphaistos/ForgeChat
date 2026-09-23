@@ -695,7 +695,8 @@ function AppInner() {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
     })
     const offCreate = on('CHANNEL_CREATE', (d: any) => {
-      if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
+      const sid = d.server_id ?? d.channel?.server_id
+      if (sid) qcHook.invalidateQueries({ queryKey: ['server', sid] })
     })
     const offDelete = on('CHANNEL_DELETE', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })

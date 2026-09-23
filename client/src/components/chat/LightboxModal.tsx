@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -64,7 +65,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
     try {
       const img = new Image()
       img.crossOrigin = 'anonymous'
-      img.src = images[index]
+      img.src = mediaUrl(images[index]) ?? ''
       await img.decode()
       const canvas = document.createElement('canvas')
       canvas.width = img.naturalWidth
@@ -179,7 +180,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         }}
       >
         <img
-          src={images[index]}
+          src={mediaUrl(images[index])}
           alt=""
           className="max-w-[90vw] max-h-[85vh] object-contain select-none"
           style={{ transform: `scale(${zoom}) translate(${pos.x / zoom}px, ${pos.y / zoom}px)`, transition: dragging ? 'none' : 'transform 0.15s ease' }}

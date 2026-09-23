@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useState } from 'react'
 import LightboxModal from './LightboxModal'
 import { renderMarkdown } from '../../utils/markdown'
@@ -66,14 +67,14 @@ export default function MediaContent({ text, className }: { text: string; classN
           const imgIdx = images.indexOf(part)
           return (
             <img
-              key={i} src={part} alt="" loading="lazy" decoding="async"
+              key={i} src={mediaUrl(part)} alt="" loading="lazy" decoding="async"
               className="max-w-full md:max-w-sm rounded-lg my-1.5 block cursor-pointer hover:opacity-90 transition"
               onClick={() => setLightbox(imgIdx)}
             />
           )
         }
         if (part.startsWith('/uploads/') && /\.(mp4|webm|mov)$/i.test(part)) {
-          return <video key={i} src={part} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
+          return <video key={i} src={mediaUrl(part)} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
         }
         // Segment texte : markdown complet (gras, code, liens...) — renderMarkdown
         // gère lui-même les sauts de ligne, pas de whitespace-pre-wrap ici

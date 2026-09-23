@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
@@ -336,6 +336,7 @@ function PostView({ serverId, channelId, post, onBack, canManageMessages }: { se
       api.delete(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+      qc.invalidateQueries({ queryKey: ['forum', channelId] })
       toast.success('Réponse supprimée')
     },
     onError: () => toast.error('Impossible de supprimer'),
@@ -464,7 +465,7 @@ function PostView({ serverId, channelId, post, onBack, canManageMessages }: { se
                 className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <img src={mediaUrl(post.creator_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </button>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
@@ -563,7 +564,7 @@ function PostView({ serverId, channelId, post, onBack, canManageMessages }: { se
               className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
             >
               {r.author?.avatar
-                ? <img src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                ? <img src={mediaUrl(r.author.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                 : (r.author?.username ?? '?').charAt(0).toUpperCase()}
             </button>
             <div className="flex-1 min-w-0">
@@ -949,7 +950,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                 {post.creator_avatar
-                  ? <img src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <img src={mediaUrl(post.creator_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

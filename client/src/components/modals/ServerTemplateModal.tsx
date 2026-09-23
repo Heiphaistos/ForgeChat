@@ -106,6 +106,8 @@ export default function ServerTemplateModal({ onClose }: Props) {
       const res = await api.post('/servers', { name: serverName })
       const serverId = res.data.id
       for (const ch of template.channels) {
+        // POST /servers crée déjà #général : le recréer donnait deux canaux homonymes.
+        if (ch.name === 'général') continue
         try {
           await api.post(`/servers/${serverId}/channels`, { name: ch.name, type: ch.type })
         } catch {

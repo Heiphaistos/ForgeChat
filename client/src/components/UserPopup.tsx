@@ -4,7 +4,7 @@ import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck } from 'luci
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -72,6 +72,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
     onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? "Impossible d'ouvrir la conversation"),
   })
 
   const sendFriend = useMutation({
@@ -120,7 +121,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
       {/* Banner */}
       <div className="h-16 relative overflow-hidden" aria-hidden>
         {user?.banner
-          ? <img src={user.banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+          ? <img src={mediaUrl(user.banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
               style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
@@ -130,7 +131,7 @@ export default function UserPopup({ userId, anchorX, anchorY, onClose }: Props) 
         <div className="absolute -bottom-6 left-4">
           <div className="w-16 h-16 rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-xl text-white overflow-hidden">
             {user?.avatar
-              ? <img src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              ? <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (

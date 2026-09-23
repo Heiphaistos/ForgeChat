@@ -7,7 +7,7 @@ import {
   Focus, GalleryHorizontal,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useVoice, type VoicePeer } from '../store/voice'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
@@ -255,7 +255,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   // fermé), sinon un son ne serait audible que si CHAQUE participant a son propre
   // panneau ouvert au moment de la lecture. `user_id` filtré pour ignorer l'écho de
   // notre propre clic (déjà joué localement en instantané dans Soundboard.tsx).
-  const { data: soundboardSounds = [] } = useQuery<{ id: string; url: string }[]>({
+  const { data: soundboardSounds = [] } = useQuery<{ id: string; file_url: string }[]>({
     queryKey: ['soundboard', serverId],
     queryFn: () => api.get(`/servers/${serverId}/soundboard`).then(r => r.data),
     staleTime: 60_000,
@@ -267,7 +267,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       if (!sound) return
       const stored = localStorage.getItem('forgechat_soundboard_volume')
       const volume = stored ? Math.min(100, Math.max(0, parseInt(stored, 10))) : 80
-      const audio = new Audio(sound.url)
+      const audio = new Audio(mediaUrl(sound.file_url))
       audio.volume = volume / 100
       audio.play().catch(() => null)
     })

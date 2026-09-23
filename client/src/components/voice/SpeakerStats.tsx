@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../api/client'
 import { useMemo } from 'react'
 import { Mic, MicOff, Volume2 } from 'lucide-react'
 
@@ -27,7 +28,7 @@ function Avatar({ participant }: { participant: Participant }) {
   return (
     <div aria-hidden className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden flex-shrink-0">
       {participant.avatar
-        ? <img src={participant.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        ? <img src={mediaUrl(participant.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
         : <span aria-hidden>{participant.username.charAt(0).toUpperCase()}</span>}
     </div>
   )

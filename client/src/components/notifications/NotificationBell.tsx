@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PickerShell from '../ui/PickerShell'
 import { useNavigate } from 'react-router-dom'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 
 interface MentionItem {
   message_id: string
@@ -134,7 +134,7 @@ export default function NotificationBell() {
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-bold text-xs text-white overflow-hidden flex-shrink-0 mt-0.5">
                         {m.author_avatar
-                          ? <img src={m.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          ? <img src={mediaUrl(m.author_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           : m.author_username.charAt(0).toUpperCase()
                         }
                       </div>

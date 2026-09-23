@@ -133,7 +133,7 @@ export default function VoiceHotkeys() {
       window.removeEventListener('keyup', onUp)
       window.removeEventListener('blur', onBlur)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [joined, pttMode, screenSharing, custom])
 
   // ── Raccourci GLOBAL (application bureau) ───────────────────────────────
@@ -166,7 +166,7 @@ export default function VoiceHotkeys() {
         .then(({ invoke }) => invoke('unregister_ptt_shortcut'))
         .catch(() => {})
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [joined, pttMode, custom])
 
   return null

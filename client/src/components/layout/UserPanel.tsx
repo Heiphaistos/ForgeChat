@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../store/auth'
 import { useVoice } from '../../store/voice'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -88,13 +88,13 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
       <div className="relative">
         <div className="h-16 bg-gradient-to-br from-fc-accent/60 to-indigo-800/60 overflow-hidden">
           {user?.banner && (
-            <img src={user.banner} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+            <img src={mediaUrl(user.banner)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
           )}
         </div>
         <div className="absolute left-3 -bottom-5 flex items-end gap-2">
           <div className="w-12 h-12 rounded-full border-4 border-fc-sidebar bg-fc-accent flex items-center justify-center font-bold text-white text-base overflow-hidden flex-shrink-0">
             {user?.avatar
-              ? <img src={user.avatar} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              ? <img src={mediaUrl(user.avatar)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               : user?.username.charAt(0).toUpperCase()}
           </div>
           <div className={`w-3.5 h-3.5 rounded-full border-2 border-fc-sidebar mb-0.5 ${STATUS_COLORS[user?.status ?? 'offline']}`} />
@@ -233,7 +233,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         <div className="relative flex-shrink-0">
           <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {user.avatar
-              ? <img src={user.avatar} alt="" loading="eager" decoding="async" className="w-full h-full rounded-full object-cover" />
+              ? <img src={mediaUrl(user.avatar)} alt="" loading="eager" decoding="async" className="w-full h-full rounded-full object-cover" />
               : user.username.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[user.status] ?? 'bg-fc-muted'}`} />

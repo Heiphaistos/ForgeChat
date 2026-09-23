@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import { useDraft, useChat } from '../../store/chat'
 import { useAuth } from '../../store/auth'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { formatStickerMessage } from './sticker-utils'
 import type { Sticker } from './sticker-utils'
@@ -906,7 +906,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 ${idx === mentionIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
             >
               <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
-                {user.avatar ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : user.username.charAt(0).toUpperCase()}
+                {user.avatar ? <img src={mediaUrl(user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : user.username.charAt(0).toUpperCase()}
               </div>
               <div>
                 <div className="text-sm font-medium">{user.username}</div>
@@ -954,7 +954,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   ${idx === emojiAutoIndex ? 'bg-fc-accent/20 text-white' : 'text-fc-text hover:bg-fc-hover'}`}
               >
                 {entry.custom
-                  ? <img src={entry.custom.url} alt={entry.name} loading="lazy" decoding="async" className="w-5 h-5 object-contain rounded" />
+                  ? <img src={mediaUrl(entry.custom.url)} alt={entry.name} loading="lazy" decoding="async" className="w-5 h-5 object-contain rounded" />
                   : <span className="text-lg leading-none">{entry.char}</span>}
                 <span className="text-xs text-fc-muted">:{entry.name}:</span>
               </button>

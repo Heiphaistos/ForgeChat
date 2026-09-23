@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Eye, EyeOff } from 'lucide-react'
 import { Field } from './shared'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -35,7 +35,7 @@ export default function AccountSection({ user, updateMe }: Props) {
       <div className="flex items-center gap-4 p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden flex-shrink-0">
           {user.avatar
-            ? <img src={user.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            ? <img src={mediaUrl(user.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : user.username.charAt(0).toUpperCase()}
         </div>
         <div>
@@ -96,6 +96,7 @@ export default function AccountSection({ user, updateMe }: Props) {
                   />
                   <button
                     onClick={field.toggle}
+                    aria-label={field.show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                     className="absolute right-3 top-2.5 text-fc-muted hover:text-white transition"
                   >
                     {field.show ? <EyeOff size={14} /> : <Eye size={14} />}

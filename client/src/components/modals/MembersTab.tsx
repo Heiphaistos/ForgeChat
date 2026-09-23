@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, Tag, UserMinus } from 'lucide-react'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 
 interface Role { id: string; name: string; color: number }
@@ -124,7 +124,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               <div className="relative flex-shrink-0" aria-hidden>
                 <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-white font-bold text-sm overflow-hidden">
                   {m.avatar
-                    ? <img src={m.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ? <img src={mediaUrl(m.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : <span aria-hidden>{m.username.charAt(0).toUpperCase()}</span>}
                 </div>
                 <div

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { X, Search, Send, ChevronDown, ChevronRight, Hash } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
@@ -113,6 +113,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
           </h2>
           <button
             onClick={onClose}
+            aria-label="Fermer"
             className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
           >
             <X size={16} />
@@ -165,7 +166,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
                     : <ChevronRight size={12} className="text-fc-muted flex-shrink-0" />
                   }
                   {server.icon ? (
-                    <img src={server.icon} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                    <img src={mediaUrl(server.icon)} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
                   ) : (
                     <div className="w-5 h-5 rounded-full bg-fc-accent flex items-center justify-center text-xs text-white font-bold flex-shrink-0">
                       {server.name.charAt(0).toUpperCase()}

@@ -60,7 +60,8 @@ function ModerationTab({ serverId }: { serverId: string }) {
 
   const purge = useMutation({
     mutationFn: () => api.post(`/channels/${purgeChannelId}/purge`, {
-      before: purgeBefore || undefined,
+      // datetime-local n'a pas de fuseau : sans conversion, le serveur l'interprète dans le sien.
+      before: purgeBefore ? new Date(purgeBefore).toISOString() : undefined,
       limit: purgeLimit,
     }),
     onSuccess: (r) => toast.success(`${r.data.deleted} messages supprimés`),

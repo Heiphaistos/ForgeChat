@@ -6,7 +6,7 @@ import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File, ChevronLeft
 import { useMobile } from '../contexts/MobileContext'
 import { isToday, isThisWeek, isThisMonth } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
 import toast from 'react-hot-toast'
@@ -112,9 +112,9 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 
   if (isImage) {
     return (
-      <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="block">
+      <a href={mediaUrl(attachment.url)} target="_blank" rel="noopener noreferrer" className="block">
         <img
-          src={attachment.url}
+          src={mediaUrl(attachment.url)}
           alt={attachment.filename}
           className="max-h-32 max-w-xs rounded-lg object-cover border border-fc-hover hover:opacity-90 transition"
         />
@@ -124,7 +124,7 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 
   return (
     <a
-      href={attachment.url}
+      href={mediaUrl(attachment.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-2 bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm hover:border-fc-accent transition"
@@ -307,7 +307,7 @@ export default function SavedPage() {
                           {/* Avatar */}
                           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                             {item.author_avatar
-                              ? <img src={item.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                              ? <img src={mediaUrl(item.author_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                               : item.author_username.charAt(0).toUpperCase()}
                           </div>
 

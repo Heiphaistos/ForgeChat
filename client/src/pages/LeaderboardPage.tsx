@@ -3,7 +3,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { ChevronLeft } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
 
@@ -111,7 +111,7 @@ export default function LeaderboardPage() {
 
                   <div className="w-9 h-9 rounded-full bg-fc-hover flex-shrink-0 overflow-hidden">
                     {entry.avatar ? (
-                      <img src={entry.avatar} alt={entry.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      <img src={mediaUrl(entry.avatar)} alt={entry.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-fc-muted text-sm font-bold">
                         {entry.username[0]?.toUpperCase()}

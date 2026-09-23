@@ -3,7 +3,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { Search, Smile } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 
 const CATEGORIES = [
   {
@@ -159,7 +159,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
                     aria-label={`:${emoji.name}:`}
                     className="w-8 h-8 flex items-center justify-center rounded hover:bg-fc-hover transition hover:scale-110"
                   >
-                    <img src={emoji.url} alt={emoji.name} loading="lazy" decoding="async" className="w-6 h-6 object-contain" />
+                    <img src={mediaUrl(emoji.url)} alt={emoji.name} loading="lazy" decoding="async" className="w-6 h-6 object-contain" />
                   </button>
                 ))}
             </div>

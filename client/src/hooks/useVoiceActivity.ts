@@ -24,7 +24,7 @@ export function usePeersVoiceActivity(peers: { userId: string; stream: MediaStre
     // `keys` capture l'identité réelle des flux ; `peers` est un tableau recréé à
     // chaque render, s'en servir comme dépendance relançait l'effet 12 fois par
     // seconde.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [keys])
 
   useEffect(() => subscribeLevels((map) => {

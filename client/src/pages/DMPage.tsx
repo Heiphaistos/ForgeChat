@@ -3,7 +3,7 @@ import NativeVideo from '../components/voice/NativeVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
-import api from '../api/client'
+import api, { mediaUrl } from '../api/client'
 import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import { useWs } from '../store/ws'
@@ -531,7 +531,7 @@ export default function DMPage() {
         <div className="relative flex-shrink-0">
           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {partnerAvatar
-              ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              ? <img src={mediaUrl(partnerAvatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : partnerName.charAt(0).toUpperCase()}
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLOR[status]}`} />
@@ -646,7 +646,7 @@ export default function DMPage() {
               {!remoteStream && !remoteVideoUrl && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
                   <div className="w-14 h-14 rounded-full bg-fc-accent flex items-center justify-center text-xl font-bold text-white overflow-hidden">
-                    {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+                    {partnerAvatar ? <img src={mediaUrl(partnerAvatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
                   </div>
                   <p className="text-white font-semibold text-sm">{partnerName}</p>
                   <p className={`text-xs ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`}>
@@ -659,7 +659,7 @@ export default function DMPage() {
             <div className="flex flex-col items-center gap-2">
               {/* Audio distant : PersistentDmCallAudio (global), pas un <audio> ici */}
               <div className="w-16 h-16 rounded-full bg-fc-accent flex items-center justify-center text-2xl font-bold text-white overflow-hidden">
-                {partnerAvatar ? <img src={partnerAvatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
+                {partnerAvatar ? <img src={mediaUrl(partnerAvatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>
               <p className="text-white font-semibold">{partnerName}</p>
               <p className={`text-sm ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`} aria-label={callState === 'connected' ? `Appel connecté, durée ${callDuration}` : undefined}>
@@ -774,7 +774,7 @@ export default function DMPage() {
                 <div key={msg.id} className="flex items-start gap-2.5 group">
                   <div className="w-8 h-8 rounded-full bg-fc-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                     {msg.sender_avatar
-                      ? <img src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      ? <img src={mediaUrl(msg.sender_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       : msg.sender_username.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
