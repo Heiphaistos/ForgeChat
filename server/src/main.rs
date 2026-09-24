@@ -76,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             cleanup_expired_attachments(&cleanup_state, &cleanup_upload_dir).await;
+            handlers::diagnostics::purge_old(&cleanup_state).await;
         }
     });
 
@@ -215,6 +216,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook))
         // Événements du SFU (sans JWT — signés par LiveKit, vérifiés dans le handler)
         .route("/api/livekit/webhook", post(handlers::voice::livekit_webhook))
+        // Rapports d'erreurs des applis (sans JWT : une page blanche n'est pas
+        // connectée). Corps borné ici, limite par IP dans le handler.
+        .route(
+            "/api/diagnostics/report",
+            post(handlers::diagnostics::submit_report)
+                .layer(DefaultBodyLimit::max(handlers::diagnostics::MAX_BODY_BYTES)),
+        )
         // Routes protégées
         .nest("/api", protected_routes(state.clone()))
         // Fichiers uploadés — avec en-têtes de sécurité pour éviter le sniffing de type MIME
@@ -524,6 +532,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
         .route("/admin/stats", get(handlers::servers::get_admin_stats))
+        .route("/admin/diagnostics", get(handlers::diagnostics::list_reports))
+        .route("/admin/diagnostics/:id", get(handlers::diagnostics::get_report).delete(handlers::diagnostics::delete_report))
         .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
         .route("/servers/:server_id/leaderboard", get(handlers::servers::get_leaderboard))
         .route("/servers/:server_id/tickets", get(handlers::tickets::list_tickets).post(handlers::tickets::create_ticket))

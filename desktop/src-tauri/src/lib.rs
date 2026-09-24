@@ -23,6 +23,7 @@ window.addEventListener('load', () => {
 /// Mise à jour automatique (version installée ET version portable).
 pub mod updater;
 mod compat;
+mod diagnostic;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -271,10 +272,25 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
             settings.set_enable_media_stream(true);
             settings.set_enable_mediasource(true);
             settings.set_enable_webrtc(true);
+            // Diagnostic de la page blanche : la console JavaScript part dans
+            // le journal (stdout, redirigé vers forgechat.log hors terminal).
+            settings.set_enable_write_console_messages_to_stdout(true);
         } else {
             eprintln!("[ForgeChat] WebKitSettings indisponibles : WebRTC peut rester désactivé");
         }
 
+        // Page blanche sans aucune erreur : tracer le chargement et la mort
+        // éventuelle du processus d'affichage de WebKit.
+        webview.connect_load_failed(|_, _, uri, err| {
+            eprintln!("[ForgeChat] Chargement échoué : {uri} : {err}");
+            false
+        });
+        webview.connect_web_process_terminated(|_, raison| {
+            eprintln!("[ForgeChat] Processus d'affichage WebKit arrêté : {raison:?}");
+        });
+        webview.connect_load_changed(|wv, ev| {
+            eprintln!("[ForgeChat] Chargement : {ev:?} {}", wv.uri().unwrap_or_default());
+        });
         webview.connect_permission_request(|_, request| {
             match request.downcast_ref::<UserMediaPermissionRequest>() {
                 Some(media) => {
@@ -315,6 +331,8 @@ fn purger_service_worker_webview2() {
 
 pub fn run() {
     #[cfg(windows)]
+    diagnostic::surveiller_paniques();
+    #[cfg(windows)]
     purger_service_worker_webview2();
 
     #[cfg(windows)]
@@ -337,6 +355,11 @@ pub fn run() {
     // valeur déjà définie par l'utilisateur/l'environnement de lancement.
     #[cfg(target_os = "linux")]
     {
+        // Avant le journal (qui écrase celui du lancement précédent) et avant
+        // `preparer` (qui repose le marqueur de lancement).
+        diagnostic::signaler_lancement_precedent();
+        compat::journal_si_pas_de_terminal();
+        compat::purger_caches_si_nouvelle_version();
         compat::preparer();
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
@@ -418,7 +441,8 @@ pub fn run() {
             native_voice::nv_set_camera,
             native_voice::nv_set_screen,
             native_voice::nv_popout,
-            compat::app_ready
+            compat::app_ready,
+            diagnostic::read_desktop_log
         ]);
 
     builder

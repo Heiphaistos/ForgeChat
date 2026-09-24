@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const SERVER_URL = isTauri ? 'https://forgechat.heiphaistos.org' : ''
-const baseURL = isTauri ? 'https://forgechat.heiphaistos.org/api' : '/api'
+export const baseURL = isTauri ? 'https://forgechat.heiphaistos.org/api' : '/api'
 
 // Le serveur renvoie des chemins relatifs `/uploads/...`. L'app bureau sert le client
 // depuis `tauri.localhost` : sans préfixe, avatars, pièces jointes et sons y pointeraient.

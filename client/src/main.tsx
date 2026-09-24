@@ -1,3 +1,5 @@
+// En premier : capte les erreurs dès l'évaluation des modules suivants.
+import './lib/errorReporter'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'

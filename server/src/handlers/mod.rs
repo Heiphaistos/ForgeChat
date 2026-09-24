@@ -43,3 +43,4 @@ pub mod tickets;
 pub mod privacy;
 pub mod desktop;
 pub mod discord_import;
+pub mod diagnostics;

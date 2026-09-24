@@ -11,6 +11,9 @@
 Le `.deb` et le `.rpm` installent eux-mêmes leurs dépendances. Préférez-les à
 l'AppImage : ils utilisent le WebKitGTK de votre système.
 
+Depuis la 3.30.1, l'AppImage ne livre plus ses propres bibliothèques Wayland :
+sous Fedora 44 elles empêchaient WebKit de démarrer (fenêtre blanche).
+
 ## Dépendances
 
 Installées automatiquement par le `.deb` et le `.rpm`. À installer à la main pour l'AppImage.
@@ -54,7 +57,13 @@ normal », ou `rm ~/.config/forgechat/mode-compatibilite`.
 
 ### Si c'est toujours blanc
 
-Lancez ForgeChat depuis un terminal et envoyez-nous ce qui s'affiche :
+Depuis la 3.30.2, ForgeChat lancé depuis le menu écrit son journal ici :
+
+```
+~/.local/share/org.heiphaistos.forgechat/forgechat.log
+```
+
+Envoyez ce fichier. Sinon, lancez-le depuis un terminal :
 
 ```
 FORGECHAT_SAFE_MODE=1 forgechat-desktop 2>&1 | tee ~/forgechat-log.txt
