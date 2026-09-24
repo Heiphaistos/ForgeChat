@@ -271,10 +271,25 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
             settings.set_enable_media_stream(true);
             settings.set_enable_mediasource(true);
             settings.set_enable_webrtc(true);
+            // Diagnostic de la page blanche : la console JavaScript part dans
+            // le journal (stdout, redirigé vers forgechat.log hors terminal).
+            settings.set_enable_write_console_messages_to_stdout(true);
         } else {
             eprintln!("[ForgeChat] WebKitSettings indisponibles : WebRTC peut rester désactivé");
         }
 
+        // Page blanche sans aucune erreur : tracer le chargement et la mort
+        // éventuelle du processus d'affichage de WebKit.
+        webview.connect_load_failed(|_, _, uri, err| {
+            eprintln!("[ForgeChat] Chargement échoué : {uri} : {err}");
+            false
+        });
+        webview.connect_web_process_terminated(|_, raison| {
+            eprintln!("[ForgeChat] Processus d'affichage WebKit arrêté : {raison:?}");
+        });
+        webview.connect_load_changed(|wv, ev| {
+            eprintln!("[ForgeChat] Chargement : {ev:?} {}", wv.uri().unwrap_or_default());
+        });
         webview.connect_permission_request(|_, request| {
             match request.downcast_ref::<UserMediaPermissionRequest>() {
                 Some(media) => {
