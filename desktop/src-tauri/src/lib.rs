@@ -23,6 +23,7 @@ window.addEventListener('load', () => {
 /// Mise à jour automatique (version installée ET version portable).
 pub mod updater;
 mod compat;
+mod diagnostic;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -330,6 +331,8 @@ fn purger_service_worker_webview2() {
 
 pub fn run() {
     #[cfg(windows)]
+    diagnostic::surveiller_paniques();
+    #[cfg(windows)]
     purger_service_worker_webview2();
 
     #[cfg(windows)]
@@ -352,6 +355,9 @@ pub fn run() {
     // valeur déjà définie par l'utilisateur/l'environnement de lancement.
     #[cfg(target_os = "linux")]
     {
+        // Avant le journal (qui écrase celui du lancement précédent) et avant
+        // `preparer` (qui repose le marqueur de lancement).
+        diagnostic::signaler_lancement_precedent();
         compat::journal_si_pas_de_terminal();
         compat::purger_caches_si_nouvelle_version();
         compat::preparer();
@@ -435,7 +441,8 @@ pub fn run() {
             native_voice::nv_set_camera,
             native_voice::nv_set_screen,
             native_voice::nv_popout,
-            compat::app_ready
+            compat::app_ready,
+            diagnostic::read_desktop_log
         ]);
 
     builder

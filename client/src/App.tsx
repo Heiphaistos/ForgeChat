@@ -61,6 +61,7 @@ const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
 const TicketsPage = lazy(() => import('./pages/TicketsPage'))
 const ServerAdminPage = lazy(() => import('./pages/ServerAdminPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const DiagnosticsAdminPage = lazy(() => import('./pages/DiagnosticsAdminPage'))
 const ImportDiscordPage = lazy(() => import('./pages/ImportDiscordPage'))
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'))
 
@@ -1084,6 +1085,7 @@ function AppInner() {
             <Route path="servers/:serverId/tickets" element={<TicketsPage />} />
             <Route path="servers/:serverId/admin" element={<ServerAdminPage />} />
             <Route path="admin" element={<AdminPage />} />
+            <Route path="admin/diagnostics" element={<DiagnosticsAdminPage />} />
             <Route path="import-discord" element={<ImportDiscordPage />} />
           </Route>
         </Routes>

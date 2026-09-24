@@ -25,6 +25,25 @@ fn dossier() -> Option<PathBuf> {
         .map(|d| d.join("forgechat"))
 }
 
+/// Dossier de données de l'app (`~/.local/share/org.heiphaistos.forgechat`).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn dossier_donnees() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    Some(
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local/share"))
+            .join("org.heiphaistos.forgechat"),
+    )
+}
+
+/// Le lancement précédent n'a jamais signalé son premier rendu (`app_ready`).
+/// Valable seulement AVANT `preparer`, qui repose le marqueur.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn lancement_precedent_echoue() -> bool {
+    dossier().is_some_and(|d| d.join(EN_COURS).exists())
+}
+
 pub fn actif() -> bool {
     dossier().is_some_and(|d| d.join(ACTIF).exists())
 }
@@ -89,10 +108,7 @@ pub fn app_ready() {
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn purger_caches_si_nouvelle_version() {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return };
-    let donnees = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".local/share"))
-        .join("org.heiphaistos.forgechat");
+    let Some(donnees) = dossier_donnees() else { return };
     let caches = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".cache"))
@@ -131,11 +147,7 @@ pub fn journal_si_pas_de_terminal() {
     if unsafe { libc::isatty(2) } == 1 {
         return;
     }
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return };
-    let dir = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".local/share"))
-        .join("org.heiphaistos.forgechat");
+    let Some(dir) = dossier_donnees() else { return };
     let _ = std::fs::create_dir_all(&dir);
     let Ok(f) = std::fs::File::create(dir.join("forgechat.log")) else { return };
     // SAFETY: dup2 remplace stdout/stderr par un fichier ouvert, possédé par `f`
