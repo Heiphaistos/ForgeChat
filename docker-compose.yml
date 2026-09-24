@@ -78,6 +78,8 @@ services:
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
     image: livekit/livekit-server:v1.13.7
+    # Pas de root : aucun volume, ports tous au-dessus de 1024.
+    user: "65534:65534"
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       NODE_IP: ${LIVEKIT_NODE_IP:?LIVEKIT_NODE_IP requis (IP publique du VPS)}
