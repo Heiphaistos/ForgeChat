@@ -397,6 +397,12 @@ export default function LandingPage() {
             </a>
           </div>
 
+          <p className="text-sm text-white/50 mb-3">
+            Dépendances, commandes d'installation et fenêtre blanche :{' '}
+            <a href={`${DL_BASE}/LISEZ-MOI-LINUX.txt`} className="text-indigo-300 hover:text-indigo-200 underline">
+              guide Linux
+            </a>
+          </p>
           <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
           {majLe && <p className="text-xs text-white/40 text-center">Mis à jour le {majLe}</p>}
         </div>

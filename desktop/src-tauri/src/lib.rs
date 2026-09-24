@@ -22,6 +22,7 @@ window.addEventListener('load', () => {
 
 /// Mise à jour automatique (version installée ET version portable).
 pub mod updater;
+mod compat;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -336,6 +337,7 @@ pub fn run() {
     // valeur déjà définie par l'utilisateur/l'environnement de lancement.
     #[cfg(target_os = "linux")]
     {
+        compat::preparer();
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
@@ -415,7 +417,8 @@ pub fn run() {
             native_voice::nv_set_peer_audio,
             native_voice::nv_set_camera,
             native_voice::nv_set_screen,
-            native_voice::nv_popout
+            native_voice::nv_popout,
+            compat::app_ready
         ]);
 
     builder
@@ -465,7 +468,18 @@ pub fn run() {
             // ── Tray icon ────────────────────────────────────────────
             let quit = MenuItem::with_id(app, "quit", "Quitter ForgeChat", true, None::<&str>)?;
             let show = MenuItem::with_id(app, "show", "Afficher", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            // Linux : sortie de secours visible même si la fenêtre reste blanche.
+            let compat_label = if compat::actif() {
+                "Redémarrer en mode normal"
+            } else {
+                "Redémarrer en mode compatibilité (écran blanc)"
+            };
+            let compat_item = MenuItem::with_id(app, "compat", compat_label, cfg!(target_os = "linux"), None::<&str>)?;
+            let menu = if cfg!(target_os = "linux") {
+                Menu::with_items(app, &[&show, &compat_item, &quit])?
+            } else {
+                Menu::with_items(app, &[&show, &quit])?
+            };
 
             TrayIconBuilder::with_id("main-tray")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -482,6 +496,10 @@ pub fn run() {
                 })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => app.exit(0),
+                    "compat" => {
+                        compat::definir(!compat::actif());
+                        app.restart();
+                    }
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Network;
+Comment=ForgeChat avec rendu logiciel et X11, si la fenêtre reste blanche
+Exec=forgechat-desktop --safe-mode
+StartupWMClass=forgechat-desktop
+Icon=forgechat-desktop
+Name=ForgeChat (mode compatibilité)
+Terminal=false
+Type=Application

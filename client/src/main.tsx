@@ -38,6 +38,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 initFaviconAnimation()
 
+// App de bureau Linux : signale le premier rendu. Sans ce signal, le lancement
+// suivant passe tout seul en mode compatibilité (fenêtre blanche selon le GPU).
+if (isTauri) {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    import('@tauri-apps/api/core').then(m => m.invoke('app_ready')).catch(() => {})
+  }))
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
