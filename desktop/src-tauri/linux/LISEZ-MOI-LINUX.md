@@ -11,6 +11,9 @@
 Le `.deb` et le `.rpm` installent eux-mêmes leurs dépendances. Préférez-les à
 l'AppImage : ils utilisent le WebKitGTK de votre système.
 
+Depuis la 3.30.1, l'AppImage ne livre plus ses propres bibliothèques Wayland :
+sous Fedora 44 elles empêchaient WebKit de démarrer (fenêtre blanche).
+
 ## Dépendances
 
 Installées automatiquement par le `.deb` et le `.rpm`. À installer à la main pour l'AppImage.

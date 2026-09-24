@@ -75,10 +75,34 @@ else
     echo "[WARN] .rpm non trouve dans $BUNDLE/rpm/"
 fi
 
+# Fenetre BLANCHE sous Fedora 44 : l'AppImage embarquait libwayland-* et
+# libepoxy d'Ubuntu 22.04. Melangees au Mesa recent du systeme, WebKit
+# s'arretait au demarrage (« Could not create default EGL display:
+# EGL_BAD_PARAMETER. Aborting »). Reproduit dans un conteneur fedora:44, corrige
+# en les retirant : toute distribution de bureau les fournit, et la version du
+# systeme est celle qui va avec son Mesa. Controle aussi sous Ubuntu 22.04.
+alleger_appimage() {
+    local img="$1" work tool
+    tool="$HOME/.cache/fc-tools/squashfs-root/appimagetool-prefix/AppRun"
+    if [ ! -x "$tool" ]; then
+        mkdir -p "$HOME/.cache/fc-tools"
+        (cd "$HOME/.cache/fc-tools" && "$HOME/.cache/tauri/linuxdeploy-plugin-appimage.AppImage" --appimage-extract >/dev/null)
+    fi
+    work=$(mktemp -d)
+    (cd "$work" && "$img" --appimage-extract >/dev/null)
+    rm -f "$work"/squashfs-root/usr/lib/libwayland-*.so* "$work"/squashfs-root/usr/lib/libepoxy.so*
+    ARCH=x86_64 "$tool" --no-appstream "$work/squashfs-root" "$img.tmp" >/dev/null 2>&1
+    mv "$img.tmp" "$img"
+    chmod +x "$img"
+    rm -rf "$work"
+    echo "[OK] AppImage allegee (sans libwayland ni libepoxy embarques)"
+}
+
 APPIMAGE_SRC=$(find "$BUNDLE/appimage" -name "*${VERSION}*.AppImage" -print -quit 2>/dev/null || true)
 if [ -n "$APPIMAGE_SRC" ]; then
     cp "$APPIMAGE_SRC" "$OUT/ForgeChat-v$VERSION-amd64.AppImage"
     chmod +x "$OUT/ForgeChat-v$VERSION-amd64.AppImage"
+    alleger_appimage "$OUT/ForgeChat-v$VERSION-amd64.AppImage"
     echo "[OK] AppImage   : dist-desktop/ForgeChat-v$VERSION-amd64.AppImage"
 else
     echo "[WARN] AppImage non trouve dans $BUNDLE/appimage/"
