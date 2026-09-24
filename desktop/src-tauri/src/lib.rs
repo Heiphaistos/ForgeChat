@@ -337,6 +337,8 @@ pub fn run() {
     // valeur déjà définie par l'utilisateur/l'environnement de lancement.
     #[cfg(target_os = "linux")]
     {
+        compat::journal_si_pas_de_terminal();
+        compat::purger_caches_si_nouvelle_version();
         compat::preparer();
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");

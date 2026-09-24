@@ -57,7 +57,13 @@ normal », ou `rm ~/.config/forgechat/mode-compatibilite`.
 
 ### Si c'est toujours blanc
 
-Lancez ForgeChat depuis un terminal et envoyez-nous ce qui s'affiche :
+Depuis la 3.30.2, ForgeChat lancé depuis le menu écrit son journal ici :
+
+```
+~/.local/share/org.heiphaistos.forgechat/forgechat.log
+```
+
+Envoyez ce fichier. Sinon, lancez-le depuis un terminal :
 
 ```
 FORGECHAT_SAFE_MODE=1 forgechat-desktop 2>&1 | tee ~/forgechat-log.txt

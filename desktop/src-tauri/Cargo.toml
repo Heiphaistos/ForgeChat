@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-desktop"
-version = "3.30.1"
+version = "3.30.2"
 edition = "2021"
 
 [lib]
@@ -48,6 +48,8 @@ windows-sys = { version = "0.59", features = [
 # deux types distincts et ne compilerait pas. Meme feature `v2_38` que wry.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+# Journal de démarrage (redirection de stderr) pour diagnostiquer une fenêtre blanche.
+libc = "0.2"
 # Vocal natif : WebKitGTK des distributions n'a pas WebRTC (RTCPeerConnection
 # absent, mesuré sur 2.50.4). Le média passe par le SDK Rust de LiveKit, qui
 # embarque son propre WebRTC, et par le module audio natif (PulseAudio/ALSA).
