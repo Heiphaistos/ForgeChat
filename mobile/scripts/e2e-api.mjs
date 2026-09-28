@@ -9,6 +9,19 @@ const BASE = process.env.FORGECHAT_API_URL || 'http://localhost:8080';
 const WS_BASE = BASE.replace(/^http/, 'ws');
 const POSTGRES_CONTAINER = process.env.POSTGRES_CONTAINER || 'forgechat-mobile-postgres-1';
 
+// Ce script crée des comptes et envoie de vraies données : garde-fou contre une exécution
+// accidentelle sur un serveur distant (prod ou autre) au lieu du backend local de dev.
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '10.0.2.2', '::1']);
+const allowRemote = process.argv.includes('--allow-remote');
+const targetHost = new URL(BASE).hostname;
+if (!ALLOWED_HOSTS.has(targetHost) && !allowRemote) {
+  console.error(
+    `Refus de lancer e2e-api.mjs contre "${BASE}" (hôte "${targetHost}" non local).\n` +
+      'Ce script crée des comptes et des données de test. Relance avec --allow-remote si c\'est bien voulu.',
+  );
+  process.exit(1);
+}
+
 let passed = 0;
 let failed = 0;
 const failures = [];
