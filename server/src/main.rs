@@ -8,6 +8,7 @@ mod models;
 mod state;
 mod notify;
 mod push;
+mod net_guard;
 
 use axum::{
     middleware as axum_middleware,
