@@ -230,18 +230,18 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
     let key = (user_id, channel_id);
     match ev["event"].as_str() {
         Some("participant_joined") => {
-            sfu_absents().lock().unwrap().remove(&key);
+            sfu_absents().lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
         }
         Some("participant_left") => {
             let marker = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);
-            sfu_absents().lock().unwrap().insert(key, marker);
+            sfu_absents().lock().unwrap_or_else(|e| e.into_inner()).insert(key, marker);
             tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(SFU_GRACE_S)).await;
-                let still_absent = sfu_absents().lock().unwrap().get(&key) == Some(&marker);
+                let still_absent = sfu_absents().lock().unwrap_or_else(|e| e.into_inner()).get(&key) == Some(&marker);
                 if !still_absent {
                     return;
                 }
-                sfu_absents().lock().unwrap().remove(&key);
+                sfu_absents().lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
                 if group_call {
                     crate::handlers::group_calls::leave(&state, channel_id, user_id).await;
                     return;
