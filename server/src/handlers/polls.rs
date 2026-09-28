@@ -183,6 +183,8 @@ pub async fn get_poll(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
+    // Sondage d'un salon masqué : même garde que le vote.
+    require_member_and_channel(&state, claims.sub, server_id, row.get("channel_id")).await?;
 
     let options_rows = sqlx::query(
         "SELECT po.id, po.text, po.position,
