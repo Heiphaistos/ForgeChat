@@ -231,6 +231,16 @@ impl AppState {
         }
     }
 
+    /// Envoie `event` aux utilisateurs listés qui sont connectés.
+    pub async fn send_to_users(&self, users: &[Uuid], event: String) {
+        let clients = self.clients.read().await;
+        for uid in users {
+            if let Some(tx) = clients.get(uid) {
+                let _ = tx.send(event.clone());
+            }
+        }
+    }
+
     /// Broadcast aux membres connectés du serveur du canal **qui peuvent voir ce
     /// canal** (correctif N14 : les overrides `channel_permissions` sont
     /// désormais respectés, un canal privé ne fuit plus vers tout le serveur).
