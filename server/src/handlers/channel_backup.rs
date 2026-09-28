@@ -14,7 +14,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::{require_member, require_member_and_channel},
+    handlers::{
+        password_reset::over_limit,
+        servers::{can_read_history, require_member, require_member_and_channel},
+    },
     middleware::auth::Claims,
     models::channel::{Category, Channel},
     state::AppState,
@@ -23,6 +26,14 @@ use crate::{
 /// ponytail: tout est chargé en mémoire ; au-delà de 50 000 messages seuls les
 /// plus récents sont gardés (`truncated`). Passer à un flux si ça ne suffit plus.
 const MAX_MESSAGES: i64 = 50_000;
+
+/// Chaque sauvegarde peut charger N × 50 000 messages : 10 par tranche de 10 min.
+async fn rate_limit(state: &AppState, user: Uuid) -> Result<()> {
+    if over_limit(state, &format!("backup:{user}"), 10, 600).await {
+        return Err(AppError::TooManyRequests);
+    }
+    Ok(())
+}
 
 async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
     let channel = sqlx::query_as::<_, Channel>("SELECT * FROM channels WHERE id=$1")
@@ -132,6 +143,10 @@ pub async fn backup_channel(
         .flatten()
         .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    if !can_read_history(&state, claims.sub, channel_id).await {
+        return Err(AppError::Forbidden);
+    }
+    rate_limit(&state, claims.sub).await?;
 
     let mut out = channel_backup(&state, channel_id).await?;
     out["format"] = json!("forgechat-channel-backup/1");
@@ -148,6 +163,7 @@ pub async fn backup_category(
     Path((server_id, category_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Value>> {
     require_member(&state, claims.sub, server_id).await?;
+    rate_limit(&state, claims.sub).await?;
     let category = sqlx::query_as::<_, Category>("SELECT * FROM categories WHERE id=$1 AND server_id=$2")
         .bind(category_id)
         .bind(server_id)
@@ -166,6 +182,9 @@ pub async fn backup_category(
 
     let mut channels = Vec::new();
     for id in ids.into_iter().filter(|id| !forbidden.contains(id)) {
+        if !can_read_history(&state, claims.sub, id).await {
+            continue;
+        }
         channels.push(channel_backup(&state, id).await?);
     }
 

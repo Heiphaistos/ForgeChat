@@ -1010,6 +1010,13 @@ pub async fn require_member_and_channel(
     Ok(())
 }
 
+/// READ_HISTORY effectif sur le salon (rôles, @everyone, surcharges ;
+/// propriétaire et administrateurs toujours). Avant : case jamais vérifiée.
+pub async fn can_read_history(state: &AppState, user_id: Uuid, channel_id: Uuid) -> bool {
+    state.effective_channel_permissions(user_id, channel_id).await
+        .is_some_and(|(_, p)| p & crate::models::role::Permissions::READ_HISTORY != 0)
+}
+
 /// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
 // ─── Hiérarchie des rôles (comme Discord) ─────────────────────────────────────
 
