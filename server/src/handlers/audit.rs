@@ -578,7 +578,7 @@ pub(crate) fn is_ssrf_safe_url(url: &str) -> bool {
     // Retirer le port éventuel
     let host = host.split(':').next().unwrap_or("");
 
-    if host.is_empty() {
+    if host.is_empty() || !crate::net_guard::url_str_target_ok(url) {
         return false;
     }
 
@@ -644,7 +644,7 @@ pub async fn og_preview(
         return Err(AppError::BadRequest("Domaine non autorisé pour l'aperçu".into()));
     }
 
-    let resp = state.http_client
+    let resp = state.public_http
         .get(&q.url)
         .timeout(std::time::Duration::from_secs(5))
         .send()

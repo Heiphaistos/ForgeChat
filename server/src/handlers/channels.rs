@@ -115,7 +115,7 @@ pub async fn create_channel(
     .await?;
 
     let event = serde_json::json!({ "type": "CHANNEL_CREATE", "server_id": server_id, "channel": &channel });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel.id, event.to_string()).await;
 
     log_event(
         &state, server_id, "CHANNEL_CREATE",
@@ -276,7 +276,7 @@ pub async fn update_channel(
             "has_voice_password": channel.voice_password_hash.is_some(),
         }
     });
-    state.broadcast_to_server_members(server_id, event.to_string()).await;
+    state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(channel))
 }
@@ -526,6 +526,7 @@ pub async fn put_channel_permission(
     if !["role", "member"].contains(&body.target_type.as_str()) {
         return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
     }
+    let before = state.channel_audience(channel_id).await;
     sqlx::query(
         "INSERT INTO channel_permissions (channel_id, target_id, target_type, allow, deny)
          VALUES ($1, $2, $3, $4, $5)
@@ -539,11 +540,7 @@ pub async fn put_channel_permission(
     .bind(body.deny)
     .execute(&state.db)
     .await?;
-    state.broadcast_to_server_members(server_id, serde_json::json!({
-        "type": "CHANNEL_PERMISSION_UPDATE",
-        "channel_id": channel_id,
-        "server_id": server_id,
-    }).to_string()).await;
+    notify_permission_change(&state, channel_id, server_id, before).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -554,16 +551,13 @@ pub async fn delete_channel_permission(
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
     require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    let before = state.channel_audience(channel_id).await;
     sqlx::query("DELETE FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
         .bind(channel_id)
         .bind(target_id)
         .execute(&state.db)
         .await?;
-    state.broadcast_to_server_members(server_id, serde_json::json!({
-        "type": "CHANNEL_PERMISSION_UPDATE",
-        "channel_id": channel_id,
-        "server_id": server_id,
-    }).to_string()).await;
+    notify_permission_change(&state, channel_id, server_id, before).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -585,7 +579,7 @@ pub async fn archive_channel(
     .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
 
     let archived: bool = row.get("archived");
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "CHANNEL_ARCHIVE_UPDATE",
         "channel_id": channel_id,
         "server_id": server_id,
@@ -682,7 +676,7 @@ pub async fn move_channel(
         .await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "CHANNEL_UPDATE",
         "channel_id": channel_id,
         "server_id": server_id,
@@ -901,4 +895,18 @@ pub async fn delete_channel_tag(
         .await?;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Surcharges de salon modifiées : seuls ceux qui voyaient le salon avant OU le
+/// voient après sont prévenus (les premiers doivent le retirer de leur liste).
+/// Avant : tout le serveur recevait l'id des salons privés.
+async fn notify_permission_change(state: &AppState, channel_id: Uuid, server_id: Uuid, mut users: Vec<Uuid>) {
+    for u in state.channel_audience(channel_id).await {
+        if !users.contains(&u) { users.push(u); }
+    }
+    state.send_to_users(&users, serde_json::json!({
+        "type": "CHANNEL_PERMISSION_UPDATE",
+        "channel_id": channel_id,
+        "server_id": server_id,
+    }).to_string()).await;
 }

@@ -406,19 +406,12 @@ pub async fn change_password(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    headers: axum::http::HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    // Rate limit : 5 tentatives / 15min par IP
-    let ip = headers
-        .get("X-Forwarded-For")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| addr.ip().to_string());
+    // Rate limit : 5 tentatives / 15 min par compte. Avant : par le 1er
+    // X-Forwarded-For, que le client choisit librement (essais illimités).
     {
-        let key = format!("chgpw_attempts:{}", ip);
+        let key = format!("chgpw_attempts:{}", claims.sub);
         let mut redis = state.redis.lock().await;
         let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
         let count = count.unwrap_or(0);

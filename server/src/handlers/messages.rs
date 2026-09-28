@@ -23,6 +23,10 @@ pub async fn get_messages(
     Query(params): Query<GetMessagesQuery>,
 ) -> Result<Json<Vec<MessageWithAuthor>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // Sans « Lire l'historique » : aucun message passé, seulement le direct (comme Discord).
+    if !crate::handlers::servers::can_read_history(&state, claims.sub, channel_id).await {
+        return Ok(Json(vec![]));
+    }
 
     // Borné des deux côtés : une limite négative donnait « LIMIT -1 » et une erreur 500.
     let limit = params.limit.unwrap_or(50).clamp(1, 100);

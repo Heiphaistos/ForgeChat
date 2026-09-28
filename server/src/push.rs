@@ -42,7 +42,7 @@ impl PushConfig {
             tracing::error!("VAPID_PUBLIC_KEY ne correspond pas à VAPID_PRIVATE_KEY : Web Push désactivé");
             return None;
         }
-        let http = reqwest::Client::builder()
+        let http = crate::net_guard::public_client(0, "ForgeChat")
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(10))
             .build()

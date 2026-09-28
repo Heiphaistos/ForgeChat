@@ -301,7 +301,7 @@ pub async fn list_channel_tasks(
     .await?
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
-    ensure_member(&state, server_id, claims.sub).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let tasks = sqlx::query_as::<_, ChannelTask>(
         "SELECT id, channel_id, title, description, completed, assignee_id,
@@ -343,7 +343,7 @@ pub async fn create_task(
     .await?
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
-    ensure_member(&state, server_id, claims.sub).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let priority = body.priority.as_deref().unwrap_or("normal");
     if !["low", "normal", "high", "urgent"].contains(&priority) {
@@ -402,7 +402,7 @@ pub async fn update_task(
     .await?
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
-    ensure_member(&state, server_id, claims.sub).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     if let Some(ref t) = body.title {
         if t.trim().is_empty() || t.chars().count() > 200 {
@@ -501,7 +501,7 @@ pub async fn delete_task(
     .await?
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
-    ensure_member(&state, server_id, claims.sub).await?;
+    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     // Vérifier ownership : créateur ou modérateur peut supprimer
     use sqlx::Row as _;

@@ -84,6 +84,8 @@ pub struct AppState {
     pub voice_move_grants: Arc<RwLock<HashMap<Uuid, (Uuid, Instant)>>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
+    /// URL fournies par les utilisateurs (flux RSS, aperçus) : voir `net_guard`.
+    pub public_http: reqwest::Client,
     /// Serveur média (SFU). `None` = vocal indisponible (variables LIVEKIT_* absentes).
     pub livekit: Option<crate::livekit::LiveKitConfig>,
     /// Web Push (VAPID). `None` = variables VAPID_* absentes, push désactivé.
@@ -121,6 +123,9 @@ impl AppState {
             idle_sessions: Arc::new(RwLock::new(HashMap::new())),
             voice_move_grants: Arc::new(RwLock::new(HashMap::new())),
             http_client,
+            public_http: crate::net_guard::public_client(3, &format!("ForgeChat/{} (+https://forgechat.heiphaistos.org)", APP_VERSION))
+                .build()
+                .expect("Failed to build public HTTP client"),
             livekit: crate::livekit::LiveKitConfig::from_env(),
             push: crate::push::PushConfig::from_env(),
         };
@@ -221,6 +226,16 @@ impl AppState {
         let clients = self.clients.read().await;
         for uid in member_ids {
             if let Some(tx) = clients.get(&uid) {
+                let _ = tx.send(event.clone());
+            }
+        }
+    }
+
+    /// Envoie `event` aux utilisateurs listés qui sont connectés.
+    pub async fn send_to_users(&self, users: &[Uuid], event: String) {
+        let clients = self.clients.read().await;
+        for uid in users {
+            if let Some(tx) = clients.get(uid) {
                 let _ = tx.send(event.clone());
             }
         }

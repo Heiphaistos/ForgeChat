@@ -22,7 +22,7 @@ fn is_ssrf_safe_feed_url(url: &str) -> bool {
     let host = without_scheme.split('/').next().unwrap_or("");
     let host = host.split(':').next().unwrap_or("");
 
-    if host.is_empty() { return false; }
+    if host.is_empty() || !crate::net_guard::url_str_target_ok(url) { return false; }
 
     let blocked = ["localhost", "127.0.0.1", "::1", "0.0.0.0",
         "metadata.google.internal", "169.254.169.254"];
@@ -250,7 +250,7 @@ async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String
         anyhow::bail!("URL de feed bloquée (SSRF) : {}", feed.feed_url);
     }
 
-    let resp = state.http_client
+    let resp = state.public_http
         .get(&feed.feed_url)
         .timeout(std::time::Duration::from_secs(10))
         .send()
@@ -444,4 +444,16 @@ async fn post_feed_message(state: &AppState, feed: &FeedRow, content: &str) {
         }
     });
     state.broadcast_to_channel_members(feed.channel_id, event.to_string()).await;
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn feed_url_refuses_internal_literals() {
+        // Passaient avant 3.261 : IPv6 entre crochets et IPv4 mappée n'étaient pas analysées.
+        assert!(!super::is_ssrf_safe_feed_url("http://[fd12::1]:7880/"));
+        assert!(!super::is_ssrf_safe_feed_url("http://[::ffff:127.0.0.1]:5000/"));
+        assert!(!super::is_ssrf_safe_feed_url("http://100.64.0.1/rss"));
+        assert!(super::is_ssrf_safe_feed_url("https://example.com/rss.xml"));
+    }
 }

@@ -816,7 +816,7 @@ async fn handle_ws_message(
                                 "channel": new_ch,
                             });
                             // Broadcast au channel du serveur (abonnés)
-                            state.broadcast_to_server_members(server_id, create_event.to_string()).await;
+                            state.broadcast_to_channel_members(new_ch.id, create_event.to_string()).await;
                         }
                     }
                 }
