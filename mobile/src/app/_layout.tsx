@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { DarkTheme, SplashScreen, Stack, ThemeProvider } from 'expo-router'
+import * as Linking from 'expo-linking'
+import { DarkTheme, router, SplashScreen, Stack, ThemeProvider, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect } from 'react'
 import { View } from 'react-native'
@@ -11,12 +12,15 @@ import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
 import { bindRealtime } from '@/services/realtimeBindings'
 import { useAuth } from '@/stores/auth'
+import { replayablePath } from '@/lib/deepLinks'
 import '@/stores/call' // enregistre les handlers d'appel entrant dès le démarrage
 import { useLock } from '@/stores/lock'
 import { useSettings } from '@/stores/settings'
 import { colors } from '@/theme'
 
 void SplashScreen.preventAutoHideAsync()
+/** Le lien de lancement n'est rejoué qu'une fois par process (jamais après une reconnexion). */
+let initialLinkReplayed = false
 configureNotifications()
 
 const theme = {
@@ -61,6 +65,18 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (status === 'signedIn') return listenNotificationTaps()
+  }, [status])
+
+  // Lien profond reçu app fermée : voir lib/deepLinks. Rejoué une seule fois, après connexion.
+  const pathname = usePathname()
+  useEffect(() => {
+    if (status !== 'signedIn' || initialLinkReplayed) return
+    initialLinkReplayed = true
+    void Linking.getInitialURL().then((url) => {
+      const target = url ? replayablePath(url) : null
+      if (target && target !== pathname) router.push(target)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seul le passage à signedIn compte
   }, [status])
 
   const signedIn = status === 'signedIn'
