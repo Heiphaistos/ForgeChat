@@ -59,7 +59,7 @@
     "ios": "expo run:ios",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit && tsc --noEmit -p __tests__",
-    "test": "jest --ci --no-watchman --forceExit",
+    "test": "jest --ci --no-watchman",
     "check": "npm run typecheck && npm run lint && npm test",
     "doctor": "expo-doctor"
   },
