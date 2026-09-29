@@ -66,6 +66,7 @@ let pc: RTCPeerConnection | null = null
 let pendingIce: RTCIceCandidateInitLike[] = []
 let ringTimeout: ReturnType<typeof setTimeout> | null = null
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null
+let connectTimeout: ReturnType<typeof setTimeout> | null = null
 let busy = false
 /** Incrémenté à chaque cleanup() : détecte une continuation async (start/accept)
  *  périmée par un raccroché distant/erreur survenu pendant un `await`. */
@@ -79,6 +80,7 @@ interface RTCIceCandidateInitLike {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RING_TIMEOUT_MS = 45_000
+const CONNECT_TIMEOUT_MS = 30_000
 
 export const useCall = create<CallState>((set, get) => {
   const cleanup = (reason: string | null = null) => {
@@ -86,8 +88,10 @@ export const useCall = create<CallState>((set, get) => {
     busy = false
     if (ringTimeout) clearTimeout(ringTimeout)
     if (disconnectTimer) clearTimeout(disconnectTimer)
+    if (connectTimeout) clearTimeout(connectTimeout)
     ringTimeout = null
     disconnectTimer = null
+    connectTimeout = null
     try {
       pc?.close()
     } catch {
@@ -119,6 +123,19 @@ export const useCall = create<CallState>((set, get) => {
     if (to) realtime.send({ type: 'VOICE_SIGNAL', to, payload })
   }
 
+  /** Armé en entrant en 'connecting' : si la connexion média n'aboutit pas
+   *  (pair distant muet, ICE bloqué…) sous 30 s, on raccroche proprement au
+   *  lieu de rester bloqué indéfiniment sur l'écran d'appel. */
+  const armConnectTimeout = () => {
+    if (connectTimeout) clearTimeout(connectTimeout)
+    connectTimeout = setTimeout(() => {
+      if (get().phase !== 'connecting') return
+      const { partnerId, dmId } = get()
+      if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+      cleanup('Connexion impossible')
+    }, CONNECT_TIMEOUT_MS)
+  }
+
   const buildPeer = async (): Promise<RTCPeerConnection> => {
     const iceServers = await voiceApi.iceServers()
     const peer = new RTCPeerConnection({ iceServers, bundlePolicy: 'max-bundle' })
@@ -135,7 +152,9 @@ export const useCall = create<CallState>((set, get) => {
       const st = peer.connectionState
       if (st === 'connected') {
         if (disconnectTimer) clearTimeout(disconnectTimer)
+        if (connectTimeout) clearTimeout(connectTimeout)
         disconnectTimer = null
+        connectTimeout = null
         audioSession.stopRingback()
         set((s) => ({ phase: 'connected', connectedAt: s.connectedAt ?? Date.now() }))
       } else if (st === 'disconnected') {
@@ -203,6 +222,7 @@ export const useCall = create<CallState>((set, get) => {
     if (ringTimeout) clearTimeout(ringTimeout)
     ringTimeout = null
     set({ phase: 'connecting' })
+    armConnectTimeout()
     try {
       const offer = await pc.createOffer({})
       await pc.setLocalDescription(offer)
@@ -283,7 +303,12 @@ export const useCall = create<CallState>((set, get) => {
       if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
       busy = true
       const gen = callGeneration
-      set({ dmId, partnerId, partnerName, callType: type, endReason: null })
+      // Phase posée AVANT les await (média, ICE servers) : un DM_CALL_ERROR/ENDED
+      // distant ou un hangup() local pendant cette attente doit voir phase !==
+      // 'idle' pour que le handler correspondant appelle cleanup() — sinon
+      // l'événement est ignoré et la garde de génération ci-dessous ne se
+      // déclenche jamais (l'appel resterait bloqué après un raccroché distant).
+      set({ phase: 'calling', dmId, partnerId, partnerName, callType: type, endReason: null })
       try {
         const stream = await attachMedia(type)
         if (gen !== callGeneration) {
@@ -305,7 +330,6 @@ export const useCall = create<CallState>((set, get) => {
         audioSession.start(get().callType === 'video')
         audioSession.startRingback()
         realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: get().callType })
-        set({ phase: 'calling' })
         ringTimeout = setTimeout(() => {
           if (get().phase === 'calling') {
             realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
@@ -328,8 +352,12 @@ export const useCall = create<CallState>((set, get) => {
       if (ringTimeout) clearTimeout(ringTimeout)
       ringTimeout = null
       audioSession.stopRinging()
+      // Idem start() : phase posée AVANT les await pour que remoteEnded /
+      // DM_CALL_ERROR appellent cleanup() s'ils arrivent pendant l'attente du
+      // micro/ICE, plutôt que de rester ignorés (phase encore 'idle').
       set({
         incoming: null,
+        phase: 'connecting',
         dmId: inc.dmId,
         partnerId: inc.fromUserId,
         partnerName: inc.fromUsername,
@@ -356,8 +384,10 @@ export const useCall = create<CallState>((set, get) => {
         stream.getTracks().forEach((t) => peer.addTrack(t, stream))
         audioSession.start(get().callType === 'video')
         realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
-        set({ phase: 'connecting' })
+        armConnectTimeout()
       } catch {
+        // gen !== callGeneration ⇒ l'appel a déjà été terminé par cleanup() (raccroché
+        // distant, timeout…) pendant l'attente : ne pas renvoyer un DECLINE en double.
         if (gen === callGeneration) {
           realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
           cleanup('Micro inaccessible — appel refusé')
