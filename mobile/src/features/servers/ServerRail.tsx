@@ -1,0 +1,98 @@
+import { Ionicons } from '@expo/vector-icons'
+import { router } from 'expo-router'
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { Avatar } from '@/components/Avatar'
+import { Badge } from '@/components/ui'
+import { directUnread, serverUnread, useUnread } from '@/stores/unread'
+import type { Server } from '@/types/models'
+import { colors, spacing } from '@/theme'
+
+/**
+ * Colonne d'icônes de l'accueil. `selected === null` : « Messages privés ».
+ * `onRetry` : affiché à la place des serveurs si leur chargement a échoué.
+ */
+export function ServerRail({
+  servers,
+  selected,
+  onSelect,
+  onRetry,
+}: {
+  servers: Server[]
+  selected: string | null
+  onSelect: (id: string | null) => void
+  onRetry?: () => void
+}) {
+  const counts = useUnread((s) => s.counts)
+  const serverOf = useUnread((s) => s.serverOf)
+  const dmActive = selected === null
+  const dmUnread = directUnread(counts, serverOf)
+  return (
+    <View style={styles.rail}>
+      <ScrollView contentContainerStyle={{ alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md }} showsVerticalScrollIndicator={false}>
+        <Pressable
+          onPress={() => onSelect(null)}
+          accessibilityRole="button"
+          accessibilityLabel={`Messages privés${dmUnread ? `, ${dmUnread} non lus` : ''}`}
+          accessibilityState={{ selected: dmActive }}
+          style={styles.item}
+        >
+          <View style={[styles.pill, { height: dmActive ? 36 : dmUnread ? 8 : 0 }]} />
+          <View style={[styles.home, dmActive && styles.homeActive]}>
+            <Ionicons name="chatbubbles" size={24} color={dmActive ? '#fff' : colors.textMuted} />
+          </View>
+          {dmUnread ? (
+            <View style={styles.badge}>
+              <Badge count={dmUnread} />
+            </View>
+          ) : null}
+        </Pressable>
+        <View style={styles.separator} />
+        {onRetry ? (
+          <Pressable style={styles.add} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Réessayer de charger les serveurs">
+            <Ionicons name="refresh" size={22} color={colors.danger} />
+          </Pressable>
+        ) : null}
+        {servers.map((s) => {
+          const active = s.id === selected
+          const unread = serverUnread(counts, serverOf, s.id)
+          return (
+            <Pressable
+              key={s.id}
+              onPress={() => onSelect(s.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Serveur ${s.name}${unread ? `, ${unread} non lus` : ''}`}
+              accessibilityState={{ selected: active }}
+              style={styles.item}
+            >
+              <View style={[styles.pill, { height: active ? 36 : unread ? 8 : 0 }]} />
+              <Avatar uri={s.icon} name={s.name} size={48} rounded={!active} />
+              {unread ? (
+                <View style={styles.badge}>
+                  <Badge count={unread} />
+                </View>
+              ) : null}
+            </Pressable>
+          )
+        })}
+        {servers.length ? <View style={styles.separator} /> : null}
+        <Pressable style={styles.add} onPress={() => router.push('/server/create')} accessibilityRole="button" accessibilityLabel="Créer un serveur">
+          <Ionicons name="add" size={26} color={colors.success} />
+        </Pressable>
+        <Pressable style={styles.add} onPress={() => router.push('/server/join')} accessibilityRole="button" accessibilityLabel="Rejoindre un serveur">
+          <Ionicons name="enter-outline" size={22} color={colors.success} />
+        </Pressable>
+      </ScrollView>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  rail: { width: 72, backgroundColor: colors.bgDeep },
+  item: { width: 72, alignItems: 'center', justifyContent: 'center' },
+  pill: { position: 'absolute', left: 0, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4, backgroundColor: colors.text },
+  badge: { position: 'absolute', right: 8, bottom: -2 },
+  separator: { width: 32, height: 2, borderRadius: 1, backgroundColor: colors.bgHover },
+  home: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.bgAlt, alignItems: 'center', justifyContent: 'center' },
+  homeActive: { borderRadius: 16, backgroundColor: colors.primary },
+  add: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.bgAlt, alignItems: 'center', justifyContent: 'center' },
+})
