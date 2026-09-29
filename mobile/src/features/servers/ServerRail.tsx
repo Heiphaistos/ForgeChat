@@ -1,11 +1,62 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/ui'
+import { errorMessage } from '@/lib/http'
+import { qk, queryClient } from '@/lib/queryClient'
+import { useAuth } from '@/stores/auth'
+import { useUi } from '@/stores/ui'
 import { directUnread, serverUnread, useUnread } from '@/stores/unread'
+import { useVoice } from '@/stores/voice'
 import type { Server } from '@/types/models'
 import { colors, spacing } from '@/theme'
+
+async function leaveServer(server: Server) {
+  try {
+    if (useVoice.getState().serverId === server.id) useVoice.getState().leave()
+    await serversApi.leave(server.id)
+    if (useUi.getState().selectedServerId === server.id) useUi.getState().selectServer(null)
+    const { counts, serverOf, clear } = useUnread.getState()
+    Object.keys(counts).forEach((id) => serverOf[id] === server.id && clear(id))
+    await queryClient.invalidateQueries({ queryKey: qk.servers })
+  } catch (e) {
+    Alert.alert('Impossible de quitter', errorMessage(e))
+  }
+}
+
+/**
+ * Appui long sur un serveur. Côté serveur : inviter exige MANAGE_SERVER et le propriétaire
+ * ne peut pas quitter. On propose donc « Inviter » au propriétaire et « Quitter » aux membres.
+ */
+function openServerActions(server: Server) {
+  const isOwner = useAuth.getState().user?.id === server.owner_id
+  const invite = { text: 'Inviter', onPress: () => router.push(`/server/${server.id}/invite`) }
+  const cancel = { text: 'Annuler', style: 'cancel' as const }
+  if (isOwner) {
+    Alert.alert(server.name, undefined, [
+      invite,
+      { text: 'Créer un salon', onPress: () => router.push(`/server/${server.id}/channel-create`) },
+      cancel,
+    ], { cancelable: true })
+    return
+  }
+  Alert.alert(server.name, undefined, [
+    {
+      text: 'Quitter',
+      style: 'destructive',
+      onPress: () =>
+        Alert.alert(
+          `Quitter ${server.name} ?`,
+          'Tu ne pourras revenir qu’avec une nouvelle invitation.',
+          [cancel, { text: 'Quitter', style: 'destructive', onPress: () => void leaveServer(server) }],
+          { cancelable: true },
+        ),
+    },
+    cancel,
+  ], { cancelable: true })
+}
 
 /**
  * Colonne d'icônes de l'accueil. `selected === null` : « Messages privés ».
@@ -59,9 +110,13 @@ export function ServerRail({
             <Pressable
               key={s.id}
               onPress={() => onSelect(s.id)}
+              onLongPress={() => openServerActions(s)}
               accessibilityRole="button"
               accessibilityLabel={`Serveur ${s.name}${unread ? `, ${unread} non lus` : ''}`}
+              accessibilityHint="Appui long pour inviter ou quitter"
               accessibilityState={{ selected: active }}
+              accessibilityActions={[{ name: 'longpress', label: 'Options du serveur' }]}
+              onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && openServerActions(s)}
               style={styles.item}
             >
               <View style={[styles.pill, { height: active ? 36 : unread ? 8 : 0 }]} />

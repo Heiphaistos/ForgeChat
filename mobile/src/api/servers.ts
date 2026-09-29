@@ -19,5 +19,8 @@ export const serversApi = {
       max_uses: maxUses ?? null,
       expires_hours: expiresHours ?? 24,
     }),
+  /** Invitations du serveur (exige MANAGE_SERVER). `uses` : nombre d'utilisations. */
+  invites: (serverId: string) => http.get<{ code: string; uses: number }[]>(path`/servers/${serverId}/invites`),
+  deleteInvite: (serverId: string, code: string) => http.delete(path`/servers/${serverId}/invites/${code}`),
   markRead: (serverId: string) => http.post(path`/servers/${serverId}/read`),
 }
