@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '@/api/auth'
-import { ApiError, ensureAccessToken, onSessionExpired } from '@/lib/http'
+import { ensureAccessToken, onSessionExpired } from '@/lib/http'
 import { logger } from '@/lib/logger'
 import { queryClient } from '@/lib/queryClient'
 import { realtime } from '@/lib/realtime'
@@ -10,6 +10,7 @@ import { usePresence } from './presence'
 import { useTyping } from './typing'
 import { useUi } from './ui'
 import { useUnread } from './unread'
+import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
 
 /**
  * Cycle de vie de la session.
@@ -92,12 +93,12 @@ export const useAuth = create<AuthState>((set, get) => {
         set({ status: 'signedIn', user: me })
         realtime.start()
       } catch (e) {
-        if (e instanceof ApiError && e.isNetwork) {
+        if (classifyBootstrapFailure(e) === 'retry') {
           set({ status: 'offline' })
         } else {
           logger.warn('auth', 'bootstrap refusé', e)
           await wipeLocal()
-          set({ status: 'signedOut', user: null })
+          set({ status: 'signedOut', user: null, notice: SESSION_EXPIRED_NOTICE })
         }
       }
     },
