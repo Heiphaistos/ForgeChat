@@ -20,6 +20,7 @@ import {
   removeMessage,
   type MessagesData,
 } from './cache'
+import { AttachmentUploadError } from './sendErrors'
 
 export interface LocalAttachment extends UploadFile {
   size: number | null
@@ -158,7 +159,9 @@ export function useConversation(ref: ConversationRef) {
           hasAttachments: files.length > 0,
         })
       } catch (e) {
-        patchMessage(stableRef.kind, id, tempId, (m) => ({ ...m, pending: false, failed: true }))
+        // Le composer récupère le texte et les fichiers (sendErrors.restoreAfterSendError) :
+        // on retire la bulle pour ne pas les afficher en double.
+        removeMessage(stableRef.kind, id, tempId)
         throw e
       }
       confirmMessage(stableRef.kind, id, tempId, { ...real, awaitingAttachments: files.length > 0 })
@@ -180,7 +183,7 @@ export function useConversation(ref: ConversationRef) {
               failed: true,
             }))
           }
-          throw new Error(`Pièce jointe non envoyée : ${errorMessage(e)}`)
+          throw new AttachmentUploadError(`Pièce jointe non envoyée : ${errorMessage(e)}`)
         }
       }
     },

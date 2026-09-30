@@ -11,6 +11,7 @@ import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { restoreAfterSendError } from './sendErrors'
 import { activeMentionQuery, applyMention, filterMentionCandidates, type MentionCandidate } from './mentions'
 import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
 
@@ -64,6 +65,13 @@ export function Composer({
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const inputRef = useRef<TextInput>(null)
+  // Valeurs courantes lues après un envoi asynchrone (le rendu a pu changer entre-temps).
+  const draftRef = useRef(draft)
+  const filesRef = useRef(files)
+  useEffect(() => {
+    draftRef.current = draft
+    filesRef.current = files
+  }, [draft, files])
   const [cursor, setCursor] = useState(0)
   /** Position imposée après une insertion de mention ; relâchée dès que le TextInput l'a appliquée. */
   const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(undefined)
@@ -166,7 +174,15 @@ export function Composer({
         const toSend = files
         onDraftChange('')
         setFiles([])
-        await onSend(text, toSend)
+        try {
+          await onSend(text, toSend)
+        } catch (e) {
+          // Ne rien perdre : ce qui n'est pas parti revient dans le composer.
+          const back = restoreAfterSendError(e, { text, files: toSend }, { text: draftRef.current, files: filesRef.current })
+          onDraftChange(back.text)
+          setFiles(back.files)
+          throw e
+        }
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     } catch (e) {
