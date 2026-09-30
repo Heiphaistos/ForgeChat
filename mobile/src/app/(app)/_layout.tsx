@@ -18,6 +18,8 @@ export default function AppLayout() {
       <Stack.Screen name="channel/[serverId]/[channelId]" options={{ title: '' }} />
       <Stack.Screen name="dm/[dmId]" options={{ title: '' }} />
       <Stack.Screen name="group/[groupId]" options={{ title: '' }} />
+      <Stack.Screen name="group/create" options={{ title: 'Nouveau groupe', presentation: 'modal' }} />
+      <Stack.Screen name="group/manage/[groupId]" options={{ title: 'Gérer le groupe' }} />
       <Stack.Screen name="voice/[serverId]/[channelId]" options={{ title: 'Salon vocal' }} />
       <Stack.Screen name="call" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
       <Stack.Screen name="server/join" options={{ title: 'Rejoindre un serveur', presentation: 'modal' }} />

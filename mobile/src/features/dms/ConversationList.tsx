@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
-import { Badge, EmptyState, ErrorState, Loading } from '@/components/ui'
+import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { qk } from '@/lib/queryClient'
@@ -38,6 +38,7 @@ export function ConversationList() {
         <Text style={styles.title} accessibilityRole="header">
           Messages privés
         </Text>
+        <IconButton icon="people-outline" label="Nouveau groupe" onPress={() => router.push('/group/create')} />
       </View>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
