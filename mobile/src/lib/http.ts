@@ -2,6 +2,7 @@ import type { ZodType } from 'zod'
 import { API_BASE, APP_VERSION } from '@/config/env'
 import { logger } from './logger'
 import { tokens } from './tokens'
+import { xhrFetch } from './xhrFetch'
 
 /**
  * Client HTTP de l'app.
@@ -86,6 +87,15 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   external?.addEventListener('abort', onAbort)
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    // Multipart : XMLHttpRequest (voir lib/xhrFetch), le fetch d'Expo refusant les fichiers { uri }.
+    if (init.body instanceof FormData) {
+      return await xhrFetch(url, {
+        method: init.method ?? 'POST',
+        headers: init.headers as Record<string, string>,
+        body: init.body,
+        signal: controller.signal,
+      })
+    }
     return await fetch(url, { ...init, signal: controller.signal, credentials: 'omit' })
   } catch (e) {
     if (external?.aborted) throw e
