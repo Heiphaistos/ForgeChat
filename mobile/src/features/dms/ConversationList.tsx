@@ -2,18 +2,20 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
+import { Sheet } from '@/components/Sheet'
 import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { formatShort, unreadLabel } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
-import { qk } from '@/lib/queryClient'
+import { qk, queryClient } from '@/lib/queryClient'
 import { useUnread } from '@/stores/unread'
 import type { ConversationSummary } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { applyConversationSettings, conversationName, filterConversations } from './conversations'
 
-const nameOf = (c: ConversationSummary) => (c.is_group ? c.name : c.username)
+const nameOf = conversationName
 
 function open(c: ConversationSummary) {
   if (c.is_group) router.push({ pathname: '/group/[groupId]', params: { groupId: c.id, name: c.name } })
@@ -25,12 +27,20 @@ export function ConversationList() {
   const q = useQuery({ queryKey: qk.conversations, queryFn: dmsApi.list })
   const counts = useUnread((s) => s.counts)
   const [search, setSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [selected, setSelected] = useState<ConversationSummary | null>(null)
 
-  const items = useMemo(() => {
-    const needle = search.trim().toLocaleLowerCase()
-    const list = (q.data ?? []).filter((c) => !c.is_archived)
-    return needle ? list.filter((c) => nameOf(c).toLocaleLowerCase().includes(needle)) : list
-  }, [q.data, search])
+  const { items, archivedCount } = useMemo(() => filterConversations(q.data ?? [], search, showArchived), [q.data, search, showArchived])
+
+  // Sourdine / archivage (PATCH /dms/:id/settings, DM et groupes) : mise à jour optimiste.
+  const updateSettings = (c: ConversationSummary, patch: { muted?: boolean; archived?: boolean }) => {
+    const previous = queryClient.getQueryData<ConversationSummary[]>(qk.conversations)
+    if (previous) queryClient.setQueryData(qk.conversations, applyConversationSettings(previous, c.id, patch))
+    dmsApi.setSettings(c.id, patch).catch((e) => {
+      if (previous) queryClient.setQueryData(qk.conversations, previous)
+      Alert.alert('Action impossible', errorMessage(e))
+    })
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
@@ -91,6 +101,7 @@ export function ConversationList() {
             return (
               <Pressable
                 onPress={() => open(item)}
+                onLongPress={() => setSelected(item)}
                 style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
                 accessibilityRole="button"
                 accessibilityLabel={`Conversation avec ${name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
@@ -120,14 +131,49 @@ export function ConversationList() {
               </Pressable>
             )
           }}
+          ListFooterComponent={
+            archivedCount || showArchived ? (
+              <Pressable
+                onPress={() => setShowArchived((v) => !v)}
+                style={({ pressed }) => [styles.archivedRow, pressed && { backgroundColor: colors.bgHover }]}
+                accessibilityRole="button"
+              >
+                <Ionicons name={showArchived ? 'arrow-back' : 'archive-outline'} size={18} color={colors.textMuted} />
+                <Text style={styles.archivedText}>{showArchived ? 'Retour aux conversations' : `Conversations archivées (${archivedCount})`}</Text>
+              </Pressable>
+            ) : null
+          }
           contentContainerStyle={{ paddingBottom: spacing.xl }}
         />
       )}
+      <Sheet
+        visible={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected ? nameOf(selected) : undefined}
+        actions={
+          selected
+            ? [
+                {
+                  label: selected.is_muted ? 'Réactiver les notifications' : 'Mettre en sourdine',
+                  icon: selected.is_muted ? 'notifications-outline' : 'notifications-off-outline',
+                  onPress: () => updateSettings(selected, { muted: !selected.is_muted }),
+                },
+                {
+                  label: selected.is_archived ? 'Désarchiver' : 'Archiver',
+                  icon: 'archive-outline',
+                  onPress: () => updateSettings(selected, { archived: !selected.is_archived }),
+                },
+              ]
+            : []
+        }
+      />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  archivedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  archivedText: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
