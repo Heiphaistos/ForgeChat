@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.org.heiphaistos.forgechat"],
+        "components": [
+          { "/": "/invite/*", "comment": "Invitations de serveur" },
+          { "/": "/friend-invite/*", "comment": "Invitations d'ami" }
+        ]
+      }
+    ]
+  }
+}
