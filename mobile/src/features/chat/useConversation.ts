@@ -32,9 +32,20 @@ export function sanitizeFilename(name: string): string {
   return cleaned || 'fichier'
 }
 
+/**
+ * Extension telle que le serveur la lit (Rust `Path::extension`, puis « bin » à défaut) :
+ * « a.tar.gz » → gz, « README » ou « .env » → bin, « a. » → '' (refusé).
+ */
+export function uploadExtension(name: string): string {
+  const base = name.split(/[\\/]/).pop() ?? ''
+  const dot = base.lastIndexOf('.')
+  return dot <= 0 ? 'bin' : base.slice(dot + 1).toLowerCase()
+}
+
 export function validateAttachment(f: LocalAttachment): string | null {
-  const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-  if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) return `Type de fichier .${ext || '?'} non autorisé`
+  const ext = uploadExtension(f.name)
+  if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext))
+    return `Type de fichier .${ext || '?'} non autorisé par le serveur. Formats acceptés : images (jpg, png, gif, webp), vidéos (mp4, mov, webm, mkv), audio (mp3, ogg, wav, flac), documents (pdf, txt, md, Office) et archives (zip, 7z, rar, tar, gz).`
   if (f.size != null && f.size > LIMITS.uploadMaxBytes) return 'Fichier trop volumineux (max 50 Mo)'
   return null
 }

@@ -50,9 +50,14 @@ export const LIMITS = {
   pageSize: 50,
 } as const
 
-/** Extensions acceptées par le serveur pour les pièces jointes (handlers/uploads.rs). */
+/**
+ * Extensions acceptées par le serveur pour un utilisateur normal. Liste identique pour les trois
+ * routes d'upload : salon (handlers/uploads.rs), DM (friends.rs) et groupe (group_dms.rs). Un fichier
+ * sans extension y est traité comme « bin ». Seuls propriétaire/modérateurs d'un serveur peuvent
+ * envoyer d'autres types dans un salon : le mobile ne reproduit pas cette exception.
+ */
 export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mkv',
   'mp3', 'ogg', 'wav', 'flac', 'pdf', 'txt', 'md', 'zip', 'tar', 'gz', '7z',
-  'rar', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'rar', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'bin',
 ])
