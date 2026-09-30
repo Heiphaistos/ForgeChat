@@ -135,6 +135,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-font',
     ['expo-splash-screen', { backgroundColor: '#1e1f22', image: './assets/splash-icon.png', imageWidth: 160 }],
     'expo-image',
+    'expo-video',
+    // Lecture seule des pièces jointes audio : même texte micro que WebRTC (clés Info.plist partagées).
+    ['expo-audio', { microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.' }],
   ],
   experiments: { typedRoutes: true },
   extra: {
