@@ -3,8 +3,7 @@ import { useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { usersApi } from '@/api/users'
 import { Button, T, TextField } from '@/components/ui'
-import { DELETE_CONFIRM_WORD, deleteAccountError } from '@/features/account/deleteAccount'
-import { errorMessage } from '@/lib/http'
+import { DELETE_CONFIRM_WORD, deleteAccountError, deleteAccountFailure } from '@/features/account/deleteAccount'
 import { useAuth } from '@/stores/auth'
 import { colors, spacing } from '@/theme'
 
@@ -13,10 +12,12 @@ export default function DeleteAccountScreen() {
   const [confirmWord, setConfirmWord] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const doDelete = async () => {
     setLoading(true)
     setError(null)
+    setFormError(null)
     try {
       await usersApi.deleteAccount(password)
       // Compte supprimé côté serveur (sessions et appareils push compris, en cascade) :
@@ -24,8 +25,10 @@ export default function DeleteAccountScreen() {
       router.dismissAll()
       await useAuth.getState().signOutLocally('Ton compte a été supprimé.')
     } catch (e) {
-      // Mot de passe incorrect, serveur possédé, trop d'essais… : message du serveur.
-      setError(errorMessage(e))
+      // Seul un mot de passe refusé s'affiche sous le champ ; le reste sous le bouton.
+      const f = deleteAccountFailure(e)
+      if (f.field === 'password') setError(f.message)
+      else setFormError(f.message)
     } finally {
       setLoading(false)
     }
@@ -33,6 +36,7 @@ export default function DeleteAccountScreen() {
 
   const submit = () => {
     const invalid = deleteAccountError(password, confirmWord)
+    setFormError(null)
     if (invalid) {
       setError(invalid)
       return
@@ -65,6 +69,7 @@ export default function DeleteAccountScreen() {
         textContentType="password"
         error={error}
       />
+      {formError ? <T style={{ color: colors.danger }}>{formError}</T> : null}
       <Button title="Supprimer mon compte" variant="danger" onPress={submit} loading={loading} />
     </ScrollView>
   )
