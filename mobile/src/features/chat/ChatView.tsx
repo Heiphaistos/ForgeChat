@@ -7,7 +7,9 @@ import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
+import { dmsApi } from '@/api/dms'
 import { messagesApi, type ReportReason } from '@/api/messages'
+import { serversApi } from '@/api/servers'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
@@ -17,6 +19,7 @@ import { useTyping } from '@/stores/typing'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { Composer } from './Composer'
+import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
 import { useScrollTarget } from './pins'
 import { useConversation } from './useConversation'
@@ -75,6 +78,18 @@ export function ChatView({
     enabled: conversation.kind !== 'channel',
   })
   const pinnedIds = useMemo(() => new Set((pins.data ?? []).map((p) => p.messageId)), [pins.data])
+  // Autocomplétion @mention : membres du serveur (salon) ou participants (groupe). Rien en DM 1:1.
+  const serverId = conversation.kind === 'channel' ? conversation.serverId : ''
+  const groupId = conversation.kind === 'group' ? conversation.groupId : ''
+  const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
+  const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
+  const mentionCandidates = useMemo<MentionCandidate[]>(
+    () =>
+      serverId
+        ? (members.data ?? []).map((m) => ({ id: m.user_id, username: m.username, nickname: m.nickname, avatar: m.avatar }))
+        : (group.data?.members ?? []).map((m) => ({ id: m.id, username: m.username, avatar: m.avatar })),
+    [serverId, members.data, group.data],
+  )
   const isPinned = (m: ChatMessage) => (conversation.kind === 'channel' ? m.pinned : pinnedIds.has(m.id))
 
   // Défilement vers un message demandé par l'écran des épinglés (chargement de pages plus anciennes si besoin).
@@ -284,6 +299,8 @@ export function ChatView({
         onTyping={conv.notifyTyping}
         draft={draft}
         onDraftChange={(t) => setDraft(conv.id, t)}
+        mentionCandidates={mentionCandidates}
+        myId={me?.id ?? null}
       />
 
       <Sheet

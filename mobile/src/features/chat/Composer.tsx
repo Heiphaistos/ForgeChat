@@ -3,13 +3,15 @@ import * as DocumentPicker from 'expo-document-picker'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'expo-image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { activeMentionQuery, applyMention, filterMentionCandidates, type MentionCandidate } from './mentions'
 import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
 
 const MAX_FILES = 10
@@ -37,6 +39,9 @@ interface Props {
   onTyping: () => void
   draft: string
   onDraftChange: (text: string) => void
+  /** Personnes proposées après « @ » (vide : pas d'autocomplétion). */
+  mentionCandidates?: readonly MentionCandidate[]
+  myId?: string | null
 }
 
 export function Composer({
@@ -52,11 +57,29 @@ export function Composer({
   onTyping,
   draft,
   onDraftChange,
+  mentionCandidates,
+  myId = null,
 }: Props) {
   const [files, setFiles] = useState<LocalAttachment[]>([])
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const inputRef = useRef<TextInput>(null)
+  const [cursor, setCursor] = useState(0)
+  /** Position imposée après une insertion de mention ; relâchée dès que le TextInput l'a appliquée. */
+  const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(undefined)
+
+  const mention = mentionCandidates?.length ? activeMentionQuery(draft, cursor) : null
+  const suggestions = useMemo(
+    () => (mention && mentionCandidates ? filterMentionCandidates(mentionCandidates, mention.query, myId) : []),
+    [mention?.query, mention?.start, mentionCandidates, myId], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const pickMention = (c: MentionCandidate) => {
+    if (!mention) return
+    const next = applyMention(draft, mention.start, cursor, c)
+    onDraftChange(next.text)
+    setCursor(next.cursor)
+    setForcedSelection({ start: next.cursor, end: next.cursor })
+  }
 
   useEffect(() => {
     if (editing) {
@@ -213,6 +236,30 @@ export function Composer({
         </ScrollView>
       ) : null}
 
+      {suggestions.length ? (
+        <ScrollView style={styles.mentions} keyboardShouldPersistTaps="always" accessibilityLabel="Suggestions de mention">
+          {suggestions.map((c) => (
+            <Pressable
+              key={c.id}
+              onPress={() => pickMention(c)}
+              style={({ pressed }) => [styles.mentionRow, pressed && { backgroundColor: colors.bgHover }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Mentionner ${c.username}`}
+            >
+              <Avatar uri={c.avatar} name={c.username} size={24} userId={c.id} />
+              <Text style={styles.mentionName} numberOfLines={1}>
+                {c.nickname ?? c.username}
+              </Text>
+              {c.nickname ? (
+                <Text style={styles.mentionUser} numberOfLines={1}>
+                  {c.username}
+                </Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+
       <View style={styles.row}>
         {!editing ? (
           <Pressable style={styles.attach} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Joindre un fichier" hitSlop={6}>
@@ -226,6 +273,11 @@ export function Composer({
           onChangeText={(t) => {
             onDraftChange(t)
             if (t.length) onTyping()
+          }}
+          selection={forcedSelection}
+          onSelectionChange={(e) => {
+            setCursor(e.nativeEvent.selection.end)
+            if (forcedSelection) setForcedSelection(undefined)
           }}
           placeholder={placeholder}
           placeholderTextColor={colors.textFaint}
@@ -295,5 +347,9 @@ const styles = StyleSheet.create({
     fontSize: font.md,
   },
   send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  mentions: { maxHeight: 200, marginHorizontal: spacing.sm, marginTop: spacing.sm, borderRadius: radius.md, backgroundColor: colors.bgAlt },
+  mentionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  mentionName: { color: colors.text, fontSize: font.md, fontWeight: '600', flexShrink: 1 },
+  mentionUser: { color: colors.textMuted, fontSize: font.sm, flexShrink: 1 },
   counter: { alignSelf: 'flex-end', marginRight: spacing.lg, color: colors.textMuted, fontSize: font.xs, marginTop: 2 },
 })
