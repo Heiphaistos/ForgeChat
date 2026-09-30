@@ -64,7 +64,8 @@
     "test": "jest --ci --no-watchman",
     "check": "npm run typecheck && npm run lint && npm test",
     "doctor": "expo-doctor",
-    "e2e": "node scripts/e2e-api.mjs"
+    "e2e": "node scripts/e2e-api.mjs",
+    "e2e:authz": "node scripts/e2e-authz.mjs"
   },
   "private": true,
   "jest": {
