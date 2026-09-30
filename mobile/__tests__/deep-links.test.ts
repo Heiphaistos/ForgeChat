@@ -1,4 +1,4 @@
-import { replayablePath } from '@/lib/deepLinks'
+import { replayablePath, safeIncomingPath } from '@/lib/deepLinks'
 
 const A = '3af17b11-1c9a-4daf-8895-a2d3eec03894'
 const B = '5aa172f3-305c-4685-bd77-64faf6b911eb'
@@ -28,5 +28,35 @@ describe('replayablePath (lien profond reçu app fermée)', () => {
     expect(replayablePath(`https://evil.example/dm/${A}`)).toBeNull()
     expect(replayablePath(`exp+forgechat://expo-development-client/?url=x`)).toBeNull()
     expect(replayablePath('')).toBeNull()
+  })
+})
+
+describe('safeIncomingPath (filtre de tout lien entrant)', () => {
+  it('laisse passer les destinations prévues, paramètres validés', () => {
+    expect(safeIncomingPath(`forgechat://dm/${A}`)).toBe(`/dm/${A}`)
+    expect(safeIncomingPath(`forgechat://group/${A.toUpperCase()}`)).toBe(`/group/${A}`)
+    expect(safeIncomingPath(`forgechat://channel/${A}/${B}?x=1#y`)).toBe(`/channel/${A}/${B}`)
+    expect(safeIncomingPath('forgechat://invite/sRevuDcg')).toBe('/invite/sRevuDcg')
+    expect(safeIncomingPath('https://forgechat.example/friend-invite/AbC123')).toBe('/friend-invite/AbC123')
+    expect(safeIncomingPath(`/user/${A}`)).toBe(`/user/${A}`)
+  })
+
+  it('renvoie à l’accueil pour les routes internes et les paramètres douteux', () => {
+    for (const bad of [
+      'forgechat://settings/password',
+      'forgechat://settings/delete-account',
+      'forgechat://server/create',
+      'forgechat://call',
+      'forgechat://dm/pas-un-uuid',
+      `forgechat://channel/${A}/../settings`,
+      'forgechat://invite/%3Cscript%3E',
+      'forgechat://invite/ab',
+      `forgechat://dm/${A}/extra`,
+      'javascript:alert(1)',
+      '',
+      'forgechat://',
+    ]) {
+      expect(safeIncomingPath(bad)).toBe('/')
+    }
   })
 })
