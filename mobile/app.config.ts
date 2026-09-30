@@ -137,7 +137,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-image',
     'expo-video',
     // Lecture seule des pièces jointes audio : même texte micro que WebRTC (clés Info.plist partagées).
-    ['expo-audio', { microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.' }],
+    // Pas de lecture en arrière-plan : évite le service de premier plan « mediaPlayback » et ses
+    // permissions (FOREGROUND_SERVICE_MEDIA_PLAYBACK), à justifier auprès de Google Play.
+    [
+      'expo-audio',
+      { microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.', enableBackgroundPlayback: false },
+    ],
   ],
   experiments: { typedRoutes: true },
   extra: {
