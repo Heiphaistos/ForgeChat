@@ -54,3 +54,8 @@ export function formatDuration(ms: number): string {
   const m = Math.floor((s % 3600) / 60)
   return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`
 }
+
+/** Libellé d'accessibilité des non-lus, accordé : « 1 non lu », « 3 non lus ». */
+export function unreadLabel(count: number): string {
+  return count > 1 ? `${count} non lus` : `${count} non lu`
+}

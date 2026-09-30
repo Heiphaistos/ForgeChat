@@ -15,6 +15,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { colors, font, radius, spacing } from '@/theme'
+import { unreadLabel } from '@/lib/format'
 
 export type IconName = ComponentProps<typeof Ionicons>['name']
 
@@ -263,7 +264,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
 export function Badge({ count }: { count: number }) {
   if (count <= 0) return null
   return (
-    <View style={styles.badge} accessibilityLabel={`${count} non lus`}>
+    <View style={styles.badge} accessibilityLabel={unreadLabel(count)}>
       <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
     </View>
   )

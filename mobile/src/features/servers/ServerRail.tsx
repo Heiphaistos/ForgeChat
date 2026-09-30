@@ -12,6 +12,7 @@ import { directUnread, serverUnread, useUnread } from '@/stores/unread'
 import { useVoice } from '@/stores/voice'
 import type { Server } from '@/types/models'
 import { colors, spacing } from '@/theme'
+import { unreadLabel } from '@/lib/format'
 
 async function leaveServer(server: Server) {
   try {
@@ -83,7 +84,7 @@ export function ServerRail({
         <Pressable
           onPress={() => onSelect(null)}
           accessibilityRole="button"
-          accessibilityLabel={`Messages privés${dmUnread ? `, ${dmUnread} non lus` : ''}`}
+          accessibilityLabel={`Messages privés${dmUnread ? `, ${unreadLabel(dmUnread)}` : ''}`}
           accessibilityState={{ selected: dmActive }}
           style={styles.item}
         >
@@ -112,7 +113,7 @@ export function ServerRail({
               onPress={() => onSelect(s.id)}
               onLongPress={() => openServerActions(s)}
               accessibilityRole="button"
-              accessibilityLabel={`Serveur ${s.name}${unread ? `, ${unread} non lus` : ''}`}
+              accessibilityLabel={`Serveur ${s.name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
               accessibilityHint="Appui long pour inviter ou quitter"
               accessibilityState={{ selected: active }}
               accessibilityActions={[{ name: 'longpress', label: 'Options du serveur' }]}

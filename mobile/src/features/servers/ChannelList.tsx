@@ -13,6 +13,7 @@ import { useVoice } from '@/stores/voice'
 import type { Channel, Server } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
+import { unreadLabel } from '@/lib/format'
 
 const VOICE_TYPES = new Set(['voice', 'video'])
 
@@ -115,7 +116,7 @@ export function ChannelList({ server }: { server: Server }) {
               onPress={() => openChannel(server, item)}
               style={({ pressed }) => [styles.channel, (pressed || inVoice) && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
-              accessibilityLabel={`Salon ${item.name}${unread ? `, ${unread} non lus` : ''}`}
+              accessibilityLabel={`Salon ${item.name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
             >
               <Ionicons name={channelIcon(item.type)} size={18} color={unread ? colors.text : colors.textMuted} />
               <Text style={[styles.channelName, unread ? { color: colors.text, fontWeight: '700' } : null]} numberOfLines={1}>

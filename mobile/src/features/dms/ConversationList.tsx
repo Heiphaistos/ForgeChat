@@ -6,7 +6,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View 
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
 import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
-import { formatShort } from '@/lib/format'
+import { formatShort, unreadLabel } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { qk } from '@/lib/queryClient'
 import { useUnread } from '@/stores/unread'
@@ -93,7 +93,7 @@ export function ConversationList() {
                 onPress={() => open(item)}
                 style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
                 accessibilityRole="button"
-                accessibilityLabel={`Conversation avec ${name}${unread ? `, ${unread} non lus` : ''}`}
+                accessibilityLabel={`Conversation avec ${name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
               >
                 {item.is_group ? (
                   <View style={styles.groupIcon}>
