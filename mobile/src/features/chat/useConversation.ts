@@ -168,12 +168,18 @@ export function useConversation(ref: ConversationRef) {
           const uploaded = await messagesApi.upload(stableRef, real.id, files)
           patchMessage(stableRef.kind, id, real.id, (m) => ({ ...m, attachments: uploaded, awaitingAttachments: false }))
         } catch (e) {
-          patchMessage(stableRef.kind, id, real.id, (m) => ({
-            ...m,
-            attachments: m.attachments.filter((a) => !a.id.startsWith('tmp-')),
-            awaitingAttachments: false,
-            failed: true,
-          }))
+          if (!text) {
+            // Sans texte, le message créé côté serveur resterait vide pour tout le monde : on le retire.
+            await messagesApi.remove(stableRef, real.id).catch(() => undefined)
+            removeMessage(stableRef.kind, id, real.id)
+          } else {
+            patchMessage(stableRef.kind, id, real.id, (m) => ({
+              ...m,
+              attachments: m.attachments.filter((a) => !a.id.startsWith('tmp-')),
+              awaitingAttachments: false,
+              failed: true,
+            }))
+          }
           throw new Error(`Pièce jointe non envoyée : ${errorMessage(e)}`)
         }
       }
