@@ -4,6 +4,7 @@ import { Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
+import { pinsParams } from '@/features/chat/pins'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { colors, font } from '@/theme'
@@ -36,7 +37,14 @@ export default function ChannelScreen() {
             </View>
           ),
           headerRight: () => (
-            <IconButton icon="people-outline" label="Membres" onPress={() => router.push(`/server/${ids.serverId}/members`)} />
+            <View style={{ flexDirection: 'row' }}>
+              <IconButton
+                icon="pin-outline"
+                label="Messages épinglés"
+                onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }) })}
+              />
+              <IconButton icon="people-outline" label="Membres" onPress={() => router.push(`/server/${ids.serverId}/members`)} />
+            </View>
           ),
         }}
       />

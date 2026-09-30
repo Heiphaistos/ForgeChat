@@ -1,6 +1,7 @@
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
 import { adaptMessage } from '@/features/chat/adapters'
+import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 
 /**
@@ -83,9 +84,34 @@ export const messagesApi = {
     }
   },
 
-  pin(ref: Extract<ConversationRef, { kind: 'channel' }>, messageId: string, pinned: boolean) {
-    const p = path`/servers/${ref.serverId}/channels/${ref.channelId}/messages/${messageId}/pin`
-    return pinned ? http.post(p) : http.delete(p)
+  /**
+   * Épingle (pinned=true) ou désépingle. Le groupe n'a qu'une bascule côté serveur :
+   * l'appelant doit connaître l'état actuel (liste des épinglés).
+   */
+  pin(ref: ConversationRef, messageId: string, pinned: boolean) {
+    switch (ref.kind) {
+      case 'channel': {
+        const p = path`/servers/${ref.serverId}/channels/${ref.channelId}/messages/${messageId}/pin`
+        return pinned ? http.post(p) : http.delete(p)
+      }
+      case 'dm': {
+        const p = path`/dms/${ref.dmId}/pins/${messageId}`
+        return pinned ? http.post(p) : http.delete(p)
+      }
+      case 'group':
+        return http.put(path`/dms/groups/${ref.groupId}/messages/${messageId}/pin`)
+    }
+  },
+
+  /** Messages épinglés, du plus récemment épinglé au plus ancien. */
+  async pins(ref: ConversationRef): Promise<PinnedItem[]> {
+    const p =
+      ref.kind === 'channel'
+        ? path`/servers/${ref.serverId}/channels/${ref.channelId}/pins`
+        : ref.kind === 'dm'
+          ? path`/dms/${ref.dmId}/pins`
+          : path`/dms/groups/${ref.groupId}/pins`
+    return normalizePins(ref.kind, await http.get<unknown>(p))
   },
 
   /** Signalement (messages de salon uniquement côté serveur). */

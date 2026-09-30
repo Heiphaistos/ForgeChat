@@ -4,6 +4,7 @@ import { Text, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
+import { pinsParams } from '@/features/chat/pins'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { colors, font } from '@/theme'
@@ -27,11 +28,18 @@ export default function GroupScreen() {
             </View>
           ),
           headerRight: () => (
-            <IconButton
-              icon="people-outline"
-              label="Gérer le groupe"
-              onPress={() => router.push({ pathname: '/group/manage/[groupId]', params: { groupId: ids.groupId } })}
-            />
+            <View style={{ flexDirection: 'row' }}>
+              <IconButton
+                icon="pin-outline"
+                label="Messages épinglés"
+                onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'group', groupId: ids.groupId }) })}
+              />
+              <IconButton
+                icon="people-outline"
+                label="Gérer le groupe"
+                onPress={() => router.push({ pathname: '/group/manage/[groupId]', params: { groupId: ids.groupId } })}
+              />
+            </View>
           ),
         }}
       />

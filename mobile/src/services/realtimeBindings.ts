@@ -127,6 +127,15 @@ export function bindRealtime(): () => void {
   on('MESSAGE_PIN_UPDATE', (e) => {
     const cid = str(e.channel_id), mid = str(e.message_id)
     if (cid && mid) patchMessage('channel', cid, mid, (m) => ({ ...m, pinned: e.pinned === true }))
+    if (cid) void queryClient.invalidateQueries({ queryKey: qk.pins(cid) })
+  })
+  on('DM_PIN_TOGGLE', (e) => {
+    const id = str(e.dm_id)
+    if (id) void queryClient.invalidateQueries({ queryKey: qk.pins(id) })
+  })
+  on('GROUP_DM_PIN_TOGGLE', (e) => {
+    const id = str(e.group_id)
+    if (id) void queryClient.invalidateQueries({ queryKey: qk.pins(id) })
   })
   on('CHANNEL_PURGE', (e) => {
     const cid = str(e.channel_id)

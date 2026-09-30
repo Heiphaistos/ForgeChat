@@ -1,8 +1,9 @@
 import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
@@ -10,12 +11,14 @@ import { messagesApi, type ReportReason } from '@/api/messages'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
+import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { useTyping } from '@/stores/typing'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { Composer } from './Composer'
 import { MessageItem } from './MessageItem'
+import { useScrollTarget } from './pins'
 import { useConversation } from './useConversation'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
@@ -25,6 +28,9 @@ const useDrafts = create<{ drafts: Record<string, string>; set: (id: string, v: 
 }))
 
 const GROUP_WINDOW_MS = 5 * 60_000
+/** Pages plus anciennes chargées au maximum pour atteindre un message épinglé. */
+const MAX_SCROLL_PAGES = 5
+const HIGHLIGHT_MS = 2000
 
 function TypingIndicator({ conversationId }: { conversationId: string }) {
   const typers = useTyping((s) => s.byConversation[conversationId])
@@ -60,6 +66,46 @@ export function ChatView({
   const [editing, setEditing] = useState<ChatMessage | null>(null)
   const [selected, setSelected] = useState<ChatMessage | null>(null)
   const [paletteFor, setPaletteFor] = useState<ChatMessage | null>(null)
+  const listRef = useRef<FlatList<ChatMessage>>(null)
+
+  // DM et groupes : l'état « épinglé » n'est pas dans les messages, on le lit dans la liste des épinglés.
+  const pins = useQuery({
+    queryKey: qk.pins(conv.id),
+    queryFn: () => messagesApi.pins(conversation),
+    enabled: conversation.kind !== 'channel',
+  })
+  const pinnedIds = useMemo(() => new Set((pins.data ?? []).map((p) => p.messageId)), [pins.data])
+  const isPinned = (m: ChatMessage) => (conversation.kind === 'channel' ? m.pinned : pinnedIds.has(m.id))
+
+  // Défilement vers un message demandé par l'écran des épinglés (chargement de pages plus anciennes si besoin).
+  const target = useScrollTarget((s) => (s.target?.conversationId === conv.id ? s.target.messageId : null))
+  const highlightId = useScrollTarget((s) => s.highlightId)
+  const pagesLoaded = useRef(0)
+  const { messages, hasOlder, loadingOlder, loadOlder } = conv
+  useEffect(() => {
+    if (!target) {
+      pagesLoaded.current = 0
+      return
+    }
+    const index = messages.findIndex((m) => m.id === target)
+    if (index >= 0) {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
+      useScrollTarget.getState().done(target)
+    } else if (hasOlder && pagesLoaded.current < MAX_SCROLL_PAGES) {
+      if (!loadingOlder) {
+        pagesLoaded.current += 1
+        loadOlder()
+      }
+    } else {
+      useScrollTarget.getState().done(null)
+      Alert.alert('Message introuvable', 'Il est trop ancien ou a été supprimé.')
+    }
+  }, [target, messages, hasOlder, loadingOlder, loadOlder])
+  useEffect(() => {
+    if (!highlightId) return
+    const t = setTimeout(() => useScrollTarget.getState().done(null), HIGHLIGHT_MS)
+    return () => clearTimeout(t)
+  }, [highlightId])
 
   const react = useCallback(
     (m: ChatMessage, emoji: string) => {
@@ -106,12 +152,16 @@ export function ChatView({
     list.push({ label: 'Ajouter une réaction', icon: 'happy-outline', onPress: () => setPaletteFor(m) })
     if (m.content) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
     if (mine && m.content && !readOnly) list.push({ label: 'Modifier', icon: 'create-outline', onPress: () => setEditing(m) })
-    if (conversation.kind === 'channel') {
+    if (conversation.kind === 'channel' || pins.isSuccess) {
+      const pinned = isPinned(m)
       list.push({
-        label: m.pinned ? 'Désépingler' : 'Épingler',
+        label: pinned ? 'Désépingler' : 'Épingler',
         icon: 'pin-outline',
         onPress: () =>
-          messagesApi.pin(conversation, m.id, !m.pinned).catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+          messagesApi
+            .pin(conversation, m.id, !pinned)
+            .then(() => queryClient.invalidateQueries({ queryKey: qk.pins(conv.id) }))
+            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
       })
     }
     if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
@@ -136,20 +186,22 @@ export function ChatView({
         !item.reply &&
         new Date(item.createdAt).getTime() - new Date(prev.createdAt).getTime() < GROUP_WINDOW_MS
       return (
-        <MessageItem
-          message={item}
-          grouped={grouped}
-          daySeparator={daySeparator}
-          myId={me?.id ?? ''}
-          myName={me?.username ?? ''}
-          onLongPress={onLongPress}
-          onReact={react}
-          onPressAuthor={onPressAuthor}
-          onRetry={onLongPress}
-        />
+        <View style={item.id === highlightId ? styles.highlight : undefined}>
+          <MessageItem
+            message={item}
+            grouped={grouped}
+            daySeparator={daySeparator}
+            myId={me?.id ?? ''}
+            myName={me?.username ?? ''}
+            onLongPress={onLongPress}
+            onReact={react}
+            onPressAuthor={onPressAuthor}
+            onRetry={onLongPress}
+          />
+        </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId],
   )
 
   const quickReactions = useMemo(
@@ -182,8 +234,14 @@ export function ChatView({
   else
     body = (
       <FlatList
+        ref={listRef}
         data={conv.messages}
         inverted
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          // Hauteurs variables : on s'approche, puis on réessaie une fois les éléments mesurés.
+          listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })
+          setTimeout(() => listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true }), 250)
+        }}
         keyExtractor={(m) => m.id}
         renderItem={renderItem}
         onEndReached={conv.loadOlder}
@@ -260,6 +318,7 @@ export function ChatView({
 }
 
 const styles = StyleSheet.create({
+  highlight: { backgroundColor: colors.primary + '33' },
   typing: { height: 20, paddingHorizontal: spacing.lg, justifyContent: 'center' },
   typingText: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },

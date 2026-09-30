@@ -5,6 +5,7 @@ import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
+import { pinsParams } from '@/features/chat/pins'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -55,13 +56,21 @@ export default function DmScreen() {
               </View>
             </View>
           ),
-          headerRight: () =>
-            otherId ? (
-              <View style={{ flexDirection: 'row' }}>
-                <IconButton icon="call-outline" label="Appel vocal" onPress={() => void call('voice')} />
-                <IconButton icon="videocam-outline" label="Appel vidéo" onPress={() => void call('video')} />
-              </View>
-            ) : null,
+          headerRight: () => (
+            <View style={{ flexDirection: 'row' }}>
+              <IconButton
+                icon="pin-outline"
+                label="Messages épinglés"
+                onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })}
+              />
+              {otherId ? (
+                <>
+                  <IconButton icon="call-outline" label="Appel vocal" onPress={() => void call('voice')} />
+                  <IconButton icon="videocam-outline" label="Appel vidéo" onPress={() => void call('video')} />
+                </>
+              ) : null}
+            </View>
+          ),
         }}
       />
       <ChatView
