@@ -7,6 +7,9 @@ describe('mediaKind', () => {
     expect(mediaKind({ content_type: 'Video/QuickTime' })).toBe('video')
     expect(mediaKind({ content_type: 'audio/mpeg' })).toBe('audio')
     expect(mediaKind({ content_type: 'audio/ogg; codecs=opus' })).toBe('audio')
+    // Types produits par le serveur (mime_guess) pour .m4a et .flac
+    expect(mediaKind({ content_type: 'audio/m4a' })).toBe('audio')
+    expect(mediaKind({ content_type: 'audio/flac' })).toBe('audio')
   })
 
   it('laisse en carte « fichier » les formats non pris en charge', () => {

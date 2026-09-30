@@ -2,9 +2,12 @@ import type { Attachment } from '@/types/models'
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'file'
 
-/** Formats lus par les lecteurs intégrés (ExoPlayer / AVPlayer). Tout le reste : carte « fichier ». */
+/**
+ * Formats lus par les lecteurs intégrés (ExoPlayer / AVPlayer). Tout le reste : carte « fichier ».
+ * Le serveur dérive le type de l'extension (mime_guess) : .m4a → audio/m4a, .flac → audio/flac.
+ */
 const VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm'])
-const AUDIO_TYPES = new Set(['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/webm'])
+const AUDIO_TYPES = new Set(['audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/webm'])
 
 export function mediaKind(a: Pick<Attachment, 'content_type'>): MediaKind {
   const t = a.content_type.toLowerCase().split(';')[0]!.trim()
