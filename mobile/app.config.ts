@@ -1,0 +1,145 @@
+import type { ExpoConfig, ConfigContext } from 'expo/config'
+
+/**
+ * Configuration Expo dynamique.
+ *
+ * Toutes les valeurs sensibles à l'environnement passent par des variables
+ * d'environnement (voir `.env.example`) — rien de secret n'est embarqué dans le
+ * binaire : l'app ne connaît que l'URL publique de l'API.
+ */
+
+const API_URL = process.env.FORGECHAT_API_URL ?? 'https://forgechat.heiphaistos.org'
+const APP_ENV = (process.env.APP_ENV ?? 'development') as 'development' | 'preview' | 'production'
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
+const BUNDLE_ID = process.env.FORGECHAT_BUNDLE_ID ?? 'org.heiphaistos.forgechat'
+
+// Garde-fou : en dehors du développement, l'API DOIT être en HTTPS.
+// (Le client vérifie aussi au runtime, cf. src/config/env.ts.)
+if (APP_ENV !== 'development' && !API_URL.startsWith('https://')) {
+  throw new Error(`FORGECHAT_API_URL doit être en https:// pour APP_ENV=${APP_ENV}`)
+}
+
+const apiHost = new URL(API_URL).host
+
+export default ({ config }: ConfigContext): ExpoConfig => ({
+  ...config,
+  name: APP_ENV === 'production' ? 'ForgeChat' : `ForgeChat (${APP_ENV})`,
+  slug: 'forgechat',
+  scheme: 'forgechat',
+  version: '1.0.0',
+  orientation: 'portrait',
+  icon: './assets/icon.png',
+  userInterfaceStyle: 'dark',
+  backgroundColor: '#1e1f22',
+  ios: {
+    bundleIdentifier: APP_ENV === 'production' ? BUNDLE_ID : `${BUNDLE_ID}.${APP_ENV}`,
+    supportsTablet: true,
+    associatedDomains: [`applinks:${apiHost}`],
+    infoPlist: {
+      NSCameraUsageDescription: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+      NSMicrophoneUsageDescription: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
+      NSPhotoLibraryUsageDescription: 'ForgeChat accède à tes photos uniquement quand tu choisis d’en envoyer.',
+      // Maintient l'audio d'un appel en cours quand l'app passe en arrière-plan.
+      UIBackgroundModes: ['audio', 'remote-notification'],
+      ITSAppUsesNonExemptEncryption: false,
+      // ATS reste actif (aucune exception) : tout le trafic est forcé en HTTPS/TLS 1.2+.
+    },
+    privacyManifests: {
+      NSPrivacyTracking: false,
+      NSPrivacyCollectedDataTypes: [],
+      NSPrivacyAccessedAPITypes: [
+        {
+          NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+          NSPrivacyAccessedAPITypeReasons: ['CA92.1'],
+        },
+      ],
+    },
+  },
+  android: {
+    package: APP_ENV === 'production' ? BUNDLE_ID : `${BUNDLE_ID}.${APP_ENV}`,
+    adaptiveIcon: {
+      backgroundColor: '#1e1f22',
+      foregroundImage: './assets/android-icon-foreground.png',
+      backgroundImage: './assets/android-icon-background.png',
+      monochromeImage: './assets/android-icon-monochrome.png',
+    },
+    // Pas de sauvegarde cloud/adb des données de l'app (tokens, préférences).
+    allowBackup: false,
+    predictiveBackGestureEnabled: false,
+    permissions: [
+      'android.permission.CAMERA',
+      'android.permission.RECORD_AUDIO',
+      'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.BLUETOOTH_CONNECT',
+      'android.permission.POST_NOTIFICATIONS',
+      'android.permission.USE_BIOMETRIC',
+      'android.permission.WAKE_LOCK',
+    ],
+    blockedPermissions: [
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_PHONE_STATE',
+    ],
+    intentFilters: [
+      {
+        action: 'VIEW',
+        autoVerify: true,
+        data: [
+          { scheme: 'https', host: apiHost, pathPrefix: '/invite/' },
+          { scheme: 'https', host: apiHost, pathPrefix: '/friend-invite/' },
+        ],
+        category: ['BROWSABLE', 'DEFAULT'],
+      },
+    ],
+  },
+  plugins: [
+    'expo-router',
+    ['expo-secure-store', { faceIDPermission: 'Déverrouiller ForgeChat avec Face ID.' }],
+    ['expo-local-authentication', { faceIDPermission: 'Déverrouiller ForgeChat avec Face ID.' }],
+    [
+      'expo-notifications',
+      { color: '#5865f2', defaultChannel: 'messages' },
+    ],
+    [
+      'expo-image-picker',
+      {
+        photosPermission: 'ForgeChat accède à tes photos uniquement quand tu choisis d’en envoyer.',
+        // Mêmes textes que le plugin WebRTC : ces plugins écrivent les mêmes clés Info.plist
+        // et ne doivent surtout pas retirer RECORD_AUDIO (indispensable aux appels).
+        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+        microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
+      },
+    ],
+    [
+      '@config-plugins/react-native-webrtc',
+      {
+        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+        microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
+      },
+    ],
+    [
+      'expo-build-properties',
+      {
+        android: {
+          // Interdit tout trafic HTTP en clair au niveau OS (en plus du contrôle applicatif).
+          usesCleartextTraffic: APP_ENV === 'development',
+          enableMinifyInReleaseBuilds: true,
+          enableShrinkResourcesInReleaseBuilds: true,
+          // Règles R8 requises par react-native-webrtc.
+          extraProguardRules: '-keep class org.webrtc.** { *; }',
+        },
+      },
+    ],
+    'expo-web-browser',
+    'expo-font',
+    ['expo-splash-screen', { backgroundColor: '#1e1f22', image: './assets/splash-icon.png', imageWidth: 160 }],
+    'expo-image',
+  ],
+  experiments: { typedRoutes: true },
+  extra: {
+    apiUrl: API_URL,
+    appEnv: APP_ENV,
+    ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
+  },
+})
