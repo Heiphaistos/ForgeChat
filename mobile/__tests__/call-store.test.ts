@@ -220,4 +220,16 @@ describe('stores/call — course entre setup asynchrone et fin d’appel', () =>
     expect(useCall.getState().endReason).toBe('Connexion impossible')
     expect(mockRealtimeSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_HANGUP' }))
   })
+
+  it('garde le nom et l’avatar du correspondant sur l’écran de fin (hors ligne)', async () => {
+    mockGetLocalMedia.mockResolvedValue({ stream: fakeStream(), hasVideo: false })
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice', '/uploads/bob.png')
+    fire('DM_CALL_ERROR', { dm_id: DM_ID, reason: 'offline' })
+    await flush()
+    const s = useCall.getState()
+    expect(s.phase).toBe('idle')
+    expect(s.partnerName).toBeNull()
+    expect(s.endReason).toBe('Ton correspondant est hors ligne')
+    expect(s.endedWith).toEqual({ name: 'Bob', avatar: '/uploads/bob.png' })
+  })
 })

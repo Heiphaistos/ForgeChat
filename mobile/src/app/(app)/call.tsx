@@ -55,12 +55,12 @@ export default function CallScreen() {
         <RTCView streamURL={remoteVideo.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" zOrder={0} />
       ) : (
         <View style={styles.center}>
-          <Avatar uri={null} name={s.partnerName ?? '?'} size={120} />
+          <Avatar uri={s.partnerAvatar ?? s.endedWith?.avatar ?? null} name={s.partnerName ?? s.endedWith?.name ?? '?'} size={120} />
         </View>
       )}
 
       <View style={[styles.top, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.name}>{s.partnerName}</Text>
+        <Text style={styles.name}>{s.partnerName ?? s.endedWith?.name}</Text>
         <Text style={styles.status}>{label}</Text>
       </View>
 

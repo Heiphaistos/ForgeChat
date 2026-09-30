@@ -44,6 +44,9 @@ interface CallState {
   dmId: string | null
   partnerId: string | null
   partnerName: string | null
+  partnerAvatar: string | null
+  /** Correspondant du dernier appel terminé avec un motif : l'écran de fin garde son nom et son avatar. */
+  endedWith: { name: string; avatar: string | null } | null
   callType: CallType
   localStream: MediaStream | null
   remoteStream: MediaStream | null
@@ -52,7 +55,7 @@ interface CallState {
   speaker: boolean
   connectedAt: number | null
   endReason: string | null
-  start: (dmId: string, partnerId: string, partnerName: string, type: CallType) => Promise<void>
+  start: (dmId: string, partnerId: string, partnerName: string, type: CallType, partnerAvatar?: string | null) => Promise<void>
   accept: () => Promise<void>
   decline: () => void
   hangup: () => void
@@ -103,11 +106,14 @@ export const useCall = create<CallState>((set, get) => {
     audioSession.stopRingback()
     audioSession.stopRinging()
     if (get().phase !== 'idle') audioSession.stop()
+    const { partnerName, partnerAvatar } = get()
     set({
       phase: 'idle',
       dmId: null,
       partnerId: null,
       partnerName: null,
+      partnerAvatar: null,
+      endedWith: reason && partnerName ? { name: partnerName, avatar: partnerAvatar } : null,
       localStream: null,
       remoteStream: null,
       micMuted: false,
@@ -289,6 +295,8 @@ export const useCall = create<CallState>((set, get) => {
     dmId: null,
     partnerId: null,
     partnerName: null,
+    partnerAvatar: null,
+    endedWith: null,
     callType: 'voice',
     localStream: null,
     remoteStream: null,
@@ -298,7 +306,7 @@ export const useCall = create<CallState>((set, get) => {
     connectedAt: null,
     endReason: null,
 
-    start: async (dmId, partnerId, partnerName, type) => {
+    start: async (dmId, partnerId, partnerName, type, partnerAvatar = null) => {
       if (busy || get().phase !== 'idle') return
       if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
       busy = true
@@ -308,7 +316,7 @@ export const useCall = create<CallState>((set, get) => {
       // 'idle' pour que le handler correspondant appelle cleanup() — sinon
       // l'événement est ignoré et la garde de génération ci-dessous ne se
       // déclenche jamais (l'appel resterait bloqué après un raccroché distant).
-      set({ phase: 'calling', dmId, partnerId, partnerName, callType: type, endReason: null })
+      set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null })
       try {
         const stream = await attachMedia(type)
         if (gen !== callGeneration) {
@@ -361,6 +369,8 @@ export const useCall = create<CallState>((set, get) => {
         dmId: inc.dmId,
         partnerId: inc.fromUserId,
         partnerName: inc.fromUsername,
+        partnerAvatar: null,
+        endedWith: null,
         callType: inc.callType,
         endReason: null,
       })

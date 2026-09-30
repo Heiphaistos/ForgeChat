@@ -34,7 +34,7 @@ export default function DmScreen() {
       return
     }
     try {
-      await startCall(ids.dmId, otherId, name, type)
+      await startCall(ids.dmId, otherId, name, type, summary && !summary.is_group ? summary.avatar : null)
       router.push('/call')
     } catch (e) {
       Alert.alert('Appel impossible', errorMessage(e))
