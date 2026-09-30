@@ -36,6 +36,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings/sessions" options={{ title: 'Appareils connectés' }} />
       <Stack.Screen name="settings/notifications" options={{ title: 'Notifications' }} />
       <Stack.Screen name="settings/password" options={{ title: 'Mot de passe', presentation: 'modal' }} />
+      <Stack.Screen name="settings/delete-account" options={{ title: 'Supprimer le compte', presentation: 'modal' }} />
     </Stack>
   )
 }

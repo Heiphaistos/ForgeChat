@@ -86,6 +86,7 @@ export default function SecuritySettings() {
             ])
           }
         />
+        <Row icon="trash-outline" title="Supprimer mon compte" danger onPress={() => router.push('/settings/delete-account')} chevron />
       </Section>
     </ScrollView>
   )
