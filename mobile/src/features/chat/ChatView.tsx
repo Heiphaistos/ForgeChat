@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
@@ -72,6 +72,13 @@ export function ChatView({
   const [selected, setSelected] = useState<ChatMessage | null>(null)
   const [paletteFor, setPaletteFor] = useState<ChatMessage | null>(null)
   const listRef = useRef<FlatList<ChatMessage>>(null)
+  // Distance haut de l'écran → haut de la vue (en-tête compris), mesurée nous-mêmes :
+  // `automaticOffset` retombait par intermittence sur y = 0 (position relative au parent)
+  // et le clavier recouvrait alors la zone de saisie.
+  const [topOffset, setTopOffset] = useState(0)
+  const onKavLayout = useCallback((e: LayoutChangeEvent) => {
+    e.target.measureInWindow((_x, y) => setTopOffset((prev) => (Math.abs(prev - y) > 0.5 ? y : prev)))
+  }, [])
 
   // DM et groupes : l'état « épinglé » n'est pas dans les messages, on le lit dans la liste des épinglés.
   const pins = useQuery({
@@ -286,7 +293,7 @@ export function ChatView({
 
   return (
     <CustomEmojiContext.Provider value={customEmojis}>
-      <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1, backgroundColor: colors.bg }}>
+      <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={topOffset} onLayout={onKavLayout} style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ flex: 1 }}>{body}</View>
         <TypingIndicator conversationId={conv.id} />
         <Composer
