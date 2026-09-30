@@ -35,6 +35,11 @@ export default function SecuritySettings() {
       // Confirmer que l'utilisateur peut effectivement se déverrouiller avant d'activer.
       const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Activer le verrouillage de ForgeChat' })
       if (!res.success) return
+    } else if ((await biometricAvailability()).usable) {
+      // Désactiver affaiblit la protection : même preuve que pour déverrouiller. Si l'appareil
+      // n'a plus aucun moyen d'authentification, on laisse désactiver (sinon blocage).
+      const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Désactiver le verrouillage de ForgeChat' })
+      if (!res.success) return
     }
     s.set({ appLock: on })
   }
