@@ -101,12 +101,13 @@ export function ChatView({
   const target = useScrollTarget((s) => (s.target?.conversationId === conv.id ? s.target.messageId : null))
   const highlightId = useScrollTarget((s) => s.highlightId)
   const pagesLoaded = useRef(0)
-  const { messages, hasOlder, loadingOlder, loadOlder } = conv
+  const { messages, hasOlder, loadingOlder, loadOlder, isLoading } = conv
   useEffect(() => {
     if (!target) {
       pagesLoaded.current = 0
       return
     }
+    if (isLoading) return // conversation ouverte à l'instant : attendre la première page
     const index = messages.findIndex((m) => m.id === target)
     if (index >= 0) {
       listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
@@ -120,7 +121,7 @@ export function ChatView({
       useScrollTarget.getState().done(null)
       Alert.alert('Message introuvable', 'Il est trop ancien ou a été supprimé.')
     }
-  }, [target, messages, hasOlder, loadingOlder, loadOlder])
+  }, [target, messages, hasOlder, loadingOlder, loadOlder, isLoading])
   useEffect(() => {
     if (!highlightId) return
     const t = setTimeout(() => useScrollTarget.getState().done(null), HIGHLIGHT_MS)
