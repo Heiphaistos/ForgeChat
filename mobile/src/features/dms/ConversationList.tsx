@@ -38,6 +38,7 @@ export function ConversationList() {
         <Text style={styles.title} accessibilityRole="header">
           Messages privés
         </Text>
+        <IconButton icon="search" label="Rechercher" onPress={() => router.push('/search')} />
         <IconButton icon="people-outline" label="Nouveau groupe" onPress={() => router.push('/group/create')} />
       </View>
       <View style={styles.search}>

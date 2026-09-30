@@ -25,6 +25,7 @@ export const qk = {
   categories: (serverId: string) => ['categories', serverId] as const,
   members: (serverId: string) => ['members', serverId] as const,
   emojis: (serverId: string) => ['emojis', serverId] as const,
+  search: (q: string) => ['search', q] as const,
   conversations: ['conversations'] as const,
   group: (id: string) => ['group', id] as const,
   /** Épinglés d'une conversation (id de salon, de DM ou de groupe). */

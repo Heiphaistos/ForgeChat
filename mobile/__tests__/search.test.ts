@@ -1,0 +1,40 @@
+import { normalizeSearch, searchQuery } from '@/features/search/search'
+
+const A = '3af17b11-1c9a-4daf-8895-a2d3eec03894'
+const B = '5aa172f3-305c-4685-bd77-64faf6b911eb'
+const C = '0b8f3c1e-2d4a-4e5f-9a6b-7c8d9e0f1a2b'
+const AT = '2026-09-30T10:00:00Z'
+
+describe('searchQuery', () => {
+  it('exige 2 à 100 caractères après trim', () => {
+    expect(searchQuery(' a ')).toBeNull()
+    expect(searchQuery('  ab ')).toBe('ab')
+    expect(searchQuery('x'.repeat(100))).toHaveLength(100)
+    expect(searchQuery('x'.repeat(101))).toBeNull()
+  })
+})
+
+describe('normalizeSearch', () => {
+  it('lit les trois sections', () => {
+    const r = normalizeSearch({
+      messages: [{ id: A, content: 'salut', created_at: AT, author_username: 'bob', author_avatar: null, channel_name: 'général', channel_id: B, server_id: C }],
+      users: [{ id: A.toUpperCase(), username: 'bob', avatar: null, status: 'online' }],
+      channels: [{ id: B, name: 'général', type: 'text', server_id: C, server_name: 'Serveur' }],
+    })
+    expect(r.messages).toEqual([
+      { id: A, content: 'salut', createdAt: AT, authorName: 'bob', authorAvatar: null, channelId: B, channelName: 'général', serverId: C },
+    ])
+    expect(r.users).toEqual([{ id: A, username: 'bob', avatar: null, status: 'online' }])
+    expect(r.channels).toEqual([{ id: B, name: 'général', type: 'text', serverId: C, serverName: 'Serveur' }])
+  })
+
+  it('ignore les entrées aux identifiants invalides et les réponses mal formées', () => {
+    const r = normalizeSearch({
+      messages: [{ id: A, created_at: AT, channel_id: '../x', server_id: C }, null],
+      users: [{ id: 'nope', username: 'x' }, { id: A }],
+      channels: 'pas une liste',
+    })
+    expect(r).toEqual({ messages: [], users: [], channels: [] })
+    expect(normalizeSearch(null)).toEqual({ messages: [], users: [], channels: [] })
+  })
+})
