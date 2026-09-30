@@ -327,7 +327,6 @@ async function main() {
   console.log('\n-- 8. Logout --');
   const loginA2 = await api('POST', '/api/auth/login', { body: { email: userA.email, password: userA.password } });
   ok(loginA2.status === 200, 'A ouvre une 2e session', JSON.stringify(loginA2.body));
-  const aAccess2 = loginA2.body.access_token;
   const aRefresh2 = loginA2.body.refresh_token;
 
   const logoutCurrent = await api('POST', '/api/auth/logout', {

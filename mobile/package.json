@@ -63,7 +63,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p __tests__",
     "test": "jest --ci --no-watchman",
     "check": "npm run typecheck && npm run lint && npm test",
-    "doctor": "expo-doctor"
+    "doctor": "expo-doctor",
+    "e2e": "node scripts/e2e-api.mjs"
   },
   "private": true,
   "jest": {

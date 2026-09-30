@@ -15,4 +15,14 @@ module.exports = defineConfig([
       'no-implied-eval': 'error',
     },
   },
+  {
+    // Scripts Node (e2e contre un serveur local) : sortie console voulue, globales Node.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', Buffer: 'readonly' },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
 ])
