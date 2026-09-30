@@ -16,6 +16,8 @@ export type InlineNode =
   | { t: 'spoiler'; c: InlineNode[] }
   | { t: 'link'; url: string }
   | { t: 'mention'; v: string; everyone: boolean }
+  /** « :nom: » : emoji personnalisé du serveur, rendu en texte si inconnu. */
+  | { t: 'emoji'; v: string }
 
 export type BlockNode =
   | { t: 'para'; c: InlineNode[] }
@@ -26,7 +28,7 @@ const MAX_INPUT = 6000
 const MAX_DEPTH = 4
 
 const INLINE_RE =
-  /(`[^`\n]+`)|(\*\*[^*\n][^*]*?\*\*)|(~~[^~\n][^~]*?~~)|(\|\|[^|\n][^|]*?\|\|)|(\*[^*\s][^*\n]*?\*)|(https?:\/\/[^\s<>]+[^\s<>().,;:!?'"\]])|(<@[0-9a-fA-F-]{36}>)|(@(?:everyone|here|[A-Za-z0-9_-]{2,32}))/g
+  /(`[^`\n]+`)|(\*\*[^*\n][^*]*?\*\*)|(~~[^~\n][^~]*?~~)|(\|\|[^|\n][^|]*?\|\|)|(\*[^*\s][^*\n]*?\*)|(https?:\/\/[^\s<>]+[^\s<>().,;:!?'"\]])|(<@[0-9a-fA-F-]{36}>)|(@(?:everyone|here|[A-Za-z0-9_-]{2,32}))|(:[A-Za-z0-9_]{1,32}:)/g
 
 export function parseInline(input: string, depth = 0): InlineNode[] {
   const out: InlineNode[] = []
@@ -49,7 +51,7 @@ export function parseInline(input: string, depth = 0): InlineNode[] {
     else if (m[8]) {
       const name = tok.slice(1)
       out.push({ t: 'mention', v: name, everyone: name === 'everyone' || name === 'here' })
-    }
+    } else if (m[9]) out.push({ t: 'emoji', v: tok.slice(1, -1) })
     last = m.index + tok.length
   }
   if (last < input.length) out.push({ t: 'text', v: input.slice(last) })

@@ -129,6 +129,12 @@ export function bindRealtime(): () => void {
     if (cid && mid) patchMessage('channel', cid, mid, (m) => ({ ...m, pinned: e.pinned === true }))
     if (cid) void queryClient.invalidateQueries({ queryKey: qk.pins(cid) })
   })
+  for (const t of ['EMOJI_CREATE', 'EMOJI_DELETE']) {
+    on(t, (e) => {
+      const sid = str(e.server_id)
+      if (sid) void queryClient.invalidateQueries({ queryKey: qk.emojis(sid) })
+    })
+  }
   on('DM_PIN_TOGGLE', (e) => {
     const id = str(e.dm_id)
     if (id) void queryClient.invalidateQueries({ queryKey: qk.pins(id) })

@@ -12,6 +12,8 @@ export const serversApi = {
     http.post<Channel>(path`/servers/${serverId}/channels`, { name: name.trim(), type, category_id: categoryId ?? undefined }),
   categories: (id: string) => http.get<Category[]>(path`/servers/${id}/categories`),
   members: (id: string) => http.get<Member[]>(path`/servers/${id}/members`),
+  /** Emojis personnalisés (données brutes : filtrées par features/chat/customEmojis.buildEmojiMap). */
+  emojis: (id: string) => http.get<unknown>(path`/servers/${id}/emojis`),
   join: (code: string) => http.post<Server>(path`/servers/join/${code}`),
   invite: (code: string) => http.get<InviteInfo>(path`/invites/${code}`, { auth: false }),
   createInvite: (serverId: string, maxUses?: number, expiresHours?: number) =>

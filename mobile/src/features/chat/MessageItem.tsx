@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
@@ -8,6 +9,7 @@ import { mentionsUser } from '@/lib/markdown'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { Attachments } from './Attachments'
+import { reactionEmojiName, useCustomEmojis } from './customEmojis'
 
 interface Props {
   message: ChatMessage
@@ -19,6 +21,15 @@ interface Props {
   onReact: (m: ChatMessage, emoji: string) => void
   onPressAuthor: (userId: string) => void
   onRetry: (m: ChatMessage) => void
+}
+
+/** Réaction : emoji Unicode, ou « :nom: » affiché en image si le serveur le connaît. */
+function ReactionEmoji({ emoji }: { emoji: string }) {
+  const emojis = useCustomEmojis()
+  const name = reactionEmojiName(emoji)
+  const url = name ? emojis.get(name) : undefined
+  if (url) return <Image source={{ uri: url }} style={{ width: 18, height: 18 }} contentFit="contain" accessibilityLabel={emoji} />
+  return <Text style={{ fontSize: 15 }}>{emoji}</Text>
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -112,7 +123,7 @@ export const MessageItem = memo(function MessageItem({
                   accessibilityRole="button"
                   accessibilityLabel={`${r.emoji} ${r.count}${r.me ? ', ta réaction' : ''}`}
                 >
-                  <Text style={{ fontSize: 15 }}>{r.emoji}</Text>
+                  <ReactionEmoji emoji={r.emoji} />
                   <Text style={[styles.reactionCount, r.me && { color: colors.text }]}>{r.count}</Text>
                 </Pressable>
               ))}

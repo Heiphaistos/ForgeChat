@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text,
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
+import { Image } from 'expo-image'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { dmsApi } from '@/api/dms'
@@ -19,6 +20,7 @@ import { useTyping } from '@/stores/typing'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { Composer } from './Composer'
+import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
 import { useScrollTarget } from './pins'
@@ -83,6 +85,9 @@ export function ChatView({
   const groupId = conversation.kind === 'group' ? conversation.groupId : ''
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
+  // Emojis personnalisés du serveur (salons uniquement) : texte, réactions et palette.
+  const emojiQuery = useQuery({ queryKey: qk.emojis(serverId), queryFn: () => serversApi.emojis(serverId), enabled: !!serverId, staleTime: 60_000 })
+  const customEmojis = useMemo(() => buildEmojiMap(emojiQuery.data), [emojiQuery.data])
   const mentionCandidates = useMemo<MentionCandidate[]>(
     () =>
       serverId
@@ -279,58 +284,75 @@ export function ChatView({
     )
 
   return (
-    <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ flex: 1 }}>{body}</View>
-      <TypingIndicator conversationId={conv.id} />
-      <Composer
-        placeholder={placeholder}
-        disabled={readOnly}
-        disabledReason={readOnlyReason}
-        replyTo={replyTo}
-        editing={editing}
-        onCancelReply={() => setReplyTo(null)}
-        onCancelEdit={() => setEditing(null)}
-        onSend={async (text, files) => {
-          const reply = replyTo
-          setReplyTo(null)
-          await conv.send(text, { replyTo: reply, files })
-        }}
-        onEdit={conv.edit}
-        onTyping={conv.notifyTyping}
-        draft={draft}
-        onDraftChange={(t) => setDraft(conv.id, t)}
-        mentionCandidates={mentionCandidates}
-        myId={me?.id ?? null}
-      />
+    <CustomEmojiContext.Provider value={customEmojis}>
+      <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1, backgroundColor: colors.bg }}>
+        <View style={{ flex: 1 }}>{body}</View>
+        <TypingIndicator conversationId={conv.id} />
+        <Composer
+          placeholder={placeholder}
+          disabled={readOnly}
+          disabledReason={readOnlyReason}
+          replyTo={replyTo}
+          editing={editing}
+          onCancelReply={() => setReplyTo(null)}
+          onCancelEdit={() => setEditing(null)}
+          onSend={async (text, files) => {
+            const reply = replyTo
+            setReplyTo(null)
+            await conv.send(text, { replyTo: reply, files })
+          }}
+          onEdit={conv.edit}
+          onTyping={conv.notifyTyping}
+          draft={draft}
+          onDraftChange={(t) => setDraft(conv.id, t)}
+          mentionCandidates={mentionCandidates}
+          myId={me?.id ?? null}
+        />
 
-      <Sheet
-        visible={!!selected}
-        onClose={() => setSelected(null)}
-        header={quickReactions}
-        actions={selected ? actionsFor(selected) : []}
-      />
+        <Sheet
+          visible={!!selected}
+          onClose={() => setSelected(null)}
+          header={quickReactions}
+          actions={selected ? actionsFor(selected) : []}
+        />
 
-      <Modal visible={!!paletteFor} transparent animationType="fade" onRequestClose={() => setPaletteFor(null)}>
-        <Pressable style={styles.paletteBackdrop} onPress={() => setPaletteFor(null)}>
-          <View style={styles.palette}>
-            {EMOJI_PALETTE.map((e) => (
-              <Pressable
-                key={e}
-                style={styles.paletteItem}
-                onPress={() => {
-                  const m = paletteFor
-                  setPaletteFor(null)
-                  if (m) react(m, e)
-                }}
-                accessibilityLabel={`Réagir ${e}`}
-              >
-                <Text style={{ fontSize: 26 }}>{e}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
-    </KeyboardAvoidingView>
+        <Modal visible={!!paletteFor} transparent animationType="fade" onRequestClose={() => setPaletteFor(null)}>
+          <Pressable style={styles.paletteBackdrop} onPress={() => setPaletteFor(null)}>
+            <View style={styles.palette}>
+              {EMOJI_PALETTE.map((e) => (
+                <Pressable
+                  key={e}
+                  style={styles.paletteItem}
+                  onPress={() => {
+                    const m = paletteFor
+                    setPaletteFor(null)
+                    if (m) react(m, e)
+                  }}
+                  accessibilityLabel={`Réagir ${e}`}
+                >
+                  <Text style={{ fontSize: 26 }}>{e}</Text>
+                </Pressable>
+              ))}
+              {customEmojis.size ? <Text style={styles.paletteTitle}>Emojis du serveur</Text> : null}
+              {[...customEmojis].map(([name, url]) => (
+                <Pressable
+                  key={`:${name}:`}
+                  style={styles.paletteItem}
+                  onPress={() => {
+                    const m = paletteFor
+                    setPaletteFor(null)
+                    if (m) react(m, `:${name}:`)
+                  }}
+                  accessibilityLabel={`Réagir :${name}:`}
+                >
+                  <Image source={{ uri: url }} style={{ width: 28, height: 28 }} contentFit="contain" />
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Modal>
+      </KeyboardAvoidingView>
+    </CustomEmojiContext.Provider>
   )
 }
 
@@ -342,5 +364,6 @@ const styles = StyleSheet.create({
   quick: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   paletteBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
   palette: { backgroundColor: colors.bgAlt, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  paletteTitle: { width: '100%', color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textTransform: 'uppercase', marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   paletteItem: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 })
