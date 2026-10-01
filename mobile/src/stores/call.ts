@@ -9,7 +9,9 @@ import { voiceApi } from '@/api/voice'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { audioSession, getLocalMedia, stopStream } from '@/services/media'
-import { onPeer } from '@/services/webrtc'
+import { canShareInCall } from '@/features/calls/screenShareLogic'
+import { captureScreen, stopScreenCapture } from '@/services/screenCapture'
+import { onPeer, onTrackEnded } from '@/services/webrtc'
 import { registerSignOutHook } from './auth'
 import { useVoice } from './voice'
 
@@ -52,6 +54,8 @@ interface CallState {
   remoteStream: MediaStream | null
   micMuted: boolean
   camOff: boolean
+  /** Notre écran remplace la caméra envoyée (appel vidéo uniquement). */
+  screenSharing: boolean
   speaker: boolean
   connectedAt: number | null
   endReason: string | null
@@ -63,6 +67,8 @@ interface CallState {
   toggleCam: () => void
   switchCamera: () => void
   toggleSpeaker: () => void
+  shareScreen: () => Promise<void>
+  stopScreenShare: () => void
 }
 
 let pc: RTCPeerConnection | null = null
@@ -71,6 +77,8 @@ let ringTimeout: ReturnType<typeof setTimeout> | null = null
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectTimeout: ReturnType<typeof setTimeout> | null = null
 let busy = false
+/** Partage d'écran en appel 1:1 : flux capturé (sa piste remplace la caméra envoyée). */
+let callScreenStream: MediaStream | null = null
 /** Incrémenté à chaque cleanup() : détecte une continuation async (start/accept)
  *  périmée par un raccroché distant/erreur survenu pendant un `await`. */
 let callGeneration = 0
@@ -102,6 +110,9 @@ export const useCall = create<CallState>((set, get) => {
     }
     pc = null
     pendingIce = []
+    // Fin d'appel : la capture d'écran s'arrête aussi (libère MediaProjection et sa notification).
+    stopScreenCapture(callScreenStream)
+    callScreenStream = null
     stopStream(get().localStream)
     audioSession.stopRingback()
     audioSession.stopRinging()
@@ -118,6 +129,7 @@ export const useCall = create<CallState>((set, get) => {
       remoteStream: null,
       micMuted: false,
       camOff: false,
+      screenSharing: false,
       speaker: false,
       connectedAt: null,
       endReason: reason,
@@ -302,6 +314,7 @@ export const useCall = create<CallState>((set, get) => {
     remoteStream: null,
     micMuted: false,
     camOff: false,
+    screenSharing: false,
     speaker: false,
     connectedAt: null,
     endReason: null,
@@ -448,6 +461,36 @@ export const useCall = create<CallState>((set, get) => {
       const on = !get().speaker
       audioSession.setSpeaker(on)
       set({ speaker: on })
+    },
+
+    // Le web n'a pas de partage d'écran en appel 1:1 : on remplace la piste caméra envoyée
+    // (replaceTrack, sans renégociation). Le correspondant voit l'écran à la place de la caméra.
+    shareScreen: async () => {
+      const { phase, callType, screenSharing } = get()
+      if (screenSharing || !pc || !canShareInCall(phase, callType)) return
+      const gen = callGeneration
+      const captured = await captureScreen()
+      const sender = pc?.getSenders().find((x) => x.track?.kind === 'video')
+      if (gen !== callGeneration || !sender) {
+        stopScreenCapture(captured.stream) // appel terminé pendant le dialogue système
+        return
+      }
+      await sender.replaceTrack(captured.track)
+      callScreenStream = captured.stream
+      onTrackEnded(captured.track, () => {
+        if (callScreenStream === captured.stream) get().stopScreenShare()
+      })
+      set({ screenSharing: true })
+    },
+
+    stopScreenShare: () => {
+      if (!callScreenStream) return
+      stopScreenCapture(callScreenStream)
+      callScreenStream = null
+      const cam = get().localStream?.getVideoTracks()[0] ?? null
+      const sender = pc?.getSenders().find((x) => x.track?.kind === 'video' || x.track === null)
+      if (sender) void sender.replaceTrack(cam).catch((err: unknown) => logger.warn('call', 'retour caméra', err))
+      set({ screenSharing: false })
     },
   }
 })

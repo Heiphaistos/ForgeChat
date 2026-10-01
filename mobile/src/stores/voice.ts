@@ -4,12 +4,16 @@ import {
   RTCPeerConnection,
   RTCSessionDescription,
   type MediaStream,
+  type MediaStreamTrack,
+  type RTCRtpSender,
 } from 'react-native-webrtc'
+import { classifyIncomingTrack } from '@/features/calls/screenShareLogic'
 import { voiceApi } from '@/api/voice'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { audioSession, getLocalMedia, stopStream } from '@/services/media'
-import { onPeer } from '@/services/webrtc'
+import { captureScreen, stopScreenCapture } from '@/services/screenCapture'
+import { onPeer, onTrackEnded } from '@/services/webrtc'
 import { getMyId, registerSignOutHook } from './auth'
 
 /**
@@ -21,8 +25,9 @@ import { getMyId, registerSignOutHook } from './auth'
  *  - VOICE_SIGNAL avec payload { type, data } (≠ appels DM : payload.sdp).
  *  - Glare : le pair « poli » (id lexicographiquement inférieur) fait un rollback.
  *
- * Mobile : micro + réception audio/vidéo des autres (caméra/écran visibles),
- * sans émission vidéo (économie batterie/données).
+ * Mobile : micro + réception audio/vidéo des autres (caméra/écran visibles), sans caméra
+ * (économie batterie/données). Partage d'écran émis et reçu avec le protocole du web : piste
+ * écran dans un flux distinct (voir features/calls/screenShareLogic.ts).
  */
 
 export interface VoicePeer {
@@ -30,8 +35,11 @@ export interface VoicePeer {
   username: string
   avatar: string | null
   stream: MediaStream | null
+  /** Écran partagé par ce pair (flux distinct de micro+caméra). */
+  screenStream: MediaStream | null
   muted: boolean
   video: boolean
+  screen: boolean
 }
 
 interface VoiceState {
@@ -44,17 +52,27 @@ interface VoiceState {
   muted: boolean
   deafened: boolean
   speaker: boolean
+  /** Notre partage d'écran est en cours. */
+  screenSharing: boolean
   error: string | null
   join: (serverId: string, channelId: string, channelName: string, password?: string) => Promise<void>
   leave: () => void
   toggleMute: () => void
   toggleDeafen: () => void
   toggleSpeaker: () => void
+  shareScreen: () => Promise<void>
+  stopScreenShare: () => void
 }
 
 const pcs = new Map<string, RTCPeerConnection>()
 const iceQueues = new Map<string, unknown[]>()
 let localStream: MediaStream | null = null
+// Partage d'écran : flux écran (son id sert de msid distinct), sa piste, et le sender par pair.
+let screenStream: MediaStream | null = null
+let screenTrack: MediaStreamTrack | null = null
+const screenSenders = new Map<string, RTCRtpSender>()
+/** Par pair : id du flux distant micro+caméra (référence pour reconnaître l'écran). */
+const camStreamIds = new Map<string, string>()
 /** Incrémenté à chaque leave() : détecte une continuation async de join() périmée
  *  par un leave()/re-join concurrent survenu pendant l'attente du micro. */
 let joinGeneration = 0
@@ -72,7 +90,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       return {
         peers: [
           ...s.peers,
-          { userId: id, username: patch.username ?? '…', avatar: patch.avatar ?? null, stream: null, muted: false, video: false, ...patch },
+          { userId: id, username: patch.username ?? '…', avatar: patch.avatar ?? null, stream: null, screenStream: null, muted: false, video: false, screen: false, ...patch },
         ],
       }
     })
@@ -86,7 +104,20 @@ export const useVoice = create<VoiceState>((set, get) => {
     }
     pcs.delete(id)
     iceQueues.delete(id)
+    screenSenders.delete(id)
+    camStreamIds.delete(id)
     set((s) => ({ peers: s.peers.filter((p) => p.userId !== id) }))
+  }
+
+  /** Nouvelle offer vers un pair (ajout/retrait de piste, comme le client web). */
+  const renegotiate = async (id: string, pc: RTCPeerConnection) => {
+    try {
+      const offer = await pc.createOffer({})
+      await pc.setLocalDescription(offer)
+      send(id, { type: 'offer', data: { type: offer.type, sdp: offer.sdp } })
+    } catch (err) {
+      logger.warn('voice', 'renégociation', err)
+    }
   }
 
   const drainIce = async (id: string) => {
@@ -107,6 +138,8 @@ export const useVoice = create<VoiceState>((set, get) => {
 
     if (localStream) localStream.getTracks().forEach((t) => pc.addTrack(t, localStream!))
     else pc.addTransceiver('audio', { direction: 'recvonly' })
+    // Partage d'écran déjà en cours (pair arrivé après coup) : lui envoyer aussi l'écran.
+    if (screenTrack && screenStream) screenSenders.set(id, pc.addTrack(screenTrack, screenStream))
     // Recevoir la vidéo des pairs (caméra / partage d'écran) même sans en émettre.
     pc.addTransceiver('video', { direction: 'recvonly' })
 
@@ -117,6 +150,12 @@ export const useVoice = create<VoiceState>((set, get) => {
     onPeer(pc, 'track', (e) => {
       const stream = e.streams[0]
       if (!stream) return
+      const { isScreen, camStreamId } = classifyIncomingTrack(camStreamIds.get(id), stream.id, e.track?.kind ?? '')
+      camStreamIds.set(id, camStreamId)
+      if (isScreen) {
+        upsertPeer(id, { screenStream: stream, screen: true })
+        return
+      }
       if (get().deafened) stream.getAudioTracks().forEach((t) => (t.enabled = false))
       upsertPeer(id, { stream })
     })
@@ -176,7 +215,8 @@ export const useVoice = create<VoiceState>((set, get) => {
       realtime.on('VOICE_STATE_UPDATE', (e) => {
         if (e.channel_id !== channelId || !isStr(e.user_id)) return
         if (!pcs.has(e.user_id)) return
-        upsertPeer(e.user_id, { muted: e.muted === true, video: e.video === true || e.screen === true })
+        const screen = e.screen === true
+        upsertPeer(e.user_id, { muted: e.muted === true, video: e.video === true, screen, ...(screen ? {} : { screenStream: null }) })
       }),
       realtime.on('VOICE_REDIRECT', (e) => {
         if (e.from_channel_id === channelId && isStr(e.channel_id)) {
@@ -232,8 +272,8 @@ export const useVoice = create<VoiceState>((set, get) => {
   }
 
   const broadcastState = () => {
-    const { channelId, muted, deafened } = get()
-    if (channelId) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video: false, screen: false })
+    const { channelId, muted, deafened, screenSharing } = get()
+    if (channelId) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video: false, screen: screenSharing })
   }
 
   return {
@@ -246,6 +286,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     muted: false,
     deafened: false,
     speaker: true,
+    screenSharing: false,
     error: null,
 
     join: async (serverId, channelId, channelName, password) => {
@@ -282,6 +323,12 @@ export const useVoice = create<VoiceState>((set, get) => {
       const { channelId } = get()
       if (!channelId) return
       joinGeneration++
+      // Fin du partage d'écran avec le salon (les connexions sont fermées juste après).
+      stopScreenCapture(screenStream)
+      screenStream = null
+      screenTrack = null
+      screenSenders.clear()
+      camStreamIds.clear()
       realtime.send({ type: 'VOICE_LEAVE', channel_id: channelId })
       offFns.forEach((f) => f())
       offFns = []
@@ -297,7 +344,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       stopStream(localStream)
       localStream = null
       audioSession.stop()
-      set({ serverId: null, channelId: null, channelName: null, joined: false, joining: false, peers: [] })
+      set({ serverId: null, channelId: null, channelName: null, joined: false, joining: false, peers: [], screenSharing: false })
     },
 
     toggleMute: () => {
@@ -321,6 +368,48 @@ export const useVoice = create<VoiceState>((set, get) => {
       const speaker = !get().speaker
       audioSession.setSpeaker(speaker)
       set({ speaker })
+    },
+
+    shareScreen: async () => {
+      if (!get().joined || get().screenSharing) return
+      const channel = get().channelId
+      const captured = await captureScreen()
+      if (!get().joined || get().channelId !== channel) {
+        stopScreenCapture(captured.stream) // salon quitté pendant le dialogue système
+        return
+      }
+      screenStream = captured.stream
+      screenTrack = captured.track
+      // Arrêt depuis la notification système ou par Android : même nettoyage.
+      onTrackEnded(captured.track, () => {
+        if (screenTrack === captured.track) get().stopScreenShare()
+      })
+      for (const [id, pc] of pcs) {
+        screenSenders.set(id, pc.addTrack(captured.track, captured.stream))
+        await renegotiate(id, pc)
+      }
+      set({ screenSharing: true })
+      broadcastState()
+    },
+
+    stopScreenShare: () => {
+      if (!screenStream && !get().screenSharing) return
+      stopScreenCapture(screenStream)
+      screenStream = null
+      screenTrack = null
+      for (const [id, sender] of screenSenders) {
+        const pc = pcs.get(id)
+        if (!pc) continue
+        try {
+          pc.removeTrack(sender)
+          void renegotiate(id, pc)
+        } catch (err) {
+          logger.warn('voice', 'retrait piste écran', err)
+        }
+      }
+      screenSenders.clear()
+      set({ screenSharing: false })
+      broadcastState()
     },
   }
 })

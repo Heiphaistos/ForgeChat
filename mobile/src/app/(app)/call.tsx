@@ -1,10 +1,14 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { useEffect } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { RTCView } from 'react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
+import { StreamViewer } from '@/components/StreamViewer'
+import { canShareInCall, isScreenShareCancel } from '@/features/calls/screenShareLogic'
+import { errorMessage } from '@/lib/http'
+import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { useCall } from '@/stores/call'
@@ -29,6 +33,21 @@ export default function CallScreen() {
   const s = useCall()
   const insets = useSafeAreaInsets()
   const now = useNow(1000, s.phase === 'connected')
+  const [viewer, setViewer] = useState(false)
+
+  const toggleShare = async () => {
+    if (s.screenSharing) {
+      s.stopScreenShare()
+      return
+    }
+    if (!(await confirmScreenShare())) return
+    try {
+      await s.shareScreen()
+    } catch (e) {
+      // Refus dans le dialogue système : pas d'alerte (choix volontaire).
+      if (!isScreenShareCancel(e)) Alert.alert('Partage impossible', errorMessage(e))
+    }
+  }
 
   // Fin d'appel : fermer l'écran.
   useEffect(() => {
@@ -39,7 +58,8 @@ export default function CallScreen() {
   }, [s.phase, s.incoming, s.endReason])
 
   const remoteVideo = s.remoteStream?.getVideoTracks().length ? s.remoteStream : null
-  const localVideo = s.callType === 'video' && !s.camOff && s.localStream?.getVideoTracks().length ? s.localStream : null
+  // Pendant un partage d'écran, la caméra n'est plus envoyée : pas d'aperçu trompeur.
+  const localVideo = s.callType === 'video' && !s.camOff && !s.screenSharing && s.localStream?.getVideoTracks().length ? s.localStream : null
   const label =
     s.phase === 'calling'
       ? 'Appel en cours…'
@@ -52,14 +72,28 @@ export default function CallScreen() {
   return (
     <View style={styles.container}>
       {remoteVideo ? (
-        <RTCView streamURL={remoteVideo.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" zOrder={0} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => setViewer(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Afficher la vidéo en plein écran (zoom possible)"
+        >
+          <RTCView streamURL={remoteVideo.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" zOrder={0} />
+        </Pressable>
       ) : (
         <View style={styles.center}>
           <Avatar uri={s.partnerAvatar ?? s.endedWith?.avatar ?? null} name={s.partnerName ?? s.endedWith?.name ?? '?'} size={120} />
         </View>
       )}
 
-      <View style={[styles.top, { paddingTop: insets.top + spacing.lg }]}>
+      <StreamViewer
+        sources={remoteVideo ? [{ key: 'remote', label: s.partnerName ?? 'Vidéo', stream: remoteVideo }] : []}
+        initialKey={viewer && remoteVideo ? 'remote' : null}
+        onClose={() => setViewer(false)}
+      />
+
+      {/* Sous le bandeau « Partage d'écran en cours » quand il est affiché. */}
+      <View style={[styles.top, { paddingTop: insets.top + spacing.lg + (s.screenSharing ? 48 : 0) }]} pointerEvents="none">
         <Text style={styles.name}>{s.partnerName ?? s.endedWith?.name}</Text>
         <Text style={styles.status}>{label}</Text>
       </View>
@@ -76,6 +110,14 @@ export default function CallScreen() {
           <>
             <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label="Caméra" onPress={s.toggleCam} active={s.camOff} />
             <CallButton icon="camera-reverse" label="Changer de caméra" onPress={s.switchCamera} />
+            {screenShareSupported && canShareInCall(s.phase, s.callType) ? (
+              <CallButton
+                icon="tv-outline"
+                label={s.screenSharing ? 'Arrêter le partage d’écran' : 'Partager l’écran'}
+                onPress={() => void toggleShare()}
+                active={s.screenSharing}
+              />
+            ) : null}
           </>
         ) : null}
         <CallButton icon={s.speaker ? 'volume-high' : 'volume-low'} label="Haut-parleur" onPress={s.toggleSpeaker} active={s.speaker} />
@@ -92,6 +134,7 @@ const styles = StyleSheet.create({
   name: { color: '#fff', fontSize: font.xxl, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 6 },
   status: { color: colors.textSecondary, fontSize: font.md, textShadowColor: '#000', textShadowRadius: 6 },
   pip: { position: 'absolute', right: spacing.lg, width: 110, height: 160, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
-  controls: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: spacing.lg },
-  btn: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  // Jusqu'à 6 boutons (appel vidéo) : passage à la ligne sur les écrans étroits.
+  controls: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm },
+  btn: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 })

@@ -1,6 +1,7 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config'
 
 import withLanCleartext from './plugins/withLanCleartext.js'
+import withScreenShare from './plugins/withScreenShare.js'
 
 /**
  * Configuration Expo dynamique.
@@ -39,7 +40,8 @@ const APP_NAMES: Record<AppEnv, string> = {
 const apiHost = new URL(API_URL).host
 
 export default (ctx: ConfigContext): ExpoConfig => {
-  const expoConfig = buildConfig(ctx)
+  // Partage d'écran (MediaProjection) : permissions et service au premier plan, tous profils.
+  const expoConfig = withScreenShare(buildConfig(ctx))
   // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
   return APP_ENV === 'lan' ? withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST }) : expoConfig
 }

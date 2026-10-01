@@ -125,7 +125,32 @@ export function IncomingCallOverlay() {
 }
 
 /** Barre « appel en cours » / « vocal connecté » quand on navigue ailleurs. */
+/** Partage d'écran en cours (appel ou vocal) : bandeau rouge avec Arrêter. La notification
+ *  système du service mediaProjection reste aussi affichée hors de l'app. */
+export function ScreenShareBanner() {
+  const callSharing = useCall((s) => s.screenSharing)
+  const voiceSharing = useVoice((s) => s.screenSharing)
+  const insets = useSafeAreaInsets()
+  if (!callSharing && !voiceSharing) return null
+  const stop = () => {
+    if (callSharing) useCall.getState().stopScreenShare()
+    if (voiceSharing) useVoice.getState().stopScreenShare()
+  }
+  return (
+    <View style={[styles.shareBar, { top: insets.top + 4 }]} accessibilityLiveRegion="polite">
+      <Ionicons name="tv-outline" size={16} color="#fff" />
+      <Text style={styles.shareText}>Partage d’écran en cours</Text>
+      <Pressable onPress={stop} accessibilityRole="button" accessibilityLabel="Arrêter le partage d’écran" style={styles.shareStop} hitSlop={6}>
+        <Text style={styles.shareStopText}>Arrêter</Text>
+      </Pressable>
+    </View>
+  )
+}
+
 export function ActiveCallBar() {
+  const callSharing = useCall((s) => s.screenSharing)
+  const voiceSharing = useVoice((s) => s.screenSharing)
+  const sharing = callSharing || voiceSharing
   const phase = useCall((s) => s.phase)
   const partner = useCall((s) => s.partnerName)
   const connectedAt = useCall((s) => s.connectedAt)
@@ -135,6 +160,8 @@ export function ActiveCallBar() {
   const now = useNow(1000, phase === 'connected')
   const insets = useSafeAreaInsets()
 
+  // Le bandeau de partage d'écran prend cette place.
+  if (sharing) return null
   if (phase !== 'idle') {
     return (
       <Pressable style={[styles.activeBar, { top: insets.top }]} onPress={() => router.push('/call')} accessibilityRole="button">
@@ -166,6 +193,10 @@ const styles = StyleSheet.create({
   sub: { color: colors.textMuted, fontSize: font.md, textAlign: 'center' },
   banner: { position: 'absolute', alignSelf: 'center', backgroundColor: colors.warning, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 4, zIndex: 50 },
   bannerText: { color: '#000', fontWeight: '700', fontSize: font.xs },
+  shareBar: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.danger, borderRadius: radius.full, paddingLeft: spacing.md, paddingRight: 4, paddingVertical: 4, zIndex: 96 },
+  shareText: { color: '#fff', fontWeight: '700', fontSize: font.sm },
+  shareStop: { backgroundColor: '#fff', borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  shareStopText: { color: colors.danger, fontWeight: '800', fontSize: font.sm },
   envBanner: { position: 'absolute', right: spacing.sm, backgroundColor: colors.warning, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, opacity: 0.85, zIndex: 95 },
   call: { backgroundColor: colors.bgDeep, justifyContent: 'space-between', alignItems: 'center', zIndex: 90 },
   callButtons: { flexDirection: 'row', gap: 80 },

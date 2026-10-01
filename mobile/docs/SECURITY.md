@@ -52,6 +52,17 @@
 | Décrocher un appel alors que l'app est verrouillée exige le déverrouillage | `components/Overlays.tsx` |
 | Permissions minimales ; permissions inutiles explicitement retirées (stockage externe, fenêtre système, état du téléphone) | `app.config.ts` |
 
+### Partage d'écran (Android)
+
+| Point | Détail |
+|---|---|
+| Lancement | Uniquement à la demande : avertissement « Tout ce qui s'affiche sur ton écran sera visible, y compris les notifications », puis dialogue système Android (écran entier, ou une seule application à partir d'Android 14 si le système le propose) |
+| Pendant | Bandeau rouge « Partage d'écran en cours » avec Arrêter, et notification système du service au premier plan `mediaProjection` |
+| Arrêt | Bouton Arrêter, fin d'appel, sortie du salon vocal, ou arrêt par Android : la capture est libérée (plus de projection ni de notification, vérifié sur émulateur) |
+| ForgeChat lui-même | Quand « Masquer dans le sélecteur d'apps » est actif (`FLAG_SECURE`), les écrans de ForgeChat apparaissent **en noir** chez le destinataire (seule la barre d'état reste visible) ; les autres applications et l'écran d'accueil sont transmis normalement. C'est voulu : les conversations ne fuient pas par le partage. |
+| Son | Pas de capture du son de l'écran en v1 (évolution possible : `AudioPlaybackCapture`, Android 10+, mixé au micro comme le fait le client web) |
+| Appel 1:1 | Uniquement en appel vidéo : l'écran remplace la caméra envoyée (le client web n'a pas de partage d'écran en appel 1:1 et n'affiche la vidéo distante qu'en appel vidéo) |
+
 ## Mesures côté serveur (patch fourni)
 
 - Enregistrement des appareils push : format de token vérifié, rate limit (30/h), 10 appareils max par

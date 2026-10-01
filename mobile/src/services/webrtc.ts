@@ -13,6 +13,11 @@ interface PeerEvents {
 
 type Listenable = { addEventListener: (type: string, fn: (e: unknown) => void) => void }
 
+/** Fin d'une piste (ex. capture d'écran arrêtée depuis la notification système). */
+export function onTrackEnded(track: MediaStreamTrack, fn: () => void) {
+  ;(track as unknown as Listenable).addEventListener('ended', fn)
+}
+
 export function onPeer<K extends keyof PeerEvents>(pc: RTCPeerConnection, type: K, fn: (e: PeerEvents[K]) => void) {
   ;(pc as unknown as Listenable).addEventListener(type, fn as (e: unknown) => void)
 }
