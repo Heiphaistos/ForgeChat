@@ -41,6 +41,9 @@ const LandingPage = lazy(() => import('./pages/LandingPage'))
 // plus "légers" depuis son ajout, donc plus question de les charger en eager.
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const MentionsLegalesPage = lazy(() => import('./pages/LegalPages').then(m => ({ default: m.MentionsLegalesPage })))
+const ConfidentialitePage = lazy(() => import('./pages/LegalPages').then(m => ({ default: m.ConfidentialitePage })))
+const CguPage = lazy(() => import('./pages/LegalPages').then(m => ({ default: m.CguPage })))
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
 const PasswordResetPage = lazy(() => import('./pages/PasswordResetPage'))
 const InvitePage = lazy(() => import('./pages/InvitePage'))
@@ -1063,6 +1066,9 @@ function AppInner() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/mentions-legales" element={<MentionsLegalesPage />} />
+          <Route path="/confidentialite" element={<ConfidentialitePage />} />
+          <Route path="/cgu" element={<CguPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/forgot-password" element={<PasswordResetPage />} />
           <Route path="/reset-password" element={<PasswordResetPage />} />

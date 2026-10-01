@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { LegalLinks } from './LegalPages'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
@@ -147,14 +148,7 @@ export default function LoginPage() {
                 <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
               </p>
             )}
-            <p className="text-center mt-2">
-              <a
-                href="https://heiphaistos.org/legal/" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-fc-muted hover:text-white transition"
-              >
-                Mentions légales &amp; confidentialité
-              </a>
-            </p>
+            <LegalLinks className="mt-2" />
           </>
         )}
       </div>

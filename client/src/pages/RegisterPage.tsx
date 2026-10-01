@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
+import { LegalLinks } from './LegalPages'
 
 function getPasswordStrength(pwd: string): { score: number; label: string; color: string } {
   if (pwd.length === 0) return { score: 0, label: '', color: '' }
@@ -25,6 +26,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const { register } = useAuth()
   const nav = useNavigate()
 
@@ -35,6 +37,10 @@ export default function RegisterPage() {
     e.preventDefault()
     if (password !== confirmPassword) {
       toast.error('Les mots de passe ne correspondent pas')
+      return
+    }
+    if (!acceptedTerms) {
+      toast.error("Acceptez les conditions d'utilisation pour créer un compte")
       return
     }
     setLoading(true)
@@ -156,23 +162,29 @@ export default function RegisterPage() {
             )}
           </div>
 
+          <label className="flex items-start gap-2 text-sm text-fc-muted">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={e => setAcceptedTerms(e.target.checked)}
+              required
+              className="mt-1 accent-indigo-500"
+            />
+            <span>
+              J'accepte les{' '}
+              <Link to="/cgu" target="_blank" className="text-fc-accent hover:underline">conditions d'utilisation</Link>
+              {' '}et j'ai lu la{' '}
+              <Link to="/confidentialite" target="_blank" className="text-fc-accent hover:underline">politique de confidentialité</Link>.
+            </span>
+          </label>
+
           <button
             type="submit"
-            disabled={loading || passwordMismatch}
+            disabled={loading || passwordMismatch || !acceptedTerms}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
             {loading ? 'Création...' : 'Créer un compte'}
           </button>
-          <p className="text-xs text-fc-muted text-center mt-3">
-            En créant un compte, vous acceptez les{' '}
-            <a
-              href="https://heiphaistos.org/legal/" target="_blank" rel="noopener noreferrer"
-              className="text-fc-accent hover:underline"
-            >
-              conditions d'utilisation et la politique de confidentialité
-            </a>
-            .
-          </p>
         </form>
 
         <p className="text-fc-muted text-sm text-center mt-4">
@@ -182,6 +194,7 @@ export default function RegisterPage() {
         <p className="text-center mt-3">
           <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
         </p>
+        <LegalLinks className="mt-3" />
       </div>
     </div>
   )

@@ -420,8 +420,9 @@ export default function LandingPage() {
               className="py-2 hover:text-white/60 transition">GitHub</a>
             <Link to="/login" className="py-2 hover:text-white/60 transition">Connexion</Link>
             <Link to="/register" className="py-2 hover:text-white/60 transition">Inscription</Link>
-            <a href="https://heiphaistos.org/legal" target="_blank" rel="noopener noreferrer"
-              className="py-2 hover:text-white/60 transition">Mentions légales</a>
+            <Link to="/mentions-legales" className="py-2 hover:text-white/60 transition">Mentions légales</Link>
+            <Link to="/confidentialite" className="py-2 hover:text-white/60 transition">Confidentialité</Link>
+            <Link to="/cgu" className="py-2 hover:text-white/60 transition">CGU</Link>
           </div>
         </div>
       </footer>
