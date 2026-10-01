@@ -40,6 +40,12 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://forgechat.heiphaistos.org}
       RUST_LOG: forgechat=info,tower_http=warn
       JWT_ISSUER: ${JWT_ISSUER:-forgechat}
+      # Mails (reinitialisation du mot de passe) : absent = pas d'envoi
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@forgechat.heiphaistos.org}
       TURN_URL: ${TURN_URL:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_PASSWORD: ${TURN_PASSWORD:-}
