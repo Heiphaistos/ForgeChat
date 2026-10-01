@@ -30,6 +30,10 @@ if (APP_ENV !== 'development' && APP_ENV !== 'lan' && !API_URL.startsWith('https
   throw new Error(`FORGECHAT_API_URL doit être en https:// pour APP_ENV=${APP_ENV}`)
 }
 
+// Icônes (scripts/generate-icons.mjs, logo officiel du web) : variante orange « DEV » pour tout ce
+// qui n'est pas la version publique, pour ne jamais confondre les apps sur un téléphone.
+const ASSETS = APP_ENV === 'production' ? './assets' : './assets/dev'
+
 const APP_NAMES: Record<AppEnv, string> = {
   development: 'ForgeChat (development)',
   lan: 'ForgeChat (LAN)',
@@ -53,7 +57,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   scheme: 'forgechat',
   version: '1.0.0',
   orientation: 'portrait',
-  icon: './assets/icon.png',
+  icon: `${ASSETS}/icon.png`,
   userInterfaceStyle: 'dark',
   backgroundColor: '#1e1f22',
   ios: {
@@ -84,9 +88,9 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     package: APP_ENV === 'production' ? BUNDLE_ID : `${BUNDLE_ID}.${APP_ENV}`,
     adaptiveIcon: {
       backgroundColor: '#1e1f22',
-      foregroundImage: './assets/android-icon-foreground.png',
-      backgroundImage: './assets/android-icon-background.png',
-      monochromeImage: './assets/android-icon-monochrome.png',
+      foregroundImage: `${ASSETS}/android-icon-foreground.png`,
+      backgroundImage: `${ASSETS}/android-icon-background.png`,
+      monochromeImage: `${ASSETS}/android-icon-monochrome.png`,
     },
     // Pas de sauvegarde cloud/adb des données de l'app (tokens, préférences).
     allowBackup: false,
@@ -125,7 +129,8 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-local-authentication', { faceIDPermission: 'Déverrouiller ForgeChat avec Face ID.' }],
     [
       'expo-notifications',
-      { color: '#5865f2', defaultChannel: 'messages' },
+      // Petite icône blanche de la barre d'état (Android n'en utilise que l'alpha).
+      { icon: `${ASSETS}/notification-icon.png`, color: '#5865f2', defaultChannel: 'messages' },
     ],
     [
       'expo-image-picker',
@@ -159,7 +164,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     ],
     'expo-web-browser',
     'expo-font',
-    ['expo-splash-screen', { backgroundColor: '#1e1f22', image: './assets/splash-icon.png', imageWidth: 160 }],
+    ['expo-splash-screen', { backgroundColor: '#1e1f22', image: `${ASSETS}/splash-icon.png`, imageWidth: 160 }],
     'expo-image',
     'expo-video',
     // Lecture seule des pièces jointes audio : même texte micro que WebRTC (clés Info.plist partagées).
