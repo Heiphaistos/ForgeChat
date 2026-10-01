@@ -8,9 +8,15 @@ export const serversApi = {
     http.post<Server>('/servers', { name: name.trim(), description: description?.trim() || undefined }),
   leave: (id: string) => http.post(path`/servers/${id}/leave`),
   channels: (id: string) => http.get<Channel[]>(path`/servers/${id}/channels`),
-  createChannel: (serverId: string, name: string, type: 'text' | 'voice', categoryId?: string | null) =>
+  createChannel: (serverId: string, name: string, type: 'text' | 'voice' | 'announcement' | (string & {}), categoryId?: string | null) =>
     http.post<Channel>(path`/servers/${serverId}/channels`, { name: name.trim(), type, category_id: categoryId ?? undefined }),
   categories: (id: string) => http.get<Category[]>(path`/servers/${id}/categories`),
+  createCategory: (serverId: string, name: string) => http.post<Category>(path`/servers/${serverId}/categories`, { name: name.trim() }),
+  deleteChannel: (serverId: string, channelId: string) => http.delete(path`/servers/${serverId}/channels/${channelId}`),
+  /** Modèles partagés : publics + les miens (données brutes, lues par features/servers/templates). */
+  templates: () => http.get<unknown>('/templates'),
+  /** Crée un serveur depuis un modèle partagé (le serveur recrée catégories, salons et rôles). */
+  useTemplate: (templateId: string, name: string) => http.post<Server>(path`/templates/${templateId}/use`, { name: name.trim() }),
   members: (id: string) => http.get<Member[]>(path`/servers/${id}/members`),
   /** Emojis personnalisés (données brutes : filtrées par features/chat/customEmojis.buildEmojiMap). */
   emojis: (id: string) => http.get<unknown>(path`/servers/${id}/emojis`),

@@ -62,6 +62,8 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit && tsc --noEmit -p __tests__",
     "test": "jest --ci --no-watchman",
+    "templates:sync": "node scripts/sync-server-templates.mjs",
+    "templates:check": "node scripts/sync-server-templates.mjs --check",
     "check": "npm run typecheck && npm run lint && npm test",
     "doctor": "expo-doctor",
     "e2e": "node scripts/e2e-api.mjs",
