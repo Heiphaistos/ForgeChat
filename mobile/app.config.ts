@@ -1,5 +1,7 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config'
 
+import withLanCleartext from './plugins/withLanCleartext.js'
+
 /**
  * Configuration Expo dynamique.
  *
@@ -8,22 +10,43 @@ import type { ExpoConfig, ConfigContext } from 'expo/config'
  * binaire : l'app ne connaît que l'URL publique de l'API.
  */
 
-const API_URL = process.env.FORGECHAT_API_URL ?? 'https://forgechat.heiphaistos.org'
-const APP_ENV = (process.env.APP_ENV ?? 'development') as 'development' | 'preview' | 'production'
+type AppEnv = 'development' | 'lan' | 'preview' | 'production'
+const APP_ENV = (process.env.APP_ENV ?? 'development') as AppEnv
+if (!['development', 'lan', 'preview', 'production'].includes(APP_ENV)) {
+  throw new Error(`APP_ENV inconnu : ${APP_ENV}`)
+}
+// LAN : l'URL (IP du PC de dev) vient de l'environnement de build, jamais du dépôt.
+const API_URL =
+  process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' ? '' : 'https://forgechat.heiphaistos.org')
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
 const BUNDLE_ID = process.env.FORGECHAT_BUNDLE_ID ?? 'org.heiphaistos.forgechat'
 
-// Garde-fou : en dehors du développement, l'API DOIT être en HTTPS.
+// Garde-fou : en dehors du développement, l'API DOIT être en HTTPS — sauf en LAN, où le HTTP
+// n'est permis que vers une IPv4 privée (sinon lanCleartextHost fait échouer le build).
 // (Le client vérifie aussi au runtime, cf. src/config/env.ts.)
-if (APP_ENV !== 'development' && !API_URL.startsWith('https://')) {
+const LAN_CLEARTEXT_HOST = APP_ENV === 'lan' ? withLanCleartext.lanCleartextHost(API_URL) : null
+if (APP_ENV !== 'development' && APP_ENV !== 'lan' && !API_URL.startsWith('https://')) {
   throw new Error(`FORGECHAT_API_URL doit être en https:// pour APP_ENV=${APP_ENV}`)
+}
+
+const APP_NAMES: Record<AppEnv, string> = {
+  development: 'ForgeChat (development)',
+  lan: 'ForgeChat (LAN)',
+  preview: 'ForgeChat (preview)',
+  production: 'ForgeChat',
 }
 
 const apiHost = new URL(API_URL).host
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
+export default (ctx: ConfigContext): ExpoConfig => {
+  const expoConfig = buildConfig(ctx)
+  // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
+  return APP_ENV === 'lan' ? withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST }) : expoConfig
+}
+
+const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: APP_ENV === 'production' ? 'ForgeChat' : `ForgeChat (${APP_ENV})`,
+  name: APP_NAMES[APP_ENV],
   slug: 'forgechat',
   scheme: 'forgechat',
   version: '1.0.0',
@@ -81,7 +104,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.READ_PHONE_STATE',
     ],
-    intentFilters: [
+    // App Links : uniquement vers un vrai domaine (pas vers l'IP du profil LAN).
+    intentFilters: APP_ENV === 'lan' ? [] : [
       {
         action: 'VIEW',
         autoVerify: true,

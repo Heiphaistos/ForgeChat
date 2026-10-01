@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { IS_LAN } from '@/config/env'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { useConnection } from '@/lib/realtime'
@@ -71,6 +72,17 @@ export function ConnectionBanner() {
   return (
     <View style={[styles.banner, { top: insets.top }]} pointerEvents="none" accessibilityLiveRegion="polite">
       <Text style={styles.bannerText}>Reconnexion…</Text>
+    </View>
+  )
+}
+
+/** Profil LAN : rappel permanent qu'il s'agit d'un APK de test local (jamais distribué). */
+export function EnvBanner() {
+  const insets = useSafeAreaInsets()
+  if (!IS_LAN) return null
+  return (
+    <View style={[styles.envBanner, { top: insets.top + 2 }]} pointerEvents="none" accessibilityLabel="Version de test local">
+      <Text style={styles.bannerText}>Test local</Text>
     </View>
   )
 }
@@ -154,6 +166,7 @@ const styles = StyleSheet.create({
   sub: { color: colors.textMuted, fontSize: font.md, textAlign: 'center' },
   banner: { position: 'absolute', alignSelf: 'center', backgroundColor: colors.warning, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: 4, zIndex: 50 },
   bannerText: { color: '#000', fontWeight: '700', fontSize: font.xs },
+  envBanner: { position: 'absolute', right: spacing.sm, backgroundColor: colors.warning, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 2, opacity: 0.85, zIndex: 95 },
   call: { backgroundColor: colors.bgDeep, justifyContent: 'space-between', alignItems: 'center', zIndex: 90 },
   callButtons: { flexDirection: 'row', gap: 80 },
   round: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },

@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
-import { ActiveCallBar, BootOverlay, ConnectionBanner, IncomingCallOverlay, LockOverlay } from '@/components/Overlays'
+import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, IncomingCallOverlay, LockOverlay } from '@/components/Overlays'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
@@ -104,6 +104,7 @@ export default function RootLayout() {
               {/* Au-dessus du verrou : on peut voir qui appelle ; décrocher exige de déverrouiller. */}
               <IncomingCallOverlay />
               <BootOverlay />
+              <EnvBanner />
             </View>
           </ThemeProvider>
         </QueryClientProvider>

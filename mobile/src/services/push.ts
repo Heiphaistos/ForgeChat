@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
 import { Platform } from 'react-native'
 import { pushApi } from '@/api/push'
+import { IS_LAN } from '@/config/env'
 import { logger } from '@/lib/logger'
 import { registerPreSignOutHook, registerSignOutHook } from '@/stores/auth'
 import { useSettings } from '@/stores/settings'
@@ -100,6 +101,9 @@ export async function syncPushRegistration(): Promise<void> {
     return
   }
   if (!Device.isDevice) return // simulateurs : pas de push
+  // Profil LAN : ni projet EAS ni Firebase dans l'APK, le serveur local n'envoie pas de push.
+  // On n'essaie pas (pas d'erreur ni de nouvelle tentative) ; les messages arrivent par WebSocket.
+  if (IS_LAN) return
   const projectId =
     (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
     Constants.easConfig?.projectId

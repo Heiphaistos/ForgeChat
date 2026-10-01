@@ -8,10 +8,17 @@ import Constants from 'expo-constants'
 type Extra = { apiUrl?: string; appEnv?: string }
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra
 
-export type AppEnv = 'development' | 'preview' | 'production'
+export type AppEnv = 'development' | 'lan' | 'preview' | 'production'
 
 export const APP_ENV: AppEnv =
-  extra.appEnv === 'production' || extra.appEnv === 'preview' ? extra.appEnv : 'development'
+  extra.appEnv === 'production' || extra.appEnv === 'preview' || extra.appEnv === 'lan'
+    ? extra.appEnv
+    : 'development'
+
+/** APK de test sur le réseau local (jamais distribué) : bandeau, pas de push. */
+export const IS_LAN = APP_ENV === 'lan'
+
+const PRIVATE_IPV4 = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}$/
 
 function normalizeBaseUrl(raw: string | undefined): string {
   const value = (raw ?? '').trim().replace(/\/+$/, '')
@@ -24,8 +31,10 @@ function normalizeBaseUrl(raw: string | undefined): string {
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
     throw new Error('[config] apiUrl doit être http(s)')
   }
-  // Hors développement, refuser tout transport non chiffré.
-  if (parsed.protocol !== 'https:' && (APP_ENV !== 'development' || !__DEV__)) {
+  // Hors développement, refuser tout transport non chiffré — sauf en LAN vers une IPv4 privée
+  // (le build l'impose déjà, et Android n'autorise le clair que vers cet hôte).
+  const lanHttp = APP_ENV === 'lan' && PRIVATE_IPV4.test(parsed.hostname)
+  if (parsed.protocol !== 'https:' && !lanHttp && (APP_ENV !== 'development' || !__DEV__)) {
     throw new Error('[config] HTTPS obligatoire hors développement')
   }
   return `${parsed.protocol}//${parsed.host}`
