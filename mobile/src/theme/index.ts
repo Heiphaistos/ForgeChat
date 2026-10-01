@@ -23,13 +23,14 @@ export const colors = {
   overlay: 'rgba(0,0,0,0.6)',
 } as const
 
+/** Couleurs de présence : voir lib/status.ts (mêmes que le web). */
 export const statusColors: Record<string, string> = {
-  online: colors.success,
-  idle: colors.warning,
-  away: colors.warning,
-  dnd: colors.danger,
-  invisible: colors.textFaint,
-  offline: colors.textFaint,
+  online: '#3ba55c',
+  idle: '#faa81a',
+  away: '#faa81a',
+  dnd: '#ed4245',
+  invisible: '#80848e',
+  offline: '#80848e',
 }
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const

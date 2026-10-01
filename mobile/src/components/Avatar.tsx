@@ -2,7 +2,8 @@ import { Image } from 'expo-image'
 import { StyleSheet, Text, View } from 'react-native'
 import { resolveMediaUrl } from '@/lib/links'
 import { usePresenceOf } from '@/stores/presence'
-import { colors, statusColors } from '@/theme'
+import { statusColor, statusHollow, statusLabel } from '@/lib/status'
+import { colors } from '@/theme'
 
 const PALETTE = ['#5865f2', '#3ba55c', '#faa61a', '#ed4245', '#eb459e', '#9b59b6', '#1abc9c']
 
@@ -34,7 +35,11 @@ export function Avatar({
   const r = rounded ? size / 2 : size * 0.3
   const dot = Math.max(10, size * 0.3)
   return (
-    <View style={{ width: size, height: size }} accessible accessibilityLabel={`Avatar de ${name}`}>
+    <View
+      style={{ width: size, height: size }}
+      accessible
+      accessibilityLabel={showStatus ? `Avatar de ${name}, ${statusLabel(live)}` : `Avatar de ${name}`}
+    >
       {src ? (
         <Image
           source={{ uri: src }}
@@ -49,24 +54,35 @@ export function Avatar({
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.4 }}>{(name[0] ?? '?').toUpperCase()}</Text>
         </View>
       )}
-      {showStatus ? (
-        <View
-          style={[
-            styles.dot,
-            {
-              width: dot,
-              height: dot,
-              borderRadius: dot / 2,
-              backgroundColor: statusColors[live] ?? colors.textFaint,
-            },
-          ]}
-        />
-      ) : null}
+      {showStatus ? <StatusDot status={live} size={dot} /> : null}
+    </View>
+  )
+}
+
+/** Pastille de présence : couleur du web ; hors ligne / invisible en anneau creux. */
+export function StatusDot({ status, size = 12, ringColor = colors.bgAlt, inline }: { status: string | null | undefined; size?: number; ringColor?: string; inline?: boolean }) {
+  const c = statusColor(status)
+  const hollow = statusHollow(status)
+  return (
+    <View
+      style={[
+        inline ? null : styles.dot,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: inline ? c : ringColor,
+          backgroundColor: c,
+          borderWidth: inline ? 0 : 2.5,
+        },
+      ]}
+    >
+      {hollow ? <View style={{ flex: 1, margin: inline ? size * 0.22 : size * 0.12, borderRadius: size, backgroundColor: inline ? colors.bgAlt : ringColor }} /> : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   fallback: { alignItems: 'center', justifyContent: 'center' },
-  dot: { position: 'absolute', right: -1, bottom: -1, borderWidth: 2.5, borderColor: colors.bgAlt },
+  dot: { position: 'absolute', right: -1, bottom: -1 },
 })

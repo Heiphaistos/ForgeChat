@@ -2,21 +2,16 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { usersApi } from '@/api/users'
-import { Avatar } from '@/components/Avatar'
+import { Avatar, StatusDot } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { Row, Section } from '@/components/ui'
 import { APP_ENV, APP_VERSION, API_HOST } from '@/config/env'
 import { errorMessage } from '@/lib/http'
+import { normalizeStatus, SELECTABLE_STATUSES, statusLabel } from '@/lib/status'
 import { useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
-import { colors, font, spacing, statusColors } from '@/theme'
+import { colors, font, spacing } from '@/theme'
 
-const STATUSES = [
-  { key: 'online', label: 'En ligne' },
-  { key: 'away', label: 'Absent' },
-  { key: 'dnd', label: 'Ne pas déranger' },
-  { key: 'invisible', label: 'Invisible' },
-] as const
 
 export default function YouScreen() {
   const user = useAuth((s) => s.user)
@@ -25,9 +20,10 @@ export default function YouScreen() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   if (!user) return null
-  const status = STATUSES.find((s) => s.key === user.status) ?? STATUSES[0]
+  // « idle » (écrit par le web) et « away » (écrit par le mobile) = Absent.
+  const status = normalizeStatus(user.status)
 
-  const changeStatus = async (key: (typeof STATUSES)[number]['key']) => {
+  const changeStatus = async (key: 'online' | 'away' | 'dnd' | 'invisible') => {
     const prev = user.status
     setUser({ status: key })
     usePresence.getState().set(user.id, key)
@@ -53,12 +49,12 @@ export default function YouScreen() {
 
       <Section>
         <Row
-          icon="ellipse"
+          icon="radio-button-on-outline"
           title="Statut"
-          subtitle={status.label}
+          subtitle={statusLabel(status)}
           onPress={() => setStatusOpen(true)}
           chevron
-          right={<View style={[styles.dot, { backgroundColor: statusColors[user.status] ?? colors.textFaint }]} />}
+          right={<StatusDot status={status} size={14} inline />}
         />
         <Row icon="person-outline" title="Mon profil" onPress={() => router.push('/settings/profile')} chevron />
       </Section>
@@ -81,7 +77,13 @@ export default function YouScreen() {
         visible={statusOpen}
         onClose={() => setStatusOpen(false)}
         title="Définir le statut"
-        actions={STATUSES.map((s) => ({ label: s.label, icon: s.key === 'invisible' ? 'eye-off-outline' : 'ellipse', onPress: () => void changeStatus(s.key) }))}
+        actions={SELECTABLE_STATUSES.map((s) => ({
+          label: statusLabel(s),
+          icon: 'ellipse',
+          leading: <StatusDot status={s} size={16} inline />,
+          selected: s === status,
+          onPress: () => void changeStatus(s as 'online' | 'away' | 'dnd' | 'invisible'),
+        }))}
       />
       <Sheet
         visible={logoutOpen}
@@ -101,6 +103,5 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: font.xl, fontWeight: '800', marginTop: spacing.md },
   tag: { color: colors.textMuted, fontSize: font.sm },
   custom: { color: colors.textSecondary, fontSize: font.sm, marginTop: spacing.xs },
-  dot: { width: 12, height: 12, borderRadius: 6 },
   version: { color: colors.textFaint, fontSize: font.xs, textAlign: 'center', marginTop: spacing.md },
 })

@@ -10,6 +10,10 @@ export interface SheetAction {
   icon: IconName
   onPress: () => void
   danger?: boolean
+  /** Remplace l'icône (ex. pastille de statut colorée). */
+  leading?: ReactNode
+  /** Option actuellement choisie (coche + état d'accessibilité). */
+  selected?: boolean
 }
 
 /** Feuille d'actions en bas d'écran (identique iOS/Android). */
@@ -39,6 +43,7 @@ export function Sheet({
             <Pressable
               key={a.label}
               accessibilityRole="button"
+              accessibilityState={a.selected === undefined ? undefined : { selected: a.selected }}
               onPress={() => {
                 onClose()
                 // Laisser la modale se fermer avant d'ouvrir une éventuelle alerte.
@@ -46,8 +51,9 @@ export function Sheet({
               }}
               style={({ pressed }) => [styles.action, pressed && { backgroundColor: colors.bgHover }]}
             >
-              <Ionicons name={a.icon} size={20} color={a.danger ? colors.danger : colors.textSecondary} />
+              {a.leading ?? <Ionicons name={a.icon} size={20} color={a.danger ? colors.danger : colors.textSecondary} />}
               <Text style={[styles.actionText, a.danger && { color: colors.danger }]}>{a.label}</Text>
+              {a.selected ? <Ionicons name="checkmark" size={20} color={colors.primary} style={{ marginLeft: 'auto' }} /> : null}
             </Pressable>
           ))}
         </ScrollView>
