@@ -17,9 +17,9 @@ module.exports = defineConfig([
   },
   {
     // Scripts Node (e2e contre un serveur local) : sortie console voulue, globales Node.
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'scripts/**/*.js'],
     languageOptions: {
-      globals: { process: 'readonly', Buffer: 'readonly' },
+      globals: { process: 'readonly', Buffer: 'readonly', __dirname: 'readonly', require: 'readonly', module: 'writable' },
     },
     rules: {
       'no-console': 'off',

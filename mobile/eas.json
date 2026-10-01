@@ -7,16 +7,30 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": { "APP_ENV": "development" }
+      "env": { "APP_ENV": "development", "EXPO_PUBLIC_APP_ENV": "development" }
     },
     "preview": {
       "distribution": "internal",
-      "env": { "APP_ENV": "preview" },
+      "autoIncrement": true,
+      "env": {
+        "APP_ENV": "preview",
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "FORGECHAT_API_URL": "https://preprod.REMPLACER.invalid"
+      },
       "android": { "buildType": "apk" }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "APP_ENV": "production" }
+      "env": {
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "FORGECHAT_API_URL": "https://forgechat.heiphaistos.org"
+      },
+      "android": { "buildType": "apk" }
+    },
+    "store": {
+      "extends": "production",
+      "android": { "buildType": "app-bundle" }
     }
   },
   "submit": {

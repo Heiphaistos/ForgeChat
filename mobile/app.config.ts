@@ -9,6 +9,13 @@ import withScreenShare from './plugins/withScreenShare.js'
  * Toutes les valeurs sensibles à l'environnement passent par des variables
  * d'environnement (voir `.env.example`) — rien de secret n'est embarqué dans le
  * binaire : l'app ne connaît que l'URL publique de l'API.
+ *
+ * Versions (APP_ENV ↔ profil EAS, voir eas.json et docs/RELEASE.md) :
+ *  - development : émulateur + Metro, local ;
+ *  - lan         : téléphone de test sur le réseau local, jamais distribuée ;
+ *  - preview     : « dev-apk », ForgeChat Dev, pré-prod en HTTPS, pour les développeurs ;
+ *  - production  : « client-apk » (APK bêta publique, AAB Play Store plus tard), ForgeChat,
+ *                  prod, AUCUNE fonction de dev (vérifié par __tests__/production-profile.test.ts).
  */
 
 type AppEnv = 'development' | 'lan' | 'preview' | 'production'
@@ -20,7 +27,25 @@ if (!['development', 'lan', 'preview', 'production'].includes(APP_ENV)) {
 const API_URL =
   process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' ? '' : 'https://forgechat.heiphaistos.org')
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
-const BUNDLE_ID = process.env.FORGECHAT_BUNDLE_ID ?? 'org.heiphaistos.forgechat'
+// Identifiant FINAL de l'app publique (Play Store) : jamais configurable.
+const BUNDLE_ID = 'org.heiphaistos.forgechat'
+const PACKAGES: Record<AppEnv, string> = {
+  development: `${BUNDLE_ID}.development`,
+  lan: `${BUNDLE_ID}.lan`,
+  preview: `${BUNDLE_ID}.dev`,
+  production: BUNDLE_ID,
+}
+
+// URL à remplacer (ex. pré-prod dans eas.json) : le build échoue tant qu'elle n'est pas renseignée.
+if (/REMPLACER|\.invalid(?:[:/]|$)/i.test(API_URL)) {
+  throw new Error(`FORGECHAT_API_URL n'est pas renseignée (« ${API_URL} ») : voir docs/DEPLOY.md`)
+}
+// Le code des outils de dev est retiré du bundle d'après EXPO_PUBLIC_APP_ENV (inliné à la
+// compilation) : il doit être cohérent avec APP_ENV, et explicite en production.
+const PUBLIC_ENV = process.env.EXPO_PUBLIC_APP_ENV
+if ((PUBLIC_ENV !== undefined && PUBLIC_ENV !== APP_ENV) || (APP_ENV === 'production' && PUBLIC_ENV !== 'production')) {
+  throw new Error(`EXPO_PUBLIC_APP_ENV (${PUBLIC_ENV ?? 'absent'}) doit valoir APP_ENV (${APP_ENV})`)
+}
 
 // Garde-fou : en dehors du développement, l'API DOIT être en HTTPS — sauf en LAN, où le HTTP
 // n'est permis que vers une IPv4 privée (sinon lanCleartextHost fait échouer le build).
@@ -37,7 +62,7 @@ const ASSETS = APP_ENV === 'production' ? './assets' : './assets/dev'
 const APP_NAMES: Record<AppEnv, string> = {
   development: 'ForgeChat (development)',
   lan: 'ForgeChat (LAN)',
-  preview: 'ForgeChat (preview)',
+  preview: 'ForgeChat Dev',
   production: 'ForgeChat',
 }
 
@@ -61,7 +86,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'dark',
   backgroundColor: '#1e1f22',
   ios: {
-    bundleIdentifier: APP_ENV === 'production' ? BUNDLE_ID : `${BUNDLE_ID}.${APP_ENV}`,
+    bundleIdentifier: PACKAGES[APP_ENV],
     supportsTablet: true,
     associatedDomains: [`applinks:${apiHost}`],
     infoPlist: {
@@ -85,7 +110,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   android: {
-    package: APP_ENV === 'production' ? BUNDLE_ID : `${BUNDLE_ID}.${APP_ENV}`,
+    package: PACKAGES[APP_ENV],
     adaptiveIcon: {
       backgroundColor: '#1e1f22',
       foregroundImage: `${ASSETS}/android-icon-foreground.png`,

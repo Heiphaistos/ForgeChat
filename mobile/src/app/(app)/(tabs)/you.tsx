@@ -13,6 +13,15 @@ import { usePresence } from '@/stores/presence'
 import { colors, font, spacing } from '@/theme'
 
 
+// Panneau « Infos dev » : retiré du bundle du client-apk. EXPO_PUBLIC_APP_ENV est inliné à la
+// compilation : en production la condition est constante et le require disparaît (vérifié sur le
+// bundle par __tests__/production-profile.test.ts et l'audit APK).
+const DevInfoRow: (() => React.JSX.Element) | null =
+  process.env.EXPO_PUBLIC_APP_ENV === 'production'
+    ? null
+    : // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('@/features/devtools/DevInfo') as typeof import('@/features/devtools/DevInfo')).DevInfoRow
+
 export default function YouScreen() {
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
@@ -65,12 +74,19 @@ export default function YouScreen() {
         <Row icon="notifications-outline" title="Notifications" onPress={() => router.push('/settings/notifications')} chevron />
       </Section>
 
+      {DevInfoRow ? (
+        <Section title="Développement">
+          <DevInfoRow />
+        </Section>
+      ) : null}
+
       <Section>
         <Row icon="log-out-outline" title="Se déconnecter" danger onPress={() => setLogoutOpen(true)} />
       </Section>
 
       <Text style={styles.version}>
-        ForgeChat mobile {APP_VERSION} ({APP_ENV}) · {API_HOST}
+        ForgeChat {APP_VERSION}
+        {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${API_HOST}`}
       </Text>
 
       <Sheet
