@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
-import { forwardRef, type ComponentProps, type ReactNode } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { forwardRef, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import {
   ActivityIndicator,
+  AppState,
   Pressable,
   StyleSheet,
   Switch,
@@ -16,6 +18,7 @@ import {
 } from 'react-native'
 import { colors, font, radius, spacing } from '@/theme'
 import { unreadLabel } from '@/lib/format'
+import { eyeIcon, eyeLabel, maskOnAppState } from '@/lib/passwordVisibility'
 
 export type IconName = ComponentProps<typeof Ionicons>['name']
 
@@ -138,6 +141,51 @@ export const TextField = forwardRef<TextInput, FieldProps>(function TextField({ 
         style={[styles.input, error ? { borderColor: colors.danger } : null, style]}
         {...rest}
       />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  )
+})
+
+/**
+ * Champ de mot de passe avec bouton œil (afficher / masquer). Utilisé pour TOUS les champs masqués.
+ * Repasse masqué quand l'écran perd le focus ou quand l'app passe en arrière-plan.
+ */
+export const PasswordField = forwardRef<TextInput, Omit<FieldProps, 'secureTextEntry'>>(function PasswordField(
+  { label, error, style, ...rest },
+  ref,
+) {
+  const [visible, setVisible] = useState(false)
+  useFocusEffect(useCallback(() => () => setVisible(false), []))
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (maskOnAppState(state)) setVisible(false)
+    })
+    return () => sub.remove()
+  }, [])
+  return (
+    <View style={{ gap: 6 }}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
+      <View>
+        <TextInput
+          ref={ref}
+          placeholderTextColor={colors.textFaint}
+          selectionColor={colors.primary}
+          autoCapitalize="none"
+          autoCorrect={false}
+          {...rest}
+          secureTextEntry={!visible}
+          style={[styles.input, error ? { borderColor: colors.danger } : null, style, { paddingRight: 48 }]}
+        />
+        <Pressable
+          onPress={() => setVisible((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={eyeLabel(visible)}
+          hitSlop={4}
+          style={({ pressed }) => [styles.eye, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name={eyeIcon(visible)} size={22} color={colors.textMuted} />
+        </Pressable>
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   )
@@ -283,6 +331,7 @@ export const styles = StyleSheet.create({
   buttonInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   buttonText: { color: colors.text, fontSize: font.md, fontWeight: '700' },
   iconButton: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  eye: { position: 'absolute', right: 2, top: 0, bottom: 0, width: 44, alignItems: 'center', justifyContent: 'center' },
   input: {
     backgroundColor: colors.bgDeep,
     color: colors.text,

@@ -2,7 +2,7 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { usersApi } from '@/api/users'
-import { Button, T, TextField } from '@/components/ui'
+import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { DELETE_CONFIRM_WORD, deleteAccountError, deleteAccountFailure } from '@/features/account/deleteAccount'
 import { useAuth } from '@/stores/auth'
 import { colors, spacing } from '@/theme'
@@ -60,11 +60,10 @@ export default function DeleteAccountScreen() {
         autoCapitalize="characters"
         autoCorrect={false}
       />
-      <TextField
+      <PasswordField
         label="Mot de passe"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
         autoComplete="current-password"
         textContentType="password"
         error={error}

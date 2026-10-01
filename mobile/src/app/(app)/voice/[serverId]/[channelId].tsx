@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Stack, router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { RTCView } from 'react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
-import { Button, EmptyState, ErrorState } from '@/components/ui'
+import { Button, EmptyState, ErrorState, PasswordField } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { useAuth } from '@/stores/auth'
@@ -46,15 +46,9 @@ export default function VoiceScreen() {
           <Text style={styles.title}>{name}</Text>
           {v.error ? <Text style={{ color: colors.danger }}>{v.error}</Text> : null}
           {needsPassword ? (
-            <TextInput
-              style={styles.pw}
-              placeholder="Mot de passe du salon"
-              placeholderTextColor={colors.textFaint}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              autoCapitalize="none"
-            />
+            <View style={styles.pw}>
+              <PasswordField placeholder="Mot de passe du salon" value={password} onChangeText={setPassword} />
+            </View>
           ) : null}
           <Button title="Rejoindre le vocal" icon="mic" onPress={join} loading={v.joining} style={{ alignSelf: 'stretch' }} />
         </View>
@@ -122,7 +116,7 @@ function Control({ icon, label, onPress, active, danger }: { icon: React.Compone
 const styles = StyleSheet.create({
   join: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
   title: { color: colors.text, fontSize: font.xl, fontWeight: '800' },
-  pw: { alignSelf: 'stretch', backgroundColor: colors.bgAlt, color: colors.text, borderRadius: radius.md, padding: spacing.md },
+  pw: { alignSelf: 'stretch' },
   tile: { flex: 1, aspectRatio: 1, backgroundColor: colors.bgAlt, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   tileLabel: { position: 'absolute', left: 8, bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   tileName: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },

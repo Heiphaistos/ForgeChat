@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Button, T, TextField } from '@/components/ui'
+import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { validateRegistration, passwordStrength } from '@/lib/validation'
 import { useAuth } from '@/stores/auth'
@@ -62,11 +62,10 @@ export default function RegisterScreen() {
               autoComplete="email"
               error={errors.email}
             />
-            <TextField
+            <PasswordField
               label="Mot de passe"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
               autoComplete="new-password"
               textContentType="newPassword"
               maxLength={128}
@@ -88,11 +87,10 @@ export default function RegisterScreen() {
                 </T>
               </View>
             ) : null}
-            <TextField
+            <PasswordField
               label="Confirmer le mot de passe"
               value={confirm}
               onChangeText={setConfirm}
-              secureTextEntry
               autoComplete="new-password"
               textContentType="newPassword"
               error={errors.confirm}

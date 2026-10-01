@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Button, T, TextField } from '@/components/ui'
+import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { API_HOST } from '@/config/env'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
@@ -82,12 +82,11 @@ export default function LoginScreen() {
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
-                <TextField
+                <PasswordField
                   ref={passwordRef}
                   label="Mot de passe"
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
                   autoComplete="current-password"
                   textContentType="password"
                   returnKeyType="go"
