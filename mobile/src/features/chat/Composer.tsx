@@ -5,10 +5,12 @@ import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'expo-image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
+import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { restoreAfterSendError } from './sendErrors'
@@ -62,6 +64,8 @@ export function Composer({
   myId = null,
 }: Props) {
   const [files, setFiles] = useState<LocalAttachment[]>([])
+  // Au-dessus de la barre de navigation Android, clavier fermé comme ouvert (affichage bord à bord).
+  const safeBottom = useKeyboardSafeBottom(spacing.sm)
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const inputRef = useRef<TextInput>(null)
@@ -194,14 +198,14 @@ export function Composer({
 
   if (disabled) {
     return (
-      <View style={[styles.container, { alignItems: 'center', paddingVertical: spacing.lg }]}>
+      <Animated.View style={[styles.container, { alignItems: 'center', paddingTop: spacing.lg }, safeBottom]}>
         <Text style={{ color: colors.textMuted }}>{disabledReason ?? 'Tu ne peux pas écrire ici.'}</Text>
-      </View>
+      </Animated.View>
     )
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, safeBottom]}>
       {replyTo || editing ? (
         <View style={styles.contextBar}>
           <Ionicons name={editing ? 'create-outline' : 'arrow-undo'} size={16} color={colors.textMuted} />
@@ -328,7 +332,7 @@ export function Composer({
           { label: 'Fichier', icon: 'document-outline', onPress: () => void pickDocuments() },
         ]}
       />
-    </View>
+    </Animated.View>
   )
 }
 
