@@ -90,7 +90,7 @@ const FEATURES = [
   {
     icon: <Shield size={22} />,
     title: 'Sécurité Renforcée',
-    desc: 'Cookies httpOnly, JWT avec révocation, rate limiting, protection CORS stricte, zéro télémétrie.',
+    desc: 'Cookies httpOnly, JWT avec révocation, rate limiting, protection CORS stricte, aucun pistage.',
     color: 'text-red-400',
     bg: 'bg-red-400/10 border-red-400/20',
   },
@@ -105,7 +105,7 @@ const FEATURES = [
 
 const STATS = [
   '100 % self-hosted',
-  '0 télémétrie',
+  '0 pistage',
   '28 thèmes',
   'WebRTC P2P',
   'Open aux bots & webhooks',
@@ -346,7 +346,7 @@ export default function LandingPage() {
             </a>
           </div>
 
-          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
+          <p className="text-xs text-white/25" aria-hidden>Windows x64 · Tauri v2 · Aucun pistage · {VERSION}</p>
           {majLe && <p className="text-xs text-white/40 text-center">Mis à jour le {majLe}</p>}
         </div>
       </section>
@@ -403,7 +403,7 @@ export default function LandingPage() {
               guide Linux
             </a>
           </p>
-          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Zéro télémétrie · {VERSION}</p>
+          <p className="text-xs text-white/25" aria-hidden>Linux x64 · Tauri v2 · Aucun pistage · {VERSION}</p>
           {majLe && <p className="text-xs text-white/40 text-center">Mis à jour le {majLe}</p>}
         </div>
       </section>
