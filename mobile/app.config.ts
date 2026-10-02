@@ -1,6 +1,7 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config'
 
 import withLanCleartext from './plugins/withLanCleartext.js'
+import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
 
 /**
@@ -77,7 +78,10 @@ export default (ctx: ConfigContext): ExpoConfig => {
   // Partage d'écran (MediaProjection) : permissions et service au premier plan, tous profils.
   const expoConfig = withScreenShare(buildConfig(ctx))
   // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
-  return APP_ENV === 'lan' ? withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST }) : expoConfig
+  if (APP_ENV === 'lan') return withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST })
+  // APK distribués (APK DEV, bêta) : signés avec la clé de release hors dépôt, jamais la clé debug.
+  if (APP_ENV === 'preview' || APP_ENV === 'production') return withReleaseSigning(expoConfig)
+  return expoConfig
 }
 
 const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({

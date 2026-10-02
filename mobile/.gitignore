@@ -13,6 +13,12 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+*.keystore
+*.password
+keystore.properties
+SHA256SUMS*.txt
+*.apk
+*.aab
 *.p8
 *.p12
 *.key
