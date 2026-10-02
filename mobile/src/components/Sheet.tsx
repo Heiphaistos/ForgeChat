@@ -43,6 +43,7 @@ export function Sheet({
             <Pressable
               key={a.label}
               accessibilityRole="button"
+              accessibilityLabel={a.label}
               accessibilityState={a.selected === undefined ? undefined : { selected: a.selected }}
               onPress={() => {
                 onClose()

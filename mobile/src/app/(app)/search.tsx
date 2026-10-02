@@ -89,7 +89,14 @@ export default function SearchScreen() {
           stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
           renderItem={({ item }) => (
-            <Pressable onPress={() => openItem(item)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]} accessibilityRole="button">
+            <Pressable
+              onPress={() => openItem(item)}
+              style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                item.kind === 'channel' ? `${item.v.type === 'voice' ? 'Salon vocal' : 'Salon'} ${item.v.name}, ${item.v.serverName}` : undefined
+              }
+            >
               {item.kind === 'message' ? (
                 <>
                   <Avatar uri={item.v.authorAvatar} name={item.v.authorName} size={32} />
