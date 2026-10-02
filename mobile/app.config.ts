@@ -13,7 +13,9 @@ import withScreenShare from './plugins/withScreenShare.js'
  * Versions (APP_ENV ↔ profil EAS, voir eas.json et docs/RELEASE.md) :
  *  - development : émulateur + Metro, local ;
  *  - lan         : téléphone de test sur le réseau local, jamais distribuée ;
- *  - preview     : « dev-apk », ForgeChat Dev, pré-prod en HTTPS, pour les développeurs ;
+ *  - preview     : « APK DEV », ForgeChat Dev, pour les deux développeurs : serveur choisi dans l'app
+ *                  (écran « Serveur » des Infos dev) ; préréglage pré-prod en HTTPS fixé ici,
+ *                  éventuellement vide ;
  *  - production  : « client-apk » (APK bêta publique, AAB Play Store plus tard), ForgeChat,
  *                  prod, AUCUNE fonction de dev (vérifié par __tests__/production-profile.test.ts).
  */
@@ -24,8 +26,9 @@ if (!['development', 'lan', 'preview', 'production'].includes(APP_ENV)) {
   throw new Error(`APP_ENV inconnu : ${APP_ENV}`)
 }
 // LAN : l'URL (IP du PC de dev) vient de l'environnement de build, jamais du dépôt.
+// APK DEV (preview) : pré-prod, éventuellement vide — jamais la prod par défaut.
 const API_URL =
-  process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' ? '' : 'https://forgechat.heiphaistos.org')
+  process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' || APP_ENV === 'preview' ? '' : 'https://forgechat.heiphaistos.org')
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
 // Identifiant FINAL de l'app publique (Play Store) : jamais configurable.
 const BUNDLE_ID = 'org.heiphaistos.forgechat'
@@ -51,7 +54,9 @@ if ((PUBLIC_ENV !== undefined && PUBLIC_ENV !== APP_ENV) || (APP_ENV === 'produc
 // n'est permis que vers une IPv4 privée (sinon lanCleartextHost fait échouer le build).
 // (Le client vérifie aussi au runtime, cf. src/config/env.ts.)
 const LAN_CLEARTEXT_HOST = APP_ENV === 'lan' ? withLanCleartext.lanCleartextHost(API_URL) : null
-if (APP_ENV !== 'development' && APP_ENV !== 'lan' && !API_URL.startsWith('https://')) {
+// APK DEV sans pré-prod : URL vide permise (le serveur se choisit dans l'app, en HTTPS ou vers une IP locale).
+const NO_BUILD_SERVER = APP_ENV === 'preview' && API_URL === ''
+if (APP_ENV !== 'development' && APP_ENV !== 'lan' && !NO_BUILD_SERVER && !API_URL.startsWith('https://')) {
   throw new Error(`FORGECHAT_API_URL doit être en https:// pour APP_ENV=${APP_ENV}`)
 }
 
@@ -66,7 +71,7 @@ const APP_NAMES: Record<AppEnv, string> = {
   production: 'ForgeChat',
 }
 
-const apiHost = new URL(API_URL).host
+const apiHost = API_URL ? new URL(API_URL).host : null
 
 export default (ctx: ConfigContext): ExpoConfig => {
   // Partage d'écran (MediaProjection) : permissions et service au premier plan, tous profils.
@@ -88,7 +93,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: PACKAGES[APP_ENV],
     supportsTablet: true,
-    associatedDomains: [`applinks:${apiHost}`],
+    associatedDomains: apiHost ? [`applinks:${apiHost}`] : [],
     infoPlist: {
       NSCameraUsageDescription: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
       NSMicrophoneUsageDescription: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
@@ -135,8 +140,8 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.READ_PHONE_STATE',
     ],
-    // App Links : uniquement vers un vrai domaine (pas vers l'IP du profil LAN).
-    intentFilters: APP_ENV === 'lan' ? [] : [
+    // App Links : uniquement vers un vrai domaine (pas vers l'IP du profil LAN, ni sans serveur fixé).
+    intentFilters: APP_ENV === 'lan' || !apiHost ? [] : [
       {
         action: 'VIEW',
         autoVerify: true,
@@ -178,8 +183,11 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
       'expo-build-properties',
       {
         android: {
-          // Interdit tout trafic HTTP en clair au niveau OS (en plus du contrôle applicatif).
-          usesCleartextTraffic: APP_ENV === 'development',
+          // Interdit tout trafic HTTP en clair au niveau OS (en plus du contrôle applicatif) — sauf
+          // development et APK DEV (preview), où le serveur local se choisit dans l'app : le contrôle
+          // applicatif (src/config/serverUrl.ts) y limite le HTTP aux IPv4 privées, 127.0.0.1, 10.0.2.2.
+          // JAMAIS en production (__tests__/production-profile.test.ts).
+          usesCleartextTraffic: APP_ENV === 'development' || APP_ENV === 'preview',
           enableMinifyInReleaseBuilds: true,
           enableShrinkResourcesInReleaseBuilds: true,
           // Règles R8 requises par react-native-webrtc.

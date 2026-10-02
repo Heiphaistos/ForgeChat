@@ -61,11 +61,16 @@ describe('client-apk (profil EAS production)', () => {
     )
   })
 
-  it('pas de trafic en clair, R8 actif', () => {
+  it('pas de trafic en clair, R8 actif, aucune URL non HTTPS', () => {
     const props = plugin(cfg, 'expo-build-properties') as [string, Cfg]
     expect(props[1].android.usesCleartextTraffic).toBe(false)
     expect(props[1].android.enableMinifyInReleaseBuilds).toBe(true)
     expect(cfg.extra.apiUrl.startsWith('https://')).toBe(true)
+    // Aucune adresse http:// ni IP locale nulle part dans la configuration de la bêta.
+    expect(JSON.stringify(cfg)).not.toMatch(/http:\/\/|10\.0\.2\.2|127\.0\.0\.1|192\.168\./)
+    // Pas de plugin de trafic en clair LAN.
+    expect(JSON.stringify(cfg)).not.toMatch(/network_security_config|cleartextTrafficPermitted/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'http://forgechat.heiphaistos.org' })).toThrow(/https/)
   })
 
   it('outils de dev retirés du bundle : EXPO_PUBLIC_APP_ENV explicite en production', () => {
@@ -79,16 +84,46 @@ describe('client-apk (profil EAS production)', () => {
   })
 })
 
-describe('dev-apk (profil EAS preview)', () => {
-  const profile = eas.build.preview
+describe('client-apk : code de développement exclu du bundle', () => {
+  const { readdirSync, statSync } = jest.requireActual<typeof import('node:fs')>('node:fs')
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((f) => {
+      const p = join(dir, f)
+      return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(f) ? [p] : []
+    })
+  const files = walk(join(root, 'src')).filter((f) => !f.includes(join('src', 'features', 'devtools')))
 
-  it('le build échoue tant que l’URL de la pré-prod n’est pas renseignée', () => {
-    expect(profile.env.FORGECHAT_API_URL).toMatch(/REMPLACER|\.invalid/)
-    expect(() => configFor(profile.env)).toThrow(/n'est pas renseignée/)
+  it('aucun import statique des outils de dev (panneau, écran Serveur)', () => {
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8')
+      expect({ f, hit: /^import[^\n]*features\/devtools/m.test(src) }).toEqual({ f, hit: false })
+    }
   })
 
-  it('identité et icône DEV une fois l’URL renseignée', () => {
-    const cfg = configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.example.org' })
+  it('chaque require des outils de dev est derrière la condition constante de production', () => {
+    let count = 0
+    for (const f of files) {
+      const lines = readFileSync(f, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        if (!/require\(['"]@\/features\/devtools/.test(line)) return
+        count++
+        const before = lines.slice(Math.max(0, i - 4), i + 1).join('\n')
+        expect({ f, line: i + 1, guarded: /process\.env\.EXPO_PUBLIC_APP_ENV === 'production'\s*\?\s*null/.test(before) }).toEqual({
+          f,
+          line: i + 1,
+          guarded: true,
+        })
+      })
+    }
+    expect(count).toBeGreaterThanOrEqual(3) // you.tsx (Infos dev), env.ts (choix du serveur), login.tsx (lien Serveur)
+  })
+})
+
+describe('APK DEV (profil EAS preview)', () => {
+  const profile = eas.build.preview
+
+  it('identité et icône DEV, distribution interne', () => {
+    const cfg = configFor(profile.env)
     expect(cfg.android.package).toBe('org.heiphaistos.forgechat.dev')
     expect(cfg.name).toBe('ForgeChat Dev')
     expect(cfg.icon).toBe('./assets/dev/icon.png')
@@ -96,9 +131,28 @@ describe('dev-apk (profil EAS preview)', () => {
     expect(profile.distribution).toBe('internal')
   })
 
+  it('pré-prod vide permise, jamais la prod par défaut', () => {
+    expect(profile.env.FORGECHAT_API_URL).toBe('')
+    expect(configFor(profile.env).extra.apiUrl).toBe('')
+    const { FORGECHAT_API_URL: _unset, ...withoutUrl } = profile.env
+    expect(configFor(withoutUrl).extra.apiUrl).toBe('')
+    expect(configFor(withoutUrl).android.intentFilters).toEqual([])
+  })
+
+  it('pré-prod renseignée : HTTPS obligatoire, App Links vers son domaine', () => {
+    const cfg = configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.example.org' })
+    expect(cfg.extra.apiUrl).toBe('https://preprod.example.org')
+    expect(JSON.stringify(cfg.android.intentFilters)).toContain('preprod.example.org')
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'http://preprod.example.org' })).toThrow(/https/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.REMPLACER.invalid' })).toThrow(/n'est pas renseignée/)
+  })
+
+  it('HTTP en clair autorisé au niveau OS dans ce profil seulement (contrôle applicatif : serverUrl.ts)', () => {
+    const props = plugin(configFor(profile.env), 'expo-build-properties') as [string, Cfg]
+    expect(props[1].android.usesCleartextTraffic).toBe(true)
+  })
+
   it('EXPO_PUBLIC_APP_ENV doit correspondre à APP_ENV', () => {
-    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.example.org', EXPO_PUBLIC_APP_ENV: 'production' })).toThrow(
-      /EXPO_PUBLIC_APP_ENV/,
-    )
+    expect(() => configFor({ ...profile.env, EXPO_PUBLIC_APP_ENV: 'production' })).toThrow(/EXPO_PUBLIC_APP_ENV/)
   })
 })
