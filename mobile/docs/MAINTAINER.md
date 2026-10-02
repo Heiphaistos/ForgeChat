@@ -47,7 +47,7 @@ Détails : `mobile/docs/DEPLOY.md` (fichiers à modifier, workflow de pré-prod)
 2. **Pré-prod** : copie séparée (`/opt/forgechat-preprod`, projet compose `forgechat-preprod`, port et
    volumes distincts, `.env` propre avec un `JWT_SECRET` **différent** de la prod), branche `preprod`,
    workflow `deploy-preprod.yml` (contenu dans DEPLOY.md).
-3. **Variables du `.env`** (VPS) : `PUSH_ENABLED=true`, `EXPO_ACCESS_TOKEN`, `TURN_*`, et
+3. **Variables du `.env`** (VPS) : `PUSH_ENABLED=true`, `EXPO_ACCESS_TOKEN`, `STUN_URLS`, `TURN_*`, et
    `TRUSTED_PROXIES` = `127.0.0.1,::1,<passerelle du réseau Docker>` :
    ```bash
    docker network inspect <projet>_default --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'
@@ -78,7 +78,8 @@ Détails : `mobile/docs/DEPLOY.md` (fichiers à modifier, workflow de pré-prod)
 - [ ] pré-prod déployée, `/api/health` OK, testée avec l'APK DEV
 - [ ] `TRUSTED_PROXIES` renseigné (prod et pré-prod) ; nginx rechargé sans erreur
 - [ ] push : `PUSH_ENABLED=true`, `EXPO_ACCESS_TOKEN`, FCM configuré (DEPLOY.md, ligne Firebase)
-- [ ] TURN configuré (appels en 4G)
+- [ ] `STUN_URLS` et TURN configurés (coturn) : sans eux, les appels sont refusés (aucun STUN public
+      par défaut) ; TURN indispensable en 4G
 - [ ] prod déployée, `/api/health` OK, `audit-roles.sql` relu
 - [ ] `assetlinks.json` servi avec l'empreinte SHA-256 de la clé de release (§4)
 
@@ -246,6 +247,7 @@ Ne **jamais** distribuer l'APK DEV, lan ou development.
 | APK DEV : délai dépassé vers le PC | Wi-Fi invité / isolation des clients, autre réseau | même Wi-Fi « normal » que le PC ; tester `http://<IP>:8080/api/health` dans le navigateur du téléphone |
 | idem | pare-feu | règle `ufw` du §5 ; `sudo ufw status` |
 | idem | serveur sur 127.0.0.1 | `BIND_ADDR=0.0.0.0` puis relancer le serveur |
+| « Appels indisponibles : le serveur ne fournit aucun serveur STUN/TURN » | `STUN_URLS` et `TURN_*` absents du `.env` du serveur | les renseigner (coturn, DEPLOY.md), redémarrer le serveur ; en local : `STUN_URLS=stun:127.0.0.1:3478` suffit pour des appels sur le même réseau |
 | `adb devices` vide / `unauthorized` | débogage USB inactif ou non autorisé | Options développeur → Débogage USB ; accepter l'empreinte de l'ordinateur ; câble données |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | même package, autre clé | voir première ligne |
 | build local arrêté « Swap > 80 % » | mémoire insuffisante | fermer émulateur / navigateur / autres builds et relancer |
