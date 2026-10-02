@@ -60,6 +60,8 @@ export function Button({ title, variant = 'primary', loading, icon, disabled, st
   return (
     <Pressable
       accessibilityRole="button"
+      // Libellé explicite : sinon Android lit le glyphe de l'icône, et garde « busy » après un chargement.
+      accessibilityLabel={title}
       accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       disabled={disabled || loading}
       style={({ pressed }) => [
