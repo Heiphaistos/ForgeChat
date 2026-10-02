@@ -297,6 +297,8 @@ export const useVoice = create<VoiceState>((set, get) => {
       set({ serverId, channelId, channelName, joining: true, joined: false, error: null, peers: [], muted: false, deafened: false })
       let stream: MediaStream
       try {
+        // Serveurs STUN/TURN d'abord : sans eux, refus clair avant d'ouvrir le micro.
+        await voiceApi.iceServers()
         const res = await getLocalMedia(false)
         stream = res.stream
       } catch (e) {

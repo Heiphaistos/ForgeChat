@@ -5,7 +5,7 @@ import {
   RTCSessionDescription,
   type MediaStream,
 } from 'react-native-webrtc'
-import { voiceApi } from '@/api/voice'
+import { ICE_UNAVAILABLE, voiceApi } from '@/api/voice'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { audioSession, getLocalMedia, stopStream } from '@/services/media'
@@ -331,6 +331,8 @@ export const useCall = create<CallState>((set, get) => {
       // déclenche jamais (l'appel resterait bloqué après un raccroché distant).
       set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null })
       try {
+        // Serveurs STUN/TURN d'abord : sans eux, refus clair avant d'ouvrir micro/caméra.
+        await voiceApi.iceServers()
         const stream = await attachMedia(type)
         if (gen !== callGeneration) {
           stopStream(stream)
@@ -388,6 +390,7 @@ export const useCall = create<CallState>((set, get) => {
         endReason: null,
       })
       try {
+        await voiceApi.iceServers()
         const stream = await attachMedia(inc.callType)
         if (gen !== callGeneration) {
           stopStream(stream)
@@ -408,12 +411,12 @@ export const useCall = create<CallState>((set, get) => {
         audioSession.start(get().callType === 'video')
         realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
         armConnectTimeout()
-      } catch {
+      } catch (e) {
         // gen !== callGeneration ⇒ l'appel a déjà été terminé par cleanup() (raccroché
         // distant, timeout…) pendant l'attente : ne pas renvoyer un DECLINE en double.
         if (gen === callGeneration) {
           realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
-          cleanup('Micro inaccessible — appel refusé')
+          cleanup(e instanceof Error && e.message === ICE_UNAVAILABLE ? ICE_UNAVAILABLE : 'Micro inaccessible — appel refusé')
         }
       } finally {
         busy = false
