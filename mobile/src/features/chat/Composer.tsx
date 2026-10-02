@@ -13,6 +13,7 @@ import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { restoreAfterSendError } from './sendErrors'
 import { activeMentionQuery, applyMention, filterMentionCandidates, type MentionCandidate } from './mentions'
 import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
@@ -116,8 +117,8 @@ export function Composer({
   }
 
   const pickImages = async (camera: boolean) => {
-    const perm = camera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) {
+    const granted = camera ? (await ImagePicker.requestCameraPermissionsAsync()).granted : await ensurePhotoAccess()
+    if (!granted) {
       Alert.alert('Permission refusée', camera ? 'Autorise l’accès à la caméra dans les réglages.' : 'Autorise l’accès aux photos dans les réglages.')
       return
     }

@@ -145,6 +145,11 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     blockedPermissions: [
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
+      // Ajoutée par expo-screen-capture pour la détection des captures (inutilisée : l'app ne fait
+      // que les bloquer). Le sélecteur de photos du système n'en a pas besoin (src/lib/photoAccess.ts).
+      // Ne PAS bloquer DETECT_SCREEN_CAPTURE : ce module l'utilise toujours sur Android 14+.
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VIDEO',
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.READ_PHONE_STATE',
     ],

@@ -78,6 +78,15 @@ describe('client-apk (profil EAS production)', () => {
     expect(() => configFor({ ...profile.env, EXPO_PUBLIC_APP_ENV: undefined })).toThrow(/EXPO_PUBLIC_APP_ENV/)
   })
 
+  it('aucune permission de lecture de la galerie (sélecteur de photos du système)', () => {
+    for (const p of ['READ_MEDIA_IMAGES', 'READ_MEDIA_VIDEO', 'READ_EXTERNAL_STORAGE']) {
+      expect(cfg.android.permissions).not.toContain(`android.permission.${p}`)
+      expect(cfg.android.blockedPermissions).toContain(`android.permission.${p}`)
+    }
+    // Indispensable à expo-screen-capture sur Android 14+ : ne doit pas être bloquée.
+    expect(cfg.android.blockedPermissions).not.toContain('android.permission.DETECT_SCREEN_CAPTURE')
+  })
+
   it('AAB Play Store : même profil, seul le format change', () => {
     expect(eas.build.store).toEqual({ extends: 'production', android: { buildType: 'app-bundle' } })
     expect(profile.android.buildType).toBe('apk')

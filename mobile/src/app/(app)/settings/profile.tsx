@@ -8,6 +8,7 @@ import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import { colors, font, spacing } from '@/theme'
+import { ensurePhotoAccess } from '@/lib/photoAccess'
 
 export default function ProfileSettings() {
   const user = useAuth((s) => s.user)
@@ -33,8 +34,7 @@ export default function ProfileSettings() {
   }
 
   const pickAvatar = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) return
+    if (!(await ensurePhotoAccess())) return
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
