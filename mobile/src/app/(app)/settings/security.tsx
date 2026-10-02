@@ -50,7 +50,7 @@ export default function SecuritySettings() {
         <SwitchRow icon="finger-print" title="Verrouiller ForgeChat" value={s.appLock} onValueChange={(v) => void toggleLock(v)} disabled={bioOk === false && !s.appLock} />
         {s.appLock
           ? DELAYS.map((d) => (
-              <Row key={d.v} title={d.label} onPress={() => s.set({ lockDelay: d.v })} right={s.lockDelay === d.v ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null} />
+              <Row key={d.v} title={d.label} selected={s.lockDelay === d.v} onPress={() => s.set({ lockDelay: d.v })} right={s.lockDelay === d.v ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null} />
             ))
           : null}
       </Section>

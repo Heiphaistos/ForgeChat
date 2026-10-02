@@ -213,6 +213,7 @@ export function Row({
   right,
   danger,
   chevron,
+  selected,
 }: {
   icon?: IconName
   title: string
@@ -221,12 +222,17 @@ export function Row({
   right?: ReactNode
   danger?: boolean
   chevron?: boolean
+  /** Option cochée dans une liste de choix (annoncé par le lecteur d'écran). */
+  selected?: boolean
 }) {
   return (
     <Pressable
       disabled={!onPress}
       onPress={onPress}
       accessibilityRole={onPress ? 'button' : undefined}
+      // Libellé explicite : sinon Android lit aussi les glyphes des icônes.
+      accessibilityLabel={onPress ? [title, subtitle].filter(Boolean).join(', ') : undefined}
+      accessibilityState={selected !== undefined ? { selected } : undefined}
       style={({ pressed }) => [styles.row, pressed && onPress ? { backgroundColor: colors.bgHover } : null]}
     >
       {icon ? <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.textMuted} /> : null}
