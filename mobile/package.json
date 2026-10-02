@@ -68,7 +68,8 @@
     "check": "npm run typecheck && npm run lint && npm test",
     "doctor": "expo-doctor",
     "e2e": "node scripts/e2e-api.mjs",
-    "e2e:authz": "node scripts/e2e-authz.mjs"
+    "e2e:authz": "node scripts/e2e-authz.mjs",
+    "e2e:delete": "node scripts/e2e-delete-account.mjs"
   },
   "private": true,
   "jest": {

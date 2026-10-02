@@ -190,8 +190,8 @@ async function main() {
     `opened=${reuseTicket.opened} closed=${reuseTicket.closed} messages=${reuseTicket.messages.length}`,
   );
 
-  const aWs = connA.ws;
-  const aMessages = connA.messages;
+  // Réaffectée après le logout global (qui ferme les WebSocket de A).
+  let aConn = connA;
 
   // 5. Amis + DM
   console.log('\n-- 5. Amis + DM --');
@@ -347,20 +347,28 @@ async function main() {
   ok(logoutAll.status === 200, 'logout sans scope (tout révoquer)', JSON.stringify(logoutAll.body));
   const refreshAfterAll = await api('POST', '/api/auth/refresh', { body: { refresh_token: aRefresh3 } });
   ok(refreshAfterAll.status === 401, 'toutes les sessions révoquées après logout global', `status=${refreshAfterAll.status}`);
+  // « Tout déconnecter » ferme aussi les WebSocket de A : il se reconnecte pour la suite.
+  await waitFor(() => aConn.ws.readyState === WebSocket.CLOSED, 3000);
+  ok(aConn.ws.readyState === WebSocket.CLOSED, 'WebSocket de A fermée par le logout global', `readyState=${aConn.ws.readyState}`);
+  await sleep(1100);
+  const loginA3 = await api('POST', '/api/auth/login', { body: { email: userA.email, password: userA.password } });
+  const ticketA3 = await api('POST', '/api/auth/ws-ticket', { token: loginA3.body.access_token });
+  aConn = await connectWs(ticketA3.body.ticket);
+  ok(aConn.opened, 'A se reconnecte après le logout global');
 
   // 9. Appel : destinataire hors ligne mais avec push, puis reconnexion
   console.log('\n-- 9. Appel (push si hors ligne, rejeu à la reconnexion) --');
   bWs.close();
   await sleep(800);
 
-  aMessages.length = 0;
-  aWs.send(JSON.stringify({ type: 'DM_CALL_INIT', to: bId, dm_id: dmId, call_type: 'voice' }));
+  aConn.messages.length = 0;
+  aConn.ws.send(JSON.stringify({ type: 'DM_CALL_INIT', to: bId, dm_id: dmId, call_type: 'voice' }));
   await sleep(2000);
-  const gotOfflineError = aMessages.some((m) => m.type === 'DM_CALL_ERROR' && m.reason === 'offline');
+  const gotOfflineError = aConn.messages.some((m) => m.type === 'DM_CALL_ERROR' && m.reason === 'offline');
   ok(
     !gotOfflineError,
     'A ne reçoit PAS DM_CALL_ERROR "offline" (B a un appareil push)',
-    JSON.stringify(aMessages),
+    JSON.stringify(aConn.messages),
   );
 
   const ticketB2 = await api('POST', '/api/auth/ws-ticket', { token: bAccess });
@@ -373,7 +381,7 @@ async function main() {
     JSON.stringify(connB2.messages.map((m) => m.type)),
   );
 
-  try { aWs.close(); } catch {}
+  try { aConn.ws.close(); } catch {}
   try { connB2.ws.close(); } catch {}
 
   console.log(`\n=== Résultat : ${passed} OK, ${failed} échec(s) ===`);

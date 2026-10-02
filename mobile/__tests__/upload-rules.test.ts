@@ -1,16 +1,25 @@
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { ALLOWED_UPLOAD_EXTENSIONS, LIMITS } from '@/config/env'
 import { uploadExtension, validateAttachment } from '@/features/chat/useConversation'
 
 /**
- * Copie de la liste `ALLOWED` du serveur pour un utilisateur normal, identique dans
- * handlers/uploads.rs (salon), friends.rs (DM) et group_dms.rs (groupe). À mettre à jour
- * avec le serveur : ce test signale tout écart.
+ * Liste `ATTACHMENT_EXTENSIONS` du serveur (server/src/media.rs), commune aux routes salon, DM et
+ * groupe pour un utilisateur normal. Lue dans la source : tout écart fait échouer le test.
  */
-const SERVER_ALLOWED = [
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mkv',
-  'mp3', 'ogg', 'wav', 'flac', 'pdf', 'txt', 'md', 'zip', 'tar', 'gz', '7z',
-  'rar', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'bin',
-]
+const SERVER_ALLOWED = (() => {
+  // Tant que le serveur n'est suivi que sur la branche security-fixes, on le lit depuis git si le
+  // fichier n'est pas sur le disque (branche mobile seule extraite).
+  const file = join(__dirname, '../../server/src/media.rs')
+  const src = existsSync(file)
+    ? readFileSync(file, 'utf8')
+    : execFileSync('git', ['show', 'security-fixes:server/src/media.rs'], { encoding: 'utf8' })
+  const block = src.match(/pub const ATTACHMENT_EXTENSIONS: &\[&str\] = &\[([^\]]*)\]/)
+  if (!block) throw new Error('ATTACHMENT_EXTENSIONS introuvable dans server/src/media.rs')
+  return [...(block[1] ?? '').matchAll(/"([a-z0-9]+)"/g)].map((m) => m[1])
+})()
 
 const file = (name: string, size = 1000) => ({ uri: 'file://x', name, type: 'application/octet-stream', size })
 
@@ -30,18 +39,18 @@ describe('règles d’upload alignées sur le serveur (salon, DM, groupe)', () =
   })
 
   it('accepte ce que le serveur accepte, y compris sans extension', () => {
-    for (const name of ['a.jpg', 'b.MP4', 'c.flac', 'd.pdf', 'e.tar.gz', 'f.pptx', 'README', 'g.bin']) {
+    for (const name of ['a.jpg', 'b.MP4', 'c.flac', 'memo.m4a', 'voix.AAC', 'd.pdf', 'e.tar.gz', 'f.pptx', 'README', 'g.bin']) {
       expect(validateAttachment(file(name))).toBeNull()
     }
   })
 
   it('refuse avant l’envoi ce que le serveur refuserait, avec un message explicite', () => {
-    for (const name of ['memo.m4a', 'page.svg', 'setup.exe', 'script.js', 'photo.heic', 'bizarre.']) {
+    for (const name of ['page.svg', 'setup.exe', 'script.js', 'photo.heic', 'bizarre.']) {
       const err = validateAttachment(file(name))
       expect(err).toMatch(/non autorisé par le serveur/)
       expect(err).toMatch(/Formats acceptés/)
     }
-    expect(validateAttachment(file('memo.m4a'))).toMatch(/^Type de fichier \.m4a/)
+    expect(validateAttachment(file('photo.heic'))).toMatch(/^Type de fichier \.heic/)
   })
 
   it('refuse au-delà de 50 Mo', () => {

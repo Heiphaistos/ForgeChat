@@ -49,7 +49,10 @@ export default function DeleteAccountScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <T>La suppression est définitive : ton profil, tes amis, tes messages privés et tes sessions seront effacés.</T>
+      <T>
+        La suppression est définitive : ton profil, tes amis, tes réactions et tes sessions seront effacés. Tes messages
+        restent visibles des autres sous « Utilisateur supprimé ».
+      </T>
       <T variant="muted">
         Si tu es propriétaire d’un serveur, supprime-le d’abord. Les groupes que tu as créés sont confiés au membre le plus ancien.
       </T>
