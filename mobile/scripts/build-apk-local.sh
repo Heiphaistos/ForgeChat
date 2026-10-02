@@ -6,6 +6,7 @@
 # Clé de release HORS dépôt (voir docs/MAINTAINER.md, « Clé de release ») :
 #   FORGECHAT_KEYSTORE                (défaut : ~/.config/forgechat-dev/release/forgechat-release.keystore)
 #   FORGECHAT_KEYSTORE_PASSWORD_FILE  (défaut : ~/.config/forgechat-dev/release/keystore.password)
+# ABI : arm64-v8a + armeabi-v7a (téléphones) ; FORGECHAT_ABIS=x86_64 pour tester sur l'émulateur.
 # Garde-fous machine : 2 workers gradle, arrêt si le swap dépasse 80 %. APK produit :
 #   android/app/build/outputs/apk/release/app-release.apk
 # Le .env.local n'est PAS lu (EXPO_NO_DOTENV) : le serveur vient uniquement du profil.
@@ -42,7 +43,7 @@ trap 'cp "$BACKUP" "$ROOT/package.json"; rm -f "$BACKUP"' EXIT
 npx expo prebuild --platform android --clean --no-install
 
 cd android
-./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a,armeabi-v7a --console=plain &
+./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures="${FORGECHAT_ABIS:-arm64-v8a,armeabi-v7a}" --console=plain &
 G=$!
 while kill -0 $G 2>/dev/null; do
   read -r total used <<<"$(free -m | awk '/^(Swap|Échange)/{print $2, $3}')"
