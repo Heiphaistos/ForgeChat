@@ -13,7 +13,7 @@ import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
-import { errorMessage } from '@/lib/http'
+import { ApiError, errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { useTyping } from '@/stores/typing'
@@ -256,6 +256,8 @@ export function ChatView({
     [selected, react],
   )
 
+  // Conversation inaccessible (lien vers une conversation dont on n'est pas membre) : pas de champ de saisie.
+  const denied = !conv.messages.length && conv.error instanceof ApiError && (conv.error.status === 403 || conv.error.status === 404)
   let body: React.ReactNode
   if (conv.isLoading) body = <Loading />
   else if (conv.error && !conv.messages.length) body = <ErrorState message={errorMessage(conv.error)} onRetry={() => void conv.refetch()} />
@@ -296,26 +298,28 @@ export function ChatView({
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={topOffset} onLayout={onKavLayout} style={{ flex: 1, backgroundColor: colors.bg }}>
         <View style={{ flex: 1 }}>{body}</View>
         <TypingIndicator conversationId={conv.id} />
-        <Composer
-          placeholder={placeholder}
-          disabled={readOnly}
-          disabledReason={readOnlyReason}
-          replyTo={replyTo}
-          editing={editing}
-          onCancelReply={() => setReplyTo(null)}
-          onCancelEdit={() => setEditing(null)}
-          onSend={async (text, files) => {
-            const reply = replyTo
-            setReplyTo(null)
-            await conv.send(text, { replyTo: reply, files })
-          }}
-          onEdit={conv.edit}
-          onTyping={conv.notifyTyping}
-          draft={draft}
-          onDraftChange={(t) => setDraft(conv.id, t)}
-          mentionCandidates={mentionCandidates}
-          myId={me?.id ?? null}
-        />
+        {denied ? null : (
+          <Composer
+            placeholder={placeholder}
+            disabled={readOnly}
+            disabledReason={readOnlyReason}
+            replyTo={replyTo}
+            editing={editing}
+            onCancelReply={() => setReplyTo(null)}
+            onCancelEdit={() => setEditing(null)}
+            onSend={async (text, files) => {
+              const reply = replyTo
+              setReplyTo(null)
+              await conv.send(text, { replyTo: reply, files })
+            }}
+            onEdit={conv.edit}
+            onTyping={conv.notifyTyping}
+            draft={draft}
+            onDraftChange={(t) => setDraft(conv.id, t)}
+            mentionCandidates={mentionCandidates}
+            myId={me?.id ?? null}
+          />
+        )}
 
         <Sheet
           visible={!!selected}
