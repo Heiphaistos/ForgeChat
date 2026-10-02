@@ -3,6 +3,8 @@ import type { ExpoConfig, ConfigContext } from 'expo/config'
 import withLanCleartext from './plugins/withLanCleartext.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
+import withStripBuildPaths from './plugins/withStripBuildPaths.js'
+import withoutDevClientScheme from './plugins/withoutDevClientScheme.js'
 
 /**
  * Configuration Expo dynamique.
@@ -80,7 +82,9 @@ export default (ctx: ConfigContext): ExpoConfig => {
   // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
   if (APP_ENV === 'lan') return withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST })
   // APK distribués (APK DEV, bêta) : signés avec la clé de release hors dépôt, jamais la clé debug.
-  if (APP_ENV === 'preview' || APP_ENV === 'production') return withReleaseSigning(expoConfig)
+  // (et sans chemin de la machine de build dans les bibliothèques natives).
+  if (APP_ENV === 'production') return withoutDevClientScheme(withStripBuildPaths(withReleaseSigning(expoConfig)))
+  if (APP_ENV === 'preview') return withStripBuildPaths(withReleaseSigning(expoConfig))
   return expoConfig
 }
 

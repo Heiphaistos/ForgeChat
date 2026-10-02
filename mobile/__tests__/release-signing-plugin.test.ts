@@ -50,3 +50,32 @@ describe('withReleaseSigning', () => {
     expect(gitignore).toMatch(/\*\.keystore|\*\.jks/)
   })
 })
+
+describe('withStripBuildPaths', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { applyStripBuildPaths } = require('../plugins/withStripBuildPaths.js') as typeof import('../plugins/withStripBuildPaths.js')
+  const src = 'android {\n    defaultConfig {\n        applicationId \'x\'\n    }\n}\n'
+
+  it('ajoute -ffile-prefix-map au CMake de l’app, chemin calculé au build', () => {
+    const out = applyStripBuildPaths(src)
+    expect(out).toContain('-ffile-prefix-map=${System.getProperty(\'user.home\')}=/build')
+    expect(out).toMatch(/defaultConfig \{\n\s+\/\/ Chemins[\s\S]*cppFlags fcPrefixMap[\s\S]*applicationId 'x'/)
+    expect(out).not.toMatch(/\/home\//)
+    expect(applyStripBuildPaths(out)).toBe(out)
+  })
+})
+
+describe('withoutDevClientScheme (bêta)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { removeDevClientSchemes } = require('../plugins/withoutDevClientScheme.js') as typeof import('../plugins/withoutDevClientScheme.js')
+
+  it('retire exp+<slug> et garde les autres schémas', () => {
+    const data = (scheme: string) => ({ $: { 'android:scheme': scheme } })
+    const manifest = {
+      manifest: { application: [{ activity: [{ 'intent-filter': [{ data: [data('forgechat'), data('exp+forgechat')] }, { data: [data('https')] }] }] }] },
+    }
+    const out = removeDevClientSchemes(manifest)
+    const schemes = out.manifest.application[0]!.activity[0]!['intent-filter'].flatMap((f) => f.data.map((d) => d.$['android:scheme']))
+    expect(schemes).toEqual(['forgechat', 'https'])
+  })
+})
