@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { WS_URL } from '@/config/env'
+import { wsUrl } from '@/config/env'
 import { http } from './http'
 import { logger } from './logger'
 
@@ -148,7 +148,7 @@ class RealtimeClient {
       return
     }
 
-    const ws = new WebSocket(`${WS_URL}?ticket=${encodeURIComponent(ticket)}`)
+    const ws = new WebSocket(`${wsUrl()}?ticket=${encodeURIComponent(ticket)}`)
     this.socket = ws
     this.connecting = false
 

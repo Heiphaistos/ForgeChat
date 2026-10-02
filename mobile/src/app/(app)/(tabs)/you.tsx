@@ -5,7 +5,7 @@ import { usersApi } from '@/api/users'
 import { Avatar, StatusDot } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { Row, Section } from '@/components/ui'
-import { APP_ENV, APP_VERSION, API_HOST } from '@/config/env'
+import { APP_ENV, APP_VERSION, apiHost } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import { normalizeStatus, SELECTABLE_STATUSES, statusLabel } from '@/lib/status'
 import { useAuth } from '@/stores/auth'
@@ -86,7 +86,7 @@ export default function YouScreen() {
 
       <Text style={styles.version}>
         ForgeChat {APP_VERSION}
-        {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${API_HOST}`}
+        {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${apiHost() || 'aucun serveur'}`}
       </Text>
 
       <Sheet

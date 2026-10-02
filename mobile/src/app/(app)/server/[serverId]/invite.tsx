@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { ScrollView, Share, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Button, ErrorState, T } from '@/components/ui'
-import { API_ORIGIN } from '@/config/env'
+import { apiOrigin } from '@/config/env'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, font, radius, spacing } from '@/theme'
@@ -53,7 +53,7 @@ export default function InviteScreen() {
     }
   }
 
-  const link = current ? `${API_ORIGIN}/invite/${current.code}` : null
+  const link = current ? `${apiOrigin()}/invite/${current.code}` : null
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }}>

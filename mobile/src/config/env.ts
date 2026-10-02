@@ -22,6 +22,8 @@ const PRIVATE_IPV4 = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.
 
 function normalizeBaseUrl(raw: string | undefined): string {
   const value = (raw ?? '').trim().replace(/\/+$/, '')
+  // APK DEV : le build peut ne pas fixer de serveur (pré-prod non renseignée) ; il se choisit dans l'app.
+  if (!value && APP_ENV === 'preview') return ''
   let parsed: URL
   try {
     parsed = new URL(value)
@@ -40,14 +42,46 @@ function normalizeBaseUrl(raw: string | undefined): string {
   return `${parsed.protocol}//${parsed.host}`
 }
 
-/** Origine du serveur, ex. https://forgechat.heiphaistos.org */
-export const API_ORIGIN = normalizeBaseUrl(extra.apiUrl ?? 'https://forgechat.heiphaistos.org')
+/** Serveur fixé à la compilation (prod pour la bêta, pré-prod — éventuellement vide — pour l'APK DEV). */
+export const BUILD_API_ORIGIN = normalizeBaseUrl(extra.apiUrl ?? 'https://forgechat.heiphaistos.org')
+
+// Choix de serveur (écran « Serveur » des Infos dev) : code retiré du bundle de production.
+const serverChoice =
+  process.env.EXPO_PUBLIC_APP_ENV === 'production'
+    ? null
+    : // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('@/features/devtools/serverChoice') as typeof import('@/features/devtools/serverChoice'))
+
+let origin = BUILD_API_ORIGIN
+
+/** Origine du serveur, ex. https://forgechat.heiphaistos.org (vide : APK DEV sans serveur choisi). */
+export const apiOrigin = () => origin
 /** Préfixe REST */
-export const API_BASE = `${API_ORIGIN}/api`
+export const apiBase = () => `${origin}/api`
 /** Endpoint WebSocket (wss:// en production) */
-export const WS_URL = `${API_ORIGIN.replace(/^http/, 'ws')}/ws`
+export const wsUrl = () => `${origin.replace(/^http/, 'ws')}/ws`
 /** Host utilisé pour valider les liens entrants (universal links) */
-export const API_HOST = new URL(API_ORIGIN).host
+export const apiHost = () => (origin ? new URL(origin).host : '')
+
+/** Au démarrage, avant toute requête : applique le serveur choisi dans l'APK DEV (rien en production). */
+export async function loadServerChoice(): Promise<void> {
+  const stored = await serverChoice?.storedOrigin(APP_ENV)
+  if (stored) setApiOrigin(stored)
+}
+
+const originListeners = new Set<() => void>()
+/** Abonnement aux changements de serveur (pour useSyncExternalStore). */
+export function subscribeApiOrigin(fn: () => void): () => void {
+  originListeners.add(fn)
+  return () => originListeners.delete(fn)
+}
+
+/** Change de serveur (APK DEV uniquement, après déconnexion complète : voir ServerPicker.tsx). */
+export function setApiOrigin(next: string): void {
+  if (process.env.EXPO_PUBLIC_APP_ENV === 'production') throw new Error('[config] serveur fixe en production')
+  origin = next
+  originListeners.forEach((fn) => fn())
+}
 
 export const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0'
 

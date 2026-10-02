@@ -1,13 +1,20 @@
 import { Link } from 'expo-router'
-import { useRef, useState } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
-import { API_HOST } from '@/config/env'
+import { apiHost, subscribeApiOrigin } from '@/config/env'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import { colors, radius, spacing } from '@/theme'
+
+// APK DEV : choix du serveur avant connexion. Retiré du bundle de production (condition constante).
+const DevServerLink =
+  process.env.EXPO_PUBLIC_APP_ENV === 'production'
+    ? null
+    : // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('@/features/devtools/ServerPicker') as typeof import('@/features/devtools/ServerPicker')).DevServerLink
 
 export default function LoginScreen() {
   const login = useAuth((s) => s.login)
@@ -20,6 +27,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const passwordRef = useRef<TextInput>(null)
+  const host = useSyncExternalStore(subscribeApiOrigin, apiHost)
 
   const submit = async () => {
     if (!email.trim() || !password) {
@@ -62,9 +70,10 @@ export default function LoginScreen() {
             {needTotp ? 'Vérification en deux étapes' : 'Content de te revoir !'}
           </T>
           <T variant="muted" style={{ textAlign: 'center', marginBottom: spacing.xl }}>
-            {needTotp ? 'Saisis le code de ton application d’authentification (ou un code de secours).' : `Connexion à ${API_HOST}`}
+            {needTotp ? 'Saisis le code de ton application d’authentification (ou un code de secours).' : `Connexion à ${host || '— aucun serveur choisi'}`}
           </T>
 
+          {DevServerLink ? <DevServerLink host={host} /> : null}
           {notice ? <T style={styles.notice}>{notice}</T> : null}
 
           <View style={{ gap: spacing.lg }}>

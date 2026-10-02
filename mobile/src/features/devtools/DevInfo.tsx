@@ -3,13 +3,16 @@ import { useState } from 'react'
 import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button, Row } from '@/components/ui'
-import { API_ORIGIN, APP_ENV, APP_VERSION, WS_URL } from '@/config/env'
+import { APP_ENV, APP_VERSION, apiHost, apiOrigin, wsUrl } from '@/config/env'
 import { clearLogs, recentLogs, redact } from '@/lib/logger'
 import { useConnection } from '@/lib/realtime'
 import { colors, font, radius, spacing } from '@/theme'
+import { ServerModal } from './ServerPicker'
+import { serverChoiceEnabled } from './serverChoice'
 
 /**
- * Panneau « Infos dev » (dev-apk, lan, development) : version, environnement, serveur, et export
+ * Panneau « Infos dev » (dev-apk, lan, development) : version, environnement, serveur (et son
+ * changement, voir ServerPicker.tsx), export
  * des journaux récents, secrets masqués. Jamais compilé dans le client-apk : importé uniquement
  * sous la condition constante EXPO_PUBLIC_APP_ENV !== 'production' (voir (tabs)/you.tsx).
  */
@@ -17,7 +20,7 @@ export function DevInfoRow() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Row icon="construct-outline" title="Infos dev" subtitle={`${APP_ENV} · ${new URL(API_ORIGIN).host}`} onPress={() => setOpen(true)} chevron />
+      <Row icon="construct-outline" title="Infos dev" subtitle={`${APP_ENV} · ${apiHost() || 'aucun serveur'}`} onPress={() => setOpen(true)} chevron />
       {open ? <DevInfoModal onClose={() => setOpen(false)} /> : null}
     </>
   )
@@ -28,8 +31,8 @@ export function devInfoLines(): [string, string][] {
     ['Version', `${APP_VERSION} (build ${Application.nativeBuildVersion ?? '?'})`],
     ['Application', Application.applicationId ?? '?'],
     ['Environnement', APP_ENV],
-    ['Serveur', API_ORIGIN],
-    ['Temps réel', WS_URL],
+    ['Serveur', apiOrigin() || '(aucun)'],
+    ['Temps réel', apiOrigin() ? wsUrl() : '—'],
     ['Système', `${Platform.OS} ${String(Platform.Version)}`],
   ]
 }
@@ -38,6 +41,7 @@ function DevInfoModal({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets()
   const ws = useConnection((s) => s.status)
   const [count, setCount] = useState(recentLogs().length)
+  const [serverOpen, setServerOpen] = useState(false)
   const lines = devInfoLines()
 
   const exportLogs = async () => {
@@ -73,6 +77,9 @@ function DevInfoModal({ onClose }: { onClose: () => void }) {
             {count} ligne{count > 1 ? 's' : ''} de journal en mémoire. Jetons, mots de passe et tickets sont masqués avant
             l’export ; relis quand même le texte avant de l’envoyer.
           </Text>
+          {serverChoiceEnabled(APP_ENV) ? (
+            <Button title="Changer de serveur" icon="server-outline" variant="secondary" onPress={() => setServerOpen(true)} />
+          ) : null}
           <Button title="Exporter les journaux" icon="share-outline" onPress={() => void exportLogs()} />
           <Button
             title="Effacer les journaux"
@@ -83,6 +90,7 @@ function DevInfoModal({ onClose }: { onClose: () => void }) {
             }}
           />
         </ScrollView>
+        {serverOpen ? <ServerModal onClose={() => setServerOpen(false)} /> : null}
       </View>
     </Modal>
   )

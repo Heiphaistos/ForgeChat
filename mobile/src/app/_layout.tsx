@@ -7,6 +7,7 @@ import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, IncomingCallOverlay, LockOverlay, ScreenShareBanner } from '@/components/Overlays'
+import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
@@ -46,7 +47,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (!hydrated) return
     if (useSettings.getState().appLock) useLock.getState().lockNow()
-    void useAuth.getState().bootstrap()
+    // Serveur choisi dans l'APK DEV d'abord (no-op en production), puis la session.
+    void loadServerChoice().finally(() => void useAuth.getState().bootstrap())
   }, [hydrated])
 
   useEffect(() => {

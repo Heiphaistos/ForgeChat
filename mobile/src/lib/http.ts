@@ -1,5 +1,5 @@
 import type { ZodType } from 'zod'
-import { API_BASE, APP_VERSION } from '@/config/env'
+import { APP_VERSION, apiBase } from '@/config/env'
 import { logger } from './logger'
 import { tokens } from './tokens'
 import { xhrFetch } from './xhrFetch'
@@ -66,7 +66,7 @@ type Query = Record<string, string | number | boolean | null | undefined>
 
 function buildUrl(p: string, query?: Query): string {
   if (!p.startsWith('/')) throw new Error('Le chemin doit commencer par /')
-  let url = API_BASE + p
+  let url = apiBase() + p
   if (query) {
     const qs = Object.entries(query)
       .filter(([, v]) => v !== undefined && v !== null)

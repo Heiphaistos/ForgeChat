@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { ScrollView } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Button, T, TextField } from '@/components/ui'
-import { API_HOST } from '@/config/env'
+import { apiHost } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { extractInviteCode } from '@/lib/validation'
@@ -37,7 +37,7 @@ export default function JoinServerScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <T variant="muted">Colle un code d’invitation ou un lien du type https://{API_HOST}/invite/abc123</T>
+      <T variant="muted">Colle un code d’invitation ou un lien du type https://{apiHost()}/invite/abc123</T>
       <TextField label="Invitation" value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} autoFocus error={error} onSubmitEditing={submit} />
       <Button title="Rejoindre" onPress={submit} loading={loading} />
     </ScrollView>

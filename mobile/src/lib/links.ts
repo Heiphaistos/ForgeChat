@@ -1,6 +1,6 @@
 import { Alert } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
-import { API_HOST, API_ORIGIN } from '@/config/env'
+import { apiHost, apiOrigin } from '@/config/env'
 import { useSettings } from '@/stores/settings'
 
 /**
@@ -24,7 +24,7 @@ export function parseSafeUrl(raw: string): URL | null {
 /** Résout une URL de média renvoyée par le serveur (souvent relative : /uploads/…). */
 export function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  if (url.startsWith('/uploads/') && !url.includes('..')) return API_ORIGIN + url
+  if (url.startsWith('/uploads/') && !url.includes('..')) return apiOrigin() + url
   const u = parseSafeUrl(url)
   if (!u) return null
   // En production, on n'affiche que du HTTPS.
@@ -33,7 +33,7 @@ export function resolveMediaUrl(url: string | null | undefined): string | null {
 }
 
 export function isOwnHost(u: URL) {
-  return u.host === API_HOST
+  return u.host === apiHost()
 }
 
 export async function openExternalUrl(raw: string): Promise<void> {
