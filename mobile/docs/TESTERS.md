@@ -31,12 +31,14 @@ préviens l'équipe : l'APK ne vient pas de nous.
 La page de release publie deux empreintes :
 
 - **SHA-256 du fichier** :
-  - Linux / macOS : `sha256sum ForgeChat-x.y.z.apk` (ou `shasum -a 256`) ;
-  - Windows (PowerShell) : `Get-FileHash ForgeChat-x.y.z.apk -Algorithm SHA256`.
+  - Linux / macOS : `sha256sum ForgeChat-x.y.z-beta.apk` (ou `shasum -a 256`) ;
+  - Windows (PowerShell) : `Get-FileHash ForgeChat-x.y.z-beta.apk -Algorithm SHA256`.
+  Le fichier `SHA256SUMS.txt` de la release donne la valeur attendue.
   Le résultat doit être **identique** à celui publié.
 - **Empreinte du certificat de signature** : toujours la même d'une version à l'autre. Avec les outils
-  Android : `apksigner verify --print-certs ForgeChat-x.y.z.apk`. Si elle change sans annonce de
-  l'équipe, n'installe pas.
+  Android : `apksigner verify --print-certs ForgeChat-x.y.z-beta.apk`. Elle doit valoir (SHA-256) :
+  `5E:A3:DB:62:2C:07:AA:69:54:D8:D9:2F:80:32:6E:24:60:A9:80:9C:94:80:5D:77:06:C0:0D:EC:E3:69:3C:BD`.
+  Si elle change sans annonce de l'équipe, n'installe pas.
 
 ## Signaler un bug
 

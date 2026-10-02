@@ -7,7 +7,7 @@ dans le dépôt : les secrets vont dans le `.env` du VPS, les secrets Forgejo ou
 
 | Fichier | Où | Quoi mettre |
 |---|---|---|
-| `mobile/eas.json` | `build.preview.env.FORGECHAT_API_URL` | URL **HTTPS** de la pré-prod (`https://<domaine-preprod>`). Tant qu'elle vaut `https://preprod.REMPLACER.invalid`, le build du dev-apk échoue volontairement. |
+| `mobile/eas.json` | `build.preview.env.FORGECHAT_API_URL` | Facultatif : URL **HTTPS** de la pré-prod (`https://<domaine-preprod>`), préréglage « Pré-prod » de l'APK DEV. Vide par défaut : le serveur se choisit dans l'app (écran « Serveur »). La bêta (`build.production`) garde l'URL de prod (MAINTAINER.md §3). |
 | `.env` du VPS (prod) | toutes les variables | `POSTGRES_PASSWORD`, `JWT_SECRET` (aléatoire, ≥ 32 octets ; le changer invalide sessions **et** URL signées des pièces jointes), `FRONTEND_URL`, `PUSH_ENABLED=true`, `EXPO_ACCESS_TOKEN` (expo.dev → Access tokens), `TURN_URL` / `TURN_USERNAME` / `TURN_PASSWORD`, et **`TRUSTED_PROXIES`** (voir ci-dessous). |
 | `.env` du VPS (prod) | `TRUSTED_PROXIES` | Passerelle du réseau Docker du serveur, **pas seulement `127.0.0.1`** : nginx (sur l'hôte) joint le conteneur via `127.0.0.1:3013`, que le conteneur voit arriver depuis la passerelle. `docker network inspect <projet>_default --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}'` → `TRUSTED_PROXIES=127.0.0.1,::1,<passerelle>`. À ajouter aussi dans l'`environment` du service `server` de `docker-compose.yml`. |
 | `nginx.conf` | `location /invites/` et `location ^~ /uploads/` | `proxy_set_header X-Real-IP $remote_addr;` et `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` (sinon un client choisit l'IP comptée par les limites de connexion via `/invites/auth/login`). Idéalement, limiter `/invites/` aux seules routes d'invitation. |
@@ -19,7 +19,7 @@ dans le dépôt : les secrets vont dans le `.env` du VPS, les secrets Forgejo ou
 | Workflow `deploy-preprod.yml` | `.forgejo/workflows/` (à créer à la main, contenu ci-dessous) | Déclenché **uniquement** par un push sur la branche `preprod`. |
 | Firebase / FCM | console Firebase + `npx eas-cli credentials` | Projet Firebase, apps Android `org.heiphaistos.forgechat` et `org.heiphaistos.forgechat.dev`, compte de service FCM v1 téléversé dans EAS (Push Notifications). `EAS_PROJECT_ID` dans l'environnement des builds EAS. |
 | coturn | serveur TURN | Identifiants utilisés par `TURN_*` ; ports UDP/TCP ouverts. Sans TURN, les appels échouent derrière certains NAT (4G). |
-| `mobile/deploy/well-known/assetlinks.json` | `sha256_cert_fingerprints` | Empreinte SHA-256 du certificat de signature du **client-apk** (EAS → credentials, ou `apksigner verify --print-certs`), servie en `https://<domaine>/.well-known/assetlinks.json` (`mobile/deploy/nginx-well-known.conf`). Si Play App Signing utilise une autre clé que l'upload, mettre les deux empreintes. |
+| `mobile/deploy/well-known/assetlinks.json` | `sha256_cert_fingerprints` | Empreinte SHA-256 du certificat de la **clé de release** (MAINTAINER.md §4, ou `apksigner verify --print-certs`), servie en `https://<domaine>/.well-known/assetlinks.json` (`mobile/deploy/nginx-well-known.conf`). Si Play App Signing utilise une autre clé que l'upload, mettre les deux empreintes. |
 | Base de données | avant chaque déploiement contenant des migrations | Sauvegarde : `docker compose exec postgres pg_dump -U forgechat -Fc forgechat > forgechat-$(date +%F).dump`. Les migrations s'appliquent seules au démarrage du serveur. |
 | Prod, après déploiement de `security-fixes` | `scripts/audit-roles.sql` (lecture seule) | `docker compose exec -T postgres psql -U forgechat -d forgechat < scripts/audit-roles.sql` puis corriger rôle par rôle. |
 | App desktop (Tauri) | nouvelle version | Le desktop embarque `client/dist` au moment du build : republier une version pour qu'il bénéficie des correctifs web. |
@@ -73,4 +73,5 @@ jobs:
 1. Pré-prod d'abord (branche `preprod`), avec sauvegarde de la base avant les migrations.
 2. Tests sur la pré-prod avec le dev-apk (et l'accord du mainteneur pour les e2e).
 3. Prod (branche `main`), sauvegarde avant, `audit-roles.sql` après.
-4. Builds EAS : dev-apk puis client-apk, audit des APK, publication (docs/RELEASE.md).
+4. Builds (EAS ou local) : APK DEV puis bêta, vérification `scripts/release-apk.sh`, publication
+   (docs/MAINTAINER.md §3 et §6).

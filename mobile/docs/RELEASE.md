@@ -1,22 +1,28 @@
 # Publication de l'app mobile
 
+Procédure pas à pas (serveur, clé, build, vérification, distribution) : **`docs/MAINTAINER.md`**.
+
 ## Les quatre versions
 
 | Version | `APP_ENV` / profil EAS | Package | Nom | Serveur | Pour qui |
 |---|---|---|---|---|---|
 | development | `development` | `org.heiphaistos.forgechat.development` | ForgeChat (development) | local (Metro, émulateur) | développeurs |
 | lan | `lan` (build local, pas EAS) | `org.heiphaistos.forgechat.lan` | ForgeChat (LAN) | PC du réseau local, HTTP vers cette IP seulement | téléphone du développeur, **jamais distribuée** |
-| dev-apk | `preview` | `org.heiphaistos.forgechat.dev` | ForgeChat Dev | **pré-prod** en HTTPS | les deux développeurs uniquement |
-| client-apk | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **prod** `https://forgechat.heiphaistos.org` | bêta publique, puis Play Store |
+| APK DEV (dev-apk) | `preview` | `org.heiphaistos.forgechat.dev` | ForgeChat Dev | **choisi dans l'app** (écran « Serveur » : pré-prod, serveur local, adresse libre) | les deux développeurs uniquement |
+| bêta (client-apk) | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **prod** `https://forgechat.heiphaistos.org` | bêta publique, puis Play Store |
 
 - Icônes : variante orange « DEV » pour development, lan et dev-apk ; icône officielle pour le
   client-apk (`scripts/generate-icons.mjs`).
 - Version lisible commune (`version` dans `app.config.ts`) ; `versionCode` incrémenté par EAS
   (`appVersionSource: remote`, `autoIncrement`).
-- dev-apk : panneau « Infos dev » (version, environnement, serveur, export des journaux masqués).
+- APK DEV : panneau « Infos dev » (version, environnement, serveur, export des journaux masqués) et
+  écran « Serveur » : HTTPS vers tout hôte, HTTP seulement vers une IPv4 privée, 127.0.0.1 ou 10.0.2.2
+  (contrôle dans l'app, `src/config/serverUrl.ts`) ; trafic en clair permis au niveau Android dans ce
+  profil seulement ; changer de serveur déconnecte complètement. Préréglage pré-prod facultatif.
 - client-apk : **aucune** fonction de dev. Pas de panneau d'infos, pas de choix de serveur, pas de
   journaux de débogage (`__DEV__` faux, tampon de journaux compilé hors production seulement), pas
-  de trafic en clair, pas d'`expo-dev-client` (exclu de l'autolinking par `scripts/eas-build-pre-install.js`),
+  de trafic en clair, pas d'`expo-dev-client` (exclu de l'autolinking par `scripts/eas-build-pre-install.js`,
+  et son schéma `exp+forgechat` retiré du manifeste par `plugins/withoutDevClientScheme.js`),
   pas d'OTA (`expo-updates` absent), non débogable, R8 actif. Vérifié par
   `__tests__/production-profile.test.ts` ; le code du panneau est retiré du bundle à la compilation
   (`EXPO_PUBLIC_APP_ENV`, vérifié en cherchant ses textes dans le bundle Hermes exporté).
@@ -27,30 +33,33 @@
 
 ```bash
 cd mobile
-npx eas-cli@latest build -p android --profile preview      # dev-apk (échoue tant que l'URL pré-prod vaut REMPLACER)
-npx eas-cli@latest build -p android --profile production   # client-apk (APK bêta)
+npx eas-cli@latest build -p android --profile preview      # APK DEV
+npx eas-cli@latest build -p android --profile production   # bêta (APK)
 npx eas-cli@latest build -p android --profile store        # AAB pour le Play Store (plus tard)
 ```
 
-L'URL de la pré-prod se renseigne dans `eas.json` (`build.preview.env.FORGECHAT_API_URL`) : voir
-`docs/DEPLOY.md`.
+Build local (sans EAS), signé avec la clé de release hors dépôt : `scripts/build-apk-local.sh preview|production`,
+puis vérification et empreintes : `scripts/release-apk.sh <apk>` (voir MAINTAINER.md §3).
+
+L'URL de la pré-prod (préréglage de l'APK DEV, facultatif) se renseigne dans `eas.json`
+(`build.preview.env.FORGECHAT_API_URL`, vide par défaut) : voir `docs/DEPLOY.md`.
 
 ## Signature
 
 - **Jamais de clé debug pour un APK distribué.** Seul l'APK lan (jamais distribué) est signé avec la
   clé debug.
-- Les clés du dev-apk et du client-apk sont **gérées par EAS** (une par package).
-- **Continuité client-apk → Play Store** : un APK bêta installé ne peut être mis à jour par la version
-  Play Store que si les deux sont signés par la **même clé**. La clé de production EAS doit donc devenir
+- APK DEV et bêta sont signés avec **la clé de release** (keystore PKCS12, alias `forgechat-release`,
+  gardé hors dépôt) : en local via `plugins/withReleaseSigning.js` (sans la clé, l'APK sort non signé) ;
+  sur EAS, la **même clé importée** (`eas credentials`). Empreintes et conservation : MAINTAINER.md §4.
+- **Continuité bêta → Play Store** : un APK bêta installé ne peut être mis à jour par la version
+  Play Store que si les deux sont signés par la **même clé**. La clé de release doit donc devenir
   la **clé de signature de l'application** dans Play App Signing : à la création de l'app dans la Play
-  Console, choisir « Utiliser ma propre clé » (exporter la clé EAS avec l'outil PEPK de Google). Sans
+  Console, choisir « Utiliser ma propre clé » (exporter la clé avec l'outil PEPK de Google). Sans
   ça, Google signerait avec une autre clé et les testeurs devraient désinstaller la bêta (perte des données
   locales de l'app).
-- **Sauvegarde de la clé de production** (à faire dès le premier build) :
-  1. `npx eas-cli@latest credentials -p android` → profil production → *Keystore* → *Download* ;
-  2. ranger le fichier `.jks` **et** ses mots de passe dans le gestionnaire de mots de passe ;
-  3. deux copies, sur deux supports différents. Perdre cette clé = ne plus jamais pouvoir mettre à jour
-     l'app pour les utilisateurs existants.
+- **Sauvegarde de la clé de release** : deux copies chiffrées sur deux supports + gestionnaire de mots
+  de passe (MAINTAINER.md §4). Perdre cette clé = ne plus jamais pouvoir mettre à jour l'app pour les
+  utilisateurs existants.
 - Empreinte du certificat de signature d'un APK (à publier avec chaque release) :
 
   ```bash
