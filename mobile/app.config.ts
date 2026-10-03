@@ -1,5 +1,6 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config'
 
+import { googleServicesFile } from './plugins/googleServices.js'
 import withLanCleartext from './plugins/withLanCleartext.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
@@ -33,6 +34,8 @@ if (!['development', 'lan', 'preview', 'production'].includes(APP_ENV)) {
 const API_URL =
   process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' || APP_ENV === 'preview' ? '' : 'https://forgechat.heiphaistos.org')
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
+// Push Android (FCM) : google-services.json hors dépôt (plugins/googleServices.js).
+const GOOGLE_SERVICES_JSON = googleServicesFile(APP_ENV, process.env.GOOGLE_SERVICES_JSON)
 // Identifiant FINAL de l'app publique (Play Store) : jamais configurable.
 const BUNDLE_ID = 'org.heiphaistos.forgechat'
 const PACKAGES: Record<AppEnv, string> = {
@@ -124,6 +127,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: PACKAGES[APP_ENV],
+    ...(GOOGLE_SERVICES_JSON ? { googleServicesFile: GOOGLE_SERVICES_JSON } : {}),
     adaptiveIcon: {
       backgroundColor: '#1e1f22',
       foregroundImage: `${ASSETS}/android-icon-foreground.png`,

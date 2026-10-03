@@ -15,7 +15,7 @@ type Cfg = Record<string, any> // eslint-disable-line @typescript-eslint/no-expl
 /** Évalue app.config.ts avec l'environnement d'un profil EAS. */
 function configFor(env: Record<string, string | undefined>): Cfg {
   const saved = { ...process.env }
-  for (const k of ['APP_ENV', 'EXPO_PUBLIC_APP_ENV', 'FORGECHAT_API_URL', 'EAS_PROJECT_ID']) delete process.env[k]
+  for (const k of ['APP_ENV', 'EXPO_PUBLIC_APP_ENV', 'FORGECHAT_API_URL', 'EAS_PROJECT_ID', 'GOOGLE_SERVICES_JSON']) delete process.env[k]
   Object.assign(process.env, env)
   try {
     let out: Cfg = {}
@@ -165,3 +165,23 @@ describe('APK DEV (profil EAS preview)', () => {
     expect(() => configFor({ ...profile.env, EXPO_PUBLIC_APP_ENV: 'production' })).toThrow(/EXPO_PUBLIC_APP_ENV/)
   })
 })
+
+describe('push Android (FCM)', () => {
+  const profile = eas.build.production
+  const { mkdtempSync, writeFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs')
+  const { tmpdir } = jest.requireActual<typeof import('node:os')>('node:os')
+
+  it('google-services.json hors dépôt, passé par GOOGLE_SERVICES_JSON', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'fc-')), 'google-services.json')
+    writeFileSync(file, '{}')
+    expect(configFor({ ...profile.env, GOOGLE_SERVICES_JSON: file }).android.googleServicesFile).toBe(file)
+    expect(configFor(profile.env).android.googleServicesFile).toBeUndefined()
+    expect(() => configFor({ ...profile.env, GOOGLE_SERVICES_JSON: '/nulle-part/google-services.json' })).toThrow(/introuvable/)
+  })
+
+  it('jamais de google-services.json versionné', () => {
+    const gitignore = readFileSync(join(root, '.gitignore'), 'utf8')
+    expect(gitignore).toMatch(/google-services\*\.json/)
+  })
+})
+

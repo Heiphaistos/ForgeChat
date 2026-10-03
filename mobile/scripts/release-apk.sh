@@ -39,6 +39,8 @@ CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
 MANIFEST=$("$AAPT2" dump xmltree --file AndroidManifest.xml "$APK")
 echo "$MANIFEST" | grep -q 'debuggable.*=true' && fail "APK débogable"
 CLEARTEXT=$(echo "$MANIFEST" | grep -q 'usesCleartextTraffic.*=true' && echo oui || echo non)
+# Push Android : la config Firebase (google-services.json) génère la ressource google_app_id.
+FCM=$("$AAPT2" dump resources "$APK" 2>/dev/null | grep -q "string/google_app_id" && echo configuré || echo "ABSENT (pas de notifications push)")
 
 # 3. Contrôles propres à la bêta publique
 if [ "$PACKAGE" = "$BETA_PACKAGE" ]; then
@@ -76,6 +78,7 @@ rm -f "$SUMS.tmp"
 echo "OK $NAME"
 echo "  package      $PACKAGE $VERSION (versionCode $CODE)"
 echo "  clair (OS)   $CLEARTEXT"
+echo "  push (FCM)   $FCM"
 echo "  SHA-256      $FILE_SHA256"
 echo "  certificat   SHA-256 $CERT_SHA256"
 echo "               SHA-1   $CERT_SHA1"
