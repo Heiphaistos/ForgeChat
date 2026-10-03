@@ -13,8 +13,9 @@ Merci de tester ForgeChat ! Cette bêta est l'application **ForgeChat** (icône 
 
 ## Installer
 
-1. Télécharge l'APK depuis la page de release indiquée par l'équipe (GitHub, ou le miroir
-   SwissTransfer). N'installe **jamais** un APK ForgeChat venant d'ailleurs.
+1. Télécharge l'APK depuis la page **Releases** GitHub indiquée par l'équipe (seule source officielle ;
+   pas de Play Store pour l'instant). N'installe **jamais** un APK ForgeChat venant d'ailleurs.
+   Guide pas à pas : `docs/INSTALLER.md`.
 2. **Vérifie le fichier** avant de l'ouvrir (voir plus bas).
 3. Ouvre le fichier APK. Android demande d'**autoriser l'installation d'applications inconnues** pour
    l'application qui l'ouvre (navigateur ou gestionnaire de fichiers) : autorise-la, installe, puis

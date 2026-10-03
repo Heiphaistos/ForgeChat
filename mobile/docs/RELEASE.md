@@ -51,7 +51,8 @@ L'URL de la pré-prod (préréglage de l'APK DEV, facultatif) se renseigne dans 
 - APK DEV et bêta sont signés avec **la clé de release** (keystore PKCS12, alias `forgechat-release`,
   gardé hors dépôt) : en local via `plugins/withReleaseSigning.js` (sans la clé, l'APK sort non signé) ;
   sur EAS, la **même clé importée** (`eas credentials`). Empreintes et conservation : MAINTAINER.md §4.
-- **Continuité bêta → Play Store** : un APK bêta installé ne peut être mis à jour par la version
+- **Continuité bêta → Play Store (plus tard)** : la bêta est distribuée uniquement par GitHub pour
+  l'instant. Le jour où l'app ira sur le Play Store : un APK bêta installé ne peut être mis à jour par la version
   Play Store que si les deux sont signés par la **même clé**. La clé de release doit donc devenir
   la **clé de signature de l'application** dans Play App Signing : à la création de l'app dans la Play
   Console, choisir « Utiliser ma propre clé » (exporter la clé avec l'outil PEPK de Google). Sans
@@ -68,15 +69,17 @@ L'URL de la pré-prod (préréglage de l'APK DEV, facultatif) se renseigne dans 
 
 ## Publier une bêta (client-apk)
 
-1. Build EAS `production`, télécharger l'APK.
-2. Vérifier : package `org.heiphaistos.forgechat`, non débogable, pas de cleartext, empreinte du
-   certificat = celle déjà publiée (même clé qu'avant).
-3. Calculer le SHA-256 du fichier (`sha256sum`).
-4. Release GitHub (dépôt « releases seulement », compte pseudonyme avec e-mail noreply) : APK, empreinte
-   du certificat, SHA-256, notes de version ; miroir SwissTransfer.
-5. **Ne jamais distribuer** les versions development, lan ni le dev-apk.
+Distribution **uniquement** par les releases d'un dépôt GitHub public (détail : MAINTAINER.md §6).
 
-## Google Play : déclarations obligatoires
+1. `scripts/release-beta.sh --server https://… --repo <propriétaire>/<dépôt>` : build signé,
+   vérification (`release-apk.sh` : package `org.heiphaistos.forgechat`, non débogable, pas de
+   cleartext, empreinte du certificat), puis release GitHub en **brouillon** (APK, `SHA256SUMS.txt`,
+   empreintes, mode d'emploi).
+2. Relire le brouillon, compléter les nouveautés, **publier à la main**.
+3. Guide utilisateurs : `docs/INSTALLER.md`.
+4. **Ne jamais distribuer** les versions development, lan ni le dev-apk.
+
+## Google Play : déclarations obligatoires (plus tard)
 
 ### Service au premier plan « media projection » (partage d'écran)
 

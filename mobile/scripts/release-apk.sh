@@ -39,13 +39,20 @@ CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
 MANIFEST=$("$AAPT2" dump xmltree --file AndroidManifest.xml "$APK")
 echo "$MANIFEST" | grep -q 'debuggable.*=true' && fail "APK débogable"
 CLEARTEXT=$(echo "$MANIFEST" | grep -q 'usesCleartextTraffic.*=true' && echo oui || echo non)
-# Push Android : la config Firebase (google-services.json) génère la ressource google_app_id.
-FCM=$("$AAPT2" dump resources "$APK" 2>/dev/null | grep -q "string/google_app_id" && echo configuré || echo "ABSENT (pas de notifications push)")
-
-# Serveur fixé au build (config Expo embarquée) : affiché pour vérification.
-SERVER_URL=$(unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const c=JSON.parse(s);process.stdout.write(c.extra?.apiUrl||"")}catch{}})')
+# Config Expo embarquée (champ extra) : serveur, LiveKit, releases, projet EAS.
+extra() { unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=process.argv[1].split(".").reduce((o,k)=>o?.[k],JSON.parse(s).extra);process.stdout.write(typeof v==="string"?v:"")}catch{}})' "$1"; }
+SERVER_URL=$(extra apiUrl)
 SERVER_HOST=$(echo "$SERVER_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
-LIVEKIT_HOST=$(unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).extra?.livekitHost||"")}catch{}})')
+LIVEKIT_HOST=$(extra livekitHost)
+UPDATES_REPO=$(extra updatesRepo)
+# Push Android : config Firebase (ressource google_app_id) ET projet EAS (jeton push Expo).
+if ! "$AAPT2" dump resources "$APK" 2>/dev/null | grep -q "string/google_app_id"; then
+  FCM="ABSENT (pas de notifications push)"
+elif [ -z "$(extra eas.projectId)" ]; then
+  FCM="INCOMPLET (EAS_PROJECT_ID manquant : pas de notifications push)"
+else
+  FCM=configuré
+fi
 
 # 3. Contrôles propres à la bêta publique
 if [ "$PACKAGE" = "$BETA_PACKAGE" ]; then
@@ -89,6 +96,7 @@ echo "  package      $PACKAGE $VERSION (versionCode $CODE)"
 echo "  clair (OS)   $CLEARTEXT"
 echo "  push (FCM)   $FCM"
 echo "  serveur      ${SERVER_URL:-(choisi dans l’app)}${LIVEKIT_HOST:+ ; LiveKit $LIVEKIT_HOST}"
+[ "$PACKAGE" = "$BETA_PACKAGE" ] && echo "  mises à jour ${UPDATES_REPO:+github.com/}${UPDATES_REPO:-pas de vérification}"
 echo "  SHA-256      $FILE_SHA256"
 echo "  certificat   SHA-256 $CERT_SHA256"
 echo "               SHA-1   $CERT_SHA1"

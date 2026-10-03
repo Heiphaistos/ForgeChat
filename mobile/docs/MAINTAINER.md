@@ -15,7 +15,7 @@ Commandes à lancer depuis la racine du dépôt, sauf mention contraire. `mobile
 | development | `development` | `org.heiphaistos.forgechat.development` | ForgeChat (development) | local (Metro + émulateur) | développeurs |
 | lan | `lan` (build local) | `org.heiphaistos.forgechat.lan` | ForgeChat (LAN) | PC du réseau local, HTTP vers cette seule IP | téléphone d'un développeur, **jamais distribuée** |
 | **APK DEV** | `preview` | `org.heiphaistos.forgechat.dev` | ForgeChat Dev | **choisi dans l'app** (écran « Serveur ») | les deux développeurs uniquement |
-| **bêta** | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **fixé à la compilation** (prod) | testeurs, puis Play Store |
+| **bêta** | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **fixé à la compilation** (prod) | testeurs (releases GitHub ; Play Store plus tard) |
 
 - Icône orange « DEV » pour development, lan et APK DEV ; icône officielle pour la bêta.
 - Les packages sont différents : les quatre variantes s'installent côte à côte sur un téléphone.
@@ -161,8 +161,9 @@ certificat = empreinte du §4 (sinon échec). Un APK construit avec un domaine `
   Restaurer : `age -d cle-release-vN.tar.gz.age | tar -C ~/.config/forgechat-dev -xzf -`, puis droits
   700 / 600 et vérification de l'empreinte comme ci-dessus. Tester la restauration une fois par an.
 - **EAS** : l'importer (§3a) au lieu de laisser EAS générer une clé.
-- **Play Store** : à la création de l'app, *Play App Signing* → « Utiliser ma propre clé » → exporter
-  cette clé avec l'outil PEPK de Google. Ainsi la version Play Store met à jour la bêta installée.
+- **Play Store (plus tard, pas prévu pour l'instant)** : à la création de l'app, *Play App Signing* →
+  « Utiliser ma propre clé » → exporter cette clé avec l'outil PEPK de Google. Ainsi la version Play
+  Store pourra mettre à jour la bêta installée depuis GitHub.
   Mettre la même empreinte dans `mobile/deploy/well-known/assetlinks.json`.
 
 ## 4 bis. Notifications push Android (Firebase + EAS)
@@ -231,30 +232,42 @@ Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
    (ou avec EAS : renseigner `build.preview.env.FORGECHAT_API_URL` dans `eas.json`, puis
    `npx eas-cli@latest build -p android --profile preview`).
 
-## 6. Distribuer une bêta
+## 6. Distribuer une bêta (GitHub uniquement)
 
-1. **Numéro de version** : `version` dans `mobile/app.config.ts` (ex. `1.0.1`). Le `versionCode`
-   doit augmenter à chaque APK (EAS : automatique ; local : `android.versionCode` dans `app.config.ts`).
-2. **Build** : §3a ou §3b.
-3. **Vérification + empreintes** : `scripts/release-apk.sh` (§3c) → met à jour `SHA256SUMS.txt`
-   (SHA-256 du fichier + empreinte du certificat). Attendu : `OK`.
-4. **Release GitHub** : dépôt « releases seulement », compte **pseudonyme** avec e-mail `noreply`
-   (jamais d'e-mail personnel) ; joindre l'APK et `SHA256SUMS.txt`, coller l'empreinte du certificat
-   dans le texte.
-5. **Miroir SwissTransfer** : même APK, même `SHA256SUMS.txt` ; lien dans la release.
-6. **Notes de version** : nouveautés, corrections, problèmes connus, rappel « messages non chiffrés
-   de bout en bout ».
-7. **Annonce** aux testeurs avec le lien de la release, l'empreinte du certificat, et le guide
-   `mobile/docs/TESTERS.md` (installation, vérification, signalement de bugs).
+La bêta est distribuée **seulement** par les releases d'un dépôt GitHub **public** (pas de Play Store
+pour l'instant, pas de miroir). L'app y vérifie elle-même les nouvelles versions (§7).
+
+1. **Numéro de version** : `const VERSION` dans `mobile/app.config.ts` (et `version` de
+   `package.json`), ex. `1.0.1`. Le `versionCode` Android en est déduit (1.0.1 → 10001) : il augmente
+   donc à chaque version, ce qu'Android exige pour installer la mise à jour.
+2. **Une commande** (build → vérification → brouillon de release) :
+   ```bash
+   cd mobile && scripts/release-beta.sh --server https://ton.domaine --repo <propriétaire>/<dépôt-public>
+   ```
+   Elle s'arrête avant le build si la release `v<version>` existe déjà. Résultat : APK et
+   `SHA256SUMS.txt` dans `~/forgechat-releases/<version>/`, et une release en **brouillon** sur GitHub
+   (APK, `SHA256SUMS.txt` limité à cet APK, empreintes et mode d'emploi dans le texte). Le script
+   refuse un APK d'exemple (`example.org`) et ne publie **jamais**.
+   Étapes séparées si besoin : `build-apk-local.sh production … --updates-repo <dépôt>`,
+   `release-apk.sh`, `github-release-draft.sh <dépôt> <APK>`.
+3. **Relire le brouillon** sur github.com (*Releases* → *Draft*) : compléter « Nouveautés », vérifier
+   l'empreinte, puis **Publish release** (à la main, jamais par script).
+4. **Annonce** aux testeurs : lien de la release et guide `mobile/docs/INSTALLER.md` (télécharger,
+   vérifier, installer, mettre à jour).
 
 Ne **jamais** distribuer l'APK DEV, lan ou development.
 
 ## 7. Mises à jour suivantes
 
 - Une nouvelle bêta s'installe **par-dessus** l'ancienne (données conservées) si : même package,
-  même clé (§4), `versionCode` supérieur.
-- Pas d'OTA pour l'instant. Une phase « Mises à jour » est prévue : mises à jour OTA **signées**
-  (expo-updates avec signature de code) et version minimale imposée par le serveur.
+  même clé (§4), `versionCode` supérieur (garanti par la version, §6).
+- **Dans l'app** : au démarrage (au plus une fois par jour), la bêta lit la dernière release **publiée**
+  du dépôt donné au build (`--repo` / `--updates-repo`) via l'API publique de GitHub (requête anonyme,
+  rien d'autre envoyé), et propose d'ouvrir sa page si la version est plus récente. Désactivable :
+  *Vous* → *Sécurité et confidentialité* → *Mises à jour*. Brouillons et pré-versions sont ignorés ;
+  rien n'est téléchargé ni installé automatiquement. Code : `src/features/updates/`.
+- Pas d'OTA pour l'instant (mises à jour du JavaScript sans nouvel APK) : prévu plus tard, signé
+  (expo-updates avec signature de code).
 
 ## 8. Dépannage
 
