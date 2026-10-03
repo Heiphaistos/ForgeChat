@@ -148,16 +148,18 @@ certificat = empreinte du §4 (sinon échec). Un APK construit avec un domaine `
   keytool -list -v -keystore ~/.config/forgechat-dev/release/forgechat-release.keystore -storepass:file ~/.config/forgechat-dev/release/keystore.password | grep SHA256
   ```
   Attendu : l'empreinte SHA-256 ci-dessus.
-- **Sauvegarde** : une archive chiffrée avec `age` (phrase de passe) contenant le keystore, son mot
-  de passe et les empreintes ; deux copies identiques sur deux supports différents (ex. clé USB
-  rangée chez soi + disque externe ou cloud personnel), la phrase de passe dans le gestionnaire de
-  mots de passe, **jamais** à côté des copies. Jamais dans git (le `.gitignore` refuse `*.keystore`,
-  `*.password`). Créer l'archive :
+- **Sauvegarde** : une archive compressée et chiffrée avec `age` (phrase de passe) contenant tout
+  `release/` (keystore, son mot de passe, empreintes). Une copie sur le PC
+  (`~/forgechat-releases/sauvegarde-cle/`) et une sur un autre support (clé USB) ; la phrase de passe
+  **uniquement** dans le gestionnaire de mots de passe — jamais dans un fichier, jamais à côté des
+  copies. Jamais dans git (le `.gitignore` refuse `*.keystore`, `*.password`). La personne qui
+  chiffre tape elle-même la phrase (age la demande deux fois) :
   ```bash
-  tar -C ~/.config/forgechat-dev -cf - release | age -p -o forgechat-cle-release.tar.age
+  cd ~/.config/forgechat-dev && tar czf - release | age -p -o ~/forgechat-releases/sauvegarde-cle/cle-release-vN.tar.gz.age
+  age -d ~/forgechat-releases/sauvegarde-cle/cle-release-vN.tar.gz.age | tar tzf -   # test : liste les 3 fichiers
   ```
-  Restaurer : `age -d -o cle.tar forgechat-cle-release.tar.age && tar -xf cle.tar && shred -u cle.tar`,
-  puis ranger `release/` comme ci-dessus. Tester la restauration une fois par an.
+  Restaurer : `age -d cle-release-vN.tar.gz.age | tar -C ~/.config/forgechat-dev -xzf -`, puis droits
+  700 / 600 et vérification de l'empreinte comme ci-dessus. Tester la restauration une fois par an.
 - **EAS** : l'importer (§3a) au lieu de laisser EAS générer une clé.
 - **Play Store** : à la création de l'app, *Play App Signing* → « Utiliser ma propre clé » → exporter
   cette clé avec l'outil PEPK de Google. Ainsi la version Play Store met à jour la bêta installée.
