@@ -12,7 +12,7 @@ export const usersApi = {
   get: (id: string) => http.get<User>(path`/users/${id}`),
   profile: (id: string) => http.get<User & Record<string, unknown>>(path`/users/${id}/profile`),
   updateMe: (patch: UpdateProfile) => http.patch<User>('/users/me', patch),
-  setStatus: (status: 'online' | 'away' | 'dnd' | 'invisible') => http.patch('/user/status', { status }),
+  setStatus: (status: 'online' | 'idle' | 'dnd' | 'invisible') => http.patch('/user/status', { status }),
   uploadAvatar: (file: { uri: string; name: string; type: string }) => {
     const fd = new FormData()
     // React Native accepte { uri, name, type } comme Blob-like.

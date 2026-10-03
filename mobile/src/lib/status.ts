@@ -2,9 +2,8 @@
  * Statuts de présence — mêmes couleurs et libellés que le client web (tailwind fc-green,
  * fc-yellow, fc-red, fc-muted ; UserPanel / UserProfileModal).
  *
- * Valeurs : le web écrit « idle » (PATCH /users/me) ; le mobile passe par PATCH /user/status,
- * qui n'accepte que « away » (et diffuse « invisible » comme hors ligne). Les deux s'affichent
- * « Absent ».
+ * Valeurs serveur : online | idle | dnd | invisible (PATCH /user/status refuse tout le reste ;
+ * « invisible » est diffusé comme hors ligne). « idle » (ou l'ancien « away ») s'affiche « Absent ».
  */
 
 export type StatusKey = 'online' | 'away' | 'dnd' | 'invisible' | 'offline'
@@ -35,6 +34,13 @@ export function normalizeStatus(raw: string | null | undefined): StatusKey {
   if (raw === 'idle' || raw === 'away') return 'away'
   if (raw === 'online' || raw === 'dnd' || raw === 'invisible') return raw
   return 'offline'
+}
+
+/** Valeur envoyée au serveur pour un statut choisi (« Absent » = idle, comme le web). */
+export function toServerStatus(key: StatusKey): 'online' | 'idle' | 'dnd' | 'invisible' {
+  if (key === 'away') return 'idle'
+  if (key === 'offline') return 'invisible'
+  return key
 }
 
 export const statusColor = (raw: string | null | undefined) => STATUS_COLORS[normalizeStatus(raw)]

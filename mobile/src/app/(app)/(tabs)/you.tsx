@@ -7,7 +7,7 @@ import { Sheet } from '@/components/Sheet'
 import { Row, Section } from '@/components/ui'
 import { APP_ENV, APP_VERSION, apiHost } from '@/config/env'
 import { errorMessage } from '@/lib/http'
-import { normalizeStatus, SELECTABLE_STATUSES, statusLabel } from '@/lib/status'
+import { normalizeStatus, SELECTABLE_STATUSES, statusLabel, toServerStatus } from '@/lib/status'
 import { useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { colors, font, spacing } from '@/theme'
@@ -37,7 +37,7 @@ export default function YouScreen() {
     setUser({ status: key })
     usePresence.getState().set(user.id, key)
     try {
-      await usersApi.setStatus(key)
+      await usersApi.setStatus(toServerStatus(key))
     } catch (e) {
       setUser({ status: prev })
       Alert.alert('Statut non modifié', errorMessage(e))

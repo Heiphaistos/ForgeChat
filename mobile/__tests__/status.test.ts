@@ -33,3 +33,11 @@ describe('statuts de présence (comme le web)', () => {
     expect(contrastRatio('#72767d', colors.bg)).toBeLessThan(3)
   })
 })
+
+describe('statut envoyé au serveur', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { toServerStatus, SELECTABLE_STATUSES } = require('@/lib/status') as typeof import('@/lib/status')
+  it('seulement online | idle | dnd | invisible (le serveur refuse le reste)', () => {
+    expect(SELECTABLE_STATUSES.map(toServerStatus)).toEqual(['online', 'idle', 'dnd', 'invisible'])
+  })
+})
