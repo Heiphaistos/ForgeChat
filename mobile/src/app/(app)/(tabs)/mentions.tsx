@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
+import { useCallback } from 'react'
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
@@ -11,6 +12,14 @@ import { colors, font, radius, spacing } from '@/theme'
 
 export default function MentionsScreen() {
   const q = useQuery({ queryKey: qk.mentions, queryFn: usersApi.mentions })
+  // Le serveur ne renvoie que les mentions NON LUES : la liste change dès qu'on lit un salon ou
+  // qu'une nouvelle mention arrive. Rechargée à chaque ouverture de l'onglet.
+  const { refetch } = q
+  useFocusEffect(
+    useCallback(() => {
+      void refetch()
+    }, [refetch]),
+  )
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
   return (
@@ -19,7 +28,7 @@ export default function MentionsScreen() {
       data={q.data ?? []}
       keyExtractor={(m) => m.message_id}
       refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
-      ListEmptyComponent={<EmptyState icon="at" title="Aucune mention récente" subtitle="Les messages qui te mentionnent (7 derniers jours) apparaîtront ici." />}
+      ListEmptyComponent={<EmptyState icon="at" title="Aucune mention non lue" subtitle="Les messages non lus qui te mentionnent (7 derniers jours) apparaîtront ici." />}
       renderItem={({ item }) => (
         <Pressable
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}
