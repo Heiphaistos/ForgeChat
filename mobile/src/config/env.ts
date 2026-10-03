@@ -105,6 +105,6 @@ export const LIMITS = {
  */
 export const ALLOWED_UPLOAD_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mkv',
-  'mp3', 'ogg', 'wav', 'flac', 'm4a', 'aac', 'pdf', 'txt', 'md', 'zip', 'tar', 'gz', '7z',
+  'mp3', 'ogg', 'wav', 'flac', 'pdf', 'txt', 'md', 'zip', 'tar', 'gz', '7z',
   'rar', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'bin',
 ])
