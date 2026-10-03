@@ -167,12 +167,42 @@ Attendu : `OK …`, package `org.heiphaistos.forgechat`, clair `non`, certificat
   keytool -list -v -keystore ~/.config/forgechat-dev/release/forgechat-release.keystore -storepass:file ~/.config/forgechat-dev/release/keystore.password | grep SHA256
   ```
   Attendu : l'empreinte SHA-256 ci-dessus.
-- **Sauvegarde** : deux copies chiffrées sur deux supports différents + fichier et mot de passe dans
-  le gestionnaire de mots de passe. Jamais dans git (le `.gitignore` refuse `*.keystore`, `*.password`).
+- **Sauvegarde** : une archive chiffrée avec `age` (phrase de passe) contenant le keystore, son mot
+  de passe et les empreintes ; deux copies identiques sur deux supports différents (ex. clé USB
+  rangée chez soi + disque externe ou cloud personnel), la phrase de passe dans le gestionnaire de
+  mots de passe, **jamais** à côté des copies. Jamais dans git (le `.gitignore` refuse `*.keystore`,
+  `*.password`). Créer l'archive :
+  ```bash
+  tar -C ~/.config/forgechat-dev -cf - release | age -p -o forgechat-cle-release.tar.age
+  ```
+  Restaurer : `age -d -o cle.tar forgechat-cle-release.tar.age && tar -xf cle.tar && shred -u cle.tar`,
+  puis ranger `release/` comme ci-dessus. Tester la restauration une fois par an.
 - **EAS** : l'importer (§3a) au lieu de laisser EAS générer une clé.
 - **Play Store** : à la création de l'app, *Play App Signing* → « Utiliser ma propre clé » → exporter
   cette clé avec l'outil PEPK de Google. Ainsi la version Play Store met à jour la bêta installée.
   Mettre la même empreinte dans `mobile/deploy/well-known/assetlinks.json`.
+
+## 4 bis. Notifications push Android (Firebase + EAS)
+
+Le push Android passe par Firebase Cloud Messaging (FCM), relayé par le service push d'Expo.
+Côté app (ce dépôt) il faut deux choses, **hors dépôt** :
+
+1. **`google-services.json`** (projet Firebase, une app Android par package : `org.heiphaistos.forgechat`
+   et `org.heiphaistos.forgechat.dev`, dans le même projet). Passé au build par `GOOGLE_SERVICES_JSON` :
+   - EAS : site expo.dev → projet → *Project settings* → *Environment variables* → variable de type
+     **fichier**, nom `GOOGLE_SERVICES_JSON`, visibilité *Secret*, environnements *preview* et *production* ;
+   - local : `GOOGLE_SERVICES_JSON=/chemin/hors/dépôt/google-services.json scripts/build-apk-local.sh …`.
+2. **`EAS_PROJECT_ID`** (identifiant du projet EAS, `npx eas-cli@latest init`), même mécanisme.
+
+Puis la **clé de compte de service FCM V1** (SECRET : clé privée Google) chargée dans EAS, jamais
+ailleurs : `npx eas-cli@latest credentials` → *Android* → *production* → *Google Service Account* →
+*Manage your Google Service Account Key for Push Notifications (FCM V1)* → *Set up a Google Service
+Account Key for Push Notifications (FCM V1)* → *Upload a new service account key*.
+
+Côté serveur (son mainteneur) : `PUSH_ENABLED=true` et `EXPO_ACCESS_TOKEN`, un jeton du **même** compte
+Expo que le projet EAS (expo.dev → *Account settings* → *Access tokens*).
+
+Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
 
 ## 5. L'APK DEV
 
