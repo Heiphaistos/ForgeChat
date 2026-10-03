@@ -67,7 +67,7 @@ Détails : `mobile/docs/DEPLOY.md` (fichiers à modifier, workflow de pré-prod)
    Attendu : réponse 200. Les migrations s'appliquent au démarrage (voir les journaux du conteneur).
 6. **Tester la pré-prod avec l'APK DEV** (§5) : connexion, messages, pièces jointes, appel, push.
 7. **Prod** : sauvegarde (étape 1), push sur `main` (déclenche le déploiement automatique), puis
-   `curl -fsS https://forgechat.heiphaistos.org/api/health` et l'audit des rôles :
+   `curl -fsS https://<domaine-prod>/api/health` et l'audit des rôles :
    ```bash
    docker compose exec -T postgres psql -U forgechat -d forgechat < scripts/audit-roles.sql
    ```
@@ -83,53 +83,34 @@ Détails : `mobile/docs/DEPLOY.md` (fichiers à modifier, workflow de pré-prod)
 - [ ] prod déployée, `/api/health` OK, `audit-roles.sql` relu
 - [ ] `assetlinks.json` servi avec l'empreinte SHA-256 de la clé de release (§4)
 
-## 3. Pointer la bêta vers SON serveur
+## 3. Construire la bêta pour un serveur
 
-Le serveur de la bêta est **fixé à la compilation** (pas de choix dans l'app, voir §1) : changer de
-serveur = **recompiler** et redistribuer.
+L'adresse du serveur est **fixée au build** et **obligatoire** : l'app n'a aucune adresse par défaut.
+Règles (vérifiées avant toute compilation, `plugins/serverConfig.js`) : `https://` vers un vrai nom de
+domaine (ni IP, ni `localhost`, ni domaine réservé `.local` / `.test` / `.invalid`…), origine seule.
+LiveKit : par défaut sur le même hôte (le serveur envoie `wss://<hôte>/…`) ; s'il est ailleurs, le
+donner au build (`--livekit wss://…`) : l'app refuse toute autre adresse LiveKit.
 
-**Où est l'URL** (à remplacer partout par `https://<ton-domaine>`, HTTPS obligatoire) :
+### 3a. En local (une commande)
 
-| Fichier | Ligne | Rôle |
-|---|---|---|
-| `mobile/eas.json` | `build.production.env.FORGECHAT_API_URL` (l. 27) | source utilisée par EAS **et** par `scripts/build-apk-local.sh` |
-| `mobile/app.config.ts` | l. 32 (valeur par défaut de `API_URL`) | si la variable est absente |
-| `mobile/src/config/env.ts` | l. 46 (`BUILD_API_ORIGIN`) | repli au runtime |
-| `mobile/__tests__/production-profile.test.ts` | test « identité finale » | le test vérifie l'URL attendue |
-| `mobile/docs/TESTERS.md`, `mobile/deploy/well-known/*` | texte, App Links | domaine affiché / vérifié |
+Prérequis : Node 20+ et npm, JDK 17, Android SDK, ~10 Go de RAM + swap libres, clé de release (§4).
 
 ```bash
-grep -rn "forgechat.heiphaistos.org" mobile --include=*.ts --include=*.tsx --include=*.json --include=*.md
+cd mobile && npm ci
+scripts/build-apk-local.sh production --server https://ton.domaine            # bêta
+scripts/build-apk-local.sh production --server https://ton.domaine --livekit wss://media.ton.domaine
 ```
-Attendu après modification : plus aucune occurrence de l'ancien domaine (sauf historique voulu).
-Puis `cd mobile && npm run check` → tous les tests passent.
+Attendu en fin de build (10–20 min) : `APK : …/android/app/build/outputs/apk/release/app-release.apk`.
+Sans `--server`, ou avec une adresse non conforme : arrêt immédiat avec le message `ERREUR : …`.
 
-### 3a. Recompiler avec EAS (recommandé)
+### 3b. Avec EAS
 
-1. Compte Expo (gratuit) : `npx eas-cli@latest login`.
-2. Lier le projet : `cd mobile && npx eas-cli@latest init` → attendu : un `projectId` ajouté
-   (renseigner `EAS_PROJECT_ID` dans l'environnement des builds, voir DEPLOY.md).
-3. **Importer la clé de release existante** (ne jamais laisser EAS en générer une nouvelle pour la
-   bêta) : `npx eas-cli@latest credentials -p android` → profil *production* → *Keystore* →
-   *Set up a new keystore* → *Upload* : fichier `forgechat-release.keystore`, alias `forgechat-release`,
-   même mot de passe pour le keystore et la clé (format PKCS12).
-   Attendu : EAS affiche l'empreinte SHA-256 = celle du §4.
-4. Build : `npx eas-cli@latest build -p android --profile production` (APK).
-   Attendu : un lien de téléchargement de l'APK.
-
-### 3b. Recompiler en local
-
-Prérequis : Node 20+ et npm, JDK 17, Android SDK (build-tools, platform 36, NDK installé par
-gradle), ~10 Go de RAM + swap libres.
-
-```bash
-cd mobile
-npm ci
-scripts/build-apk-local.sh production
-```
-La clé est lue dans `~/.config/forgechat-dev/release/` (ou `FORGECHAT_KEYSTORE` et
-`FORGECHAT_KEYSTORE_PASSWORD_FILE`). Sans clé, le script s'arrête ; jamais de signature debug.
-Attendu en fin de build : `APK : …/android/app/build/outputs/apk/release/app-release.apk` (10–20 min).
+1. `npx eas-cli@latest login`, puis `cd mobile && npx eas-cli@latest init` (projet EAS).
+2. Importer la clé de release : `npx eas-cli@latest credentials -p android` → *production* →
+   *Keystore* → *Upload* (`forgechat-release.keystore`, alias `forgechat-release`, PKCS12).
+3. Variables (expo.dev → projet → *Project settings* → *Environment variables*, environnement
+   *production*) : `FORGECHAT_API_URL=https://ton.domaine` (et `FORGECHAT_LIVEKIT_URL` si besoin).
+4. `npx eas-cli@latest build -p android --profile production`.
 
 ### 3c. Vérifier l'APK
 
@@ -137,10 +118,10 @@ Attendu en fin de build : `APK : …/android/app/build/outputs/apk/release/app-r
 mkdir -p ~/forgechat-releases/<version>
 cp mobile/android/app/build/outputs/apk/release/app-release.apk ~/forgechat-releases/<version>/ForgeChat-<version>-beta.apk
 mobile/scripts/release-apk.sh ~/forgechat-releases/<version>/ForgeChat-<version>-beta.apk <empreinte SHA-256 du §4>
-unzip -p ~/forgechat-releases/<version>/ForgeChat-<version>-beta.apk assets/index.android.bundle | strings | grep -o 'https://<ton-domaine>' | head -1
 ```
-Attendu : `OK …`, package `org.heiphaistos.forgechat`, clair `non`, certificat = empreinte du §4
-(sinon le script échoue), et l'URL de **ton** domaine présente dans le bundle.
+Attendu : `OK …`, package `org.heiphaistos.forgechat`, clair `non`, `serveur https://ton.domaine`,
+certificat = empreinte du §4 (sinon échec). Un APK construit avec un domaine `example.org` est signalé
+« APK D'EXEMPLE : NE PAS DISTRIBUER ».
 
 ## 4. La clé de release
 
@@ -199,8 +180,11 @@ ailleurs : `npx eas-cli@latest credentials` → *Android* → *production* → *
 *Manage your Google Service Account Key for Push Notifications (FCM V1)* → *Set up a Google Service
 Account Key for Push Notifications (FCM V1)* → *Upload a new service account key*.
 
-Côté serveur (son mainteneur) : `PUSH_ENABLED=true` et `EXPO_ACCESS_TOKEN`, un jeton du **même** compte
-Expo que le projet EAS (expo.dev → *Account settings* → *Access tokens*).
+Côté serveur : le serveur doit gérer le push **mobile** (routes `POST/DELETE /api/push/devices`,
+envoi via Expo, voir `docs/SERVER_CHANGES.md`), avec `PUSH_ENABLED=true` et `EXPO_ACCESS_TOKEN`, un jeton
+du **même** compte Expo que le projet EAS (expo.dev → *Account settings* → *Access tokens*).
+⚠ Le serveur de référence testé (commit `2dae54d`) ne gère que le push **web** : sans ce complément,
+l'app fonctionne mais ne reçoit aucune notification push (elle l'ignore sans erreur).
 
 Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
 
@@ -238,7 +222,7 @@ Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
    `APP_ENV` : `development` ici ; `preview` / `production` sont posés par les profils.
 5. **Reconstruire l'APK DEV** (préréglage pré-prod facultatif, HTTPS) :
    ```bash
-   cd mobile && scripts/build-apk-local.sh preview https://<pré-prod>
+   cd mobile && scripts/build-apk-local.sh preview --server https://<pré-prod>
    ```
    (ou avec EAS : renseigner `build.preview.env.FORGECHAT_API_URL` dans `eas.json`, puis
    `npx eas-cli@latest build -p android --profile preview`).

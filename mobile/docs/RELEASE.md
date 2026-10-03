@@ -9,7 +9,7 @@ Procédure pas à pas (serveur, clé, build, vérification, distribution) : **`d
 | development | `development` | `org.heiphaistos.forgechat.development` | ForgeChat (development) | local (Metro, émulateur) | développeurs |
 | lan | `lan` (build local, pas EAS) | `org.heiphaistos.forgechat.lan` | ForgeChat (LAN) | PC du réseau local, HTTP vers cette IP seulement | téléphone du développeur, **jamais distribuée** |
 | APK DEV (dev-apk) | `preview` | `org.heiphaistos.forgechat.dev` | ForgeChat Dev | **choisi dans l'app** (écran « Serveur » : pré-prod, serveur local, adresse libre) | les deux développeurs uniquement |
-| bêta (client-apk) | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **prod** `https://forgechat.heiphaistos.org` | bêta publique, puis Play Store |
+| bêta (client-apk) | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **fixé au build** (`--server` / `FORGECHAT_API_URL`, obligatoire, aucun défaut) | bêta publique, puis Play Store |
 
 - Icônes : variante orange « DEV » pour development, lan et dev-apk ; icône officielle pour le
   client-apk (`scripts/generate-icons.mjs`).

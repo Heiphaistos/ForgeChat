@@ -1,7 +1,7 @@
 # ForgeChat bêta (Android) — guide des testeurs
 
 Merci de tester ForgeChat ! Cette bêta est l'application **ForgeChat** (icône violette, sans mention
-« DEV »), connectée au serveur public `https://forgechat.heiphaistos.org`.
+« DEV »), connectée au serveur public annoncé par l'équipe.
 
 ## ⚠️ À savoir avant d'installer
 
