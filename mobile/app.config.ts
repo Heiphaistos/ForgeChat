@@ -1,6 +1,7 @@
 import type { ExpoConfig, ConfigContext } from 'expo/config'
 
 import { googleServicesFile } from './plugins/googleServices.js'
+import { distributedServerConfig } from './plugins/serverConfig.js'
 import withLanCleartext from './plugins/withLanCleartext.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
@@ -29,10 +30,22 @@ const APP_ENV = (process.env.APP_ENV ?? 'development') as AppEnv
 if (!['development', 'lan', 'preview', 'production'].includes(APP_ENV)) {
   throw new Error(`APP_ENV inconnu : ${APP_ENV}`)
 }
-// LAN : l'URL (IP du PC de dev) vient de l'environnement de build, jamais du dépôt.
-// APK DEV (preview) : pré-prod, éventuellement vide — jamais la prod par défaut.
-const API_URL =
-  process.env.FORGECHAT_API_URL ?? (APP_ENV === 'lan' || APP_ENV === 'preview' ? '' : 'https://forgechat.heiphaistos.org')
+// Adresse du serveur : TOUJOURS fournie au build, AUCUNE adresse par défaut cachée dans l'app.
+//  - development : mobile/.env.local (émulateur : http://10.0.2.2:8080) ;
+//  - lan : IP du PC (réseau local), voir plus bas ;
+//  - preview (APK DEV) : pré-prod facultative, sinon choisie dans l'app (écran « Serveur ») ;
+//  - production (bêta) : obligatoire, https:// vers un vrai domaine (plugins/serverConfig.js).
+// FORGECHAT_LIVEKIT_URL (facultatif) : serveur LiveKit s'il n'est pas sur le même hôte.
+const RAW_API_URL = (process.env.FORGECHAT_API_URL ?? '').trim()
+if ((APP_ENV === 'development' || APP_ENV === 'lan') && !RAW_API_URL) {
+  throw new Error(`FORGECHAT_API_URL manquant pour APP_ENV=${APP_ENV} : voir mobile/.env.example`)
+}
+const DISTRIBUTED =
+  APP_ENV === 'preview' || APP_ENV === 'production'
+    ? distributedServerConfig(APP_ENV, RAW_API_URL, process.env.FORGECHAT_LIVEKIT_URL)
+    : null
+const API_URL = DISTRIBUTED ? DISTRIBUTED.apiUrl : RAW_API_URL
+const LIVEKIT_HOST = DISTRIBUTED?.livekitHost ?? null
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
 // Push Android (FCM) : google-services.json hors dépôt (plugins/googleServices.js).
 const GOOGLE_SERVICES_JSON = googleServicesFile(APP_ENV, process.env.GOOGLE_SERVICES_JSON)
@@ -45,10 +58,6 @@ const PACKAGES: Record<AppEnv, string> = {
   production: BUNDLE_ID,
 }
 
-// URL à remplacer (ex. pré-prod dans eas.json) : le build échoue tant qu'elle n'est pas renseignée.
-if (/REMPLACER|\.invalid(?:[:/]|$)/i.test(API_URL)) {
-  throw new Error(`FORGECHAT_API_URL n'est pas renseignée (« ${API_URL} ») : voir docs/DEPLOY.md`)
-}
 // Le code des outils de dev est retiré du bundle d'après EXPO_PUBLIC_APP_ENV (inliné à la
 // compilation) : il doit être cohérent avec APP_ENV, et explicite en production.
 const PUBLIC_ENV = process.env.EXPO_PUBLIC_APP_ENV
@@ -56,15 +65,9 @@ if ((PUBLIC_ENV !== undefined && PUBLIC_ENV !== APP_ENV) || (APP_ENV === 'produc
   throw new Error(`EXPO_PUBLIC_APP_ENV (${PUBLIC_ENV ?? 'absent'}) doit valoir APP_ENV (${APP_ENV})`)
 }
 
-// Garde-fou : en dehors du développement, l'API DOIT être en HTTPS — sauf en LAN, où le HTTP
-// n'est permis que vers une IPv4 privée (sinon lanCleartextHost fait échouer le build).
-// (Le client vérifie aussi au runtime, cf. src/config/env.ts.)
+// LAN : HTTP permis seulement vers une IPv4 privée (sinon lanCleartextHost fait échouer le build).
+// APK DEV et bêta : HTTPS imposé par distributedServerConfig. (Le client revérifie au runtime : src/config/env.ts.)
 const LAN_CLEARTEXT_HOST = APP_ENV === 'lan' ? withLanCleartext.lanCleartextHost(API_URL) : null
-// APK DEV sans pré-prod : URL vide permise (le serveur se choisit dans l'app, en HTTPS ou vers une IP locale).
-const NO_BUILD_SERVER = APP_ENV === 'preview' && API_URL === ''
-if (APP_ENV !== 'development' && APP_ENV !== 'lan' && !NO_BUILD_SERVER && !API_URL.startsWith('https://')) {
-  throw new Error(`FORGECHAT_API_URL doit être en https:// pour APP_ENV=${APP_ENV}`)
-}
 
 // Icônes (scripts/generate-icons.mjs, logo officiel du web) : variante orange « DEV » pour tout ce
 // qui n'est pas la version publique, pour ne jamais confondre les apps sur un téléphone.
@@ -232,6 +235,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     apiUrl: API_URL,
     appEnv: APP_ENV,
+    livekitHost: LIVEKIT_HOST,
     ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
   },
 })

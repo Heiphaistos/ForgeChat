@@ -42,8 +42,8 @@ function normalizeBaseUrl(raw: string | undefined): string {
   return `${parsed.protocol}//${parsed.host}`
 }
 
-/** Serveur fixé à la compilation (prod pour la bêta, pré-prod — éventuellement vide — pour l'APK DEV). */
-export const BUILD_API_ORIGIN = normalizeBaseUrl(extra.apiUrl ?? 'https://forgechat.heiphaistos.org')
+/** Serveur fixé à la compilation (aucun défaut : bêta = celui du build ; APK DEV = pré-prod éventuelle). */
+export const BUILD_API_ORIGIN = normalizeBaseUrl(extra.apiUrl)
 
 // Choix de serveur (écran « Serveur » des Infos dev) : code retiré du bundle de production.
 const serverChoice =
@@ -54,7 +54,7 @@ const serverChoice =
 
 let origin = BUILD_API_ORIGIN
 
-/** Origine du serveur, ex. https://forgechat.heiphaistos.org (vide : APK DEV sans serveur choisi). */
+/** Origine du serveur, ex. https://chat.example.org (vide : APK DEV sans serveur choisi). */
 export const apiOrigin = () => origin
 /** Préfixe REST */
 export const apiBase = () => `${origin}/api`

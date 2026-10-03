@@ -23,8 +23,7 @@
       "autoIncrement": true,
       "env": {
         "APP_ENV": "production",
-        "EXPO_PUBLIC_APP_ENV": "production",
-        "FORGECHAT_API_URL": "https://forgechat.heiphaistos.org"
+        "EXPO_PUBLIC_APP_ENV": "production"
       },
       "android": { "buildType": "apk" }
     },

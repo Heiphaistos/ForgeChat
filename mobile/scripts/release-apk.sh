@@ -42,9 +42,15 @@ CLEARTEXT=$(echo "$MANIFEST" | grep -q 'usesCleartextTraffic.*=true' && echo oui
 # Push Android : la config Firebase (google-services.json) génère la ressource google_app_id.
 FCM=$("$AAPT2" dump resources "$APK" 2>/dev/null | grep -q "string/google_app_id" && echo configuré || echo "ABSENT (pas de notifications push)")
 
+# Serveur fixé au build (config Expo embarquée) : affiché pour vérification.
+SERVER_URL=$(unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const c=JSON.parse(s);process.stdout.write(c.extra?.apiUrl||"")}catch{}})')
+SERVER_HOST=$(echo "$SERVER_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
+LIVEKIT_HOST=$(unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).extra?.livekitHost||"")}catch{}})')
+
 # 3. Contrôles propres à la bêta publique
 if [ "$PACKAGE" = "$BETA_PACKAGE" ]; then
   [ "$CLEARTEXT" = non ] || fail "bêta : trafic en clair autorisé"
+  case "$SERVER_URL" in https://*) ;; *) fail "bêta : serveur absent ou non HTTPS (« $SERVER_URL »)" ;; esac
   echo "$MANIFEST" | grep -q networkSecurityConfig && fail "bêta : network_security_config présent"
   echo "$MANIFEST" | grep -q '"exp+' && fail "bêta : schéma exp+ du client de développement présent"
   TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -57,7 +63,10 @@ if [ "$PACKAGE" = "$BETA_PACKAGE" ]; then
   # espaces de noms, valeur par défaut interne d'expo-router « localhost:8081 »).
   strings "$BUNDLE" | grep -qE 'https?://(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.0\.0\.1)|10\.0\.2\.2' &&
     fail "bêta : adresse locale ou de dev dans le bundle"
-  grep -qF "https://forgechat.heiphaistos.org" <(strings "$BUNDLE") || echo "ATTENTION : URL de prod par défaut absente du bundle (serveur personnalisé ?)"
+  case "$SERVER_HOST" in
+    example.org | example.com | example.net | *.example.org | *.example.com | *.example.net)
+      echo "######## APK D'EXEMPLE (serveur factice $SERVER_HOST) : NE PAS DISTRIBUER ########" ;;
+  esac
   unzip -l "$APK" | grep -qE 'devlauncher|devmenu|expo-dev-' && fail "bêta : client de développement présent"
   unzip -l "$APK" | grep -qE '\.map$' && fail "bêta : source map présente"
 fi
@@ -79,6 +88,7 @@ echo "OK $NAME"
 echo "  package      $PACKAGE $VERSION (versionCode $CODE)"
 echo "  clair (OS)   $CLEARTEXT"
 echo "  push (FCM)   $FCM"
+echo "  serveur      ${SERVER_URL:-(choisi dans l’app)}${LIVEKIT_HOST:+ ; LiveKit $LIVEKIT_HOST}"
 echo "  SHA-256      $FILE_SHA256"
 echo "  certificat   SHA-256 $CERT_SHA256"
 echo "               SHA-1   $CERT_SHA1"

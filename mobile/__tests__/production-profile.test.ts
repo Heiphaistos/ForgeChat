@@ -15,7 +15,7 @@ type Cfg = Record<string, any> // eslint-disable-line @typescript-eslint/no-expl
 /** Évalue app.config.ts avec l'environnement d'un profil EAS. */
 function configFor(env: Record<string, string | undefined>): Cfg {
   const saved = { ...process.env }
-  for (const k of ['APP_ENV', 'EXPO_PUBLIC_APP_ENV', 'FORGECHAT_API_URL', 'EAS_PROJECT_ID', 'GOOGLE_SERVICES_JSON']) delete process.env[k]
+  for (const k of ['APP_ENV', 'EXPO_PUBLIC_APP_ENV', 'FORGECHAT_API_URL', 'FORGECHAT_LIVEKIT_URL', 'EAS_PROJECT_ID', 'GOOGLE_SERVICES_JSON']) delete process.env[k]
   Object.assign(process.env, env)
   try {
     let out: Cfg = {}
@@ -33,15 +33,18 @@ function configFor(env: Record<string, string | undefined>): Cfg {
 const plugin = (cfg: Cfg, name: string) =>
   (cfg.plugins as unknown[]).find((p) => (Array.isArray(p) ? p[0] : p) === name) as [string, Cfg] | string | undefined
 
+/** Adresse d'exemple (factice) fournie au build, comme --server. */
+const SERVER = 'https://chat.example.org'
+
 describe('client-apk (profil EAS production)', () => {
-  const profile = eas.build.production
+  const profile = { ...eas.build.production, env: { ...eas.build.production.env, FORGECHAT_API_URL: SERVER } }
   const cfg = configFor(profile.env)
 
   it('identité finale : package, nom, serveur de production', () => {
     expect(cfg.android.package).toBe('org.heiphaistos.forgechat')
     expect(cfg.name).toBe('ForgeChat')
-    expect(profile.env.FORGECHAT_API_URL).toBe('https://forgechat.heiphaistos.org')
-    expect(cfg.extra.apiUrl).toBe('https://forgechat.heiphaistos.org')
+    expect(cfg.extra.apiUrl).toBe(SERVER)
+    expect(cfg.extra.livekitHost).toBeNull()
     expect(cfg.extra.appEnv).toBe('production')
     expect(cfg.icon).toBe('./assets/icon.png') // icône officielle, pas la variante DEV
   })
@@ -70,11 +73,11 @@ describe('client-apk (profil EAS production)', () => {
     expect(JSON.stringify(cfg)).not.toMatch(/http:\/\/|10\.0\.2\.2|127\.0\.0\.1|192\.168\./)
     // Pas de plugin de trafic en clair LAN.
     expect(JSON.stringify(cfg)).not.toMatch(/network_security_config|cleartextTrafficPermitted/)
-    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'http://forgechat.heiphaistos.org' })).toThrow(/https/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'http://chat.example.org' })).toThrow(/https/)
   })
 
   it('outils de dev retirés du bundle : EXPO_PUBLIC_APP_ENV explicite en production', () => {
-    expect(profile.env.EXPO_PUBLIC_APP_ENV).toBe('production')
+    expect(eas.build.production.env.EXPO_PUBLIC_APP_ENV).toBe('production')
     expect(() => configFor({ ...profile.env, EXPO_PUBLIC_APP_ENV: undefined })).toThrow(/EXPO_PUBLIC_APP_ENV/)
   })
 
@@ -85,6 +88,39 @@ describe('client-apk (profil EAS production)', () => {
     }
     // Indispensable à expo-screen-capture sur Android 14+ : ne doit pas être bloquée.
     expect(cfg.android.blockedPermissions).not.toContain('android.permission.DETECT_SCREEN_CAPTURE')
+  })
+
+  it('adresse du serveur : obligatoire, fournie au build, jamais de défaut caché', () => {
+    expect(eas.build.production.env.FORGECHAT_API_URL).toBeUndefined()
+    expect(() => configFor(eas.build.production.env)).toThrow(/FORGECHAT_API_URL manquant/)
+    for (const bad of ['http://chat.example.org', 'https://192.168.1.20', 'https://10.0.2.2:8080', 'https://127.0.0.1', 'https://localhost', 'https://forgechat.local', 'https://serveur.test', 'https://preprod.REMPLACER.invalid', 'https://chat', 'https://chat.example.org/api', 'https://user@chat.example.org']) {
+      expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: bad })).toThrow(/FORGECHAT_API_URL/)
+    }
+    // Aucune adresse de serveur réelle codée en dur dans l'app.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync: read } = require('node:fs') as typeof import('node:fs')
+    for (const f of ['app.config.ts', 'src/config/env.ts', 'eas.json']) {
+      expect({ f, prod: /heiphaistos\.org/.test(read(join(root, f), 'utf8')) }).toEqual({ f, prod: false })
+    }
+  })
+
+  it('LiveKit sur un autre hôte : wss:// et hôte épinglé au build', () => {
+    const c = configFor({ ...profile.env, FORGECHAT_LIVEKIT_URL: 'wss://media.example.org' })
+    expect(c.extra.livekitHost).toBe('media.example.org')
+    expect(() => configFor({ ...profile.env, FORGECHAT_LIVEKIT_URL: 'ws://media.example.org' })).toThrow(/wss/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_LIVEKIT_URL: 'wss://192.168.1.20:7880' })).toThrow(/refusé/)
+  })
+
+  it('script de build : refuse une bêta sans --server ou avec une adresse non conforme, avant de compiler', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawnSync } = require('node:child_process') as typeof import('node:child_process')
+    const run = (...args: string[]) => spawnSync('bash', [join(root, 'scripts', 'build-apk-local.sh'), ...args], { encoding: 'utf8', env: { ...process.env, FORGECHAT_KEYSTORE: '/nulle-part' } })
+    for (const args of [['production'], ['production', '--server', 'http://chat.example.org'], ['production', '--server', 'https://192.168.1.20'], ['production', '--server', 'https://chat.example.org', '--livekit', 'ws://chat.example.org']]) {
+      const r = run(...args)
+      expect({ args, status: r.status }).toEqual({ args, status: 1 })
+      expect(r.stderr).toMatch(/ERREUR|usage/)
+    }
+    expect(run('autre').stderr).toMatch(/usage/)
   })
 
   it('AAB Play Store : même profil, seul le format change', () => {
@@ -153,7 +189,8 @@ describe('APK DEV (profil EAS preview)', () => {
     expect(cfg.extra.apiUrl).toBe('https://preprod.example.org')
     expect(JSON.stringify(cfg.android.intentFilters)).toContain('preprod.example.org')
     expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'http://preprod.example.org' })).toThrow(/https/)
-    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.REMPLACER.invalid' })).toThrow(/n'est pas renseignée/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'https://preprod.REMPLACER.invalid' })).toThrow(/refusé/)
+    expect(() => configFor({ ...profile.env, FORGECHAT_API_URL: 'https://192.168.1.20' })).toThrow(/refusé/)
   })
 
   it('HTTP en clair autorisé au niveau OS dans ce profil seulement (contrôle applicatif : serverUrl.ts)', () => {
@@ -167,7 +204,7 @@ describe('APK DEV (profil EAS preview)', () => {
 })
 
 describe('push Android (FCM)', () => {
-  const profile = eas.build.production
+  const profile = { env: { ...eas.build.production.env, FORGECHAT_API_URL: SERVER } }
   const { mkdtempSync, writeFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs')
   const { tmpdir } = jest.requireActual<typeof import('node:os')>('node:os')
 
