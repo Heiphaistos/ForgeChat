@@ -181,10 +181,12 @@ ailleurs : `npx eas-cli@latest credentials` → *Android* → *production* → *
 Account Key for Push Notifications (FCM V1)* → *Upload a new service account key*.
 
 Côté serveur : le serveur doit gérer le push **mobile** (routes `POST/DELETE /api/push/devices`,
-envoi via Expo, voir `docs/SERVER_CHANGES.md`), avec `PUSH_ENABLED=true` et `EXPO_ACCESS_TOKEN`, un jeton
-du **même** compte Expo que le projet EAS (expo.dev → *Account settings* → *Access tokens*).
-⚠ Le serveur de référence testé (commit `2dae54d`) ne gère que le push **web** : sans ce complément,
-l'app fonctionne mais ne reçoit aucune notification push (elle l'ignore sans erreur).
+envoi via Expo) avec `PUSH_ENABLED=true`. `EXPO_ACCESS_TOKEN` n'est requis que si « Enhanced push
+security » est activé sur le projet Expo : c'est alors un jeton du **même** compte Expo que le projet EAS
+(expo.dev → *Account settings* → *Access tokens*).
+⚠ Le serveur de référence testé (commit `2dae54d`) ne gère que le push **web** : le push mobile lui est
+fourni sous forme de patch (`0002`, adapté à ce commit). Sans lui, l'app fonctionne mais ne reçoit
+aucune notification push (elle l'ignore sans erreur).
 
 Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
 

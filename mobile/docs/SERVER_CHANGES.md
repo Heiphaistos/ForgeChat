@@ -3,7 +3,9 @@
 > État au 2026-10-03 : le serveur de référence (dépôt de Heiphaistos, commit `2dae54d`) n’a **pas**
 > ces changements (push mobile, appel vers un mobile fermé, rejeu d’appel, déconnexion par appareil).
 > Le reste de l’app est compatible (routes HTTP et événements WebSocket vérifiés). Appels et vocal :
-> LiveKit (`docs/ARCHITECTURE.md`).
+> LiveKit (`docs/ARCHITECTURE.md`). Le push mobile lui est proposé en patch, adapté à son code : mêmes
+> routes et mêmes données que ci-dessous ; un appel vers un mobile fermé y donne une notification
+> « Appel manqué » (pas de sonnerie ni de rejeu d’appel).
 
 Tous rétro-compatibles : le client web et le desktop Tauri fonctionnent sans modification.
 `cargo check` et `cargo test` passent.
