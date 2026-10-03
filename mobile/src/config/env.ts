@@ -5,7 +5,7 @@ import Constants from 'expo-constants'
  * Toute l'app passe par ce module : aucune URL codée en dur ailleurs.
  */
 
-type Extra = { apiUrl?: string; appEnv?: string; livekitHost?: string | null }
+type Extra = { apiUrl?: string; appEnv?: string; livekitHost?: string | null; updatesRepo?: string | null }
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra
 
 export type AppEnv = 'development' | 'lan' | 'preview' | 'production'
@@ -88,6 +88,12 @@ export function setApiOrigin(next: string): void {
 }
 
 export const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0'
+
+/** Dépôt GitHub des releases (« propriétaire/dépôt ») ; null = pas de vérification des mises à jour. */
+export const UPDATES_REPO: string | null =
+  APP_ENV === 'production' && typeof extra.updatesRepo === 'string' && /^[\w-]+\/[\w.-]+$/.test(extra.updatesRepo)
+    ? extra.updatesRepo
+    : null
 
 /** Limites alignées sur le serveur */
 export const LIMITS = {

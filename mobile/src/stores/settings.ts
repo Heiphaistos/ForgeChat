@@ -17,6 +17,12 @@ interface SettingsState {
   pushPreview: boolean
   /** Confirmer avant d'ouvrir un lien externe. */
   confirmLinks: boolean
+  /** Vérifier au démarrage (une fois par jour) s'il existe une nouvelle version sur GitHub. */
+  updateCheck: boolean
+  /** Date (ms) de la dernière vérification automatique. */
+  updateLastCheckAt: number
+  /** Version que l'utilisateur a choisi d'ignorer. */
+  updateSkippedVersion: string | null
   hydrated: boolean
   set: (patch: Partial<Omit<SettingsState, 'set' | 'hydrated'>>) => void
 }
@@ -30,6 +36,9 @@ export const useSettings = create<SettingsState>()(
       pushEnabled: true,
       pushPreview: false, // vie privée par défaut : pas de contenu sur l'écran verrouillé
       confirmLinks: true,
+      updateCheck: true,
+      updateLastCheckAt: 0,
+      updateSkippedVersion: null,
       hydrated: false,
       set: (patch) => set(patch),
     }),

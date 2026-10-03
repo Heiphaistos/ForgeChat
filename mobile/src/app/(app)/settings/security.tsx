@@ -4,6 +4,8 @@ import * as LocalAuthentication from 'expo-local-authentication'
 import { useEffect, useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { Row, Section, SwitchRow } from '@/components/ui'
+import { UPDATES_REPO } from '@/config/env'
+import { checkForUpdateNow } from '@/features/updates/useUpdateCheck'
 import { useAuth } from '@/stores/auth'
 import { biometricAvailability } from '@/stores/lock'
 import { useSettings, type LockDelay } from '@/stores/settings'
@@ -71,6 +73,21 @@ export default function SecuritySettings() {
           onValueChange={(v) => s.set({ confirmLinks: v })}
         />
       </Section>
+
+      {UPDATES_REPO ? (
+        <Section
+          title="Mises à jour"
+          footer="Une fois par jour au démarrage, l'app demande à GitHub le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi."
+        >
+          <SwitchRow
+            icon="cloud-download-outline"
+            title="Proposer les nouvelles versions"
+            value={s.updateCheck}
+            onValueChange={(v) => s.set({ updateCheck: v })}
+          />
+          <Row icon="refresh-outline" title="Rechercher une mise à jour" onPress={() => void checkForUpdateNow()} chevron />
+        </Section>
+      ) : null}
 
       <Section title="Compte">
         <Row icon="key-outline" title="Changer le mot de passe" onPress={() => router.push('/settings/password')} chevron />

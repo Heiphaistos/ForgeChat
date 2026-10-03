@@ -2,6 +2,8 @@ import type { ExpoConfig, ConfigContext } from 'expo/config'
 
 import { googleServicesFile } from './plugins/googleServices.js'
 import { distributedServerConfig } from './plugins/serverConfig.js'
+import { updatesRepo } from './plugins/updatesRepo.js'
+import { versionCodeOf } from './plugins/versionCode.js'
 import withLanCleartext from './plugins/withLanCleartext.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
@@ -47,6 +49,8 @@ const DISTRIBUTED =
 const API_URL = DISTRIBUTED ? DISTRIBUTED.apiUrl : RAW_API_URL
 const LIVEKIT_HOST = DISTRIBUTED?.livekitHost ?? null
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID
+// Releases GitHub consultées par l'app pour proposer les mises à jour (bêta seulement).
+const UPDATES_REPO = updatesRepo(APP_ENV, process.env.FORGECHAT_UPDATES_REPO)
 // Push Android (FCM) : google-services.json hors dépôt (plugins/googleServices.js).
 const GOOGLE_SERVICES_JSON = googleServicesFile(APP_ENV, process.env.GOOGLE_SERVICES_JSON)
 // Identifiant FINAL de l'app publique (Play Store) : jamais configurable.
@@ -94,12 +98,15 @@ export default (ctx: ConfigContext): ExpoConfig => {
   return expoConfig
 }
 
+// Version publique : la changer ici (et dans package.json) pour chaque nouvelle bêta.
+const VERSION = '1.0.0'
+
 const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: APP_NAMES[APP_ENV],
   slug: 'forgechat',
   scheme: 'forgechat',
-  version: '1.0.0',
+  version: VERSION,
   orientation: 'portrait',
   icon: `${ASSETS}/icon.png`,
   userInterfaceStyle: 'dark',
@@ -130,6 +137,8 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: PACKAGES[APP_ENV],
+    // Builds locaux ; EAS gère son propre compteur (eas.json : appVersionSource remote).
+    versionCode: versionCodeOf(VERSION),
     ...(GOOGLE_SERVICES_JSON ? { googleServicesFile: GOOGLE_SERVICES_JSON } : {}),
     adaptiveIcon: {
       backgroundColor: '#1e1f22',
@@ -236,6 +245,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     apiUrl: API_URL,
     appEnv: APP_ENV,
     livekitHost: LIVEKIT_HOST,
+    updatesRepo: UPDATES_REPO,
     ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
   },
 })
