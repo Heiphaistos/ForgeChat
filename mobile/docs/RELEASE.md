@@ -85,7 +85,8 @@ la capture exige un service au premier plan de type `mediaProjection` :
 
 - permissions `FOREGROUND_SERVICE` et `FOREGROUND_SERVICE_MEDIA_PROJECTION` (ajoutées par
   `plugins/withScreenShare.js`) ;
-- service `com.oney.WebRTCModule.MediaProjectionService` (fourni par react-native-webrtc).
+- service `com.oney.WebRTCModule.MediaProjectionService` (fourni par @livekit/react-native-webrtc, activé
+  par le plugin Expo de LiveKit).
 
 Google Play demande une **déclaration des services au premier plan** dans la Play Console
 (Contenu de l'application → Services au premier plan) pour ce type :

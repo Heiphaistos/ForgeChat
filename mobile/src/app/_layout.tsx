@@ -1,3 +1,4 @@
+import '@/services/livekitSetup' // en premier : globales WebRTC de LiveKit
 import { QueryClientProvider } from '@tanstack/react-query'
 import * as Linking from 'expo-linking'
 import { DarkTheme, router, SplashScreen, Stack, ThemeProvider, usePathname } from 'expo-router'

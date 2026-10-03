@@ -1,32 +1,28 @@
 import { create } from 'zustand'
-import {
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-  type MediaStream,
-} from 'react-native-webrtc'
-import { ICE_UNAVAILABLE, voiceApi } from '@/api/voice'
+import type { MediaStream } from '@livekit/react-native-webrtc'
+import { DisconnectReason, Room, RoomEvent, Track, type RemoteParticipant } from 'livekit-client'
+import { voiceApi } from '@/api/voice'
+import type { LiveKitAccess } from '@/config/livekitUrl'
+import { canShareInCall } from '@/features/calls/screenShareLogic'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
-import { audioSession, getLocalMedia, stopStream } from '@/services/media'
-import { canShareInCall } from '@/features/calls/screenShareLogic'
-import { captureScreen, stopScreenCapture } from '@/services/screenCapture'
-import { onPeer, onTrackEnded } from '@/services/webrtc'
+import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf } from '@/services/livekit'
+import { ensureMediaPermissions, ringtones } from '@/services/media'
 import { registerSignOutHook } from './auth'
 import { useVoice } from './voice'
 
 /**
- * Appels privés 1:1 (audio/vidéo) — protocole identique au client web
- * (client/src/store/call.ts) pour l'interopérabilité mobile ⇄ web ⇄ desktop :
+ * Appels privés 1:1 (audio/vidéo) — protocole du serveur ForgeChat ≥ 3.251 et du client web
+ * (client/src/store/call.ts) : la sonnerie passe par le WebSocket, le média par le SFU LiveKit.
  *
- *   A: DM_CALL_INIT ─────────────▶ B: DM_CALL_INCOMING
- *   A: DM_CALL_ACCEPTED ◀───────── B: DM_CALL_ACCEPT
- *   A: VOICE_SIGNAL{offer}  ─────▶ B
- *   A ◀──── VOICE_SIGNAL{answer}   B
- *   A ⇄ VOICE_SIGNAL{ice} ⇄ B       (payload.sdp / payload.candidate)
+ *   A: DM_CALL_INIT ─────────────▶ B: DM_CALL_INCOMING (toutes ses sessions)
+ *   A ◀── DM_CALL_ACCEPTED{livekit} ── B: DM_CALL_ACCEPT
+ *                                   B ◀── DM_CALL_MEDIA{livekit, session_id} (seule session qui décroche)
+ *                                   autres sessions de B ◀── DM_CALL_TAKEN
+ *   A et B rejoignent la salle LiveKit (identité = id utilisateur) et publient micro (+ caméra).
  *   DM_CALL_HANGUP / DM_CALL_DECLINE ⇒ DM_CALL_ENDED / DM_CALL_DECLINED
  *
- * Le serveur n'autorise la signalisation qu'entre deux utilisateurs ayant un DM.
+ * Le serveur ne délivre l'accès LiveKit qu'entre deux utilisateurs ayant une conversation commune.
  */
 
 export type CallType = 'voice' | 'video'
@@ -50,11 +46,13 @@ interface CallState {
   /** Correspondant du dernier appel terminé avec un motif : l'écran de fin garde son nom et son avatar. */
   endedWith: { name: string; avatar: string | null } | null
   callType: CallType
-  localStream: MediaStream | null
-  remoteStream: MediaStream | null
+  /** Notre caméra (aperçu), null si coupée ou en partage d'écran. */
+  localVideo: MediaStream | null
+  /** Vidéo du correspondant : son écran partagé s'il y en a un, sinon sa caméra. */
+  remoteVideo: MediaStream | null
   micMuted: boolean
   camOff: boolean
-  /** Notre écran remplace la caméra envoyée (appel vidéo uniquement). */
+  /** Notre écran est diffusé à la place de la caméra (appel vidéo uniquement). */
   screenSharing: boolean
   speaker: boolean
   connectedAt: number | null
@@ -71,52 +69,48 @@ interface CallState {
   stopScreenShare: () => void
 }
 
-let pc: RTCPeerConnection | null = null
-let pendingIce: RTCIceCandidateInitLike[] = []
+let room: Room | null = null
 let ringTimeout: ReturnType<typeof setTimeout> | null = null
-let disconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectTimeout: ReturnType<typeof setTimeout> | null = null
+let partnerGoneTimer: ReturnType<typeof setTimeout> | null = null
 let busy = false
-/** Partage d'écran en appel 1:1 : flux capturé (sa piste remplace la caméra envoyée). */
-let callScreenStream: MediaStream | null = null
-/** Incrémenté à chaque cleanup() : détecte une continuation async (start/accept)
- *  périmée par un raccroché distant/erreur survenu pendant un `await`. */
+/** Appelé : DM_CALL_ACCEPT envoyé, en attente de l'accès LiveKit (DM_CALL_MEDIA). */
+let awaitingMedia = false
+/** Session WebSocket de cet appareil (SESSION_INIT) : DM_CALL_MEDIA n'est que pour elle. */
+let mySessionId: string | null = null
+/** Caméra active avant le partage d'écran (rétablie à la fin du partage). */
+let camBeforeShare = false
+/** Incrémenté à chaque cleanup() : détecte une continuation async périmée (raccroché pendant un await). */
 let callGeneration = 0
-
-interface RTCIceCandidateInitLike {
-  candidate?: string
-  sdpMid?: string | null
-  sdpMLineIndex?: number | null
-}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RING_TIMEOUT_MS = 45_000
 const CONNECT_TIMEOUT_MS = 30_000
+/** Coupure du correspondant (réseau, app fermée) : délai pour revenir, comme le web. */
+const PARTNER_GONE_MS = 20_000
 
 export const useCall = create<CallState>((set, get) => {
+  const clearTimers = () => {
+    for (const t of [ringTimeout, connectTimeout, partnerGoneTimer]) if (t) clearTimeout(t)
+    ringTimeout = null
+    connectTimeout = null
+    partnerGoneTimer = null
+  }
+
   const cleanup = (reason: string | null = null) => {
     callGeneration++
     busy = false
-    if (ringTimeout) clearTimeout(ringTimeout)
-    if (disconnectTimer) clearTimeout(disconnectTimer)
-    if (connectTimeout) clearTimeout(connectTimeout)
-    ringTimeout = null
-    disconnectTimer = null
-    connectTimeout = null
-    try {
-      pc?.close()
-    } catch {
-      /* ignore */
+    awaitingMedia = false
+    clearTimers()
+    const r = room
+    room = null
+    if (r) void leaveRoom(r)
+    ringtones.stopRingback()
+    ringtones.stopRinging()
+    if (get().phase !== 'idle') {
+      ringtones.keepScreenOn(false)
+      void callAudio.stop()
     }
-    pc = null
-    pendingIce = []
-    // Fin d'appel : la capture d'écran s'arrête aussi (libère MediaProjection et sa notification).
-    stopScreenCapture(callScreenStream)
-    callScreenStream = null
-    stopStream(get().localStream)
-    audioSession.stopRingback()
-    audioSession.stopRinging()
-    if (get().phase !== 'idle') audioSession.stop()
     const { partnerName, partnerAvatar } = get()
     set({
       phase: 'idle',
@@ -125,8 +119,8 @@ export const useCall = create<CallState>((set, get) => {
       partnerName: null,
       partnerAvatar: null,
       endedWith: reason && partnerName ? { name: partnerName, avatar: partnerAvatar } : null,
-      localStream: null,
-      remoteStream: null,
+      localVideo: null,
+      remoteVideo: null,
       micMuted: false,
       camOff: false,
       screenSharing: false,
@@ -136,77 +130,132 @@ export const useCall = create<CallState>((set, get) => {
     })
   }
 
-  const signal = (payload: Record<string, unknown>) => {
-    const to = get().partnerId
-    if (to) realtime.send({ type: 'VOICE_SIGNAL', to, payload })
+  const refreshRemote = () => {
+    const pid = get().partnerId
+    const rp = pid ? room?.remoteParticipants.get(pid) : undefined
+    const screen = rp?.getTrackPublication(Track.Source.ScreenShare)
+    const cam = rp?.getTrackPublication(Track.Source.Camera)
+    const video = (screen?.isSubscribed && !screen.isMuted ? streamOf(screen.track) : null) ?? (cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null)
+    set({ remoteVideo: video })
   }
 
-  /** Armé en entrant en 'connecting' : si la connexion média n'aboutit pas
-   *  (pair distant muet, ICE bloqué…) sous 30 s, on raccroche proprement au
-   *  lieu de rester bloqué indéfiniment sur l'écran d'appel. */
+  const refreshLocal = () => {
+    const cam = room?.localParticipant.getTrackPublication(Track.Source.Camera)
+    const { camOff, screenSharing } = get()
+    set({ localVideo: !camOff && !screenSharing && cam && !cam.isMuted ? streamOf(cam.track) : null })
+  }
+
+  const markConnected = () => {
+    if (connectTimeout) clearTimeout(connectTimeout)
+    connectTimeout = null
+    if (partnerGoneTimer) clearTimeout(partnerGoneTimer)
+    partnerGoneTimer = null
+    ringtones.stopRingback()
+    set((s) => ({ phase: 'connected', connectedAt: s.connectedAt ?? Date.now() }))
+  }
+
   const armConnectTimeout = () => {
     if (connectTimeout) clearTimeout(connectTimeout)
     connectTimeout = setTimeout(() => {
-      if (get().phase !== 'connecting') return
+      if (get().phase === 'connected' || get().phase === 'idle') return
       const { partnerId, dmId } = get()
       if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
       cleanup('Connexion impossible')
     }, CONNECT_TIMEOUT_MS)
   }
 
-  const buildPeer = async (): Promise<RTCPeerConnection> => {
-    const iceServers = await voiceApi.iceServers()
-    const peer = new RTCPeerConnection({ iceServers, bundlePolicy: 'max-bundle' })
-
-    onPeer(peer, 'icecandidate', (e) => {
-      const c = e.candidate
-      if (c) signal({ type: 'ice', candidate: { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex } })
-    })
-    onPeer(peer, 'track', (e) => {
-      const stream = e.streams[0]
-      if (stream) set({ remoteStream: stream })
-    })
-    onPeer(peer, 'connectionstatechange', () => {
-      const st = peer.connectionState
-      if (st === 'connected') {
-        if (disconnectTimer) clearTimeout(disconnectTimer)
-        if (connectTimeout) clearTimeout(connectTimeout)
-        disconnectTimer = null
-        connectTimeout = null
-        audioSession.stopRingback()
-        set((s) => ({ phase: 'connected', connectedAt: s.connectedAt ?? Date.now() }))
-      } else if (st === 'disconnected') {
-        // Coupure réseau passagère (4G ⇄ Wi-Fi) : laisser 6 s pour récupérer.
-        disconnectTimer = setTimeout(() => {
-          if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed') {
-            get().hangup()
-          }
-        }, 6000)
-      } else if (st === 'failed') {
-        peer.restartIce()
-        setTimeout(async () => {
-          if (peer.connectionState !== 'failed') return
-          try {
-            const offer = await peer.createOffer({ iceRestart: true })
-            await peer.setLocalDescription(offer)
-            signal({ type: 'offer', sdp: { type: offer.type, sdp: offer.sdp } })
-          } catch {
-            get().hangup()
-          }
-        }, 2000)
+  /** Rejoint la salle LiveKit et publie micro (+ caméra en appel vidéo). */
+  const connect = async (access: LiveKitAccess) => {
+    if (room) return
+    const gen = callGeneration
+    const r = new Room({ adaptiveStream: false, dynacast: true })
+    room = r
+    const isPartner = (p: RemoteParticipant) => p.identity === get().partnerId
+    r.on(RoomEvent.TrackSubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
+      .on(RoomEvent.TrackUnsubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
+      .on(RoomEvent.TrackMuted, () => refreshRemote())
+      .on(RoomEvent.TrackUnmuted, () => refreshRemote())
+      .on(RoomEvent.LocalTrackPublished, () => refreshLocal())
+      .on(RoomEvent.LocalTrackUnpublished, (pub) => {
+        // Partage arrêté depuis la notification système (ou par Android) : même nettoyage.
+        if (pub.source === Track.Source.ScreenShare && get().screenSharing) get().stopScreenShare()
+        refreshLocal()
+      })
+      .on(RoomEvent.ParticipantConnected, (p) => {
+        if (!isPartner(p)) return
+        markConnected()
+        refreshRemote()
+      })
+      .on(RoomEvent.ParticipantDisconnected, (p) => {
+        if (!isPartner(p)) return
+        set({ remoteVideo: null })
+        partnerGoneTimer = setTimeout(() => {
+          if (room === r) cleanup('Appel terminé')
+        }, PARTNER_GONE_MS)
+      })
+      .on(RoomEvent.Disconnected, (reason) => {
+        if (room !== r) return
+        if (reason !== DisconnectReason.CLIENT_INITIATED) cleanup('Connexion au serveur audio/vidéo perdue')
+      })
+    try {
+      await callAudio.start(get().speaker)
+      const turn = await voiceApi.turnServers()
+      await r.connect(access.url, access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
+    } catch (err) {
+      logger.warn('call', 'connexion LiveKit', err)
+      if (gen === callGeneration) {
+        const { partnerId, dmId } = get()
+        if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+        cleanup('Impossible de joindre le serveur audio/vidéo')
       }
-    })
-    pc = peer
-    return peer
+      return
+    }
+    if (gen !== callGeneration || room !== r) {
+      void r.disconnect().catch(() => undefined)
+      return
+    }
+    try {
+      await r.localParticipant.setMicrophoneEnabled(!get().micMuted)
+      if (get().callType === 'video') {
+        try {
+          await r.localParticipant.setCameraEnabled(true, { facingMode: 'user', resolution: { width: 640, height: 480, frameRate: 24 } })
+        } catch (err) {
+          logger.warn('call', 'caméra indisponible, repli audio', err)
+          set({ callType: 'voice', camOff: true })
+        }
+      }
+    } catch (err) {
+      logger.warn('call', 'publication micro', err)
+    }
+    if (gen !== callGeneration) return
+    const pid = get().partnerId
+    if (pid && r.remoteParticipants.has(pid)) markConnected()
+    refreshRemote()
+    refreshLocal()
   }
 
-  const attachMedia = async (type: CallType) => {
-    const { stream, hasVideo } = await getLocalMedia(type === 'video')
-    set({ localStream: stream, callType: hasVideo ? 'video' : 'voice', speaker: hasVideo })
-    return stream
+  const unpublishCamera = async (r: Room) => {
+    const track = r.localParticipant.getTrackPublication(Track.Source.Camera)?.track
+    if (track) await r.localParticipant.unpublishTrack(track, true).catch((e: unknown) => logger.warn('call', 'retrait caméra', e))
+  }
+
+  /** Accès LiveKit reçu : validé (adresse autorisée), sinon fin d'appel avec le motif. */
+  const connectWith = (raw: unknown) => {
+    const res = liveKitAccess(raw)
+    if ('error' in res) {
+      const { partnerId, dmId } = get()
+      if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+      cleanup(res.error)
+      return
+    }
+    void connect(res.access)
   }
 
   // ── Signalisation entrante ────────────────────────────────────────────────
+  realtime.on('SESSION_INIT', (e: RealtimeEvent) => {
+    mySessionId = typeof e.session_id === 'string' ? e.session_id : null
+  })
+
   realtime.on('DM_CALL_INCOMING', (e: RealtimeEvent) => {
     const from = typeof e.from === 'string' ? e.from : null
     const dmId = typeof e.dm_id === 'string' ? e.dm_id : null
@@ -226,35 +275,50 @@ export const useCall = create<CallState>((set, get) => {
         receivedAt: Date.now(),
       },
     })
-    audioSession.startRinging()
+    ringtones.startRinging()
     ringTimeout = setTimeout(() => {
       if (get().incoming?.dmId === dmId) {
-        audioSession.stopRinging()
+        ringtones.stopRinging()
         set({ incoming: null })
       }
     }, RING_TIMEOUT_MS)
   })
 
-  realtime.on('DM_CALL_ACCEPTED', async (e) => {
-    if (e.dm_id !== get().dmId || !pc || get().phase !== 'calling') return
+  // Appelant : le correspondant a décroché, le serveur joint l'accès au SFU.
+  realtime.on('DM_CALL_ACCEPTED', (e) => {
+    if (e.dm_id !== get().dmId || get().phase !== 'calling') return
     if (ringTimeout) clearTimeout(ringTimeout)
     ringTimeout = null
+    ringtones.stopRingback()
     set({ phase: 'connecting' })
     armConnectTimeout()
-    try {
-      const offer = await pc.createOffer({})
-      await pc.setLocalDescription(offer)
-      signal({ type: 'offer', sdp: { type: offer.type, sdp: offer.sdp } })
-    } catch (err) {
-      logger.warn('call', 'création offer', err)
-      get().hangup()
+    connectWith(e.livekit)
+  })
+
+  // Appelé : accès au SFU, envoyé à la seule session qui a décroché.
+  realtime.on('DM_CALL_MEDIA', (e) => {
+    if (e.dm_id !== get().dmId || !awaitingMedia) return
+    if (typeof e.session_id === 'string' && mySessionId && e.session_id !== mySessionId) return
+    awaitingMedia = false
+    connectWith(e.livekit)
+  })
+
+  // Une autre session du même compte (web, desktop) a décroché ou refusé : on arrête de sonner.
+  realtime.on('DM_CALL_TAKEN', (e) => {
+    if (typeof e.session_id === 'string' && e.session_id === mySessionId) return
+    const inc = get().incoming
+    if (inc && e.dm_id === inc.dmId) {
+      if (ringTimeout) clearTimeout(ringTimeout)
+      ringTimeout = null
+      ringtones.stopRinging()
+      set({ incoming: null })
     }
   })
 
   const remoteEnded = (reason: string) => (e: RealtimeEvent) => {
     const inc = get().incoming
     if (inc && e.dm_id === inc.dmId) {
-      audioSession.stopRinging()
+      ringtones.stopRinging()
       set({ incoming: null })
       return
     }
@@ -269,38 +333,6 @@ export const useCall = create<CallState>((set, get) => {
     cleanup(e.reason === 'offline' ? 'Ton correspondant est hors ligne' : e.reason === 'rate_limited' ? 'Trop d’appels, patiente un peu' : 'Appel impossible')
   })
 
-  realtime.on('VOICE_SIGNAL', async (e) => {
-    const peer = pc
-    if (!peer) return
-    const payload = e.payload as Record<string, unknown> | undefined
-    if (!payload || typeof payload.type !== 'string') return
-    // Signaux du vocal de serveur (format payload.data) : pas pour nous.
-    if (payload.data !== undefined && payload.sdp === undefined && payload.candidate === undefined) return
-    if (typeof e.from === 'string' && e.from !== get().partnerId) return
-    try {
-      if (payload.type === 'offer' && payload.sdp) {
-        await peer.setRemoteDescription(new RTCSessionDescription(payload.sdp as { type: string; sdp: string }))
-        for (const c of pendingIce) await peer.addIceCandidate(new RTCIceCandidate(c)).catch(() => undefined)
-        pendingIce = []
-        const answer = await peer.createAnswer()
-        await peer.setLocalDescription(answer)
-        signal({ type: 'answer', sdp: { type: answer.type, sdp: answer.sdp } })
-      } else if (payload.type === 'answer' && payload.sdp) {
-        if (peer.signalingState === 'have-local-offer') {
-          await peer.setRemoteDescription(new RTCSessionDescription(payload.sdp as { type: string; sdp: string }))
-          for (const c of pendingIce) await peer.addIceCandidate(new RTCIceCandidate(c)).catch(() => undefined)
-          pendingIce = []
-        }
-      } else if (payload.type === 'ice' && payload.candidate && typeof payload.candidate === 'object') {
-        const c = payload.candidate as RTCIceCandidateInitLike
-        if (peer.remoteDescription) await peer.addIceCandidate(new RTCIceCandidate(c)).catch(() => undefined)
-        else if (pendingIce.length < 200) pendingIce.push(c)
-      }
-    } catch (err) {
-      logger.warn('call', `signal ${String(payload.type)}`, err)
-    }
-  })
-
   return {
     incoming: null,
     phase: 'idle',
@@ -310,8 +342,8 @@ export const useCall = create<CallState>((set, get) => {
     partnerAvatar: null,
     endedWith: null,
     callType: 'voice',
-    localStream: null,
-    remoteStream: null,
+    localVideo: null,
+    remoteVideo: null,
     micMuted: false,
     camOff: false,
     screenSharing: false,
@@ -324,35 +356,15 @@ export const useCall = create<CallState>((set, get) => {
       if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
       busy = true
       const gen = callGeneration
-      // Phase posée AVANT les await (média, ICE servers) : un DM_CALL_ERROR/ENDED
-      // distant ou un hangup() local pendant cette attente doit voir phase !==
-      // 'idle' pour que le handler correspondant appelle cleanup() — sinon
-      // l'événement est ignoré et la garde de génération ci-dessous ne se
-      // déclenche jamais (l'appel resterait bloqué après un raccroché distant).
-      set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null })
+      // Phase posée AVANT les await : un DM_CALL_ERROR/ENDED distant ou un hangup() local pendant
+      // l'attente des permissions doit voir phase !== 'idle' et appeler cleanup().
+      set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null, speaker: type === 'video' })
       try {
-        // Serveurs STUN/TURN d'abord : sans eux, refus clair avant d'ouvrir micro/caméra.
-        await voiceApi.iceServers()
-        const stream = await attachMedia(type)
-        if (gen !== callGeneration) {
-          stopStream(stream)
-          return
-        }
-        const peer = await buildPeer()
-        if (gen !== callGeneration) {
-          try {
-            peer.close()
-          } catch {
-            /* ignore */
-          }
-          pc = null
-          stopStream(stream)
-          return
-        }
-        stream.getTracks().forEach((t) => peer.addTrack(t, stream))
-        audioSession.start(get().callType === 'video')
-        audioSession.startRingback()
-        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: get().callType })
+        if (!(await ensureMediaPermissions(type === 'video'))) throw new Error('Permission micro/caméra refusée')
+        if (gen !== callGeneration) return
+        ringtones.keepScreenOn(true)
+        ringtones.startRingback()
+        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
         ringTimeout = setTimeout(() => {
           if (get().phase === 'calling') {
             realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
@@ -374,10 +386,7 @@ export const useCall = create<CallState>((set, get) => {
       const gen = callGeneration
       if (ringTimeout) clearTimeout(ringTimeout)
       ringTimeout = null
-      audioSession.stopRinging()
-      // Idem start() : phase posée AVANT les await pour que remoteEnded /
-      // DM_CALL_ERROR appellent cleanup() s'ils arrivent pendant l'attente du
-      // micro/ICE, plutôt que de rester ignorés (phase encore 'idle').
+      ringtones.stopRinging()
       set({
         incoming: null,
         phase: 'connecting',
@@ -388,35 +397,20 @@ export const useCall = create<CallState>((set, get) => {
         endedWith: null,
         callType: inc.callType,
         endReason: null,
+        speaker: inc.callType === 'video',
       })
       try {
-        await voiceApi.iceServers()
-        const stream = await attachMedia(inc.callType)
-        if (gen !== callGeneration) {
-          stopStream(stream)
-          return
-        }
-        const peer = await buildPeer()
-        if (gen !== callGeneration) {
-          try {
-            peer.close()
-          } catch {
-            /* ignore */
-          }
-          pc = null
-          stopStream(stream)
-          return
-        }
-        stream.getTracks().forEach((t) => peer.addTrack(t, stream))
-        audioSession.start(get().callType === 'video')
+        if (!(await ensureMediaPermissions(inc.callType === 'video'))) throw new Error('Micro inaccessible — appel refusé')
+        if (gen !== callGeneration) return
+        ringtones.keepScreenOn(true)
+        awaitingMedia = true
         realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
         armConnectTimeout()
       } catch (e) {
-        // gen !== callGeneration ⇒ l'appel a déjà été terminé par cleanup() (raccroché
-        // distant, timeout…) pendant l'attente : ne pas renvoyer un DECLINE en double.
+        // gen !== callGeneration ⇒ appel déjà terminé (raccroché distant…) : pas de DECLINE en double.
         if (gen === callGeneration) {
           realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
-          cleanup(e instanceof Error && e.message === ICE_UNAVAILABLE ? ICE_UNAVAILABLE : 'Micro inaccessible — appel refusé')
+          cleanup(e instanceof Error ? e.message : 'Micro inaccessible — appel refusé')
         }
       } finally {
         busy = false
@@ -428,7 +422,7 @@ export const useCall = create<CallState>((set, get) => {
       if (!inc) return
       if (ringTimeout) clearTimeout(ringTimeout)
       ringTimeout = null
-      audioSession.stopRinging()
+      ringtones.stopRinging()
       realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
       set({ incoming: null })
     },
@@ -440,60 +434,65 @@ export const useCall = create<CallState>((set, get) => {
     },
 
     toggleMic: () => {
-      const track = get().localStream?.getAudioTracks()[0]
-      if (!track) return
       const muted = !get().micMuted
-      track.enabled = !muted
       set({ micMuted: muted })
+      void room?.localParticipant.setMicrophoneEnabled(!muted).catch((e: unknown) => logger.warn('call', 'micro', e))
     },
 
     toggleCam: () => {
-      const track = get().localStream?.getVideoTracks()[0]
-      if (!track) return
+      if (get().screenSharing) return
       const off = !get().camOff
-      track.enabled = !off
       set({ camOff: off })
+      void room?.localParticipant
+        .setCameraEnabled(!off)
+        .then(refreshLocal)
+        .catch((e: unknown) => logger.warn('call', 'caméra', e))
     },
 
     switchCamera: () => {
-      const track = get().localStream?.getVideoTracks()[0]
-      if (track) track._switchCamera()
+      const track = room?.localParticipant.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack as
+        | { _switchCamera?: () => void }
+        | undefined
+      track?._switchCamera?.()
     },
 
     toggleSpeaker: () => {
       const on = !get().speaker
-      audioSession.setSpeaker(on)
       set({ speaker: on })
+      void callAudio.setSpeaker(on)
     },
 
-    // Le web n'a pas de partage d'écran en appel 1:1 : on remplace la piste caméra envoyée
-    // (replaceTrack, sans renégociation). Le correspondant voit l'écran à la place de la caméra.
+    // Le correspondant ne voit qu'une vidéo : l'écran remplace la caméra le temps du partage.
     shareScreen: async () => {
-      const { phase, callType, screenSharing } = get()
-      if (screenSharing || !pc || !canShareInCall(phase, callType)) return
-      const gen = callGeneration
-      const captured = await captureScreen()
-      const sender = pc?.getSenders().find((x) => x.track?.kind === 'video')
-      if (gen !== callGeneration || !sender) {
-        stopScreenCapture(captured.stream) // appel terminé pendant le dialogue système
-        return
+      const { phase, callType, screenSharing, camOff } = get()
+      const r = room
+      if (screenSharing || !r || !canShareInCall(phase, callType)) return
+      camBeforeShare = !camOff
+      // Caméra DÉPUBLIÉE (pas seulement coupée) : le web assemble toutes les pistes du correspondant
+      // dans un seul flux et affiche la première vidéo ; une caméra en sourdine y resterait en noir.
+      await unpublishCamera(r)
+      try {
+        await r.localParticipant.setScreenShareEnabled(true)
+      } catch (e) {
+        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true).catch(() => undefined)
+        refreshLocal()
+        throw e
       }
-      await sender.replaceTrack(captured.track)
-      callScreenStream = captured.stream
-      onTrackEnded(captured.track, () => {
-        if (callScreenStream === captured.stream) get().stopScreenShare()
-      })
+      if (room !== r) return
       set({ screenSharing: true })
+      refreshLocal()
     },
 
     stopScreenShare: () => {
-      if (!callScreenStream) return
-      stopScreenCapture(callScreenStream)
-      callScreenStream = null
-      const cam = get().localStream?.getVideoTracks()[0] ?? null
-      const sender = pc?.getSenders().find((x) => x.track?.kind === 'video' || x.track === null)
-      if (sender) void sender.replaceTrack(cam).catch((err: unknown) => logger.warn('call', 'retour caméra', err))
+      const r = room
+      if (!get().screenSharing) return
       set({ screenSharing: false })
+      if (!r) return
+      void (async () => {
+        await stopScreenShare(r)
+        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true).catch(() => undefined)
+        refreshLocal()
+      })()
     },
   }
 })

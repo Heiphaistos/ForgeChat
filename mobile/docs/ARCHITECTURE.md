@@ -78,21 +78,30 @@ Cache (`features/chat/cache.ts`) : `InfiniteData` TanStack, `pages[0]` = page la
 - Pièces jointes : message créé avec `has_attachments`, puis upload multipart sur l'id réel.
 - Historique : `before=<id du plus ancien>` au défilement (liste inversée).
 
-## Appels et vocal (WebRTC)
+## Appels et vocal (LiveKit)
 
-Protocole identique au client web (`client/src/store/call.ts` et `voice.ts`), donc interopérable :
+Protocole du serveur ForgeChat ≥ 3.251 et du client web (`client/src/store/call.ts`, `voice.ts`,
+`voiceSfu.ts`) : la signalisation passe par le WebSocket, **tout le média par le SFU LiveKit** (plus de
+pair-à-pair). Le serveur ne délivre un jeton LiveKit qu'après ses contrôles ; l'identité LiveKit d'un
+participant est son id utilisateur.
 
-- **Appel 1:1** : `DM_CALL_INIT → DM_CALL_INCOMING`, `DM_CALL_ACCEPT → DM_CALL_ACCEPTED`, puis offre /
-  réponse / ICE via `VOICE_SIGNAL` (`payload.sdp` / `payload.candidate`). Sonnerie 45 s, tolérance de
-  6 s aux coupures, redémarrage ICE en cas d'échec.
-- **Salon vocal** : maillage (mesh) ; le nouvel arrivant envoie une offre à chaque pair
-  (`VOICE_EXISTING_PEERS`) ; `VOICE_SIGNAL` avec `payload.data` ; gestion du glare « pair poli ». Le
-  mobile émet l'audio et reçoit audio + vidéo.
+- **Appel 1:1** (`src/stores/call.ts`) : `DM_CALL_INIT → DM_CALL_INCOMING` ; l'appelé envoie
+  `DM_CALL_ACCEPT` ; l'appelant reçoit `DM_CALL_ACCEPTED { livekit }`, l'appelé `DM_CALL_MEDIA { livekit,
+  session_id }` (seule la session qui décroche ; les autres reçoivent `DM_CALL_TAKEN`). Les deux rejoignent
+  la salle et publient micro (+ caméra). Partage d'écran : l'écran remplace la caméra (dépubliée).
+  Sonnerie 45 s, connexion 30 s, 20 s de grâce si le correspondant disparaît.
+- **Salon vocal** (`src/stores/voice.ts`) : présence par le WebSocket (`VOICE_JOIN → VOICE_EXISTING_PEERS
+  { peers, livekit, can_speak, server_muted }`, `VOICE_USER_JOINED/LEFT`, `VOICE_STATE(_UPDATE)`) ;
+  média LiveKit : micro et écran émis, son, caméras et écrans des autres reçus.
+- **Adresse LiveKit** vérifiée avant connexion (`src/config/livekitUrl.ts`) : bêta = `wss://` sur l'hôte du
+  serveur (ou celui fixé au build) ; APK DEV = `wss://`, ou `ws://` vers une IP locale.
+- **Relais réseau** : seuls les relais TURN de `GET /api/voice/ice-config` sont passés à LiveKit (jamais de
+  STUN, public ou non).
 - **Appel vers un mobile fermé** (patch serveur) : le serveur envoie un push « appel entrant » au lieu
   de répondre « hors ligne » ; à l'ouverture de l'app, la reconnexion WebSocket rejoue
   `DM_CALL_INCOMING` si l'appelant attend toujours.
-- Routage audio (écouteur / haut-parleur / Bluetooth, capteur de proximité, sonneries) :
-  `react-native-incall-manager`. Configuration ICE (STUN/TURN) : `GET /api/voice/ice-config`.
+- Audio : session d'appel et sortie (haut-parleur / écouteur / Bluetooth) par `AudioSession` de LiveKit ;
+  sonneries et écran allumé par `react-native-incall-manager`.
 
 ## Navigation
 

@@ -189,6 +189,9 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
         microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
       },
     ],
+    // Média des appels et salons vocaux : SFU LiveKit. Le module natif du plugin initialise LiveKit
+    // au démarrage (audio « communication ») et active le service au premier plan du partage d'écran.
+    ['@livekit/react-native-expo-plugin', { android: { audioType: 'communication', enableScreenShareService: true } }],
     [
       '@config-plugins/react-native-webrtc',
       {
@@ -207,7 +210,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
           usesCleartextTraffic: APP_ENV === 'development' || APP_ENV === 'preview',
           enableMinifyInReleaseBuilds: true,
           enableShrinkResourcesInReleaseBuilds: true,
-          // Règles R8 requises par react-native-webrtc.
+          // Règles R8 requises par la pile WebRTC (@livekit/react-native-webrtc).
           extraProguardRules: '-keep class org.webrtc.** { *; }',
         },
       },

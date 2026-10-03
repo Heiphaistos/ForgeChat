@@ -7,32 +7,35 @@ export interface IceServer {
 }
 
 /**
- * Pas de serveur STUN public de repli (il verrait l'adresse IP des utilisateurs) : uniquement les
- * serveurs STUN/TURN fournis par NOTRE serveur. Sans eux, l'appel est refusé avec ce message.
+ * Relais TURN du serveur (/voice/ice-config), passés à LiveKit pour les réseaux qui filtrent
+ * l'UDP direct. Uniquement les URL turn:/turns: : avec un SFU LiveKit, le client n'a pas besoin
+ * de STUN, et un STUN public (ex. Google) verrait l'adresse IP de chaque participant.
  */
-export const ICE_UNAVAILABLE =
-  'Appels indisponibles : le serveur ne fournit aucun serveur STUN/TURN. Préviens l’administrateur.'
-
-/** Liste ICE utilisable, ou erreur claire si le serveur n'en fournit aucune. */
-export function usableIceServers(list: unknown): IceServer[] {
-  if (!Array.isArray(list) || list.length === 0) throw new Error(ICE_UNAVAILABLE)
-  return list as IceServer[]
+export function relayOnly(list: unknown): IceServer[] {
+  if (!Array.isArray(list)) return []
+  const out: IceServer[] = []
+  for (const s of list as IceServer[]) {
+    const urls = (Array.isArray(s?.urls) ? s.urls : [s?.urls]).filter(
+      (u): u is string => typeof u === 'string' && /^turns?:/i.test(u),
+    )
+    if (urls.length) out.push({ urls, ...(s.username ? { username: s.username } : {}), ...(s.credential ? { credential: s.credential } : {}) })
+  }
+  return out
 }
 
 let cache: { at: number; servers: IceServer[] } | null = null
 
 export const voiceApi = {
-  /** Config ICE (STUN + TURN) — mise en cache 10 min (les identifiants TURN peuvent tourner). */
-  async iceServers(): Promise<IceServer[]> {
+  /** Relais TURN (mis en cache 10 min : identifiants éphémères). Liste vide si indisponible. */
+  async turnServers(): Promise<IceServer[]> {
     if (cache && Date.now() - cache.at < 10 * 60_000) return cache.servers
-    let list: unknown
     try {
-      list = (await http.get<{ ice_servers?: IceServer[] }>('/voice/ice-config')).ice_servers
+      const res = await http.get<{ ice_servers?: IceServer[] }>('/voice/ice-config')
+      const servers = relayOnly(res.ice_servers)
+      cache = { at: Date.now(), servers }
+      return servers
     } catch {
-      throw new Error(ICE_UNAVAILABLE)
+      return []
     }
-    const servers = usableIceServers(list)
-    cache = { at: Date.now(), servers }
-    return servers
   },
 }

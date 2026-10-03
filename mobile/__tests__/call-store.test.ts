@@ -1,83 +1,65 @@
 import type { RealtimeEvent } from '@/lib/realtime'
-import type { MediaStream } from 'react-native-webrtc'
 
 /**
- * Course entre le setup asynchrone d'un appel (attente micro/ICE servers) et sa
- * fin (raccroché distant, hangup local, timeout) — cf. stores/call.ts.
+ * Store d'appel 1:1 (LiveKit) : protocole du serveur (DM_CALL_*, accès LiveKit) et courses entre
+ * le setup asynchrone et la fin d'appel (raccroché distant, hangup local, timeout).
  */
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-class MockPeerConnection {
-  connectionState = 'new'
-  signalingState = 'stable'
-  remoteDescription: unknown = null
-  private listeners = new Map<string, (e: unknown) => void>()
-  addEventListener(type: string, fn: (e: unknown) => void) {
-    this.listeners.set(type, fn)
+const mockConnect = jest.fn()
+const mockRooms: { connect: jest.Mock; disconnect: jest.Mock }[] = []
+jest.mock('livekit-client', () => {
+  class Room {
+    remoteParticipants = new Map()
+    state = 'connected'
+    localParticipant = {
+      setMicrophoneEnabled: jest.fn().mockResolvedValue(undefined),
+      setCameraEnabled: jest.fn().mockResolvedValue(undefined),
+      setScreenShareEnabled: jest.fn().mockResolvedValue(undefined),
+      getTrackPublication: () => undefined,
+    }
+    connect = jest.fn((...a: unknown[]) => mockConnect(...a))
+    disconnect = jest.fn().mockResolvedValue(undefined)
+    constructor() {
+      mockRooms.push(this)
+    }
+    on() {
+      return this
+    }
   }
-  removeEventListener(type: string) {
-    this.listeners.delete(type)
+  return {
+    Room,
+    RoomEvent: new Proxy({}, { get: (_t, k) => String(k) }),
+    Track: { Source: { Camera: 'camera', ScreenShare: 'screen_share', Microphone: 'microphone' } },
+    DisconnectReason: { CLIENT_INITIATED: 1 },
   }
-  emit(type: string, payload: unknown) {
-    this.listeners.get(type)?.(payload)
-  }
-  addTrack() {
-    /* no-op */
-  }
-  async createOffer() {
-    return { type: 'offer', sdp: 'offer-sdp' }
-  }
-  async createAnswer() {
-    return { type: 'answer', sdp: 'answer-sdp' }
-  }
-  async setLocalDescription() {
-    /* no-op */
-  }
-  async setRemoteDescription() {
-    /* no-op */
-  }
-  async addIceCandidate() {
-    /* no-op */
-  }
-  restartIce() {
-    /* no-op */
-  }
-  close() {
-    this.connectionState = 'closed'
-  }
-}
+})
 
-let mockLastPeer: MockPeerConnection | null = null
-
-jest.mock('react-native-webrtc', () => ({
-  RTCPeerConnection: jest.fn().mockImplementation(() => {
-    mockLastPeer = new MockPeerConnection()
-    return mockLastPeer
-  }),
-  RTCSessionDescription: jest.fn().mockImplementation((init: unknown) => init),
-  RTCIceCandidate: jest.fn().mockImplementation((init: unknown) => init),
-}))
-
-const mockGetLocalMedia = jest.fn()
-const mockStopStream = jest.fn()
-const mockAudioSession = {
-  start: jest.fn(),
-  stop: jest.fn(),
-  setSpeaker: jest.fn(),
+const mockPermissions = jest.fn()
+const mockRingtones = {
   startRinging: jest.fn(),
   stopRinging: jest.fn(),
   startRingback: jest.fn(),
   stopRingback: jest.fn(),
+  keepScreenOn: jest.fn(),
 }
 jest.mock('@/services/media', () => ({
-  getLocalMedia: (...args: unknown[]) => mockGetLocalMedia(...args),
-  stopStream: (...args: unknown[]) => mockStopStream(...args),
-  audioSession: mockAudioSession,
+  ensureMediaPermissions: (...a: unknown[]) => mockPermissions(...a),
+  ringtones: mockRingtones,
+}))
+
+const mockAccess = jest.fn()
+jest.mock('@/services/livekit', () => ({
+  liveKitAccess: (v: unknown) => mockAccess(v),
+  leaveRoom: (r: { disconnect: () => Promise<void> }) => r.disconnect(),
+  stopScreenShare: jest.fn().mockResolvedValue(undefined),
+  streamOf: () => null,
+  callAudio: { start: jest.fn().mockResolvedValue(undefined), stop: jest.fn().mockResolvedValue(undefined), setSpeaker: jest.fn() },
 }))
 
 jest.mock('@/api/voice', () => ({
-  voiceApi: { iceServers: jest.fn().mockResolvedValue([]) },
+  voiceApi: { turnServers: jest.fn().mockResolvedValue([]) },
 }))
 
 jest.mock('@/stores/voice', () => ({
@@ -111,42 +93,34 @@ const fire = (type: string, event: Partial<RealtimeEvent> = {}) => {
   mockRealtimeHandlers.get(type)?.({ type, ...event })
 }
 
-function deferredMedia() {
-  let resolve!: (v: { stream: MediaStream; hasVideo: boolean }) => void
-  const promise = new Promise<{ stream: MediaStream; hasVideo: boolean }>((res) => {
+function deferred<T>() {
+  let resolve!: (v: T) => void
+  const promise = new Promise<T>((res) => {
     resolve = res
   })
   return { promise, resolve }
 }
 
-const fakeStream = () =>
-  ({
-    getTracks: () => [],
-    getAudioTracks: () => [],
-    getVideoTracks: () => [],
-  }) as unknown as MediaStream
-
-/** Laisse le micro-task queue se vider (les timers restent faux si fake timers actifs). */
 const flush = async () => {
-  for (let i = 0; i < 5; i++) await Promise.resolve()
+  for (let i = 0; i < 8; i++) await Promise.resolve()
 }
 
 const DM_ID = '11111111-1111-1111-1111-111111111111'
 const PARTNER_ID = '22222222-2222-2222-2222-222222222222'
+const ACCESS = { url: 'wss://chat.example.org/livekit', token: 't'.repeat(40), room: 'dm' }
 
-describe('stores/call — course entre setup asynchrone et fin d’appel', () => {
+describe('stores/call (LiveKit)', () => {
   let useCall: typeof import('@/stores/call').useCall
 
   beforeEach(() => {
     jest.resetModules()
     mockRealtimeHandlers.clear()
     mockRealtimeSend.mockClear()
-    mockGetLocalMedia.mockReset()
-    mockStopStream.mockClear()
-    Object.values(mockAudioSession).forEach((fn) => fn.mockClear())
-    mockLastPeer = null
-    // require() plutôt qu'un import dynamique : jest ne l'exécute pas sous
-    // --experimental-vm-modules dans cette config babel-jest/CommonJS.
+    mockPermissions.mockReset().mockResolvedValue(true)
+    mockConnect.mockReset().mockResolvedValue(undefined)
+    mockAccess.mockReset().mockImplementation((v: unknown) => (v ? { access: ACCESS } : { error: 'Serveur audio/vidéo indisponible.' }))
+    mockRooms.length = 0
+    Object.values(mockRingtones).forEach((fn) => fn.mockClear())
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     ;({ useCall } = require('@/stores/call'))
   })
@@ -155,37 +129,76 @@ describe('stores/call — course entre setup asynchrone et fin d’appel', () =>
     jest.useRealTimers()
   })
 
+  it('appelant : DM_CALL_INIT, puis connexion LiveKit avec l’accès joint à DM_CALL_ACCEPTED', async () => {
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice' })
+    expect(mockRooms).toHaveLength(0) // pas de média avant que l'autre décroche
+
+    fire('DM_CALL_ACCEPTED', { dm_id: DM_ID, livekit: ACCESS })
+    await flush()
+    expect(useCall.getState().phase).toBe('connecting')
+    expect(mockRooms).toHaveLength(1)
+    expect(mockConnect).toHaveBeenCalledWith(ACCESS.url, ACCESS.token, { autoSubscribe: true })
+  })
+
+  it('appelé : DM_CALL_ACCEPT puis connexion seulement sur DM_CALL_MEDIA de SA session', async () => {
+    fire('SESSION_INIT', { session_id: 'moi' })
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    await useCall.getState().accept()
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+
+    fire('DM_CALL_MEDIA', { dm_id: DM_ID, session_id: 'autre-appareil', livekit: ACCESS })
+    await flush()
+    expect(mockRooms).toHaveLength(0)
+
+    fire('DM_CALL_MEDIA', { dm_id: DM_ID, session_id: 'moi', livekit: ACCESS })
+    await flush()
+    expect(mockRooms).toHaveLength(1)
+  })
+
+  it('DM_CALL_TAKEN d’une autre session : la sonnerie s’arrête', () => {
+    fire('SESSION_INIT', { session_id: 'moi' })
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    fire('DM_CALL_TAKEN', { dm_id: DM_ID, session_id: 'web' })
+    expect(useCall.getState().incoming).toBeNull()
+    expect(mockRingtones.stopRinging).toHaveBeenCalled()
+  })
+
+  it('accès LiveKit refusé : fin d’appel avec le motif, raccroché envoyé', async () => {
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    mockAccess.mockReturnValueOnce({ error: 'Serveur audio/vidéo refusé : adresse inattendue.' })
+    fire('DM_CALL_ACCEPTED', { dm_id: DM_ID, livekit: { url: 'wss://ailleurs.example.net', token: 'x'.repeat(40) } })
+    await flush()
+    expect(useCall.getState().phase).toBe('idle')
+    expect(useCall.getState().endReason).toBe('Serveur audio/vidéo refusé : adresse inattendue.')
+    expect(mockRealtimeSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_HANGUP' }))
+    expect(mockRooms).toHaveLength(0)
+  })
+
   it('un raccroché distant pendant accept() annule la reprise (pas de DM_CALL_ACCEPT, retour à idle)', async () => {
     fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
-    expect(useCall.getState().incoming).not.toBeNull()
-
-    const media = deferredMedia()
-    mockGetLocalMedia.mockReturnValueOnce(media.promise)
+    const perm = deferred<boolean>()
+    mockPermissions.mockReturnValueOnce(perm.promise)
 
     const acceptPromise = useCall.getState().accept()
     await flush()
-    // La phase doit déjà refléter la tentative de connexion AVANT que le micro ne
-    // soit obtenu : c'est ce qui permet à DM_CALL_ENDED ci-dessous d'être pris en
-    // compte (phase !== 'idle') au lieu d'être silencieusement ignoré.
+    // Phase posée AVANT l'attente : DM_CALL_ENDED ci-dessous est pris en compte.
     expect(useCall.getState().phase).toBe('connecting')
 
     fire('DM_CALL_ENDED', { dm_id: DM_ID })
     expect(useCall.getState().phase).toBe('idle')
 
-    media.resolve({ stream: fakeStream(), hasVideo: false })
+    perm.resolve(true)
     await acceptPromise
     await flush()
-
     expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_ACCEPT' }))
     expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_DECLINE' }))
     expect(useCall.getState().phase).toBe('idle')
-    expect(mockStopStream).toHaveBeenCalled()
   })
 
   it('hangup() local pendant start() annule l’appel sortant sans envoyer DM_CALL_INIT', async () => {
-    const media = deferredMedia()
-    mockGetLocalMedia.mockReturnValueOnce(media.promise)
-
+    const perm = deferred<boolean>()
+    mockPermissions.mockReturnValueOnce(perm.promise)
     const startPromise = useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
     await flush()
     expect(useCall.getState().phase).toBe('calling')
@@ -193,36 +206,29 @@ describe('stores/call — course entre setup asynchrone et fin d’appel', () =>
     useCall.getState().hangup()
     expect(useCall.getState().phase).toBe('idle')
 
-    media.resolve({ stream: fakeStream(), hasVideo: false })
+    perm.resolve(true)
     await startPromise
     await flush()
-
     expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_INIT' }))
     expect(useCall.getState().phase).toBe('idle')
-    expect(mockStopStream).toHaveBeenCalled()
   })
 
   it('raccroche après 30 s si la connexion n’aboutit jamais (timeout de connexion)', async () => {
     jest.useFakeTimers()
-    mockGetLocalMedia.mockResolvedValue({ stream: fakeStream(), hasVideo: false })
-
+    mockConnect.mockReturnValue(new Promise(() => undefined)) // SFU injoignable : jamais résolu
     await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
-    expect(useCall.getState().phase).toBe('calling')
-
-    fire('DM_CALL_ACCEPTED', { dm_id: DM_ID })
+    fire('DM_CALL_ACCEPTED', { dm_id: DM_ID, livekit: ACCESS })
     await flush()
     expect(useCall.getState().phase).toBe('connecting')
 
     jest.advanceTimersByTime(30_000)
     await flush()
-
     expect(useCall.getState().phase).toBe('idle')
     expect(useCall.getState().endReason).toBe('Connexion impossible')
     expect(mockRealtimeSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_HANGUP' }))
   })
 
   it('garde le nom et l’avatar du correspondant sur l’écran de fin (hors ligne)', async () => {
-    mockGetLocalMedia.mockResolvedValue({ stream: fakeStream(), hasVideo: false })
     await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice', '/uploads/bob.png')
     fire('DM_CALL_ERROR', { dm_id: DM_ID, reason: 'offline' })
     await flush()
@@ -231,5 +237,12 @@ describe('stores/call — course entre setup asynchrone et fin d’appel', () =>
     expect(s.partnerName).toBeNull()
     expect(s.endReason).toBe('Ton correspondant est hors ligne')
     expect(s.endedWith).toEqual({ name: 'Bob', avatar: '/uploads/bob.png' })
+  })
+
+  it('permission micro refusée : pas d’appel lancé', async () => {
+    mockPermissions.mockResolvedValueOnce(false)
+    await expect(useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')).rejects.toThrow(/Permission/)
+    expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_INIT' }))
+    expect(useCall.getState().phase).toBe('idle')
   })
 })

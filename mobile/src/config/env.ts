@@ -5,7 +5,7 @@ import Constants from 'expo-constants'
  * Toute l'app passe par ce module : aucune URL codée en dur ailleurs.
  */
 
-type Extra = { apiUrl?: string; appEnv?: string }
+type Extra = { apiUrl?: string; appEnv?: string; livekitHost?: string | null }
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra
 
 export type AppEnv = 'development' | 'lan' | 'preview' | 'production'
@@ -62,6 +62,10 @@ export const apiBase = () => `${origin}/api`
 export const wsUrl = () => `${origin.replace(/^http/, 'ws')}/ws`
 /** Host utilisé pour valider les liens entrants (universal links) */
 export const apiHost = () => (origin ? new URL(origin).host : '')
+/** Nom d'hôte seul (sans port) du serveur : sert à valider l'adresse LiveKit reçue. */
+export const apiHostname = () => (origin ? new URL(origin).hostname : '')
+/** Hôte LiveKit fixé au build (bêta), s'il diffère de celui du serveur (FORGECHAT_LIVEKIT_URL). */
+export const BUILD_LIVEKIT_HOST: string | null = extra.livekitHost ?? null
 
 /** Au démarrage, avant toute requête : applique le serveur choisi dans l'APK DEV (rien en production). */
 export async function loadServerChoice(): Promise<void> {

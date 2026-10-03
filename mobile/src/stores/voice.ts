@@ -1,41 +1,34 @@
 import { create } from 'zustand'
-import {
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
-  type MediaStream,
-  type MediaStreamTrack,
-  type RTCRtpSender,
-} from 'react-native-webrtc'
-import { classifyIncomingTrack } from '@/features/calls/screenShareLogic'
+import type { MediaStream } from '@livekit/react-native-webrtc'
+import { DisconnectReason, Room, RoomEvent, Track, type Participant, type RemoteParticipant } from 'livekit-client'
 import { voiceApi } from '@/api/voice'
+import type { LiveKitAccess } from '@/config/livekitUrl'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
-import { audioSession, getLocalMedia, stopStream } from '@/services/media'
-import { captureScreen, stopScreenCapture } from '@/services/screenCapture'
-import { onPeer, onTrackEnded } from '@/services/webrtc'
+import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf } from '@/services/livekit'
+import { ensureMediaPermissions } from '@/services/media'
 import { getMyId, registerSignOutHook } from './auth'
 
 /**
- * Salons vocaux de serveur — maillage WebRTC (mesh), compatible avec le client
- * web (client/src/store/voice.ts) :
+ * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
+ * (client/src/store/voice.ts + voiceSfu.ts) :
  *
- *  - VOICE_JOIN → VOICE_EXISTING_PEERS : le nouvel arrivant envoie une offer à
- *    chaque pair déjà présent ; les suivants (VOICE_USER_JOINED) nous l'enverront.
- *  - VOICE_SIGNAL avec payload { type, data } (≠ appels DM : payload.sdp).
- *  - Glare : le pair « poli » (id lexicographiquement inférieur) fait un rollback.
+ *  - présence par le WebSocket : VOICE_JOIN → VOICE_EXISTING_PEERS { peers, livekit, can_speak,
+ *    server_muted }, puis VOICE_USER_JOINED / VOICE_USER_LEFT / VOICE_STATE_UPDATE ; notre état
+ *    (muet, sourdine, partage d'écran) part dans VOICE_STATE ;
+ *  - média par le SFU LiveKit (salle et jeton délivrés après les contrôles du serveur) ; identité
+ *    LiveKit = id utilisateur ; micro, caméra et écran sont des pistes de sources distinctes.
  *
- * Mobile : micro + réception audio/vidéo des autres (caméra/écran visibles), sans caméra
- * (économie batterie/données). Partage d'écran émis et reçu avec le protocole du web : piste
- * écran dans un flux distinct (voir features/calls/screenShareLogic.ts).
+ * Mobile : micro + partage d'écran émis ; son, caméras et écrans des autres reçus.
  */
 
 export interface VoicePeer {
   userId: string
   username: string
   avatar: string | null
+  /** Caméra de ce pair (null si coupée ou pas encore reçue). */
   stream: MediaStream | null
-  /** Écran partagé par ce pair (flux distinct de micro+caméra). */
+  /** Écran partagé par ce pair. */
   screenStream: MediaStream | null
   muted: boolean
   video: boolean
@@ -64,25 +57,16 @@ interface VoiceState {
   stopScreenShare: () => void
 }
 
-const pcs = new Map<string, RTCPeerConnection>()
-const iceQueues = new Map<string, unknown[]>()
-let localStream: MediaStream | null = null
-// Partage d'écran : flux écran (son id sert de msid distinct), sa piste, et le sender par pair.
-let screenStream: MediaStream | null = null
-let screenTrack: MediaStreamTrack | null = null
-const screenSenders = new Map<string, RTCRtpSender>()
-/** Par pair : id du flux distant micro+caméra (référence pour reconnaître l'écran). */
-const camStreamIds = new Map<string, string>()
-/** Incrémenté à chaque leave() : détecte une continuation async de join() périmée
- *  par un leave()/re-join concurrent survenu pendant l'attente du micro. */
+let room: Room | null = null
+let roomName: string | null = null
+/** Le serveur interdit la parole dans ce salon (can_speak=false ou muet imposé). */
+let speakLocked = false
+/** Incrémenté à chaque leave() : détecte une continuation async de join() périmée. */
 let joinGeneration = 0
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 100
 
 export const useVoice = create<VoiceState>((set, get) => {
-  const send = (to: string, payload: { type: string; data: unknown }) =>
-    realtime.send({ type: 'VOICE_SIGNAL', to, payload })
-
   const upsertPeer = (id: string, patch: Partial<VoicePeer>) =>
     set((s) => {
       const existing = s.peers.find((p) => p.userId === id)
@@ -95,86 +79,89 @@ export const useVoice = create<VoiceState>((set, get) => {
       }
     })
 
-  const dropPeer = (id: string) => {
-    const pc = pcs.get(id)
-    try {
-      pc?.close()
-    } catch {
-      /* ignore */
-    }
-    pcs.delete(id)
-    iceQueues.delete(id)
-    screenSenders.delete(id)
-    camStreamIds.delete(id)
-    set((s) => ({ peers: s.peers.filter((p) => p.userId !== id) }))
+  /** Pistes LiveKit d'un pair → caméra et écran affichables ; son coupé si sourdine. */
+  const rebuildPeer = (p: Participant) => {
+    if (p === room?.localParticipant || !get().peers.some((x) => x.userId === p.identity)) return
+    const cam = p.getTrackPublication(Track.Source.Camera)
+    const scr = p.getTrackPublication(Track.Source.ScreenShare)
+    applyDeafen(p as RemoteParticipant)
+    upsertPeer(p.identity, {
+      stream: cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null,
+      screenStream: scr?.isSubscribed && !scr.isMuted ? streamOf(scr.track) : null,
+    })
   }
 
-  /** Nouvelle offer vers un pair (ajout/retrait de piste, comme le client web). */
-  const renegotiate = async (id: string, pc: RTCPeerConnection) => {
+  const applyDeafen = (p: RemoteParticipant) => {
+    const deafened = get().deafened
+    p.audioTrackPublications.forEach((pub) => {
+      const mst = pub.track?.mediaStreamTrack
+      if (mst) mst.enabled = !deafened
+    })
+  }
+
+  const broadcastState = () => {
+    const { channelId, muted, deafened, screenSharing } = get()
+    if (channelId) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video: false, screen: screenSharing, recording: false })
+  }
+
+  const disconnectMedia = () => {
+    const r = room
+    room = null
+    roomName = null
+    if (r) void leaveRoom(r)
+  }
+
+  const connectMedia = async (access: LiveKitAccess) => {
+    if (room && roomName && roomName === access.room && room.state !== 'disconnected') return
+    disconnectMedia()
+    const gen = joinGeneration
+    const r = new Room({ adaptiveStream: false, dynacast: true })
+    room = r
+    roomName = access.room
+    r.on(RoomEvent.TrackSubscribed, (_t, _pub, p) => rebuildPeer(p))
+      .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => rebuildPeer(p))
+      .on(RoomEvent.TrackMuted, (_pub, p) => rebuildPeer(p))
+      .on(RoomEvent.TrackUnmuted, (_pub, p) => rebuildPeer(p))
+      .on(RoomEvent.TrackUnpublished, (_pub, p) => rebuildPeer(p))
+      .on(RoomEvent.ParticipantConnected, (p) => rebuildPeer(p))
+      .on(RoomEvent.ParticipantDisconnected, (p) => upsertPeer(p.identity, { stream: null, screenStream: null }))
+      .on(RoomEvent.LocalTrackUnpublished, (pub) => {
+        // Partage arrêté depuis la notification système (ou par Android).
+        if (pub.source === Track.Source.ScreenShare && get().screenSharing) {
+          set({ screenSharing: false })
+          broadcastState()
+        }
+      })
+      .on(RoomEvent.Disconnected, (reason) => {
+        if (room !== r) return
+        if (reason !== DisconnectReason.CLIENT_INITIATED && get().joined) {
+          set({ error: 'Connexion au serveur audio/vidéo perdue. Quitte et rejoins le salon.' })
+        }
+      })
     try {
-      const offer = await pc.createOffer({})
-      await pc.setLocalDescription(offer)
-      send(id, { type: 'offer', data: { type: offer.type, sdp: offer.sdp } })
+      await callAudio.start(get().speaker)
+      const turn = await voiceApi.turnServers()
+      await r.connect(access.url, access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
     } catch (err) {
-      logger.warn('voice', 'renégociation', err)
+      logger.warn('voice', 'connexion LiveKit', err)
+      if (room === r) {
+        room = null
+        roomName = null
+        set({ error: 'Impossible de joindre le serveur audio/vidéo. Vérifie ta connexion puis réessaie.' })
+      }
+      return
     }
-  }
-
-  const drainIce = async (id: string) => {
-    const pc = pcs.get(id)
-    const q = iceQueues.get(id) ?? []
-    iceQueues.set(id, [])
-    if (!pc) return
-    for (const c of q) await pc.addIceCandidate(new RTCIceCandidate(c as never)).catch(() => undefined)
-  }
-
-  const createPeer = async (id: string, info: Partial<VoicePeer>): Promise<RTCPeerConnection> => {
-    const existing = pcs.get(id)
-    if (existing) return existing
-    const iceServers = await voiceApi.iceServers()
-    const pc = new RTCPeerConnection({ iceServers, bundlePolicy: 'max-bundle' })
-    pcs.set(id, pc)
-    iceQueues.set(id, [])
-
-    if (localStream) localStream.getTracks().forEach((t) => pc.addTrack(t, localStream!))
-    else pc.addTransceiver('audio', { direction: 'recvonly' })
-    // Partage d'écran déjà en cours (pair arrivé après coup) : lui envoyer aussi l'écran.
-    if (screenTrack && screenStream) screenSenders.set(id, pc.addTrack(screenTrack, screenStream))
-    // Recevoir la vidéo des pairs (caméra / partage d'écran) même sans en émettre.
-    pc.addTransceiver('video', { direction: 'recvonly' })
-
-    onPeer(pc, 'icecandidate', (e) => {
-      const c = e.candidate
-      if (c) send(id, { type: 'ice', data: { candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex } })
-    })
-    onPeer(pc, 'track', (e) => {
-      const stream = e.streams[0]
-      if (!stream) return
-      const { isScreen, camStreamId } = classifyIncomingTrack(camStreamIds.get(id), stream.id, e.track?.kind ?? '')
-      camStreamIds.set(id, camStreamId)
-      if (isScreen) {
-        upsertPeer(id, { screenStream: stream, screen: true })
-        return
-      }
-      if (get().deafened) stream.getAudioTracks().forEach((t) => (t.enabled = false))
-      upsertPeer(id, { stream })
-    })
-    let timer: ReturnType<typeof setTimeout> | null = null
-    onPeer(pc, 'connectionstatechange', () => {
-      const st = pc.connectionState
-      if (st === 'connected' && timer) {
-        clearTimeout(timer)
-        timer = null
-      } else if (st === 'disconnected') {
-        timer = setTimeout(() => {
-          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') dropPeer(id)
-        }, 6000)
-      } else if (st === 'failed') {
-        pc.restartIce()
-      }
-    })
-    upsertPeer(id, info)
-    return pc
+    if (gen !== joinGeneration || room !== r) {
+      void r.disconnect().catch(() => undefined)
+      return
+    }
+    r.remoteParticipants.forEach((p) => rebuildPeer(p))
+    try {
+      if (!speakLocked) await r.localParticipant.setMicrophoneEnabled(!get().muted)
+    } catch (err) {
+      logger.warn('voice', 'publication micro', err)
+      set({ error: 'Ton micro n’a pas pu être diffusé. Vérifie les permissions du salon.' })
+    }
   }
 
   let offFns: (() => void)[] = []
@@ -182,98 +169,88 @@ export const useVoice = create<VoiceState>((set, get) => {
   const bindRoom = (channelId: string) => {
     offFns.forEach((f) => f())
     offFns = [
-      realtime.on('VOICE_EXISTING_PEERS', async (e: RealtimeEvent) => {
-        if (e.channel_id !== channelId || !Array.isArray(e.peers)) return
-        set({ joined: true, joining: false })
-        for (const raw of e.peers as Record<string, unknown>[]) {
-          if (!isStr(raw.user_id)) continue
-          const pc = await createPeer(raw.user_id, {
+      realtime.on('VOICE_EXISTING_PEERS', (e: RealtimeEvent) => {
+        if (e.channel_id !== channelId) return
+        const me = getMyId()
+        const peers = Array.isArray(e.peers) ? (e.peers as Record<string, unknown>[]) : []
+        // Réponse à un re-VOICE_JOIN (reconnexion WS) : retirer ceux partis entre-temps.
+        const present = new Set(peers.map((p) => String(p.user_id)))
+        set((s) => ({ joined: true, joining: false, peers: s.peers.filter((p) => present.has(p.userId)) }))
+        for (const raw of peers) {
+          if (!isStr(raw.user_id) || raw.user_id === me) continue
+          upsertPeer(raw.user_id, {
             username: isStr(raw.username) ? raw.username : '…',
             avatar: isStr(raw.avatar) ? raw.avatar : null,
             muted: raw.muted === true,
             video: raw.video === true,
+            screen: raw.screen === true,
           })
-          try {
-            const offer = await pc.createOffer({})
-            await pc.setLocalDescription(offer)
-            send(raw.user_id, { type: 'offer', data: { type: offer.type, sdp: offer.sdp } })
-          } catch (err) {
-            logger.warn('voice', 'offer initiale', err)
-          }
         }
+        // Parole interdite (permission) ou muet imposé par un modérateur.
+        speakLocked = e.can_speak === false || e.server_muted === true
+        if (speakLocked) set({ muted: true })
+        const res = liveKitAccess(e.livekit)
+        if ('error' in res) {
+          set({ error: res.error })
+          return
+        }
+        void connectMedia(res.access)
       }),
       realtime.on('VOICE_USER_JOINED', (e) => {
         if (e.channel_id !== channelId || !isStr(e.user_id) || e.user_id === getMyId()) return
-        void createPeer(e.user_id, {
+        upsertPeer(e.user_id, {
           username: isStr(e.username) ? e.username : '…',
           avatar: isStr(e.avatar) ? e.avatar : null,
+          video: e.video === true,
+          screen: e.screen === true,
         })
+        const rp = room?.remoteParticipants.get(e.user_id)
+        if (rp) rebuildPeer(rp)
       }),
       realtime.on('VOICE_USER_LEFT', (e) => {
-        if (e.channel_id === channelId && isStr(e.user_id)) dropPeer(e.user_id)
+        if (e.channel_id === channelId && isStr(e.user_id)) set((s) => ({ peers: s.peers.filter((p) => p.userId !== e.user_id) }))
       }),
       realtime.on('VOICE_STATE_UPDATE', (e) => {
-        if (e.channel_id !== channelId || !isStr(e.user_id)) return
-        if (!pcs.has(e.user_id)) return
+        if (e.channel_id !== channelId || !isStr(e.user_id) || !get().peers.some((p) => p.userId === e.user_id)) return
         const screen = e.screen === true
         upsertPeer(e.user_id, { muted: e.muted === true, video: e.video === true, screen, ...(screen ? {} : { screenStream: null }) })
       }),
       realtime.on('VOICE_REDIRECT', (e) => {
-        if (e.from_channel_id === channelId && isStr(e.channel_id)) {
+        // Salon « auto-création » : le serveur nous place dans un salon temporaire.
+        if ((e.from_channel_id === undefined || e.from_channel_id === channelId) && isStr(e.channel_id)) {
           const next = e.channel_id
           set({ channelId: next })
           bindRoom(next)
         }
       }),
       realtime.on('VOICE_JOIN_ERROR', (e) => {
-        if (e.channel_id !== channelId) return
+        if (e.channel_id !== undefined && e.channel_id !== channelId) return
         const reason =
-          e.reason === 'wrong_password' ? 'Mot de passe vocal incorrect' : e.reason === 'channel_full' ? 'Salon plein' : 'Impossible de rejoindre'
+          e.reason === 'wrong_password'
+            ? 'Mot de passe vocal incorrect'
+            : e.reason === 'channel_full' || e.reason === 'full'
+              ? 'Salon plein'
+              : e.reason === 'missing_permission'
+                ? 'Tu n’as pas la permission de rejoindre ce salon vocal'
+                : e.reason === 'rate_limited'
+                  ? 'Trop de tentatives : patiente quelques secondes'
+                  : 'Impossible de rejoindre'
         get().leave()
         set({ error: reason })
       }),
-      realtime.on('VOICE_SIGNAL', async (e) => {
-        const from = e.from
-        const payload = e.payload as { type?: string; data?: unknown } | undefined
-        if (!isStr(from) || !payload || payload.data === undefined || typeof payload.type !== 'string') return
-        if (payload.type === 'offer' && !pcs.has(from)) await createPeer(from, {})
-        const pc = pcs.get(from)
-        if (!pc) return
-        try {
-          if (payload.type === 'offer') {
-            if (pc.signalingState === 'have-local-offer') {
-              const polite = (getMyId() ?? '') < from
-              if (!polite) return
-              await pc.setLocalDescription({ type: 'rollback', sdp: '' } as never)
-            }
-            await pc.setRemoteDescription(new RTCSessionDescription(payload.data as { type: string; sdp: string }))
-            await drainIce(from)
-            const answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
-            send(from, { type: 'answer', data: { type: answer.type, sdp: answer.sdp } })
-          } else if (payload.type === 'answer') {
-            if (pc.signalingState === 'have-local-offer') {
-              await pc.setRemoteDescription(new RTCSessionDescription(payload.data as { type: string; sdp: string }))
-              await drainIce(from)
-            }
-          } else if (payload.type === 'ice' && payload.data) {
-            if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(payload.data as never)).catch(() => undefined)
-            else {
-              const q = iceQueues.get(from) ?? []
-              if (q.length < 200) q.push(payload.data)
-              iceQueues.set(from, q)
-            }
-          }
-        } catch (err) {
-          logger.warn('voice', `signal ${payload.type}`, err)
+      // Le serveur refuse un partage (permission STREAM) ou la parole (SPEAK_VOICE).
+      realtime.on('VOICE_STATE_ERROR', (e) => {
+        if (e.channel_id !== channelId) return
+        if (e.permission === 'STREAM') {
+          get().stopScreenShare()
+          set({ error: 'Tu n’as pas la permission de partager ton écran sur ce serveur.' })
+        } else if (e.permission === 'SPEAK_VOICE') {
+          speakLocked = true
+          set({ muted: true, error: 'Tu n’as pas la permission de parler dans ce salon : micro coupé.' })
+          void room?.localParticipant.setMicrophoneEnabled(false).catch(() => undefined)
         }
       }),
     ]
-  }
-
-  const broadcastState = () => {
-    const { channelId, muted, deafened, screenSharing } = get()
-    if (channelId) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video: false, screen: screenSharing })
   }
 
   return {
@@ -294,30 +271,15 @@ export const useVoice = create<VoiceState>((set, get) => {
       if (get().channelId) get().leave()
       if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
       const gen = ++joinGeneration
-      set({ serverId, channelId, channelName, joining: true, joined: false, error: null, peers: [], muted: false, deafened: false })
-      let stream: MediaStream
-      try {
-        // Serveurs STUN/TURN d'abord : sans eux, refus clair avant d'ouvrir le micro.
-        await voiceApi.iceServers()
-        const res = await getLocalMedia(false)
-        stream = res.stream
-      } catch (e) {
-        if (gen === joinGeneration) {
-          set({ joining: false, channelId: null, error: e instanceof Error ? e.message : 'Micro inaccessible' })
-        }
-        throw e
+      speakLocked = false
+      set({ serverId, channelId, channelName, joining: true, joined: false, error: null, peers: [], muted: false, deafened: false, speaker: true })
+      if (!(await ensureMediaPermissions(false))) {
+        if (gen === joinGeneration) set({ joining: false, channelId: null, error: 'Permission micro refusée' })
+        throw new Error('Permission micro refusée')
       }
-      if (gen !== joinGeneration) {
-        // leave() (ou un nouveau join()) a eu lieu pendant l'attente du micro : ne
-        // pas ressusciter un flux audio ni réabonner les listeners du salon.
-        stopStream(stream)
-        return
-      }
-      localStream = stream
-      audioSession.start(false)
-      audioSession.setSpeaker(true)
+      if (gen !== joinGeneration) return // leave() ou autre join() pendant la demande de permission
       bindRoom(channelId)
-      realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, ...(password ? { password } : {}) })
+      realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: false, ...(password ? { password } : {}) })
       setTimeout(broadcastState, 300)
     },
 
@@ -325,92 +287,54 @@ export const useVoice = create<VoiceState>((set, get) => {
       const { channelId } = get()
       if (!channelId) return
       joinGeneration++
-      // Fin du partage d'écran avec le salon (les connexions sont fermées juste après).
-      stopScreenCapture(screenStream)
-      screenStream = null
-      screenTrack = null
-      screenSenders.clear()
-      camStreamIds.clear()
       realtime.send({ type: 'VOICE_LEAVE', channel_id: channelId })
       offFns.forEach((f) => f())
       offFns = []
-      for (const id of [...pcs.keys()]) {
-        try {
-          pcs.get(id)?.close()
-        } catch {
-          /* ignore */
-        }
-      }
-      pcs.clear()
-      iceQueues.clear()
-      stopStream(localStream)
-      localStream = null
-      audioSession.stop()
+      disconnectMedia()
+      void callAudio.stop()
       set({ serverId: null, channelId: null, channelName: null, joined: false, joining: false, peers: [], screenSharing: false })
     },
 
     toggleMute: () => {
+      if (speakLocked && get().muted) return // parole interdite par le serveur
       const muted = !get().muted
-      localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted))
       set({ muted })
+      void room?.localParticipant.setMicrophoneEnabled(!muted).catch((e: unknown) => logger.warn('voice', 'micro', e))
       broadcastState()
     },
 
     toggleDeafen: () => {
       const deafened = !get().deafened
-      get().peers.forEach((p) => p.stream?.getAudioTracks().forEach((t) => (t.enabled = !deafened)))
       // Se rendre sourd coupe aussi le micro (comportement du client web).
-      const muted = deafened ? true : get().muted
-      localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted))
+      const muted = deafened ? true : speakLocked ? true : get().muted
       set({ deafened, muted })
+      room?.remoteParticipants.forEach((p) => applyDeafen(p))
+      void room?.localParticipant.setMicrophoneEnabled(!muted).catch(() => undefined)
       broadcastState()
     },
 
     toggleSpeaker: () => {
       const speaker = !get().speaker
-      audioSession.setSpeaker(speaker)
       set({ speaker })
+      void callAudio.setSpeaker(speaker)
     },
 
     shareScreen: async () => {
-      if (!get().joined || get().screenSharing) return
-      const channel = get().channelId
-      const captured = await captureScreen()
-      if (!get().joined || get().channelId !== channel) {
-        stopScreenCapture(captured.stream) // salon quitté pendant le dialogue système
+      const r = room
+      if (!get().joined || get().screenSharing || !r) return
+      await r.localParticipant.setScreenShareEnabled(true)
+      if (room !== r || !get().joined) {
+        void r.localParticipant.setScreenShareEnabled(false).catch(() => undefined) // salon quitté pendant le dialogue
         return
-      }
-      screenStream = captured.stream
-      screenTrack = captured.track
-      // Arrêt depuis la notification système ou par Android : même nettoyage.
-      onTrackEnded(captured.track, () => {
-        if (screenTrack === captured.track) get().stopScreenShare()
-      })
-      for (const [id, pc] of pcs) {
-        screenSenders.set(id, pc.addTrack(captured.track, captured.stream))
-        await renegotiate(id, pc)
       }
       set({ screenSharing: true })
       broadcastState()
     },
 
     stopScreenShare: () => {
-      if (!screenStream && !get().screenSharing) return
-      stopScreenCapture(screenStream)
-      screenStream = null
-      screenTrack = null
-      for (const [id, sender] of screenSenders) {
-        const pc = pcs.get(id)
-        if (!pc) continue
-        try {
-          pc.removeTrack(sender)
-          void renegotiate(id, pc)
-        } catch (err) {
-          logger.warn('voice', 'retrait piste écran', err)
-        }
-      }
-      screenSenders.clear()
+      if (!get().screenSharing) return
       set({ screenSharing: false })
+      if (room) void stopScreenShare(room)
       broadcastState()
     },
   }

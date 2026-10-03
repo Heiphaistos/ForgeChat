@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
-import { RTCView } from 'react-native-webrtc'
+import { RTCView } from '@livekit/react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
 import { StreamViewer } from '@/components/StreamViewer'
@@ -57,9 +57,9 @@ export default function CallScreen() {
     }
   }, [s.phase, s.incoming, s.endReason])
 
-  const remoteVideo = s.remoteStream?.getVideoTracks().length ? s.remoteStream : null
-  // Pendant un partage d'écran, la caméra n'est plus envoyée : pas d'aperçu trompeur.
-  const localVideo = s.callType === 'video' && !s.camOff && !s.screenSharing && s.localStream?.getVideoTracks().length ? s.localStream : null
+  const remoteVideo = s.remoteVideo
+  // Pendant un partage d'écran, la caméra n'est plus envoyée : pas d'aperçu trompeur (géré par le store).
+  const localVideo = s.callType === 'video' ? s.localVideo : null
   const label =
     s.phase === 'calling'
       ? 'Appel en cours…'

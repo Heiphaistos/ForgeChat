@@ -3,24 +3,9 @@ import {
   canShareInCall,
   clampOffset,
   clampZoom,
-  classifyIncomingTrack,
   isScreenShareCancel,
   ZOOM_MAX,
 } from '@/features/calls/screenShareLogic'
-
-describe('partage d’écran : tri des pistes reçues (protocole du client web)', () => {
-  it('le 1er flux vu devient la référence micro+caméra', () => {
-    expect(classifyIncomingTrack(undefined, 'cam', 'audio')).toEqual({ isScreen: false, camStreamId: 'cam' })
-    expect(classifyIncomingTrack(undefined, 'cam', 'video')).toEqual({ isScreen: false, camStreamId: 'cam' })
-  })
-  it('une vidéo d’un autre flux est l’écran partagé', () => {
-    expect(classifyIncomingTrack('cam', 'ecran', 'video')).toEqual({ isScreen: true, camStreamId: 'cam' })
-  })
-  it('la caméra du même flux reste la caméra ; l’audio n’est jamais l’écran', () => {
-    expect(classifyIncomingTrack('cam', 'cam', 'video').isScreen).toBe(false)
-    expect(classifyIncomingTrack('cam', 'autre', 'audio').isScreen).toBe(false)
-  })
-})
 
 describe('partage d’écran en appel 1:1', () => {
   it('seulement en appel vidéo établi', () => {
@@ -55,7 +40,7 @@ describe('refus du dialogue système', () => {
     expect(isScreenShareCancel(new Error('AbortError'))).toBe(true)
     expect(isScreenShareCancel(new Error('ScreenTrack is null.'))).toBe(false)
     expect(isScreenShareCancel('NotAllowedError')).toBe(true)
-    // Forme réelle : MediaStreamError de react-native-webrtc (objet simple, pas une Error).
+    // Forme réelle : MediaStreamError de la pile WebRTC (objet simple, pas une Error).
     expect(isScreenShareCancel({ name: 'DOMException', message: 'NotAllowedError' })).toBe(true)
     expect(isScreenShareCancel({ name: 'Error', message: 'ScreenTrack is null.' })).toBe(false)
     expect(isScreenShareCancel(null)).toBe(false)

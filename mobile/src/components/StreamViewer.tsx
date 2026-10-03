@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { RTCView, type MediaStream } from 'react-native-webrtc'
+import { RTCView, type MediaStream } from '@livekit/react-native-webrtc'
 import { clampOffset, clampZoom } from '@/features/calls/screenShareLogic'
 import { colors, font, radius, spacing } from '@/theme'
 
