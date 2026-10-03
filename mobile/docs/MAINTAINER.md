@@ -287,6 +287,7 @@ Ne **jamais** distribuer l'APK DEV, lan ou development.
 
 - **Messages non chiffrés de bout en bout** : chiffrés en transit (HTTPS/WSS), lisibles par le
   serveur. Le chiffrement de bout en bout est en conception (aucun code tant qu'il n'est pas validé).
-- **Pas d'iOS** : Android uniquement.
+- **Pas d'iOS** : Android uniquement. Le code est en théorie compatible iOS grâce à Expo, mais aucune
+  version iOS n'a été construite ni testée (ni build, ni compte Apple, ni push APNs).
 - Notifications push : nécessitent la configuration Firebase/EAS (DEPLOY.md) ; non testables sur les
   builds locaux sans cette configuration.

@@ -1,8 +1,13 @@
-# ForgeChat Mobile (Android & iOS)
+# ForgeChat Mobile (Android)
 
-Application native ForgeChat pour Android et iOS, construite avec **React Native + Expo (SDK 57)** et
+Application native ForgeChat pour **Android**, construite avec **React Native + Expo (SDK 57)** et
 **TypeScript strict**. Elle parle au même backend Rust que le web et le desktop, avec le même protocole
 temps réel : un utilisateur mobile peut discuter et **s'appeler** avec un utilisateur web/desktop.
+
+> **Android uniquement pour l'instant.** Grâce à Expo, le code est en théorie compatible iOS, mais
+> **aucune version iOS n'a été construite ni testée** (pas de build, pas de compte Apple, pas de
+> configuration push APNs). Les mentions d'iOS dans le code et la doc décrivent ce qui est prévu, pas
+> une version qui existe.
 
 > Documentation complémentaire : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 > [`docs/SECURITY.md`](docs/SECURITY.md) · [`docs/SERVER_CHANGES.md`](docs/SERVER_CHANGES.md)
@@ -19,21 +24,21 @@ temps réel : un utilisateur mobile peut discuter et **s'appeler** avec un utili
 | Pièces jointes | Photos / vidéos / caméra / fichiers, aperçu, visionneuse plein écran (métadonnées EXIF/GPS retirées) |
 | Messages privés | Liste des conversations, DM 1:1, groupes, quitter un groupe |
 | Amis | En ligne / tous / en attente / bloqués, ajouter par pseudo, accepter, refuser, retirer, bloquer |
-| Appels | Appels 1:1 audio & vidéo (WebRTC, compatibles web/desktop), haut-parleur, caméra avant/arrière, appel entrant même app fermée (push) |
-| Salons vocaux | Rejoindre (y compris protégé par mot de passe), micro, sourdine, haut-parleur, vidéo des autres |
+| Appels | Appels 1:1 audio & vidéo via LiveKit (compatibles web/desktop), partage d'écran, haut-parleur, caméra avant/arrière, notification « appel manqué » si l'app est fermée |
+| Salons vocaux | Rejoindre (y compris protégé par mot de passe), micro, sourdine, haut-parleur, vidéo et partage d'écran |
 | Notifications | Push DM / groupes / mentions / demandes d'ami / appels, aperçu du contenu optionnel |
 | Sécurité | Verrouillage biométrique, masquage dans le sélecteur d'apps, sessions actives + révocation, changement de mot de passe |
 | Liens | `forgechat://invite/CODE`, liens universels `https://<hôte>/invite/CODE` et `/friend-invite/CODE` |
 
 Pas encore sur mobile (disponible sur web/desktop) : forums, scènes (stage), fils (threads), sondages,
-administration de serveur (rôles, automod, webhooks…), partage d'écran, configuration de la 2FA.
+administration de serveur (rôles, automod, webhooks…), configuration de la 2FA.
 
 ---
 
 ## Démarrage rapide
 
-Prérequis : Node 20+, un compte [Expo](https://expo.dev) (gratuit) et soit Android Studio / Xcode en
-local, soit les builds cloud EAS (pas besoin de Mac pour iOS).
+Prérequis : Node 20+, JDK 17 et le SDK Android (Android Studio), ou les builds cloud EAS avec un
+compte [Expo](https://expo.dev) (gratuit).
 
 ```bash
 cd mobile
@@ -48,7 +53,6 @@ cp .env.example .env.local        # puis adapter FORGECHAT_API_URL, EAS_PROJECT_
 
 ```bash
 npx expo run:android      # émulateur ou téléphone branché
-npx expo run:ios          # macOS + Xcode
 ```
 
 **Option B — build cloud (EAS)**
@@ -56,44 +60,44 @@ npx expo run:ios          # macOS + Xcode
 ```bash
 npx eas-cli@latest login
 npx eas-cli@latest init                          # crée le projet → copier l'id dans EAS_PROJECT_ID
-npx eas-cli@latest build --profile development --platform android   # (ou ios)
+npx eas-cli@latest build --profile development --platform android
 npm start                                        # sert le JS au development build installé
 ```
 
-**Backend local** : `FORGECHAT_API_URL=http://10.0.2.2:8080` (émulateur Android) ou
-`http://localhost:8080` (simulateur iOS). Le HTTP en clair n'est accepté qu'avec `APP_ENV=development`.
+**Backend local** : `FORGECHAT_API_URL=http://10.0.2.2:8080` (émulateur Android). Le HTTP en clair
+n'est accepté qu'avec `APP_ENV=development`.
 
 ---
 
-## Builds de production
+## Builds de production et distribution
+
+La bêta Android est distribuée **uniquement** par les releases d'un dépôt GitHub public (pas de Play
+Store pour l'instant). Une commande : build signé, vérification, release en **brouillon** à relire et
+publier à la main :
 
 ```bash
-npx eas-cli@latest build --profile production --platform all
-npx eas-cli@latest submit --profile production --platform all
+scripts/release-beta.sh --server https://ton.domaine --repo <propriétaire>/<dépôt>
 ```
 
-Les variables de `.env.local` ne sont pas envoyées aux builds cloud : définis-les côté EAS
-(`npx eas-cli@latest env:create --name FORGECHAT_API_URL --value https://… --environment production`,
-idem pour `EAS_PROJECT_ID`).
+Détails (clé de signature, APK DEV, EAS) : [`docs/MAINTAINER.md`](docs/MAINTAINER.md). Guide des
+utilisateurs : [`docs/INSTALLER.md`](docs/INSTALLER.md).
 
 Le profil `production` impose : API en `https://` (le build échoue sinon), trafic en clair interdit au
 niveau OS Android, minification R8, pas de sauvegarde Android des données de l'app.
 
 ### Notifications push (une fois)
 
-1. **Serveur** : appliquer les changements décrits dans [`docs/SERVER_CHANGES.md`](docs/SERVER_CHANGES.md)
-   (migration `061_push_devices.sql` incluse, jouée automatiquement au démarrage).
-2. **Android** : créer un projet Firebase, puis `npx eas-cli@latest credentials` → *Google Service Account
-   Key for FCM V1*.
-3. **iOS** : `npx eas-cli@latest credentials` → laisser EAS générer la *Push Key* APNs.
-4. **Recommandé** : activer *Enhanced Push Security* sur expo.dev et renseigner `EXPO_ACCESS_TOKEN` dans le
-   `.env` du serveur.
+1. **Serveur** : routes du push mobile (voir [`docs/SERVER_CHANGES.md`](docs/SERVER_CHANGES.md)) et
+   `PUSH_ENABLED=true`.
+2. **Android** : projet Firebase (`google-services.json`) et clé de compte de service FCM V1 chargée
+   dans EAS : [`docs/MAINTAINER.md`](docs/MAINTAINER.md) §4 bis.
+3. **iOS** : non configuré (aucune version iOS).
 
 ### Liens universels (une fois)
 
-Remplir `deploy/well-known/apple-app-site-association` (Team ID Apple) et
-`deploy/well-known/assetlinks.json` (empreinte SHA-256 affichée par `eas credentials`), les servir sous
-`https://<hôte>/.well-known/` et ajouter le bloc de `deploy/nginx-well-known.conf` à nginx.
+Remplir `deploy/well-known/assetlinks.json` (empreinte SHA-256 du certificat de la clé de release,
+`docs/MAINTAINER.md` §4), le servir sous `https://<hôte>/.well-known/` et ajouter le bloc de
+`deploy/nginx-well-known.conf` à nginx. (`apple-app-site-association` : pour une future version iOS.)
 
 ---
 

@@ -9,7 +9,7 @@ Merci de tester ForgeChat ! Cette bêta est l'application **ForgeChat** (icône 
   (HTTPS), mais le serveur peut les lire. N'envoie rien que tu ne confierais pas à l'administrateur
   du serveur. Le chiffrement de bout en bout est en cours de conception.
 - C'est une **bêta** : bugs possibles, données de test susceptibles d'être effacées.
-- **Android uniquement** pour l'instant (pas d'iPhone).
+- **Android uniquement** pour l'instant : pas de version iPhone (aucune n'a été construite ni testée).
 
 ## Installer
 

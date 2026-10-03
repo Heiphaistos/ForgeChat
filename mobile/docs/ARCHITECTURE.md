@@ -1,5 +1,8 @@
 # Architecture de l'app mobile
 
+> Android uniquement pour l'instant : les mentions d'iOS ci-dessous décrivent ce que le code prévoit
+> (compatible en théorie grâce à Expo), mais aucune version iOS n'a été construite ni testée.
+
 ## Vue d'ensemble
 
 ```
