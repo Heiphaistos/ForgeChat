@@ -17,6 +17,8 @@ pub struct Config {
     pub smtp_pass: Option<String>,
     pub smtp_from: String,
     // TURN (optionnel — si absent, STUN seulement)
+    /// STUN_URLS (séparés par des virgules). Aucun STUN public par défaut.
+    pub stun_urls: Vec<String>,
     pub turn_url: Option<String>,
     pub turn_username: Option<String>,
     pub turn_password: Option<String>,
@@ -57,6 +59,7 @@ impl Config {
             smtp_pass: env::var("SMTP_PASS").ok(),
             smtp_from: env::var("SMTP_FROM")
                 .unwrap_or_else(|_| "noreply@forgechat.heiphaistos.org".into()),
+            stun_urls: crate::handlers::voice::parse_stun_urls(&env::var("STUN_URLS").unwrap_or_default()),
             turn_url: env::var("TURN_URL").ok(),
             turn_username: env::var("TURN_USERNAME").ok(),
             turn_password: env::var("TURN_PASSWORD").ok(),

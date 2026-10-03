@@ -8,7 +8,8 @@ use crate::{error::AppError, middleware::auth::Claims, state::AppState};
 const TURN_TTL_S: u64 = 3600;
 
 /// GET /api/voice/ice-config
-/// Retourne la configuration ICE (STUN + TURN si configuré).
+/// Retourne la configuration ICE : STUN configurés (STUN_URLS) + TURN si configuré.
+/// Aucun serveur STUN public par défaut.
 ///
 /// Deux modes TURN :
 /// - **éphémère** (recommandé) si `TURN_STATIC_AUTH_SECRET` est défini :
@@ -22,15 +23,12 @@ pub async fn get_ice_config(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let mut servers = vec![
-        serde_json::json!({
-            "urls": [
-                "stun:stun.l.google.com:19302",
-                "stun:stun1.l.google.com:19302",
-                "stun:stun2.l.google.com:19302"
-            ]
-        }),
-    ];
+    // Uniquement les serveurs STUN configurés (STUN_URLS) : aucun STUN public par défaut, qui
+    // verrait l'adresse IP de chaque participant. Sans STUN_URLS ni TURN, la liste est vide.
+    let mut servers = Vec::new();
+    if !state.config.stun_urls.is_empty() {
+        servers.push(serde_json::json!({ "urls": state.config.stun_urls }));
+    }
 
     let mut ttl: u64 = 0;
 
@@ -256,4 +254,27 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
         _ => {}
     }
     StatusCode::OK
+}
+
+/// STUN_URLS : liste séparée par des virgules ; seules les URL stun: / stuns: sont gardées.
+pub fn parse_stun_urls(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|u| u.starts_with("stun:") || u.starts_with("stuns:"))
+        .map(String::from)
+        .collect()
+}
+
+#[cfg(test)]
+mod stun_tests {
+    use super::parse_stun_urls;
+
+    #[test]
+    fn parses_only_stun_urls() {
+        assert!(parse_stun_urls("").is_empty());
+        assert_eq!(
+            parse_stun_urls(" stun:a.example:3478, turn:x, ,stuns:b.example:5349,http://c "),
+            vec!["stun:a.example:3478".to_string(), "stuns:b.example:5349".to_string()]
+        );
+    }
 }
