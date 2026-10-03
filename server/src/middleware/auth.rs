@@ -130,6 +130,9 @@ pub async fn revoke_all_tokens(state: &AppState, user_id: Uuid) {
         .set_ex(revoke_key(user_id), chrono::Utc::now().timestamp(), 2 * 3600)
         .await
         .unwrap_or(());
+    drop(redis);
+    // Téléphones déconnectés : ils ne doivent plus recevoir de notifications.
+    crate::mobile_push::forget_devices(state, user_id).await;
 }
 
 pub async fn is_revoked(state: &AppState, claims: &Claims) -> bool {

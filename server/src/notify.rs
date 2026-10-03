@@ -350,6 +350,12 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
         }
     }
     let body: String = humanize(m.content, &names).chars().take(200).collect();
+    crate::mobile_push::spawn_send(state, offline.clone(), crate::mobile_push::Notice::new(
+        format!("{} · #{}", server_name, channel_name),
+        &format!("{} : {}", m.author_username, body),
+        format!("{} t'a mentionné", m.author_username),
+        crate::mobile_push::Target::Channel { server_id: m.server_id, channel_id: m.channel_id },
+    ));
     crate::push::spawn_send_if_offline(state, offline, serde_json::json!({
         "title": format!("{} (#{}, {})", m.author_username, channel_name, server_name),
         "body": body,
@@ -359,10 +365,17 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
     Ok(())
 }
 
-/// Web Push d'un message privé ou d'un appel : destinataires hors ligne, hors
-/// « Ne pas déranger » et n'ayant pas rendu ce DM muet (`dm_user_settings`).
-pub fn push_direct(state: &AppState, recipients: Vec<Uuid>, dm_id: Option<Uuid>, payload: serde_json::Value) {
-    if state.push.is_none() || recipients.is_empty() { return; }
+/// Web Push et push mobile d'un message privé ou d'un appel : destinataires
+/// hors ligne, hors « Ne pas déranger » et n'ayant pas rendu ce DM muet
+/// (`dm_user_settings`).
+pub fn push_direct(
+    state: &AppState,
+    recipients: Vec<Uuid>,
+    dm_id: Option<Uuid>,
+    payload: serde_json::Value,
+    mobile: crate::mobile_push::Notice,
+) {
+    if (state.push.is_none() && state.mobile_push.is_none()) || recipients.is_empty() { return; }
     let state = state.clone();
     tokio::spawn(async move {
         for uid in recipients {
@@ -382,6 +395,7 @@ pub fn push_direct(state: &AppState, recipients: Vec<Uuid>, dm_id: Option<Uuid>,
             .unwrap_or(true);
             if !silenced {
                 crate::push::send_if_offline(&state, uid, &payload).await;
+                crate::mobile_push::send(&state, uid, &mobile).await;
             }
         }
     });

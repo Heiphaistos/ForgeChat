@@ -450,12 +450,22 @@ pub async fn send_group_message(
         state.broadcast_to_user(*uid, event_str.clone()).await;
     }
     let others: Vec<Uuid> = members.into_iter().filter(|u| *u != claims.sub).collect();
+    let sender: String = user.get("username");
+    let text: String = content.as_deref().map(|c| c.chars().take(200).collect::<String>()).unwrap_or_else(|| "Pièce jointe".into());
+    let group_name: Option<String> = sqlx::query_scalar("SELECT name FROM group_dm_channels WHERE id=$1")
+        .bind(group_id).fetch_optional(&state.db).await.ok().flatten();
+    let mobile = crate::mobile_push::Notice::new(
+        group_name.unwrap_or_else(|| "Groupe".into()),
+        &format!("{sender} : {text}"),
+        format!("Nouveau message de {sender}"),
+        crate::mobile_push::Target::Group(group_id),
+    );
     crate::notify::push_direct(&state, others, None, serde_json::json!({
-        "title": user.get::<String, _>("username"),
-        "body": content.as_deref().map(|c| c.chars().take(200).collect::<String>()).unwrap_or_else(|| "Pièce jointe".into()),
+        "title": sender,
+        "body": text,
         "url": format!("/dms/groups/{group_id}"),
         "tag": group_id,
-    }));
+    }), mobile);
 
     Ok(Json(msg_json))
 }

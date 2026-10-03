@@ -90,6 +90,8 @@ pub struct AppState {
     pub livekit: Option<crate::livekit::LiveKitConfig>,
     /// Web Push (VAPID). `None` = variables VAPID_* absentes, push désactivé.
     pub push: Option<Arc<crate::push::PushConfig>>,
+    /// Push mobile (Expo). `None` = PUSH_ENABLED absent ou faux.
+    pub mobile_push: Option<Arc<crate::mobile_push::MobilePushConfig>>,
 }
 
 impl AppState {
@@ -128,9 +130,13 @@ impl AppState {
                 .expect("Failed to build public HTTP client"),
             livekit: crate::livekit::LiveKitConfig::from_env(),
             push: crate::push::PushConfig::from_env(),
+            mobile_push: crate::mobile_push::MobilePushConfig::from_env(),
         };
         if state.push.is_none() {
             tracing::info!("VAPID_* absents ou invalides : notifications Web Push désactivées");
+        }
+        if state.mobile_push.is_none() {
+            tracing::info!("PUSH_ENABLED absent : notifications push mobiles désactivées");
         }
         if state.livekit.is_none() {
             tracing::warn!("LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET absents : le vocal est désactivé");

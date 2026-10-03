@@ -854,12 +854,19 @@ pub async fn send_dm(
     // Sync multi-onglets/appareils : notifier aussi le sender lui-même
     state.broadcast_to_user(claims.sub, event_str).await;
     // Destinataire sans aucune session ouverte : Web Push.
+    let text: String = if content.is_empty() { "Pièce jointe".to_string() } else { content.chars().take(200).collect() };
+    let mobile = crate::mobile_push::Notice::new(
+        sender_username.clone(),
+        &text,
+        "Nouveau message privé",
+        crate::mobile_push::Target::Dm(dm_id),
+    );
     crate::notify::push_direct(&state, vec![other_id], Some(dm_id), serde_json::json!({
         "title": sender_username,
-        "body": if content.is_empty() { "Pièce jointe".to_string() } else { content.chars().take(200).collect() },
+        "body": text,
         "url": format!("/dms/{dm_id}"),
         "tag": dm_id,
-    }));
+    }), mobile);
 
     Ok(Json(serde_json::json!({
         "id": msg_id,

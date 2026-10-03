@@ -8,6 +8,7 @@ mod models;
 mod state;
 mod notify;
 mod push;
+mod mobile_push;
 mod net_guard;
 
 use axum::{
@@ -807,6 +808,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/push/vapid-public-key", get(push::get_public_key))
         .route("/push/subscribe", post(push::subscribe))
         .route("/push/unsubscribe", post(push::unsubscribe))
+        // Push mobile (app Android, via Expo)
+        .route("/push/devices", post(mobile_push::register_device))
+        .route("/push/devices/:token", delete(mobile_push::unregister_device))
         .route("/users/:id/mutual-servers", get(handlers::users::get_mutual_servers))
         .route("/users/:id/achievements", get(handlers::users::get_user_achievements))
         // User status + activity feed

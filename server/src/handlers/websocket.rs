@@ -1364,7 +1364,12 @@ async fn handle_ws_message(
                     "body": format!("{} essaie de vous appeler", cached_username),
                     "url": dm_uuid.map(|d| format!("/dms/{d}")).unwrap_or_else(|| "/friends".into()),
                     "tag": format!("call-{user_id}"),
-                }));
+                }), crate::mobile_push::Notice::new(
+                    cached_username,
+                    "Appel manqué",
+                    "Appel manqué",
+                    crate::mobile_push::Target::MissedCall { dm_id: dm_uuid, caller: user_id },
+                ));
                 let err = serde_json::json!({
                     "type": "DM_CALL_ERROR",
                     "reason": "offline",

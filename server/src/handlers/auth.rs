@@ -519,6 +519,8 @@ pub async fn logout(
         .bind(claims.sub)
         .execute(&state.db)
         .await?;
+    // Toutes les sessions sont fermées : plus de notifications vers les téléphones.
+    crate::mobile_push::forget_devices(&state, claims.sub).await;
 
     // Effacer les cookies côté client
     let clear = "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
