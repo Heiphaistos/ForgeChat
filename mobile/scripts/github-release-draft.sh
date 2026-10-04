@@ -40,7 +40,8 @@ VERSION=$(echo "$REPORT" | sed -n 's/^  package      [^ ]* \([0-9.]*\) .*/\1/p')
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version introuvable dans l'APK"
 [ "$NAME" = "ForgeChat-$VERSION-beta.apk" ] || fail "le fichier doit s'appeler ForgeChat-$VERSION-beta.apk"
 FILE_SHA256=$(echo "$REPORT" | sed -n 's/^  SHA-256      //p')
-grep -q "^  push (FCM)   configuré" <<<"$REPORT" || echo "ATTENTION : APK sans notifications push"
+PUSH=no; grep -q "^  push (FCM)   configuré" <<<"$REPORT" && PUSH=yes
+echo "Notifications push dans cet APK : $PUSH"
 TAG=v$VERSION
 
 # 2. Pas de doublon (release ou brouillon existant pour ce tag).
@@ -75,6 +76,8 @@ Guide complet (vérification sur ordinateur, mises à jour) : ${GUIDE_URL:-https
 
 ### À savoir
 - Bêta : bugs possibles. Les messages ne sont **pas chiffrés de bout en bout**.
+$( [ "$PUSH" = yes ] || echo "- **Pas encore de notifications** quand l'app est fermée : prévues dans une prochaine version." )
+- Android 7 ou plus récent uniquement (pas de version iPhone).
 - L'app vérifie une fois par jour s'il existe une nouvelle version (requête anonyme à GitHub,
   désactivable : *Vous* → *Sécurité et confidentialité* → *Mises à jour*).
 EOF

@@ -24,9 +24,9 @@ temps réel : un utilisateur mobile peut discuter et **s'appeler** avec un utili
 | Pièces jointes | Photos / vidéos / caméra / fichiers, aperçu, visionneuse plein écran (métadonnées EXIF/GPS retirées) |
 | Messages privés | Liste des conversations, DM 1:1, groupes, quitter un groupe |
 | Amis | En ligne / tous / en attente / bloqués, ajouter par pseudo, accepter, refuser, retirer, bloquer |
-| Appels | Appels 1:1 audio & vidéo via LiveKit (compatibles web/desktop), partage d'écran, haut-parleur, caméra avant/arrière, notification « appel manqué » si l'app est fermée |
+| Appels | Appels 1:1 audio & vidéo via LiveKit (compatibles web/desktop), partage d'écran, haut-parleur, caméra avant/arrière |
 | Salons vocaux | Rejoindre (y compris protégé par mot de passe), micro, sourdine, haut-parleur, vidéo et partage d'écran |
-| Notifications | Push DM / groupes / mentions / demandes d'ami / appels, aperçu du contenu optionnel |
+| Notifications | **Prochaine version** (pas de push dans la 1.0) : DM, groupes, mentions, appels manqués, aperçu du contenu optionnel. Le code est prêt, désactivé tant que le build n'a pas de projet Firebase/EAS |
 | Sécurité | Verrouillage biométrique, masquage dans le sélecteur d'apps, sessions actives + révocation, changement de mot de passe |
 | Liens | `forgechat://invite/CODE`, liens universels `https://<hôte>/invite/CODE` et `/friend-invite/CODE` |
 
@@ -85,7 +85,7 @@ utilisateurs : [`docs/INSTALLER.md`](docs/INSTALLER.md).
 Le profil `production` impose : API en `https://` (le build échoue sinon), trafic en clair interdit au
 niveau OS Android, minification R8, pas de sauvegarde Android des données de l'app.
 
-### Notifications push (une fois)
+### Notifications push (plus tard, pas dans la 1.0)
 
 1. **Serveur** : routes du push mobile (voir [`docs/SERVER_CHANGES.md`](docs/SERVER_CHANGES.md)) et
    `PUSH_ENABLED=true`.

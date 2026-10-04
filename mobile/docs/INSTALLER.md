@@ -6,6 +6,11 @@ d'ailleurs (site, messagerie, clé USB d'un inconnu…).
 
 > ⚠️ C'est une **bêta**. Les messages sont chiffrés pendant le transport (HTTPS), mais **pas de bout en
 > bout** : l'administrateur du serveur peut les lire. N'envoie rien de sensible.
+>
+> 🔕 **Pas encore de notifications** quand l'app est fermée : elles arriveront dans une prochaine
+> version. En attendant, les messages et les appels arrivent quand ForgeChat est ouverte.
+>
+> 📱 **Android uniquement** (Android 7 ou plus récent). Pas de version iPhone pour l'instant.
 
 ---
 

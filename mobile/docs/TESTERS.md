@@ -56,6 +56,8 @@ Ne mets jamais ton mot de passe, ni un code de vérification, dans un rapport de
 ## Ce que la bêta ne fait pas encore
 
 - Chiffrement de bout en bout des messages privés et des groupes.
+- **Notifications** quand l'app est fermée : prévues dans une prochaine version (les messages et
+  appels arrivent quand ForgeChat est ouverte).
 - Partage d'écran : uniquement en appel **vidéo** et dans les salons vocaux, sans le son de l'écran ;
   les écrans de ForgeChat apparaissent noirs chez les autres quand la protection des captures est
   active.

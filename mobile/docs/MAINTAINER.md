@@ -166,7 +166,14 @@ certificat = empreinte du §4 (sinon échec). Un APK construit avec un domaine `
   Store pourra mettre à jour la bêta installée depuis GitHub.
   Mettre la même empreinte dans `mobile/deploy/well-known/assetlinks.json`.
 
-## 4 bis. Notifications push Android (Firebase + EAS)
+## 4 bis. Notifications push Android (Firebase + EAS) — plus tard
+
+> **Pas dans la première version.** La bêta 1.0.x est construite **sans** push : sans projet EAS ni
+> `google-services.json`, l'app ne contacte ni Expo ni Firebase, ne demande pas la permission et
+> affiche « Prévues dans une prochaine version » dans *Notifications* (`PUSH_AVAILABLE`,
+> `src/config/env.ts`). Côté serveur, `PUSH_ENABLED=false` suffit. Les étapes ci-dessous serviront
+> le jour où le push sera ajouté (nouvelle version de l'app + patch serveur `0002`).
+
 
 Le push Android passe par Firebase Cloud Messaging (FCM), relayé par le service push d'Expo.
 Côté app (ce dépôt) il faut deux choses, **hors dépôt** :
@@ -191,7 +198,8 @@ security » est activé sur le projet Expo : c'est alors un jeton du **même** c
 fourni sous forme de patch (`0002`, adapté à ce commit). Sans lui, l'app fonctionne mais ne reçoit
 aucune notification push (elle l'ignore sans erreur).
 
-Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré`.
+Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré` (première version :
+`ABSENT`, c'est normal).
 
 ## 5. L'APK DEV
 
