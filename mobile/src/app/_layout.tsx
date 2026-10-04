@@ -11,6 +11,7 @@ import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, IncomingCallOv
 import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
+import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
 import { bindRealtime } from '@/services/realtimeBindings'
 import { useAuth } from '@/stores/auth'
@@ -41,6 +42,8 @@ const theme = {
 export default function RootLayout() {
   const status = useAuth((s) => s.status)
   const hydrated = useSettings((s) => s.hydrated)
+  // Nouvelle version sur GitHub : vérifiée même déconnecté (serveur en panne, compte à créer…).
+  useUpdateCheck()
   const pushEnabled = useSettings((s) => s.pushEnabled)
   const pushPreview = useSettings((s) => s.pushPreview)
 

@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
 import { colors } from '@/theme'
 
 export const unstable_settings = { initialRouteName: '(tabs)' }
@@ -13,7 +12,6 @@ export default function AppLayout() {
   // Affichage bord à bord : sans marge, la fin des listes passerait sous la barre de navigation
   // Android (3 boutons ou gestes).
   const { bottom } = useSafeAreaInsets()
-  useUpdateCheck()
   return (
     <Stack
       screenOptions={{

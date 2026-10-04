@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
 import { Platform } from 'react-native'
 import { pushApi } from '@/api/push'
-import { IS_LAN } from '@/config/env'
+import { PUSH_AVAILABLE } from '@/config/env'
 import { logger } from '@/lib/logger'
 import { registerPreSignOutHook, registerSignOutHook } from '@/stores/auth'
 import { useSettings } from '@/stores/settings'
@@ -25,6 +25,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v)
 
 export function configureNotifications() {
+  // Build sans push : ni gestionnaire ni canaux Android (ils apparaîtraient pour rien dans les réglages).
+  if (!PUSH_AVAILABLE) return
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       // Ne pas afficher de bannière pour la conversation déjà ouverte.
@@ -67,6 +69,7 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
 }
 
 export function listenNotificationTaps(): () => void {
+  if (!PUSH_AVAILABLE) return () => undefined
   const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
     routeFromNotification(resp.notification.request.content.data as Record<string, unknown>)
   })
@@ -100,17 +103,14 @@ export async function syncPushRegistration(): Promise<void> {
     await unregisterPush()
     return
   }
+  // Build sans push (pas de projet EAS / Firebase) : on n'essaie rien, aucune requête vers Expo
+  // ni Firebase, aucune demande de permission ; les messages arrivent par WebSocket app ouverte.
+  if (!PUSH_AVAILABLE) return
   if (!Device.isDevice) return // simulateurs : pas de push
-  // Profil LAN : ni projet EAS ni Firebase dans l'APK, le serveur local n'envoie pas de push.
-  // On n'essaie pas (pas d'erreur ni de nouvelle tentative) ; les messages arrivent par WebSocket.
-  if (IS_LAN) return
   const projectId =
     (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
     Constants.easConfig?.projectId
-  if (!projectId) {
-    logger.warn('push', 'EAS projectId absent — push désactivé (voir .env.example)')
-    return
-  }
+  if (!projectId) return
 
   let { status } = await Notifications.getPermissionsAsync()
   if (status !== 'granted') status = (await Notifications.requestPermissionsAsync()).status

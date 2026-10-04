@@ -5,7 +5,13 @@ import Constants from 'expo-constants'
  * Toute l'app passe par ce module : aucune URL codée en dur ailleurs.
  */
 
-type Extra = { apiUrl?: string; appEnv?: string; livekitHost?: string | null; updatesRepo?: string | null }
+type Extra = {
+  apiUrl?: string
+  appEnv?: string
+  livekitHost?: string | null
+  updatesRepo?: string | null
+  eas?: { projectId?: string }
+}
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra
 
 export type AppEnv = 'development' | 'lan' | 'preview' | 'production'
@@ -17,6 +23,14 @@ export const APP_ENV: AppEnv =
 
 /** APK de test sur le réseau local (jamais distribué) : bandeau, pas de push. */
 export const IS_LAN = APP_ENV === 'lan'
+
+/**
+ * Notifications push présentes dans ce build : il faut le projet EAS (jeton push Expo) — fourni au
+ * build avec google-services.json (FCM). Sans lui (première version, APK LAN), l'app ne contacte ni
+ * Expo ni Firebase, ne demande pas la permission et n'affiche pas les réglages de notification.
+ */
+export const PUSH_AVAILABLE =
+  !IS_LAN && typeof extra.eas?.projectId === 'string' && extra.eas.projectId.length > 0
 
 const PRIVATE_IPV4 = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}$/
 
