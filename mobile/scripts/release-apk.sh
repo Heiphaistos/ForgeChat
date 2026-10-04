@@ -38,6 +38,14 @@ VERSION=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
 CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
 MANIFEST=$("$AAPT2" dump xmltree --file AndroidManifest.xml "$APK")
 echo "$MANIFEST" | grep -q 'debuggable.*=true' && fail "APK débogable"
+# Classes Java appelées par la bibliothèque native WebRTC (LiveKit) au chargement : si R8 les a
+# retirées, l'app plante dès le démarrage (JNI_OnLoad → SIGILL).
+DEXTMP=$(mktemp -d)
+unzip -q -o "$APK" 'classes*.dex' -d "$DEXTMP"
+for c in 'Llivekit/org/jni_zero/JniInit;' 'Llivekit/org/webrtc/PeerConnectionFactory;'; do
+  cat "$DEXTMP"/classes*.dex | grep -aqF "$c" || { rm -rf "$DEXTMP"; fail "classe Java requise par WebRTC absente ($c) : règles R8 (extraProguardRules)"; }
+done
+rm -rf "$DEXTMP"
 CLEARTEXT=$(echo "$MANIFEST" | grep -q 'usesCleartextTraffic.*=true' && echo oui || echo non)
 # Config Expo embarquée (champ extra) : serveur, LiveKit, releases, projet EAS.
 extra() { unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=process.argv[1].split(".").reduce((o,k)=>o?.[k],JSON.parse(s).extra);process.stdout.write(typeof v==="string"?v:"")}catch{}})' "$1"; }

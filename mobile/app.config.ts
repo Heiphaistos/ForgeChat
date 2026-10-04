@@ -222,8 +222,11 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
           usesCleartextTraffic: APP_ENV === 'development' || APP_ENV === 'preview',
           enableMinifyInReleaseBuilds: true,
           enableShrinkResourcesInReleaseBuilds: true,
-          // Règles R8 requises par la pile WebRTC (@livekit/react-native-webrtc).
-          extraProguardRules: '-keep class org.webrtc.** { *; }',
+          // Règles R8 de la pile WebRTC de LiveKit (SDK « android-prefixed » : paquets livekit.org.*).
+          // Les règles fournies par @livekit/react-native-webrtc gardent org.jni_zero mais pas
+          // livekit.org.jni_zero : sans la 2ᵉ ligne, R8 retire JniInit et l'app plante au démarrage
+          // (JNI_OnLoad de libjingle → SIGILL). Vérifié par scripts/release-apk.sh.
+          extraProguardRules: ['-keep class livekit.org.webrtc.** { *; }', '-keep class livekit.org.jni_zero.** { *; }'].join('\n'),
         },
       },
     ],

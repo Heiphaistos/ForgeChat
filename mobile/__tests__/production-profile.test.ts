@@ -68,6 +68,10 @@ describe('client-apk (profil EAS production)', () => {
     const props = plugin(cfg, 'expo-build-properties') as [string, Cfg]
     expect(props[1].android.usesCleartextTraffic).toBe(false)
     expect(props[1].android.enableMinifyInReleaseBuilds).toBe(true)
+    // R8 ne doit pas retirer les classes Java appelées par la bibliothèque native de WebRTC (LiveKit) :
+    // sans elles, l'APK release plante au démarrage.
+    expect(props[1].android.extraProguardRules).toContain('-keep class livekit.org.webrtc.** { *; }')
+    expect(props[1].android.extraProguardRules).toContain('-keep class livekit.org.jni_zero.** { *; }')
     expect(cfg.extra.apiUrl.startsWith('https://')).toBe(true)
     // Aucune adresse http:// ni IP locale nulle part dans la configuration de la bêta.
     expect(JSON.stringify(cfg)).not.toMatch(/http:\/\/|10\.0\.2\.2|127\.0\.0\.1|192\.168\./)
