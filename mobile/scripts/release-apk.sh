@@ -43,7 +43,7 @@ echo "$MANIFEST" | grep -q 'debuggable.*=true' && fail "APK débogable"
 DEXTMP=$(mktemp -d)
 unzip -q -o "$APK" 'classes*.dex' -d "$DEXTMP"
 for c in 'Llivekit/org/jni_zero/JniInit;' 'Llivekit/org/webrtc/PeerConnectionFactory;'; do
-  cat "$DEXTMP"/classes*.dex | grep -aqF "$c" || { rm -rf "$DEXTMP"; fail "classe Java requise par WebRTC absente ($c) : règles R8 (extraProguardRules)"; }
+  grep -aqF "$c" "$DEXTMP"/classes*.dex || { rm -rf "$DEXTMP"; fail "classe Java requise par WebRTC absente ($c) : règles R8 (extraProguardRules)"; }
 done
 rm -rf "$DEXTMP"
 CLEARTEXT=$(echo "$MANIFEST" | grep -q 'usesCleartextTraffic.*=true' && echo oui || echo non)
