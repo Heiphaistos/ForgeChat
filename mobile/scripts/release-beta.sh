@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bêta en une commande : build signé → vérification → release GitHub en BROUILLON (jamais publiée).
+# Bêta en une commande : build de test lancé sur émulateur → build signé → vérification → release
+# GitHub en BROUILLON (jamais publiée).
 #
 #   scripts/release-beta.sh --server https://ton.domaine --repo propriétaire/dépôt [--livekit wss://…]
 #
@@ -32,13 +33,23 @@ if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "== 1/3 Build de la bêta $VERSION"
-scripts/build-apk-local.sh production --server "$SERVER" "${LIVEKIT[@]}" --updates-repo "$REPO"
 mkdir -p "$OUT"
+
+# Même configuration, ABI de l'émulateur : le code Java/JS et les règles R8 sont identiques à l'APK
+# distribué ; seul le code natif diffère. Un plantage au démarrage arrête tout avant la release.
+echo "== 1/4 Build de test (émulateur x86_64) et démarrage réel"
+FORGECHAT_ABIS=x86_64 scripts/build-apk-local.sh production --server "$SERVER" "${LIVEKIT[@]}" --updates-repo "$REPO"
+SMOKE=$(mktemp -d)/ForgeChat-$VERSION-beta-x86_64.apk
+cp android/app/build/outputs/apk/release/app-release.apk "$SMOKE"
+scripts/smoke-test-apk.sh "$SMOKE"
+rm -rf "$(dirname "$SMOKE")"
+
+echo "== 2/4 Build de la bêta $VERSION (téléphones)"
+scripts/build-apk-local.sh production --server "$SERVER" "${LIVEKIT[@]}" --updates-repo "$REPO"
 cp android/app/build/outputs/apk/release/app-release.apk "$APK"
 
-echo "== 2/3 Vérification"
+echo "== 3/4 Vérification"
 scripts/release-apk.sh "$APK" 5E:A3:DB:62:2C:07:AA:69:54:D8:D9:2F:80:32:6E:24:60:A9:80:9C:94:80:5D:77:06:C0:0D:EC:E3:69:3C:BD
 
-echo "== 3/3 Brouillon de release"
+echo "== 4/4 Brouillon de release"
 scripts/github-release-draft.sh "$REPO" "$APK"

@@ -252,7 +252,10 @@ pour l'instant, pas de miroir). L'app y vérifie elle-même les nouvelles versio
    ```bash
    cd mobile && scripts/release-beta.sh --server https://ton.domaine --repo <propriétaire>/<dépôt-public>
    ```
-   Elle s'arrête avant le build si la release `v<version>` existe déjà. Résultat : APK et
+   Elle s'arrête avant le build si la release `v<version>` existe déjà. Elle construit d'abord une
+   version de test x86_64 (même configuration) et la **lance réellement** sur un émulateur
+   (`scripts/smoke-test-apk.sh` : 3 démarrages à froid, échec si plantage) ; seulement ensuite l'APK
+   pour téléphones (~30 min au total). Résultat : APK et
    `SHA256SUMS.txt` dans `~/forgechat-releases/<version>/`, et une release en **brouillon** sur GitHub
    (APK, `SHA256SUMS.txt` limité à cet APK, empreintes et mode d'emploi dans le texte). Le script
    refuse un APK d'exemple (`example.org`) et ne publie **jamais**.
