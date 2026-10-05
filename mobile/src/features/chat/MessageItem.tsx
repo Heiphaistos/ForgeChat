@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
@@ -8,8 +8,10 @@ import { formatDay, formatTime } from '@/lib/format'
 import { mentionsUser } from '@/lib/markdown'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, tenorGifUrl } from '@/features/composer/formats'
+import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
-import { reactionEmojiName, useCustomEmojis } from './customEmojis'
+import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 
 interface Props {
   message: ChatMessage
@@ -21,6 +23,58 @@ interface Props {
   onReact: (m: ChatMessage, emoji: string) => void
   onPressAuthor: (userId: string) => void
   onRetry: (m: ChatMessage) => void
+}
+
+/**
+ * Contenu spécial envoyé par la barre de saisie (web ou app) : sticker ou GIF Tenor. null = texte
+ * normal. Le GIF est la SEULE image chargée depuis un service externe (media.tenor.com), comme le web.
+ */
+function SpecialContent({ content, pending }: { content: string; pending?: boolean }) {
+  const sticker = parseSticker(content)
+  if (sticker) {
+    if (sticker.emoji !== undefined) {
+      return (
+        <Text style={styles.stickerEmoji} accessibilityLabel={`Sticker ${sticker.name}`}>
+          {sticker.emoji}
+        </Text>
+      )
+    }
+    const src = safeEmojiUrl(sticker.url)
+    return src ? (
+      <Image source={{ uri: src }} style={[styles.stickerImage, pending && { opacity: 0.6 }]} contentFit="contain" accessibilityLabel={`Sticker ${sticker.name}`} />
+    ) : (
+      <Text style={styles.meta}>[sticker {sticker.name}]</Text>
+    )
+  }
+  const gif = tenorGifUrl(content)
+  return gif ? <TenorGif url={gif} /> : null
+}
+
+/** GIF Tenor animé ; introuvable ou hors ligne → simple lien (comme un message texte). */
+function TenorGif({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <MessageText content={url} myName="" />
+  return (
+    <Pressable onPress={() => void openExternalUrl(url)} accessibilityRole="imagebutton" accessibilityLabel="GIF (Tenor)">
+      <Image source={{ uri: url }} style={styles.gif} contentFit="contain" autoplay cachePolicy="memory-disk" onError={() => setFailed(true)} />
+      <Text style={styles.meta}>GIF via Tenor</Text>
+    </Pressable>
+  )
+}
+
+/** « ⏱ disparaît dans 4 min », rafraîchi toutes les 30 s. */
+function ExpiryBadge({ expiresAt }: { expiresAt: string }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const left = remainingLabel(expiresAt, now)
+  return (
+    <Text style={[styles.meta, { color: colors.danger }]} accessibilityLabel={`Message éphémère, disparaît dans ${left}`}>
+      ⏱ disparaît dans {left}
+    </Text>
+  )
 }
 
 /** Réaction : emoji Unicode, ou « :nom: » affiché en image si le serveur le connaît. */
@@ -94,9 +148,9 @@ export const MessageItem = memo(function MessageItem({
 
           {m.forwardedFrom ? <Text style={styles.forward}>↪ Transféré de {m.forwardedFrom}</Text> : null}
 
-          {m.content ? (
+          {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
-              <MessageText content={m.content} myName={myName} />
+              {SpecialContent({ content: m.content, pending: m.pending }) ?? <MessageText content={m.content} myName={myName} />}
             </View>
           ) : null}
 
@@ -104,6 +158,7 @@ export const MessageItem = memo(function MessageItem({
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>Pièce jointe en cours d’envoi…</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>(modifié)</Text> : null}
+          {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : null}
           {m.pinned ? <Text style={styles.meta}>📌 Épinglé</Text> : null}
 
           {m.failed ? (
@@ -163,6 +218,9 @@ const styles = StyleSheet.create({
   },
   reactionMine: { borderColor: colors.primary, backgroundColor: 'rgba(88,101,242,0.2)' },
   reactionCount: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
+  stickerEmoji: { fontSize: 64, lineHeight: 76 },
+  stickerImage: { width: 120, height: 120 },
+  gif: { width: 220, height: 165, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   dayRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.lg, marginTop: spacing.lg },
   dayLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   dayText: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700' },

@@ -20,6 +20,8 @@ export const serversApi = {
   members: (id: string) => http.get<Member[]>(path`/servers/${id}/members`),
   /** Emojis personnalisés (données brutes : filtrées par features/chat/customEmojis.buildEmojiMap). */
   emojis: (id: string) => http.get<unknown>(path`/servers/${id}/emojis`),
+  /** Stickers image du serveur (données brutes, validées par features/composer/stickers). */
+  stickers: (id: string) => http.get<unknown>(path`/servers/${id}/stickers`),
   join: (code: string) => http.post<Server>(path`/servers/join/${code}`),
   invite: (code: string) => http.get<InviteInfo>(path`/invites/${code}`, { auth: false }),
   createInvite: (serverId: string, maxUses?: number, expiresHours?: number) =>

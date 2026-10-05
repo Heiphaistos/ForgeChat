@@ -42,12 +42,14 @@ export const messagesApi = {
 
   async send(
     ref: ConversationRef,
-    input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean },
+    input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null },
   ): Promise<ChatMessage> {
     const raw = await http.post<unknown>(base(ref), {
       content: input.content,
       reply_to: input.replyTo ?? undefined,
       has_attachments: input.hasAttachments ?? false,
+      // Messages éphémères : seuls les salons les gèrent côté serveur (comme le web).
+      ...(ref.kind === 'channel' && input.expiresInSeconds ? { expires_at_seconds: input.expiresInSeconds } : {}),
     })
     return adaptMessage(ref, raw)
   },

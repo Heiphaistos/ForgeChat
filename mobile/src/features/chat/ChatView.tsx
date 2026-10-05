@@ -307,10 +307,10 @@ export function ChatView({
             editing={editing}
             onCancelReply={() => setReplyTo(null)}
             onCancelEdit={() => setEditing(null)}
-            onSend={async (text, files) => {
+            onSend={async (text, files, opts) => {
               const reply = replyTo
               setReplyTo(null)
-              await conv.send(text, { replyTo: reply, files })
+              await conv.send(text, { replyTo: reply, files, expiresInSeconds: opts?.expiresInSeconds ?? null })
             }}
             onEdit={conv.edit}
             onTyping={conv.notifyTyping}
@@ -318,6 +318,7 @@ export function ChatView({
             onDraftChange={(t) => setDraft(conv.id, t)}
             mentionCandidates={mentionCandidates}
             myId={me?.id ?? null}
+            serverId={serverId || undefined}
           />
         )}
 

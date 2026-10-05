@@ -23,6 +23,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
     pinned: !!m.pinned,
+    expiresAt: m.expires_at ?? null,
   }
 }
 

@@ -21,7 +21,8 @@ export function VideoAttachment({ src, attachment }: { src: string; attachment: 
   )
 }
 
-export function AudioAttachment({ src, attachment }: { src: string; attachment: Attachment }) {
+export function AudioAttachment({ src, attachment, voice }: { src: string; attachment: Attachment; voice?: boolean }) {
+  const label = voice ? 'Message vocal' : attachment.filename
   const player = useAudioPlayer(src)
   const status = useAudioPlayerStatus(player)
   const ended = !status.playing && status.duration > 0 && status.currentTime >= status.duration - 0.25
@@ -43,7 +44,7 @@ export function AudioAttachment({ src, attachment }: { src: string; attachment: 
         disabled={!status.isLoaded}
         style={styles.playButton}
         accessibilityRole="button"
-        accessibilityLabel={status.playing ? `Pause ${attachment.filename}` : `Lire ${attachment.filename}`}
+        accessibilityLabel={status.playing ? `Pause ${label}` : `Lire ${label}`}
         hitSlop={6}
       >
         {!status.isLoaded ? (
@@ -54,7 +55,7 @@ export function AudioAttachment({ src, attachment }: { src: string; attachment: 
       </Pressable>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={styles.name} numberOfLines={1}>
-          {attachment.filename}
+          {voice ? '🎤 Message vocal' : attachment.filename}
         </Text>
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${progress * 100}%` }]} />

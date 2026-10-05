@@ -7,6 +7,7 @@ import { formatBytes } from '@/lib/format'
 import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
 import type { Attachment } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { isVoiceAttachment } from '@/features/composer/formats'
 import { mediaKind } from './media'
 import { AudioAttachment, VideoAttachment } from './MediaPlayers'
 
@@ -23,7 +24,8 @@ export function Attachments({ items, pending }: { items: Attachment[]; pending?:
   const images = items.filter((a) => mediaKind(a) === 'image')
   // Vidéo/audio envoyés et servis par le serveur : lecteur intégré. Pendant l'envoi : carte « fichier ».
   const playable = (a: Attachment) => !pending && !isLocal(a.url) && !!resolveMediaUrl(a.url)
-  const players = items.filter((a) => (mediaKind(a) === 'video' || mediaKind(a) === 'audio') && playable(a))
+  // Message vocal (web : .webm/.ogg ; app : .mp4) : lecteur audio, même si le serveur l'a typé vidéo.
+  const players = items.filter((a) => (mediaKind(a) === 'video' || mediaKind(a) === 'audio' || isVoiceAttachment(a)) && playable(a))
   const files = items.filter((a) => mediaKind(a) !== 'image' && !players.includes(a))
 
   return (
@@ -55,6 +57,7 @@ export function Attachments({ items, pending }: { items: Attachment[]; pending?:
 
       {players.map((a) => {
         const src = resolveMediaUrl(a.url)!
+        if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice />
         return mediaKind(a) === 'video' ? (
           <VideoAttachment key={a.id} src={src} attachment={a} />
         ) : (

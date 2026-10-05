@@ -169,6 +169,8 @@ export interface ChatMessage {
   failed?: boolean
   /** Pièces jointes annoncées mais pas encore reçues */
   awaitingAttachments?: boolean
+  /** Message éphémère (salons uniquement) : disparaît à cette date. */
+  expiresAt?: string | null
 }
 
 export type ConversationRef =

@@ -235,12 +235,13 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     ['expo-splash-screen', { backgroundColor: '#1e1f22', image: `${ASSETS}/splash-icon.png`, imageWidth: 160 }],
     'expo-image',
     'expo-video',
-    // Lecture seule des pièces jointes audio : même texte micro que WebRTC (clés Info.plist partagées).
+    // Lecture des pièces jointes audio et enregistrement des messages vocaux (permission demandée au
+    // premier enregistrement). Même texte micro que WebRTC (clés Info.plist partagées).
     // Pas de lecture en arrière-plan : évite le service de premier plan « mediaPlayback » et ses
     // permissions (FOREGROUND_SERVICE_MEDIA_PLAYBACK), à justifier auprès de Google Play.
     [
       'expo-audio',
-      { microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.', enableBackgroundPlayback: false },
+      { microphonePermission: 'ForgeChat utilise le micro pour les appels, les salons vocaux et les messages vocaux.', enableBackgroundPlayback: false },
     ],
   ],
   experiments: { typedRoutes: true },

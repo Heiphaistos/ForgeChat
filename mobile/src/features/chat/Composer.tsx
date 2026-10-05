@@ -8,12 +8,17 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import Animated from 'react-native-reanimated'
 import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
+import { MESSAGE_TTL_OPTIONS } from '@/features/composer/data'
+import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
+import { EmojiPanel, QuickRepliesPanel, StickerPanel } from '@/features/composer/Panels'
+import { prepareVoiceRecording, VoiceRecorder } from '@/features/composer/VoiceRecorder'
 import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
+import { useCustomEmojis } from './customEmojis'
 import { restoreAfterSendError } from './sendErrors'
 import { activeMentionQuery, applyMention, filterMentionCandidates, type MentionCandidate } from './mentions'
 import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
@@ -38,7 +43,7 @@ interface Props {
   editing: ChatMessage | null
   onCancelReply: () => void
   onCancelEdit: () => void
-  onSend: (text: string, files: LocalAttachment[]) => Promise<void>
+  onSend: (text: string, files: LocalAttachment[], opts?: { expiresInSeconds?: number | null }) => Promise<void>
   onEdit: (id: string, text: string) => Promise<void>
   onTyping: () => void
   draft: string
@@ -46,6 +51,8 @@ interface Props {
   /** Personnes proposées après « @ » (vide : pas d'autocomplétion). */
   mentionCandidates?: readonly MentionCandidate[]
   myId?: string | null
+  /** Salon d'un serveur : stickers du serveur et messages éphémères (le serveur ne les gère qu'ici). */
+  serverId?: string
 }
 
 export function Composer({
@@ -63,12 +70,17 @@ export function Composer({
   onDraftChange,
   mentionCandidates,
   myId = null,
+  serverId,
 }: Props) {
   const [files, setFiles] = useState<LocalAttachment[]>([])
   // Au-dessus de la barre de navigation Android, clavier fermé comme ouvert (affichage bord à bord).
   const safeBottom = useKeyboardSafeBottom(spacing.sm)
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [panel, setPanel] = useState<'emoji' | 'sticker' | 'quick' | 'ttl' | null>(null)
+  const [ttl, setTtl] = useState<number | null>(null)
+  const [recording, setRecording] = useState(false)
+  const customEmojis = useCustomEmojis()
   const inputRef = useRef<TextInput>(null)
   // Valeurs courantes lues après un envoi asynchrone (le rendu a pu changer entre-temps).
   const draftRef = useRef(draft)
@@ -92,6 +104,39 @@ export function Composer({
     onDraftChange(next.text)
     setCursor(next.cursor)
     setForcedSelection({ start: next.cursor, end: next.cursor })
+  }
+
+  /** Insère un texte à la position du curseur (emoji, réponse rapide), comme le web. */
+  const insertText = (text: string) => {
+    const at = Math.min(cursor, draft.length)
+    const next = draft.slice(0, at) + text + draft.slice(at)
+    if (next.length > LIMITS.messageMaxChars + 200) return
+    onDraftChange(next)
+    setCursor(at + text.length)
+    setForcedSelection({ start: at + text.length, end: at + text.length })
+  }
+
+  /** Envoi direct d'un contenu (sticker, message vocal), sans toucher au brouillon. */
+  const sendDirect = async (text: string, attached: LocalAttachment[] = []) => {
+    setSending(true)
+    try {
+      await onSend(text, attached, { expiresInSeconds: serverId ? ttl : null })
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    } catch (e) {
+      Alert.alert('Envoi impossible', errorMessage(e))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const startRecording = async () => {
+    if (await prepareVoiceRecording()) setRecording(true)
+  }
+
+  const onRecorded = (result: { uri: string; seconds: number } | null) => {
+    setRecording(false)
+    if (!result) return
+    void sendDirect(voiceMessageContent(result.seconds), [{ uri: result.uri, name: voiceFileName(), type: 'video/mp4', size: null }])
   }
 
   useEffect(() => {
@@ -180,7 +225,7 @@ export function Composer({
         onDraftChange('')
         setFiles([])
         try {
-          await onSend(text, toSend)
+          await onSend(text, toSend, { expiresInSeconds: serverId ? ttl : null })
         } catch (e) {
           // Ne rien perdre : ce qui n'est pas parti revient dans le composer.
           const back = restoreAfterSendError(e, { text, files: toSend }, { text: draftRef.current, files: filesRef.current })
@@ -281,12 +326,35 @@ export function Composer({
         </ScrollView>
       ) : null}
 
+      {!editing && !recording ? (
+        <View style={styles.toolbar}>
+          <ToolButton icon="happy-outline" label="Emoji" onPress={() => setPanel('emoji')} />
+          <ToolButton icon="sparkles-outline" label="Stickers" onPress={() => setPanel('sticker')} />
+          <ToolButton icon="flash-outline" label="Réponses rapides" onPress={() => setPanel('quick')} />
+          {serverId ? (
+            <ToolButton
+              icon="timer-outline"
+              label={ttl ? `Message éphémère : ${MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)?.label}` : 'Message éphémère'}
+              active={!!ttl}
+              onPress={() => setPanel('ttl')}
+            />
+          ) : null}
+          {ttl && serverId ? (
+            <Text style={styles.ttlLabel} numberOfLines={1}>
+              ⏱ {MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)?.label}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
       <View style={styles.row}>
-        {!editing ? (
+        {recording ? <VoiceRecorder onDone={onRecorded} /> : null}
+        {!recording && !editing ? (
           <Pressable style={styles.attach} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Joindre un fichier" hitSlop={6}>
             <Ionicons name="add" size={24} color={colors.textSecondary} />
           </Pressable>
         ) : null}
+        {recording ? null : (
         <TextInput
           ref={inputRef}
           style={styles.input}
@@ -307,21 +375,48 @@ export function Composer({
           accessibilityLabel="Message"
           textAlignVertical="center"
         />
-        <Pressable
-          style={[styles.send, { backgroundColor: canSend && !over ? colors.primary : colors.bgHover }]}
-          onPress={submit}
-          disabled={!canSend || over}
-          accessibilityRole="button"
-          accessibilityLabel={editing ? 'Enregistrer' : 'Envoyer'}
-        >
-          <Ionicons name={editing ? 'checkmark' : 'send'} size={18} color="#fff" />
-        </Pressable>
+        )}
+        {recording ? null : !editing && !sending && draft.trim().length === 0 && files.length === 0 ? (
+          <Pressable
+            style={[styles.send, { backgroundColor: colors.bgElevated }]}
+            onPress={() => void startRecording()}
+            accessibilityRole="button"
+            accessibilityLabel="Enregistrer un message vocal"
+          >
+            <Ionicons name="mic" size={20} color={colors.textSecondary} />
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.send, { backgroundColor: canSend && !over ? colors.primary : colors.bgHover }]}
+            onPress={submit}
+            disabled={!canSend || over}
+            accessibilityRole="button"
+            accessibilityLabel={editing ? 'Enregistrer' : 'Envoyer'}
+          >
+            <Ionicons name={editing ? 'checkmark' : 'send'} size={18} color="#fff" />
+          </Pressable>
+        )}
       </View>
       {draft.length > LIMITS.messageMaxChars - 300 ? (
         <Text style={[styles.counter, over && { color: colors.danger }]}>
           {draft.length}/{LIMITS.messageMaxChars}
         </Text>
       ) : null}
+
+      <EmojiPanel visible={panel === 'emoji'} onClose={() => setPanel(null)} onPick={insertText} customEmojis={customEmojis} />
+      <StickerPanel visible={panel === 'sticker'} onClose={() => setPanel(null)} onSend={(c) => void sendDirect(c)} serverId={serverId} />
+      <QuickRepliesPanel visible={panel === 'quick'} onClose={() => setPanel(null)} onPick={insertText} />
+      <Sheet
+        visible={panel === 'ttl'}
+        onClose={() => setPanel(null)}
+        title="Expiration du message"
+        actions={MESSAGE_TTL_OPTIONS.map((o) => ({
+          label: o.label,
+          icon: o.seconds ? 'timer-outline' : 'infinite-outline',
+          selected: ttl === o.seconds,
+          onPress: () => setTtl(o.seconds),
+        }))}
+      />
 
       <Sheet
         visible={pickerOpen}
@@ -337,7 +432,18 @@ export function Composer({
   )
 }
 
+function ToolButton({ icon, label, onPress, active }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; onPress: () => void; active?: boolean }) {
+  return (
+    <Pressable onPress={onPress} style={styles.tool} hitSlop={4} accessibilityRole="button" accessibilityLabel={label} accessibilityState={active ? { selected: true } : undefined}>
+      <Ionicons name={icon} size={22} color={active ? colors.primary : colors.textMuted} />
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
+  tool: { width: 36, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  ttlLabel: { color: colors.primary, fontSize: font.xs, marginLeft: spacing.xs, flexShrink: 1 },
   container: { backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingBottom: spacing.sm },
   contextBar: {
     flexDirection: 'row',

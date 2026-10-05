@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import * as Crypto from 'expo-crypto'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { messagesApi, type UploadFile } from '@/api/messages'
 import { ALLOWED_UPLOAD_EXTENSIONS, LIMITS } from '@/config/env'
 import { ApiError, errorMessage } from '@/lib/http'
@@ -9,6 +9,7 @@ import { realtime } from '@/lib/realtime'
 import { useAuth } from '@/stores/auth'
 import { useUnread } from '@/stores/unread'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
+import { isExpired, nextExpiry } from '@/features/composer/formats'
 import { conversationId } from './adapters'
 import {
   appendMessage,
@@ -71,7 +72,18 @@ export function useConversation(ref: ConversationRef) {
     staleTime: Infinity, // le WebSocket maintient le cache ; invalidé à la reconnexion
   })
 
-  const messages = useMemo(() => flattenNewestFirst(query.data), [query.data])
+  const all = useMemo(() => flattenNewestFirst(query.data), [query.data])
+  // Messages éphémères : masqués dès leur expiration, sans attendre la purge du serveur (chaque
+  // minute, puis MESSAGE_DELETE) ni le réseau. Un minuteur se cale sur la prochaine expiration.
+  const [clock, setClock] = useState(() => Date.now())
+  const messages = useMemo(() => all.filter((m) => !isExpired(m.expiresAt, clock)), [all, clock])
+  useEffect(() => {
+    const now = Date.now()
+    const next = nextExpiry(all, now)
+    if (next === null) return
+    const t = setTimeout(() => setClock(Date.now()), Math.min(next - now + 50, 2_147_000_000))
+    return () => clearTimeout(t)
+  }, [all, clock])
 
   // ── Lecture ──────────────────────────────────────────────────────────────
   const readTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -108,7 +120,7 @@ export function useConversation(ref: ConversationRef) {
 
   // ── Envoi ────────────────────────────────────────────────────────────────
   const send = useCallback(
-    async (content: string, opts: { replyTo?: ChatMessage | null; files?: LocalAttachment[] } = {}) => {
+    async (content: string, opts: { replyTo?: ChatMessage | null; files?: LocalAttachment[]; expiresInSeconds?: number | null } = {}) => {
       if (!me) return
       const text = content.trim()
       const files = opts.files ?? []
@@ -144,6 +156,8 @@ export function useConversation(ref: ConversationRef) {
         reactions: [],
         pinned: false,
         pending: true,
+        expiresAt:
+          stableRef.kind === 'channel' && opts.expiresInSeconds ? new Date(Date.now() + opts.expiresInSeconds * 1000).toISOString() : null,
       }
       appendMessage(stableRef.kind, id, optimistic)
 
@@ -157,6 +171,7 @@ export function useConversation(ref: ConversationRef) {
           content: text || null,
           replyTo: opts.replyTo?.id ?? null,
           hasAttachments: files.length > 0,
+          expiresInSeconds: opts.expiresInSeconds ?? null,
         })
       } catch (e) {
         // Le composer récupère le texte et les fichiers (sendErrors.restoreAfterSendError) :
