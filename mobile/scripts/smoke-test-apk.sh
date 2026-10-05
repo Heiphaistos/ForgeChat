@@ -52,6 +52,8 @@ if [ -z "$SERIAL" ]; then
     sleep 2
   done
   [ -n "$SERIAL" ] || fail "l'émulateur n'a pas démarré : $(grep -m1 -E 'FATAL|ERROR' "$EMU_LOG" || echo 'voir '"$EMU_LOG")"
+  # Juste après le démarrage, l'interface système est encore lente (elle peut « ne pas répondre »).
+  sleep 30
 fi
 A() { "$ADB" -s "$SERIAL" "$@"; }
 A shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
@@ -61,25 +63,40 @@ A shell wm dismiss-keyguard >/dev/null 2>&1 || true
 A uninstall "$PKG" >/dev/null 2>&1 || true
 A install "$APK" | grep -q Success || fail "installation refusée"
 
-# 3. Démarrages à froid.
-for run in $(seq "$RUNS"); do
+# 3. Démarrages à froid. Une fenêtre « ne répond pas » d'une AUTRE app (interface système d'un
+# émulateur lent) n'est pas imputée à l'APK : elle est fermée et l'essai recommencé (2 fois au plus).
+run=1
+retries=0
+while [ "$run" -le "$RUNS" ]; do
   A shell am force-stop "$PKG"
+  A shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null 2>&1 || true
+  A shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
   A logcat -b all -c
   A shell am start -W -n "$PKG/$ACTIVITY" >/dev/null 2>&1 || true
   sleep 15
   CRASH=$(A logcat -d -b crash 2>/dev/null | grep -E "Fatal signal|FATAL EXCEPTION|Process: $PKG|>>> $PKG <<<" | head -3 || true)
+  OWN_ANR=$(A logcat -d 2>/dev/null | grep -m1 -E "ANR in $PKG( |$)" || true)
   PID=$(A shell pidof "$PKG" 2>/dev/null | tr -d '\r' || true)
   FOCUS=$(A shell dumpsys window 2>/dev/null | grep -m1 -E "mCurrentFocus|mFocusedApp" || true)
-  if [ -n "$CRASH" ] || [ -z "$PID" ] || ! grep -qF "$PKG" <<<"$FOCUS"; then
+  if [ -z "$CRASH" ] && [ -z "$OWN_ANR" ] && [ -n "$PID" ] && grep -q "Application Not Responding" <<<"$FOCUS" && ! grep -qF "$PKG" <<<"$FOCUS" && [ "$retries" -lt 2 ]; then
+    retries=$((retries + 1))
+    echo "  démarrage à froid $run/$RUNS : une autre app bloquait l'écran ($(grep -oE 'Responding: [^}]+' <<<"$FOCUS")), nouvel essai"
+    A shell input keyevent KEYCODE_ENTER >/dev/null 2>&1 || true
+    sleep 5
+    continue
+  fi
+  if [ -n "$CRASH" ] || [ -n "$OWN_ANR" ] || [ -z "$PID" ] || ! grep -qF "$PKG" <<<"$FOCUS"; then
     mkdir -p "$LOGDIR"
     LOG=$LOGDIR/$(date +%Y%m%d-%H%M%S)-$PKG.log
     { echo "APK : $APK (démarrage $run/$RUNS)"; echo "focus : $FOCUS"; echo "--- crash"; A logcat -d -b crash; echo "--- tout"; A logcat -d -b all; } > "$LOG" 2>&1
     WHY="écran de l'app absent"
     [ -z "$PID" ] && WHY="processus arrêté"
+    [ -n "$OWN_ANR" ] && WHY="l'app ne répond plus (ANR)"
     [ -n "$CRASH" ] && WHY="plantage"
     fail "démarrage $run/$RUNS : $WHY (journaux : $LOG)"
   fi
   echo "  démarrage à froid $run/$RUNS : OK (processus $PID, écran de l'app au premier plan)"
+  run=$((run + 1))
 done
 A uninstall "$PKG" >/dev/null 2>&1 || true
 echo "OK : $(basename "$APK") démarre sans planter ($RUNS démarrages à froid sur $SERIAL)"
