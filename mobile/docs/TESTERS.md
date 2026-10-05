@@ -62,4 +62,6 @@ Ne mets jamais ton mot de passe, ni un code de vérification, dans un rapport de
   les écrans de ForgeChat apparaissent noirs chez les autres quand la protection des captures est
   active.
 - Les mentions dans les groupes n'apparaissent pas dans l'onglet Mentions.
+- Envoyer des **GIF** (ceux envoyés depuis le site web s'affichent). Les messages **éphémères** ne
+  sont possibles que dans les salons des serveurs (pas en message privé ni en groupe).
 - Double authentification (2FA) : se configure depuis la version web.

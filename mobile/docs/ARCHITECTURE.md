@@ -81,6 +81,19 @@ Cache (`features/chat/cache.ts`) : `InfiniteData` TanStack, `pages[0]` = page la
 - Pièces jointes : message créé avec `has_attachments`, puis upload multipart sur l'id réel.
 - Historique : `before=<id du plus ancien>` au défilement (liste inversée).
 
+## Barre de saisie (même protocole que le web)
+
+Code : `src/features/composer/` (formats testés dans `__tests__/composer-features.test.ts`).
+
+| Fonction | Protocole (identique au client web, serveur commit 2dae54d) |
+|---|---|
+| Emoji | Unicode inséré au curseur ; emoji du serveur en `:nom:` ; 8 catégories + 18 récents (sur l'appareil) |
+| Stickers | Message texte `[sticker:🐱:cat]` (20 stickers globaux) ou `[sticker:nom](/uploads/stickers/…)` (`GET /servers/:id/stickers`, salons) |
+| Réponses rapides | Sur l'appareil seulement (comme le `localStorage` du web), 3 par défaut, 10 au plus ; insérées au curseur |
+| Expiration | `expires_at_seconds` à l'envoi (300 / 3600 / 86400 / 604800), **salons uniquement** (DM et groupes : non gérés par le serveur) ; le serveur purge chaque minute et diffuse `MESSAGE_DELETE` ; l'app masque aussi le message à l'heure exacte (minuteur, et filtre au rechargement) |
+| Vocaux | Message « 🎤 Message vocal (m:ss) » + pièce jointe. Web : WebM/Opus (typé `video/webm`). App : AAC dans un `.mp4` (`expo-audio` n'encode pas l'Opus ; le serveur refuse `.m4a`), lu par le lecteur vidéo du web. L'app lit `voice-*.webm/.ogg/.mp4` avec son lecteur audio. Permission micro demandée au premier enregistrement ; refusé pendant un appel |
+| GIF | Le web appelle Tenor directement (clé dans le build web). L'app n'en envoie pas (aucune clé dans l'APK) et affiche les GIF reçus : seul cas où le téléphone contacte un service externe (`media.tenor.com`, URL strictement validée) |
+
 ## Appels et vocal (LiveKit)
 
 Protocole du serveur ForgeChat ≥ 3.251 et du client web (`client/src/store/call.ts`, `voice.ts`,

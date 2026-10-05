@@ -24,6 +24,7 @@
 | Trafic en clair interdit au niveau OS Android en préproduction/production ; ATS actif sans exception sur iOS | `app.config.ts` |
 | WebSocket authentifié par ticket éphémère à usage unique (le JWT n'apparaît jamais dans une URL) | `lib/realtime.ts` |
 | Timeouts sur toutes les requêtes ; taille des messages WebSocket bornée (entrée et sortie) | `lib/http.ts`, `lib/realtime.ts` |
+| Services externes contactés : uniquement GitHub (vérification des mises à jour, désactivable) et `media.tenor.com` pour afficher un GIF reçu du web (URL https strictement validée). Aucune clé d'API dans l'APK ; l'app n'envoie pas de GIF | `features/updates`, `features/composer/formats.ts` |
 
 ### Entrées non fiables
 | Mesure | Où |
