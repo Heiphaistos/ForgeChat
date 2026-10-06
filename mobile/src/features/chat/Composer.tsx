@@ -3,11 +3,17 @@ import * as DocumentPicker from 'expo-document-picker'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import { Image } from 'expo-image'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
+import type { IconName } from '@/components/ui'
+import { messagesApi } from '@/api/messages'
+import { PollCreator, ScheduleSheet } from '@/features/composer/ChannelExtras'
+import { activeSlashQuery, BUILTIN_COMMANDS, COMMANDS_WITH_ARGS, runBuiltin, type SlashCommand } from '@/features/composer/commands'
+import { useServerDetail } from '@/features/servers/menus'
 import { MESSAGE_TTL_OPTIONS } from '@/features/composer/data'
 import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
 import { EmojiPanel, GifPanel, QuickRepliesPanel, StickerPanel, useGifSearchAvailable } from '@/features/composer/Panels'
@@ -20,7 +26,19 @@ import { colors, font, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { useCustomEmojis } from './customEmojis'
 import { restoreAfterSendError } from './sendErrors'
-import { activeMentionQuery, applyMention, filterMentionCandidates, type MentionCandidate } from './mentions'
+import {
+  activeMentionQuery,
+  activeTriggerQuery,
+  applyMention,
+  encodeMentions,
+  filterChannels,
+  filterMentionCandidates,
+  filterRoles,
+  replaceQuery,
+  specialMentions,
+  type MentionCandidate,
+} from './mentions'
+import { roleColor } from './tokens'
 import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
 
 const MAX_FILES = 10
@@ -53,6 +71,19 @@ interface Props {
   myId?: string | null
   /** Salon d'un serveur : stickers du serveur et messages éphémères (le serveur ne les gère qu'ici). */
   serverId?: string
+  /** Salon courant : sondages et messages programmés. */
+  channelId?: string
+}
+
+/** Ligne d'autocomplétion : membre, rôle, @everyone, salon ou commande « / ». */
+interface Suggestion {
+  key: string
+  label: string
+  sub?: string
+  icon?: IconName
+  color?: string | null
+  user?: MentionCandidate
+  pick: () => void
 }
 
 export function Composer({
@@ -71,13 +102,14 @@ export function Composer({
   mentionCandidates,
   myId = null,
   serverId,
+  channelId,
 }: Props) {
   const [files, setFiles] = useState<LocalAttachment[]>([])
   // Au-dessus de la barre de navigation Android, clavier fermé comme ouvert (affichage bord à bord).
   const safeBottom = useKeyboardSafeBottom(spacing.sm)
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [panel, setPanel] = useState<'emoji' | 'gif' | 'sticker' | 'quick' | 'ttl' | null>(null)
+  const [panel, setPanel] = useState<'emoji' | 'gif' | 'sticker' | 'quick' | 'ttl' | 'more' | 'poll' | 'schedule' | null>(null)
   const gifSearch = useGifSearchAvailable()
   const [ttl, setTtl] = useState<number | null>(null)
   const [recording, setRecording] = useState(false)
@@ -94,18 +126,95 @@ export function Composer({
   /** Position imposée après une insertion de mention ; relâchée dès que le TextInput l'a appliquée. */
   const [forcedSelection, setForcedSelection] = useState<{ start: number; end: number } | undefined>(undefined)
 
-  const mention = mentionCandidates?.length ? activeMentionQuery(draft, cursor) : null
-  const suggestions = useMemo(
-    () => (mention && mentionCandidates ? filterMentionCandidates(mentionCandidates, mention.query, myId) : []),
-    [mention?.query, mention?.start, mentionCandidates, myId], // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const pickMention = (c: MentionCandidate) => {
-    if (!mention) return
-    const next = applyMention(draft, mention.start, cursor, c)
+  // Rôles et salons du serveur (GET /servers/:id, déjà en cache pour l'en-tête du salon) ; commandes des bots.
+  const detail = useServerDetail(serverId ?? '', !!serverId)
+  const botCommands = useQuery({
+    queryKey: ['server-commands', serverId],
+    queryFn: () => messagesApi.commands(serverId!),
+    enabled: !!serverId,
+    staleTime: 60_000,
+  })
+  /** `@rôle` affiché dans la saisie → jeton <@&id> envoyé (comme pickedMentions du web). */
+  const picked = useRef(new Map<string, string>())
+
+  const applyText = (next: { text: string; cursor: number }) => {
     onDraftChange(next.text)
     setCursor(next.cursor)
     setForcedSelection({ start: next.cursor, end: next.cursor })
   }
+
+  const slash = editing ? null : activeSlashQuery(draft)
+  const mention = slash === null && (mentionCandidates?.length || serverId) ? activeMentionQuery(draft, cursor) : null
+  const channelQuery = slash === null && !mention && serverId ? activeTriggerQuery(draft, cursor, '#') : null
+  const suggestions = useMemo<Suggestion[]>(() => {
+    if (slash !== null) {
+      const all: SlashCommand[] = [...BUILTIN_COMMANDS, ...(serverId ? (botCommands.data ?? []) : [])]
+      return all
+        .filter((c) => c.name.startsWith(slash))
+        .slice(0, 8)
+        .map((c) => ({
+          key: `/${c.name}`,
+          label: `/${c.name}`,
+          sub: c.bot ? `${c.bot} · ${c.description}` : c.description,
+          icon: c.bot ? 'hardware-chip-outline' : 'flash-outline',
+          pick: () => pickCommand(c),
+        }))
+    }
+    if (mention) {
+      const users: Suggestion[] = filterMentionCandidates(mentionCandidates ?? [], mention.query, myId).map((c) => ({
+        key: `u${c.id}`,
+        label: c.nickname ?? c.username,
+        sub: c.nickname ? c.username : undefined,
+        user: c,
+        pick: () => applyText(applyMention(draft, mention.start, cursor, c)),
+      }))
+      if (!serverId) return users
+      const roles: Suggestion[] = filterRoles(detail.data?.roles ?? [], mention.query).map((r) => ({
+        key: `r${r.id}`,
+        label: `@${r.name}`,
+        sub: 'Rôle',
+        icon: 'shield-outline',
+        color: roleColor(r.color),
+        pick: () => {
+          picked.current.set(r.name, `<@&${r.id}>`)
+          applyText(replaceQuery(draft, mention.start, cursor, `@${r.name}`))
+        },
+      }))
+      const specials: Suggestion[] = specialMentions(mention.query).map((n) => ({
+        key: n,
+        label: `@${n}`,
+        sub: n === 'everyone' ? 'Tous les membres du salon' : 'Membres en ligne',
+        icon: 'megaphone-outline',
+        pick: () => applyText(replaceQuery(draft, mention.start, cursor, `@${n}`)),
+      }))
+      return [...users, ...roles, ...specials]
+    }
+    if (channelQuery) {
+      return filterChannels(detail.data?.channels ?? [], channelQuery.query).map((c) => ({
+        key: `c${c.id}`,
+        label: `#${c.name}`,
+        icon: c.type === 'voice' ? 'volume-medium-outline' : 'chatbubble-outline',
+        pick: () => applyText(replaceQuery(draft, channelQuery.start, cursor, `#${c.name}`)),
+      }))
+    }
+    return []
+  }, [slash, mention?.start, mention?.query, channelQuery?.start, channelQuery?.query, draft, cursor, mentionCandidates, myId, serverId, detail.data, botCommands.data]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Commande choisie : celles qui attendent un texte (et celles des bots) restent dans la saisie, les autres partent. */
+  const pickCommand = (c: SlashCommand) => {
+    if (c.bot || COMMANDS_WITH_ARGS.has(c.name)) {
+      applyText({ text: `/${c.name} `, cursor: c.name.length + 2 })
+      return
+    }
+    const result = runBuiltin(`/${c.name}`)
+    if (result && 'send' in result) {
+      onDraftChange('')
+      void sendDirect(result.send)
+    }
+  }
+
+  /** Texte final : jetons des rôles choisis (salons). */
+  const encode = (text: string) => (serverId ? encodeMentions(text, picked.current) : text)
 
   /** Insère un texte à la position du curseur (emoji, réponse rapide), comme le web. */
   const insertText = (text: string) => {
@@ -223,10 +332,19 @@ export function Composer({
         onDraftChange('')
       } else {
         const toSend = files
+        // Commande intégrée (« /shrug », « /me … ») : remplacée par son texte, comme le web.
+        const builtin = toSend.length ? null : runBuiltin(text)
+        if (builtin && 'gif' in builtin) {
+          onDraftChange('')
+          setPanel('gif')
+          return
+        }
+        const out = builtin ? builtin.send : encode(text)
         onDraftChange('')
         setFiles([])
+        picked.current.clear()
         try {
-          await onSend(text, toSend, { expiresInSeconds: serverId ? ttl : null })
+          await onSend(out, toSend, { expiresInSeconds: serverId ? ttl : null })
         } catch (e) {
           // Ne rien perdre : ce qui n'est pas parti revient dans le composer.
           const back = restoreAfterSendError(e, { text, files: toSend }, { text: draftRef.current, files: filesRef.current })
@@ -304,22 +422,26 @@ export function Composer({
       ) : null}
 
       {suggestions.length ? (
-        <ScrollView style={styles.mentions} keyboardShouldPersistTaps="always" accessibilityLabel="Suggestions de mention">
+        <ScrollView style={styles.mentions} keyboardShouldPersistTaps="always" accessibilityLabel="Suggestions">
           {suggestions.map((c) => (
             <Pressable
-              key={c.id}
-              onPress={() => pickMention(c)}
+              key={c.key}
+              onPress={c.pick}
               style={({ pressed }) => [styles.mentionRow, pressed && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
-              accessibilityLabel={`Mentionner ${c.username}`}
+              accessibilityLabel={[c.label, c.sub].filter(Boolean).join(', ')}
             >
-              <Avatar uri={c.avatar} name={c.username} size={24} userId={c.id} />
-              <Text style={styles.mentionName} numberOfLines={1}>
-                {c.nickname ?? c.username}
+              {c.user ? (
+                <Avatar uri={c.user.avatar} name={c.user.username} size={24} userId={c.user.id} />
+              ) : (
+                <Ionicons name={c.icon ?? 'at'} size={20} color={c.color ?? colors.textMuted} />
+              )}
+              <Text style={[styles.mentionName, c.color ? { color: c.color } : null]} numberOfLines={1}>
+                {c.label}
               </Text>
-              {c.nickname ? (
+              {c.sub ? (
                 <Text style={styles.mentionUser} numberOfLines={1}>
-                  {c.username}
+                  {c.sub}
                 </Text>
               ) : null}
             </Pressable>
@@ -343,6 +465,7 @@ export function Composer({
               onPress={() => setPanel('ttl')}
             />
           ) : null}
+          {serverId && channelId ? <ToolButton icon="ellipsis-horizontal-circle-outline" label="Sondage et messages programmés" onPress={() => setPanel('more')} /> : null}
           {ttl && serverId ? (
             <Text style={styles.ttlLabel} numberOfLines={1}>
               ⏱ {MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)?.label}
@@ -431,6 +554,38 @@ export function Composer({
           onPress: () => setTtl(o.seconds),
         }))}
       />
+
+      {serverId && channelId ? (
+        <>
+          <Sheet
+            visible={panel === 'more'}
+            onClose={() => setPanel(null)}
+            actions={[
+              { label: 'Créer un sondage', icon: 'stats-chart-outline', onPress: () => setPanel('poll') },
+              {
+                label: draft.trim() ? 'Programmer ce message' : 'Messages programmés',
+                icon: 'calendar-outline',
+                onPress: () => setPanel('schedule'),
+              },
+            ]}
+          />
+          <PollCreator visible={panel === 'poll'} onClose={() => setPanel(null)} serverId={serverId} channelId={channelId} />
+          <ScheduleSheet
+            visible={panel === 'schedule'}
+            onClose={() => setPanel(null)}
+            serverId={serverId}
+            channelId={channelId}
+            content={draft}
+            prepare={encode}
+            onScheduled={() => {
+              onDraftChange('')
+              picked.current.clear()
+              setPanel(null)
+              Alert.alert('Message programmé', 'Il partira à l’heure choisie.')
+            }}
+          />
+        </>
+      ) : null}
 
       <Sheet
         visible={pickerOpen}
