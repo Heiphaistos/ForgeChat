@@ -1,0 +1,3 @@
+- Nouvelle application macOS (Apple Silicon et Intel), avec mise à jour automatique
+- Construction et publication automatiques de toutes les versions de bureau
+- Le site ForgeChat devient un vrai site, avec un guide d'installation par plateforme

@@ -4,7 +4,9 @@
 #                         par AltStore / SideStore / Sideloadly, sans compte Apple payant)
 #   tag desktop-vX.Y.Z -> Windows (installeur + portable), Linux (.deb, .rpm, AppImage), macOS
 #
-# Les fichiers sont joints à une release GitHub. Le VPS les récupère tout seul
+# Les fichiers sont joints à une release GitHub créée en PRÉ-VERSION : le VPS l'ignore tant qu'elle
+# n'est pas testée puis promue (`gh release edit <tag> --prerelease=false`). Une mise à jour cassée
+# partirait sinon d'un coup chez tous les utilisateurs. Une fois promue, le VPS la récupère tout seul
 # (deploy/forgechat-releases-sync.sh, minuteur systemd), vérifie les empreintes, les copie dans
 # /var/www/forgechat-desktop/ et régénère les manifestes de mise à jour : aucun accès SSH depuis
 # GitHub.
@@ -279,5 +281,5 @@ jobs:
           cat SHA256SUMS.txt
           notes="../release-notes/${GITHUB_REF_NAME}.md"
           [ -f "$notes" ] || notes=/dev/null
-          gh release create "$GITHUB_REF_NAME" * --repo "$GITHUB_REPOSITORY" \
+          gh release create "$GITHUB_REF_NAME" * --repo "$GITHUB_REPOSITORY" --prerelease \
             --title "ForgeChat ${{ needs.version.outputs.kind }} ${{ needs.version.outputs.version }}" --notes-file "$notes"
