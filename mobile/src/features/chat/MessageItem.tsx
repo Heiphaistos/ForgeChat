@@ -29,7 +29,7 @@ interface Props {
  * Contenu spécial envoyé par la barre de saisie (web ou app) : sticker ou GIF Tenor. null = texte
  * normal. Les GIF sont les SEULES images chargées depuis un service externe (media.tenor.com, CDN KLIPY).
  */
-function SpecialContent({ content, pending }: { content: string; pending?: boolean }) {
+function SpecialContent({ content, pending, onLongPress }: { content: string; pending?: boolean; onLongPress?: () => void }) {
   const sticker = parseSticker(content)
   if (sticker) {
     if (sticker.emoji !== undefined) {
@@ -47,15 +47,21 @@ function SpecialContent({ content, pending }: { content: string; pending?: boole
     )
   }
   const gif = remoteGif(content)
-  return gif ? <RemoteGif url={gif.url} provider={gif.provider} /> : null
+  return gif ? <RemoteGif url={gif.url} provider={gif.provider} onLongPress={onLongPress} /> : null
 }
 
 /** GIF animé (Tenor ou KLIPY) ; introuvable ou hors ligne → simple lien (comme un message texte). */
-function RemoteGif({ url, provider }: { url: string; provider: string }) {
+function RemoteGif({ url, provider, onLongPress }: { url: string; provider: string; onLongPress?: () => void }) {
   const [failed, setFailed] = useState(false)
   if (failed) return <MessageText content={url} myName="" />
   return (
-    <Pressable onPress={() => void openExternalUrl(url)} accessibilityRole="imagebutton" accessibilityLabel={`GIF (${provider})`}>
+    <Pressable
+      onPress={() => void openExternalUrl(url)}
+      onLongPress={onLongPress}
+      delayLongPress={300}
+      accessibilityRole="imagebutton"
+      accessibilityLabel={`GIF (${provider})`}
+    >
       <Image source={{ uri: url }} style={styles.gif} contentFit="contain" autoplay cachePolicy="memory-disk" onError={() => setFailed(true)} />
       <Text style={styles.meta}>GIF via {provider}</Text>
     </Pressable>
@@ -150,11 +156,11 @@ export const MessageItem = memo(function MessageItem({
 
           {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
-              {SpecialContent({ content: m.content, pending: m.pending }) ?? <MessageText content={m.content} myName={myName} />}
+              {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <MessageText content={m.content} myName={myName} />}
             </View>
           ) : null}
 
-          <Attachments items={m.attachments} pending={m.pending} />
+          <Attachments items={m.attachments} pending={m.pending} onLongPress={() => onLongPress(m)} />
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>Pièce jointe en cours d’envoi…</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>(modifié)</Text> : null}

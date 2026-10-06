@@ -18,7 +18,8 @@ function sourceOf(a: Attachment): string | null {
   return resolveMediaUrl(a.url)
 }
 
-export function Attachments({ items, pending }: { items: Attachment[]; pending?: boolean }) {
+/** `onLongPress` : menu du message (sans lui, un appui long sur une image l'ouvrirait). */
+export function Attachments({ items, pending, onLongPress }: { items: Attachment[]; pending?: boolean; onLongPress?: () => void }) {
   const [viewer, setViewer] = useState<string | null>(null)
   if (!items.length) return null
   const images = items.filter((a) => mediaKind(a) === 'image')
@@ -39,6 +40,8 @@ export function Attachments({ items, pending }: { items: Attachment[]; pending?:
               <Pressable
                 key={a.id}
                 onPress={() => !pending && setViewer(src)}
+                onLongPress={onLongPress}
+                delayLongPress={300}
                 accessibilityRole="imagebutton"
                 accessibilityLabel={`Image ${a.filename}`}
               >
@@ -57,11 +60,11 @@ export function Attachments({ items, pending }: { items: Attachment[]; pending?:
 
       {players.map((a) => {
         const src = resolveMediaUrl(a.url)!
-        if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice />
+        if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice onLongPress={onLongPress} />
         return mediaKind(a) === 'video' ? (
           <VideoAttachment key={a.id} src={src} attachment={a} />
         ) : (
-          <AudioAttachment key={a.id} src={src} attachment={a} />
+          <AudioAttachment key={a.id} src={src} attachment={a} onLongPress={onLongPress} />
         )
       })}
 
@@ -73,6 +76,8 @@ export function Attachments({ items, pending }: { items: Attachment[]; pending?:
             style={styles.file}
             disabled={!src || pending || isLocal(a.url)}
             onPress={() => src && void openExternalUrl(src)}
+            onLongPress={onLongPress}
+            delayLongPress={300}
             accessibilityRole="button"
             accessibilityLabel={`Fichier ${a.filename}`}
           >

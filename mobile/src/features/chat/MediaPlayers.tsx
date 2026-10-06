@@ -21,7 +21,17 @@ export function VideoAttachment({ src, attachment }: { src: string; attachment: 
   )
 }
 
-export function AudioAttachment({ src, attachment, voice }: { src: string; attachment: Attachment; voice?: boolean }) {
+export function AudioAttachment({
+  src,
+  attachment,
+  voice,
+  onLongPress,
+}: {
+  src: string
+  attachment: Attachment
+  voice?: boolean
+  onLongPress?: () => void
+}) {
   const label = voice ? 'Message vocal' : attachment.filename
   const player = useAudioPlayer(src)
   const status = useAudioPlayerStatus(player)
@@ -41,6 +51,8 @@ export function AudioAttachment({ src, attachment, voice }: { src: string; attac
     <View style={styles.audio}>
       <Pressable
         onPress={toggle}
+        onLongPress={onLongPress}
+        delayLongPress={300}
         disabled={!status.isLoaded}
         style={styles.playButton}
         accessibilityRole="button"
