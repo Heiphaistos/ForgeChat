@@ -1,25 +1,31 @@
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
+import * as DocumentPicker from 'expo-document-picker'
 import { router } from 'expo-router'
 import { useCallback, useState, type ReactElement } from 'react'
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native'
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import Animated from 'react-native-reanimated'
-import { Sheet } from '@/components/Sheet'
+import { Sheet, type SheetAction } from '@/components/Sheet'
 import { ErrorState, Loading } from '@/components/ui'
 import { LIMITS } from '@/config/env'
+import { hasEditableText } from '@/features/composer/formats'
 import { QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import { useAuth } from '@/stores/auth'
 import type { ChatMessage } from '@/types/models'
-import { colors, font, spacing } from '@/theme'
+import { colors, font, radius, spacing } from '@/theme'
 import { MessageItem } from './MessageItem'
+import { sanitizeFilename, validateAttachment, type LocalAttachment } from './useConversation'
+
+const MAX_FILES = 10
 
 /**
- * Conversation secondaire (fil de discussion, publication de forum) : messages en lecture,
- * réactions rapides, copie, et une zone de réponse texte. `messages` : du plus récent au plus ancien.
+ * Conversation secondaire (fil de discussion, publication de forum) : messages, réactions rapides,
+ * copie, modification et suppression, et une zone de réponse avec pièces jointes.
+ * `messages` : du plus récent au plus ancien.
  */
 export function ReplyThreadView({
   messages,
@@ -31,6 +37,9 @@ export function ReplyThreadView({
   onLoadOlder,
   onReact,
   onSend,
+  onEdit,
+  onDelete,
+  canModerate,
   header,
   disabledReason,
   placeholder,
@@ -43,13 +52,20 @@ export function ReplyThreadView({
   loadingOlder: boolean
   onLoadOlder: () => void
   onReact: (m: ChatMessage, emoji: string) => void
-  onSend: (text: string) => Promise<unknown>
+  onSend: (text: string, files: LocalAttachment[]) => Promise<unknown>
+  /** Ses propres messages (le serveur refuse les autres). */
+  onEdit?: (m: ChatMessage, text: string) => Promise<unknown>
+  /** Ses messages, ou tous avec MANAGE_MESSAGES (`canModerate`). */
+  onDelete?: (m: ChatMessage) => Promise<unknown>
+  canModerate?: boolean
   header?: ReactElement
   disabledReason?: string | null
   placeholder: string
 }) {
   const me = useAuth((s) => s.user)
   const [draft, setDraft] = useState('')
+  const [files, setFiles] = useState<LocalAttachment[]>([])
+  const [editing, setEditing] = useState<ChatMessage | null>(null)
   const [sending, setSending] = useState(false)
   const [selected, setSelected] = useState<ChatMessage | null>(null)
   const safeBottom = useKeyboardSafeBottom(spacing.sm)
@@ -60,13 +76,55 @@ export function ReplyThreadView({
   const onPressAuthor = useCallback((userId: string) => router.push(`/user/${userId}`), [])
 
   const text = draft.trim()
+  const canSubmit = !sending && (editing ? !!text : !!text || files.length > 0)
   const submit = () => {
-    if (!text || sending) return
+    if (!canSubmit) return
     setSending(true)
-    onSend(text)
-      .then(() => setDraft(''))
-      .catch((e) => Alert.alert('Envoi impossible', errorMessage(e)))
+    const sent = files
+    ;(editing && onEdit ? onEdit(editing, text) : onSend(text, sent))
+      .then(() => {
+        setDraft('')
+        setEditing(null)
+        setFiles((prev) => prev.filter((f) => !sent.includes(f)))
+      })
+      .catch((e) => Alert.alert(editing ? 'Modification impossible' : 'Envoi impossible', errorMessage(e)))
       .finally(() => setSending(false))
+  }
+
+  const pickFiles = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true })
+    if (res.canceled) return
+    const accepted: LocalAttachment[] = []
+    for (const a of res.assets) {
+      const f = { uri: a.uri, name: sanitizeFilename(a.name), type: a.mimeType ?? 'application/octet-stream', size: a.size ?? null }
+      const err = validateAttachment(f)
+      if (err) Alert.alert('Fichier refusé', `${f.name} : ${err}`)
+      else accepted.push(f)
+    }
+    setFiles((prev) => [...prev, ...accepted].slice(0, MAX_FILES))
+  }
+
+  const confirmDelete = (m: ChatMessage) =>
+    Alert.alert('Supprimer le message ?', 'Cette action est définitive.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => void onDelete?.(m).catch((e) => Alert.alert('Suppression impossible', errorMessage(e))) },
+    ])
+
+  const actionsFor = (m: ChatMessage): SheetAction[] => {
+    const mine = !!me && m.authorId === me.id
+    const list: SheetAction[] = []
+    if (m.content) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
+    if (mine && onEdit && hasEditableText(m) && !disabledReason)
+      list.push({
+        label: 'Modifier',
+        icon: 'create-outline',
+        onPress: () => {
+          setEditing(m)
+          setDraft(m.content ?? '')
+        },
+      })
+    if (onDelete && (mine || canModerate)) list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
+    return list
   }
 
   let body: React.ReactNode
@@ -110,29 +168,68 @@ export function ReplyThreadView({
         {disabledReason ? (
           <Text style={styles.disabled}>{disabledReason}</Text>
         ) : (
-          <View style={styles.row}>
-            <TextInput
-              style={styles.input}
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={placeholder}
-              placeholderTextColor={colors.textFaint}
-              multiline
-              maxLength={LIMITS.messageMaxChars}
-              accessibilityLabel="Réponse"
-              textAlignVertical="center"
-            />
-            <Pressable
-              style={[styles.send, { backgroundColor: text && !sending ? colors.primary : colors.bgHover }]}
-              onPress={submit}
-              disabled={!text || sending}
-              accessibilityRole="button"
-              accessibilityLabel="Envoyer"
-              accessibilityState={{ disabled: !text || sending, busy: sending }}
-            >
-              {sending ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={18} color="#fff" />}
-            </Pressable>
-          </View>
+          <>
+            {editing ? (
+              <View style={styles.contextBar}>
+                <Ionicons name="create-outline" size={16} color={colors.textMuted} />
+                <Text style={styles.contextText}>Modification du message</Text>
+                <Pressable
+                  onPress={() => {
+                    setEditing(null)
+                    setDraft('')
+                  }}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Annuler la modification"
+                >
+                  <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            ) : null}
+            {files.length && !editing ? (
+              <ScrollView horizontal contentContainerStyle={styles.files} keyboardShouldPersistTaps="handled">
+                {files.map((f, i) => (
+                  <View key={`${f.uri}-${i}`} style={styles.fileChip}>
+                    <Ionicons name={f.type.startsWith('image/') ? 'image-outline' : 'document-outline'} size={14} color={colors.textMuted} />
+                    <Text style={styles.fileName} numberOfLines={1}>
+                      {f.name}
+                    </Text>
+                    <Pressable onPress={() => setFiles((prev) => prev.filter((_, j) => j !== i))} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Retirer ${f.name}`}>
+                      <Ionicons name="close" size={14} color={colors.textMuted} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : null}
+            <View style={styles.row}>
+              {editing ? null : (
+                <Pressable style={styles.attach} onPress={() => void pickFiles()} accessibilityRole="button" accessibilityLabel="Joindre un fichier" hitSlop={6}>
+                  <Ionicons name="add" size={24} color={colors.textSecondary} />
+                </Pressable>
+              )}
+              <TextInput
+                style={styles.input}
+                value={draft}
+                onChangeText={setDraft}
+                placeholder={placeholder}
+                placeholderTextColor={colors.textFaint}
+                multiline
+                maxLength={LIMITS.messageMaxChars}
+                accessibilityLabel={editing ? 'Message modifié' : 'Réponse'}
+                textAlignVertical="center"
+              />
+              <Pressable
+                style={[styles.send, { backgroundColor: canSubmit ? colors.primary : colors.bgHover }]}
+                onPress={submit}
+                disabled={!canSubmit}
+                accessibilityRole="button"
+                accessibilityLabel={editing ? 'Enregistrer' : 'Envoyer'}
+                accessibilityState={{ disabled: !canSubmit, busy: sending }}
+              >
+                {sending ? <ActivityIndicator color="#fff" /> : <Ionicons name={editing ? 'checkmark' : 'send'} size={18} color="#fff" />}
+              </Pressable>
+            </View>
+          </>
         )}
       </Animated.View>
       <Sheet
@@ -157,11 +254,7 @@ export function ReplyThreadView({
             ))}
           </View>
         }
-        actions={
-          selected?.content
-            ? [{ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(selected.content ?? '') }]
-            : []
-        }
+        actions={selected ? actionsFor(selected) : []}
       />
     </KeyboardAvoidingView>
   )
@@ -169,7 +262,13 @@ export function ReplyThreadView({
 
 const styles = StyleSheet.create({
   bar: { backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  contextBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bgAlt },
+  contextText: { flex: 1, color: colors.textMuted, fontSize: font.sm },
+  files: { gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
+  fileChip: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 180, backgroundColor: colors.bgElevated, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
+  fileName: { color: colors.textSecondary, fontSize: font.xs, flexShrink: 1 },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
+  attach: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1,
     minHeight: 40,
