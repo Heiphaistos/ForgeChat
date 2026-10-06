@@ -1,8 +1,9 @@
+import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, Pressable, ScrollView, View } from 'react-native'
 import { serversApi } from '@/api/servers'
-import { Button, ErrorState, Loading, Section, SwitchRow, T, TextField } from '@/components/ui'
+import { Button, ErrorState, Loading, Row, Section, SwitchRow, T, TextField } from '@/components/ui'
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
 import { PERMISSION_GROUPS, hasBit, roleColorHex, toggleBit } from '@/features/servers/perms'
 import { errorMessage } from '@/lib/http'
@@ -30,6 +31,9 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
   const [name, setName] = useState(role.name)
   const [color, setColor] = useState(role.color)
   const [bits, setBits] = useState(role.permissions)
+  const [hoisted, setHoisted] = useState(role.hoisted)
+  const [mentionable, setMentionable] = useState(role.mentionable)
+  const members = useQuery({ queryKey: ['role-members', sid, role.id], queryFn: () => serversApi.roleMembers(sid, role.id), enabled: !role.is_everyone })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: qk.server(sid) })
@@ -39,7 +43,7 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
     setSaving(true)
     setError(null)
     try {
-      await serversApi.updateRole(sid, role.id, { ...(role.is_everyone ? {} : { name: name.trim(), color }), permissions: bits })
+      await serversApi.updateRole(sid, role.id, { ...(role.is_everyone ? {} : { name: name.trim(), color, hoisted, mentionable }), permissions: bits })
       await refresh()
       router.back()
     } catch (e) {
@@ -96,6 +100,10 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
               })}
             </View>
           </View>
+          <Section>
+            <SwitchRow icon="list-outline" title="Afficher séparément" subtitle="Ses membres forment un groupe dans la liste des membres" value={hoisted} onValueChange={setHoisted} />
+            <SwitchRow icon="at-outline" title="Mentionnable" subtitle="Tout le monde peut écrire @rôle" value={mentionable} onValueChange={setMentionable} />
+          </Section>
         </>
       )}
       {PERMISSION_GROUPS.map((g) => (
@@ -117,6 +125,22 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
       ))}
       {error ? <T variant="error">{error}</T> : null}
       <Button title="Enregistrer" onPress={save} loading={saving} />
+      {role.is_everyone ? null : (
+        <Section title={`Membres${members.data ? ` (${members.data.length})` : ''}`}>
+          {members.isLoading ? <Row title="Chargement…" /> : null}
+          {members.data?.length === 0 ? <Row title="Aucun membre n’a ce rôle" /> : null}
+          {(members.data ?? []).map((m) => (
+            <Row
+              key={m.id}
+              icon="person-outline"
+              title={m.nick || m.username}
+              subtitle={m.nick ? m.username : null}
+              chevron
+              onPress={() => router.push({ pathname: '/server/[serverId]/settings/member/[userId]', params: { serverId: sid, userId: m.id } })}
+            />
+          ))}
+        </Section>
+      )}
       {role.is_everyone ? null : <Button title="Supprimer le rôle" variant="danger" icon="trash-outline" onPress={remove} />}
     </ScrollView>
   )

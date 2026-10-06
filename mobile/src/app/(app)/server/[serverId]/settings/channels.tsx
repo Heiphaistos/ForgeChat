@@ -1,18 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
-import { Alert, ScrollView } from 'react-native'
+import { Alert, ScrollView, View } from 'react-native'
+import { channelsApi } from '@/api/channels'
 import { serversApi } from '@/api/servers'
 import { Button, ErrorState, IconButton, Loading, Row, Section } from '@/components/ui'
 import { channelIcon } from '@/features/servers/ChannelList'
 import { channelSections } from '@/features/servers/channels'
 import { useServerPerms } from '@/features/servers/menus'
+import { reorderChannelIds } from '@/features/servers/reorder'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import type { Category } from '@/types/models'
 import { colors, spacing } from '@/theme'
 
-/** Salons et catégories : toucher un salon pour le modifier ; corbeille sur une catégorie. */
+/** Salons et catégories : toucher un salon pour le modifier ; flèches pour le déplacer ; corbeille sur une catégorie. */
 export default function ChannelsSettingsScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const sid = ids.serverId ?? ''
@@ -37,8 +39,17 @@ export default function ChannelsSettingsScreen() {
       },
     ])
 
+  const move = (channelId: string, delta: -1 | 1) => {
+    const order = reorderChannelIds(channels.data ?? [], categories.data ?? [], channelId, delta)
+    if (!order) return
+    void channelsApi
+      .reorder(sid, order)
+      .then(() => Promise.all([qk.channels(sid), qk.server(sid)].map((queryKey) => queryClient.invalidateQueries({ queryKey }))))
+      .catch((e) => Alert.alert('Déplacement impossible', errorMessage(e)))
+  }
+
   // Archivés et masqués compris : on les gère aussi ici.
-  const all = (channels.data ?? []).map((c) => ({ ...c, hidden: false, archived: false }))
+  const all = (channels.data ?? []).map((c) => ({ ...c, hidden: false, archived: false, state: c.archived ? 'Archivé' : c.hidden ? 'Masqué pour toi' : null }))
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
       {perms.canCreateChannels ? (
@@ -60,14 +71,21 @@ export default function ChannelsSettingsScreen() {
               right={<IconButton icon="trash-outline" label={`Supprimer la catégorie ${section.category.name}`} color={colors.danger} onPress={() => deleteCategory(section.category!)} />}
             />
           ) : null}
-          {section.data.map((c) => (
+          {section.data.map((c, i) => (
             <Row
               key={c.id}
               icon={channelIcon(c.type)}
               title={c.name}
-              subtitle={c.topic}
-              chevron
+              subtitle={[c.state, c.topic].filter(Boolean).join(' · ')}
               onPress={() => router.push({ pathname: '/server/[serverId]/settings/channel/[channelId]', params: { serverId: sid, channelId: c.id } })}
+              right={
+                perms.canEditChannels ? (
+                  <View style={{ flexDirection: 'row' }}>
+                    <IconButton icon="chevron-up" label={`Monter ${c.name}`} disabled={i === 0} onPress={() => move(c.id, -1)} />
+                    <IconButton icon="chevron-down" label={`Descendre ${c.name}`} disabled={i === section.data.length - 1} onPress={() => move(c.id, 1)} />
+                  </View>
+                ) : null
+              }
             />
           ))}
           {section.data.length ? null : <Row title="Aucun salon" />}
