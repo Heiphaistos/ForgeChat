@@ -20,7 +20,7 @@ import {
 export type NoiseEngine = 'off' | 'browser' | 'gate' | 'speex' | 'rnnoise' | 'gtcrn'
 
 export const NOISE_ENGINES: { id: NoiseEngine; label: string; hint: string }[] = [
-  { id: 'off', label: 'Désactivée', hint: 'Micro brut, aucun traitement' },
+  { id: 'off', label: 'Désactivée', hint: 'Micro brut : ni réduction de bruit ni gain automatique' },
   { id: 'browser', label: 'Navigateur', hint: 'Annulation d\'écho + réduction de bruit natives (CPU négligeable)' },
   { id: 'gate', label: 'Porte de bruit', hint: 'Coupe les silences, très léger' },
   { id: 'speex', label: 'Speex', hint: 'Réduction spectrale classique, ~2 % CPU' },

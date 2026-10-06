@@ -13,8 +13,8 @@ import {
   addPeer, removePeer, connectMedia, disconnectMedia, watchStream as sfuWatchStream, getAutoWatch, setAutoWatch as sfuSetAutoWatch,
   setLocalStream, replaceMicTrack, applyMicEnabled, addCameraTrack, removeCameraTrack,
   startScreenTracks, stopScreenTracks, clearLocalMedia, getLocalStream, getRawMicTrack,
-  getMicTrack, refreshAllSenderQuality, setWhisper, warn,
-  type MeshCtx, type MediaStatus,
+  getMicTrack, refreshAllSenderQuality, setWhisper, resubscribeAll, warn,
+  type MeshCtx, type MediaStatus, type MediaLoss,
 } from './voiceSfu'
 import type { ConnectionQuality } from 'livekit-client'
 import { initVoiceModeration } from './voiceModeration'
@@ -140,6 +140,16 @@ let _processed: ProcessedAudio | null = null
 let _joining = false
 let _offFns: Array<() => void> = []
 let _offOpen: (() => void) | null = null
+/** VOICE_JOIN envoyé, réponse (pairs ou erreur) pas encore reçue. */
+let _awaitingPeers = false
+/** Mot de passe du salon : renvoyé avec chaque VOICE_JOIN de reconnexion. */
+let _password: string | undefined
+/** Reconnexion au média : tentatives et minuteur en cours. */
+let _rejoinAttempts = 0
+let _rejoinTimer: ReturnType<typeof setTimeout> | null = null
+const MAX_REJOIN_ATTEMPTS = 5
+/** Caméra en cours d'ouverture (double clic, sortie pendant getUserMedia). */
+let _camBusy = false
 
 const VOLUMES_KEY = 'fc_user_volumes'
 const SCREEN_VOLUMES_KEY = 'fc_screen_volumes'
@@ -162,15 +172,21 @@ function saveVolumes(key: string, volumes: Record<string, number>) {
 function micConstraints(): MediaTrackConstraints {
   const savedMicId = localStorage.getItem('fc_audio_input') || undefined
   const engine = getNoiseEngine()
-  // Quand un moteur applicatif traite le signal, l'AGC du navigateur en plus
-  // faisait « pomper » la voix (gain qui monte dans les silences nettoyés).
-  const nativeProcessing = engine === 'off' || engine === 'browser'
   return {
     echoCancellation: true,
-    noiseSuppression: nativeProcessing,
-    autoGainControl: nativeProcessing,
+    ...browserProcessing(engine),
     ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
   }
+}
+
+/**
+ * Traitement du navigateur selon le moteur. Quand un moteur applicatif traite le
+ * signal, l'AGC du navigateur en plus faisait « pomper » la voix (gain qui monte
+ * dans les silences nettoyés) ; « Désactivée » veut dire micro brut.
+ */
+function browserProcessing(engine: NoiseEngine) {
+  const on = engine === 'browser'
+  return { noiseSuppression: on, autoGainControl: on }
 }
 
 function camConstraints(): MediaTrackConstraints {
@@ -199,14 +215,20 @@ function screenConstraints() {
 }
 
 function micShouldBeOpen(s: VoiceStore): boolean {
-  if (s.listenOnly || s.serverMuted || s.serverDeafened) return false
-  if (s.pttMode) return s.pttActive
+  // En sourdine on n'émet pas non plus (comme Discord) : le micro restait ouvert.
+  if (s.listenOnly || s.serverMuted || s.serverDeafened || s.deafened) return false
+  // Muet l'emporte sur le push-to-talk : appuyer sur la touche rouvrait le micro.
+  if (s.pttMode) return s.pttActive && !s.muted
   return !s.muted
 }
 
 /** Construit la piste micro à envoyer : brute + moteur de suppression de bruit. */
 async function buildMicTrack(raw: MediaStreamTrack, engine: NoiseEngine): Promise<{ track: MediaStreamTrack; error: string | null }> {
-  if (engine === 'off' || engine === 'browser') return { track: raw, error: null }
+  if (engine === 'off' || engine === 'browser') {
+    // L'ancienne chaîne (worklet + AudioContext) tournait encore pour rien.
+    disposeProcessed()
+    return { track: raw, error: null }
+  }
   try {
     _processed?.dispose()
     _processed = await createProcessedAudioTrack(raw, engine)
@@ -225,7 +247,7 @@ function disposeProcessed() {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 export const useVoice = create<VoiceStore>((set, get) => {
-  const ctx: MeshCtx = { get: get as any, set: set as any }
+  const ctx: MeshCtx = { get: get as any, set: set as any, onMediaLost: why => onMediaLost(why) }
 
   const syncMic = () => applyMicEnabled(micShouldBeOpen(get()))
 
@@ -254,10 +276,124 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
   /** Muet / sourdine imposés : micro coupé, écoute coupée, non levables. */
   const applyImposed = (muted: boolean, deafened: boolean) => {
+    // Sourdine imposée levée : le SFU a retiré nos abonnements, les redemander.
+    if (get().serverDeafened && !deafened) resubscribeAll()
     set({ serverMuted: muted, serverDeafened: deafened })
     if (muted || deafened) set({ muted: true })
     if (deafened) applyDeafen(true)
     syncMic()
+  }
+
+  const clearRejoin = () => {
+    if (_rejoinTimer) { clearTimeout(_rejoinTimer); _rejoinTimer = null }
+    _rejoinAttempts = 0
+  }
+
+  const sendJoin = (channelId: string, listenOnly: boolean) => {
+    _awaitingPeers = true
+    useWs.getState().send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(_password ? { password: _password } : {}) })
+  }
+
+  /** Média perdu alors qu'on est toujours dans le salon. */
+  const onMediaLost = (why: MediaLoss) => {
+    if (!get().joined) return
+    if (why === 'duplicate' || why === 'removed' || why === 'evicted') {
+      // Le serveur nous a déjà sortis (ou un autre appareil a repris le salon) :
+      // un VOICE_LEAVE ici sortirait l'autre appareil, et un VOICE_JOIN le chasserait.
+      teardown(why === 'evicted')
+      toast(why === 'duplicate' ? 'Salon vocal repris sur un autre appareil.'
+        : why === 'evicted' ? 'Salon vocal quitté pour l\'appel privé.'
+        : 'Vous avez été déconnecté du salon vocal.')
+      return
+    }
+    // Panne réseau : redemander un accès au SFU (nouveau jeton) avant que le
+    // serveur ne nous retire du salon (20 s d'absence), avec un délai croissant.
+    if (_rejoinTimer) return
+    if (_rejoinAttempts >= MAX_REJOIN_ATTEMPTS) {
+      set({ mediaStatus: 'failed', error: 'Connexion au serveur audio/vidéo perdue. Quittez et rejoignez le salon.' })
+      return
+    }
+    const delay = 1000 * 2 ** _rejoinAttempts++
+    set({ mediaStatus: 'reconnecting' })
+    _rejoinTimer = setTimeout(() => {
+      _rejoinTimer = null
+      const s = get()
+      if (s.joined && s.channelId) sendJoin(s.channelId, s.listenOnly)
+    }, delay)
+  }
+
+  /** Sortie locale. `announce` = prévenir le serveur (VOICE_LEAVE). */
+  const teardown = (announce: boolean) => {
+    const { channelId, joined, screenSharing } = get()
+    if (!joined) return
+
+    if (announce) {
+      const ws = useWs.getState()
+      // Annoncer la fin du partage AVANT de quitter, sinon le badge LIVE reste
+      // affiché chez les autres.
+      if (screenSharing && channelId) {
+        ws.send({ type: 'VOICE_STATE', channel_id: channelId, muted: true, deafened: false, video: false, screen: false })
+      }
+      ws.send({ type: 'VOICE_LEAVE', channel_id: channelId })
+    }
+    clearRejoin()
+    _awaitingPeers = false
+    _password = undefined
+
+    void disconnectMedia()
+
+    const tracks = new Set<MediaStreamTrack>()
+    getLocalStream()?.getTracks().forEach(t => tracks.add(t))
+    const raw = getRawMicTrack()
+    // La piste micro BRUTE n'était référencée que par ce champ dès que la
+    // suppression de bruit était active : elle n'était jamais stoppée et
+    // l'indicateur micro de l'OS restait allumé après avoir quitté.
+    if (raw) tracks.add(raw)
+    const mic = getMicTrack()
+    if (mic) tracks.add(mic)
+    get().localScreenStream?.getTracks().forEach(t => tracks.add(t))
+    tracks.forEach(t => { t.onended = null; t.stop() })
+
+    disposeProcessed()
+    void stopScreenTracks()
+    clearLocalMedia()
+
+    _offFns.forEach(off => off())
+    _offFns = []
+    _offOpen?.()
+    _offOpen = null
+
+    set({
+      joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
+      localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
+      localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
+      videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
+      pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
+      serverMuted: false, serverDeafened: false, sfuSpeakers: [],
+      // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
+      // à la sortie du salon (et sont persistées).
+    })
+  }
+
+  /** Micro débranché : repli sur le micro par défaut, sans quitter le salon. */
+  const watchMic = (raw: MediaStreamTrack | null) => {
+    if (!raw) return
+    raw.onended = () => {
+      if (!get().joined || getRawMicTrack() !== raw) return
+      localStorage.removeItem('fc_audio_input')
+      set({ notice: 'Micro débranché : micro par défaut utilisé.' })
+      void get().setAudioInput('')
+    }
+  }
+
+  /** Caméra débranchée : la couper proprement au lieu d'envoyer une image figée. */
+  const watchCam = (vt: MediaStreamTrack) => {
+    vt.onended = () => {
+      const s = get()
+      if (!s.joined || !s.videoEnabled) return
+      set({ notice: 'Caméra débranchée : caméra coupée.' })
+      void s.toggleVideo()
+    }
   }
 
   const refreshLocal = () => {
@@ -382,7 +518,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               [d.channel_id]: current.map(p => p.userId === d.user_id ? { ...p, muted: d.muted, video: d.video, screen: d.screen } : p),
             },
             peers: s.peers.map(p => p.userId === d.user_id
-              ? { ...p, muted: d.muted, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording }
+              ? { ...p, muted: d.muted, deafened: !!d.deafened, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording }
               : p),
           }
         })
@@ -465,8 +601,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
           const outgoing = new MediaStream()
           if (micTrack) outgoing.addTrack(micTrack)
-          stream.getVideoTracks().forEach(t => outgoing.addTrack(t))
+          stream.getVideoTracks().forEach(t => { outgoing.addTrack(t); watchCam(t) })
           setLocalStream(outgoing, raw)
+          watchMic(raw)
         }
 
         set({
@@ -494,7 +631,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
           const s = get()
           // Comparer au canal EFFECTIF : sur un canal auto-create, le serveur
           // répond pour le canal temporaire, pas pour celui qui a été cliqué.
-          if (d.channel_id !== s.channelId) return
+          // Réponse à NOTRE VOICE_JOIN pour un autre canal : c'est ce canal
+          // temporaire, l'adopter (sinon jamais de son ni d'image).
+          if (d.channel_id !== s.channelId) {
+            if (!_awaitingPeers) return
+            set({ channelId: d.channel_id })
+          }
+          _awaitingPeers = false
           // La liste du serveur ne contient que les AUTRES : sans s'y ajouter soi-même,
           // on n'apparaissait pas sous le salon dans sa propre barre latérale.
           const me = useAuth.getState().user
@@ -537,7 +680,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
             return
           }
           // Sans effet si la connexion au SFU tient déjà (reconnexion du seul WebSocket).
-          await connectMedia(lk.url, lk.token, lk.room, ctx)
+          await connectMedia(lk.url, lk.token, lk.room, ctx, d.can_speak !== false)
+          if (get().mediaStatus === 'connected') clearRejoin()
         })
 
         const offJoined = ws.on('VOICE_USER_JOINED', (d: any) => {
@@ -557,15 +701,23 @@ export const useVoice = create<VoiceStore>((set, get) => {
           // Canal auto-create : le serveur nous place dans un canal temporaire.
           // On met simplement à jour l'identifiant courant — un leave()/join()
           // ici supprimait le canal temporaire aussitôt créé.
-          if (!d?.channel_id) return
+          if (!d?.channel_id || !_awaitingPeers) return
           set({ channelId: d.channel_id })
         })
 
         const offError = ws.on('VOICE_JOIN_ERROR', (d: any) => {
-          if (d.reason === 'channel_full' || d.reason === 'full') set({ error: `Canal plein (${d.current ?? '?'}/${d.limit} places)` })
-          else if (d.reason === 'missing_permission') set({ error: "Vous n'avez pas la permission de rejoindre ce salon vocal." })
-          else if (d.reason === 'rate_limited') set({ error: 'Trop de tentatives de connexion : patientez quelques secondes.' })
-          else if (d.reason === 'wrong_password') set({ error: 'Mot de passe du salon incorrect.' })
+          // Seulement en réponse à notre VOICE_JOIN (le message part à toutes nos sessions).
+          if (!_awaitingPeers) return
+          const error = d.reason === 'channel_full' || d.reason === 'full' ? `Canal plein (${d.current ?? '?'}/${d.limit} places)`
+            : d.reason === 'missing_permission' ? "Vous n'avez pas la permission de rejoindre ce salon vocal."
+            : d.reason === 'rate_limited' ? 'Trop de tentatives de connexion : patientez quelques secondes.'
+            : d.reason === 'wrong_password' ? 'Mot de passe du salon incorrect.'
+            : d.reason === 'media_unavailable' ? 'Serveur audio/vidéo indisponible : réessayez dans un instant.'
+            : 'Impossible de rejoindre ce salon vocal.'
+          // Le serveur ne nous a pas acceptés : l'interface ne doit pas rester
+          // « connectée » à un salon où l'on n'est pas (micro ouvert pour rien).
+          get().leave()
+          set({ error })
         })
 
         // Le serveur refuse un partage sans la permission STREAM : sans ce handler,
@@ -591,11 +743,12 @@ export const useVoice = create<VoiceStore>((set, get) => {
           if (!s.joined || !s.channelId) return
           // Le média ne passe pas par le WebSocket : la connexion au SFU survit
           // à un redémarrage du serveur ForgeChat, seule la présence est rejouée.
-          ws.send({ type: 'VOICE_JOIN', channel_id: s.channelId, listen_only: s.listenOnly, ...(password ? { password } : {}) })
+          sendJoin(s.channelId, s.listenOnly)
           setTimeout(broadcastState, 300)
         })
 
-        ws.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(password ? { password } : {}) })
+        _password = password
+        sendJoin(channelId, listenOnly)
         setTimeout(broadcastState, 200)
       } finally {
         _joining = false
@@ -603,52 +756,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     },
 
     // ── Leave ───────────────────────────────────────────────────────────────
-    leave: () => {
-      const { channelId, joined, screenSharing } = get()
-      if (!joined) return
-
-      const ws = useWs.getState()
-      // Annoncer la fin du partage AVANT de quitter, sinon le badge LIVE reste
-      // affiché chez les autres.
-      if (screenSharing && channelId) {
-        ws.send({ type: 'VOICE_STATE', channel_id: channelId, muted: true, deafened: false, video: false, screen: false })
-      }
-      ws.send({ type: 'VOICE_LEAVE', channel_id: channelId })
-
-      void disconnectMedia()
-
-      const tracks = new Set<MediaStreamTrack>()
-      getLocalStream()?.getTracks().forEach(t => tracks.add(t))
-      const raw = getRawMicTrack()
-      // La piste micro BRUTE n'était référencée que par ce champ dès que la
-      // suppression de bruit était active : elle n'était jamais stoppée et
-      // l'indicateur micro de l'OS restait allumé après avoir quitté.
-      if (raw) tracks.add(raw)
-      const mic = getMicTrack()
-      if (mic) tracks.add(mic)
-      get().localScreenStream?.getTracks().forEach(t => tracks.add(t))
-      tracks.forEach(t => t.stop())
-
-      disposeProcessed()
-      void stopScreenTracks()
-      clearLocalMedia()
-
-      _offFns.forEach(off => off())
-      _offFns = []
-      _offOpen?.()
-      _offOpen = null
-
-      set({
-        joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
-        localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
-        localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
-        videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
-        pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
-        serverMuted: false, serverDeafened: false, sfuSpeakers: [],
-        // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
-        // à la sortie du salon (et sont persistées).
-      })
-    },
+    leave: () => teardown(true),
 
     toggleMute: () => {
       const s0 = get()
@@ -668,43 +776,57 @@ export const useVoice = create<VoiceStore>((set, get) => {
         return
       }
       applyDeafen(next)
+      syncMic()
       broadcastState()
     },
 
     // ── Caméra ──────────────────────────────────────────────────────────────
     toggleVideo: async () => {
-      const { videoEnabled, joined, listenOnly } = get()
+      const { videoEnabled, joined, listenOnly, channelId } = get()
       if (!joined || listenOnly) return
-      if (isNativeVoice()) {
-        try {
-          const url = await nativeSetCamera(!videoEnabled)
-          set({ videoEnabled: !videoEnabled && !!url, localVideoUrl: url })
-        } catch (e) {
-          warn('caméra native', e)
-          set({ error: `Caméra indisponible : ${String(e)}` })
+      // Double clic pendant l'ouverture : deux caméras ouvertes, une jamais fermée.
+      if (_camBusy) return
+      _camBusy = true
+      // Salon quitté (ou changé) pendant l'attente : ne rien publier ni afficher.
+      const stillHere = () => get().joined && get().channelId === channelId
+      try {
+        if (isNativeVoice()) {
+          try {
+            const url = await nativeSetCamera(!videoEnabled)
+            if (!stillHere()) return
+            set({ videoEnabled: !videoEnabled && !!url, localVideoUrl: url })
+          } catch (e) {
+            warn('caméra native', e)
+            if (stillHere()) set({ error: `Caméra indisponible : ${String(e)}` })
+          }
+          broadcastState()
+          return
+        }
+
+        if (videoEnabled) {
+          await removeCameraTrack()
+          set({ videoEnabled: false })
+          refreshLocal()
+        } else {
+          try {
+            const vs = await navigator.mediaDevices.getUserMedia({ video: camConstraints() })
+            const vt = vs.getVideoTracks()[0]
+            if (!vt) throw new Error('aucune piste caméra')
+            if (!stillHere()) { vs.getTracks().forEach(t => t.stop()); return }
+            await addCameraTrack(vt)
+            if (!stillHere()) { await removeCameraTrack(); return }
+            watchCam(vt)
+            set({ videoEnabled: true })
+            refreshLocal()
+          } catch (e) {
+            warn('activation caméra', e)
+            set({ error: 'Impossible d\'accéder à la caméra.' })
+          }
         }
         broadcastState()
-        return
+      } finally {
+        _camBusy = false
       }
-
-      if (videoEnabled) {
-        await removeCameraTrack()
-        set({ videoEnabled: false })
-        refreshLocal()
-      } else {
-        try {
-          const vs = await navigator.mediaDevices.getUserMedia({ video: camConstraints() })
-          const vt = vs.getVideoTracks()[0]
-          if (!vt) throw new Error('aucune piste caméra')
-          await addCameraTrack(vt)
-          set({ videoEnabled: true })
-          refreshLocal()
-        } catch (e) {
-          warn('activation caméra', e)
-          set({ error: 'Impossible d\'accéder à la caméra.' })
-        }
-      }
-      broadcastState()
     },
 
     // ── Partage d'écran ─────────────────────────────────────────────────────
@@ -788,18 +910,18 @@ export const useVoice = create<VoiceStore>((set, get) => {
       broadcastState()
     },
 
+    // Pas de VOICE_STATE à chaque appui : rien de diffusé ne change, et chaque
+    // appui consommait la limite de 20 changements d'état par 10 s.
     activatePtt: () => {
       if (!get().pttMode || !get().joined) return
       set({ pttActive: true })
       syncMic()
-      broadcastState()
     },
 
     deactivatePtt: () => {
       if (!get().pttMode || !get().joined) return
       set({ pttActive: false })
       syncMic()
-      broadcastState()
     },
 
     // ── Volumes ─────────────────────────────────────────────────────────────
@@ -834,6 +956,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
       const raw = getRawMicTrack()
       if (!raw) return
+      // Traitement du navigateur suivant le moteur : passer à « Navigateur » ne
+      // réactivait pas sa réduction de bruit, « Désactivée » la gardait.
+      await raw.applyConstraints(browserProcessing(engine)).catch(e => warn('contraintes micro', e))
       const built = await buildMicTrack(raw, engine)
       // Réappliquer l'état mute APRÈS le remplacement : sinon basculer ce réglage
       // rouvrait le micro d'un utilisateur muet, sans que l'icône ne change.
@@ -844,7 +969,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
     // ── Périphériques à chaud ───────────────────────────────────────────────
     setAudioInput: async (deviceId) => {
-      localStorage.setItem('fc_audio_input', deviceId)
+      if (deviceId) localStorage.setItem('fc_audio_input', deviceId)
+      else localStorage.removeItem('fc_audio_input')
       if (!get().joined || get().listenOnly) return
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints() })
@@ -855,6 +981,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         const built = await buildMicTrack(raw, get().noiseEngine)
         const ls = getLocalStream()
         setLocalStream(ls, raw)
+        watchMic(raw)
         await replaceMicTrack(built.track, micShouldBeOpen(get()))
         refreshLocal()
         set({ notice: built.error })
@@ -872,6 +999,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         const vt = vs.getVideoTracks()[0]
         if (!vt) return
         await addCameraTrack(vt)
+        watchCam(vt)
         refreshLocal()
       } catch (e) {
         warn('changement de caméra', e)

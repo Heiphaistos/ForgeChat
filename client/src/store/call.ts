@@ -86,7 +86,7 @@ function _cleanup(set: SetFn) {
   _room = null
   _camPub = _micPub = null
   void room?.disconnect(true)
-  if (_native) { _native = false; void nativeDisconnect() }
+  if (_native) { _native = false; void nativeDisconnect('call') }
   set(s => {
     s.localStream?.getTracks().forEach(t => t.stop())
     return {
@@ -95,6 +95,13 @@ function _cleanup(set: SetFn) {
       micMuted: false, camOff: false, connectedAt: null,
     }
   })
+}
+
+/** Fin d'appel décidée ici (correspondant parti, SFU perdu) : le prévenir aussi. */
+function _endCall(set: SetFn, get: () => CallStore) {
+  const { partnerId, dmId } = get()
+  if (partnerId && dmId) useWs.getState().send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+  _cleanup(set)
 }
 
 function _rebuildRemote(p: RemoteParticipant, set: SetFn, get: () => CallStore) {
@@ -116,7 +123,7 @@ async function _connectNative(lk: { url: string; token: string }, set: SetFn, ge
   const partner = () => get().partnerId
   const res = await api.get('/voice/ice-config').catch(() => null)
   try {
-    await nativeConnect(lk.url, lk.token, res?.data.ice_servers ?? [], true, !get().micMuted, {
+    await nativeConnect('call', lk.url, lk.token, res?.data.ice_servers ?? [], true, !get().micMuted, {
       onTrack: e => {
         if (e.identity !== partner()) return
         if (e.source === 'camera') set(() => ({ remoteVideoUrl: e.active ? e.url : null }))
@@ -126,8 +133,13 @@ async function _connectNative(lk: { url: string; token: string }, set: SetFn, ge
       onState: e => {
         if (e.status === 'disconnected' && _native) {
           toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
-          _cleanup(set)
+          _endCall(set, get)
         }
+      },
+      // Un salon vocal rejoint reprend la session native (une seule à la fois).
+      onEvicted: () => {
+        toast('Appel privé terminé : vous avez rejoint un salon vocal.')
+        _endCall(set, get)
       },
     })
     if (get().callType === 'video') {
@@ -137,7 +149,7 @@ async function _connectNative(lk: { url: string; token: string }, set: SetFn, ge
     if (get().deafened) void nativeSetDeafen(true)
   } catch (e) {
     toast.error(`Appel impossible : ${String(e)}`)
-    _cleanup(set)
+    _endCall(set, get)
   }
 }
 

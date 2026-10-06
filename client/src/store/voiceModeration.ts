@@ -12,6 +12,9 @@ interface Store {
   joined: boolean
   channelId: string | null
   listenOnly: boolean
+  muted: boolean
+  serverMuted: boolean
+  serverDeafened: boolean
   peers: VoicePeer[]
   roomParticipants: Record<string, VoiceRoomParticipant[]>
   leave(): void
@@ -43,7 +46,10 @@ export function initVoiceModeration(
     if (inChannel) applyImposed(flags.serverMuted, flags.serverDeafened)
     if (flags.serverDeafened) toast('Un modérateur vous a mis en sourdine sur ce serveur.')
     else if (flags.serverMuted) toast('Un modérateur vous a rendu muet sur ce serveur.')
-    else toast('Votre micro a été rétabli par un modérateur.')
+    // Le micro reste coupé localement après la levée : le dire, au lieu
+    // d'annoncer un micro « rétabli » qui ne transmet rien.
+    else if (inChannel && get().muted) toast('Un modérateur a levé votre muet : réactivez votre micro pour parler.')
+    else toast('Un modérateur a levé votre muet sur ce serveur.')
   })
 
   const offMove = ws.on('VOICE_MOVE', (d: any) => {
@@ -59,7 +65,10 @@ export function initVoiceModeration(
     const s = get()
     if (!s.joined || (d.channel_id && d.channel_id !== s.channelId)) return
     s.leave()
-    toast('Un modérateur vous a déconnecté du salon vocal.')
+    // media_lost : retiré par le serveur après 20 s sans connexion au média.
+    toast(d.reason === 'media_lost'
+      ? 'Déconnecté du salon vocal : connexion au serveur audio/vidéo perdue.'
+      : 'Un modérateur vous a déconnecté du salon vocal.')
   })
 
   return () => { offState(); offMove(); offDisconnect() }

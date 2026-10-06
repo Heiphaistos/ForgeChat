@@ -26,9 +26,14 @@ export function warn(ctx: string, e: unknown) {
   console.warn(`[voice] ${ctx}`, e)
 }
 
+/** Pourquoi le média est perdu alors qu'on est toujours dans le salon. */
+export type MediaLoss = 'network' | 'duplicate' | 'removed' | 'evicted'
+
 export interface MeshCtx {
   get: () => any
   set: (fn: any) => void
+  /** Média perdu sans sortie voulue : le store décide (reconnexion ou sortie). */
+  onMediaLost?: (why: MediaLoss) => void
 }
 
 export type MediaStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
@@ -45,6 +50,7 @@ let _micOpen = false
 let _room: Room | null = null
 let _roomName: string | null = null
 let _micPub: LocalTrackPublication | null = null
+let _micPublishing = false
 let _camPub: LocalTrackPublication | null = null
 let _screenPub: LocalTrackPublication | null = null
 let _screenAudioPub: LocalTrackPublication | null = null
@@ -110,6 +116,8 @@ async function publishCamera(room: Room, track: MediaStreamTrack) {
     simulcast: true,
     videoEncoding: { maxBitrate: q.camMaxBitrate, maxFramerate: q.camFps },
   })
+  // Chuchotement en cours : la nouvelle piste doit rester visible des autres.
+  applyWhisper()
 }
 
 async function publishScreen(room: Room) {
@@ -135,11 +143,12 @@ async function publishScreen(room: Room) {
       forceStereo: true,
     })
   }
+  applyWhisper()
 }
 
 export async function refreshAllSenderQuality() {
   const q = getQualityPrefs()
-  const apply = async (pub: LocalTrackPublication | null, bitrate: number) => {
+  const apply = async (pub: LocalTrackPublication | null, bitrate: number, fps: number) => {
     const sender = pub?.track?.sender
     if (!sender) return
     try {
@@ -147,12 +156,24 @@ export async function refreshAllSenderQuality() {
       if (!params.encodings?.length) return
       // Couche la plus haute seulement : les couches simulcast basses gardent
       // leurs plafonds, calculés par le SDK.
-      params.encodings[params.encodings.length - 1].maxBitrate = bitrate
+      const top = params.encodings[params.encodings.length - 1]
+      top.maxBitrate = bitrate
+      top.maxFramerate = fps
       await sender.setParameters(params)
     } catch (e) { warn('réglage qualité', e) }
   }
-  await apply(_camPub, q.camMaxBitrate)
-  await apply(_screenPub, q.screenMaxBitrate)
+  // Résolution, images/s et type de contenu des captures en cours : seuls les
+  // débits suivaient, le reste attendait le prochain partage.
+  const fit = (t: MediaStreamTrack | null, key: string, def: number, fps: number) => {
+    const h = Number(localStorage.getItem(key) ?? def) || def
+    t?.applyConstraints({ width: { ideal: Math.round((h * 16) / 9) }, height: { ideal: h }, frameRate: { ideal: fps } })
+      .catch(e => warn('contraintes vidéo', e))
+  }
+  fit(_camTrack, 'fc_cam_height', 720, q.camFps)
+  fit(_screenVideoTrack, 'fc_screen_height', 1080, q.screenFps)
+  if (_screenVideoTrack) _screenVideoTrack.contentHint = q.screenContentHint
+  await apply(_camPub, q.camMaxBitrate, q.camFps)
+  await apply(_screenPub, q.screenMaxBitrate, q.screenFps)
 }
 
 // ── Pairs (présence WebSocket) ↔ média (LiveKit) ─────────────────────────────
@@ -219,14 +240,25 @@ export function getAutoWatch(): boolean {
 
 export function setAutoWatch(on: boolean) {
   try { localStorage.setItem(WATCH_KEY, on ? 'true' : 'false') } catch { /* mode privé */ }
+  // Sans ça, le réglage ne valait que pour les partages commencés ensuite.
+  resubscribeAll()
 }
 
 const isScreenSource = (s: Track.Source) => s === Track.Source.ScreenShare || s === Track.Source.ScreenShareAudio
 
 /** Décide de l'abonnement d'une piste distante. */
-function applySubscription(pub: RemoteTrackPublication, identity: string) {
+function applySubscription(pub: RemoteTrackPublication, identity: string, force = false) {
   const want = !isScreenSource(pub.source) || getAutoWatch() || _watched.has(identity)
-  if (pub.isSubscribed !== want) pub.setSubscribed(want)
+  if (force || pub.isSubscribed !== want) pub.setSubscribed(want)
+}
+
+/**
+ * Réapplique l'abonnement de toutes les pistes distantes (lecture auto, sourdine
+ * imposée levée). Envoyé même si l'état local semble bon : le SFU a pu retirer
+ * l'abonnement de son côté (droit d'écoute retiré puis rendu).
+ */
+export function resubscribeAll() {
+  _room?.remoteParticipants.forEach(p => p.trackPublications.forEach(pub => applySubscription(pub, p.identity, true)))
 }
 
 /** Regarder (ou arrêter de regarder) le partage d'écran d'un participant. */
@@ -265,37 +297,52 @@ function onNativeTrack(e: NativeTrackEvent) {
 
 function onNativeState(e: NativeStateEvent, ctx: MeshCtx) {
   if (e.status === 'disconnected') {
-    if (_nativeRoom !== null && ctx.get().joined) {
-      ctx.set({ mediaStatus: 'failed', error: 'Connexion au serveur audio/vidéo perdue. Quittez et rejoignez le salon.' })
-    }
+    if (_nativeRoom === null) return
+    // Salle oubliée : sans ça, isConnectedTo() la croyait toujours ouverte et
+    // aucune reconnexion n'était jamais tentée.
+    _nativeRoom = null
+    _nativeUrls.clear()
+    if (!ctx.get().joined) return
+    ctx.set({ mediaStatus: 'failed' })
+    if (e.reason === 'ClientInitiated') return
+    ctx.onMediaLost?.(e.reason === 'DuplicateIdentity' ? 'duplicate' : e.reason === 'ParticipantRemoved' ? 'removed' : 'network')
     return
   }
-  ctx.set({ mediaStatus: e.status === 'failed' ? 'failed' : e.status, ...(e.quality ? { mediaQuality: e.quality } : {}) })
+  ctx.set({ mediaStatus: e.status === 'failed' ? 'failed' : e.status, ...(e.quality ? { mediaQuality: e.quality } : {}), ...(e.status === 'connected' ? { error: null } : {}) })
 }
 
-async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx) {
+async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak: boolean) {
   const ice = (await getIceConfig())?.iceServers ?? []
   const s = ctx.get()
   _nativeRoom = roomName
   try {
-    await nativeConnect(url, token, ice, !s.listenOnly, _micOpen, {
+    // Sans droit de parole, le jeton refuse le micro : ne pas le demander, sinon
+    // la connexion entière échouait et on ne pouvait même pas écouter.
+    await nativeConnect('voice', url, token, ice, !s.listenOnly && canSpeak && !s.serverMuted && !s.serverDeafened, _micOpen, {
       onTrack: onNativeTrack,
       onSpeakers: ids => ctx.set({ nativeSpeakers: ids }),
       onState: e => onNativeState(e, ctx),
+      onLocalEnded: source => { if (source === 'screen' && ctx.get().screenSharing) void ctx.get().stopScreenShare() },
+      onEvicted: () => {
+        _nativeRoom = null
+        _nativeUrls.clear()
+        ctx.onMediaLost?.('evicted')
+      },
     })
     report('connected', { native: true })
   } catch (e) {
     _nativeRoom = null
     report('connect_failed', { native: true, error: String(e) })
     ctx.set({ mediaStatus: 'failed', error: `Vocal indisponible : ${String(e)}` })
+    ctx.onMediaLost?.('network')
   }
 }
 
-export async function connectMedia(url: string, token: string, roomName: string, ctx: MeshCtx) {
+export async function connectMedia(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak = true) {
   _ctx = ctx
   if (isConnectedTo(roomName)) return
   await disconnectMedia()
-  if (isNativeVoice()) return connectNative(url, token, roomName, ctx)
+  if (isNativeVoice()) return connectNative(url, token, roomName, ctx, canSpeak)
 
   if (typeof RTCPeerConnection === 'undefined') {
     ctx.set({ mediaStatus: 'failed', error: 'Ce moteur d\'affichage ne gère pas WebRTC : le vocal y est impossible. Utilisez la version web dans Chrome, Edge ou Firefox.' })
@@ -338,19 +385,24 @@ export async function connectMedia(url: string, token: string, roomName: string,
     // PRIORITY_SPEAKER : les autres ne sont atténués que pendant qu'il parle.
     .on(RoomEvent.ActiveSpeakersChanged, (speakers) => ctx.set({ sfuSpeakers: speakers.map(p => p.identity) }))
     .on(RoomEvent.Reconnecting, () => { ctx.set({ mediaStatus: 'reconnecting' }); report('reconnecting') })
-    .on(RoomEvent.Reconnected, () => { ctx.set({ mediaStatus: 'connected' }); report('reconnected') })
+    .on(RoomEvent.Reconnected, () => { ctx.set({ mediaStatus: 'connected', error: null }); report('reconnected') })
     .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
       if (p === room.localParticipant) ctx.set({ mediaQuality: q })
-      else if (q === ConnectionQuality.Lost) patchPeer(p.identity, { connectionLost: true })
+      // Remis à false au retour : le pair restait marqué « connexion perdue ».
+      else patchPeer(p.identity, { connectionLost: q === ConnectionQuality.Lost })
     })
     .on(RoomEvent.Disconnected, (reason) => {
       if (_room !== room) return
       report('disconnected', { reason: reason !== undefined ? DisconnectReason[reason] : 'unknown' })
-      // Déconnexion voulue (sortie, éjection par le serveur) : l'état du store
-      // est géré par leave(). Sinon, c'est une panne à montrer.
-      if (reason !== DisconnectReason.CLIENT_INITIATED && ctx.get().joined) {
-        ctx.set({ mediaStatus: 'failed', error: 'Connexion au serveur audio/vidéo perdue. Quittez et rejoignez le salon.' })
-      }
+      // Déconnexion voulue (sortie) : l'état du store est géré par leave().
+      if (reason === DisconnectReason.CLIENT_INITIATED || !ctx.get().joined) return
+      _room = null; _roomName = null; expose()
+      ctx.set({ mediaStatus: 'failed' })
+      ctx.onMediaLost?.(
+        reason === DisconnectReason.DUPLICATE_IDENTITY ? 'duplicate'
+          : reason === DisconnectReason.PARTICIPANT_REMOVED ? 'removed'
+          : 'network',
+      )
     })
 
   try {
@@ -361,29 +413,48 @@ export async function connectMedia(url: string, token: string, roomName: string,
     if (_room === room) {
       _room = null; _roomName = null; expose()
       ctx.set({ mediaStatus: 'failed', error: 'Impossible de joindre le serveur audio/vidéo. Vérifiez votre connexion puis réessayez.' })
+      ctx.onMediaLost?.('network')
     }
     return
   }
   if (_room !== room) return // quitté pendant la connexion
 
-  ctx.set({ mediaStatus: 'connected' })
+  ctx.set({ mediaStatus: 'connected', error: null })
   report('connected')
   room.remoteParticipants.forEach(p => {
     p.trackPublications.forEach(pub => applySubscription(pub, p.identity))
     rebuildPeer(p)
   })
 
+  // Une piste par essai : muet imposé, le jeton refuse le micro, et la caméra
+  // n'était alors jamais publiée. Le micro suivra à la levée (applyMicEnabled).
   try {
-    if (_micTrack) {
-      _micPub = await room.localParticipant.publishTrack(_micTrack, { source: Track.Source.Microphone })
-      if (!_micOpen) await _micPub.mute()
-    }
+    await publishMic(room)
+  } catch (e) { warn('publication du micro', e) }
+  try {
     if (_camTrack) await publishCamera(room, _camTrack)
-    await publishScreen(room)
-    applyWhisper()
   } catch (e) {
-    warn('publication des pistes locales', e)
-    ctx.set({ error: 'Votre micro ou votre caméra n\'a pas pu être diffusé. Vérifiez les permissions du salon.' })
+    warn('publication de la caméra', e)
+    ctx.set({ error: 'Votre caméra n\'a pas pu être diffusée. Vérifiez les permissions du salon.' })
+  }
+  try {
+    await publishScreen(room)
+  } catch (e) {
+    warn('publication du partage', e)
+    ctx.set({ error: 'Votre partage d\'écran n\'a pas pu être diffusé. Vérifiez les permissions du salon.' })
+  }
+  applyWhisper()
+}
+
+async function publishMic(room: Room) {
+  if (!_micTrack || _micPub || _micPublishing) return
+  _micPublishing = true
+  try {
+    _micPub = await room.localParticipant.publishTrack(_micTrack, { source: Track.Source.Microphone })
+    if (!_micOpen) await _micPub.mute()
+    applyWhisper()
+  } finally {
+    _micPublishing = false
   }
 }
 
@@ -391,7 +462,7 @@ export async function disconnectMedia() {
   if (_nativeRoom !== null) {
     _nativeRoom = null
     _nativeUrls.clear()
-    await nativeDisconnect()
+    await nativeDisconnect('voice')
   }
   const room = _room
   _room = null
@@ -426,6 +497,8 @@ export async function applyMicEnabled(open: boolean) {
   if (_micTrack) _micTrack.enabled = open
   try {
     if (_micPub) await (open ? _micPub.unmute() : _micPub.mute())
+    // Micro jamais publié (muet imposé à l'arrivée) : publié à la première ouverture.
+    else if (open && _room?.state === 'connected') await publishMic(_room)
   } catch (e) { warn('micro', e) }
 }
 
@@ -434,9 +507,8 @@ export async function replaceMicTrack(track: MediaStreamTrack, open: boolean) {
   rebuildLocal()
   if (_micPub?.track) {
     await _micPub.track.replaceTrack(track, { userProvidedTrack: true }).catch(e => warn('remplacement micro', e))
-  } else if (_room?.state === 'connected') {
-    _micPub = await _room.localParticipant.publishTrack(track, { source: Track.Source.Microphone })
   }
+  // Sans publication, applyMicEnabled publie la nouvelle piste si le micro est ouvert.
   await applyMicEnabled(open)
 }
 
