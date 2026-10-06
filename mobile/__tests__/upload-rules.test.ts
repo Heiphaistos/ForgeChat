@@ -17,7 +17,7 @@ const file = (name: string, size = 1000) => ({ uri: 'file://x', name, type: 'app
 describe('règles d’upload alignées sur le serveur (salon, DM, groupe)', () => {
   it('même liste d’extensions que le serveur', () => {
     expect([...ALLOWED_UPLOAD_EXTENSIONS].sort()).toEqual([...SERVER_ALLOWED].sort())
-    expect(LIMITS.uploadMaxBytes).toBe(52_428_800) // MAX_UPLOAD_SIZE par défaut (config.rs)
+    expect(LIMITS.uploadMaxBytes).toBe(524_288_000) // MAX_UPLOAD_SIZE par défaut (config.rs) : 500 Mo
   })
 
   it('lit l’extension comme Rust Path::extension, « bin » à défaut', () => {

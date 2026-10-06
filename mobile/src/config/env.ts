@@ -114,7 +114,7 @@ export const UPDATES_MANIFEST_URL: string | null =
 /** Limites alignées sur le serveur */
 export const LIMITS = {
   messageMaxChars: 4000,
-  uploadMaxBytes: 50 * 1024 * 1024,
+  uploadMaxBytes: 500 * 1024 * 1024,
   avatarMaxBytes: 8 * 1024 * 1024,
   pageSize: 50,
 } as const

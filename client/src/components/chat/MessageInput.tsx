@@ -387,10 +387,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   })
 
   const addFiles = useCallback(async (newFiles: File[]) => {
-    const MAX_SIZE = 50 * 1024 * 1024
+    const MAX_SIZE = 500 * 1024 * 1024 // = server/src/config.rs (gratuit ; Discord Nitro : 500 Mo)
     const oversized = newFiles.filter(f => f.size > MAX_SIZE)
     if (oversized.length > 0) {
-      toast.error(`${oversized.map(f => f.name).join(', ')} dépasse${oversized.length > 1 ? 'nt' : ''} la limite de 50 Mo`)
+      toast.error(`${oversized.map(f => f.name).join(', ')} dépasse${oversized.length > 1 ? 'nt' : ''} la limite de 500 Mo`)
     }
     const valid = newFiles.filter(f => f.size <= MAX_SIZE)
     if (valid.length === 0) return

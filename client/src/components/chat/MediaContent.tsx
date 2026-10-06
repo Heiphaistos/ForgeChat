@@ -13,7 +13,7 @@ export function useMediaUpload(serverId: string, channelId: string) {
     try {
       const fd = new FormData()
       fd.append('file', f)
-      // Toast de progression pour les gros médias (vidéos jusqu'à 50 Mo) ; le
+      // Toast de progression pour les gros médias (vidéos jusqu'à 500 Mo) ; le
       // toast d'erreur (message serveur inclus) est géré par l'utilitaire
       const { data } = await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd, f.size)
       if (data?.url) onUrl(data.url)

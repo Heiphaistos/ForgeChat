@@ -46,7 +46,7 @@ impl Config {
                 .parse()?,
             upload_dir: env::var("UPLOAD_DIR").unwrap_or_else(|_| "./uploads".into()),
             max_upload_size: env::var("MAX_UPLOAD_SIZE")
-                .unwrap_or_else(|_| "52428800".into())
+                .unwrap_or_else(|_| "524288000".into()) // 500 Mo par fichier (gratuit)
                 .parse()?,
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".into()),

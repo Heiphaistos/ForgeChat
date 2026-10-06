@@ -719,21 +719,10 @@ pub async fn upload_group_dm_attachment(
         }
 
         let original_name = field.file_name().unwrap_or("fichier").to_string();
-        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-
-        if data.len() as u64 > state.config.max_upload_size {
-            return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
-        }
-
         let ext = std::path::Path::new(&original_name)
             .extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
 
-        const ALLOWED: &[&str] = &[
-            "jpg","jpeg","png","gif","webp","mp4","webm","mov","mkv",
-            "mp3","ogg","wav","flac","pdf","txt","md","zip","tar","gz","7z",
-            "rar","doc","docx","xls","xlsx","ppt","pptx","bin",
-        ];
-        if !ALLOWED.contains(&ext.as_str()) {
+        if !crate::handlers::uploads::ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
             return Err(AppError::BadRequest(format!("Extension .{} non autorisée", ext)));
         }
 
@@ -746,10 +735,9 @@ pub async fn upload_group_dm_attachment(
 
         let file_id = Uuid::new_v4();
         let filename = format!("{}.{}", file_id, ext);
-        tokio::fs::write(upload_dir.join(&filename), &data).await.map_err(|e| AppError::Internal(e.into()))?;
+        let size = crate::handlers::uploads::save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await? as i64;
 
         let url = format!("/uploads/{}", filename);
-        let size = data.len() as i64;
         let expires_at = ttl_hours.map(|h| Utc::now() + chrono::Duration::hours(h));
 
         let att = sqlx::query(

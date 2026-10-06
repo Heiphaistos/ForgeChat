@@ -24,6 +24,39 @@ pub const ALLOWED_EXTENSIONS: &[&str] = &[
     "bin",
 ];
 
+/// Écrit un fichier reçu morceau par morceau sur le disque, sans jamais le charger entier en
+/// mémoire (jusqu'à 500 Mo par fichier). Au-delà de `max` octets, le fichier partiel est supprimé
+/// et l'envoi refusé. Rend la taille écrite.
+pub async fn save_field(mut field: axum::extract::multipart::Field<'_>, path: &std::path::Path, max: u64) -> Result<u64> {
+    use tokio::io::AsyncWriteExt;
+    let mut file = tokio::fs::File::create(path).await.map_err(|e| AppError::Internal(e.into()))?;
+    let mut total: u64 = 0;
+    loop {
+        let chunk = match field.chunk().await {
+            Ok(Some(c)) => c,
+            Ok(None) => break,
+            Err(e) => {
+                drop(file);
+                let _ = tokio::fs::remove_file(path).await;
+                return Err(AppError::BadRequest(e.to_string()));
+            }
+        };
+        total += chunk.len() as u64;
+        if total > max {
+            drop(file);
+            let _ = tokio::fs::remove_file(path).await;
+            return Err(AppError::BadRequest(format!("Fichier trop volumineux (max {} Mo)", max / 1_048_576)));
+        }
+        if let Err(e) = file.write_all(&chunk).await {
+            drop(file);
+            let _ = tokio::fs::remove_file(path).await;
+            return Err(AppError::Internal(e.into()));
+        }
+    }
+    file.flush().await.map_err(|e| AppError::Internal(e.into()))?;
+    Ok(total)
+}
+
 /// Propriétaire d'une pièce jointe : une colonne de `attachments` par source.
 #[derive(Clone, Copy)]
 pub enum AttachmentOwner {
@@ -104,13 +137,6 @@ pub async fn store_attachments(
             .to_string();
 
         // Le Content-Type du client est ignoré : dérivé de l'extension (anti-spoofing)
-        let data = field.bytes().await
-            .map_err(|e| AppError::BadRequest(e.to_string()))?;
-
-        if data.len() as u64 > state.config.max_upload_size {
-            return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
-        }
-
         // Valider et normaliser l'extension — bloquer les types dangereux
         let ext = std::path::Path::new(&original_name)
             .extension()
@@ -137,11 +163,9 @@ pub async fn store_attachments(
             .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        tokio::fs::write(upload_dir.join(&filename), &data).await
-            .map_err(|e| AppError::Internal(e.into()))?;
+        let size = save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await? as i64;
 
         let url = format!("/uploads/{}", filename);
-        let size = data.len() as i64;
         // Pièce jointe éphémère : 1 h à 30 jours (même raison que les messages éphémères).
         let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 30)));
 
@@ -347,13 +371,6 @@ pub async fn forum_upload(
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
 
         let original_name = field.file_name().unwrap_or("fichier").to_string();
-        let data = field.bytes().await
-            .map_err(|e| AppError::BadRequest(e.to_string()))?;
-
-        if data.len() as u64 > state.config.max_upload_size {
-            return Err(AppError::BadRequest("Fichier trop volumineux (max 50MB)".into()));
-        }
-
         let ext = std::path::Path::new(&original_name)
             .extension()
             .and_then(|e| e.to_str())
@@ -367,9 +384,7 @@ pub async fn forum_upload(
         }
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let file_path = upload_dir.join(&filename);
-        tokio::fs::write(&file_path, &data).await
-            .map_err(|e| AppError::Internal(e.into()))?;
+        save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await?;
 
         return Ok(Json(serde_json::json!({ "url": format!("/uploads/{}", filename) })));
     }

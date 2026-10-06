@@ -241,7 +241,8 @@ async fn main() -> anyhow::Result<()> {
                 ))
                 .service(ServeDir::new(&config.upload_dir))
         )
-        .layer(DefaultBodyLimit::max(52_428_800)) // 50 MB
+        // 500 Mo par fichier (gratuit ; Discord Nitro) + marge pour plusieurs pièces et l'enveloppe multipart.
+        .layer(DefaultBodyLimit::max(1_100 * 1_048_576))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);

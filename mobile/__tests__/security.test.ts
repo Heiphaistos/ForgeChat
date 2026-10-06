@@ -114,7 +114,7 @@ describe('pièces jointes', () => {
   })
   it('refuse extensions interdites et tailles excessives', () => {
     expect(validateAttachment({ uri: 'file://a', name: 'a.exe', type: 'x', size: 10 })).toMatch(/non autorisé/)
-    expect(validateAttachment({ uri: 'file://a', name: 'a.jpg', type: 'image/jpeg', size: 60 * 1024 * 1024 })).toMatch(/volumineux/)
+    expect(validateAttachment({ uri: 'file://a', name: 'a.jpg', type: 'image/jpeg', size: 600 * 1024 * 1024 })).toMatch(/volumineux/)
     expect(validateAttachment({ uri: 'file://a', name: 'a.jpg', type: 'image/jpeg', size: 1000 })).toBeNull()
   })
 })
