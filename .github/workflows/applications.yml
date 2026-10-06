@@ -146,13 +146,19 @@ jobs:
           xcodebuild -workspace "$ws" -scheme "$scheme" -configuration Release -sdk iphoneos \
             -destination generic/platform=iOS -archivePath "$RUNNER_TEMP/fc.xcarchive" archive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > "$RUNNER_TEMP/xcode.log" 2>&1 || {
-              grep -nE "error|Error|fatal|failed" "$RUNNER_TEMP/xcode.log" | grep -v "^[0-9]*: *[/ ].*clang " | head -80
-              tail -60 "$RUNNER_TEMP/xcode.log"
+              set +o pipefail
+              grep -n " error: \|error: " "$RUNNER_TEMP/xcode.log" | cut -c1-400 | head -40
               exit 1
             }
           mkdir -p "$RUNNER_TEMP/ipa/Payload" "$RUNNER_TEMP/out"
           cp -R "$RUNNER_TEMP/fc.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$RUNNER_TEMP/out/ForgeChat-${{ needs.version.outputs.version }}.ipa" Payload)
+      - name: Journal Xcode (échec)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: xcode-log
+          path: ${{ runner.temp }}/xcode.log
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ios
