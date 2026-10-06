@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
-import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, IncomingCallOverlay, LockOverlay, ScreenShareBanner } from '@/components/Overlays'
+import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, GroupRingOverlay, IncomingCallOverlay, LockOverlay, ScreenShareBanner } from '@/components/Overlays'
 import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
@@ -17,6 +17,8 @@ import { bindRealtime } from '@/services/realtimeBindings'
 import { useAuth } from '@/stores/auth'
 import { replayablePath } from '@/lib/deepLinks'
 import '@/stores/call' // enregistre les handlers d'appel entrant dès le démarrage
+import '@/stores/groupCall' // sonnerie des appels de groupe
+import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
 import { useLock } from '@/stores/lock'
 import { useSettings } from '@/stores/settings'
 import { colors } from '@/theme'
@@ -109,6 +111,7 @@ export default function RootLayout() {
               <ScreenShareBanner />
               <LockOverlay />
               {/* Au-dessus du verrou : on peut voir qui appelle ; décrocher exige de déverrouiller. */}
+              <GroupRingOverlay />
               <IncomingCallOverlay />
               <BootOverlay />
               <EnvBanner />

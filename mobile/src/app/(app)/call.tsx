@@ -96,11 +96,12 @@ export default function CallScreen() {
       <View style={[styles.top, { paddingTop: insets.top + spacing.lg + (s.screenSharing ? 48 : 0) }]} pointerEvents="none">
         <Text style={styles.name}>{s.partnerName ?? s.endedWith?.name}</Text>
         <Text style={styles.status}>{label}</Text>
+        {s.warning && s.phase !== 'idle' ? <Text style={styles.warning}>{s.warning}</Text> : null}
       </View>
 
       {localVideo ? (
         <View style={[styles.pip, { top: insets.top + 90 }]}>
-          <RTCView streamURL={localVideo.toURL()} style={{ flex: 1 }} objectFit="cover" mirror zOrder={1} />
+          <RTCView streamURL={localVideo.toURL()} style={{ flex: 1 }} objectFit="cover" mirror={s.facing === 'user'} zOrder={1} />
         </View>
       ) : null}
 
@@ -133,6 +134,7 @@ const styles = StyleSheet.create({
   top: { alignItems: 'center', gap: 4 },
   name: { color: '#fff', fontSize: font.xxl, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 6 },
   status: { color: colors.textSecondary, fontSize: font.md, textShadowColor: '#000', textShadowRadius: 6 },
+  warning: { color: colors.warning, fontSize: font.sm, textAlign: 'center', paddingHorizontal: spacing.lg, textShadowColor: '#000', textShadowRadius: 6 },
   pip: { position: 'absolute', right: spacing.lg, width: 110, height: 160, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
   // Jusqu'à 6 boutons (appel vidéo) : passage à la ligne sur les écrans étroits.
   controls: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm },
