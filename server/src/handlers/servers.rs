@@ -261,12 +261,58 @@ pub async fn update_server(
     Ok(Json(server))
 }
 
+#[derive(serde::Deserialize, Default)]
+pub struct ReauthBody {
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub totp_code: Option<String>,
+}
+
+/// Confirmation forte avant une action irréversible : mot de passe obligatoire, et code de double
+/// authentification (ou code de secours) si elle est activée. 5 essais par quart d'heure.
+/// Erreurs : 400 « Mot de passe incorrect », 403 `totp_required` si le code manque, 400 si faux.
+pub async fn verify_reauth(state: &AppState, user_id: Uuid, body: &ReauthBody) -> Result<()> {
+    use redis::AsyncCommands;
+    {
+        let key = format!("reauth:{user_id}");
+        let mut redis = state.redis.lock().await;
+        let n: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
+        if n == 1 {
+            let _: () = redis.expire(&key, 900).await.unwrap_or(());
+        }
+        if n > 5 {
+            return Err(AppError::TooManyRequests);
+        }
+    }
+    let (hash, totp_enabled, secret): (String, bool, Option<String>) =
+        sqlx::query_as("SELECT password_hash, totp_enabled, totp_secret FROM users WHERE id=$1")
+            .bind(user_id)
+            .fetch_one(&state.db)
+            .await?;
+    if body.password.is_empty() || !bcrypt::verify(&body.password, &hash).unwrap_or(false) {
+        return Err(AppError::BadRequest("Mot de passe incorrect".into()));
+    }
+    if totp_enabled {
+        let code = body.totp_code.as_deref().map(str::trim).filter(|c| !c.is_empty()).ok_or(AppError::TotpRequired)?;
+        let ok = secret.as_deref().is_some_and(|s| crate::handlers::totp::verify_totp(s, code))
+            || crate::handlers::totp::verify_and_consume_backup_code(state, user_id, code).await?;
+        if !ok {
+            return Err(AppError::BadRequest("Code de double authentification incorrect".into()));
+        }
+    }
+    Ok(())
+}
+
 pub async fn delete_server(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
+    body: Option<Json<ReauthBody>>,
 ) -> Result<Json<serde_json::Value>> {
     require_owner(&state, claims.sub, server_id).await?;
+    // Suppression définitive : mot de passe + 2FA, quel que soit le client (web, bureau, mobile).
+    verify_reauth(&state, claims.sub, &body.map(|b| b.0).unwrap_or_default()).await?;
     // Notifier tous les membres avant suppression
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "SERVER_DELETE",
