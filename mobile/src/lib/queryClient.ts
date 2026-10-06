@@ -37,4 +37,7 @@ export const qk = {
   user: (id: string) => ['user', id] as const,
   saved: ['saved'] as const,
   poll: (id: string) => ['poll', id] as const,
+  /** Fils d'un salon ; préfixe aussi la recherche d'un fil précis. */
+  threads: (channelId: string) => ['threads', channelId] as const,
+  threadMessages: (threadId: string) => ['thread-messages', threadId] as const,
 }

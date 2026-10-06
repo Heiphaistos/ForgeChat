@@ -12,6 +12,7 @@ import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, re
 import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
 import { PollCard } from './PollCard'
+import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 
 interface Props {
@@ -27,6 +28,9 @@ interface Props {
   /** Salon courant (sondages) ; absent en DM et groupe. */
   serverId?: string
   channelId?: string
+  /** Fil ouvert depuis ce message (salons). */
+  thread?: ThreadSummary
+  onOpenThread?: (m: ChatMessage) => void
 }
 
 /**
@@ -108,6 +112,8 @@ export const MessageItem = memo(function MessageItem({
   onRetry,
   serverId,
   channelId,
+  thread,
+  onOpenThread,
 }: Props) {
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
@@ -182,6 +188,24 @@ export const MessageItem = memo(function MessageItem({
             </Pressable>
           ) : null}
 
+          {thread && onOpenThread ? (
+            <Pressable
+              onPress={() => onOpenThread(m)}
+              style={styles.thread}
+              accessibilityRole="button"
+              accessibilityLabel={`Ouvrir le fil ${thread.title}, ${thread.messageCount} message${thread.messageCount > 1 ? 's' : ''}`}
+            >
+              <Ionicons name="chatbubbles-outline" size={14} color={colors.primary} />
+              <Text style={styles.threadTitle} numberOfLines={1}>
+                {thread.title}
+              </Text>
+              <Text style={[styles.meta, { marginTop: 0 }]}>
+                {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
+                {thread.unreadCount ? ` · ${thread.unreadCount} non lu${thread.unreadCount > 1 ? 's' : ''}` : ''}
+              </Text>
+            </Pressable>
+          ) : null}
+
           {m.reactions.length ? (
             <View style={styles.reactions}>
               {m.reactions.map((r) => (
@@ -217,6 +241,8 @@ const styles = StyleSheet.create({
   replyText: { color: colors.textMuted, fontSize: font.sm, flex: 1 },
   forward: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   meta: { color: colors.textFaint, fontSize: font.xs, marginTop: 2 },
+  thread: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: colors.bgAlt, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5 },
+  threadTitle: { color: colors.text, fontSize: font.sm, fontWeight: '600', flexShrink: 1 },
   failed: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   reaction: {

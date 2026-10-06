@@ -130,6 +130,19 @@ export function bindRealtime(): () => void {
     if (cid && mid) patchMessage('channel', cid, mid, (m) => ({ ...m, pinned: e.pinned === true }))
     if (cid) void queryClient.invalidateQueries({ queryKey: qk.pins(cid) })
   })
+  // Fils (threads.rs, uploads.rs) : liste du salon (badges, compteurs) et messages du fil.
+  for (const t of ['THREAD_CREATE', 'THREAD_UPDATE', 'THREAD_MESSAGE', 'THREAD_MESSAGE_DELETE']) {
+    on(t, (e) => {
+      const cid = str(e.channel_id)
+      if (cid) void queryClient.invalidateQueries({ queryKey: qk.threads(cid) })
+    })
+  }
+  for (const t of ['THREAD_MESSAGE', 'THREAD_MESSAGE_EDIT', 'THREAD_MESSAGE_DELETE', 'THREAD_REACTION_TOGGLE', 'THREAD_ATTACHMENT_ADDED']) {
+    on(t, (e) => {
+      const tid = str(e.thread_id)
+      if (tid) void queryClient.invalidateQueries({ queryKey: qk.threadMessages(tid) })
+    })
+  }
   // Sondages (polls.rs) : l'événement ne porte pas les résultats, on relit le sondage.
   for (const t of ['POLL_VOTE', 'POLL_CLOSED']) {
     on(t, (e) => {

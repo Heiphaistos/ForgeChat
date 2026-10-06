@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { dmsApi } from '@/api/dms'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
+import { threadsApi } from '@/api/threads'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { ApiError, errorMessage } from '@/lib/http'
@@ -26,6 +27,7 @@ import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
 import { useScrollTarget } from './pins'
 import { supportsMessageExtras } from './messageExtras'
+import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
@@ -104,6 +106,22 @@ export function ChatView({
         ? (members.data ?? []).map((m) => ({ id: m.user_id, username: m.username, nickname: m.nickname, avatar: m.avatar }))
         : (group.data?.members ?? []).map((m) => ({ id: m.id, username: m.username, avatar: m.avatar })),
     [serverId, members.data, group.data],
+  )
+  // Fils du salon (100 plus récents) : badge sous le message d'origine.
+  const threads = useQuery({
+    queryKey: [...qk.threads(channelId), 'list'],
+    queryFn: () => threadsApi.list(serverId, channelId, { limit: 100 }),
+    enabled: !!channelId,
+    staleTime: 60_000,
+  })
+  const threadOf = useMemo(() => threadsByParent(threads.data ?? []), [threads.data])
+  const openThread = useCallback(
+    (m: ChatMessage) =>
+      router.push({
+        pathname: '/thread/[serverId]/[channelId]',
+        params: { serverId, channelId, parent: m.id, preview: (m.content ?? '').slice(0, 100) },
+      }),
+    [serverId, channelId],
   )
   // Enregistrés : lus seulement quand le menu d'un message est ouvert (libellé Enregistrer / Retirer).
   const extras = supportsMessageExtras(conversation)
@@ -202,6 +220,10 @@ export function ChatView({
             .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
       })
     }
+    if (channelId && !m.pending) {
+      if (threadOf.has(m.id)) list.push({ label: 'Ouvrir le fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+      else if (!readOnly) list.push({ label: 'Créer un fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+    }
     if (extras && !m.pending) {
       const messageId = m.id
       list.push({ label: 'Transférer', icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
@@ -252,11 +274,13 @@ export function ChatView({
             onRetry={onLongPress}
             serverId={serverId || undefined}
             channelId={channelId || undefined}
+            thread={threadOf.get(item.id)}
+            onOpenThread={openThread}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread],
   )
 
   const quickReactions = useMemo(
