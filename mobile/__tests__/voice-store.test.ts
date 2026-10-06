@@ -54,6 +54,8 @@ jest.mock('@/services/livekit', () => ({
   callAudio: { start: jest.fn().mockResolvedValue(undefined), stop: jest.fn().mockResolvedValue(undefined), setSpeaker: jest.fn() },
 }))
 
+const mockPlaySound = jest.fn()
+jest.mock('@/services/soundboard', () => ({ playSoundFile: (u: unknown) => mockPlaySound(u) }))
 jest.mock('@/services/media', () => ({ ensureMediaPermissions: jest.fn().mockResolvedValue(true) }))
 jest.mock('@/api/voice', () => ({ voiceApi: { turnServers: jest.fn().mockResolvedValue([]) } }))
 jest.mock('@/stores/auth', () => ({ registerSignOutHook: jest.fn(), getMyId: () => 'moi' }))
@@ -93,6 +95,7 @@ describe('stores/voice (LiveKit)', () => {
     mockHandlers.clear()
     mockOpenHandlers.length = 0
     mockSend.mockClear()
+    mockPlaySound.mockClear()
     mockRealtime.isOpen = true
     mockRooms.length = 0
     mockAccess.mockReset().mockReturnValue({ access: ACCESS })
@@ -254,5 +257,110 @@ describe('stores/voice (LiveKit)', () => {
     await flush()
     expect(useVoice.getState().muted).toBe(true)
     expect(mockRooms[0]!.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
+  })
+
+  it('salon plein : message avec le nombre de places', async () => {
+    await useVoice.getState().join('srv', 'salon', 'Salon')
+    fire('VOICE_JOIN_ERROR', { channel_id: 'salon', reason: 'channel_full', limit: 5, current: 5 })
+    expect(useVoice.getState().channelId).toBeNull()
+    expect(useVoice.getState().error).toBe('Salon plein (5/5)')
+  })
+
+  describe('soundboard', () => {
+    it('jouer un son : SOUNDBOARD_PLAY envoyé et son joué localement', async () => {
+      await joinAndEnter()
+      useVoice.getState().playSound('son1', '/uploads/sounds/a.mp3')
+      expect(mockSend).toHaveBeenCalledWith({ type: 'SOUNDBOARD_PLAY', sound_id: 'son1', channel_id: 'salon' })
+      expect(mockPlaySound).toHaveBeenCalledWith('/uploads/sounds/a.mp3')
+    })
+
+    it('son d’un autre membre du salon : joué ; écho du nôtre, autre salon : ignorés', async () => {
+      await joinAndEnter()
+      fire('SOUNDBOARD_PLAY', { channel_id: 'salon', sound_id: 's', file_url: '/uploads/sounds/b.mp3', user_id: 'bob' })
+      expect(mockPlaySound).toHaveBeenCalledTimes(1)
+      expect(mockPlaySound).toHaveBeenCalledWith('/uploads/sounds/b.mp3')
+      fire('SOUNDBOARD_PLAY', { channel_id: 'salon', sound_id: 's', file_url: '/uploads/sounds/b.mp3', user_id: 'moi' })
+      fire('SOUNDBOARD_PLAY', { channel_id: 'ailleurs', sound_id: 's', file_url: '/uploads/sounds/b.mp3', user_id: 'bob' })
+      expect(mockPlaySound).toHaveBeenCalledTimes(1)
+    })
+
+    it('en sourdine : aucun son joué', async () => {
+      await joinAndEnter()
+      useVoice.getState().toggleDeafen()
+      fire('SOUNDBOARD_PLAY', { channel_id: 'salon', sound_id: 's', file_url: '/uploads/sounds/b.mp3', user_id: 'bob' })
+      useVoice.getState().playSound('son1', '/uploads/sounds/a.mp3')
+      expect(mockPlaySound).not.toHaveBeenCalled()
+      expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'SOUNDBOARD_PLAY' }))
+    })
+  })
+
+  describe('scène', () => {
+    const enterStage = async () => {
+      await useVoice.getState().joinStage('srv', 'scene', 'Scène')
+      fire('VOICE_EXISTING_PEERS', { channel_id: 'scene', peers, livekit: ACCESS })
+      await flush()
+    }
+
+    it('rejoindre : écoute seule + STAGE_JOIN, puis orateurs et mains levées du serveur', async () => {
+      await enterStage()
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true })
+      expect(mockSend).toHaveBeenCalledWith({ type: 'STAGE_JOIN', channel_id: 'scene' })
+      fire('STAGE_STATE', { channel_id: 'scene', speakers: [{ user_id: 'bob', username: 'Bob', avatar: null }], hand_raises: [{ user_id: 'eve', username: 'Eve' }] })
+      const st = useVoice.getState().stage!
+      expect(st.speakers.map((u) => u.userId)).toEqual(['bob'])
+      expect(st.hands.map((u) => u.userId)).toEqual(['eve'])
+      expect(useVoice.getState().listenOnly).toBe(true)
+    })
+
+    it('demander la parole puis main baissée par le serveur : demande réinitialisée', async () => {
+      await enterStage()
+      useVoice.getState().stageRequestSpeak()
+      useVoice.getState().stageRequestSpeak() // pas de doublon
+      expect(mockSend.mock.calls.filter(([m]) => (m as { type: string }).type === 'STAGE_REQUEST_SPEAK')).toHaveLength(1)
+      fire('STAGE_HAND_RAISE', { channel_id: 'scene', user_id: 'moi', username: 'Moi', raised: true })
+      expect(useVoice.getState().stage).toMatchObject({ requested: true, hands: [{ userId: 'moi' }] })
+      useVoice.getState().stageToggleHand()
+      expect(mockSend).toHaveBeenLastCalledWith({ type: 'STAGE_HAND_RAISE', channel_id: 'scene', raised: false })
+      fire('STAGE_HAND_RAISE', { channel_id: 'scene', user_id: 'moi', raised: false })
+      expect(useVoice.getState().stage).toMatchObject({ requested: false, hands: [] })
+    })
+
+    it('invité à parler : rejoint avec micro, puis retour en audience quand la parole est retirée', async () => {
+      await enterStage()
+      mockSend.mockClear()
+      fire('STAGE_SPEAKER_ADD', { channel_id: 'scene', user_id: 'moi', username: 'Moi' })
+      await flush()
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_LEAVE', channel_id: 'scene' })
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: false })
+      expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'STAGE_LEAVE_SPEAKER' }))
+      expect(useVoice.getState()).toMatchObject({ listenOnly: false, stage: { channelId: 'scene', speakers: [{ userId: 'moi' }] } })
+      mockSend.mockClear()
+      fire('STAGE_SPEAKER_REMOVE', { channel_id: 'scene', user_id: 'moi' })
+      await flush()
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true })
+      expect(useVoice.getState()).toMatchObject({ listenOnly: true, stage: { speakers: [] } })
+    })
+
+    it('modérateur : inviter, retirer la parole ; quitter en orateur descend de la scène', async () => {
+      await enterStage()
+      useVoice.getState().stageInvite('bob')
+      expect(mockSend).toHaveBeenLastCalledWith({ type: 'STAGE_INVITE_SPEAK', channel_id: 'scene', target_user_id: 'bob' })
+      useVoice.getState().stageRemoveSpeaker('bob')
+      expect(mockSend).toHaveBeenLastCalledWith({ type: 'STAGE_LEAVE_SPEAKER', channel_id: 'scene', target_user_id: 'bob' })
+      fire('STAGE_STATE', { channel_id: 'scene', speakers: [{ user_id: 'moi', username: 'Moi' }], hand_raises: [] })
+      await flush()
+      expect(useVoice.getState().listenOnly).toBe(false) // déjà orateur (autre appareil) : micro
+      mockSend.mockClear()
+      useVoice.getState().leave()
+      expect(mockSend).toHaveBeenCalledWith({ type: 'STAGE_LEAVE_SPEAKER', channel_id: 'scene' })
+      expect(useVoice.getState().stage).toBeNull()
+    })
+
+    it('événements d’une autre scène : ignorés', async () => {
+      await enterStage()
+      fire('STAGE_SPEAKER_ADD', { channel_id: 'autre', user_id: 'moi', username: 'Moi' })
+      expect(useVoice.getState().stage!.speakers).toEqual([])
+      expect(useVoice.getState().listenOnly).toBe(true)
+    })
   })
 })
