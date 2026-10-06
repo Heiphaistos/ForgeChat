@@ -37,6 +37,19 @@ export default function AppLayout() {
       <Stack.Screen name="server/[serverId]/members" options={{ title: 'Membres' }} />
       <Stack.Screen name="server/[serverId]/invite" options={{ title: 'Inviter', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/channel-create" options={{ title: 'Créer un salon', presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/notifications" options={{ title: 'Notifications' }} />
+      <Stack.Screen name="server/[serverId]/nickname" options={{ title: 'Profil de serveur', presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/delete" options={{ title: 'Supprimer le serveur', presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/settings/index" options={{ title: 'Paramètres du serveur' }} />
+      <Stack.Screen name="server/[serverId]/settings/overview" options={{ title: "Vue d'ensemble" }} />
+      <Stack.Screen name="server/[serverId]/settings/channels" options={{ title: 'Salons et catégories' }} />
+      <Stack.Screen name="server/[serverId]/settings/channel/[channelId]" options={{ title: 'Modifier le salon' }} />
+      <Stack.Screen name="server/[serverId]/settings/roles" options={{ title: 'Rôles' }} />
+      <Stack.Screen name="server/[serverId]/settings/role/[roleId]" options={{ title: 'Modifier le rôle' }} />
+      <Stack.Screen name="server/[serverId]/settings/member/[userId]" options={{ title: 'Gérer le membre' }} />
+      <Stack.Screen name="server/[serverId]/settings/bans" options={{ title: 'Bannissements' }} />
+      <Stack.Screen name="server/[serverId]/settings/invites" options={{ title: 'Invitations' }} />
+      <Stack.Screen name="server/[serverId]/settings/transfer" options={{ title: 'Transférer la propriété' }} />
       <Stack.Screen name="user/[userId]" options={{ title: 'Profil', presentation: 'modal' }} />
       <Stack.Screen name="friends/add" options={{ title: 'Ajouter un ami', presentation: 'modal' }} />
       <Stack.Screen name="settings/profile" options={{ title: 'Mon profil' }} />
