@@ -19,6 +19,7 @@ import { useAuth } from '@/stores/auth'
 import { useTyping } from '@/stores/typing'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
+import { hasEditableText, tenorGifUrl } from '@/features/composer/formats'
 import { Composer } from './Composer'
 import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
@@ -178,8 +179,11 @@ export function ChatView({
     const list: SheetAction[] = []
     if (!readOnly) list.push({ label: 'Répondre', icon: 'arrow-undo', onPress: () => setReplyTo(m) })
     list.push({ label: 'Ajouter une réaction', icon: 'happy-outline', onPress: () => setPaletteFor(m) })
-    if (m.content) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
-    if (mine && m.content && !readOnly) list.push({ label: 'Modifier', icon: 'create-outline', onPress: () => setEditing(m) })
+    const gif = tenorGifUrl(m.content)
+    if (hasEditableText(m)) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
+    else if (gif) list.push({ label: 'Copier le lien du GIF', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(gif) })
+    // Vocal, sticker, GIF ou pièce jointe seule : rien à modifier.
+    if (mine && hasEditableText(m) && !readOnly) list.push({ label: 'Modifier', icon: 'create-outline', onPress: () => setEditing(m) })
     if (conversation.kind === 'channel' || pins.isSuccess) {
       const pinned = isPinned(m)
       list.push({

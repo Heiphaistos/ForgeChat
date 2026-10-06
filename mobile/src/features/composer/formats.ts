@@ -23,17 +23,26 @@ export function parseSticker(content: string | null | undefined): ParsedSticker 
   return null
 }
 
-// ─── GIF (web : GifPicker envoie l'URL du GIF Tenor comme contenu du message) ─
+// ─── GIF (contenu du message = URL du GIF, comme le web) ───────────────────
 
 const TENOR_GIF = /^https:\/\/media\d*\.tenor\.com\/(?:m\/)?[A-Za-z0-9_-]{1,64}\/[A-Za-z0-9._-]{1,120}\.gif$/
+const KLIPY_GIF = /^https:\/\/static\d{0,2}\.klipy\.com\/[A-Za-z0-9._~\/-]{1,300}\.(?:gif|webp)$/
 
 /**
- * Message qui n'est QUE l'URL d'un GIF Tenor (envoyé depuis le web) → l'URL, sinon null.
- * Seules les URL https de media.tenor.com sont reconnues : aucun autre hôte n'est chargé.
+ * Message qui n'est QUE l'URL d'un GIF (Tenor : anciens messages du web ; KLIPY : recherche GIF par
+ * le serveur) → l'URL et sa source, sinon null. Aucun autre hôte n'est chargé comme image.
  */
-export function tenorGifUrl(content: string | null | undefined): string | null {
+export function remoteGif(content: string | null | undefined): { url: string; provider: 'Tenor' | 'KLIPY' } | null {
   const c = content?.trim()
-  return c && c.length <= 300 && TENOR_GIF.test(c) ? c : null
+  if (!c || c.length > 400 || c.includes('..')) return null
+  if (TENOR_GIF.test(c)) return { url: c, provider: 'Tenor' }
+  if (KLIPY_GIF.test(c)) return { url: c, provider: 'KLIPY' }
+  return null
+}
+
+/** URL du GIF (Tenor ou KLIPY), sinon null. */
+export function tenorGifUrl(content: string | null | undefined): string | null {
+  return remoteGif(content)?.url ?? null
 }
 
 // ─── Messages vocaux (web : MessageInput.handleVoiceMessage) ──────────────────
@@ -65,6 +74,20 @@ const VOICE_FILE = /^voice-\d{10,16}\.(webm|ogg|mp4|m4a)$/i
 /** Pièce jointe d'un message vocal (web ou app) : lue avec le lecteur audio, même si son type est vidéo. */
 export function isVoiceAttachment(a: { filename: string; content_type: string }): boolean {
   return VOICE_FILE.test(a.filename) && /^(audio|video)\//.test(a.content_type)
+}
+
+// ─── Contenu modifiable ──────────────────────────────────────────────────────
+
+/**
+ * Le message a-t-il un vrai texte, que l'auteur peut modifier ou copier ? Non pour un message vocal,
+ * un sticker, un GIF seul ou une pièce jointe sans texte.
+ */
+export function hasEditableText(m: { content: string | null; attachments: readonly { filename: string; content_type: string }[] }): boolean {
+  const c = m.content?.trim()
+  if (!c) return false
+  if (isVoiceMessageText(c) && m.attachments.some(isVoiceAttachment)) return false
+  if (parseSticker(c) || tenorGifUrl(c)) return false
+  return true
 }
 
 // ─── Expiration (serveur : expires_at, purge chaque minute + MESSAGE_DELETE) ──
