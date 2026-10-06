@@ -4,7 +4,8 @@
 #
 #   scripts/smoke-test-apk.sh <fichier.apk>
 #
-# L'APK doit contenir l'ABI de l'émulateur (x86_64) : FORGECHAT_ABIS=x86_64 au build.
+# L'APK doit contenir une ABI que l'émulateur exécute : x86_64 (FORGECHAT_ABIS=x86_64 au build), ou
+# l'ARM d'un APK pour téléphones si l'image système de l'émulateur traduit l'ARM (Android 11+).
 # Émulateur : un AVD dédié « forgechat_smoke » (sans code PIN), créé au premier lancement depuis
 # l'image système x86_64 installée ; démarré sans fenêtre puis arrêté à la fin s'il ne tournait pas.
 # Variables : FORGECHAT_SMOKE_AVD (nom de l'AVD), FORGECHAT_SMOKE_RUNS (démarrages, défaut 3).
@@ -26,8 +27,7 @@ fail() { echo "ÉCHEC : $*" >&2; exit 1; }
 PKG=$("$AAPT2" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
 ACTIVITY=$("$AAPT2" dump badging "$APK" | sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p")
 [ -n "$PKG" ] && [ -n "$ACTIVITY" ] || fail "package ou activité de lancement introuvable"
-"$AAPT2" dump badging "$APK" | grep -q "native-code:.*'x86_64'" ||
-  fail "l'APK ne contient pas l'ABI x86_64 de l'émulateur (construire avec FORGECHAT_ABIS=x86_64)"
+NATIVE=$("$AAPT2" dump badging "$APK" | sed -n "s/^native-code: //p" | tr -d "'")
 
 # 1. Émulateur : réutilise celui qui tourne déjà, sinon démarre l'AVD dédié.
 SERIAL=$("$ADB" devices | awk '/^emulator-[0-9]+\tdevice$/{print $1; exit}')
@@ -56,6 +56,11 @@ if [ -z "$SERIAL" ]; then
   sleep 30
 fi
 A() { "$ADB" -s "$SERIAL" "$@"; }
+ABILIST=$(A shell getprop ro.product.cpu.abilist | tr -d '\r')
+RUNNABLE=""
+for abi in $NATIVE; do [[ ",$ABILIST," == *",$abi,"* ]] && RUNNABLE="$RUNNABLE $abi"; done
+[ -n "$RUNNABLE" ] || fail "l'émulateur ($ABILIST) ne peut exécuter aucune ABI de l'APK ($NATIVE)"
+[[ " $RUNNABLE " == *" x86_64 "* ]] || echo "  (APK ARM exécuté par la traduction ARM de l'émulateur : ABI disponibles $ABILIST)"
 A shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 A shell wm dismiss-keyguard >/dev/null 2>&1 || true
 
