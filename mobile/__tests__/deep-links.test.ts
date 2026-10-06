@@ -60,3 +60,13 @@ describe('safeIncomingPath (filtre de tout lien entrant)', () => {
     }
   })
 })
+
+describe('safeIncomingPath : lien de réinitialisation du mot de passe', () => {
+  const T = 'Z'.repeat(64)
+  it('transmet seulement un jeton valide', () => {
+    expect(safeIncomingPath(`https://forgechat.example/reset-password#token=${T}`)).toBe(`/reset-password?token=${T}`)
+    expect(safeIncomingPath(`https://forgechat.example/reset-password#token=${T}&x=/settings`)).toBe(`/reset-password?token=${T}`)
+    expect(safeIncomingPath('https://forgechat.example/reset-password#token=court')).toBe('/reset-password')
+    expect(safeIncomingPath(`https://forgechat.example/reset-password/x#token=${T}`)).toBe('/')
+  })
+})

@@ -128,9 +128,14 @@ export default function LoginScreen() {
                 }}
               />
             ) : (
-              <Link href="/register" asChild>
-                <Button title="Pas encore de compte ? S’inscrire" variant="ghost" />
-              </Link>
+              <>
+                <Link href="/forgot-password" asChild>
+                  <Button title="Mot de passe oublié ?" variant="ghost" />
+                </Link>
+                <Link href="/register" asChild>
+                  <Button title="Pas encore de compte ? S’inscrire" variant="ghost" />
+                </Link>
+              </>
             )}
           </View>
         </ScrollView>

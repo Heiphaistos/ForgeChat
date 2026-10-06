@@ -56,4 +56,23 @@ export const authApi = {
   revokeSession: (id: string) => http.delete<void>(`/users/me/sessions/${encodeURIComponent(id)}`),
   changePassword: (oldPassword: string, newPassword: string) =>
     http.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
+
+  /** Réponse identique que le compte existe ou non (le serveur ne révèle rien). */
+  forgotPassword: (email: string) => http.post('/auth/forgot-password', { email: email.trim().toLowerCase() }, { auth: false }),
+  /** Jeton à usage unique (30 min) reçu par e-mail ; révoque toutes les sessions. */
+  resetPassword: (token: string, newPassword: string) =>
+    http.post('/auth/reset-password', { token, new_password: newPassword }, { auth: false }),
+
+  /** Double authentification (handlers/totp.rs). Le secret n'est actif qu'après `confirmTotp`. */
+  setupTotp: () => http.post<TotpSetup>('/auth/2fa/setup'),
+  confirmTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/confirm', { code: code.replace(/\s+/g, '') }),
+  /** Le serveur n'exige que le code TOTP (pas le mot de passe). */
+  disableTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/disable', { code: code.replace(/\s+/g, '') }),
+}
+
+export interface TotpSetup {
+  secret: string
+  /** otpauth://totp/… */
+  qr_url: string
+  backup_codes: string[]
 }

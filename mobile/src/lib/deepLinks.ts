@@ -1,3 +1,4 @@
+import { extractResetToken } from '@/features/account/rules'
 import { isUuid } from './params'
 
 const SCHEME = 'forgechat://'
@@ -39,6 +40,11 @@ export function safeIncomingPath(raw: string): string {
   const parts = pathname.split('/').filter(Boolean)
   const [kind, a, b] = parts
   if (parts.length === 0) return '/'
+  // Lien du mail de réinitialisation (jeton dans le fragment) : jeton revalidé, rien d'autre transmis.
+  if (kind === 'reset-password' && parts.length === 1) {
+    const token = extractResetToken(raw)
+    return token ? `/reset-password?token=${token}` : '/reset-password'
+  }
   if ((kind === 'invite' || kind === 'friend-invite') && parts.length === 2 && CODE.test(a ?? '')) return `/${kind}/${a}`
   if ((kind === 'dm' || kind === 'group' || kind === 'user') && parts.length === 2 && isUuid(a)) return `/${kind}/${a.toLowerCase()}`
   if (kind === 'channel' && parts.length === 3 && isUuid(a) && isUuid(b)) return `/channel/${a.toLowerCase()}/${b.toLowerCase()}`
