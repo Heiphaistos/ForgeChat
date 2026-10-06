@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -28,8 +27,6 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig
  * dure jusqu'à la fin de l'appel.
  */
 class CallForegroundService : HeadlessJsTaskService() {
-  override fun onBind(intent: Intent?): IBinder? = null
-
   override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig =
     // Pas de délai maximal (0), et autorisée app au premier plan (l'appel démarre app ouverte).
     HeadlessJsTaskConfig("ForgeChatKeepAlive", Arguments.createMap(), 0, true)
