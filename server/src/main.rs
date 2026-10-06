@@ -241,8 +241,10 @@ async fn main() -> anyhow::Result<()> {
                 ))
                 .service(ServeDir::new(&config.upload_dir))
         )
-        // 500 Mo par fichier (gratuit ; Discord Nitro) + marge pour plusieurs pièces et l'enveloppe multipart.
-        .layer(DefaultBodyLimit::max(1_100 * 1_048_576))
+        // 50 Mo partout ailleurs : un corps JSON est lu entier en mémoire, 1,1 Go ici permettait
+        // de saturer la RAM sans compte (/api/auth/login). Seules les pièces jointes, écrites sur
+        // le disque au fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
+        .layer(DefaultBodyLimit::max(52_428_800))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -495,6 +497,10 @@ async fn send_birthday_notifications(state: &AppState) {
     }
 }
 
+/// Pièces jointes : 500 Mo par fichier (gratuit ; Discord Nitro) + marge pour plusieurs pièces et
+/// l'enveloppe multipart. Le multipart est lu au fil de l'eau (`uploads::save_field`).
+const ATTACHMENT_BODY_LIMIT: usize = 1_100 * 1_048_576;
+
 fn protected_routes(state: AppState) -> Router<AppState> {
     Router::new()
         // Auth
@@ -589,7 +595,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/reports", get(handlers::reports::list_reports))
         .route("/servers/:server_id/reports/:report_id", patch(handlers::reports::update_report))
         // Uploads
-        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file))
+        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         // Roles
         .route("/servers/:server_id/roles", get(handlers::roles::get_roles))
         .route("/servers/:server_id/roles", post(handlers::roles::create_role))
@@ -614,7 +620,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/:user_id", post(handlers::friends::open_dm))
         .route("/dms/:dm_id/messages", get(handlers::friends::get_dm_messages))
         .route("/dms/:dm_id/messages", post(handlers::friends::send_dm))
-        .route("/dms/:dm_id/messages/:msg_id/attachments", post(handlers::friends::upload_dm_attachment))
+        .route("/dms/:dm_id/messages/:msg_id/attachments", post(handlers::friends::upload_dm_attachment).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         .route("/dms/:dm_id/messages/:msg_id", patch(handlers::friends::edit_dm_message))
         .route("/dms/:dm_id/messages/:msg_id", delete(handlers::friends::delete_dm_message))
         .route("/dms/:dm_id/messages/:msg_id/reactions/:emoji", put(handlers::friends::toggle_dm_reaction))
@@ -632,7 +638,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/read", post(handlers::reads::mark_server_read))
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
         // Threads
-        .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload))
+        .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         .route("/servers/:server_id/channels/:channel_id/threads", get(handlers::threads::list_threads))
         .route("/servers/:server_id/channels/:channel_id/threads", post(handlers::threads::create_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))
@@ -640,7 +646,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", patch(handlers::threads::edit_thread_message))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/reactions/:emoji", put(handlers::threads::toggle_thread_reaction))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id", delete(handlers::threads::delete_thread_message))
-        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/attachments", post(handlers::uploads::upload_thread_attachment))
+        .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages/:msg_id/attachments", post(handlers::uploads::upload_thread_attachment).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/ack", post(handlers::threads::ack_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id", patch(handlers::threads::archive_thread))
         // Forum
@@ -653,7 +659,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/reactions/:emoji", put(handlers::forum::toggle_reply_reaction))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", patch(handlers::forum::edit_reply))
         .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id", delete(handlers::forum::delete_reply))
-        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/attachments", post(handlers::uploads::upload_forum_reply_attachment))
+        .route("/servers/:server_id/channels/:channel_id/posts/:post_id/replies/:reply_id/attachments", post(handlers::uploads::upload_forum_reply_attachment).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         // Custom Emojis
         .route("/servers/:server_id/emojis", get(handlers::emojis::list_emojis))
         .route("/servers/:server_id/emojis", post(handlers::emojis::create_emoji))
@@ -846,7 +852,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id/messages/:msg_id/reactions/:emoji", put(handlers::group_dms::toggle_group_dm_reaction))
         .route("/dms/groups/:group_id/messages/:msg_id/pin", put(handlers::group_dms::toggle_group_dm_pin))
         .route("/dms/groups/:group_id/pins", get(handlers::group_dms::list_group_dm_pins))
-        .route("/dms/groups/:group_id/messages/:msg_id/attachments", post(handlers::group_dms::upload_group_dm_attachment))
+        .route("/dms/groups/:group_id/messages/:msg_id/attachments", post(handlers::group_dms::upload_group_dm_attachment).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         .route("/dms/groups/:group_id/messages/search", get(handlers::group_dms::search_group_dm_messages))
         .route("/dms/groups/:group_id/leave", post(handlers::group_dms::leave_group_dm))
         .route("/dms/groups/:group_id/members", post(handlers::group_dms::add_group_dm_member))
