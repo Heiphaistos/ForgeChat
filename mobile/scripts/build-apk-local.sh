@@ -10,6 +10,8 @@
 # --livekit : serveur LiveKit, seulement s'il n'est PAS sur le même hôte que --server (wss://).
 # --updates-repo : dépôt GitHub PUBLIC des releases ; la bêta y vérifie s'il existe une nouvelle
 #             version (désactivable dans l'app). Sans cette option : pas de vérification.
+# --unsigned : APK release NON signé (kit de build : la signature se fait ensuite, ailleurs, par le
+#             détenteur de la clé). La clé n'est alors ni lue ni requise.
 #
 # Clé de release HORS dépôt (voir docs/MAINTAINER.md, « Clé de release ») :
 #   FORGECHAT_KEYSTORE                (défaut : ~/.config/forgechat-dev/release/forgechat-release.keystore)
@@ -23,17 +25,19 @@
 # Le .env.local n'est PAS lu (EXPO_NO_DOTENV) : le serveur vient uniquement de --server.
 set -euo pipefail
 
-usage() { echo "usage : build-apk-local.sh preview|production [--server https://…] [--livekit wss://…] [--updates-repo propriétaire/dépôt]" >&2; exit 1; }
+usage() { echo "usage : build-apk-local.sh preview|production [--server https://…] [--livekit wss://…] [--updates-repo propriétaire/dépôt] [--unsigned]" >&2; exit 1; }
 PROFILE=${1:-}
 case "$PROFILE" in preview | production) shift ;; *) usage ;; esac
 SERVER=""
 LIVEKIT=""
 UPDATES_REPO=""
+UNSIGNED=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --server) SERVER=${2:-}; shift 2 ;;
     --livekit) LIVEKIT=${2:-}; shift 2 ;;
     --updates-repo) UPDATES_REPO=${2:-}; shift 2 ;;
+    --unsigned) UNSIGNED=1; shift ;;
     *) usage ;;
   esac
 done
@@ -60,12 +64,18 @@ else
   [ -z "${EAS_PROJECT_ID:-}" ] && [ -f "$FIREBASE_DIR/eas-project-id.txt" ] && EAS_PROJECT_ID=$(tr -d ' \n' < "$FIREBASE_DIR/eas-project-id.txt") && export EAS_PROJECT_ID
 fi
 echo "Push Android : $([ -n "${GOOGLE_SERVICES_JSON:-}" ] && [ -n "${EAS_PROJECT_ID:-}" ] && echo "configuré" || echo "ABSENT (pas de google-services.json / EAS_PROJECT_ID)")"
-export FORGECHAT_KEYSTORE=${FORGECHAT_KEYSTORE:-$HOME/.config/forgechat-dev/release/forgechat-release.keystore}
-export FORGECHAT_KEYSTORE_PASSWORD_FILE=${FORGECHAT_KEYSTORE_PASSWORD_FILE:-$HOME/.config/forgechat-dev/release/keystore.password}
-[ -f "$FORGECHAT_KEYSTORE" ] && [ -f "$FORGECHAT_KEYSTORE_PASSWORD_FILE" ] || {
-  echo "Clé de release introuvable : voir docs/MAINTAINER.md" >&2
-  exit 1
-}
+if [ -n "$UNSIGNED" ]; then
+  # Sans FORGECHAT_KEYSTORE, plugins/withReleaseSigning.js ne signe pas (jamais de clé debug).
+  unset FORGECHAT_KEYSTORE FORGECHAT_KEYSTORE_PASSWORD_FILE FORGECHAT_KEY_ALIAS
+  echo "Signature : AUCUNE (APK non signé, à signer par le détenteur de la clé)"
+else
+  export FORGECHAT_KEYSTORE=${FORGECHAT_KEYSTORE:-$HOME/.config/forgechat-dev/release/forgechat-release.keystore}
+  export FORGECHAT_KEYSTORE_PASSWORD_FILE=${FORGECHAT_KEYSTORE_PASSWORD_FILE:-$HOME/.config/forgechat-dev/release/keystore.password}
+  [ -f "$FORGECHAT_KEYSTORE" ] && [ -f "$FORGECHAT_KEYSTORE_PASSWORD_FILE" ] || {
+    echo "Clé de release introuvable : voir docs/MAINTAINER.md" >&2
+    exit 1
+  }
+fi
 # Retire le chemin du dossier personnel des bibliothèques natives compilées localement.
 export CFLAGS="-ffile-prefix-map=$HOME=/build" CXXFLAGS="-ffile-prefix-map=$HOME=/build"
 
@@ -91,5 +101,5 @@ while kill -0 $G 2>/dev/null; do
   sleep 5
 done
 wait $G
-echo "APK : $(pwd)/app/build/outputs/apk/release/app-release.apk"
+if [ -n "$UNSIGNED" ]; then echo "APK : $(pwd)/app/build/outputs/apk/release/app-release-unsigned.apk"; else echo "APK : $(pwd)/app/build/outputs/apk/release/app-release.apk"; fi
 echo "Vérifier puis empreintes : scripts/release-apk.sh <copie renommée de l'APK>"
