@@ -242,6 +242,13 @@ Vérifier un APK : `scripts/release-apk.sh` affiche `push (FCM) configuré` (pre
 
 ## 6. Distribuer une bêta (GitHub uniquement)
 
+> **Quand le serveur n'est pas le tien** (son administrateur garde son adresse et ses accès) : il
+> construit l'APK bêta lui-même, **non signé** (`scripts/build-apk-local.sh production --server https://…
+> --unsigned`, ou un kit Docker qui l'appelle) et te l'envoie avec son SHA-256 par un autre canal. Toi
+> seul signes, après avoir vérifié l'empreinte, le package, l'absence d'outils de dev, l'adresse du
+> serveur, et que le code (JavaScript et Java) est identique à ta propre version construite avec la
+> même adresse : ces builds sont reproductibles. La clé ne quitte jamais ta machine.
+
 La bêta est distribuée **seulement** par les releases d'un dépôt GitHub **public** (pas de Play Store
 pour l'instant, pas de miroir). L'app y vérifie elle-même les nouvelles versions (§7).
 
