@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { Apple, Download, Globe, Monitor, RefreshCw, ShieldCheck, Smartphone, Terminal, Copy, Check } from 'lucide-react'
 import SiteLayout from './SiteLayout'
+import { Phone } from './Cinema'
 import {
   ALTSTORE_SOURCE, artefactUrl, dateFr, plateformeDuVisiteur, taille, useDesktopRelease, useMobileRelease,
   type Artefact, type Plateforme, type Release,
@@ -61,15 +62,40 @@ function MisesAJour({ children }: { children: ReactNode }) {
   )
 }
 
-function EnTete({ titre, release, children }: { titre: string; release: Release | null; children: ReactNode }) {
+type Os = 'windows' | 'macos' | 'linux' | 'mobile' | 'web'
+
+/** Fenêtre de bureau aux couleurs du système (boutons Windows, feux macOS, barre GNOME). */
+function Fenetre({ os }: { os: Os }) {
+  return (
+    <div className={`dl-win dl-win-${os}`} aria-hidden="true">
+      <div className="dl-win-bar">
+        {os === 'macos' ? <span className="dl-feux"><i /><i /><i /></span> : null}
+        <span className="dl-win-titre">ForgeChat</span>
+        {os !== 'macos' ? <span className="dl-win-btn"><i /><i /><i /></span> : null}
+      </div>
+      <div className="dl-win-body">
+        <div className="dl-win-rail"><b /><b /><b /></div>
+        <div className="dl-win-chat">
+          {['70%', '52%', '84%', '40%'].map((w, i) => <span key={i} className="dl-win-line" style={{ width: w, '--i': i } as React.CSSProperties} />)}
+          <span className="dl-win-input" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EnTete({ titre, release, os, children }: { titre: string; release: Release | null; os: Os; children: ReactNode }) {
   const date = dateFr(release?.pub_date)
   return (
     <section className="site-hero">
-      <div className="site-wrap">
-        <Link to="/telecharger" className="site-eyebrow">← Toutes les plateformes</Link>
-        <h1 className="site-h1 reveal">ForgeChat pour <span className="grad">{titre}</span></h1>
-        {release && <p className="site-muted reveal">Version {release.version}{date ? ` · publiée le ${date}` : ''}</p>}
-        <div className="site-actions reveal">{children}</div>
+      <div className="site-wrap dl-hero">
+        <div>
+          <Link to="/telecharger" className="site-eyebrow">← Toutes les plateformes</Link>
+          <h1 className="site-h1 reveal">ForgeChat pour <span className="grad">{titre}</span></h1>
+          {release && <p className="site-muted reveal">Version {release.version}{date ? ` · publiée le ${date}` : ''}</p>}
+          <div className="site-actions reveal">{children}</div>
+        </div>
+        <div className="dl-visuel">{os === 'mobile' ? <Phone className="dl-phone" /> : <Fenetre os={os} />}</div>
       </div>
     </section>
   )
@@ -89,7 +115,7 @@ function Windows() {
   const setup = r?.platforms['windows-x86_64']
   return (
     <>
-      <EnTete titre="Windows" release={r}>
+      <EnTete titre="Windows" os="windows" release={r}>
         <Bouton a={setup} titre="Installeur" sous="recommandé" primaire />
         <Bouton a={r?.platforms['windows-portable']} titre="Version portable" sous="sans installation" />
       </EnTete>
@@ -127,7 +153,7 @@ function MacOS() {
   const dmg = r?.platforms['macos-dmg']
   return (
     <>
-      <EnTete titre="macOS" release={r}>
+      <EnTete titre="macOS" os="macos" release={r}>
         <Bouton a={dmg} titre="Télécharger pour Mac" sous="Apple Silicon et Intel" primaire />
       </EnTete>
       <div className="site-wrap">
@@ -168,7 +194,7 @@ function Linux() {
   const nom = (a?: Artefact) => (a ? a.url.split('/').pop() : '…')
   return (
     <>
-      <EnTete titre="Linux" release={r}>
+      <EnTete titre="Linux" os="linux" release={r}>
         <Bouton a={deb} titre=".deb" sous="Ubuntu, Debian, Mint" primaire />
         <Bouton a={rpm} titre=".rpm" sous="Fedora, openSUSE" />
         <Bouton a={app} titre="AppImage" sous="toutes distributions" />
@@ -204,7 +230,7 @@ function Android() {
   const apk = r?.platforms.android
   return (
     <>
-      <EnTete titre="Android" release={r}>
+      <EnTete titre="Android" os="mobile" release={r}>
         <Bouton a={apk} titre="Télécharger l'APK" sous="Android 7 et plus" primaire />
       </EnTete>
       <div className="site-wrap">
@@ -243,7 +269,7 @@ function IPhone() {
   const ipa = r?.platforms.ios
   return (
     <>
-      <EnTete titre="iPhone et iPad" release={r}>
+      <EnTete titre="iPhone et iPad" os="mobile" release={r}>
         <a href="#web-app" className="site-btn site-btn-primary">Web app (le plus simple)</a>
         <a href="#app-native" className="site-btn site-btn-ghost">App native (AltStore / SideStore)</a>
       </EnTete>
@@ -293,7 +319,7 @@ function IPhone() {
 function Web() {
   return (
     <>
-      <EnTete titre="votre navigateur" release={null}>
+      <EnTete titre="votre navigateur" os="web" release={null}>
         <Link to="/register" className="site-btn site-btn-primary">Créer un compte</Link>
         <Link to="/login" className="site-btn site-btn-ghost">Se connecter</Link>
       </EnTete>

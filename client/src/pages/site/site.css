@@ -3,15 +3,17 @@
    ce bloc. Animations en CSS natif (+ IntersectionObserver dans SiteLayout), coupées si le système
    demande moins d'animations. */
 .site {
-  --bg: #0d0e12;
-  --bg-2: #14161c;
-  --card: #181a21;
-  --line: #262933;
-  --text: #eceef3;
-  --muted: #9aa0ad;
-  --accent: #5865f2;
-  --accent-2: #f2994a;
+  /* Palette de la vidéo de présentation : nuit bleue, halo violet. */
+  --bg: #07080f;
+  --bg-2: rgba(14, 15, 30, .72);
+  --card: rgba(255, 255, 255, .045);
+  --line: rgba(255, 255, 255, .09);
+  --text: #eef0f7;
+  --muted: #9aa0b8;
+  --accent: #6d5cff;
+  --accent-2: #a99bff;
   --accent-3: #3ddc97;
+  --acc: #5865f2; /* accent de l'app dans les maquettes (téléphone, thèmes) */
   --radius: 18px;
   --ease: cubic-bezier(.2, .8, .2, 1);
   --t: 700ms;
@@ -19,11 +21,20 @@
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  position: relative; isolation: isolate;
   line-height: 1.6;
   overflow-x: clip;
 }
 .site a { color: inherit; }
+/* Fond commun à toutes les pages : halo violet fixe + poussière lumineuse. */
+.site-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(70% 55% at 50% 0%, #1d1850 0%, rgba(29, 24, 80, 0) 70%), radial-gradient(45% 40% at 90% 90%, #2a1546 0%, rgba(42, 21, 70, 0) 70%), var(--bg); }
+/* « backwards » et pas « both » : une animation de transform qui reste appliquée fait de <main> le
+   repère des éléments position: fixed, et toutes les scènes épinglées par GSAP partent avec la page. */
+.site-main { animation: site-page .7s var(--ease) backwards; }
+@keyframes site-page { from { opacity: 0; transform: translateY(14px); } }
+.site-brand-chat { color: #9d8cff; }
 .site-wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
 .site-muted { color: var(--muted); }
 .site-skip { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; }
@@ -33,7 +44,7 @@
 /* ── En-tête ─────────────────────────────────────────────────────────── */
 .site-header {
   position: sticky; top: 0; z-index: 50;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  background: rgba(7, 8, 15, .62);
   backdrop-filter: blur(14px) saturate(1.4);
   border-bottom: 1px solid var(--line);
 }
@@ -78,18 +89,9 @@
 
 /* ── Sections et titres ──────────────────────────────────────────────── */
 .site-hero { position: relative; padding: clamp(64px, 12vw, 140px) 0 clamp(48px, 8vw, 96px); isolation: isolate; }
-.site-hero::before {
-  content: ''; position: absolute; inset: -20% -10% auto; height: 120%; z-index: -1;
-  background:
-    radial-gradient(40% 50% at 20% 30%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 70%),
-    radial-gradient(35% 45% at 80% 20%, color-mix(in srgb, var(--accent-2) 35%, transparent), transparent 70%),
-    radial-gradient(30% 40% at 60% 80%, color-mix(in srgb, var(--accent-3) 25%, transparent), transparent 70%);
-  filter: blur(40px); opacity: .55;
-  animation: site-drift 18s ease-in-out infinite alternate;
-}
-.site-eyebrow { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: .85rem; }
+.site-eyebrow { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: #c3c6db; font-size: .8rem; font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .06em; text-decoration: none; }
 .site-h1 { font-size: clamp(2.2rem, 6vw, 4.4rem); line-height: 1.05; letter-spacing: -.03em; font-weight: 900; margin: 20px 0; }
-.site .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent)); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: site-shine 8s linear infinite; }
+.site .grad { background: linear-gradient(100deg, #7b6bff, #a99bff, #c9b8ff, #7b6bff); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: site-shine 8s linear infinite; }
 .site-h2 { font-size: clamp(1.6rem, 3.5vw, 2.4rem); line-height: 1.15; letter-spacing: -.02em; font-weight: 800; margin: 0 0 12px; }
 .site-h3 { font-size: 1.15rem; font-weight: 700; margin: 0 0 6px; }
 .site-lead { font-size: clamp(1.05rem, 2vw, 1.25rem); color: var(--muted); max-width: 680px; }
@@ -100,7 +102,7 @@
 /* ── Grilles et cartes ───────────────────────────────────────────────── */
 .site-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 .site-card {
-  position: relative; padding: 24px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line);
+  position: relative; padding: 24px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(12px);
   transition: transform .35s var(--ease), border-color .35s, box-shadow .35s;
 }
 .site-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); box-shadow: 0 20px 50px -30px var(--accent); }
@@ -110,8 +112,11 @@
 .site-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .75rem; font-weight: 700; background: color-mix(in srgb, var(--accent-3) 18%, transparent); color: var(--accent-3); }
 
 /* ── Tutoriels pas à pas ─────────────────────────────────────────────── */
-.site-steps { counter-reset: step; display: grid; gap: 14px; padding: 0; margin: 24px 0 0; list-style: none; }
-.site-steps > li { counter-increment: step; position: relative; padding: 18px 18px 18px 72px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.site-steps { --fill: 1; counter-reset: step; position: relative; display: grid; gap: 14px; padding: 0; margin: 24px 0 0; list-style: none; }
+/* Fil des étapes qui se remplit au défilement (--fill animé par SiteLayout). */
+.site-steps::before { content: ""; position: absolute; left: 37px; top: 30px; bottom: 30px; width: 2px; background: var(--line); }
+.site-steps::after { content: ""; position: absolute; left: 37px; top: 30px; bottom: 30px; width: 2px; background: linear-gradient(var(--accent), var(--accent-2)); transform-origin: top; transform: scaleY(var(--fill)); }
+.site-steps > li { counter-increment: step; position: relative; z-index: 1; padding: 18px 18px 18px 72px; background: #0e0f1d; border: 1px solid var(--line); border-radius: var(--radius); }
 .site-steps > li::before {
   content: counter(step); position: absolute; left: 18px; top: 16px; width: 38px; height: 38px; border-radius: 12px;
   display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
@@ -143,7 +148,6 @@
 .site .reveal { opacity: 0; transform: translateY(28px) scale(.98); filter: blur(6px); transition: opacity var(--t) var(--ease), transform var(--t) var(--ease), filter var(--t) var(--ease); transition-delay: calc(var(--i, 0) * 80ms); }
 .site .reveal.is-visible { opacity: 1; transform: none; filter: none; }
 .site-float { animation: site-float 6s ease-in-out infinite; }
-@keyframes site-drift { to { transform: translate3d(4%, 6%, 0) rotate(8deg) scale(1.1); } }
 @keyframes site-shine { to { background-position: 300% 0; } }
 @keyframes site-float { 50% { transform: translateY(-12px); } }
 @keyframes site-grow { from { transform: scaleX(0); } }
@@ -151,3 +155,31 @@
   .site *, .site *::before, .site *::after { animation: none !important; transition: none !important; }
   .site .reveal { opacity: 1; transform: none; filter: none; }
 }
+
+/* ── Pages Télécharger : visuel animé à côté du titre ───────────────── */
+.site-wrap > .site-h2 { margin-top: 40px; }
+.dl-hero { display: grid; gap: 40px; align-items: center; }
+.dl-visuel { display: flex; justify-content: center; perspective: 1200px; }
+.dl-phone { width: min(230px, 60vw); animation: dl-float 7s ease-in-out infinite; }
+.dl-win {
+  width: min(460px, 100%); border-radius: 14px; overflow: hidden; background: #1e1f24; border: 1px solid var(--line);
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, .9), 0 0 70px -30px var(--accent); animation: dl-float 8s ease-in-out infinite; transform: rotateY(-12deg) rotateX(4deg);
+}
+.dl-win-bar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; background: #15161b; font-size: .78rem; color: #b7bacb; }
+.dl-win-titre { flex: 1; }
+.dl-win-macos .dl-win-titre { text-align: center; margin-right: 52px; }
+.dl-feux { display: flex; gap: 7px; } .dl-feux i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .dl-feux i:nth-child(2) { background: #febc2e; } .dl-feux i:nth-child(3) { background: #28c840; }
+.dl-win-btn { display: flex; gap: 14px; } .dl-win-btn i { width: 10px; height: 2px; background: #9a9db0; }
+.dl-win-linux .dl-win-btn i { width: 14px; height: 14px; border-radius: 50%; background: #3a3c46; }
+.dl-win-linux .dl-win-bar { background: #2a2b31; }
+.dl-win-body { display: grid; grid-template-columns: 54px 1fr; height: 230px; }
+.dl-win-rail { background: #121317; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+.dl-win-rail b { width: 32px; height: 32px; border-radius: 50%; background: #2a2c33; } .dl-win-rail b:first-child { border-radius: 10px; background: linear-gradient(145deg, #8f7dff, #5b45f0); }
+.dl-win-chat { display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 16px; }
+.dl-win-line { height: 10px; border-radius: 6px; background: #34363e; transform-origin: left; animation: dl-type 4.5s ease-in-out infinite; animation-delay: calc(var(--i) * .35s); }
+.dl-win-line:nth-child(3) { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.dl-win-input { height: 30px; border-radius: 8px; background: #2b2d34; margin-top: 6px; }
+@keyframes dl-float { 50% { translate: 0 -12px; } }
+@keyframes dl-type { 0%, 10% { transform: scaleX(0); opacity: 0; } 30%, 85% { transform: scaleX(1); opacity: 1; } 100% { opacity: 0; } }
+@media (min-width: 900px) { .dl-hero { grid-template-columns: 1.15fr .85fr; } }
+@media (max-width: 899px) { .dl-win { transform: none; } .dl-phone { width: min(200px, 54vw); } }

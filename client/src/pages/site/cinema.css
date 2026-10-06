@@ -1,0 +1,177 @@
+/* Accueil « cinéma », d'après la vidéo de présentation ForgeChat (fond nuit violet, titres géants,
+   chapitres numérotés en chasse fixe, téléphone qui s'anime). Écrit d'abord pour le téléphone. */
+
+.cn { --cn-bg: #07080f; --cn-violet: #6d5cff; --cn-lilas: #a99bff; --cn-dim: #8d93a8; overflow-x: clip; }
+.cn-grad {
+  background: linear-gradient(100deg, #7b6bff 0%, #a99bff 45%, #c9b8ff 70%, #7b6bff 100%);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.cn-dim { color: var(--cn-dim); }
+.cn-chapter { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .8rem; letter-spacing: .14em; color: var(--cn-violet); margin: 0 0 14px; }
+.cn-h1 { font-size: clamp(2.3rem, 7.5vw, 5.4rem); line-height: 1; letter-spacing: -.045em; font-weight: 800; margin: 0; }
+.cn-h2 { font-size: clamp(1.9rem, 5vw, 3.6rem); line-height: 1.05; letter-spacing: -.04em; font-weight: 800; margin: 0 0 18px; }
+.cn-dust { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.cn section { position: relative; }
+.cn-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 28px; }
+.cn-pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: .82rem; color: #cfd3e6;
+  background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .1); margin: 18px 0 0;
+}
+.cn-pill i { width: 7px; height: 7px; border-radius: 50%; background: #3ddc97; box-shadow: 0 0 10px #3ddc97; }
+
+/* Logo */
+.cn-logo {
+  display: inline-grid; place-items: center; border-radius: 26%; flex: none;
+  background: linear-gradient(145deg, #8f7dff, #5b45f0); box-shadow: 0 20px 60px -15px #6d5cff, inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+
+/* ── Héros ─────────────────────────────────────────────────────────────── */
+.cn-hero {
+  min-height: 100svh; display: grid; place-items: center; text-align: center; padding: 96px 16px 80px; overflow: hidden;
+  background: radial-gradient(60% 50% at 50% 40%, #241d63 0%, rgba(36, 29, 99, 0) 70%), radial-gradient(40% 40% at 80% 85%, #3a1c5c 0%, rgba(58, 28, 92, 0) 70%);
+}
+.cn-hero-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; max-width: 820px; }
+.cn-hero-title { font-size: clamp(3.2rem, 14vw, 8.5rem); font-weight: 800; letter-spacing: -.055em; line-height: 1; margin: 22px 0 0; display: flex; flex-wrap: wrap; justify-content: center; overflow: hidden; padding-bottom: .1em; }
+.cn-ch { display: inline-block; }
+.cn-grad .cn-ch { background: inherit; background-size: 400% 100%; -webkit-background-clip: text; background-clip: text; }
+.cn-hero-title .cn-grad, .cn-finale-title .cn-grad { background: none; color: #a99bff; }
+.cn-hero-title .cn-grad .cn-ch, .cn-finale-title .cn-grad .cn-ch { color: #9d8cff; text-shadow: 0 0 40px rgba(125, 105, 255, .45); }
+.cn-lead { color: #b9bdd0; font-size: clamp(1rem, 2.4vw, 1.2rem); max-width: 620px; margin: 20px 0 0; }
+.cn-streak { position: absolute; left: 0; width: 60%; height: 1px; transform-origin: left; background: linear-gradient(90deg, transparent, rgba(140, 125, 255, .7), transparent); z-index: 0; }
+.cn-scroll { position: absolute; bottom: 22px; left: 50%; width: 24px; height: 38px; margin-left: -12px; border: 2px solid rgba(255, 255, 255, .25); border-radius: 14px; }
+.cn-scroll span { position: absolute; left: 50%; top: 7px; width: 4px; height: 8px; margin-left: -2px; border-radius: 2px; background: #fff; animation: cn-wheel 1.6s ease-in-out infinite; }
+@keyframes cn-wheel { 60% { transform: translateY(12px); opacity: 0; } }
+
+/* ── Bande-annonce ─────────────────────────────────────────────────────── */
+.cn-trailer { padding: 80px 16px; perspective: 1400px; }
+.cn-trailer-head { text-align: center; }
+.cn-trailer-frame {
+  position: relative; width: min(1100px, 100%); margin: 24px auto 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, .1); box-shadow: 0 50px 120px -40px rgba(109, 92, 255, .6); background: #000;
+}
+.cn-trailer-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cn-trailer-ctrl { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 8px; }
+.cn-trailer-ctrl button {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .2);
+  background: rgba(10, 10, 20, .55); color: #fff; backdrop-filter: blur(8px); cursor: pointer;
+}
+
+/* ── Mots géants ───────────────────────────────────────────────────────── */
+.cn-words { height: 100svh; display: grid; place-items: center; text-align: center; overflow: hidden; padding: 0 16px; }
+.cn-word { grid-area: 1 / 1; margin: 0; font-size: clamp(3rem, 15vw, 10rem); font-weight: 800; letter-spacing: -.055em; line-height: .95; }
+.cn-lines { position: absolute; inset: 0; pointer-events: none; }
+.cn-lines i { position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(140, 125, 255, .6), transparent); transform: scaleX(.2); opacity: .2; }
+.cn-lines i:nth-child(1) { top: 18%; } .cn-lines i:nth-child(2) { top: 30%; } .cn-lines i:nth-child(3) { top: 72%; } .cn-lines i:nth-child(4) { top: 84%; }
+
+/* ── Téléphone ─────────────────────────────────────────────────────────── */
+.cn-phone {
+  position: relative; flex: none; width: min(300px, 74vw); aspect-ratio: 9 / 19; border-radius: 42px; padding: 10px;
+  background: #0d0e12; border: 2px solid #2b2d36; box-shadow: 0 50px 100px -30px rgba(0, 0, 0, .9), 0 0 0 1px rgba(255, 255, 255, .04), 0 0 80px -30px var(--acc);
+  display: flex; flex-direction: column; overflow: hidden; font-size: .74rem; color: #e8e9ee;
+}
+.cn-phone > * { position: relative; }
+.cn-phone::before { content: ""; position: absolute; inset: 10px; border-radius: 34px; background: #2b2d31; }
+.cn-phone-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 18px 4px; font-weight: 700; font-size: .7rem; }
+.cn-cam { width: 9px; height: 9px; border-radius: 50%; background: #000; }
+.cn-sig { display: flex; gap: 3px; } .cn-sig b { width: 10px; height: 6px; border-radius: 2px; background: #c9cad1; }
+.cn-phone-top { display: flex; align-items: center; gap: 6px; padding: 10px 16px; font-weight: 800; font-size: .86rem; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.cn-phone-top svg { color: #8e93a3; }
+.cn-phone-acc { margin-left: auto; width: 22px; height: 22px; border-radius: 7px; background: var(--acc); transition: background .5s; }
+.cn-phone-msgs { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 10px 14px; overflow: hidden; }
+.cn-pm { display: flex; gap: 8px; }
+.cn-pm p { margin: 1px 0 0; color: #d6d8df; }
+.cn-pm b { font-size: .75rem; }
+.cn-pm small { color: #81869a; font-size: .62rem; }
+.cn-av { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .7rem; color: #fff; }
+.cn-mention { color: #c8c2ff; background: color-mix(in srgb, var(--acc) 30%, transparent); border-radius: 4px; padding: 0 3px; transition: background .5s; }
+.cn-poll { margin-top: 6px; padding: 8px; border-radius: 10px; background: #1e1f23; border: 1px solid rgba(255, 255, 255, .06); }
+.cn-poll > p { margin: 0 0 6px; font-weight: 800; color: #fff; }
+.cn-poll-row { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: 6px; margin-top: 5px; overflow: hidden; background: #2b2d31; font-weight: 600; }
+.cn-poll-row span, .cn-poll-row em { position: relative; font-style: normal; }
+.cn-poll-bar { position: absolute; inset: 0 auto 0 0; width: var(--v); background: color-mix(in srgb, var(--acc) 75%, #000); transform-origin: left; transition: background .5s; }
+.cn-react { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--acc) 70%, transparent); background: color-mix(in srgb, var(--acc) 18%, transparent); font-size: .66rem; }
+.cn-typing { margin: 0; color: #8e93a3; font-size: .64rem; }
+.cn-typing span { animation: cn-dot 1.2s infinite; } .cn-typing span:nth-child(2) { animation-delay: .2s; } .cn-typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes cn-dot { 50% { opacity: .2; } }
+.cn-phone-input { display: flex; align-items: center; gap: 8px; margin: 4px 12px 8px; padding: 8px 10px; border-radius: 12px; background: #383a40; color: #8e93a3; }
+.cn-phone-input span { width: 18px; height: 18px; border-radius: 50%; background: #4e5058; display: grid; place-items: center; color: #ddd; }
+.cn-phone-input i { margin-left: auto; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--acc); color: #fff; transition: background .5s; }
+.cn-home { width: 34%; height: 4px; border-radius: 4px; background: #c9cad1; margin: 2px auto 6px; }
+.cn-notif {
+  position: absolute; top: 40px; left: 16px; right: 16px; z-index: 3; display: flex; gap: 8px; padding: 10px; border-radius: 16px;
+  background: rgba(52, 54, 62, .96); box-shadow: 0 14px 30px -10px #000; backdrop-filter: blur(10px);
+}
+.cn-notif b { display: block; font-size: .68rem; } .cn-notif small { color: #c3c6d2; font-size: .64rem; }
+.cn-notif-ico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: #6d5cff; flex: none; }
+
+/* ── Chapitres ─────────────────────────────────────────────────────────── */
+.cn-chapters { min-height: 100svh; display: grid; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 28px; padding: 80px 16px 24px; overflow: hidden; }
+.cn-chap-text { position: relative; width: 100%; max-width: 760px; min-height: 9.5em; margin-top: 22px; }
+.cn-chap { position: absolute; inset: 0 0 auto 0; }
+.cn-chap-progress { position: absolute; left: 0; top: -22px; width: 140px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.cn-chap-progress i { display: block; height: 100%; background: linear-gradient(90deg, #6d5cff, #a99bff); transform: scaleX(0); transform-origin: left; }
+.cn-chapters .cn-phone { width: min(270px, 64vw); }
+.cn-chapters .cn-h1 { font-size: clamp(2.1rem, 8vw, 5rem); }
+@media (min-width: 900px) {
+  .cn-chapters { grid-template-columns: 1.2fr .8fr; align-items: center; justify-items: start; padding: 0 6vw; }
+  .cn-chapters .cn-phone { width: 300px; justify-self: center; }
+  .cn-chap-text { min-height: 12em; }
+}
+
+/* ── Puces de fonctionnalités ──────────────────────────────────────────── */
+.cn-chips { display: grid; gap: 40px; padding: 100px 16px; align-items: center; justify-items: center; max-width: 1200px; margin: 0 auto; }
+.cn-chips .cn-phone { width: min(260px, 64vw); transform: rotate(-4deg); }
+.cn-chip-grid { display: grid; grid-template-columns: 1fr; gap: 12px; perspective: 900px; }
+.cn-chip {
+  display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 18px; transform-style: preserve-3d;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02)); border: 1px solid rgba(255, 255, 255, .1); backdrop-filter: blur(10px);
+}
+.cn-chip b { display: block; font-size: 1.05rem; letter-spacing: -.01em; } .cn-chip small { color: #9aa0b4; }
+.cn-chip-ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; flex: none; color: #fff; background: linear-gradient(145deg, #8f7dff, #5b45f0); box-shadow: 0 10px 30px -10px #6d5cff; }
+@media (min-width: 640px) { .cn-chip-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 900px) { .cn-chips { grid-template-columns: .7fr 1.3fr; gap: 64px; } }
+
+/* ── Thèmes ────────────────────────────────────────────────────────────── */
+.cn-themes { min-height: 100svh; display: grid; grid-template-columns: 1fr; justify-items: center; align-content: center; gap: 18px; padding: 70px 16px 24px; text-align: center; overflow: hidden; }
+.cn-themes-glow { position: absolute; inset: 0; background: radial-gradient(45% 55% at 50% 50%, color-mix(in srgb, var(--acc) 38%, transparent), transparent 70%); transition: background .6s; pointer-events: none; }
+.cn-themes .cn-side { position: relative; font-size: clamp(2.2rem, 9vw, 5rem); }
+.cn-themes-mid { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.cn-phone-themed { width: min(240px, 58vw); }
+.cn-dots { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.cn-dots button { width: 18px; height: 18px; border-radius: 50%; border: 0; cursor: pointer; opacity: .55; transition: transform .3s, opacity .3s, box-shadow .3s; }
+.cn-dots button.is-on { opacity: 1; transform: scale(1.35); box-shadow: 0 0 0 3px #07080f, 0 0 0 5px currentColor, 0 0 20px var(--acc); color: #fff; }
+.cn-theme-name { margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .8rem; letter-spacing: .12em; color: #c9cbe0; text-transform: uppercase; }
+@media (min-width: 900px) {
+  .cn-themes { grid-template-columns: 1fr auto 1fr; align-items: center; gap: 48px; padding: 0 5vw; }
+  .cn-themes .cn-side:first-of-type { justify-self: end; }
+  .cn-themes .cn-side:last-of-type { justify-self: start; }
+  .cn-phone-themed { width: 280px; }
+}
+
+/* ── Sous le capot ─────────────────────────────────────────────────────── */
+.cn-capot { height: 100svh; display: grid; place-items: center; text-align: center; overflow: hidden; padding: 0 16px; }
+.cn-capot-label { position: absolute; top: 90px; left: 16px; margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .75rem; letter-spacing: .2em; color: #7d82a0; }
+.cn-capot-item { grid-area: 1 / 1; }
+.cn-capot-mot { margin: 0; font-size: clamp(3rem, 15vw, 10rem); font-weight: 800; letter-spacing: -.055em; line-height: 1; }
+.cn-dot { color: #6d5cff; }
+.cn-capot-sous { margin: 18px 0 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: clamp(.62rem, 2vw, .85rem); letter-spacing: .25em; color: #8a8fac; }
+.cn-capot-bar { position: absolute; left: 16px; right: 16px; bottom: 40px; height: 2px; background: rgba(255, 255, 255, .08); }
+.cn-capot-bar i { display: block; height: 100%; background: linear-gradient(90deg, #6d5cff, #a99bff); transform: scaleX(.25); transform-origin: left; }
+@media (min-width: 900px) { .cn-capot-label { left: 6vw; } .cn-capot-bar { left: 6vw; right: 6vw; } }
+
+/* ── Final ─────────────────────────────────────────────────────────────── */
+.cn-finale { min-height: 90svh; display: grid; place-content: center; justify-items: center; text-align: center; padding: 80px 16px; overflow: hidden; background: radial-gradient(50% 50% at 50% 45%, #1f1a55 0%, rgba(31, 26, 85, 0) 70%); }
+.cn-finale > :not(.cn-dust) { position: relative; z-index: 1; }
+.cn-finale-brand { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.cn-finale-title { margin: 0; font-size: clamp(2.8rem, 11vw, 6.5rem); font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+.cn-devices { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 28px; }
+.cn-devices a { padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .12); color: #cfd3e6; text-decoration: none; font-size: .9rem; transition: border-color .3s, background .3s, transform .3s; }
+.cn-devices a:hover { border-color: #6d5cff; background: rgba(109, 92, 255, .15); transform: translateY(-2px); }
+.cn-url { margin: 30px 0 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .8rem; letter-spacing: .14em; color: #7d82a0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cn-chap, .cn-capot-item, .cn-word { position: static; }
+  .cn-words, .cn-capot { height: auto; padding: 80px 16px; display: block; }
+  .cn-chap-text { min-height: 0; }
+  .cn-word-0, .cn-word-1, .cn-word-2, .cn-capot-item:not(.cn-capot-item-3) { display: none; }
+}

@@ -1,10 +1,7 @@
 import { Link } from 'react-router-dom'
-import {
-  Apple, Bell, Bot, Download, Globe, Heart, Lock, MessageSquare, Mic, Monitor, Palette, RefreshCw, Search,
-  Server, Shield, Smartphone, Sparkles, Terminal, Users, Video,
-} from 'lucide-react'
+import { Bell, Bot, Heart, Lock, MessageSquare, Mic, Palette, Search, Server, Shield, Video } from 'lucide-react'
 import SiteLayout from './SiteLayout'
-import { AppShowcase, HorizontalFeatures, KineticTitle, useSpotlight } from './HomeShowcase'
+import Cinema from './Cinema'
 import { dateFr, useDesktopRelease, useMobileRelease } from './releases'
 
 const FONCTIONS = [
@@ -13,90 +10,17 @@ const FONCTIONS = [
   { icone: <Video size={22} />, titre: 'Appels vidéo et partage d’écran', texte: 'Appels privés et de groupe, caméra, partage d’écran jusqu’en 1080p, même depuis Android.' },
   { icone: <Lock size={22} />, titre: 'Vie privée', texte: 'Aucun pistage, aucune publicité. Messages privés chiffrés de bout en bout, serveur hébergé en France.' },
   { icone: <Shield size={22} />, titre: 'Sécurité', texte: 'Double authentification, sessions révocables, appareils connectés visibles, protection contre le hameçonnage des liens.' },
-  { icone: <Palette size={22} />, titre: '28 thèmes', texte: 'Sombre, clair, cyberpunk, everforest, kanagawa… et vos emojis, stickers et sons personnalisés.' },
+  { icone: <Palette size={22} />, titre: '38 thèmes', texte: 'Sombre, clair, cyberpunk, everforest, kanagawa… et vos emojis, stickers et sons personnalisés.' },
   { icone: <Bot size={22} />, titre: 'Bots et webhooks', texte: 'Automatisez vos serveurs : webhooks, bots, flux RSS, notifications GitHub, tickets, classements.' },
   { icone: <Search size={22} />, titre: 'Recherche', texte: 'Retrouvez n’importe quel message, fichier ou lien, avec filtres par auteur, salon et date.' },
   { icone: <Bell size={22} />, titre: 'Notifications fines', texte: 'Par serveur, par salon, par conversation ; mode Ne pas déranger ; @everyone ignorable.' },
 ]
 
-const APPAREILS = [
-  { to: '/telecharger/windows', icone: <Monitor size={20} />, nom: 'Windows' },
-  { to: '/telecharger/macos', icone: <Apple size={20} />, nom: 'macOS' },
-  { to: '/telecharger/linux', icone: <Terminal size={20} />, nom: 'Linux' },
-  { to: '/telecharger/android', icone: <Smartphone size={20} />, nom: 'Android' },
-  { to: '/telecharger/iphone', icone: <Apple size={20} />, nom: 'iPhone' },
-  { to: '/telecharger/web', icone: <Globe size={20} />, nom: 'Navigateur' },
-]
-
-function Hero() {
-  const spot = useSpotlight<HTMLElement>()
-  return (
-    <section ref={spot} className="site-hero site-hero-spot">
-      <div className="site-grid-bg" />
-      <div className="site-wrap" style={{ textAlign: 'center' }}>
-        <span className="site-eyebrow reveal"><Sparkles size={16} /> Web · Windows · macOS · Linux · Android · iPhone</span>
-        <KineticTitle lignes={[{ texte: 'Vos communautés,' }, { texte: 'sur tous vos écrans.', grad: true }]} />
-        <p className="site-lead reveal" style={{ marginInline: 'auto', '--i': 2 } as React.CSSProperties}>
-          Messages, salons vocaux, appels vidéo et partage d’écran. Gratuit, sans pistage, hébergé en France, et toujours à jour sur chaque appareil.
-        </p>
-        <div className="site-actions reveal" style={{ justifyContent: 'center', '--i': 3 } as React.CSSProperties}>
-          <Link to="/register" className="site-btn site-btn-primary">Créer un compte gratuit</Link>
-          <Link to="/telecharger" className="site-btn site-btn-ghost"><Download size={18} /> Télécharger</Link>
-        </div>
-        <p className="site-muted reveal" style={{ marginTop: 40, fontSize: '.85rem', '--i': 4 } as React.CSSProperties}>Faites défiler pour la démo ↓</p>
-      </div>
-    </section>
-  )
-}
 
 export function AccueilPage() {
   return (
     <SiteLayout>
-      <Hero />
-      <AppShowcase />
-      <HorizontalFeatures items={FONCTIONS} />
-
-      <section className="site-section">
-        <div className="site-wrap">
-          <h2 className="site-h2 reveal">Une seule app, partout</h2>
-          <p className="site-lead reveal">Le même compte et les mêmes conversations sur chaque appareil, synchronisés en direct.</p>
-          <div className="site-grid" style={{ marginTop: 28 }}>
-            {APPAREILS.map((a, i) => (
-              <Link key={a.to} to={a.to} className="site-card site-card-link reveal" style={{ '--i': i } as React.CSSProperties}>
-                <div className="ico">{a.icone}</div>
-                <h3 className="site-h3">{a.nom}</h3>
-                <p className="site-muted" style={{ margin: 0 }}>Guide d’installation →</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="site-section site-section-alt">
-        <div className="site-wrap site-grid">
-          {[
-            { icone: <RefreshCw size={22} />, t: 'Mises à jour automatiques', x: 'Chaque application vérifie elle-même les nouvelles versions et s’installe par-dessus, empreinte vérifiée.' },
-            { icone: <Server size={22} />, t: 'Hébergé en France', x: 'Vos données restent sur notre serveur, jamais revendues, jamais analysées.' },
-            { icone: <Users size={22} />, t: 'Fait par la communauté', x: 'ForgeChat par Heiphaistos, application mobile créée par aerwx.' },
-          ].map((c, i) => (
-            <div key={c.t} className="site-card reveal" style={{ '--i': i } as React.CSSProperties}>
-              <div className="ico">{c.icone}</div>
-              <h3 className="site-h3">{c.t}</h3>
-              <p className="site-muted" style={{ margin: 0 }}>{c.x}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="site-section">
-        <div className="site-wrap" style={{ textAlign: 'center' }}>
-          <h2 className="site-h2 reveal">Prêt à rejoindre la forge ?</h2>
-          <div className="site-actions reveal" style={{ justifyContent: 'center' }}>
-            <Link to="/register" className="site-btn site-btn-primary">Créer un compte</Link>
-            <Link to="/fonctionnalites" className="site-btn site-btn-ghost">Voir toutes les fonctionnalités</Link>
-          </div>
-        </div>
-      </section>
+      <Cinema />
     </SiteLayout>
   )
 }
