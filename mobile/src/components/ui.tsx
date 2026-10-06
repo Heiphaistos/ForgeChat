@@ -57,6 +57,8 @@ interface ButtonProps extends Omit<PressableProps, 'style' | 'children'> {
 export function Button({ title, variant = 'primary', loading, icon, disabled, style, ...rest }: ButtonProps) {
   const bg =
     variant === 'primary' ? colors.primary : variant === 'danger' ? colors.danger : variant === 'secondary' ? colors.bgElevated : 'transparent'
+  // Blanc sur les fonds colorés (comme le web), couleur du texte du thème sinon (thèmes clairs).
+  const fg = variant === 'primary' || variant === 'danger' ? '#fff' : variant === 'ghost' ? colors.primary : colors.text
   return (
     <Pressable
       accessibilityRole="button"
@@ -73,11 +75,11 @@ export function Button({ title, variant = 'primary', loading, icon, disabled, st
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={colors.text} />
+        <ActivityIndicator color={fg} />
       ) : (
         <View style={styles.buttonInner}>
-          {icon ? <Ionicons name={icon} size={18} color={variant === 'ghost' ? colors.primary : colors.text} /> : null}
-          <Text style={[styles.buttonText, variant === 'ghost' && { color: colors.primary }]}>{title}</Text>
+          {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
+          <Text style={[styles.buttonText, { color: fg }]}>{title}</Text>
         </View>
       )}
     </Pressable>
@@ -120,7 +122,7 @@ export function IconButton({
         style,
       ]}
     >
-      <Ionicons name={icon} size={size} color={danger ? colors.text : color} />
+      <Ionicons name={icon} size={size} color={danger ? '#fff' : color} />
     </Pressable>
   )
 }
@@ -276,7 +278,7 @@ export function SwitchRow({
           onValueChange={onValueChange}
           disabled={disabled}
           trackColor={{ true: colors.primary, false: colors.bgHover }}
-          thumbColor={colors.text}
+          thumbColor="#fff"
           accessibilityLabel={title}
         />
       }

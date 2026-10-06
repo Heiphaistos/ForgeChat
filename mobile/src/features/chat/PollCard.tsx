@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   optionMine: { borderColor: colors.primary },
-  bar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(88,101,242,0.25)' },
+  bar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.primary + '40' },
   optionText: { flex: 1, color: colors.textSecondary, fontSize: font.sm },
   percent: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700' },
 })
