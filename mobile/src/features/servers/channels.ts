@@ -4,16 +4,16 @@ import type { Category, Channel } from '@/types/models'
 export const isTextChannel = (c: Channel) => c.type === 'text' || c.type === 'announcement'
 
 /** Sections de la liste : salons sans catégorie d'abord, puis chaque catégorie dans l'ordre. */
-export function channelSections(channels: Channel[], categories: Category[]) {
+export function channelSections<C extends Channel>(channels: C[], categories: Category[]) {
   const list = channels.filter((c) => !c.hidden && !c.archived)
   const cats = [...categories].sort((a, b) => a.position - b.position)
-  const byCat = new Map<string | null, Channel[]>()
+  const byCat = new Map<string | null, C[]>()
   for (const c of list) {
     const key = c.category_id && cats.some((k) => k.id === c.category_id) ? c.category_id : null
     byCat.set(key, [...(byCat.get(key) ?? []), c])
   }
-  const sort = (arr: Channel[]) => [...arr].sort((a, b) => a.position - b.position)
-  const out: { category: Category | null; title: string | null; data: Channel[] }[] = []
+  const sort = (arr: C[]) => [...arr].sort((a, b) => a.position - b.position)
+  const out: { category: Category | null; title: string | null; data: C[] }[] = []
   if (byCat.get(null)?.length) out.push({ category: null, title: null, data: sort(byCat.get(null)!) })
   for (const k of cats) out.push({ category: k, title: k.name, data: sort(byCat.get(k.id) ?? []) })
   return out

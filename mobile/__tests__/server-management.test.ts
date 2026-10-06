@@ -33,29 +33,31 @@ const detail = (myRoles: string[], roles: Role[] = []): ServerDetail => ({
 describe('permissions affichées', () => {
   it('simple membre : pas de paramètres, peut quitter, jamais supprimer', () => {
     const p = serverPerms(detail([]), ME)
-    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'nickname', 'copyId', 'leave'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'nickname', 'boost', 'copyId', 'leave'])
     expect(settingsSections(p)).toEqual([])
   })
 
   it('propriétaire : tout, supprimer au lieu de quitter', () => {
     const p = serverPerms(detail([]), OWNER)
-    expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'createChannel', 'createCategory', 'settings', 'nickname', 'copyId', 'delete'])
-    expect(settingsSections(p)).toEqual(['overview', 'channels', 'roles', 'members', 'bans', 'invites', 'danger'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'events', 'createChannel', 'createCategory', 'settings', 'nickname', 'boost', 'copyId', 'delete'])
+    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'danger'])
   })
 
   it('administrateur (bit 31) : tout sauf vue d’ensemble et zone de danger (réservées au propriétaire)', () => {
     const p = serverPerms(detail(['admin'], [role('admin', PERM.ADMINISTRATOR, 1)]), ME)
     expect(p.isAdmin).toBe(true)
-    expect(settingsSections(p)).toEqual(['channels', 'roles', 'members', 'bans', 'invites'])
+    expect(settingsSections(p)).toEqual(['channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats'])
     expect(serverMenuKeys(p)).toContain('leave')
     expect(serverMenuKeys(p)).not.toContain('delete')
   })
 
   it('droits isolés : créer des salons sans gérer le serveur', () => {
     const p = serverPerms(detail(['c'], [role('c', PERM.CREATE_CHANNELS, 1)]), ME)
-    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'createChannel', 'createCategory', 'nickname', 'copyId', 'leave'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'createChannel', 'createCategory', 'nickname', 'boost', 'copyId', 'leave'])
     const bans = serverPerms(detail(['b'], [role('b', PERM.BAN_TEMP, 1)]), ME)
-    expect(settingsSections(bans)).toEqual(['members', 'bans'])
+    expect(settingsSections(bans)).toEqual(['members', 'reports', 'bans'])
+    const voice = serverPerms(detail(['v'], [role('v', PERM.MOVE_MEMBERS, 1)]), ME)
+    expect(settingsSections(voice)).toEqual(['members'])
   })
 
   it('un rôle non attribué ne compte pas ; tant que rien n’est chargé, ni quitter ni supprimer', () => {

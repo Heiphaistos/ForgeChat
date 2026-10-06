@@ -157,6 +157,8 @@ export type ServerMenuKey =
   | 'read'
   | 'invite'
   | 'notifications'
+  | 'events'
+  | 'boost'
   | 'createChannel'
   | 'createCategory'
   | 'settings'
@@ -165,18 +167,37 @@ export type ServerMenuKey =
   | 'leave'
   | 'delete'
 
-export type SettingsSection = 'overview' | 'channels' | 'roles' | 'members' | 'bans' | 'invites' | 'danger'
+export type SettingsSection =
+  | 'overview'
+  | 'advanced'
+  | 'channels'
+  | 'roles'
+  | 'tags'
+  | 'members'
+  | 'reports'
+  | 'bans'
+  | 'invites'
+  | 'emojis'
+  | 'webhooks'
+  | 'audit'
+  | 'automod'
+  | 'stats'
+  | 'danger'
 
 /** Rubriques des paramètres du serveur, d'après les gardes des routes Rust correspondantes. */
 export function settingsSections(p: ServerPerms): SettingsSection[] {
   if (!p.loaded) return []
   const out: SettingsSection[] = []
-  if (p.isOwner) out.push('overview') // PATCH /servers/:id : require_owner
+  const manageServer = p.has(PERM.MANAGE_SERVER)
+  // PATCH /servers/:id et /verification : require_owner
+  if (p.isOwner) out.push('overview', 'advanced')
   if (p.canEditChannels || p.has(PERM.DELETE_CHANNELS | PERM.DELETE_OWN_CHANNELS)) out.push('channels')
-  if (p.has(PERM.MANAGE_ROLES)) out.push('roles')
-  if (p.has(PERM.MANAGE_ROLES | PERM.KICK_MEMBERS | PERM.BAN_MEMBERS | PERM.BAN_TEMP | PERM.MANAGE_MESSAGES)) out.push('members')
-  if (p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) out.push('bans')
-  if (p.has(PERM.MANAGE_SERVER)) out.push('invites')
+  if (p.has(PERM.MANAGE_ROLES)) out.push('roles', 'tags')
+  const voiceMod = PERM.MUTE_MEMBERS | PERM.DEAFEN_MEMBERS | PERM.MOVE_MEMBERS
+  if (p.has(PERM.MANAGE_ROLES | PERM.KICK_MEMBERS | PERM.BAN_MEMBERS | PERM.BAN_TEMP | PERM.MANAGE_MESSAGES | voiceMod)) out.push('members')
+  if (p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) out.push('reports', 'bans') // reports.rs : BAN_MEMBERS | BAN_TEMP
+  // Invitations, emojis, stickers, webhooks, audit, AutoMod, statistiques : MANAGE_SERVER
+  if (manageServer) out.push('invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats')
   if (p.isOwner) out.push('danger') // transfert et suppression : require_owner
   return out
 }
@@ -186,9 +207,12 @@ export function serverMenuKeys(p: ServerPerms): ServerMenuKey[] {
   const out: ServerMenuKey[] = ['read']
   if (p.has(PERM.MANAGE_SERVER)) out.push('invite') // POST /servers/:id/invites
   out.push('notifications')
+  if (p.loaded) out.push('events') // tout membre
   if (p.canCreateChannels) out.push('createChannel', 'createCategory')
   if (settingsSections(p).length) out.push('settings')
-  out.push('nickname', 'copyId')
+  out.push('nickname')
+  if (p.loaded) out.push('boost')
+  out.push('copyId')
   if (p.loaded) out.push(p.isOwner ? 'delete' : 'leave')
   return out
 }
