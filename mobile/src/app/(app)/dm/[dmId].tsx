@@ -10,6 +10,7 @@ import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { useCall, type CallType } from '@/stores/call'
+import { useGroupCall } from '@/stores/groupCall'
 import { usePresenceOf } from '@/stores/presence'
 import { useVoice } from '@/stores/voice'
 import { colors, font } from '@/theme'
@@ -31,6 +32,10 @@ export default function DmScreen() {
     if (!otherId) return
     if (useVoice.getState().channelId) {
       Alert.alert('Déjà en vocal', 'Quitte le salon vocal avant de lancer un appel.')
+      return
+    }
+    if (useGroupCall.getState().groupId) {
+      Alert.alert('Appel de groupe en cours', 'Quitte l’appel de groupe avant de lancer un appel.')
       return
     }
     try {

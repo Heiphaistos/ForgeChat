@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, usePathname } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { IS_LAN } from '@/config/env'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
+import { errorMessage } from '@/lib/http'
 import { useConnection } from '@/lib/realtime'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
+import { useGroupCall } from '@/stores/groupCall'
 import { useLock } from '@/stores/lock'
 import { useVoice } from '@/stores/voice'
 import { colors, font, radius, spacing } from '@/theme'
@@ -98,7 +100,7 @@ export function IncomingCallOverlay() {
   return (
     <View style={[StyleSheet.absoluteFill, styles.call, { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xxl }]}>
       <View style={{ alignItems: 'center', gap: spacing.md }}>
-        <Avatar uri={null} name={incoming.fromUsername} size={96} />
+        <Avatar uri={incoming.fromAvatar} name={incoming.fromUsername} size={96} />
         <Text style={styles.title}>{incoming.fromUsername}</Text>
         <Text style={styles.sub}>{incoming.callType === 'video' ? 'Appel vidéo entrant…' : 'Appel vocal entrant…'}</Text>
       </View>
@@ -124,7 +126,44 @@ export function IncomingCallOverlay() {
   )
 }
 
-/** Barre « appel en cours » / « vocal connecté » quand on navigue ailleurs. */
+/** Appel de groupe qui démarre : rejoindre ou ignorer. */
+export function GroupRingOverlay() {
+  const ring = useGroupCall((s) => s.ring)
+  const insets = useSafeAreaInsets()
+  if (!ring) return null
+  const join = async () => {
+    if (useCall.getState().phase !== 'idle') {
+      Alert.alert('Appel en cours', 'Raccroche avant de rejoindre l’appel de groupe.')
+      return
+    }
+    if (useLock.getState().locked && !(await useLock.getState().unlock())) return
+    useVoice.getState().leave()
+    try {
+      await useGroupCall.getState().join(ring.groupId, ring.callType)
+      router.push('/group-call')
+    } catch (e) {
+      Alert.alert('Appel impossible', errorMessage(e))
+    }
+  }
+  return (
+    <View style={[StyleSheet.absoluteFill, styles.call, { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xxl }]}>
+      <View style={{ alignItems: 'center', gap: spacing.md }}>
+        <Ionicons name="people" size={72} color={colors.textMuted} />
+        <Text style={styles.title}>{ring.fromUsername}</Text>
+        <Text style={styles.sub}>{ring.callType === 'video' ? 'Appel vidéo de groupe…' : 'Appel vocal de groupe…'}</Text>
+      </View>
+      <View style={styles.callButtons}>
+        <Pressable style={[styles.round, { backgroundColor: colors.danger }]} onPress={useGroupCall.getState().dismissRing} accessibilityRole="button" accessibilityLabel="Ignorer l'appel de groupe">
+          <Ionicons name="close" size={30} color="#fff" />
+        </Pressable>
+        <Pressable style={[styles.round, { backgroundColor: colors.success }]} onPress={() => void join()} accessibilityRole="button" accessibilityLabel="Rejoindre l'appel de groupe">
+          <Ionicons name={ring.callType === 'video' ? 'videocam' : 'call'} size={30} color="#fff" />
+        </Pressable>
+      </View>
+    </View>
+  )
+}
+
 /** Partage d'écran en cours (appel ou vocal) : bandeau rouge avec Arrêter. La notification
  *  système du service mediaProjection reste aussi affichée hors de l'app. */
 export function ScreenShareBanner() {
@@ -147,7 +186,11 @@ export function ScreenShareBanner() {
   )
 }
 
+/** Barre « appel en cours » / « vocal connecté » quand on navigue ailleurs. */
 export function ActiveCallBar() {
+  const pathname = usePathname()
+  const groupId = useGroupCall((s) => s.groupId)
+  const groupName = useGroupCall((s) => s.groupName)
   const callSharing = useCall((s) => s.screenSharing)
   const voiceSharing = useVoice((s) => s.screenSharing)
   const sharing = callSharing || voiceSharing
@@ -160,8 +203,8 @@ export function ActiveCallBar() {
   const now = useNow(1000, phase === 'connected')
   const insets = useSafeAreaInsets()
 
-  // Le bandeau de partage d'écran prend cette place.
-  if (sharing) return null
+  // Le bandeau de partage d'écran prend cette place ; inutile sur l'écran d'appel lui-même.
+  if (sharing || pathname === '/call' || pathname === '/group-call') return null
   if (phase !== 'idle') {
     return (
       <Pressable style={[styles.activeBar, { top: insets.top }]} onPress={() => router.push('/call')} accessibilityRole="button">
@@ -172,11 +215,19 @@ export function ActiveCallBar() {
       </Pressable>
     )
   }
-  if (voiceChannel && voiceServer && voiceChannelId) {
+  if (groupId) {
+    return (
+      <Pressable style={[styles.activeBar, { top: insets.top }]} onPress={() => router.push('/group-call')} accessibilityRole="button">
+        <Ionicons name="people" size={14} color="#fff" />
+        <Text style={styles.activeText}>Appel de groupe{groupName ? ` : ${groupName}` : ''}</Text>
+      </Pressable>
+    )
+  }
+  if (voiceChannel && voiceServer && voiceChannelId && !pathname.startsWith('/voice/')) {
     return (
       <Pressable
         style={[styles.activeBar, { top: insets.top }]}
-        onPress={() => router.push(`/voice/${voiceServer}/${voiceChannelId}`)}
+        onPress={() => router.push({ pathname: '/voice/[serverId]/[channelId]', params: { serverId: voiceServer, channelId: voiceChannelId, name: voiceChannel } })}
         accessibilityRole="button"
       >
         <Ionicons name="volume-high" size={14} color="#fff" />

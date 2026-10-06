@@ -62,12 +62,25 @@ jest.mock('@/api/voice', () => ({
   voiceApi: { turnServers: jest.fn().mockResolvedValue([]) },
 }))
 
+const mockVoice = { channelId: null as string | null, leave: jest.fn() }
 jest.mock('@/stores/voice', () => ({
-  useVoice: { getState: () => ({ channelId: null }) },
+  useVoice: { getState: () => mockVoice },
 }))
 
+const mockGroupLeave = jest.fn()
+jest.mock('@/stores/groupCall', () => ({
+  useGroupCall: { getState: () => ({ leave: mockGroupLeave }) },
+}))
+
+let mockMyId = '33333333-3333-3333-3333-333333333333'
 jest.mock('@/stores/auth', () => ({
   registerSignOutHook: jest.fn(),
+  getMyId: () => mockMyId,
+}))
+
+jest.mock('@/lib/queryClient', () => ({
+  qk: { conversations: ['conversations'] },
+  queryClient: { getQueryData: () => [{ is_group: false, other_user_id: '22222222-2222-2222-2222-222222222222', avatar: '/uploads/bob.png' }] },
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -75,10 +88,15 @@ jest.mock('@/lib/logger', () => ({
 }))
 
 const mockRealtimeHandlers = new Map<string, (e: RealtimeEvent) => void>()
+const mockOpenHandlers: (() => void)[] = []
 const mockRealtimeSend = jest.fn()
 jest.mock('@/lib/realtime', () => ({
   realtime: {
     isOpen: true,
+    onOpen: (h: () => void) => {
+      mockOpenHandlers.push(h)
+      return () => undefined
+    },
     on: (type: string, handler: (e: RealtimeEvent) => void) => {
       mockRealtimeHandlers.set(type, handler)
       return () => mockRealtimeHandlers.delete(type)
@@ -115,7 +133,12 @@ describe('stores/call (LiveKit)', () => {
   beforeEach(() => {
     jest.resetModules()
     mockRealtimeHandlers.clear()
+    mockOpenHandlers.length = 0
     mockRealtimeSend.mockClear()
+    mockVoice.channelId = null
+    mockVoice.leave.mockClear()
+    mockGroupLeave.mockClear()
+    mockMyId = '33333333-3333-3333-3333-333333333333'
     mockPermissions.mockReset().mockResolvedValue(true)
     mockConnect.mockReset().mockResolvedValue(undefined)
     mockAccess.mockReset().mockImplementation((v: unknown) => (v ? { access: ACCESS } : { error: 'Serveur audio/vidéo indisponible.' }))
@@ -126,6 +149,10 @@ describe('stores/call (LiveKit)', () => {
   })
 
   afterEach(() => {
+    // Minuteurs de sonnerie / connexion annulés : Jest peut se terminer aussitôt.
+    const s = useCall.getState()
+    if (s.incoming) s.decline()
+    s.hangup()
     jest.useRealTimers()
   })
 
@@ -237,6 +264,81 @@ describe('stores/call (LiveKit)', () => {
     expect(s.partnerName).toBeNull()
     expect(s.endReason).toBe('Ton correspondant est hors ligne')
     expect(s.endedWith).toEqual({ name: 'Bob', avatar: '/uploads/bob.png' })
+  })
+
+  it('appel croisé : l’id le plus petit décroche l’appel de l’autre', async () => {
+    mockMyId = '11111111-0000-0000-0000-000000000000' // < PARTNER_ID
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    fire('SESSION_INIT', { session_id: 'moi' })
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+    expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_DECLINE' }))
+    expect(useCall.getState().incoming).toBeNull()
+    expect(useCall.getState().phase).toBe('connecting')
+    fire('DM_CALL_MEDIA', { dm_id: DM_ID, session_id: 'moi', livekit: ACCESS })
+    await flush()
+    expect(mockRooms).toHaveLength(1)
+    // Notre propre appel expire côté serveur : sans effet sur l'appel décroché.
+    fire('DM_CALL_ENDED', { dm_id: DM_ID, from: mockMyId, reason: 'timeout' })
+    expect(useCall.getState().phase).not.toBe('idle')
+  })
+
+  it('appel croisé : l’id le plus grand attend DM_CALL_ACCEPTED sans rien envoyer', async () => {
+    mockMyId = '99999999-0000-0000-0000-000000000000' // > PARTNER_ID
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    mockRealtimeSend.mockClear()
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    expect(mockRealtimeSend).not.toHaveBeenCalled()
+    expect(useCall.getState().phase).toBe('calling')
+    fire('DM_CALL_ACCEPTED', { dm_id: DM_ID, livekit: ACCESS })
+    await flush()
+    expect(mockRooms).toHaveLength(1)
+  })
+
+  it('en vocal : l’appel entrant est proposé (pas de refus automatique) et décrocher quitte le vocal', async () => {
+    mockVoice.channelId = 'salon'
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_DECLINE' }))
+    expect(useCall.getState().incoming?.fromAvatar).toBe('/uploads/bob.png')
+    await useCall.getState().accept()
+    expect(mockVoice.leave).toHaveBeenCalled()
+    expect(mockGroupLeave).toHaveBeenCalled()
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+  })
+
+  it('la sonnerie annulée par l’appelant ne coupe pas un nouvel appel entrant plus tard', () => {
+    jest.useFakeTimers()
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    jest.advanceTimersByTime(10_000)
+    fire('DM_CALL_ENDED', { dm_id: DM_ID, from: PARTNER_ID })
+    expect(useCall.getState().incoming).toBeNull()
+    jest.advanceTimersByTime(10_000)
+    fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
+    jest.advanceTimersByTime(30_000) // 50 s après le premier appel : son minuteur ne doit plus agir
+    expect(useCall.getState().incoming).not.toBeNull()
+    jest.advanceTimersByTime(15_000)
+    expect(useCall.getState().incoming).toBeNull()
+  })
+
+  it('WebSocket rétabli pendant la sonnerie sortante : appel abandonné', async () => {
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    mockOpenHandlers.forEach((h) => h())
+    expect(useCall.getState().phase).toBe('idle')
+    expect(useCall.getState().endReason).toBe('Connexion perdue')
+  })
+
+  it('fin de sonnerie décidée par le serveur : « Pas de réponse »', async () => {
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
+    fire('DM_CALL_ENDED', { dm_id: DM_ID, from: mockMyId, reason: 'timeout' })
+    expect(useCall.getState().endReason).toBe('Pas de réponse')
+  })
+
+  it('caméra refusée : appel vidéo transformé en appel vocal au lieu d’être annulé', async () => {
+    mockPermissions.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'video')
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice' })
+    expect(useCall.getState().callType).toBe('voice')
+    expect(useCall.getState().warning).toMatch(/Caméra/)
   })
 
   it('permission micro refusée : pas d’appel lancé', async () => {

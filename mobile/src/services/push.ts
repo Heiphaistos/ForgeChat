@@ -65,7 +65,9 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
   else if (kind === 'channel' && isId(data.server_id) && isId(data.channel_id))
     router.push(`/channel/${data.server_id}/${data.channel_id}`)
   else if (kind === 'friend_request') router.push('/friends')
-  // kind === 'call' : l'ouverture de l'app suffit, le serveur rejoue l'appel en cours via WS.
+  // kind === 'call' : appel MANQUÉ sans conversation connue. Le serveur ne rejoue pas un appel en
+  // cours à la reconnexion et l'app en arrière-plan (WebSocket fermé) ne sonne pas : il ne pousse
+  // que « Appel manqué » (avec dm_id, routé ci-dessus comme un message privé). Rien à ouvrir.
 }
 
 export function listenNotificationTaps(): () => void {

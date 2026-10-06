@@ -32,6 +32,7 @@ export default function AppLayout() {
       <Stack.Screen name="search" options={{ title: 'Rechercher' }} />
       <Stack.Screen name="voice/[serverId]/[channelId]" options={{ title: 'Salon vocal', ...OWN_BOTTOM }} />
       <Stack.Screen name="call" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false, ...OWN_BOTTOM }} />
+      <Stack.Screen name="group-call" options={{ headerShown: false, presentation: 'fullScreenModal', ...OWN_BOTTOM }} />
       <Stack.Screen name="server/join" options={{ title: 'Rejoindre un serveur', presentation: 'modal' }} />
       <Stack.Screen name="server/create" options={{ title: 'Créer un serveur', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/members" options={{ title: 'Membres' }} />

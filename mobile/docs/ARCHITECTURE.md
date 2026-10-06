@@ -65,7 +65,7 @@ Le mobile n'utilise **jamais** les cookies (`credentials: 'omit'`) : il s'authen
 |---|---|---|
 | Premier plan | Ouvert | Événements temps réel |
 | Arrière-plan (sans appel) | **Fermé volontairement** | Le serveur voit l'utilisateur hors ligne → notifications push |
-| Arrière-plan en appel / vocal | Ouvert (mode audio iOS) | L'appel continue |
+| Arrière-plan en appel / vocal | Ouvert (mode audio iOS, service au premier plan Android `modules/call-service`) | L'appel continue, micro et caméra compris ; refermé à la fin de l'appel |
 | Retour au premier plan | Rouvert | Resynchronisation + verrouillage biométrique si délai dépassé |
 
 ## Messagerie
@@ -128,8 +128,8 @@ appel entrant, bandeau de connexion, appel en cours) sont superposées dans `app
 
 ## Pistes d'évolution
 
-- CallKit (iOS) / ConnectionService (Android) + pushes VoIP pour une vraie UI d'appel système et un
-  service au premier plan Android pour les longs appels en arrière-plan.
+- CallKit (iOS) / ConnectionService (Android) + pushes VoIP pour une vraie UI d'appel système et
+  une sonnerie quand l'app est fermée (aujourd'hui : notification « Appel manqué »).
 - Cache chiffré hors-ligne (lecture des dernières conversations sans réseau).
 - Forums, fils, sondages, administration de serveur, partage d'écran.
 - Chiffrement de bout en bout des DM (le serveur a déjà des endpoints `/e2e`).

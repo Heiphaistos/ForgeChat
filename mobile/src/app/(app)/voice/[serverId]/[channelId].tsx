@@ -5,16 +5,27 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native
 import { RTCView } from '@livekit/react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
+import { Sheet, type SheetAction } from '@/components/Sheet'
 import { StreamViewer, type ViewerSource } from '@/components/StreamViewer'
-import { Button, EmptyState, ErrorState, PasswordField } from '@/components/ui'
+import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { isScreenShareCancel } from '@/features/calls/screenShareLogic'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
+import { useGroupCall } from '@/stores/groupCall'
 import { useVoice, type VoicePeer } from '@/stores/voice'
 import { colors, font, radius, spacing } from '@/theme'
+
+const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
+const VOLUMES = [
+  { label: 'Couper le son', value: 0 },
+  { label: 'Volume 50 %', value: 0.5 },
+  { label: 'Volume normal (100 %)', value: 1 },
+  { label: 'Volume fort (200 %)', value: 2 },
+]
+const QUALITY_LABEL: Record<string, string> = { poor: 'Connexion faible', lost: 'Connexion perdue' }
 
 export default function VoiceScreen() {
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name', 'locked'])
@@ -24,19 +35,26 @@ export default function VoiceScreen() {
   const [password, setPassword] = useState('')
   // Visionneuse plein écran : pair affiché et source choisie (caméra ou écran).
   const [viewing, setViewing] = useState<{ userId: string; key: string } | null>(null)
+  const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
+  const [more, setMore] = useState(false)
   if (!valid) return <ErrorState message="Lien de salon vocal invalide." />
 
-  const name = text.name ?? 'Salon vocal'
-  const here = v.channelId === ids.channelId || (v.joined && v.serverId === ids.serverId && v.channelName === name)
+  // Salon auto-création : channelId devient le salon temporaire, entryChannelId reste celui choisi.
+  const here = !!v.channelId && (v.channelId === ids.channelId || v.entryChannelId === ids.channelId)
+  const name = (here ? v.channelName : null) ?? text.name ?? 'Salon vocal'
   const needsPassword = text.locked === '1'
 
-  const join = async () => {
+  const join = async (listenOnly: boolean) => {
     if (useCall.getState().phase !== 'idle') {
       Alert.alert('Appel en cours', 'Raccroche avant de rejoindre un salon vocal.')
       return
     }
+    if (useGroupCall.getState().groupId) {
+      Alert.alert('Appel de groupe en cours', 'Quitte l’appel de groupe avant de rejoindre un salon vocal.')
+      return
+    }
     try {
-      await v.join(ids.serverId, ids.channelId, name, needsPassword ? password : undefined)
+      await v.join(ids.serverId, ids.channelId, name, needsPassword ? password : undefined, listenOnly)
     } catch (e) {
       Alert.alert('Impossible de rejoindre', errorMessage(e))
     }
@@ -59,78 +77,144 @@ export default function VoiceScreen() {
   const viewedPeer = viewing ? v.peers.find((p) => p.userId === viewing.userId) : undefined
   const viewerSources: ViewerSource[] = viewedPeer ? peerSources(viewedPeer) : []
 
-  type Tile = { key: string; peer: Pick<VoicePeer, 'userId' | 'username' | 'avatar' | 'muted'>; stream: VoicePeer['stream']; screen: boolean }
-  const meTile: Tile = { key: 'me', peer: { userId: me?.id ?? 'me', username: me?.username ?? 'Moi', avatar: me?.avatar ?? null, muted: v.muted }, stream: null, screen: false }
-  const tiles: Tile[] = [meTile]
-  for (const p of v.peers) {
-    tiles.push({ key: p.userId, peer: p, stream: p.video && p.stream?.getVideoTracks().length ? p.stream : null, screen: false })
-    if (p.screenStream?.getVideoTracks().length) tiles.push({ key: `${p.userId}:screen`, peer: p, stream: p.screenStream, screen: true })
+  type Tile = {
+    key: string
+    peer: Pick<VoicePeer, 'userId' | 'username' | 'avatar' | 'muted' | 'handRaised' | 'recording'>
+    stream: VoicePeer['stream']
+    screen: boolean
+    self: boolean
   }
+  const myId = me?.id ?? 'me'
+  const tiles: Tile[] = [
+    {
+      key: 'me',
+      peer: { userId: myId, username: me?.username ?? 'Moi', avatar: me?.avatar ?? null, muted: v.muted, handRaised: v.handRaised, recording: false },
+      stream: v.localVideo,
+      screen: false,
+      self: true,
+    },
+  ]
+  for (const p of v.peers) {
+    tiles.push({ key: p.userId, peer: p, stream: p.video && p.stream?.getVideoTracks().length ? p.stream : null, screen: false, self: false })
+    if (p.screenStream?.getVideoTracks().length) tiles.push({ key: `${p.userId}:screen`, peer: p, stream: p.screenStream, screen: true, self: false })
+  }
+
+  const status =
+    v.mediaStatus === 'reconnecting'
+      ? 'Reconnexion au serveur audio…'
+      : v.joining || v.mediaStatus === 'connecting'
+        ? 'Connexion…'
+        : v.quality
+          ? QUALITY_LABEL[v.quality]
+          : undefined
+
+  const volumeActions: SheetAction[] = volumeOf
+    ? VOLUMES.map((o) => ({
+        label: o.label,
+        icon: o.value === 0 ? 'volume-mute' : 'volume-high',
+        selected: (v.volumes[volumeOf.userId] ?? 1) === o.value,
+        onPress: () => v.setPeerVolume(volumeOf.userId, o.value),
+      }))
+    : []
+  const moreActions: SheetAction[] = [
+    { label: v.handRaised ? 'Baisser la main' : 'Lever la main', icon: 'hand-left-outline', onPress: v.toggleHand },
+    ...(v.video ? [{ label: 'Changer de caméra', icon: 'camera-reverse' as IconName, onPress: v.switchCamera }] : []),
+    ...(screenShareSupported && !v.listenOnly
+      ? [{ label: v.screenSharing ? 'Arrêter le partage d’écran' : 'Partager l’écran', icon: 'tv-outline' as IconName, onPress: () => void toggleShare() }]
+      : []),
+  ]
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgDeep }}>
       <Stack.Screen options={{ title: `🔊 ${name}` }} />
       <StreamViewer sources={viewerSources} initialKey={viewing && viewerSources.length ? viewing.key : null} onClose={() => setViewing(null)} />
+      <Sheet visible={!!volumeOf} onClose={() => setVolumeOf(null)} title={volumeOf ? `Volume de ${volumeOf.username}` : undefined} actions={volumeActions} />
+      <Sheet visible={more} onClose={() => setMore(false)} actions={moreActions} />
       {!here ? (
         <View style={styles.join}>
           <Ionicons name="volume-high" size={56} color={colors.textMuted} />
           <Text style={styles.title}>{name}</Text>
-          {v.error ? <Text style={{ color: colors.danger }}>{v.error}</Text> : null}
+          {v.error ? <Text style={{ color: colors.danger, textAlign: 'center' }}>{v.error}</Text> : null}
           {needsPassword ? (
             <View style={styles.pw}>
               <PasswordField placeholder="Mot de passe du salon" value={password} onChangeText={setPassword} />
             </View>
           ) : null}
-          <Button title="Rejoindre le vocal" icon="mic" onPress={join} loading={v.joining} style={{ alignSelf: 'stretch' }} />
+          <Button title="Rejoindre le vocal" icon="mic" onPress={() => void join(false)} loading={v.joining} style={{ alignSelf: 'stretch' }} />
+          <Button title="Écouter seulement" icon="headset" variant="ghost" onPress={() => void join(true)} disabled={v.joining} />
         </View>
       ) : (
         <>
+          {v.error ? <Banner text={v.error} tone="danger" onPress={v.dismiss} /> : v.notice ? <Banner text={v.notice} tone="info" onPress={v.dismiss} /> : null}
+          {status ? <Banner text={status} tone="warning" /> : null}
           <FlatList
             data={tiles}
             keyExtractor={(t) => t.key}
             numColumns={2}
             contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
             columnWrapperStyle={{ gap: spacing.md }}
-            ListEmptyComponent={<EmptyState icon="mic-outline" title="Connexion…" />}
             renderItem={({ item }) => {
               const label = item.screen ? `Écran de ${item.peer.username}` : item.peer.username
-              const open = item.stream ? () => setViewing({ userId: item.peer.userId, key: item.screen ? 'screen' : 'camera' }) : undefined
+              const open = item.stream && !item.self ? () => setViewing({ userId: item.peer.userId, key: item.screen ? 'screen' : 'camera' }) : undefined
+              const speaking = !item.screen && v.speaking.includes(item.peer.userId)
+              const reaction = item.screen ? undefined : v.reactions[item.peer.userId]
+              const peer = item.self || item.screen ? undefined : v.peers.find((p) => p.userId === item.peer.userId)
+              const volume = v.volumes[item.peer.userId]
               return (
                 <Pressable
-                  style={styles.tile}
+                  style={[styles.tile, speaking && styles.speaking]}
                   onPress={open}
-                  disabled={!open}
-                  accessibilityRole={open ? 'button' : undefined}
-                  accessibilityLabel={open ? `${label}, afficher en plein écran` : label}
+                  onLongPress={peer ? () => setVolumeOf(peer) : undefined}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label}${speaking ? ', parle' : ''}${item.peer.handRaised ? ', main levée' : ''}`}
+                  accessibilityHint={peer ? 'Appui long : régler le volume' : undefined}
                 >
                   {item.stream ? (
-                    <RTCView streamURL={item.stream.toURL()} style={StyleSheet.absoluteFill} objectFit={item.screen ? 'contain' : 'cover'} />
+                    <RTCView
+                      streamURL={item.stream.toURL()}
+                      style={StyleSheet.absoluteFill}
+                      objectFit={item.screen ? 'contain' : 'cover'}
+                      mirror={item.self && v.facing === 'user'}
+                    />
                   ) : (
                     <Avatar uri={item.peer.avatar} name={item.peer.username} size={64} />
                   )}
+                  {reaction ? <Text style={styles.reaction}>{reaction}</Text> : null}
                   <View style={styles.tileLabel}>
                     {item.screen ? <Ionicons name="tv-outline" size={12} color="#fff" /> : null}
                     {!item.screen && item.peer.muted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
+                    {!item.screen && item.peer.handRaised ? <Text style={styles.tileName}>✋</Text> : null}
+                    {item.peer.recording ? <Ionicons name="radio-button-on" size={12} color={colors.danger} accessibilityLabel="Enregistre" /> : null}
+                    {volume !== undefined && volume !== 1 ? <Ionicons name={volume === 0 ? 'volume-mute' : 'volume-high'} size={12} color={colors.warning} /> : null}
                     <Text style={styles.tileName} numberOfLines={1}>
-                      {label}
+                      {item.self ? `${label} (toi)` : label}
                     </Text>
                   </View>
                 </Pressable>
               )
             }}
           />
+          <View style={styles.reactions}>
+            {REACTIONS.map((emoji) => (
+              <Pressable key={emoji} onPress={() => v.react(emoji)} accessibilityRole="button" accessibilityLabel={`Réagir ${emoji}`} hitSlop={4}>
+                <Text style={{ fontSize: 22 }}>{emoji}</Text>
+              </Pressable>
+            ))}
+          </View>
           <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.md }]}>
-            <Control icon={v.muted ? 'mic-off' : 'mic'} label={v.muted ? 'Réactiver le micro' : 'Couper le micro'} onPress={v.toggleMute} active={v.muted} />
+            <Control
+              icon={v.muted ? 'mic-off' : 'mic'}
+              label={v.muted ? 'Réactiver le micro' : 'Couper le micro'}
+              onPress={v.toggleMute}
+              active={v.muted}
+              dim={v.speakLocked || v.listenOnly}
+            />
             <Control icon={v.deafened ? 'volume-mute' : 'headset'} label="Sourdine" onPress={v.toggleDeafen} active={v.deafened} />
-            <Control icon={v.speaker ? 'volume-high' : 'ear-outline'} label="Haut-parleur" onPress={v.toggleSpeaker} />
-            {screenShareSupported ? (
-              <Control
-                icon="tv-outline"
-                label={v.screenSharing ? 'Arrêter le partage d’écran' : 'Partager l’écran'}
-                onPress={() => void toggleShare()}
-                active={v.screenSharing}
-              />
+            {!v.listenOnly ? (
+              <Control icon={v.video ? 'videocam' : 'videocam-off'} label={v.video ? 'Couper la caméra' : 'Activer la caméra'} onPress={() => void v.toggleCamera()} active={v.video} />
             ) : null}
+            <Control icon={v.speaker ? 'volume-high' : 'ear-outline'} label="Haut-parleur" onPress={v.toggleSpeaker} />
+            <Control icon="ellipsis-horizontal" label="Plus d’options" onPress={() => setMore(true)} active={v.handRaised || v.screenSharing} />
             <Control
               icon="call"
               label="Quitter le vocal"
@@ -155,13 +239,32 @@ function peerSources(p: VoicePeer): ViewerSource[] {
   return out
 }
 
-function Control({ icon, label, onPress, active, danger }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; onPress: () => void; active?: boolean; danger?: boolean }) {
+function Banner({ text, tone, onPress }: { text: string; tone: 'danger' | 'info' | 'warning'; onPress?: () => void }) {
+  const bg = tone === 'danger' ? colors.danger : tone === 'warning' ? colors.warning : colors.primary
+  const fg = tone === 'warning' ? '#000' : '#fff'
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={[styles.banner, { backgroundColor: bg }]}
+      accessibilityRole={onPress ? 'button' : 'text'}
+      accessibilityLiveRegion="polite"
+      accessibilityHint={onPress ? 'Masquer le message' : undefined}
+    >
+      <Text style={[styles.bannerText, { color: fg }]}>{text}</Text>
+      {onPress ? <Ionicons name="close" size={16} color={fg} /> : null}
+    </Pressable>
+  )
+}
+
+function Control({ icon, label, onPress, active, danger, dim }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean; dim?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[styles.ctrl, active && { backgroundColor: colors.text }, danger && { backgroundColor: colors.danger }]}
+      accessibilityState={{ selected: !!active }}
+      style={[styles.ctrl, active && { backgroundColor: colors.text }, danger && { backgroundColor: colors.danger }, dim && { opacity: 0.5 }]}
     >
       <Ionicons name={icon} size={24} color={active ? colors.bgDeep : '#fff'} />
     </Pressable>
@@ -172,9 +275,33 @@ const styles = StyleSheet.create({
   join: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
   title: { color: colors.text, fontSize: font.xl, fontWeight: '800' },
   pw: { alignSelf: 'stretch' },
-  tile: { flex: 1, aspectRatio: 1, backgroundColor: colors.bgAlt, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  bannerText: { flex: 1, fontSize: font.sm, fontWeight: '600' },
+  tile: {
+    flex: 1,
+    aspectRatio: 1,
+    backgroundColor: colors.bgAlt,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  speaking: { borderColor: colors.success },
+  reaction: { position: 'absolute', top: 6, right: 8, fontSize: 28 },
   tileLabel: { position: 'absolute', left: 8, bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   tileName: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },
-  controls: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingTop: spacing.md, backgroundColor: colors.bgAlt },
-  ctrl: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.bgHover, alignItems: 'center', justifyContent: 'center' },
+  reactions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bgAlt },
+  controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: colors.bgAlt },
+  ctrl: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.bgHover, alignItems: 'center', justifyContent: 'center' },
 })

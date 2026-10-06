@@ -5,10 +5,13 @@ import { voiceApi } from '@/api/voice'
 import type { LiveKitAccess } from '@/config/livekitUrl'
 import { canShareInCall } from '@/features/calls/screenShareLogic'
 import { logger } from '@/lib/logger'
+import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf } from '@/services/livekit'
 import { ensureMediaPermissions, ringtones } from '@/services/media'
-import { registerSignOutHook } from './auth'
+import type { ConversationSummary } from '@/types/models'
+import { getMyId, registerSignOutHook } from './auth'
+import { useGroupCall } from './groupCall'
 import { useVoice } from './voice'
 
 /**
@@ -21,6 +24,7 @@ import { useVoice } from './voice'
  *                                   autres sessions de B ◀── DM_CALL_TAKEN
  *   A et B rejoignent la salle LiveKit (identité = id utilisateur) et publient micro (+ caméra).
  *   DM_CALL_HANGUP / DM_CALL_DECLINE ⇒ DM_CALL_ENDED / DM_CALL_DECLINED
+ *   Appel croisé (A et B s'appellent en même temps) : l'id le plus petit décroche l'appel de l'autre.
  *
  * Le serveur ne délivre l'accès LiveKit qu'entre deux utilisateurs ayant une conversation commune.
  */
@@ -31,6 +35,7 @@ export type CallPhase = 'idle' | 'calling' | 'connecting' | 'connected'
 export interface IncomingCall {
   fromUserId: string
   fromUsername: string
+  fromAvatar: string | null
   dmId: string
   callType: CallType
   receivedAt: number
@@ -46,6 +51,9 @@ interface CallState {
   /** Correspondant du dernier appel terminé avec un motif : l'écran de fin garde son nom et son avatar. */
   endedWith: { name: string; avatar: string | null } | null
   callType: CallType
+  facing: 'user' | 'environment'
+  /** Avertissement non bloquant (micro ou caméra indisponible…). */
+  warning: string | null
   /** Notre caméra (aperçu), null si coupée ou en partage d'écran. */
   localVideo: MediaStream | null
   /** Vidéo du correspondant : son écran partagé s'il y en a un, sinon sa caméra. */
@@ -71,6 +79,8 @@ interface CallState {
 
 let room: Room | null = null
 let ringTimeout: ReturnType<typeof setTimeout> | null = null
+/** Sonnerie d'un appel entrant : minuteur distinct, un appel entrant peut arriver pendant un appel. */
+let incomingTimeout: ReturnType<typeof setTimeout> | null = null
 let connectTimeout: ReturnType<typeof setTimeout> | null = null
 let partnerGoneTimer: ReturnType<typeof setTimeout> | null = null
 let busy = false
@@ -88,6 +98,20 @@ const RING_TIMEOUT_MS = 45_000
 const CONNECT_TIMEOUT_MS = 30_000
 /** Coupure du correspondant (réseau, app fermée) : délai pour revenir, comme le web. */
 const PARTNER_GONE_MS = 20_000
+const CAMERA_OPTIONS = { resolution: { width: 640, height: 480, frameRate: 24 } }
+
+/** Avatar d'un correspondant d'après les conversations déjà chargées (DM_CALL_INCOMING n'en a pas). */
+function avatarOf(userId: string): string | null {
+  const convs = queryClient.getQueryData<ConversationSummary[]>(qk.conversations)
+  const dm = convs?.find((c) => !c.is_group && c.other_user_id === userId)
+  return dm && !dm.is_group ? dm.avatar : null
+}
+
+/** Micro (+ caméra) demandés ; caméra refusée ⇒ appel vocal plutôt qu'un appel annulé. */
+async function mediaAccess(type: CallType): Promise<CallType | null> {
+  if (await ensureMediaPermissions(type === 'video')) return type
+  return type === 'video' && (await ensureMediaPermissions(false)) ? 'voice' : null
+}
 
 export const useCall = create<CallState>((set, get) => {
   const clearTimers = () => {
@@ -106,7 +130,7 @@ export const useCall = create<CallState>((set, get) => {
     room = null
     if (r) void leaveRoom(r)
     ringtones.stopRingback()
-    ringtones.stopRinging()
+    if (!get().incoming) ringtones.stopRinging()
     if (get().phase !== 'idle') {
       ringtones.keepScreenOn(false)
       void callAudio.stop()
@@ -119,6 +143,7 @@ export const useCall = create<CallState>((set, get) => {
       partnerName: null,
       partnerAvatar: null,
       endedWith: reason && partnerName ? { name: partnerName, avatar: partnerAvatar } : null,
+      facing: 'user',
       localVideo: null,
       remoteVideo: null,
       micMuted: false,
@@ -198,7 +223,7 @@ export const useCall = create<CallState>((set, get) => {
         if (reason !== DisconnectReason.CLIENT_INITIATED) cleanup('Connexion au serveur audio/vidéo perdue')
       })
     try {
-      await callAudio.start(get().speaker)
+      await callAudio.start(get().speaker, `Appel avec ${get().partnerName ?? 'ton correspondant'}`)
       const turn = await voiceApi.turnServers()
       await r.connect(access.url, access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
     } catch (err) {
@@ -216,16 +241,18 @@ export const useCall = create<CallState>((set, get) => {
     }
     try {
       await r.localParticipant.setMicrophoneEnabled(!get().micMuted)
-      if (get().callType === 'video') {
-        try {
-          await r.localParticipant.setCameraEnabled(true, { facingMode: 'user', resolution: { width: 640, height: 480, frameRate: 24 } })
-        } catch (err) {
-          logger.warn('call', 'caméra indisponible, repli audio', err)
-          set({ callType: 'voice', camOff: true })
-        }
-      }
     } catch (err) {
+      // iOS : micro refusé dans les réglages (pas de demande préalable comme sur Android).
       logger.warn('call', 'publication micro', err)
+      set({ micMuted: true, warning: 'Micro inaccessible : autorise-le dans les réglages du téléphone.' })
+    }
+    if (get().callType === 'video') {
+      try {
+        await r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS })
+      } catch (err) {
+        logger.warn('call', 'caméra indisponible, repli audio', err)
+        set({ callType: 'voice', camOff: true, warning: 'Caméra indisponible : appel vocal.' })
+      }
     }
     if (gen !== callGeneration) return
     const pid = get().partnerId
@@ -256,31 +283,50 @@ export const useCall = create<CallState>((set, get) => {
     mySessionId = typeof e.session_id === 'string' ? e.session_id : null
   })
 
+  const clearIncoming = () => {
+    if (incomingTimeout) clearTimeout(incomingTimeout)
+    incomingTimeout = null
+    ringtones.stopRinging()
+    set({ incoming: null })
+  }
+
   realtime.on('DM_CALL_INCOMING', (e: RealtimeEvent) => {
     const from = typeof e.from === 'string' ? e.from : null
     const dmId = typeof e.dm_id === 'string' ? e.dm_id : null
     if (!from || !dmId || !UUID_RE.test(from) || !UUID_RE.test(dmId)) return
     const s = get()
-    if (s.phase !== 'idle' || s.incoming || useVoice.getState().channelId) {
-      // Déjà en appel ou dans un salon vocal : occupé.
-      realtime.send({ type: 'DM_CALL_DECLINE', to: from, dm_id: dmId })
+    if (s.phase === 'calling' && from === s.partnerId && dmId === s.dmId) {
+      // Appel croisé : l'id le plus petit décroche l'appel de l'autre, l'autre reçoit DM_CALL_ACCEPTED.
+      const me = getMyId()
+      if (me && me < from) {
+        if (ringTimeout) clearTimeout(ringTimeout)
+        ringTimeout = null
+        ringtones.stopRingback()
+        set({ phase: 'connecting' })
+        awaitingMedia = true
+        realtime.send({ type: 'DM_CALL_ACCEPT', to: from, dm_id: dmId })
+        armConnectTimeout()
+      }
       return
     }
+    // Un seul appel entrant à la fois. Déjà en appel ou en vocal : l'appel est quand même proposé
+    // (pas de refus automatique, qui couperait aussi la sonnerie des autres appareils du compte).
+    if (s.incoming || (s.phase !== 'idle' && s.partnerId === from)) return
+    if (incomingTimeout) clearTimeout(incomingTimeout)
     set({
       incoming: {
         fromUserId: from,
         fromUsername: typeof e.from_username === 'string' ? e.from_username.slice(0, 64) : 'Inconnu',
+        fromAvatar: avatarOf(from),
         dmId,
         callType: e.call_type === 'video' ? 'video' : 'voice',
         receivedAt: Date.now(),
       },
     })
     ringtones.startRinging()
-    ringTimeout = setTimeout(() => {
-      if (get().incoming?.dmId === dmId) {
-        ringtones.stopRinging()
-        set({ incoming: null })
-      }
+    incomingTimeout = setTimeout(() => {
+      incomingTimeout = null
+      if (get().incoming?.dmId === dmId) clearIncoming()
     }, RING_TIMEOUT_MS)
   })
 
@@ -307,23 +353,24 @@ export const useCall = create<CallState>((set, get) => {
   realtime.on('DM_CALL_TAKEN', (e) => {
     if (typeof e.session_id === 'string' && e.session_id === mySessionId) return
     const inc = get().incoming
-    if (inc && e.dm_id === inc.dmId) {
-      if (ringTimeout) clearTimeout(ringTimeout)
-      ringTimeout = null
-      ringtones.stopRinging()
-      set({ incoming: null })
-    }
+    if (inc && e.dm_id === inc.dmId) clearIncoming()
   })
 
   const remoteEnded = (reason: string) => (e: RealtimeEvent) => {
     const inc = get().incoming
-    if (inc && e.dm_id === inc.dmId) {
-      ringtones.stopRinging()
-      set({ incoming: null })
+    if (inc && e.dm_id === inc.dmId && (!e.from || e.from === inc.fromUserId)) {
+      clearIncoming()
       return
     }
     if (e.dm_id && e.dm_id !== get().dmId) return
-    if (get().phase !== 'idle') cleanup(reason)
+    const phase = get().phase
+    if (e.reason === 'timeout') {
+      // Fin de sonnerie décidée par le serveur. Déjà décroché (appel croisé : notre propre appel
+      // sonne encore côté serveur) : sans objet.
+      if (phase === 'calling') cleanup('Pas de réponse')
+      return
+    }
+    if (phase !== 'idle') cleanup(reason)
   }
   realtime.on('DM_CALL_ENDED', remoteEnded('Appel terminé'))
   realtime.on('DM_CALL_DECLINED', remoteEnded('Appel refusé'))
@@ -331,6 +378,12 @@ export const useCall = create<CallState>((set, get) => {
     if (get().phase === 'idle') return
     if (e.dm_id && e.dm_id !== get().dmId) return
     cleanup(e.reason === 'offline' ? 'Ton correspondant est hors ligne' : e.reason === 'rate_limited' ? 'Trop d’appels, patiente un peu' : 'Appel impossible')
+  })
+
+  // WebSocket rétabli pendant que l'on sonnait : le serveur a classé l'appel « manqué » à la
+  // coupure, l'autre côté a cessé de sonner. Le média d'un appel décroché, lui, survit (SFU).
+  realtime.onOpen(() => {
+    if (get().phase === 'calling') cleanup('Connexion perdue')
   })
 
   return {
@@ -342,6 +395,8 @@ export const useCall = create<CallState>((set, get) => {
     partnerAvatar: null,
     endedWith: null,
     callType: 'voice',
+    facing: 'user',
+    warning: null,
     localVideo: null,
     remoteVideo: null,
     micMuted: false,
@@ -358,13 +413,15 @@ export const useCall = create<CallState>((set, get) => {
       const gen = callGeneration
       // Phase posée AVANT les await : un DM_CALL_ERROR/ENDED distant ou un hangup() local pendant
       // l'attente des permissions doit voir phase !== 'idle' et appeler cleanup().
-      set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null, speaker: type === 'video' })
+      set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null, warning: null, speaker: type === 'video' })
       try {
-        if (!(await ensureMediaPermissions(type === 'video'))) throw new Error('Permission micro/caméra refusée')
+        const granted = await mediaAccess(type)
+        if (!granted) throw new Error('Permission micro refusée')
         if (gen !== callGeneration) return
+        if (granted !== type) set({ callType: granted, speaker: false, warning: 'Caméra refusée : appel vocal.' })
         ringtones.keepScreenOn(true)
         ringtones.startRingback()
-        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
+        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: granted })
         ringTimeout = setTimeout(() => {
           if (get().phase === 'calling') {
             realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
@@ -382,10 +439,14 @@ export const useCall = create<CallState>((set, get) => {
     accept: async () => {
       const inc = get().incoming
       if (!inc || busy) return
+      // Décrocher met fin à l'appel, au vocal ou à l'appel de groupe en cours.
+      if (get().phase !== 'idle') get().hangup()
+      useVoice.getState().leave()
+      useGroupCall.getState().leave()
       busy = true
       const gen = callGeneration
-      if (ringTimeout) clearTimeout(ringTimeout)
-      ringTimeout = null
+      if (incomingTimeout) clearTimeout(incomingTimeout)
+      incomingTimeout = null
       ringtones.stopRinging()
       set({
         incoming: null,
@@ -393,15 +454,18 @@ export const useCall = create<CallState>((set, get) => {
         dmId: inc.dmId,
         partnerId: inc.fromUserId,
         partnerName: inc.fromUsername,
-        partnerAvatar: null,
+        partnerAvatar: inc.fromAvatar,
         endedWith: null,
         callType: inc.callType,
         endReason: null,
+        warning: null,
         speaker: inc.callType === 'video',
       })
       try {
-        if (!(await ensureMediaPermissions(inc.callType === 'video'))) throw new Error('Micro inaccessible — appel refusé')
+        const granted = await mediaAccess(inc.callType)
+        if (!granted) throw new Error('Micro inaccessible — appel refusé')
         if (gen !== callGeneration) return
+        if (granted !== inc.callType) set({ callType: granted, speaker: false, warning: 'Caméra refusée : appel vocal.' })
         ringtones.keepScreenOn(true)
         awaitingMedia = true
         realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
@@ -420,11 +484,8 @@ export const useCall = create<CallState>((set, get) => {
     decline: () => {
       const inc = get().incoming
       if (!inc) return
-      if (ringTimeout) clearTimeout(ringTimeout)
-      ringTimeout = null
-      ringtones.stopRinging()
       realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
-      set({ incoming: null })
+      clearIncoming()
     },
 
     hangup: () => {
@@ -440,11 +501,13 @@ export const useCall = create<CallState>((set, get) => {
     },
 
     toggleCam: () => {
-      if (get().screenSharing) return
+      const r = room
+      if (get().screenSharing || !r) return
       const off = !get().camOff
       set({ camOff: off })
-      void room?.localParticipant
-        .setCameraEnabled(!off)
+      // Caméra dépubliée plutôt que coupée (le web afficherait une vidéo noire), puis republiée
+      // avec la caméra choisie (avant / arrière).
+      void (off ? unpublishCamera(r) : r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS }))
         .then(refreshLocal)
         .catch((e: unknown) => logger.warn('call', 'caméra', e))
     },
@@ -453,7 +516,9 @@ export const useCall = create<CallState>((set, get) => {
       const track = room?.localParticipant.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack as
         | { _switchCamera?: () => void }
         | undefined
-      track?._switchCamera?.()
+      if (!track?._switchCamera) return
+      track._switchCamera()
+      set((s) => ({ facing: s.facing === 'user' ? 'environment' : 'user' }))
     },
 
     toggleSpeaker: () => {
@@ -474,7 +539,7 @@ export const useCall = create<CallState>((set, get) => {
       try {
         await r.localParticipant.setScreenShareEnabled(true)
       } catch (e) {
-        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true).catch(() => undefined)
+        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS }).catch(() => undefined)
         refreshLocal()
         throw e
       }
@@ -490,7 +555,7 @@ export const useCall = create<CallState>((set, get) => {
       if (!r) return
       void (async () => {
         await stopScreenShare(r)
-        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true).catch(() => undefined)
+        if (camBeforeShare && room === r) await r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS }).catch(() => undefined)
         refreshLocal()
       })()
     },

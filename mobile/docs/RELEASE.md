@@ -101,5 +101,14 @@ Google Play demande une **déclaration des services au premier plan** dans la Pl
 - la capture s'arrête quand l'utilisateur appuie sur « Arrêter » (bandeau de l'app ou
   notification système), raccroche ou quitte le salon.
 
-Sans cette déclaration, la mise en ligne sur le Play Store est refusée. Les APK distribués hors
+### Services au premier plan « microphone » et « camera » (appels et vocal en arrière-plan)
+
+Pendant un appel, un appel de groupe ou un salon vocal, `modules/call-service` (module Expo local)
+démarre un service au premier plan de type `microphone` (+ `camera` si la permission est accordée),
+avec la notification « Appel en cours » : sans lui, Android coupe le micro et la caméra dès que
+l'app passe en arrière-plan ou que l'écran se verrouille. Permissions `FOREGROUND_SERVICE_MICROPHONE`
+et `FOREGROUND_SERVICE_CAMERA` (manifeste du module). Même déclaration Play Console : « appel
+audio/vidéo en cours, démarré par l'utilisateur, arrêté en raccrochant ou en quittant le salon ».
+
+Sans ces déclarations, la mise en ligne sur le Play Store est refusée. Les APK distribués hors
 Play Store (bêta) ne sont pas concernés.
