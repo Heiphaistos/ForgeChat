@@ -17,6 +17,14 @@ describe('modules/call-service', () => {
     expect(manifest).toContain('android:exported="false"')
   })
 
+  it("expose restart() (changement de thème) avec un retour explicite et l'arrêt du service", () => {
+    const kt = readFileSync(join(root, 'android', 'src', 'main', 'java', 'com', 'forgechat', 'callservice', 'CallServiceModule.kt'), 'utf8')
+    const body = kt.slice(kt.indexOf('Function("restart")'))
+    expect(body).toContain('Intent.makeRestartActivityTask')
+    expect(body.indexOf('stopService')).toBeLessThan(body.indexOf('exit(0)'))
+    expect(body).toMatch(/exit\(0\)\s*null/)
+  })
+
   it('est un module Expo Android lié automatiquement', () => {
     const config = JSON.parse(readFileSync(join(root, 'expo-module.config.json'), 'utf8'))
     expect(config.android.modules).toEqual(['com.forgechat.callservice.CallServiceModule'])

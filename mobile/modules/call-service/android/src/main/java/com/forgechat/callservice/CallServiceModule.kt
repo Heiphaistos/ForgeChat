@@ -6,7 +6,10 @@ import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
-/** Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts). */
+/**
+ * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
+ * et redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement).
+ */
 class CallServiceModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ForgeCallService")
@@ -27,6 +30,20 @@ class CallServiceModule : Module() {
     Function("stop") {
       val ctx = appContext.reactContext ?: return@Function null
       ctx.stopService(Intent(ctx, CallForegroundService::class.java))
+      null
+    }
+
+    // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS
+    // repart de zéro et relit le thème. Le service d'appel est arrêté avant, pour ne pas survivre seul.
+    Function("restart") {
+      val ctx = appContext.reactContext ?: return@Function null
+      val launch = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return@Function null
+      val component = launch.component ?: return@Function null
+      ctx.stopService(Intent(ctx, CallForegroundService::class.java))
+      // Depuis l'activité visible si possible (lancements en arrière-plan restreints sur Android 10+).
+      (appContext.currentActivity ?: ctx).startActivity(Intent.makeRestartActivityTask(component))
+      appContext.currentActivity?.finishAffinity()
+      Runtime.getRuntime().exit(0)
       null
     }
   }
