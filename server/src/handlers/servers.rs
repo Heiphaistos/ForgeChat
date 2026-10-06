@@ -380,19 +380,15 @@ pub async fn join_server(
     Extension(claims): Extension<Claims>,
     Path(code): Path<String>,
 ) -> Result<Json<Server>> {
-    // Rate limit : 10 tentatives d'invitation / 10min par user (anti-énumération)
+    // Anti-énumération : 10 codes INVALIDES / 10 min par utilisateur. Les jonctions réussies ne
+    // comptent pas (rejoindre 10 serveurs d'affilée sur invitation est un usage normal).
+    let join_key = format!("join_attempts:{}", claims.sub);
     {
         use redis::AsyncCommands;
-        let key = format!("join_attempts:{}", claims.sub);
         let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let count = count.unwrap_or(0);
-        if count >= 10 {
+        let count: Option<i64> = redis.get(&join_key).await.unwrap_or(None);
+        if count.unwrap_or(0) >= 10 {
             return Err(AppError::TooManyRequests);
-        }
-        let _: () = redis.incr(&key, 1).await.unwrap_or(());
-        if count == 0 {
-            let _: () = redis.expire(&key, 600).await.unwrap_or(());
         }
     }
     let invite = sqlx::query_as::<_, crate::models::server::Invite>(
@@ -421,14 +417,25 @@ pub async fn join_server(
     let server_id = match &invite {
         Some(inv) => inv.server_id,
         // … ou l'adresse personnalisée choisie par le propriétaire (invitation volontairement publique).
-        None => sqlx::query_scalar::<_, Uuid>(
+        None => match sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM servers WHERE (invite_code=$1 AND is_public=true)
                 OR (vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)) LIMIT 1"
         )
             .bind(&code)
             .fetch_optional(&state.db)
             .await?
-            .ok_or_else(|| AppError::NotFound("Invitation invalide".into()))?,
+        {
+            Some(id) => id,
+            None => {
+                use redis::AsyncCommands;
+                let mut redis = state.redis.lock().await;
+                let n: i64 = redis.incr(&join_key, 1).await.unwrap_or(1);
+                if n == 1 {
+                    let _: () = redis.expire(&join_key, 600).await.unwrap_or(());
+                }
+                return Err(AppError::NotFound("Invitation invalide".into()));
+            }
+        },
     };
 
     if let Some(inv) = &invite {
