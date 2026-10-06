@@ -5,12 +5,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
 import { formatDay, formatTime } from '@/lib/format'
-import { mentionsUser } from '@/lib/markdown'
+import { mentionsUser, previewUrl } from '@/lib/markdown'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
+import { LinkPreview } from './LinkPreview'
 import { PollCard } from './PollCard'
 import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
@@ -31,6 +32,10 @@ interface Props {
   /** Fil ouvert depuis ce message (salons). */
   thread?: ThreadSummary
   onOpenThread?: (m: ChatMessage) => void
+  /** Appui long sur une réaction : qui a réagi (salons et DM). */
+  onReactionLongPress?: (m: ChatMessage, emoji: string) => void
+  /** Traduction demandée depuis le menu du message. */
+  translation?: string
 }
 
 /**
@@ -100,6 +105,17 @@ function ReactionEmoji({ emoji }: { emoji: string }) {
   return <Text style={{ fontSize: 15 }}>{emoji}</Text>
 }
 
+/** Texte du message, puis l'aperçu de son premier lien (pas pendant l'envoi). */
+function TextWithPreview({ content, myName, pending }: { content: string; myName: string; pending?: boolean }) {
+  const url = pending ? null : previewUrl(content)
+  return (
+    <>
+      <MessageText content={content} myName={myName} />
+      {url ? <LinkPreview url={url} /> : null}
+    </>
+  )
+}
+
 export const MessageItem = memo(function MessageItem({
   message: m,
   grouped,
@@ -114,6 +130,8 @@ export const MessageItem = memo(function MessageItem({
   channelId,
   thread,
   onOpenThread,
+  onReactionLongPress,
+  translation,
 }: Props) {
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
@@ -168,7 +186,14 @@ export const MessageItem = memo(function MessageItem({
 
           {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
-              {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <MessageText content={m.content} myName={myName} />}
+              {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview content={m.content} myName={myName} pending={m.pending} />}
+            </View>
+          ) : null}
+
+          {translation ? (
+            <View style={styles.translation} accessibilityLabel={`Traduction : ${translation}`}>
+              <Text style={styles.meta}>Traduction</Text>
+              <MessageText content={translation} myName={myName} />
             </View>
           ) : null}
 
@@ -212,6 +237,8 @@ export const MessageItem = memo(function MessageItem({
                 <Pressable
                   key={r.emoji}
                   onPress={() => onReact(m, r.emoji)}
+                  onLongPress={onReactionLongPress ? () => onReactionLongPress(m, r.emoji) : undefined}
+                  accessibilityHint={onReactionLongPress ? 'Appui long pour voir qui a réagi' : undefined}
                   style={[styles.reaction, r.me && styles.reactionMine]}
                   accessibilityRole="button"
                   accessibilityLabel={`${r.emoji} ${r.count}${r.me ? ', ta réaction' : ''}`}
@@ -241,6 +268,7 @@ const styles = StyleSheet.create({
   replyText: { color: colors.textMuted, fontSize: font.sm, flex: 1 },
   forward: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   meta: { color: colors.textFaint, fontSize: font.xs, marginTop: 2 },
+  translation: { marginTop: 4, paddingLeft: spacing.sm, borderLeftWidth: 2, borderLeftColor: colors.primary },
   thread: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: colors.bgAlt, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5 },
   threadTitle: { color: colors.text, fontSize: font.sm, fontWeight: '600', flexShrink: 1 },
   failed: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },

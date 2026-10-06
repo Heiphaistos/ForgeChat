@@ -61,6 +61,7 @@ export default function GroupScreen() {
                 label="Messages épinglés"
                 onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'group', groupId: ids.groupId }) })}
               />
+              <IconButton icon="search-outline" label="Rechercher dans la conversation" onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'group', groupId: ids.groupId }) })} />
               <IconButton icon="call-outline" label={inCall ? 'Rejoindre l’appel de groupe' : 'Appel vocal de groupe'} onPress={() => void call('voice')} />
               <IconButton icon="videocam-outline" label={inCall ? 'Rejoindre l’appel avec la caméra' : 'Appel vidéo de groupe'} onPress={() => void call('video')} />
               <IconButton
