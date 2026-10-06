@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Stack, router } from 'expo-router'
+import { useEffect } from 'react'
 import { Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { ErrorState, IconButton } from '@/components/ui'
@@ -7,6 +8,7 @@ import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
+import { useLastChannel } from '@/stores/lastChannel'
 import { colors, font } from '@/theme'
 
 export default function ChannelScreen() {
@@ -16,6 +18,10 @@ export default function ChannelScreen() {
     queryFn: () => serversApi.channels(ids.serverId),
     enabled: valid,
   })
+  // Dernier salon consulté de ce serveur : rouvert au prochain appui sur le serveur dans le rail.
+  useEffect(() => {
+    if (valid) useLastChannel.getState().remember(ids.serverId, ids.channelId)
+  }, [valid, ids.serverId, ids.channelId])
   if (!valid) return <ErrorState message="Lien de salon invalide." />
   const channel = channels.data?.find((c) => c.id === ids.channelId)
   const name = channel?.name ?? text.name ?? 'salon'

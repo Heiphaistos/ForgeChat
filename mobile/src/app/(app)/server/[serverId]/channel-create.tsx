@@ -1,29 +1,32 @@
 import { useQuery } from '@tanstack/react-query'
-import { router } from 'expo-router'
+import { Stack, router } from 'expo-router'
 import { useState } from 'react'
 import { ScrollView, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Button, ErrorState, T, TextField } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
-import { useRouteParams } from '@/lib/params'
+import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
 
 const TYPES = [
   { type: 'text', label: 'Textuel', icon: 'chatbubble-outline' },
   { type: 'voice', label: 'Vocal', icon: 'volume-medium' },
+  { type: 'category', label: 'Catégorie', icon: 'folder-open-outline' },
 ] as const
 
+type Kind = (typeof TYPES)[number]['type']
+
 export default function CreateChannelScreen() {
-  const { valid, ids } = useRouteParams(['serverId'] as const)
+  const { valid, ids, text } = useRouteParams(['serverId'] as const, ['type', 'categoryId'])
   const categories = useQuery({
     queryKey: qk.categories(ids.serverId ?? ''),
     queryFn: () => serversApi.categories(ids.serverId!),
     enabled: valid,
   })
   const [name, setName] = useState('')
-  const [type, setType] = useState<'text' | 'voice'>('text')
-  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [type, setType] = useState<Kind>(text.type === 'category' ? 'category' : 'text')
+  const [categoryId, setCategoryId] = useState<string | null>(isUuid(text.categoryId) ? text.categoryId : null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!valid) return <ErrorState message="Serveur invalide." />
@@ -37,8 +40,9 @@ export default function CreateChannelScreen() {
     setLoading(true)
     setError(null)
     try {
-      await serversApi.createChannel(ids.serverId, n, type, categoryId)
-      await queryClient.invalidateQueries({ queryKey: qk.channels(ids.serverId) })
+      if (type === 'category') await serversApi.createCategory(ids.serverId, n)
+      else await serversApi.createChannel(ids.serverId, n, type, categoryId)
+      await queryClient.invalidateQueries({ queryKey: type === 'category' ? qk.categories(ids.serverId) : qk.channels(ids.serverId) })
       router.back()
     } catch (e) {
       setError(errorMessage(e))
@@ -51,7 +55,8 @@ export default function CreateChannelScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <View style={{ flexDirection: 'row', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Type de salon">
+      <Stack.Screen options={{ title: type === 'category' ? 'Créer une catégorie' : 'Créer un salon' }} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Type de salon">
         {TYPES.map((t) => (
           <Button
             key={t.type}
@@ -61,12 +66,12 @@ export default function CreateChannelScreen() {
             onPress={() => setType(t.type)}
             accessibilityRole="radio"
             accessibilityState={{ selected: type === t.type }}
-            style={{ flex: 1 }}
+            style={{ flexGrow: 1 }}
           />
         ))}
       </View>
-      <TextField label="Nom du salon" value={name} onChangeText={setName} maxLength={100} autoFocus autoCapitalize="none" error={error} />
-      {cats.length ? (
+      <TextField label={type === 'category' ? 'Nom de la catégorie' : 'Nom du salon'} value={name} onChangeText={setName} maxLength={100} autoFocus autoCapitalize="none" error={error} />
+      {cats.length && type !== 'category' ? (
         <View style={{ gap: spacing.sm }}>
           <T variant="muted">Catégorie</T>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Catégorie">
@@ -83,7 +88,7 @@ export default function CreateChannelScreen() {
           </View>
         </View>
       ) : null}
-      <Button title="Créer le salon" onPress={submit} loading={loading} />
+      <Button title={type === 'category' ? 'Créer la catégorie' : 'Créer le salon'} onPress={submit} loading={loading} />
     </ScrollView>
   )
 }

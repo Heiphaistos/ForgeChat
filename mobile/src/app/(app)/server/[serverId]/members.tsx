@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { router } from 'expo-router'
+import { Stack, router } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { serversApi } from '@/api/servers'
@@ -12,7 +12,9 @@ import { usePresence } from '@/stores/presence'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function MembersScreen() {
-  const { valid, ids } = useRouteParams(['serverId'] as const)
+  // `manage=1` : ouvert depuis les paramètres du serveur, toucher un membre ouvre sa gestion.
+  const { valid, ids, text } = useRouteParams(['serverId'] as const, ['manage'])
+  const manage = text.manage === '1'
   const q = useQuery({ queryKey: qk.members(ids.serverId ?? ''), queryFn: () => serversApi.members(ids.serverId), enabled: valid })
   const statuses = usePresence((s) => s.statuses)
   const [search, setSearch] = useState('')
@@ -33,6 +35,7 @@ export default function MembersScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {manage ? <Stack.Screen options={{ title: 'Gérer les membres' }} /> : null}
       <TextInput
         style={styles.search}
         placeholder="Rechercher un membre"
@@ -46,7 +49,16 @@ export default function MembersScreen() {
         data={sorted}
         keyExtractor={(m) => m.user_id}
         renderItem={({ item }) => (
-          <Pressable style={styles.row} onPress={() => router.push(`/user/${item.user_id}`)} accessibilityRole="button">
+          <Pressable
+            style={styles.row}
+            onPress={() =>
+              manage
+                ? router.push({ pathname: '/server/[serverId]/settings/member/[userId]', params: { serverId: ids.serverId, userId: item.user_id } })
+                : router.push(`/user/${item.user_id}`)
+            }
+            accessibilityRole="button"
+            accessibilityLabel={`${item.nickname || item.username}${item.is_owner ? ', propriétaire' : ''}`}
+          >
             <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} />
             <View style={{ flex: 1 }}>
               <Text style={styles.name} numberOfLines={1}>

@@ -249,6 +249,13 @@ export function bindRealtime(): () => void {
       }
     })
   }
+  // Rôles : recalcul des permissions affichées (features/servers/perms).
+  for (const t of ['ROLE_CREATE', 'ROLE_UPDATE', 'ROLE_DELETE']) {
+    on(t, (e) => {
+      const sid = str(e.server_id)
+      if (sid) void queryClient.invalidateQueries({ queryKey: qk.server(sid) })
+    })
+  }
   on('SERVER_UPDATE', (e) => {
     void queryClient.invalidateQueries({ queryKey: qk.servers })
     const sid = str(e.server_id)
