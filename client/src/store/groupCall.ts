@@ -6,7 +6,8 @@ import { Room, RoomEvent, Track, DisconnectReason, type RemoteParticipant, type 
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { useWs } from './ws'
-import { useCallStore } from './call'
+import { useCallStore, callAudioConstraints, callVideoConstraints } from './call'
+import { useVoice } from './voice'
 import { webrtcMissing } from '../lib/webrtcSupport'
 
 export interface GroupRing { groupId: string; fromUsername: string; callType: 'voice' | 'video'; expiresAt: number }
@@ -74,6 +75,11 @@ async function _connect(lk: { url: string; token: string }, set: Set, get: () =>
       if (track.kind === Track.Kind.Audio) {
         const el = track.attach()
         el.dataset.groupCall = '1'
+        // data-fc-call : la sortie choisie dans Réglages s'applique aussi ici.
+        el.dataset.fcCall = '1'
+        const out = localStorage.getItem('fc_audio_output')
+        if (out && 'setSinkId' in el) (el as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(out).catch(() => {})
+        el.muted = useVoice.getState().deafened
         document.body.appendChild(el)
         _audioEls.set(pub.trackSid, el)
       }
@@ -93,6 +99,13 @@ async function _connect(lk: { url: string; token: string }, set: Set, get: () =>
     .on(RoomEvent.ActiveSpeakersChanged, sp => set({ activeSpeakerId: sp[0]?.identity ?? null }))
     .on(RoomEvent.Disconnected, reason => {
       if (_room !== room) return
+      // Même compte rejoint depuis un autre appareil : c'est lui qui est dans
+      // l'appel désormais, un GROUP_CALL_LEAVE l'en sortirait.
+      if (reason === DisconnectReason.DUPLICATE_IDENTITY) {
+        toast('Appel de groupe repris sur un autre appareil.')
+        _cleanup(set)
+        return
+      }
       if (reason === DisconnectReason.PARTICIPANT_REMOVED) toast('Vous avez quitté l\'appel de groupe.')
       else if (reason !== DisconnectReason.CLIENT_INITIATED) toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
       useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: get().groupId })
@@ -122,6 +135,11 @@ async function _connect(lk: { url: string; token: string }, set: Set, get: () =>
   room.remoteParticipants.forEach(rp => _refresh(rp, set))
   set({ status: 'connected' })
 }
+
+// Sourdine globale (bouton casque) : coupe aussi le son de l'appel de groupe.
+useVoice.subscribe((s, prev) => {
+  if (s.deafened !== prev.deafened) _audioEls.forEach(el => { el.muted = s.deafened })
+})
 
 export const useGroupCall = create<GroupCallStore>((set, get) => ({
   groupId: null,
@@ -177,10 +195,12 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
     if (get().groupId) get().leave()
     set({ groupId, status: 'connecting', ring: null, camOff: type !== 'video' })
     try {
+      // Micro et caméra choisis dans Réglages (ils étaient ignorés), repli sur
+      // les périphériques par défaut si celui mémorisé est débranché.
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
-      })
+        audio: callAudioConstraints(),
+        video: type === 'video' ? callVideoConstraints() : false,
+      }).catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' }))
       if (get().groupId !== groupId) { stream.getTracks().forEach(t => t.stop()); return }
       set({ localStream: stream })
       useWs.getState().send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: type })
@@ -215,7 +235,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
       return
     }
     try {
-      const vs = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } })
+      const vs = await navigator.mediaDevices.getUserMedia({ video: callVideoConstraints() })
       const vt = vs.getVideoTracks()[0]
       if (!vt) return
       if (_room?.state === 'connected') await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, simulcast: true })

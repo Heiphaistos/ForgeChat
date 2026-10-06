@@ -619,21 +619,29 @@ function AppInner() {
         })
       }
     })
-    const offEnded = on('DM_CALL_ENDED', () => {
-      // Modal encore affiché = l'appel a sonné ici sans être décroché → manqué
+    // Seulement l'appel qui sonne ici : la fin d'un AUTRE appel (celui en cours,
+    // un autre correspondant) effaçait la sonnerie d'un appel entrant sans rapport.
+    const isRinging = (d: any) => {
       const ringing = useCallStore.getState().incomingCall
+      if (!ringing) return null
+      const same = d.dm_id ? String(d.dm_id) === ringing.dmId : String(d.from) === ringing.fromUserId
+      return same ? ringing : null
+    }
+    const offEnded = on('DM_CALL_ENDED', (d: any) => {
+      // Modal encore affiché = l'appel a sonné ici sans être décroché → manqué
+      const ringing = isRinging(d)
       if (ringing) {
         toast(`📵 Appel manqué de ${ringing.fromUsername}`, {
           duration: 8000,
           style: { cursor: 'pointer' },
           onClick: () => nav(`/dms/${ringing.dmId}`),
         } as any)
+        setIncomingCall(null)
       }
-      setIncomingCall(null)
       qcHook.invalidateQueries({ queryKey: ['call_history'] })
     })
-    const offDeclined = on('DM_CALL_DECLINED', () => {
-      setIncomingCall(null)
+    const offDeclined = on('DM_CALL_DECLINED', (d: any) => {
+      if (isRinging(d)) setIncomingCall(null)
       qcHook.invalidateQueries({ queryKey: ['call_history'] })
     })
     const offCallError = on('DM_CALL_ERROR', (d: any) => {

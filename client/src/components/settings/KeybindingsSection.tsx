@@ -32,9 +32,11 @@ function formatKey(e: KeyboardEvent): string {
   if (e.shiftKey) parts.push('Shift')
   if (e.metaKey) parts.push('Meta')
   const key = e.key
-  if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
-    parts.push(key.length === 1 ? key.toUpperCase() : key)
-  }
+  // Modificateur seul : attendre la vraie touche (« Ctrl » seul était enregistré
+  // à la première pression).
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return ''
+  // ' ' donnait « Ctrl+  », illisible et ignoré par les raccourcis vocaux.
+  parts.push(key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key)
   return parts.join('+')
 }
 

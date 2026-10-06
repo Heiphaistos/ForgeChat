@@ -248,6 +248,13 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
                 if in_room {
                     tracing::warn!(user_id = %user_id, channel_id = %channel_id, "présence fantôme retirée : absent du SFU depuis {SFU_GRACE_S} s");
                     crate::handlers::websocket::cleanup_voice(&state, user_id, None).await;
+                    // cleanup_voice prévient tout le salon SAUF l'intéressé : sans ce
+                    // message, son interface le croyait encore connecté, à jamais muet.
+                    state.broadcast_to_user(user_id, serde_json::json!({
+                        "type": "VOICE_FORCE_DISCONNECT",
+                        "channel_id": channel_id,
+                        "reason": "media_lost",
+                    }).to_string()).await;
                 }
             });
         }

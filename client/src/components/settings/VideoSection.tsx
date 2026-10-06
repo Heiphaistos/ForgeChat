@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
 import { Camera, RefreshCw, ShieldCheck, ShieldX, Monitor } from 'lucide-react'
 import { useVoice } from '../../store/voice'
+import { useCallStore } from '../../store/call'
 
 export default function VideoSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
@@ -101,6 +102,7 @@ export default function VideoSection() {
     setSelectedCamera(id)
     // Applique la caméra à l'appel en cours (replaceTrack) et pas seulement au suivant
     void setVideoInput(id)
+    void useCallStore.getState().setVideoInput()
     if (previewActive) {
       stopPreview()
       setTimeout(startPreview, 100)

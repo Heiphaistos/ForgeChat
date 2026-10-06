@@ -28,9 +28,18 @@ export interface NativeHandlers {
   onTrack: (e: NativeTrackEvent) => void
   onSpeakers: (identities: string[]) => void
   onState: (e: NativeStateEvent) => void
+  /** Partage d'écran arrêté par le système (portail fermé). */
+  onLocalEnded?: (source: string) => void
+  /** La session native est reprise par l'autre usage (salon vocal / appel privé). */
+  onEvicted: () => void
 }
 
+/** Le processus natif n'a qu'UNE session : salon vocal OU appel privé. */
+export type NativeOwner = 'voice' | 'call'
+
 let _unlisten: Array<() => void> = []
+let _owner: NativeOwner | null = null
+let _onEvicted: (() => void) | null = null
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core')
@@ -38,14 +47,24 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 }
 
 export async function nativeConnect(
-  url: string, token: string, ice: RTCIceServer[], mic: boolean, micOpen: boolean, h: NativeHandlers,
+  owner: NativeOwner, url: string, token: string, ice: RTCIceServer[], mic: boolean, micOpen: boolean, h: NativeHandlers,
 ): Promise<void> {
+  // L'autre usage perd sa session (le natif la ferme en se connectant) : il nettoie
+  // son état sans fermer la nôtre — avant, quitter le salon vocal coupait l'appel.
+  if (_owner && _owner !== owner) {
+    const evicted = _onEvicted
+    _owner = null
+    evicted?.()
+  }
+  _owner = owner
+  _onEvicted = h.onEvicted
   const { listen } = await import('@tauri-apps/api/event')
   _unlisten.forEach(u => u())
   _unlisten = await Promise.all([
     listen<NativeTrackEvent>('nv:track', e => h.onTrack(e.payload)),
     listen<string[]>('nv:speakers', e => h.onSpeakers(e.payload)),
     listen<NativeStateEvent>('nv:state', e => h.onState(e.payload)),
+    listen<string>('nv:local_ended', e => h.onLocalEnded?.(e.payload)),
   ])
   // Une panne dans le processus natif (panique d'un thread) laisse la commande sans
   // réponse : au bout de 30 s on le dit, au lieu d'afficher « Connexion… » à vie.
@@ -55,7 +74,10 @@ export async function nativeConnect(
   ])
 }
 
-export async function nativeDisconnect(): Promise<void> {
+export async function nativeDisconnect(owner: NativeOwner): Promise<void> {
+  if (_owner !== owner) return // session déjà reprise par l'autre usage
+  _owner = null
+  _onEvicted = null
   _unlisten.forEach(u => u())
   _unlisten = []
   await tauriInvoke('nv_disconnect').catch(e => console.warn('[voice] déconnexion native', e))

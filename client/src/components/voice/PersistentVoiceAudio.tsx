@@ -11,22 +11,38 @@ import { getAudioContext } from '../../lib/audio'
  * Un <audio> muet reste branché sur le flux d'origine : sans lui, Chrome ne fait
  * pas circuler l'audio WebRTC distant dans WebAudio.
  */
-const _boosted = new WeakMap<MediaStream, { out: MediaStream; gain: GainNode; keepAlive: HTMLAudioElement }>()
+// Indexé par « pair:type » et non par flux : chaque piste (re)publiée crée un
+// nouveau MediaStream, et l'ancien graphe (source, gain, <audio>) restait branché.
+const _boosted = new Map<string, { src: MediaStream; out: MediaStream; node: AudioNode; gain: GainNode; keepAlive: HTMLAudioElement }>()
 
-function playable(stream: MediaStream, volume: number): { stream: MediaStream; elementVolume: number } {
-  if (volume <= 1) return { stream, elementVolume: Math.max(0, volume) }
-  let b = _boosted.get(stream)
+function dropBoost(key: string) {
+  const b = _boosted.get(key)
+  if (!b) return
+  b.node.disconnect()
+  b.gain.disconnect()
+  b.keepAlive.srcObject = null
+  _boosted.delete(key)
+}
+
+function playable(key: string, stream: MediaStream, volume: number): { stream: MediaStream; elementVolume: number } {
+  if (volume <= 1) {
+    dropBoost(key)
+    return { stream, elementVolume: Math.max(0, volume) }
+  }
+  let b = _boosted.get(key)
+  if (b && b.src !== stream) { dropBoost(key); b = undefined }
   if (!b) {
     const ctx = getAudioContext()
     const gain = ctx.createGain()
     const dst = ctx.createMediaStreamDestination()
-    ctx.createMediaStreamSource(stream).connect(gain).connect(dst)
+    const node = ctx.createMediaStreamSource(stream)
+    node.connect(gain).connect(dst)
     const keepAlive = new Audio()
     keepAlive.muted = true
     keepAlive.srcObject = stream
     void keepAlive.play().catch(() => {})
-    b = { out: dst.stream, gain, keepAlive }
-    _boosted.set(stream, b)
+    b = { src: stream, out: dst.stream, node, gain, keepAlive }
+    _boosted.set(key, b)
   }
   b.gain.gain.value = Math.min(volume, 2)
   return { stream: b.out, elementVolume: 1 }
@@ -59,15 +75,17 @@ export default function PersistentVoiceAudio() {
   const elementsRef = useRef(new Set<HTMLAudioElement>())
 
   useEffect(() => {
-    if (!joined) setAutoplayBlocked(false)
+    if (joined) return
+    setAutoplayBlocked(false)
+    ;[..._boosted.keys()].forEach(dropBoost)
   }, [joined])
 
   if (!joined) return null
 
-  const attach = (el: HTMLAudioElement | null, stream: MediaStream, volume: number) => {
+  const attach = (el: HTMLAudioElement | null, key: string, stream: MediaStream, volume: number) => {
     if (!el) return
     elementsRef.current.add(el)
-    const out = playable(stream, volume)
+    const out = playable(key, stream, volume)
     if (el.srcObject !== out.stream) el.srcObject = out.stream
     el.volume = deafened ? 0 : out.elementVolume
     const savedOut = localStorage.getItem('fc_audio_output')
@@ -97,10 +115,10 @@ export default function PersistentVoiceAudio() {
           return (
             <span key={p.userId}>
               {p.stream && p.stream.getAudioTracks().length > 0 && (
-                <audio ref={el => attach(el, p.stream!, micVolume)} autoPlay data-fc-call="voice" />
+                <audio ref={el => attach(el, `${p.userId}:voice`, p.stream!, micVolume)} autoPlay data-fc-call="voice" />
               )}
               {p.screenStream && p.screenStream.getAudioTracks().length > 0 && (
-                <audio ref={el => attach(el, p.screenStream!, screenVolume)} autoPlay data-fc-call="screen" />
+                <audio ref={el => attach(el, `${p.userId}:screen`, p.screenStream!, screenVolume)} autoPlay data-fc-call="screen" />
               )}
             </span>
           )
