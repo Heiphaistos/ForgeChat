@@ -21,6 +21,7 @@ export default function VideoSection() {
   const autoWatchStreams = useVoice(s => s.autoWatchStreams)
   const setAutoWatchStreams = useVoice(s => s.setAutoWatchStreams)
   const [screenHint, setScreenHint] = useState(() => localStorage.getItem('fc_screen_hint') ?? 'motion')
+  const [camBlur, setCamBlur] = useState(() => localStorage.getItem('fc_cam_blur') ?? 'false')
 
   const savePref = (key: string, value: string, setter: (v: string) => void) => {
     localStorage.setItem(key, value)
@@ -219,6 +220,14 @@ export default function VideoSection() {
         <p className="text-xs text-fc-muted mt-1">
           Chaque participant reçoit son propre flux : au-delà de 5-6 caméras, baissez la résolution et le débit.
         </p>
+      </Field>
+
+      <Field label="Arrière-plan">
+        <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" checked={camBlur === 'true'} onChange={e => savePref('fc_cam_blur', String(e.target.checked), setCamBlur)} className="accent-fc-accent" />
+          Flouter l’arrière-plan de ma caméra
+        </label>
+        <p className="text-xs text-fc-muted mt-1">Calculé sur ton appareil, rien n’est envoyé ailleurs. S’applique à la prochaine activation de la caméra.</p>
       </Field>
 
       <Field label="Qualité du partage d'écran">

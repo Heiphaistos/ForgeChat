@@ -17,6 +17,7 @@ import {
 } from 'livekit-client'
 import type { VoicePeer } from './voice'
 import api from '../api/client'
+import { maybeBlur } from '../utils/backgroundBlur'
 import {
   isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic,
   type NativeTrackEvent, type NativeStateEvent,
@@ -512,7 +513,8 @@ export async function replaceMicTrack(track: MediaStreamTrack, open: boolean) {
   await applyMicEnabled(open)
 }
 
-export async function addCameraTrack(track: MediaStreamTrack) {
+export async function addCameraTrack(raw: MediaStreamTrack) {
+  const track = await maybeBlur(raw)
   const old = _camTrack
   _camTrack = track
   rebuildLocal()

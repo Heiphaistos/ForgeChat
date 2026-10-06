@@ -31,3 +31,13 @@ for (const [from, to] of FILES) {
   copyFileSync(join(src, from), join(out, to))
 }
 console.log(`[noise] ${FILES.length} fichiers copiés vers public/noise/`)
+
+// Flou d'arrière-plan caméra : moteur MediaPipe servi depuis public/mediapipe/ (CSP 'self', aucun CDN).
+// Version SIMD seule (tous les navigateurs récents) ; le modèle selfie_segmenter.tflite y est versionné.
+const mp = join(here, '..', 'node_modules', '@mediapipe', 'tasks-vision', 'wasm')
+if (existsSync(mp)) {
+  const outMp = join(here, '..', 'public', 'mediapipe')
+  mkdirSync(outMp, { recursive: true })
+  for (const f of ['vision_wasm_internal.js', 'vision_wasm_internal.wasm']) copyFileSync(join(mp, f), join(outMp, f))
+  console.log('[mediapipe] moteur copié vers public/mediapipe/')
+}

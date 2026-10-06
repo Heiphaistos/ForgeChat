@@ -9,6 +9,7 @@ import {
   Room, RoomEvent, Track, DisconnectReason,
   type LocalTrackPublication, type RemoteParticipant,
 } from 'livekit-client'
+import { maybeBlur } from '../utils/backgroundBlur'
 import toast from 'react-hot-toast'
 
 export interface IncomingCallInfo {
@@ -240,7 +241,10 @@ export function callVideoConstraints(): MediaTrackConstraints {
 async function _getCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
   const audio = callAudioConstraints()
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? callVideoConstraints() : false })
+    const s = await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? callVideoConstraints() : false })
+    const cam = s.getVideoTracks()[0]
+    if (!cam) return s
+    return new MediaStream([...s.getAudioTracks(), await maybeBlur(cam)])
   } catch {
     if (type === 'video') {
       try {
@@ -261,7 +265,7 @@ async function _switchDevice(kind: 'audio' | 'video', set: SetFn, get: () => Cal
   if (_native || !local || (kind === 'video' && get().camOff)) return
   try {
     const s = await navigator.mediaDevices.getUserMedia(kind === 'audio' ? { audio: callAudioConstraints() } : { video: callVideoConstraints() })
-    const t = s.getTracks()[0]
+    const t = kind === 'video' && s.getVideoTracks()[0] ? await maybeBlur(s.getVideoTracks()[0]!) : s.getTracks()[0]
     // Appel terminé (ou caméra coupée) pendant l'attente : ne rien remplacer.
     if (!t || get().localStream !== local) { s.getTracks().forEach(x => x.stop()); return }
     if (kind === 'audio') t.enabled = !get().micMuted
