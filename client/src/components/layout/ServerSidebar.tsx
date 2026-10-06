@@ -1,7 +1,8 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
+import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import DeleteServerModal from '../modals/DeleteServerModal'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
@@ -154,6 +155,7 @@ export default function ServerSidebar() {
   const me = useAuth(s => s.user)
   const isServerMuted = useChannelNotif(s => s.isServerMuted)
   const [notifServer, setNotifServer] = useState<{ id: string; name: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
 
   const { data: servers = [] } = useQuery({
     queryKey: ['servers'],
@@ -284,6 +286,13 @@ export default function ServerSidebar() {
   const handleSlotDragLeave = useCallback(() => {
     setDragOverSlot(null)
   }, [])
+
+  // Ouvre le serveur puis une fenêtre de sa barre des salons (Inviter, Créer un salon).
+  const openPanel = (sId: string, what: 'invite' | 'create-channel') => {
+    nav(`/servers/${sId}`)
+    setTimeout(() => window.dispatchEvent(new CustomEvent('forgechat:open-server-panel', { detail: what })), 350)
+    setContextMenu(null)
+  }
 
   // Context menu actions
   const handleContextMenu = (e: React.MouseEvent, sId: string) => {
@@ -615,6 +624,19 @@ export default function ServerSidebar() {
               </button>
             )}
             <button
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-accent hover:bg-fc-accent hover:text-white transition flex items-center gap-2"
+              onClick={() => openPanel(contextMenu.serverId, 'invite')}
+            >
+              <UserPlus size={12} /> Inviter des gens
+            </button>
+            <button
+              className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={() => openPanel(contextMenu.serverId, 'create-channel')}
+            >
+              <Plus size={12} /> Créer un salon
+            </button>
+            <div className="my-1 border-t border-fc-hover" />
+            <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
               onClick={() => {
                 // Naviguer vers le serveur puis demander à ChannelSidebar d'ouvrir
@@ -700,9 +722,21 @@ export default function ServerSidebar() {
                 </button>
               </>
             )}
+            {isOwner && ctxServer && (
+              <>
+                <div className="my-1 border-t border-fc-hover" />
+                <button
+                  className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
+                  onClick={() => { setDeleteTarget({ id: ctxServer.id, name: ctxServer.name }); setContextMenu(null) }}
+                >
+                  <Trash2 size={12} /> Supprimer le serveur
+                </button>
+              </>
+            )}
           </div>
         )
       })()}
+      {deleteTarget && <DeleteServerModal server={deleteTarget} onClose={() => setDeleteTarget(null)} />}
 
       {showCreate && (
         <CreateServerModal

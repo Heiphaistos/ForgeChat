@@ -222,8 +222,18 @@ export default function ChannelSidebar() {
   // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
   useEffect(() => {
     const open = () => setShowSettings(true)
+    // « Inviter » et « Créer un salon » du menu de la vignette de serveur (ServerSidebar).
+    const panel = (e: Event) => {
+      const what = (e as CustomEvent<string>).detail
+      if (what === 'invite') setShowInvite(true)
+      else if (what === 'create-channel') setShowCreateChannel(true)
+    }
     window.addEventListener('forgechat:open-server-settings', open)
-    return () => window.removeEventListener('forgechat:open-server-settings', open)
+    window.addEventListener('forgechat:open-server-panel', panel)
+    return () => {
+      window.removeEventListener('forgechat:open-server-settings', open)
+      window.removeEventListener('forgechat:open-server-panel', panel)
+    }
   }, [])
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)

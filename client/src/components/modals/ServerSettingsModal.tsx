@@ -2,7 +2,6 @@ import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -10,6 +9,7 @@ import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useAuth } from '../../store/auth'
 import RolesTab from './RolesTab'
 import TransferOwnershipSection from './TransferOwnershipSection'
+import DeleteServerModal from './DeleteServerModal'
 import MembersTab from './MembersTab'
 import BansTab from './BansTab'
 import TagsTab from './TagsTab'
@@ -115,8 +115,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   const [isPublic, setIsPublic] = useState(server.is_public)
   const [verificationEnabled, setVerificationEnabled] = useState(server.verification_enabled ?? false)
   const [verificationRules, setVerificationRules] = useState(server.verification_rules ?? '')
-  const [deleteConfirm, setDeleteConfirm] = useState('')
-  const nomConfirme = deleteConfirm.trim().toLowerCase() === server.name.trim().toLowerCase()
+  const [showDelete, setShowDelete] = useState(false)
   // Seul le propriétaire peut supprimer (le serveur refuse les autres en 403) : la zone n'est montrée qu'à lui.
   const estProprietaire = useAuth(st => st.user?.id) === server.owner_id
   const [systemChannelId, setSystemChannelId] = useState<string>(server.system_channel_id ?? '')
@@ -135,7 +134,6 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   const iconInputRef = useRef<HTMLInputElement>(null)
   const emojiInputRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
-  const nav = useNavigate()
 
   const uploadBanner = useMutation({
     mutationFn: async (file: File) => {
@@ -211,16 +209,6 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     },
   })
 
-  const deleteServer = useMutation({
-    mutationFn: () => api.delete(`/servers/${server.id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['servers'] })
-      // « / » est la page d'accueil du site public sur le web : revenir dans l'app.
-      nav('/friends')
-      toast.success('Serveur supprimé')
-    },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
-  })
 
   // Emojis
   const { data: emojis = [] } = useQuery<any[]>({
@@ -597,20 +585,14 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 {estProprietaire && <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-red/40">
                   <div className="text-xs font-semibold text-fc-red uppercase tracking-wide mb-2">Zone de danger</div>
                   <p className="text-sm text-fc-muted mb-3">
-                    Tape le nom du serveur pour le supprimer : <span className="text-white font-mono">{server.name}</span>
+                    Suppression définitive : nom du serveur, mot de passe et code de double authentification demandés.
                   </p>
-                  <input value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
-                    placeholder={server.name}
-                    aria-label="Nom du serveur à supprimer"
-                    className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-red text-sm"
-                  />
-                  {/* Le bouton est ICI, sous le champ (il était dans le menu latéral, masqué sur téléphone).
-                      Espaces et majuscules ignorés : « Mon serveur » = « mon serveur ». */}
-                  <button onClick={() => deleteServer.mutate()} disabled={!nomConfirme || deleteServer.isPending}
-                    className="mt-3 px-4 py-2 rounded text-sm font-medium bg-fc-red text-white hover:bg-red-600 transition flex items-center gap-2 disabled:opacity-40"
+                  <button onClick={() => setShowDelete(true)}
+                    className="px-4 py-2 rounded text-sm font-medium bg-fc-red text-white hover:bg-red-600 transition flex items-center gap-2"
                   >
-                    <Trash2 size={14} /> {deleteServer.isPending ? 'Suppression…' : 'Supprimer le serveur'}
+                    <Trash2 size={14} /> Supprimer le serveur
                   </button>
+                  {showDelete && <DeleteServerModal server={server} onClose={() => setShowDelete(false)} />}
                 </div>}
 
                 <button onClick={() => update.mutate()} disabled={update.isPending}
