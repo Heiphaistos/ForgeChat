@@ -15,6 +15,15 @@ name: Applications
 on:
   push:
     tags: ['mobile-v*', 'desktop-v*']
+  # Essai manuel d'une partie des builds (sans publication) : version = celle du tag indiqué.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag de référence (mobile-vX.Y.Z ou desktop-vX.Y.Z)'
+        required: true
+      jobs:
+        description: 'Jobs à lancer, séparés par des espaces (android ios windows linux macos)'
+        required: true
 
 permissions:
   contents: read
@@ -37,9 +46,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
         shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="$TAG"
           kind="${tag%%-v*}"; version="${tag#*-v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag invalide : $tag"; exit 1; }
           if [ "$kind" = mobile ]; then
@@ -55,7 +66,7 @@ jobs:
 
   android:
     needs: version
-    if: needs.version.outputs.kind == 'mobile'
+    if: needs.version.outputs.kind == 'mobile' && (github.event_name == 'push' || contains(inputs.jobs, 'android'))
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -103,7 +114,7 @@ jobs:
 
   ios:
     needs: version
-    if: needs.version.outputs.kind == 'mobile'
+    if: needs.version.outputs.kind == 'mobile' && (github.event_name == 'push' || contains(inputs.jobs, 'ios'))
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -134,7 +145,11 @@ jobs:
           ws=$(ls -d ios/*.xcworkspace | head -1); scheme=$(basename "$ws" .xcworkspace)
           xcodebuild -workspace "$ws" -scheme "$scheme" -configuration Release -sdk iphoneos \
             -destination generic/platform=iOS -archivePath "$RUNNER_TEMP/fc.xcarchive" archive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -40
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > "$RUNNER_TEMP/xcode.log" 2>&1 || {
+              grep -nE "error|Error|fatal|failed" "$RUNNER_TEMP/xcode.log" | grep -v "^[0-9]*: *[/ ].*clang " | head -80
+              tail -60 "$RUNNER_TEMP/xcode.log"
+              exit 1
+            }
           mkdir -p "$RUNNER_TEMP/ipa/Payload" "$RUNNER_TEMP/out"
           cp -R "$RUNNER_TEMP/fc.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$RUNNER_TEMP/out/ForgeChat-${{ needs.version.outputs.version }}.ipa" Payload)
@@ -146,7 +161,7 @@ jobs:
 
   windows:
     needs: version
-    if: needs.version.outputs.kind == 'desktop'
+    if: needs.version.outputs.kind == 'desktop' && (github.event_name == 'push' || contains(inputs.jobs, 'windows'))
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
@@ -168,7 +183,7 @@ jobs:
 
   linux:
     needs: version
-    if: needs.version.outputs.kind == 'desktop'
+    if: needs.version.outputs.kind == 'desktop' && (github.event_name == 'push' || contains(inputs.jobs, 'linux'))
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
@@ -200,7 +215,7 @@ jobs:
 
   macos:
     needs: version
-    if: needs.version.outputs.kind == 'desktop'
+    if: needs.version.outputs.kind == 'desktop' && (github.event_name == 'push' || contains(inputs.jobs, 'macos'))
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -229,7 +244,7 @@ jobs:
   release:
     needs: [version, android, ios, windows, linux, macos]
     # Les jobs de l'autre famille sont « skipped » : seul un échec bloque la publication.
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    if: ${{ github.event_name == 'push' && !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
