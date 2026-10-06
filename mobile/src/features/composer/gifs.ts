@@ -1,5 +1,5 @@
 /**
- * Recherche de GIF via le serveur (GIPHY, ou Wikimedia Commons sans clé). Le serveur ne renvoie que
+ * Recherche de GIF via le serveur (GIPHY, KLIPY, ou Wikimedia Commons sans clé). Le serveur ne renvoie que
  * des images de ces CDN, sans paramètres ; l'app le revérifie avant d'afficher ou d'envoyer quoi que
  * ce soit (même liste que server/src/handlers/gifs.rs).
  */
@@ -15,7 +15,7 @@ export interface GifResult {
   height: number
 }
 
-const GIF_HOST = /^(?:media\d?\.giphy\.com|i\.giphy\.com|upload\.wikimedia\.org|thumb\.wikimedia\.org)$/
+const GIF_HOST = /^(?:media\d?\.giphy\.com|i\.giphy\.com|static\d{0,2}\.klipy\.com|upload\.wikimedia\.org|thumb\.wikimedia\.org)$/
 
 /** Image d'un CDN de GIF connu, en https, sans port, identifiants ni paramètres. */
 export function isGifMediaUrl(raw: unknown): raw is string {
@@ -60,6 +60,7 @@ export function parseGifResults(raw: unknown): { results: GifResult[]; next: str
       })
     }
   }
-  const next = typeof r.next === 'string' && /^\d{1,6}$/.test(r.next) ? r.next : null
+  // Décalage (GIPHY, Wikimedia) ou jeton opaque KLIPY (base64, ex. « Mg== »).
+  const next = typeof r.next === 'string' && /^[A-Za-z0-9._=+\/-]{1,64}$/.test(r.next) && !r.next.includes('..') ? r.next : null
   return { results, next }
 }

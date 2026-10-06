@@ -1,5 +1,6 @@
-//! Recherche de GIF par le serveur : GIPHY si `GIPHY_API_KEY` est fournie, sinon Wikimedia Commons,
-//! qui ne demande ni clé ni compte (le bouton GIF n'est donc jamais mort).
+//! Recherche de GIF par le serveur, par ordre de préférence : GIPHY (`GIPHY_API_KEY`), KLIPY
+//! (`KLIPY_API_KEY`, API compatible Tenor v2), sinon Wikimedia Commons, qui ne demande ni clé ni
+//! compte (le bouton GIF n'est donc jamais mort).
 //!
 //! La clé reste sur le serveur : les clients (web, bureau, app mobile) appellent ces routes, le
 //! fournisseur ne voit que le serveur (ni l'IP ni l'identité des utilisateurs). Seules les images
@@ -8,6 +9,7 @@
 //! - Réponses en cache Redis (recherche 5 min, tendances 10 min).
 //! - 60 requêtes par minute et par utilisateur.
 //! - GIPHY : classement `GIPHY_RATING` (g|pg|pg-13|r, défaut pg-13).
+//! - KLIPY : filtre `KLIPY_CONTENT_FILTER` (off|low|medium|high, défaut medium).
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -26,6 +28,7 @@ use crate::{
 };
 
 const GIPHY_BASE: &str = "https://api.giphy.com/v1/gifs";
+const KLIPY_BASE: &str = "https://api.klipy.com/v2";
 const COMMONS_API: &str = "https://commons.wikimedia.org/w/api.php";
 const PAGE_SIZE: u32 = 24;
 const MAX_QUERY_CHARS: usize = 100;
@@ -35,14 +38,20 @@ const USER_AGENT: &str = "ForgeChat/1.0 (https://forgechat.heiphaistos.org)";
 
 enum Provider {
     Giphy { key: String, rating: &'static str },
+    Klipy { key: String, filter: &'static str },
     Commons,
+}
+
+/// Clé lue dans l'environnement, refusée si elle contient autre chose que [A-Za-z0-9_-].
+fn cle(nom: &str) -> Option<String> {
+    let k = std::env::var(nom).unwrap_or_default().trim().to_string();
+    (!k.is_empty() && k.len() <= 128 && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')).then_some(k)
 }
 
 fn provider() -> &'static Provider {
     static P: OnceLock<Provider> = OnceLock::new();
     P.get_or_init(|| {
-        let key = std::env::var("GIPHY_API_KEY").unwrap_or_default().trim().to_string();
-        if !key.is_empty() && key.len() <= 64 && key.chars().all(|c| c.is_ascii_alphanumeric()) {
+        if let Some(key) = cle("GIPHY_API_KEY") {
             let rating = match std::env::var("GIPHY_RATING").unwrap_or_default().trim() {
                 "g" => "g",
                 "pg" => "pg",
@@ -50,6 +59,14 @@ fn provider() -> &'static Provider {
                 _ => "pg-13",
             };
             Provider::Giphy { key, rating }
+        } else if let Some(key) = cle("KLIPY_API_KEY") {
+            let filter = match std::env::var("KLIPY_CONTENT_FILTER").unwrap_or_default().trim() {
+                "off" => "off",
+                "low" => "low",
+                "high" => "high",
+                _ => "medium",
+            };
+            Provider::Klipy { key, filter }
         } else {
             Provider::Commons
         }
@@ -64,7 +81,9 @@ pub fn is_gif_media_url(url: &str) -> bool {
         return false;
     }
     let Some(host) = u.host_str() else { return false };
-    let host_ok = host == "i.giphy.com"
+    let klipy = host.strip_prefix("static").and_then(|r| r.strip_suffix(".klipy.com")).is_some_and(|n| n.len() <= 2 && n.chars().all(|c| c.is_ascii_digit()));
+    let host_ok = klipy
+        || host == "i.giphy.com"
         || host.strip_prefix("media").and_then(|r| r.strip_suffix(".giphy.com")).is_some_and(|n| n.len() <= 1 && n.chars().all(|c| c.is_ascii_digit()))
         || host == "upload.wikimedia.org"
         || host == "thumb.wikimedia.org";
@@ -80,8 +99,9 @@ fn sans_parametres(url: &str) -> Option<String> {
     Some(u.to_string()).filter(|s| is_gif_media_url(s))
 }
 
+/// Jeton de page : un décalage (GIPHY, Wikimedia) ou un jeton opaque KLIPY (base64, ex. « Mg== »).
 fn valid_pos(pos: &str) -> bool {
-    !pos.is_empty() && pos.len() <= 6 && pos.chars().all(|c| c.is_ascii_digit())
+    !pos.is_empty() && pos.len() <= 64 && !pos.contains("..") && pos.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '=' | '+' | '/'))
 }
 
 fn titre(s: Option<&str>) -> String {
@@ -124,6 +144,37 @@ pub fn normalize_giphy(resp: &Value, offset: u32) -> Value {
     json!({ "results": items, "next": next })
 }
 
+/// Réponse KLIPY (format Tenor v2) → liste réduite et validée.
+pub fn normalize_klipy(resp: &Value) -> Value {
+    let items: Vec<Value> = resp["results"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|r| {
+                    let gif = &r["media_formats"]["gif"];
+                    let url = sans_parametres(gif["url"].as_str()?)?;
+                    let preview = ["tinygif", "nanogif", "gif"]
+                        .iter()
+                        .find_map(|f| r["media_formats"][*f]["url"].as_str().and_then(sans_parametres))
+                        .unwrap_or_else(|| url.clone());
+                    let dims = gif["dims"].as_array();
+                    let d = |i: usize| dims.and_then(|v| v.get(i)).map(dim).unwrap_or(0);
+                    Some(json!({
+                        "id": r["id"].as_str().unwrap_or("").chars().take(64).collect::<String>(),
+                        "title": titre(r["content_description"].as_str().or_else(|| r["title"].as_str())),
+                        "url": url,
+                        "preview": preview,
+                        "width": d(0),
+                        "height": d(1),
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let next = resp["next"].as_str().filter(|p| *p != "0" && valid_pos(p));
+    json!({ "results": items, "next": next })
+}
+
 /// Réponse de l'API de Wikimedia Commons (generator=search + imageinfo) → liste réduite et validée.
 pub fn normalize_commons(resp: &Value) -> Value {
     let mut pages: Vec<&Value> = resp["query"]["pages"].as_object().map(|o| o.values().collect()).unwrap_or_default();
@@ -158,6 +209,8 @@ pub fn normalize_commons(resp: &Value) -> Value {
 pub async fn status() -> Json<Value> {
     Json(match provider() {
         Provider::Giphy { .. } => json!({ "enabled": true, "provider": "giphy", "search_placeholder": "Rechercher sur GIPHY", "attribution": "Powered by GIPHY" }),
+        // « Search KLIPY » : seule mention exigée par KLIPY dans le champ de recherche.
+        Provider::Klipy { .. } => json!({ "enabled": true, "provider": "klipy", "search_placeholder": "Search KLIPY", "attribution": "Powered by KLIPY" }),
         Provider::Commons => json!({ "enabled": true, "provider": "wikimedia", "search_placeholder": "Rechercher un GIF", "attribution": "GIF de Wikimedia Commons" }),
     })
 }
@@ -197,6 +250,10 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
         return Err(AppError::BadRequest("Pagination invalide".into()));
     }
     let offset: u32 = pos.and_then(|p| p.parse().ok()).unwrap_or(0);
+    let prov = provider();
+    if !matches!(prov, Provider::Klipy { .. }) && pos.is_some_and(|p| !p.chars().all(|c| c.is_ascii_digit()) || p.len() > 6) {
+        return Err(AppError::BadRequest("Pagination invalide".into()));
+    }
 
     {
         let key = format!("gifs_rl:{}", claims.sub);
@@ -210,9 +267,8 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
         }
     }
 
-    let prov = provider();
-    let nom = match prov { Provider::Giphy { .. } => "giphy", Provider::Commons => "commons" };
-    let cache_key = format!("gifs2:{nom}:{}:{offset}", q.unwrap_or("").to_lowercase());
+    let nom = match prov { Provider::Giphy { .. } => "giphy", Provider::Klipy { .. } => "klipy", Provider::Commons => "commons" };
+    let cache_key = format!("gifs2:{nom}:{}:{}", q.unwrap_or("").to_lowercase(), pos.unwrap_or("0"));
     {
         let mut redis = state.redis.lock().await;
         let cached: Option<String> = redis.get(&cache_key).await.unwrap_or(None);
@@ -231,6 +287,22 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
                     .append_pair("rating", rating).append_pair("bundle", "messaging_non_clips");
                 if let Some(q) = q {
                     qp.append_pair("q", q).append_pair("lang", "fr");
+                }
+            }
+            u
+        }
+        Provider::Klipy { key, filter } => {
+            let mut u = reqwest::Url::parse(&format!("{KLIPY_BASE}/{}", if q.is_some() { "search" } else { "featured" }))
+                .map_err(|e| AppError::Internal(e.into()))?;
+            {
+                let mut qp = u.query_pairs_mut();
+                qp.append_pair("key", key).append_pair("limit", &PAGE_SIZE.to_string())
+                    .append_pair("media_filter", "gif,tinygif").append_pair("contentfilter", filter).append_pair("locale", "fr_FR");
+                if let Some(q) = q {
+                    qp.append_pair("q", q);
+                }
+                if let Some(p) = pos {
+                    qp.append_pair("pos", p);
                 }
             }
             u
@@ -259,6 +331,7 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
     let body: Value = resp.json().await.map_err(|_| AppError::BadRequest("Réponse GIF invalide".into()))?;
     let out = match prov {
         Provider::Giphy { .. } => normalize_giphy(&body, offset),
+        Provider::Klipy { .. } => normalize_klipy(&body),
         Provider::Commons => normalize_commons(&body),
     };
 
@@ -276,6 +349,10 @@ mod tests {
         assert!(is_gif_media_url("https://media2.giphy.com/media/abc123/giphy.gif"));
         assert!(is_gif_media_url("https://i.giphy.com/media/abc123/200w.webp"));
         assert!(is_gif_media_url("https://upload.wikimedia.org/wikipedia/commons/8/8f/Chat.gif"));
+        assert!(is_gif_media_url("https://static.klipy.com/ii/abc/def/hello.gif"));
+        assert!(is_gif_media_url("https://static2.klipy.com/x.webp"));
+        assert!(!is_gif_media_url("https://api.klipy.com/x.gif"));
+        assert!(!is_gif_media_url("https://static.klipy.com.evil.example/x.gif"));
         assert!(!is_gif_media_url("https://media2.giphy.com/media/abc/giphy.gif?cid=x"));
         assert!(!is_gif_media_url("http://media.giphy.com/media/abc/giphy.gif"));
         assert!(!is_gif_media_url("https://media.giphy.com.evil.example/x.gif"));
@@ -310,6 +387,26 @@ mod tests {
     }
 
     #[test]
+    fn klipy_is_normalized() {
+        let resp = json!({
+            "results": [
+                { "id": "1", "content_description": "Hello", "media_formats": {
+                    "gif": { "url": "https://static.klipy.com/a/hello.gif", "dims": [480, 270] },
+                    "tinygif": { "url": "https://static1.klipy.com/a/hello-tiny.gif" } } },
+                { "id": "2", "media_formats": { "gif": { "url": "https://evil.example/x.gif" } } }
+            ],
+            "next": "Mg=="
+        });
+        let out = normalize_klipy(&resp);
+        let items = out["results"].as_array().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["preview"], "https://static1.klipy.com/a/hello-tiny.gif");
+        assert_eq!(items[0]["width"], 480);
+        assert_eq!(out["next"], "Mg==");
+        assert!(normalize_klipy(&json!({ "results": [], "next": "a&key=x" }))["next"].is_null());
+    }
+
+    #[test]
     fn commons_keeps_animated_gifs_only() {
         let resp = json!({
             "continue": { "gsroffset": 24 },
@@ -329,10 +426,11 @@ mod tests {
     }
 
     #[test]
-    fn pagination_is_a_small_number() {
+    fn pagination_token_is_restricted() {
         assert!(valid_pos("48"));
+        assert!(valid_pos("Mg=="));
         assert!(!valid_pos("a&key=x"));
-        assert!(!valid_pos("1234567"));
-        assert!(!valid_pos("CAgQ.48"));
+        assert!(!valid_pos("../a"));
+        assert!(!valid_pos(&"a".repeat(65)));
     }
 }

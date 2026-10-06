@@ -227,6 +227,8 @@ describe('GIF : GIPHY ou Wikimedia via le serveur, GIF du téléphone', () => {
 
   it('résultats du serveur : seules les images des CDN connus, sans paramètres, sont gardées', () => {
     expect(isGifMediaUrl('https://i.giphy.com/media/abc/200w.webp')).toBe(true)
+    expect(isGifMediaUrl('https://static1.klipy.com/ii/a/b.gif')).toBe(true)
+    expect(parseGifResults({ results: [], next: 'Mg==' }).next).toBe('Mg==')
     expect(isGifMediaUrl('https://media.giphy.com:444/media/a/a.gif')).toBe(false)
     expect(isGifMediaUrl('https://u:p@media.giphy.com/media/a/a.gif')).toBe(false)
     expect(isGifMediaUrl('https://media.giphy.com/media/a/a.gif?rid=1')).toBe(false)
