@@ -408,18 +408,35 @@ pub fn start_camera(preview: Arc<VideoServer>, preview_key: String) -> Result<(C
 }
 
 /// Partage d'écran natif : portail PipeWire (sélecteur du système) sous
-/// Wayland, capture X11 sinon.
-pub fn start_screen(preview: Arc<VideoServer>, preview_key: String) -> Result<(Capture, NativeVideoSource), String> {
+/// Wayland, capture X11 sinon. `on_end` est appelé si le système arrête le
+/// partage (portail fermé, écran débranché), jamais sur un arrêt demandé.
+pub fn start_screen(
+    preview: Arc<VideoServer>,
+    preview_key: String,
+    on_end: impl FnOnce() + Send + 'static,
+) -> Result<(Capture, NativeVideoSource), String> {
     start("fc-screen", true, move |stop, slot, ready| {
-        let ready = Mutex::new(Some(ready));
+        let ready = Arc::new(Mutex::new(Some(ready)));
+        let ended = Arc::new(AtomicBool::new(false));
+        let (ready_cb, ended_cb) = (ready.clone(), ended.clone());
         let mut out = frame_of(I420Buffer::new(2, 2));
         let mut last_preview = Instant::now() - Duration::from_secs(1);
         let (pv, pk) = (preview.clone(), preview_key.clone());
         let callback = move |result: Result<DesktopFrame, CaptureError>| {
-            let Ok(frame) = result else { return };
+            let frame = match result {
+                Ok(frame) => frame,
+                // Sélecteur annulé avant la première image : on le dit tout de
+                // suite au lieu d'attendre les 60 s du démarrage.
+                Err(CaptureError::Permanent) => {
+                    if let Some(tx) = ready_cb.lock().unwrap().take() { let _ = tx.send(Err("partage d'écran annulé".into())); }
+                    ended_cb.store(true, Ordering::Relaxed);
+                    return;
+                }
+                Err(CaptureError::Temporary) => return,
+            };
             let (w, h) = (frame.width() & !1, frame.height() & !1);
             if w <= 0 || h <= 0 { return; }
-            if let Some(tx) = ready.lock().unwrap().take() { let _ = tx.send(Ok((w as u32, h as u32))); }
+            if let Some(tx) = ready_cb.lock().unwrap().take() { let _ = tx.send(Ok((w as u32, h as u32))); }
             if out.buffer.width() as i32 != w || out.buffer.height() as i32 != h {
                 out.buffer = I420Buffer::new(w as u32, h as u32);
             }
@@ -436,15 +453,19 @@ pub fn start_screen(preview: Arc<VideoServer>, preview_key: String) -> Result<(C
         let options = DesktopCapturerOptions::new(DesktopCaptureSourceType::Generic);
         let Some(mut capturer) = DesktopCapturer::new(options) else {
             eprintln!("[ForgeChat] capture d'écran indisponible");
+            if let Some(tx) = ready.lock().unwrap().take() { let _ = tx.send(Err("capture d'écran indisponible".into())); }
             return;
         };
         let source = capturer.get_source_list().first().cloned();
         capturer.start_capture(source, callback);
-        while !stop.load(Ordering::Relaxed) {
+        while !stop.load(Ordering::Relaxed) && !ended.load(Ordering::Relaxed) {
             capturer.capture_frame();
             thread::sleep(Duration::from_millis(16));
         }
         preview.remove(&preview_key);
+        if !stop.load(Ordering::Relaxed) {
+            on_end();
+        }
     })
 }
 

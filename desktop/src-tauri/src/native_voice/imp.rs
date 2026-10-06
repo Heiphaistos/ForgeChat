@@ -25,6 +25,7 @@ struct Session {
     screen: Option<(LocalTrackPublication, Capture)>,
     video: Arc<VideoServer>,
     events: tauri::async_runtime::JoinHandle<()>,
+    app: AppHandle,
 }
 
 #[derive(Default)]
@@ -214,17 +215,26 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     })?;
     let room = Arc::new(room);
 
+    // Micro refusé (jeton sans droit de parole, périphérique absent) : on reste
+    // dans le salon pour écouter, au lieu d'échouer toute la connexion.
     let mic_pub = if mic {
         let track = LocalAudioTrack::create_audio_track("microphone", audio.rtc_source());
-        let publication = room
+        match room
             .local_participant()
             .publish_track(LocalTrack::Audio(track), TrackPublishOptions { source: TrackSource::Microphone, ..Default::default() })
             .await
-            .map_err(|e| format!("micro : {e}"))?;
-        if !mic_open {
-            publication.mute();
+        {
+            Ok(publication) => {
+                if !mic_open {
+                    publication.mute();
+                }
+                Some(publication)
+            }
+            Err(e) => {
+                eprintln!("[ForgeChat] micro non publié : {e}");
+                None
+            }
         }
-        Some(publication)
     } else {
         None
     };
@@ -233,7 +243,7 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     // livre en `TrackSubscribed`, traité par la boucle d'événements.
     let events = tauri::async_runtime::spawn(run_events(app.clone(), room.clone(), video.clone(), rx));
     state(&app, "connected", None, None);
-    *session().lock().await = Some(Session { room, _audio: audio, mic: mic_pub, camera: None, screen: None, video, events });
+    *session().lock().await = Some(Session { room, _audio: audio, mic: mic_pub, camera: None, screen: None, video, events, app });
     Ok(())
 }
 
@@ -242,8 +252,10 @@ pub async fn disconnect() {
     // Les captures s'arrêtent en premier (threads joints à la libération).
     drop(s.camera);
     drop(s.screen);
-    let _ = s.room.close().await;
+    // Boucle d'événements arrêtée AVANT la fermeture : sinon son « disconnected »
+    // arrivait aux écouteurs de la session suivante (appel coupé à peine ouvert).
     s.events.abort();
+    let _ = s.room.close().await;
     *prefs().lock().unwrap() = AudioPrefs::default();
 }
 
@@ -286,44 +298,65 @@ async fn publish_video(room: &Room, name: &str, source: livekit::webrtc::video_s
         .map_err(|e| e.to_string())
 }
 
-pub async fn set_camera(on: bool) -> Result<Option<String>, String> {
-    let mut guard = session().lock().await;
-    let Some(s) = guard.as_mut() else { return Err("pas d'appel en cours".into()) };
-    if let Some((publication, capture)) = s.camera.take() {
-        let _ = s.room.local_participant().unpublish_track(&publication.sid()).await;
-        drop(capture);
-    }
-    if !on {
-        return Ok(None);
-    }
-    let key = "local-camera".to_string();
-    let (capture, source) = {
-        let v = s.video.clone();
-        let k = key.clone();
-        tauri::async_runtime::spawn_blocking(move || video::start_camera(v, k)).await.map_err(|e| e.to_string())??
+fn video_slot(s: &mut Session, screen: bool) -> &mut Option<(LocalTrackPublication, Capture)> {
+    if screen { &mut s.screen } else { &mut s.camera }
+}
+
+/// Caméra ou partage d'écran. La capture démarre SANS le verrou de session : le
+/// sélecteur d'écran du système peut attendre l'utilisateur jusqu'à 60 s, et le
+/// verrou tenu bloquait micro, push-to-talk et sortie pendant tout ce temps.
+async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
+    let (room, server, app) = {
+        let mut guard = session().lock().await;
+        let Some(s) = guard.as_mut() else { return Err("pas d'appel en cours".into()) };
+        if let Some((publication, capture)) = video_slot(s, screen).take() {
+            let _ = s.room.local_participant().unpublish_track(&publication.sid()).await;
+            drop(capture);
+        }
+        if !on {
+            return Ok(None);
+        }
+        (s.room.clone(), s.video.clone(), s.app.clone())
     };
-    let publication = publish_video(&s.room, "camera", source, TrackSource::Camera).await?;
-    s.camera = Some((publication, capture));
-    Ok(Some(s.video.url(&key)))
+    let key = if screen { "local-screen" } else { "local-camera" }.to_string();
+    let (capture, source) = {
+        let (v, k) = (server.clone(), key.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            if screen {
+                // Partage arrêté par le système (portail fermé) : le front coupe le partage.
+                video::start_screen(v, k, move || { let _ = app.emit("nv:local_ended", "screen"); })
+            } else {
+                video::start_camera(v, k)
+            }
+        })
+        .await
+        .map_err(|e| e.to_string())??
+    };
+    let (name, kind) = if screen { ("screen", TrackSource::Screenshare) } else { ("camera", TrackSource::Camera) };
+    let publication = publish_video(&room, name, source, kind).await?;
+    let mut guard = session().lock().await;
+    match guard.as_mut() {
+        Some(s) if Arc::ptr_eq(&s.room, &room) => {
+            // Une capture lancée en parallèle (double clic) est remplacée.
+            if let Some((old, old_capture)) = video_slot(s, screen).replace((publication, capture)) {
+                let _ = s.room.local_participant().unpublish_track(&old.sid()).await;
+                drop(old_capture);
+            }
+            Ok(Some(server.url(&key)))
+        }
+        _ => {
+            // Appel quitté pendant la capture.
+            let _ = room.local_participant().unpublish_track(&publication.sid()).await;
+            drop(capture);
+            Err("pas d'appel en cours".into())
+        }
+    }
+}
+
+pub async fn set_camera(on: bool) -> Result<Option<String>, String> {
+    set_video(on, false).await
 }
 
 pub async fn set_screen(on: bool) -> Result<Option<String>, String> {
-    let mut guard = session().lock().await;
-    let Some(s) = guard.as_mut() else { return Err("pas d'appel en cours".into()) };
-    if let Some((publication, capture)) = s.screen.take() {
-        let _ = s.room.local_participant().unpublish_track(&publication.sid()).await;
-        drop(capture);
-    }
-    if !on {
-        return Ok(None);
-    }
-    let key = "local-screen".to_string();
-    let (capture, source) = {
-        let v = s.video.clone();
-        let k = key.clone();
-        tauri::async_runtime::spawn_blocking(move || video::start_screen(v, k)).await.map_err(|e| e.to_string())??
-    };
-    let publication = publish_video(&s.room, "screen", source, TrackSource::Screenshare).await?;
-    s.screen = Some((publication, capture));
-    Ok(Some(s.video.url(&key)))
+    set_video(on, true).await
 }
