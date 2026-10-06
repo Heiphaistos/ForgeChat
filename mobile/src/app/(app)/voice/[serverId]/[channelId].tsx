@@ -11,6 +11,10 @@ import { Button, ErrorState, PasswordField, type IconName } from '@/components/u
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { isScreenShareCancel } from '@/features/calls/screenShareLogic'
+import { useServerPerms } from '@/features/servers/menus'
+import { PERM } from '@/features/servers/perms'
+import { SoundboardSheet } from '@/features/voice/SoundboardSheet'
+import { StagePanel } from '@/features/voice/StagePanel'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
@@ -28,7 +32,7 @@ const VOLUMES = [
 const QUALITY_LABEL: Record<string, string> = { poor: 'Connexion faible', lost: 'Connexion perdue' }
 
 export default function VoiceScreen() {
-  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name', 'locked'])
+  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name', 'locked', 'stage'])
   const v = useVoice()
   const me = useAuth((s) => s.user)
   const insets = useSafeAreaInsets()
@@ -37,12 +41,16 @@ export default function VoiceScreen() {
   const [viewing, setViewing] = useState<{ userId: string; key: string } | null>(null)
   const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
   const [more, setMore] = useState(false)
+  const [sounds, setSounds] = useState(false)
+  const perms = useServerPerms(ids.serverId ?? '', valid)
   if (!valid) return <ErrorState message="Lien de salon vocal invalide." />
 
   // Salon auto-création : channelId devient le salon temporaire, entryChannelId reste celui choisi.
   const here = !!v.channelId && (v.channelId === ids.channelId || v.entryChannelId === ids.channelId)
   const name = (here ? v.channelName : null) ?? text.name ?? 'Salon vocal'
   const needsPassword = text.locked === '1'
+  // Barre « en vocal » (Overlays) : pas de paramètre `stage`, l'état du store fait foi.
+  const isStage = here ? !!v.stage : text.stage === '1'
 
   const join = async (listenOnly: boolean) => {
     if (useCall.getState().phase !== 'idle') {
@@ -54,7 +62,8 @@ export default function VoiceScreen() {
       return
     }
     try {
-      await v.join(ids.serverId, ids.channelId, name, needsPassword ? password : undefined, listenOnly)
+      const pw = needsPassword ? password : undefined
+      await (isStage ? v.joinStage(ids.serverId, ids.channelId, name, pw) : v.join(ids.serverId, ids.channelId, name, pw, listenOnly))
     } catch (e) {
       Alert.alert('Impossible de rejoindre', errorMessage(e))
     }
@@ -126,13 +135,14 @@ export default function VoiceScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgDeep }}>
-      <Stack.Screen options={{ title: `🔊 ${name}` }} />
+      <Stack.Screen options={{ title: `${isStage ? '📻' : '🔊'} ${name}` }} />
       <StreamViewer sources={viewerSources} initialKey={viewing && viewerSources.length ? viewing.key : null} onClose={() => setViewing(null)} />
       <Sheet visible={!!volumeOf} onClose={() => setVolumeOf(null)} title={volumeOf ? `Volume de ${volumeOf.username}` : undefined} actions={volumeActions} />
       <Sheet visible={more} onClose={() => setMore(false)} actions={moreActions} />
+      {here ? <SoundboardSheet serverId={ids.serverId} canManage={perms.has(PERM.MANAGE_SERVER)} visible={sounds} onClose={() => setSounds(false)} /> : null}
       {!here ? (
         <View style={styles.join}>
-          <Ionicons name="volume-high" size={56} color={colors.textMuted} />
+          <Ionicons name={isStage ? 'radio-outline' : 'volume-high'} size={56} color={colors.textMuted} />
           <Text style={styles.title}>{name}</Text>
           {v.error ? <Text style={{ color: colors.danger, textAlign: 'center' }}>{v.error}</Text> : null}
           {needsPassword ? (
@@ -140,67 +150,84 @@ export default function VoiceScreen() {
               <PasswordField placeholder="Mot de passe du salon" value={password} onChangeText={setPassword} />
             </View>
           ) : null}
-          <Button title="Rejoindre le vocal" icon="mic" onPress={() => void join(false)} loading={v.joining} style={{ alignSelf: 'stretch' }} />
-          <Button title="Écouter seulement" icon="headset" variant="ghost" onPress={() => void join(true)} disabled={v.joining} />
+          {isStage ? (
+            <Button title="Rejoindre la scène" icon="headset" onPress={() => void join(true)} loading={v.joining} style={{ alignSelf: 'stretch' }} />
+          ) : (
+            <>
+              <Button title="Rejoindre le vocal" icon="mic" onPress={() => void join(false)} loading={v.joining} style={{ alignSelf: 'stretch' }} />
+              <Button title="Écouter seulement" icon="headset" variant="ghost" onPress={() => void join(true)} disabled={v.joining} />
+            </>
+          )}
         </View>
       ) : (
         <>
           {v.error ? <Banner text={v.error} tone="danger" onPress={v.dismiss} /> : v.notice ? <Banner text={v.notice} tone="info" onPress={v.dismiss} /> : null}
           {status ? <Banner text={status} tone="warning" /> : null}
-          <FlatList
-            data={tiles}
-            keyExtractor={(t) => t.key}
-            numColumns={2}
-            contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
-            columnWrapperStyle={{ gap: spacing.md }}
-            renderItem={({ item }) => {
-              const label = item.screen ? `Écran de ${item.peer.username}` : item.peer.username
-              const open = item.stream && !item.self ? () => setViewing({ userId: item.peer.userId, key: item.screen ? 'screen' : 'camera' }) : undefined
-              const speaking = !item.screen && v.speaking.includes(item.peer.userId)
-              const reaction = item.screen ? undefined : v.reactions[item.peer.userId]
-              const peer = item.self || item.screen ? undefined : v.peers.find((p) => p.userId === item.peer.userId)
-              const volume = v.volumes[item.peer.userId]
-              return (
-                <Pressable
-                  style={[styles.tile, speaking && styles.speaking]}
-                  onPress={open}
-                  onLongPress={peer ? () => setVolumeOf(peer) : undefined}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${label}${speaking ? ', parle' : ''}${item.peer.handRaised ? ', main levée' : ''}`}
-                  accessibilityHint={peer ? 'Appui long : régler le volume' : undefined}
-                >
-                  {item.stream ? (
-                    <RTCView
-                      streamURL={item.stream.toURL()}
-                      style={StyleSheet.absoluteFill}
-                      objectFit={item.screen ? 'contain' : 'cover'}
-                      mirror={item.self && v.facing === 'user'}
-                    />
-                  ) : (
-                    <Avatar uri={item.peer.avatar} name={item.peer.username} size={64} />
-                  )}
-                  {reaction ? <Text style={styles.reaction}>{reaction}</Text> : null}
-                  <View style={styles.tileLabel}>
-                    {item.screen ? <Ionicons name="tv-outline" size={12} color="#fff" /> : null}
-                    {!item.screen && item.peer.muted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
-                    {!item.screen && item.peer.handRaised ? <Text style={styles.tileName}>✋</Text> : null}
-                    {item.peer.recording ? <Ionicons name="radio-button-on" size={12} color={colors.danger} accessibilityLabel="Enregistre" /> : null}
-                    {volume !== undefined && volume !== 1 ? <Ionicons name={volume === 0 ? 'volume-mute' : 'volume-high'} size={12} color={colors.warning} /> : null}
-                    <Text style={styles.tileName} numberOfLines={1}>
-                      {item.self ? `${label} (toi)` : label}
-                    </Text>
-                  </View>
-                </Pressable>
-              )
-            }}
-          />
-          <View style={styles.reactions}>
-            {REACTIONS.map((emoji) => (
-              <Pressable key={emoji} onPress={() => v.react(emoji)} accessibilityRole="button" accessibilityLabel={`Réagir ${emoji}`} hitSlop={4}>
-                <Text style={{ fontSize: 22 }}>{emoji}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {v.stage ? (
+            <View style={{ flex: 1 }}>
+              <StagePanel
+                me={{ userId: myId, username: me?.username ?? 'Moi', avatar: me?.avatar ?? null }}
+                isModerator={perms.has(PERM.MANAGE_CHANNELS)}
+              />
+            </View>
+          ) : (
+            <>
+              <FlatList
+                data={tiles}
+                keyExtractor={(t) => t.key}
+                numColumns={2}
+                contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
+                columnWrapperStyle={{ gap: spacing.md }}
+                renderItem={({ item }) => {
+                  const label = item.screen ? `Écran de ${item.peer.username}` : item.peer.username
+                  const open = item.stream && !item.self ? () => setViewing({ userId: item.peer.userId, key: item.screen ? 'screen' : 'camera' }) : undefined
+                  const speaking = !item.screen && v.speaking.includes(item.peer.userId)
+                  const reaction = item.screen ? undefined : v.reactions[item.peer.userId]
+                  const peer = item.self || item.screen ? undefined : v.peers.find((p) => p.userId === item.peer.userId)
+                  const volume = v.volumes[item.peer.userId]
+                  return (
+                    <Pressable
+                      style={[styles.tile, speaking && styles.speaking]}
+                      onPress={open}
+                      onLongPress={peer ? () => setVolumeOf(peer) : undefined}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${label}${speaking ? ', parle' : ''}${item.peer.handRaised ? ', main levée' : ''}`}
+                      accessibilityHint={peer ? 'Appui long : régler le volume' : undefined}
+                    >
+                      {item.stream ? (
+                        <RTCView
+                          streamURL={item.stream.toURL()}
+                          style={StyleSheet.absoluteFill}
+                          objectFit={item.screen ? 'contain' : 'cover'}
+                          mirror={item.self && v.facing === 'user'}
+                        />
+                      ) : (
+                        <Avatar uri={item.peer.avatar} name={item.peer.username} size={64} />
+                      )}
+                      {reaction ? <Text style={styles.reaction}>{reaction}</Text> : null}
+                      <View style={styles.tileLabel}>
+                        {item.screen ? <Ionicons name="tv-outline" size={12} color="#fff" /> : null}
+                        {!item.screen && item.peer.muted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
+                        {!item.screen && item.peer.handRaised ? <Text style={styles.tileName}>✋</Text> : null}
+                        {item.peer.recording ? <Ionicons name="radio-button-on" size={12} color={colors.danger} accessibilityLabel="Enregistre" /> : null}
+                        {volume !== undefined && volume !== 1 ? <Ionicons name={volume === 0 ? 'volume-mute' : 'volume-high'} size={12} color={colors.warning} /> : null}
+                        <Text style={styles.tileName} numberOfLines={1}>
+                          {item.self ? `${label} (toi)` : label}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  )
+                }}
+              />
+              <View style={styles.reactions}>
+                {REACTIONS.map((emoji) => (
+                  <Pressable key={emoji} onPress={() => v.react(emoji)} accessibilityRole="button" accessibilityLabel={`Réagir ${emoji}`} hitSlop={4}>
+                    <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
           <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.md }]}>
             <Control
               icon={v.muted ? 'mic-off' : 'mic'}
@@ -210,11 +237,14 @@ export default function VoiceScreen() {
               dim={v.speakLocked || v.listenOnly}
             />
             <Control icon={v.deafened ? 'volume-mute' : 'headset'} label="Sourdine" onPress={v.toggleDeafen} active={v.deafened} />
-            {!v.listenOnly ? (
+            {!v.listenOnly && !v.stage ? (
               <Control icon={v.video ? 'videocam' : 'videocam-off'} label={v.video ? 'Couper la caméra' : 'Activer la caméra'} onPress={() => void v.toggleCamera()} active={v.video} />
             ) : null}
             <Control icon={v.speaker ? 'volume-high' : 'ear-outline'} label="Haut-parleur" onPress={v.toggleSpeaker} />
-            <Control icon="ellipsis-horizontal" label="Plus d’options" onPress={() => setMore(true)} active={v.handRaised || v.screenSharing} />
+            {v.stage ? null : <Control icon="musical-notes" label="Soundboard" onPress={() => setSounds(true)} />}
+            {v.stage ? null : (
+              <Control icon="ellipsis-horizontal" label="Plus d’options" onPress={() => setMore(true)} active={v.handRaised || v.screenSharing} />
+            )}
             <Control
               icon="call"
               label="Quitter le vocal"

@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions } from '@/services/media'
+import { playSoundFile } from '@/services/soundboard'
 import { getMyId, registerSignOutHook } from './auth'
 
 /**
@@ -22,7 +23,13 @@ import { getMyId, registerSignOutHook } from './auth'
  *    réouverture (le média LiveKit, lui, survit le plus souvent) ;
  *  - modération : VOICE_SERVER_STATE (muet / sourdine imposés), VOICE_MOVE, VOICE_FORCE_DISCONNECT ;
  *  - média par le SFU LiveKit (identité = id utilisateur) ; micro, caméra et écran sont des pistes
- *    de sources distinctes.
+ *    de sources distinctes ;
+ *  - soundboard : SOUNDBOARD_PLAY { sound_id, channel_id } → diffusé au salon avec file_url et user_id ;
+ *  - scène (salon `stage`, server/src/handlers/websocket.rs + client/src/components/voice/StageChannel.tsx) :
+ *    STAGE_JOIN → STAGE_STATE { speakers, hand_raises } ; STAGE_HAND_RAISE / STAGE_REQUEST_SPEAK,
+ *    STAGE_INVITE_SPEAK { target_user_id } (modérateur), STAGE_LEAVE_SPEAKER { target_user_id? } ;
+ *    le serveur diffuse STAGE_SPEAKER_ADD / STAGE_SPEAKER_REMOVE / STAGE_HAND_RAISE. L'audience écoute
+ *    seulement (listen_only) ; un orateur rejoint le salon avec micro.
  */
 
 export interface VoicePeer {
@@ -39,6 +46,21 @@ export interface VoicePeer {
   /** Ce pair enregistre la conversation. */
   recording: boolean
   handRaised: boolean
+}
+
+export interface StageUser {
+  userId: string
+  username: string
+  avatar: string | null
+}
+
+/** Salon Scène : orateurs et mains levées tenus par le serveur (en mémoire). */
+export interface StageState {
+  channelId: string
+  speakers: StageUser[]
+  hands: StageUser[]
+  /** Demande de parole envoyée, en attente d'un modérateur. */
+  requested: boolean
 }
 
 export type MediaStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
@@ -78,6 +100,8 @@ interface VoiceState {
   error: string | null
   /** Information non bloquante (enregistrement, modération…). */
   notice: string | null
+  /** Salon Scène en cours (null pour un salon vocal ordinaire). */
+  stage: StageState | null
   join: (serverId: string, channelId: string, channelName: string, password?: string, listenOnly?: boolean) => Promise<void>
   leave: () => void
   toggleMute: () => void
@@ -91,6 +115,16 @@ interface VoiceState {
   toggleHand: () => void
   react: (emoji: string) => void
   dismiss: () => void
+  /** Joue un son pour tout le salon (et pour soi, sauf en sourdine). */
+  playSound: (soundId: string, fileUrl: string) => void
+  /** Rejoint une scène en auditeur. */
+  joinStage: (serverId: string, channelId: string, channelName: string, password?: string) => Promise<void>
+  stageRequestSpeak: () => void
+  stageToggleHand: () => void
+  /** Modérateur : donner la parole (soi-même compris). */
+  stageInvite: (userId: string) => void
+  /** Redescendre de la scène, ou (modérateur) retirer la parole à `userId`. */
+  stageRemoveSpeaker: (userId?: string) => void
 }
 
 let room: Room | null = null
@@ -112,6 +146,12 @@ const leftChannels = new Set<string>()
 const reactionTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 100
+const stageUser = (raw: unknown): StageUser | null => {
+  const r = raw as Record<string, unknown> | null
+  if (!r || !isStr(r.user_id)) return null
+  return { userId: r.user_id, username: isStr(r.username) ? r.username : '…', avatar: isStr(r.avatar) ? r.avatar : null }
+}
+const stageUsers = (list: unknown): StageUser[] => (Array.isArray(list) ? list.map(stageUser).filter((u): u is StageUser => !!u) : [])
 const CAMERA_OPTIONS = { resolution: CAMERA_RESOLUTION }
 const REJOIN_TIMEOUT_MS = 15_000
 
@@ -206,9 +246,11 @@ export const useVoice = create<VoiceState>((set, get) => {
 
   /** Rejoue VOICE_JOIN (reconnexion du WebSocket, SFU perdu) : le serveur renvoie l'état et un jeton. */
   const rejoin = () => {
-    const { channelId, joined, joining, listenOnly } = get()
+    const { channelId, joined, joining, listenOnly, stage } = get()
     if (!channelId || !(joined || joining)) return
     realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(joinPassword ? { password: joinPassword } : {}) })
+    // Le serveur retire un orateur dont le WebSocket tombe : relire l'état de la scène.
+    if (stage) realtime.send({ type: 'STAGE_JOIN', channel_id: stage.channelId })
     clearRejoinTimer()
     rejoinTimer = setTimeout(() => {
       rejoinTimer = null
@@ -293,6 +335,30 @@ export const useVoice = create<VoiceState>((set, get) => {
       logger.warn('voice', 'publication micro/caméra', err)
       set({ error: 'Ton micro ou ta caméra n’a pas pu être diffusé. Vérifie les permissions du salon.' })
     }
+  }
+
+  /** Scène : passer d'auditeur à orateur (ou l'inverse) = rejoindre à nouveau avec ou sans micro, comme le web. */
+  const switchStageMode = (listenOnly: boolean) => {
+    const { stage, serverId, channelName } = get()
+    if (!stage || !serverId) return
+    const password = joinPassword
+    set({ stage: null }) // leave() ne doit pas nous faire descendre de scène
+    get().leave()
+    get()
+      .join(serverId, stage.channelId, channelName ?? 'Scène', password, listenOnly)
+      .catch((e: unknown) => logger.warn('voice', 'scène', e))
+    set({ stage })
+  }
+  /** Orateur ⇔ micro : aligne le mode d'écoute sur la liste des orateurs. */
+  const syncStageMode = () => {
+    const s = get()
+    if (!s.stage || !s.channelId) return
+    const speaker = s.stage.speakers.some((u) => u.userId === getMyId())
+    if (speaker === s.listenOnly) switchStageMode(!speaker)
+  }
+  const stageHere = (cid: unknown) => {
+    const st = get().stage
+    return st && isStr(cid) && cid === st.channelId ? st : null
   }
 
   // ── Signalisation entrante (enregistrée une fois, filtrée sur le salon courant) ──
@@ -394,7 +460,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       e.reason === 'wrong_password'
         ? 'Mot de passe vocal incorrect'
         : e.reason === 'channel_full' || e.reason === 'full'
-          ? 'Salon plein'
+          ? `Salon plein${typeof e.limit === 'number' && typeof e.current === 'number' ? ` (${e.current}/${e.limit})` : ''}`
           : e.reason === 'missing_permission'
             ? 'Tu n’as pas la permission de rejoindre ce salon vocal'
             : e.reason === 'rate_limited'
@@ -494,6 +560,57 @@ export const useVoice = create<VoiceState>((set, get) => {
     )
   })
 
+  // Son joué par un autre membre du salon (le nôtre est déjà joué localement).
+  realtime.on('SOUNDBOARD_PLAY', (e) => {
+    const s = get()
+    if (!here(e.channel_id) || !s.joined || s.deafened || e.user_id === getMyId()) return
+    playSoundFile(e.file_url)
+  })
+
+  // ── Scène ──
+  realtime.on('STAGE_STATE', (e) => {
+    const st = stageHere(e.channel_id)
+    if (!st) return
+    set({ stage: { ...st, speakers: stageUsers(e.speakers), hands: stageUsers(e.hand_raises) } })
+    syncStageMode()
+  })
+
+  realtime.on('STAGE_SPEAKER_ADD', (e) => {
+    const st = stageHere(e.channel_id)
+    const u = stageUser(e)
+    if (!st || !u) return
+    const mine = u.userId === getMyId()
+    set({
+      stage: {
+        ...st,
+        speakers: st.speakers.some((x) => x.userId === u.userId) ? st.speakers : [...st.speakers, u],
+        hands: st.hands.filter((x) => x.userId !== u.userId),
+        requested: mine ? false : st.requested,
+      },
+    })
+    if (mine) syncStageMode()
+  })
+
+  realtime.on('STAGE_SPEAKER_REMOVE', (e) => {
+    const st = stageHere(e.channel_id)
+    if (!st || !isStr(e.user_id)) return
+    set({ stage: { ...st, speakers: st.speakers.filter((x) => x.userId !== e.user_id) } })
+    if (e.user_id === getMyId()) syncStageMode()
+  })
+
+  realtime.on('STAGE_HAND_RAISE', (e) => {
+    const st = stageHere(e.channel_id)
+    const u = stageUser(e)
+    if (!st || !u) return
+    const raised = e.raised === true
+    const mine = u.userId === getMyId()
+    const hands = st.hands.filter((x) => x.userId !== u.userId)
+    set({
+      stage: { ...st, hands: raised ? [...hands, u] : hands, requested: mine && !raised ? false : st.requested },
+      ...(raised && !mine ? { notice: `✋ ${u.username} demande à parler` } : {}),
+    })
+  })
+
   return {
     serverId: null,
     channelId: null,
@@ -519,6 +636,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     quality: null,
     error: null,
     notice: null,
+    stage: null,
 
     join: async (serverId, channelId, channelName, password, listenOnly = false) => {
       const cur = get()
@@ -563,7 +681,12 @@ export const useVoice = create<VoiceState>((set, get) => {
     },
 
     leave: () => {
-      const { channelId, entryChannelId } = get()
+      const { channelId, entryChannelId, stage } = get()
+      if (stage) {
+        // Quitter la scène pour de bon : le serveur ne retire un orateur qu'à la déconnexion du WebSocket.
+        if (stage.speakers.some((u) => u.userId === getMyId())) realtime.send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: stage.channelId })
+        set({ stage: null })
+      }
       if (!channelId) return
       joinGeneration++
       clearRejoinTimer()
@@ -599,7 +722,13 @@ export const useVoice = create<VoiceState>((set, get) => {
       const s = get()
       if (s.muted && !speakAllowed()) {
         // Parole interdite par le serveur ou écoute seule : le dire au lieu de ne rien faire.
-        set({ notice: s.listenOnly ? 'Mode écoute seule : rejoins le salon normalement pour parler.' : 'Tu ne peux pas parler dans ce salon pour le moment.' })
+        set({
+          notice: s.stage
+            ? 'Tu es dans l’audience : demande la parole pour parler.'
+            : s.listenOnly
+              ? 'Mode écoute seule : rejoins le salon normalement pour parler.'
+              : 'Tu ne peux pas parler dans ce salon pour le moment.',
+        })
         return
       }
       const muted = !s.muted
@@ -708,6 +837,44 @@ export const useVoice = create<VoiceState>((set, get) => {
     },
 
     dismiss: () => set({ error: null, notice: null }),
+
+    playSound: (soundId, fileUrl) => {
+      const { channelId, joined, deafened } = get()
+      if (!channelId || !joined) return
+      realtime.send({ type: 'SOUNDBOARD_PLAY', sound_id: soundId, channel_id: channelId })
+      if (!deafened) playSoundFile(fileUrl)
+    },
+
+    joinStage: async (serverId, channelId, channelName, password) => {
+      const joining = get().join(serverId, channelId, channelName, password, true)
+      set({ stage: { channelId, speakers: [], hands: [], requested: false } })
+      realtime.send({ type: 'STAGE_JOIN', channel_id: channelId })
+      await joining
+    },
+
+    stageRequestSpeak: () => {
+      const st = get().stage
+      if (!st || st.requested) return
+      set({ stage: { ...st, requested: true }, notice: 'Demande envoyée aux modérateurs.' })
+      realtime.send({ type: 'STAGE_REQUEST_SPEAK', channel_id: st.channelId })
+    },
+
+    stageToggleHand: () => {
+      const st = get().stage
+      if (!st) return
+      const raised = !st.hands.some((u) => u.userId === getMyId())
+      realtime.send({ type: 'STAGE_HAND_RAISE', channel_id: st.channelId, raised })
+    },
+
+    stageInvite: (userId) => {
+      const st = get().stage
+      if (st) realtime.send({ type: 'STAGE_INVITE_SPEAK', channel_id: st.channelId, target_user_id: userId })
+    },
+
+    stageRemoveSpeaker: (userId) => {
+      const st = get().stage
+      if (st) realtime.send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: st.channelId, ...(userId ? { target_user_id: userId } : {}) })
+    },
   }
 })
 

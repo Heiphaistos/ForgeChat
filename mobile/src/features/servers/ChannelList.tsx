@@ -20,7 +20,7 @@ import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
 import { unreadLabel } from '@/lib/format'
 
-const VOICE_TYPES = new Set(['voice', 'video'])
+const VOICE_TYPES = new Set(['voice', 'video', 'stage'])
 
 export function channelIcon(type: string): IconName {
   switch (type) {
@@ -44,7 +44,10 @@ export function openChannel(server: Server, ch: Channel) {
   } else if (ch.type === 'forum') {
     router.push({ pathname: '/forum/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name } })
   } else if (VOICE_TYPES.has(ch.type)) {
-    router.push({ pathname: '/voice/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name, locked: ch.has_voice_password ? '1' : '0' } })
+    router.push({
+      pathname: '/voice/[serverId]/[channelId]',
+      params: { serverId: server.id, channelId: ch.id, name: ch.name, locked: ch.has_voice_password ? '1' : '0', stage: ch.type === 'stage' ? '1' : '0' },
+    })
   } else {
     Alert.alert('Bientôt sur mobile', `Les salons de type « ${ch.type} » sont disponibles sur la version web/desktop.`)
   }
