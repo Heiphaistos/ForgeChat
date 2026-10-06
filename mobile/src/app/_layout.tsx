@@ -1,8 +1,9 @@
 import '@/services/livekitSetup' // en premier : globales WebRTC de LiveKit
 import { QueryClientProvider } from '@tanstack/react-query'
 import * as Linking from 'expo-linking'
-import { DarkTheme, router, SplashScreen, Stack, ThemeProvider, usePathname } from 'expo-router'
+import { DarkTheme, DefaultTheme, router, SplashScreen, Stack, ThemeProvider, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import * as SystemUI from 'expo-system-ui'
 import { useEffect } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -21,17 +22,20 @@ import '@/stores/groupCall' // sonnerie des appels de groupe
 import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
 import { useLock } from '@/stores/lock'
 import { useSettings } from '@/stores/settings'
-import { colors } from '@/theme'
+import { colors, isLight } from '@/theme'
 
 void SplashScreen.preventAutoHideAsync()
 /** Le lien de lancement n'est rejoué qu'une fois par process (jamais après une reconnexion). */
 let initialLinkReplayed = false
 configureNotifications()
+// Fond de la fenêtre native (visible derrière le clavier et pendant les transitions) : celui du thème.
+void SystemUI.setBackgroundColorAsync(colors.bgDeep).catch(() => undefined)
 
+const baseTheme = isLight ? DefaultTheme : DarkTheme
 const theme = {
-  ...DarkTheme,
+  ...baseTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...baseTheme.colors,
     primary: colors.primary,
     background: colors.bg,
     card: colors.bgAlt,
@@ -94,7 +98,7 @@ export default function RootLayout() {
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider value={theme}>
-            <StatusBar style="light" />
+            <StatusBar style={isLight ? 'dark' : 'light'} />
             <View style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
                 <Stack.Protected guard={signedIn}>
