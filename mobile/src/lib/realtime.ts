@@ -27,6 +27,8 @@ export const useConnection = create<{ status: RealtimeStatus }>(() => ({ status:
 
 const HEARTBEAT_MS = 25_000
 const WATCHDOG_MS = 70_000
+/** Socket ni ouverte ni fermée après ce délai (réseau qui revient) : on la jette et on réessaie. */
+const OPEN_TIMEOUT_MS = 15_000
 const MAX_INBOUND_BYTES = 1_000_000
 const MAX_OUTBOUND_BYTES = 60_000 // le serveur coupe au-delà de 64 Ko
 
@@ -151,6 +153,7 @@ class RealtimeClient {
     const ws = new WebSocket(`${wsUrl()}?ticket=${encodeURIComponent(ticket)}`)
     this.socket = ws
     this.connecting = false
+    this.armWatchdog(OPEN_TIMEOUT_MS)
 
     ws.onopen = () => {
       if (gen !== this.generation) return
@@ -207,10 +210,10 @@ class RealtimeClient {
     this.anyHandlers.forEach(run)
   }
 
-  private armWatchdog() {
+  private armWatchdog(ms = WATCHDOG_MS) {
     if (this.watchdog) clearTimeout(this.watchdog)
     this.watchdog = setTimeout(() => {
-      logger.warn('ws', 'aucun trafic depuis 70 s — reconnexion')
+      logger.warn('ws', `aucun trafic depuis ${ms / 1000} s — reconnexion`)
       const s = this.socket
       this.socket = null
       this.clearTimers()
@@ -220,7 +223,7 @@ class RealtimeClient {
         /* ignore */
       }
       if (this.wanted) this.scheduleReconnect()
-    }, WATCHDOG_MS)
+    }, ms)
   }
 
   private scheduleReconnect() {
