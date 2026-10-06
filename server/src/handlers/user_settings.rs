@@ -690,3 +690,40 @@ pub async fn update_email_prefs(
     Ok(Json(serde_json::json!({ "dm_unread_notify": notify })))
 }
 
+
+// ─── Dossiers et ordre des serveurs (synchronisés entre appareils) ──────────
+// Forme libre côté client ({ order: [id], folders: { id: { name, color, serverIds } } }) :
+// le serveur ne l'interprète pas, il borne seulement la taille et exige un objet JSON.
+
+const MAX_LAYOUT_BYTES: usize = 64 * 1024;
+
+pub async fn get_server_layout(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    let layout: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT layout FROM user_server_layout WHERE user_id = $1")
+            .bind(claims.sub)
+            .fetch_optional(&state.db)
+            .await?;
+    Ok(Json(layout.unwrap_or(serde_json::Value::Null)))
+}
+
+pub async fn put_server_layout(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    if !body.is_object() || body.to_string().len() > MAX_LAYOUT_BYTES {
+        return Err(AppError::BadRequest("Disposition invalide ou trop grande".into()));
+    }
+    sqlx::query(
+        "INSERT INTO user_server_layout (user_id, layout) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET layout = EXCLUDED.layout, updated_at = NOW()",
+    )
+    .bind(claims.sub)
+    .bind(&body)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}

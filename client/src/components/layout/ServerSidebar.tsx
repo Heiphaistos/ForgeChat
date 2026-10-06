@@ -258,6 +258,32 @@ export default function ServerSidebar() {
     })
   }, [freeServers, serverOrder])
 
+  // Dossiers et ordre synchronisés entre appareils : le serveur fait foi, le localStorage sert de
+  // cache hors ligne. Au premier passage sans disposition en ligne, celle de ce navigateur y monte.
+  const layoutLoaded = useRef(false)
+  useEffect(() => {
+    let alive = true
+    api.get('/users/me/server-layout').then(({ data }) => {
+      if (!alive) return
+      if (data && typeof data === 'object') {
+        if (data.folders && typeof data.folders === 'object') { setFolders(data.folders); saveFolders(data.folders) }
+        if (Array.isArray(data.order)) {
+          setServerOrder(data.order)
+          try { localStorage.setItem('fc_server_order', JSON.stringify(data.order)) } catch { /* cache seulement */ }
+        }
+      }
+      layoutLoaded.current = true
+    }).catch(() => { /* hors ligne : on garde le cache local, sans écraser le serveur */ })
+    return () => { alive = false }
+  }, [])
+  useEffect(() => {
+    if (!layoutLoaded.current) return
+    const t = setTimeout(() => {
+      api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => {})
+    }, 800)
+    return () => clearTimeout(t)
+  }, [folders, serverOrder])
+
   const saveServerOrder = useCallback((newOrder: string[]) => {
     setServerOrder(newOrder)
     try { localStorage.setItem('fc_server_order', JSON.stringify(newOrder)) } catch {}
