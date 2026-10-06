@@ -143,6 +143,19 @@ export function bindRealtime(): () => void {
       if (tid) void queryClient.invalidateQueries({ queryKey: qk.threadMessages(tid) })
     })
   }
+  // Forums (forum.rs) : liste des publications du salon et publication ouverte.
+  for (const t of ['FORUM_POST_CREATE', 'FORUM_POST_UPDATE', 'FORUM_POST_DELETE', 'FORUM_REPLY_CREATE', 'FORUM_REPLY_DELETE']) {
+    on(t, (e) => {
+      const cid = str(e.channel_id)
+      if (cid) void queryClient.invalidateQueries({ queryKey: qk.forum(cid) })
+    })
+  }
+  for (const t of ['FORUM_POST_UPDATE', 'FORUM_REPLY_CREATE', 'FORUM_REPLY_EDIT', 'FORUM_REPLY_DELETE', 'FORUM_REPLY_REACTION', 'FORUM_REPLY_ATTACHMENT_ADDED']) {
+    on(t, (e) => {
+      const pid = str(e.post_id)
+      if (pid) void queryClient.invalidateQueries({ queryKey: qk.forumPost(pid) })
+    })
+  }
   // Sondages (polls.rs) : l'événement ne porte pas les résultats, on relit le sondage.
   for (const t of ['POLL_VOTE', 'POLL_CLOSED']) {
     on(t, (e) => {

@@ -26,6 +26,9 @@ export default function AppLayout() {
       <Stack.Screen name="channel/[serverId]/[channelId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="dm/[dmId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="thread/[serverId]/[channelId]" options={{ title: 'Fil', ...OWN_BOTTOM }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/index" options={{ title: 'Forum' }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/new" options={{ title: 'Nouvelle publication', presentation: 'modal' }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/[postId]" options={{ title: 'Publication', ...OWN_BOTTOM }} />
       <Stack.Screen name="group/[groupId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="group/create" options={{ title: 'Nouveau groupe', presentation: 'modal' }} />
       <Stack.Screen name="group/manage/[groupId]" options={{ title: 'Gérer le groupe' }} />
