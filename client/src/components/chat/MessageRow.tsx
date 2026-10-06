@@ -7,6 +7,7 @@ import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import LinkPreview from './LinkPreview'
 import { parseStickerMessage } from './StickerPicker'
+import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge } from './messageListShared'
 
@@ -237,7 +238,14 @@ function MessageRow({
               )}
 
               {msg.content && (() => {
+                const gif = gifMessage(msg.content)
+                if (gif) return <GifMessage url={gif.url} provider={gif.provider} />
                 const sticker = parseStickerMessage(msg.content)
+                if (sticker?.url) {
+                  // Sticker image (ou GIF animé) du serveur : `[sticker:nom](/uploads/stickers/…)`.
+                  const src = sticker.url.startsWith('/uploads/') && !sticker.url.includes('..') ? mediaUrl(sticker.url) : null
+                  if (src) return <img src={src} alt={`Sticker ${sticker.name}`} loading="lazy" decoding="async" className="mt-1 w-32 h-32 object-contain" />
+                }
                 if (sticker) {
                   return (
                     <div className="mt-1 inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-fc-accent/10 to-indigo-500/10 border border-fc-accent/20 shadow-sm">

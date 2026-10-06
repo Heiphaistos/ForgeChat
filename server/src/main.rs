@@ -712,6 +712,10 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/notes/:target_id", put(handlers::saved::set_note))
         // Global search
         .route("/search", get(handlers::search::global_search))
+        // GIF (KLIPY via le serveur : la clé ne quitte jamais le serveur)
+        .route("/gifs/status", get(handlers::gifs::status))
+        .route("/gifs/search", get(handlers::gifs::search))
+        .route("/gifs/trending", get(handlers::gifs::trending))
         // Audit log
         .route("/servers/:server_id/audit", get(handlers::audit::get_audit_log))
         // AutoMod

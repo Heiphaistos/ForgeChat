@@ -65,6 +65,9 @@ services:
       DISCORD_IMPORT_MAX_BYTES: ${DISCORD_IMPORT_MAX_BYTES:-21474836480}
       # Comptes autorises a lire les rapports d'erreurs (UUID separes par des virgules)
       FORGECHAT_ADMIN_USER_IDS: ${FORGECHAT_ADMIN_USER_IDS:-}
+      # GIF via KLIPY (facultatif : vide = GIF désactivés)
+      KLIPY_API_KEY: ${KLIPY_API_KEY:-}
+      KLIPY_CONTENT_FILTER: ${KLIPY_CONTENT_FILTER:-medium}
     volumes:
       - uploads:/app/uploads
       # Artefacts et manifeste des applications de bureau, deposes sur l'hote.

@@ -3,11 +3,13 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { Search, X, Loader2 } from 'lucide-react'
 
-const TENOR_KEY = import.meta.env?.VITE_TENOR_API_KEY || ''
-const TENOR_BASE = 'https://tenor.googleapis.com/v2'
-const LIMIT = 20
+import api from '../../api/client'
 
-// GIFs placeholder pour le mode démo (si Tenor inaccessible)
+// GIF via le serveur (KLIPY, routes /api/gifs/*) : la clé API reste sur le serveur.
+// L'API Tenor appelée auparavant depuis le navigateur a fermé le 30/06/2026.
+const LIMIT = 24 // = PAGE_SIZE du serveur (handlers/gifs.rs)
+
+// GIFs placeholder pour le mode démo (GIF non configurés sur le serveur ou indisponibles)
 const DEMO_GIFS = [
   { id: 'demo1', url: '', preview: '', title: '😀 Heureux', emoji: '😀' },
   { id: 'demo2', url: '', preview: '', title: '😂 Rire', emoji: '😂' },
@@ -27,25 +29,6 @@ interface TenorGif {
   preview: string
   title: string
   emoji?: string
-}
-
-interface TenorResult {
-  id: string
-  title: string
-  media_formats: {
-    gif?: { url: string; dims: number[] }
-    tinygif?: { url: string; dims: number[] }
-    nanogif?: { url: string; dims: number[] }
-  }
-}
-
-function parseTenorResults(results: TenorResult[]): TenorGif[] {
-  return results.map(r => ({
-    id: r.id,
-    url: r.media_formats?.gif?.url ?? r.media_formats?.tinygif?.url ?? '',
-    preview: r.media_formats?.tinygif?.url ?? r.media_formats?.nanogif?.url ?? r.media_formats?.gif?.url ?? '',
-    title: r.title,
-  }))
 }
 
 interface Props {
@@ -86,18 +69,14 @@ export default function GifPicker({ onPick, onClose }: Props) {
     }
 
     try {
-      if (!TENOR_KEY) throw new Error('Tenor API key missing')
-      const endpoint = query.trim()
-        ? `${TENOR_BASE}/search?q=${encodeURIComponent(query)}&key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
-        : `${TENOR_BASE}/featured?key=${TENOR_KEY}&limit=${LIMIT}&media_filter=gif${pos ? `&pos=${pos}` : ''}`
-
-      const res = await fetch(endpoint, { signal })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      const parsed = parseTenorResults(data.results ?? [])
-
+      const { data } = query.trim()
+        ? await api.get('/gifs/search', { params: { q: query, pos }, signal })
+        : await api.get('/gifs/trending', { params: { pos }, signal })
+      const parsed: TenorGif[] = (data.results ?? []).map((r: { id: string; url: string; preview: string; title: string }) => ({
+        id: r.id, url: r.url, preview: r.preview, title: r.title,
+      }))
       setGifs(prev => append ? [...prev, ...parsed] : parsed)
-      setNextPos(data.next)
+      setNextPos(data.next ?? undefined)
       setHasMore(!!data.next && parsed.length === LIMIT)
       setDemoMode(false)
     } catch (err) {
@@ -157,7 +136,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Chercher un GIF..."
+            placeholder="Search KLIPY"
             aria-label="Chercher un GIF"
             enterKeyHint="search"
             inputMode="search"
@@ -172,7 +151,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
           )}
         </div>
         {demoMode && (
-          <p className="text-xs text-fc-muted mt-1 text-center">Mode démo — Tenor inaccessible</p>
+          <p className="text-xs text-fc-muted mt-1 text-center">GIF indisponibles (non configurés sur le serveur)</p>
         )}
         {!demoMode && !search && (
           <p className="text-xs text-fc-muted mt-1 text-center font-medium" aria-hidden>Trending</p>

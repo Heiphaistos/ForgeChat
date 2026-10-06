@@ -22,6 +22,7 @@ import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 
 interface GDMReaction {
   emoji: string
@@ -1008,7 +1009,7 @@ export default function GroupDMPage() {
                               ? 'bg-fc-accent text-white rounded-tr-sm'
                               : 'bg-fc-channel text-fc-text rounded-tl-sm'
                           }`}>
-                            {renderMarkdown(msg.content)}
+                            {(() => { const gif = gifMessage(msg.content); return gif ? <GifMessage url={gif.url} provider={gif.provider} /> : renderMarkdown(msg.content) })()}
                             {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
                           </div>
                         )}
