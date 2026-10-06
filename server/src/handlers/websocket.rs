@@ -900,6 +900,17 @@ async fn handle_ws_message(
                 }
             }
 
+            // Canal temporaire différent du canal cliqué : la redirection part AVANT
+            // VOICE_EXISTING_PEERS, sinon le client ignorait la liste (et l'accès au
+            // SFU) qui portait un canal qu'il ne connaissait pas encore.
+            if effective_channel_id != channel_id {
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_REDIRECT",
+                    "from_channel_id": channel_id,
+                    "channel_id": effective_channel_id,
+                }).to_string()).await;
+            }
+
             state.broadcast_to_user(user_id, serde_json::json!({
                 "type": "VOICE_EXISTING_PEERS",
                 "channel_id": effective_channel_id,
@@ -952,15 +963,6 @@ async fn handle_ws_message(
                 state.broadcast_to_channel_members_except(
                     effective_channel_id, Some(user_id), notif.to_string(),
                 ).await;
-
-                // Si canal temporaire différent du canal cliqué, notifier le client de la redirection
-                if effective_channel_id != channel_id {
-                    state.broadcast_to_user(user_id, serde_json::json!({
-                        "type": "VOICE_REDIRECT",
-                        "from_channel_id": channel_id,
-                        "channel_id": effective_channel_id,
-                    }).to_string()).await;
-                }
             }
         }
 
