@@ -835,7 +835,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         ? await api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content })
         : await api.post(`/dms/${channelId}/messages`, { content })
       const formData = new FormData()
-      const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm'
+      const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm'
       formData.append('file', blob, `voice-${Date.now()}.${ext}`)
       const uploadUrl = serverId
         ? `/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`
@@ -1475,8 +1475,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           </div>
           )}
 
-          {/* TTL message éphémère — masqué sur petits écrans */}
-          <div className="relative hidden sm:block">
+          {/* TTL message éphémère — masqué sur petits écrans, et hors salon : le serveur ne gère
+              expires_at que dans les salons (en MP/groupe le message partait sans expiration). */}
+          {serverId && <div className="relative hidden sm:block">
             <button
               onClick={() => { setShowTtlPicker(v => !v) }}
               className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
@@ -1509,7 +1510,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 ))}
               </PickerShell>
             )}
-          </div>
+          </div>}
 
           {/* Voice message — disponible aussi en DM, cf. handleVoiceMessage */}
           {showVoiceRecorder ? (

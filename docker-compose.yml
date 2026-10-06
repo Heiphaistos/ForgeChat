@@ -46,6 +46,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@forgechat.heiphaistos.org}
+      STUN_URLS: ${STUN_URLS:-}
       TURN_URL: ${TURN_URL:-}
       TURN_USERNAME: ${TURN_USERNAME:-}
       TURN_PASSWORD: ${TURN_PASSWORD:-}

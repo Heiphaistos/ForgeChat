@@ -151,6 +151,10 @@ fn installee_par_rpm() -> bool {
 
 /// Cible du manifeste correspondant à cette copie.
 fn cible() -> &'static str {
+    // macOS : un seul format, le paquet `.app` remplacé sur place (archive `.app.tar.gz`).
+    if cfg!(target_os = "macos") {
+        return "macos";
+    }
     let installee = est_installee();
     if cfg!(windows) {
         if installee {
@@ -171,10 +175,23 @@ fn cible() -> &'static str {
 /// `$APPIMAGE` (le `.AppImage` lui-même), pas le binaire extrait dans /tmp que
 /// `current_exe()` renvoie.
 fn cible_portable() -> Result<PathBuf, String> {
-    if let Some(appimage) = std::env::var_os("APPIMAGE") {
-        return Ok(PathBuf::from(appimage));
+    // macOS : le paquet ForgeChat.app qui contient l'exécutable (…/ForgeChat.app/Contents/MacOS/…).
+    #[cfg(target_os = "macos")]
+    {
+        let exe = exe_courant()?;
+        return exe
+            .ancestors()
+            .find(|p| p.extension().is_some_and(|e| e == "app"))
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "paquet .app introuvable".to_string());
     }
-    exe_courant()
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(appimage) = std::env::var_os("APPIMAGE") {
+            return Ok(PathBuf::from(appimage));
+        }
+        exe_courant()
+    }
 }
 
 // ──────────────────────── Comparaison de versions ────────────────────────
@@ -273,7 +290,7 @@ fn choisir_artefact(
         current_version: actuelle.to_string(),
         notes: manifeste.notes.clone(),
         pub_date: manifeste.pub_date.clone(),
-        portable: target.ends_with("-portable"),
+        portable: target.ends_with("-portable") || target == "macos",
         target: target.to_string(),
         url: artefact.url.clone(),
         sha256: artefact.sha256.clone(),
@@ -411,6 +428,14 @@ pub fn update_restart(app: AppHandle) {
 /// Un seul fichier est touché : l'exécutable. Rien d'autre dans le dossier
 /// n'est ouvert, listé ni supprimé.
 fn remplacer_sur_place(cible: &Path, octets: &[u8]) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return remplacer_app_macos(cible, octets);
+    #[cfg(not(target_os = "macos"))]
+    remplacer_fichier(cible, octets)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn remplacer_fichier(cible: &Path, octets: &[u8]) -> Result<(), String> {
     let nouveau = cible.with_extension("nouveau");
     let ancien = cible.with_extension("ancien");
 
@@ -441,13 +466,50 @@ fn remplacer_sur_place(cible: &Path, octets: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// macOS : l'archive vérifiée contient `ForgeChat.app`. Elle est extraite À CÔTÉ de l'application
+/// (même volume : le renommage est atomique), puis les deux paquets sont échangés. L'ancien est
+/// balayé au lancement suivant, comme sous Windows.
+#[cfg(target_os = "macos")]
+fn remplacer_app_macos(cible: &Path, octets: &[u8]) -> Result<(), String> {
+    let dossier = cible.parent().ok_or("dossier de l'application introuvable")?;
+    let travail = dossier.join(".forgechat-maj");
+    let _ = std::fs::remove_dir_all(&travail);
+    std::fs::create_dir_all(&travail).map_err(|e| format!("écriture impossible : {e}"))?;
+    let archive = travail.join("maj.tar.gz");
+    std::fs::write(&archive, octets).map_err(|e| format!("écriture impossible : {e}"))?;
+    let ok = std::process::Command::new("/usr/bin/tar")
+        .arg("-xzf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(&travail)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    let nouveau = travail.join("ForgeChat.app");
+    if !ok || !nouveau.join("Contents/MacOS").is_dir() {
+        let _ = std::fs::remove_dir_all(&travail);
+        return Err("archive de mise à jour invalide".into());
+    }
+    let ancien = cible.with_extension("ancien");
+    let _ = std::fs::remove_dir_all(&ancien);
+    std::fs::rename(cible, &ancien).map_err(|e| format!("impossible d'écarter l'ancienne version : {e}"))?;
+    if let Err(e) = std::fs::rename(&nouveau, cible) {
+        let _ = std::fs::rename(&ancien, cible);
+        return Err(format!("impossible de mettre en place la nouvelle version : {e}"));
+    }
+    let _ = std::fs::remove_dir_all(&travail);
+    Ok(())
+}
+
 /// Balaye la dépouille de la mise à jour précédente. Elle ne peut pas être
 /// supprimée pendant qu'elle tourne, seulement écartée : c'est au lancement
 /// SUIVANT qu'elle disparaît.
 pub fn balayer_ancien() {
     if let Ok(cible) = cible_portable() {
         let ancien = cible.with_extension("ancien");
-        if ancien.exists() {
+        if ancien.is_dir() {
+            let _ = std::fs::remove_dir_all(&ancien); // macOS : paquet .app
+        } else if ancien.exists() {
             let _ = std::fs::remove_file(&ancien);
         }
     }
@@ -733,7 +795,7 @@ mod tests {
     fn la_cible_est_une_des_quatre_publiees() {
         assert!(matches!(
             cible(),
-            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-portable"
+            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-portable" | "macos"
         ));
     }
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=ForgeChat : publie les applications des releases GitHub (APK, IPA, bureau)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/sbin/forgechat_releases_sync.py
+# Ecrit seulement dans le dossier des telechargements.
+ProtectSystem=strict
+ReadWritePaths=/var/www/forgechat-desktop
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
