@@ -59,6 +59,17 @@ interface Props {
 type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
 
 function BoostSection({ server }: { server: any }) {
+  // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
+  const qc = useQueryClient()
+  const boost = useMutation({
+    mutationFn: () => api.post(`/servers/${server.id}/boost`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['server', server.id] })
+      qc.invalidateQueries({ queryKey: ['servers'] })
+      toast.success('Merci pour le boost !')
+    },
+    onError: () => toast.error('Impossible de booster'),
+  })
   const LEVELS = [
     { level: 1, threshold: 2, label: 'Niveau 1', color: 'from-indigo-500 to-purple-500' },
     { level: 2, threshold: 7, label: 'Niveau 2', color: 'from-purple-500 to-fuchsia-500' },
@@ -94,9 +105,10 @@ function BoostSection({ server }: { server: any }) {
       )}
       <button
         className="mt-3 w-full py-2 bg-fc-accent/10 hover:bg-fc-accent/20 text-fc-accent text-sm rounded-lg transition"
-        onClick={() => toast('Fonctionnalité bientôt disponible !')}
+        onClick={() => boost.mutate()}
+        disabled={boost.isPending}
       >
-        ⚡ Booster ce serveur
+        ⚡ Booster ce serveur (gratuit)
       </button>
     </div>
   )
