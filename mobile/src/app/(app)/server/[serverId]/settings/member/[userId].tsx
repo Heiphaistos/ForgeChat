@@ -6,8 +6,9 @@ import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, ErrorState, Loading, Section, SwitchRow, T } from '@/components/ui'
+import { MemberTags, ModNotes, VoiceModeration } from '@/features/servers/MemberAdmin'
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
-import { memberActions } from '@/features/servers/perms'
+import { PERM, memberActions } from '@/features/servers/perms'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -27,7 +28,7 @@ const TEMP_BANS = [
   { label: '30 jours', hours: 720 },
 ]
 
-/** Gestion d'un membre : rôles, exclusion temporaire, expulsion, bannissement. */
+/** Gestion d'un membre : rôles, tags, vocal, notes, exclusion temporaire, expulsion, bannissement. */
 export default function ManageMemberScreen() {
   const { valid, ids } = useRouteParams(['serverId', 'userId'] as const)
   const sid = ids.serverId ?? ''
@@ -66,6 +67,9 @@ export default function ManageMemberScreen() {
 
   const roles = [...(detail.data?.roles ?? [])].filter((r) => !r.is_everyone).sort((a, b) => b.position - a.position)
   const mine = new Set(member.role_ids ?? [])
+  // Vocal : le serveur accepte aussi d'agir sur soi-même (voice_moderation.rs).
+  const voiceTarget = member.user_id === perms.meId || perms.outranks(member)
+  const voice = { mute: voiceTarget && perms.has(PERM.MUTE_MEMBERS), deafen: voiceTarget && perms.has(PERM.DEAFEN_MEMBERS), move: voiceTarget && perms.has(PERM.MOVE_MEMBERS) }
   const timedOut = !!member.timeout_until && new Date(member.timeout_until).getTime() > now
 
   const sheetActions: SheetAction[] =
@@ -109,6 +113,9 @@ export default function ManageMemberScreen() {
           ))}
         </Section>
       ) : null}
+      {perms.has(PERM.MANAGE_ROLES) ? <MemberTags serverId={sid} userId={member.user_id} /> : null}
+      {voice.mute || voice.deafen || voice.move ? <VoiceModeration serverId={sid} userId={member.user_id} channels={detail.data?.channels ?? []} can={voice} /> : null}
+      {perms.has(PERM.MANAGE_MESSAGES) ? <ModNotes serverId={sid} userId={member.user_id} /> : null}
       {can.timeout ? (
         timedOut ? (
           <Button title="Lever l’exclusion temporaire" variant="secondary" icon="time-outline" loading={busy === 'untimeout'} onPress={() => void run('untimeout', () => serversApi.removeTimeout(sid, member.user_id))} />
@@ -118,7 +125,7 @@ export default function ManageMemberScreen() {
       ) : null}
       {can.kick ? <Button title={`Expulser ${name}`} variant="danger" icon="exit-outline" onPress={() => confirm(`Expulser ${name} ?`, 'Expulser', () => serversApi.kick(sid, member.user_id))} /> : null}
       {can.ban ? <Button title={`Bannir ${name}`} variant="danger" icon="ban-outline" onPress={() => setSheet('ban')} /> : null}
-      {!can.roles && !can.timeout && !can.kick && !can.ban ? <T variant="muted">Aucune action possible : ce membre a un rôle égal ou supérieur au tien.</T> : null}
+      {!can.roles && !can.timeout && !can.kick && !can.ban && !voice.mute && !voice.deafen && !voice.move ? <T variant="muted">Aucune action possible : ce membre a un rôle égal ou supérieur au tien.</T> : null}
       <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'timeout' ? 'Exclusion temporaire' : 'Bannissement'} actions={sheetActions} />
     </ScrollView>
   )

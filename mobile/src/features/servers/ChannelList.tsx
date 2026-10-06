@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
+import { Sheet } from '@/components/Sheet'
 import { Badge, ErrorState, IconButton, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
@@ -14,7 +15,7 @@ import { useUnread } from '@/stores/unread'
 import { useVoice } from '@/stores/voice'
 import type { Category, Channel, Server } from '@/types/models'
 import { channelSections } from './channels'
-import { CategoryMenu, ChannelMenu, ServerMenu, useServerPerms } from './menus'
+import { CategoryMenu, ChannelMenu, ServerMenu, setChannelHidden, useServerPerms } from './menus'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
 import { unreadLabel } from '@/lib/format'
@@ -58,8 +59,11 @@ export function ChannelList({ server }: { server: Server }) {
   const [menu, setMenu] = useState(false)
   const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
   const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
+  const [hiddenMenu, setHiddenMenu] = useState(false)
 
   const sections = useMemo(() => channelSections(channels.data ?? [], categories.data ?? []), [channels.data, categories.data])
+  // Masqués pour moi seul (POST /channels/:id/hide) : réaffichables d'ici.
+  const hidden = (channels.data ?? []).filter((c) => c.hidden && !c.archived)
 
   if (channels.isLoading) return <Loading />
   if (channels.error) return <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
@@ -143,12 +147,28 @@ export function ChannelList({ server }: { server: Server }) {
             </Pressable>
           )
         }}
+        ListFooterComponent={
+          hidden.length ? (
+            <Pressable onPress={() => setHiddenMenu(true)} accessibilityRole="button" style={styles.channel}>
+              <Ionicons name="eye-off-outline" size={18} color={colors.textFaint} />
+              <Text style={styles.channelName}>
+                {hidden.length} salon{hidden.length > 1 ? 's' : ''} masqué{hidden.length > 1 ? 's' : ''}
+              </Text>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={<Text style={[styles.category, { textAlign: 'center' }]}>Aucun salon</Text>}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
       <ServerMenu server={server} visible={menu} onClose={() => setMenu(false)} />
       <ChannelMenu server={server} channel={channelMenu} onClose={() => setChannelMenu(null)} />
       <CategoryMenu server={server} category={categoryMenu} onClose={() => setCategoryMenu(null)} />
+      <Sheet
+        visible={hiddenMenu}
+        onClose={() => setHiddenMenu(false)}
+        title="Salons masqués"
+        actions={hidden.map((c) => ({ label: `Réafficher ${c.name}`, icon: 'eye-outline', onPress: () => void setChannelHidden(server.id, c.id, false) }))}
+      />
     </View>
   )
 }

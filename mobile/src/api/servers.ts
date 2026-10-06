@@ -11,13 +11,58 @@ export interface NotifOverride {
   suppress_everyone?: boolean
 }
 
+/** Champs avancés renvoyés par le serveur (models/server.rs), absents du type de base. */
+export interface ServerFull extends Server {
+  welcome_message: string | null
+  verification_enabled: boolean
+  verification_rules: string | null
+  afk_channel_id: string | null
+  afk_timeout_minutes: number
+  vanity_url: string | null
+  content_filter: string
+  boost_count?: number
+}
+
+/** PATCH /servers/:id (UpdateServerRequest) ; `null` vide un salon système/AFK/règles ou l'adresse personnalisée. */
+export interface ServerPatch {
+  name?: string
+  description?: string
+  is_public?: boolean
+  welcome_message?: string
+  system_channel_id?: string | null
+  afk_channel_id?: string | null
+  afk_timeout?: number
+  rules_channel_id?: string | null
+  vanity_url?: string | null
+  content_filter?: string
+}
+
+/** Serveur public de GET /explore (audit.rs::PublicServer). */
+export interface PublicServer {
+  id: string
+  name: string
+  icon: string | null
+  description: string | null
+  member_count: number
+  invite_code: string | null
+}
+
 
 export const serversApi = {
   list: () => http.get<Server[]>('/servers'),
   /** Serveur + salons visibles + rôles + mes rôles (calcul des permissions : features/servers/perms). */
   detail: (id: string) => http.get<ServerDetail>(path`/servers/${id}`),
   /** Propriétaire seulement. */
-  update: (id: string, patch: { name?: string; description?: string }) => http.patch<Server>(path`/servers/${id}`, patch),
+  update: (id: string, patch: ServerPatch) => http.patch<ServerFull>(path`/servers/${id}`, patch),
+  /** Barrière de vérification (propriétaire) ; `rules: null` vide le texte. */
+  updateVerification: (id: string, enabled: boolean, rules: string | null) =>
+    http.patch<ServerFull>(path`/servers/${id}/verification`, { verification_enabled: enabled, verification_rules: rules }),
+  /** Un boost par membre et par serveur (cosmétique). */
+  boost: (id: string) => http.post<{ boost_count: number; boost_level: number }>(path`/servers/${id}/boost`),
+  /** Enregistre salons, catégories et rôles comme modèle (propriétaire). */
+  saveTemplate: (id: string, name: string, isPublic: boolean) => http.post(path`/servers/${id}/template`, { name: name.trim(), is_public: isPublic }),
+  /** Serveurs publics (100 max, les plus peuplés d'abord). */
+  explore: () => http.get<PublicServer[]>('/explore'),
   /** Propriétaire seulement : mot de passe + code 2FA si activée (features/servers/deleteServer). */
   remove: (id: string, body: { password: string; totp_code?: string }) => http.delete(path`/servers/${id}`, { body }),
   uploadImage: (id: string, kind: 'icon' | 'banner', file: { uri: string; name: string; type: string }) => {
@@ -43,9 +88,13 @@ export const serversApi = {
   moveChannel: (channelId: string, categoryId: string | null) => http.patch(path`/channels/${channelId}/move`, { category_id: categoryId }),
   deleteCategory: (serverId: string, categoryId: string) => http.delete(path`/servers/${serverId}/categories/${categoryId}`),
   createRole: (serverId: string, name: string) => http.post<Role>(path`/servers/${serverId}/roles`, { name: name.trim() }),
-  updateRole: (serverId: string, roleId: string, patch: { name?: string; color?: number; permissions?: number }) =>
+  updateRole: (serverId: string, roleId: string, patch: { name?: string; color?: number; permissions?: number; hoisted?: boolean; mentionable?: boolean }) =>
     http.patch<Role>(path`/servers/${serverId}/roles/${roleId}`, patch),
   deleteRole: (serverId: string, roleId: string) => http.delete(path`/servers/${serverId}/roles/${roleId}`),
+  /** Tous les rôles sauf @everyone, du plus haut au plus bas (features/servers/reorder). */
+  reorderRoles: (serverId: string, roleIds: string[]) => http.patch(path`/servers/${serverId}/roles/order`, { role_ids: roleIds }),
+  roleMembers: (serverId: string, roleId: string) =>
+    http.get<{ id: string; username: string; avatar: string | null; nick: string | null }[]>(path`/servers/${serverId}/roles/${roleId}/members`),
   assignRole: (serverId: string, userId: string, roleId: string) => http.put(path`/servers/${serverId}/members/${userId}/roles/${roleId}`),
   removeRole: (serverId: string, userId: string, roleId: string) => http.delete(path`/servers/${serverId}/members/${userId}/roles/${roleId}`),
   kick: (serverId: string, userId: string) => http.post(path`/servers/${serverId}/members/${userId}/kick`),

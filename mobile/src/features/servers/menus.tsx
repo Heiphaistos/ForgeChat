@@ -3,6 +3,7 @@ import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { useMemo } from 'react'
 import { Alert } from 'react-native'
+import { channelsApi } from '@/api/channels'
 import { messagesApi } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { Sheet, type SheetAction } from '@/components/Sheet'
@@ -64,6 +65,30 @@ function confirmLeave(server: Server) {
   ])
 }
 
+/** Boost cosmétique : un par membre et par serveur (le serveur ignore un second boost). */
+function confirmBoost(s: Server) {
+  Alert.alert(`Booster ${s.name} ?`, 'Un boost par membre, gratuit, pour faire monter le niveau du serveur.', [
+    { text: 'Annuler', style: 'cancel' },
+    {
+      text: 'Booster',
+      onPress: () =>
+        void serversApi
+          .boost(s.id)
+          .then((r) => {
+            Alert.alert('Merci !', `${r.boost_count} boost${r.boost_count > 1 ? 's' : ''} · niveau ${r.boost_level}`)
+            return Promise.all([qk.servers, qk.server(s.id)].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+          })
+          .catch((e) => Alert.alert('Boost impossible', errorMessage(e))),
+    },
+  ])
+}
+
+export function setChannelHidden(serverId: string, channelId: string, hidden: boolean) {
+  return (hidden ? channelsApi.hide(channelId) : channelsApi.unhide(channelId))
+    .then(() => queryClient.invalidateQueries({ queryKey: qk.channels(serverId) }))
+    .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+}
+
 function serverAction(key: ServerMenuKey, s: Server): SheetAction {
   const go = (p: string) => () => router.push(p as never)
   switch (key) {
@@ -73,6 +98,10 @@ function serverAction(key: ServerMenuKey, s: Server): SheetAction {
       return { label: 'Inviter des gens', icon: 'person-add-outline', onPress: go(`/server/${s.id}/invite`) }
     case 'notifications':
       return { label: 'Notifications du serveur', icon: 'notifications-outline', onPress: go(`/server/${s.id}/notifications`) }
+    case 'events':
+      return { label: 'Événements', icon: 'calendar-outline', onPress: go(`/server/${s.id}/events`) }
+    case 'boost':
+      return { label: 'Booster le serveur', icon: 'flash-outline', onPress: () => confirmBoost(s) }
     case 'createChannel':
       return { label: 'Créer un salon', icon: 'add-circle-outline', onPress: go(`/server/${s.id}/channel-create`) }
     case 'createCategory':
@@ -155,6 +184,7 @@ export function ChannelMenu({ server, channel, onClose }: { server: Server; chan
         icon: 'create-outline',
         onPress: () => router.push({ pathname: '/server/[serverId]/settings/channel/[channelId]', params: { serverId: server.id, channelId: ch.id } }),
       })
+    actions.push({ label: 'Masquer le salon', icon: 'eye-off-outline', onPress: () => void setChannelHidden(server.id, ch.id, true) })
     actions.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => copy(`forgechat://channel/${server.id}/${ch.id}`, 'Lien') })
     actions.push({ label: "Copier l'ID du salon", icon: 'copy-outline', onPress: () => copy(ch.id, 'ID') })
     if (perms.loaded && perms.canDeleteChannel(ch.created_by))
