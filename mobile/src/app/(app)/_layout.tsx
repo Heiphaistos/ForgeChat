@@ -30,6 +30,10 @@ export default function AppLayout() {
       <Stack.Screen name="group/manage/[groupId]" options={{ title: 'Gérer le groupe' }} />
       <Stack.Screen name="pins" options={{ title: 'Messages épinglés', presentation: 'modal' }} />
       <Stack.Screen name="search" options={{ title: 'Rechercher' }} />
+      <Stack.Screen name="saved" options={{ title: 'Messages enregistrés' }} />
+      <Stack.Screen name="forward" options={{ title: 'Transférer', presentation: 'modal' }} />
+      <Stack.Screen name="remind" options={{ title: 'Me le rappeler', presentation: 'modal' }} />
+      <Stack.Screen name="edits" options={{ title: 'Historique des modifications', presentation: 'modal' }} />
       <Stack.Screen name="voice/[serverId]/[channelId]" options={{ title: 'Salon vocal', ...OWN_BOTTOM }} />
       <Stack.Screen name="call" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false, ...OWN_BOTTOM }} />
       <Stack.Screen name="group-call" options={{ headerShown: false, presentation: 'fullScreenModal', ...OWN_BOTTOM }} />

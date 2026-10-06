@@ -25,6 +25,7 @@ import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
 import { useScrollTarget } from './pins'
+import { supportsMessageExtras } from './messageExtras'
 import { useConversation } from './useConversation'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
@@ -103,6 +104,10 @@ export function ChatView({
         : (group.data?.members ?? []).map((m) => ({ id: m.id, username: m.username, avatar: m.avatar })),
     [serverId, members.data, group.data],
   )
+  // Enregistrés : lus seulement quand le menu d'un message est ouvert (libellé Enregistrer / Retirer).
+  const extras = supportsMessageExtras(conversation)
+  const saved = useQuery({ queryKey: qk.saved, queryFn: messagesApi.saved, enabled: extras && !!selected })
+  const savedIds = useMemo(() => new Set((saved.data ?? []).map((s) => s.messageId)), [saved.data])
   const isPinned = (m: ChatMessage) => (conversation.kind === 'channel' ? m.pinned : pinnedIds.has(m.id))
 
   // Défilement vers un message demandé par l'écran des épinglés (chargement de pages plus anciennes si besoin).
@@ -195,6 +200,21 @@ export function ChatView({
             .then(() => queryClient.invalidateQueries({ queryKey: qk.pins(conv.id) }))
             .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
       })
+    }
+    if (extras && !m.pending) {
+      const messageId = m.id
+      list.push({ label: 'Transférer', icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
+      const isSaved = savedIds.has(m.id)
+      list.push({
+        label: isSaved ? 'Retirer des enregistrés' : 'Enregistrer',
+        icon: isSaved ? 'bookmark' : 'bookmark-outline',
+        onPress: () =>
+          (isSaved ? messagesApi.unsave(m.id) : messagesApi.save(conversation, m))
+            .then(() => queryClient.invalidateQueries({ queryKey: qk.saved }))
+            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+      })
+      list.push({ label: 'Me le rappeler', icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
+      if (m.editedAt) list.push({ label: 'Historique des modifications', icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
     }
     if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
     if (!mine && conversation.kind === 'channel') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })

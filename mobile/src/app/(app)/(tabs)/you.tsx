@@ -66,6 +66,7 @@ export default function YouScreen() {
           right={<StatusDot status={status} size={14} inline />}
         />
         <Row icon="person-outline" title="Mon profil" onPress={() => router.push('/settings/profile')} chevron />
+        <Row icon="bookmark-outline" title="Messages enregistrés" onPress={() => router.push('/saved')} chevron />
       </Section>
 
       <Section title="Paramètres">

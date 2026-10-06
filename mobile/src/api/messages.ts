@@ -1,6 +1,7 @@
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
 import { adaptMessage } from '@/features/chat/adapters'
+import { normalizeEdits, normalizeSaved, savedBody, type EditEntry, type SavedItem } from '@/features/chat/messageExtras'
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 
@@ -114,6 +115,32 @@ export const messagesApi = {
           ? path`/dms/${ref.dmId}/pins`
           : path`/dms/groups/${ref.groupId}/pins`
     return normalizePins(ref.kind, await http.get<unknown>(p))
+  },
+
+  /** Copie le message (salon ou DM) dans un salon textuel ; le serveur applique les règles d'envoi du salon cible. */
+  forward(messageId: string, channelId: string) {
+    return http.post(path`/messages/${messageId}/forward`, { channel_id: channelId })
+  },
+
+  /** Rappel livré par l'événement temps réel REMINDER à l'échéance (reminders.rs). */
+  remind(messageId: string, at: Date) {
+    return http.post(path`/messages/${messageId}/remind`, { remind_at: at.toISOString() })
+  },
+
+  async edits(messageId: string): Promise<EditEntry[]> {
+    return normalizeEdits(await http.get<unknown>(path`/messages/${messageId}/edits`))
+  },
+
+  async saved(): Promise<SavedItem[]> {
+    return normalizeSaved(await http.get<unknown>('/saved'))
+  },
+
+  save(ref: ConversationRef, m: ChatMessage) {
+    return http.post('/saved', savedBody(ref, m))
+  },
+
+  unsave(messageId: string) {
+    return http.delete(path`/saved/${messageId}`)
   },
 
   /** Signalement (messages de salon uniquement côté serveur). */

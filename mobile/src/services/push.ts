@@ -3,7 +3,7 @@ import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
-import { Platform } from 'react-native'
+import { Alert, Platform } from 'react-native'
 import { pushApi } from '@/api/push'
 import { PUSH_AVAILABLE } from '@/config/env'
 import { logger } from '@/lib/logger'
@@ -54,6 +54,29 @@ export function configureNotifications() {
       // Pas de `sound` : absent = son système par défaut ; une chaîne serait lue comme un fichier res/raw.
     })
   }
+}
+
+/**
+ * Rappel de message (événement temps réel REMINDER, affiché en toast par le web). Il n'arrive que par
+ * le WebSocket, donc app ouverte : notification locale si elles sont permises, sinon simple alerte.
+ */
+export async function showReminder(content: string | null): Promise<void> {
+  const body = content?.trim().slice(0, 200) || 'Rappel !'
+  if (PUSH_AVAILABLE) {
+    try {
+      const { status } = await Notifications.getPermissionsAsync()
+      if (status === 'granted') {
+        await Notifications.scheduleNotificationAsync({
+          content: { title: '⏰ Rappel', body, data: { kind: 'reminder' } },
+          trigger: Platform.OS === 'android' ? { channelId: 'messages' } : null,
+        })
+        return
+      }
+    } catch (e) {
+      logger.warn('push', 'rappel', e)
+    }
+  }
+  Alert.alert('⏰ Rappel', body)
 }
 
 /** Route vers l'écran correspondant à une notification touchée. */

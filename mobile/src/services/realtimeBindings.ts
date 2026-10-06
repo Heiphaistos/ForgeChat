@@ -11,6 +11,7 @@ import { fromDmMessage, fromGroupMessage, fromServerMessage } from '@/features/c
 import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
+import { showReminder } from '@/services/push'
 import { getMyId, useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { useTyping } from '@/stores/typing'
@@ -284,6 +285,9 @@ export function bindRealtime(): () => void {
     if (id && id === getMyId() && isObj(e.user)) useAuth.getState().setUser(e.user as never)
     if (id) void queryClient.invalidateQueries({ queryKey: qk.user(id) })
   })
+
+  // ── Rappels de messages (reminders.rs) ─────────────────────────────────────
+  on('REMINDER', (e) => void showReminder(typeof e.content === 'string' ? e.content : null))
 
   // Nettoyage périodique des indicateurs de saisie expirés
   const pruneTimer = setInterval(() => useTyping.getState().prune(), 2000)

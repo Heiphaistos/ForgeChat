@@ -35,4 +35,5 @@ export const qk = {
   sessions: ['sessions'] as const,
   mentions: ['mentions'] as const,
   user: (id: string) => ['user', id] as const,
+  saved: ['saved'] as const,
 }
