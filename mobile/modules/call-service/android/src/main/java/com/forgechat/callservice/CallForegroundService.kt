@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -13,14 +12,27 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.facebook.react.HeadlessJsTaskService
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
 /**
  * Service au premier plan pendant un appel ou un salon vocal : sans lui, Android coupe le micro
  * (et la caméra) dès que l'app passe en arrière-plan ou que l'écran se verrouille.
  * Type « microphone », plus « camera » si la permission caméra est accordée.
+ *
+ * C'est aussi un service de tâche JS « headless » : React Native SUSPEND les minuteurs JavaScript
+ * (setTimeout) dès que l'app passe en arrière-plan, sauf pendant une tâche headless. Sans elle, une
+ * coupure réseau en arrière-plan n'était jamais rattrapée (reconnexions du chat et de LiveKit
+ * figées jusqu'au retour au premier plan). La tâche « ForgeChatKeepAlive » (src/services/livekit.ts)
+ * dure jusqu'à la fin de l'appel.
  */
-class CallForegroundService : Service() {
+class CallForegroundService : HeadlessJsTaskService() {
   override fun onBind(intent: Intent?): IBinder? = null
+
+  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig =
+    // Pas de délai maximal (0), et autorisée app au premier plan (l'appel démarre app ouverte).
+    HeadlessJsTaskConfig("ForgeChatKeepAlive", Arguments.createMap(), 0, true)
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val title = intent?.getStringExtra("title") ?: "Appel en cours"
@@ -51,6 +63,13 @@ class CallForegroundService : Service() {
     } catch (e: Exception) {
       Log.w("ForgeCallService", "startForeground refusé", e)
       stopSelf()
+      return START_NOT_STICKY
+    }
+    // Démarre la tâche headless qui garde les minuteurs JS actifs (voir l'en-tête).
+    try {
+      super.onStartCommand(intent, flags, startId)
+    } catch (e: Exception) {
+      Log.w("ForgeCallService", "tâche JS de maintien non démarrée", e)
     }
     return START_NOT_STICKY
   }

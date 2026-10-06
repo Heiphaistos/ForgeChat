@@ -16,4 +16,6 @@ android {
 
 dependencies {
   implementation "androidx.core:core-ktx:1.17.0"
+  // HeadlessJsTaskService (version alignée par le plugin Gradle de React Native).
+  implementation "com.facebook.react:react-android"
 }

@@ -2,6 +2,7 @@ import { AndroidAudioTypePresets, AudioSession, registerGlobals } from '@livekit
 import { MediaStream } from '@livekit/react-native-webrtc'
 import { requireOptionalNativeModule } from 'expo'
 import { Track, type Room } from 'livekit-client'
+import { AppRegistry, Platform } from 'react-native'
 import InCallManager from 'react-native-incall-manager'
 import { APP_ENV, BUILD_LIVEKIT_HOST, apiHostname } from '@/config/env'
 import { parseLiveKitAccess, type LiveKitAccess } from '@/config/livekitUrl'
@@ -53,6 +54,21 @@ export function streamOf(track: Track | null | undefined): MediaStream | null {
 /** Service au premier plan Android (modules/call-service) : micro et caméra gardés en arrière-plan. */
 const callService = requireOptionalNativeModule<{ start(title: string): void; stop(): void }>('ForgeCallService')
 
+/**
+ * Tâche headless démarrée par le service d'appel Android : tant qu'elle tourne, React Native garde
+ * les minuteurs JS actifs en arrière-plan (sinon setTimeout est suspendu et aucune reconnexion,
+ * chat ou LiveKit, n'a lieu avant le retour au premier plan). Elle se termine avec l'appel.
+ */
+let finMaintien: (() => void) | null = null
+if (Platform.OS === 'android') {
+  AppRegistry.registerHeadlessTask('ForgeChatKeepAlive', () => () =>
+    new Promise<void>((resolve) => {
+      finMaintien?.()
+      finMaintien = resolve
+    }),
+  )
+}
+
 /** Écran éteint contre la joue (verrou de proximité), seulement quand le son sort par l'écouteur. */
 function proximity(on: boolean) {
   try {
@@ -97,6 +113,8 @@ export const callAudio = {
   stop: () => serial(async () => {
     proximity(false)
     try {
+      finMaintien?.()
+      finMaintien = null
       callService?.stop()
       InCallManager.setKeepScreenOn(false)
     } catch (e) {
