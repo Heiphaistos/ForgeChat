@@ -16,6 +16,7 @@ import {
   getMicTrack, refreshAllSenderQuality, setWhisper, resubscribeAll, warn,
   type MeshCtx, type MediaStatus, type MediaLoss,
 } from './voiceSfu'
+import { maybeBlur } from '../utils/backgroundBlur'
 import type { ConnectionQuality } from 'livekit-client'
 import { initVoiceModeration } from './voiceModeration'
 
@@ -601,7 +602,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
           const outgoing = new MediaStream()
           if (micTrack) outgoing.addTrack(micTrack)
-          stream.getVideoTracks().forEach(t => { outgoing.addTrack(t); watchCam(t) })
+          for (const t of stream.getVideoTracks()) { watchCam(t); outgoing.addTrack(await maybeBlur(t)) }
           setLocalStream(outgoing, raw)
           watchMic(raw)
         }
