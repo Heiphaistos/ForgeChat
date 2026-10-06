@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Appel / vocal en arrière-plan : Android coupe micro et caméra d'une app sans service au
+       premier plan de ce type (Android 11+, obligatoire depuis Android 14). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <application>
+    <service
+      android:name="com.forgechat.callservice.CallForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="microphone|camera" />
+  </application>
+</manifest>
