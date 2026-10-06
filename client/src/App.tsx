@@ -34,6 +34,7 @@ import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
+import { startAfkWatch } from './store/afk'
 
 // Lazy loading pour les pages non-critiques au premier affichage
 const AccueilPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AccueilPage })))
@@ -328,6 +329,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const off = initVoiceListeners()
+    startAfkWatch()
     return off
   }, [user?.id])
 
