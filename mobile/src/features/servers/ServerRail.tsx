@@ -89,6 +89,9 @@ export function ServerRail({
         <Pressable style={styles.add} onPress={() => router.push('/server/join')} accessibilityRole="button" accessibilityLabel="Rejoindre un serveur">
           <Ionicons name="enter-outline" size={22} color={colors.success} />
         </Pressable>
+        <Pressable style={styles.add} onPress={() => router.push('/server/explore')} accessibilityRole="button" accessibilityLabel="Explorer les serveurs publics">
+          <Ionicons name="compass-outline" size={24} color={colors.success} />
+        </Pressable>
       </ScrollView>
       {menu ? <ServerMenu server={menu} visible onClose={() => setMenu(null)} /> : null}
     </View>
