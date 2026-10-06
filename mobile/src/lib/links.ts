@@ -29,8 +29,13 @@ export function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!u) return null
   // En production, on n'affiche que du HTTPS.
   if (u.protocol !== 'https:' && !__DEV__) return null
+  // Jamais d'image d'un hôte quelconque (pixel espion : fuite de l'IP des membres) : seulement le
+  // serveur lui-même et les CDN de GIF (Tenor, KLIPY).
+  if (!isOwnHost(u) && !MEDIA_CDN.test(u.hostname)) return null
   return u.toString()
 }
+
+const MEDIA_CDN = /^(?:media\.tenor\.com|static\d{0,2}\.klipy\.com)$/
 
 export function isOwnHost(u: URL) {
   return u.host === apiHost()

@@ -42,7 +42,7 @@ const theme = {
 export default function RootLayout() {
   const status = useAuth((s) => s.status)
   const hydrated = useSettings((s) => s.hydrated)
-  // Nouvelle version sur GitHub : vérifiée même déconnecté (serveur en panne, compte à créer…).
+  // Nouvelle version sur le serveur ForgeChat : vérifiée même déconnecté (serveur en panne, compte à créer…).
   useUpdateCheck()
   const pushEnabled = useSettings((s) => s.pushEnabled)
   const pushPreview = useSettings((s) => s.pushPreview)

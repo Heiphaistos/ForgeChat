@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build local d'un APK signé (sans EAS) : APK DEV (preview) ou bêta (production).
 #
-#   scripts/build-apk-local.sh production --server https://ton.domaine [--livekit wss://media.domaine] [--updates-repo propriétaire/dépôt]
+#   scripts/build-apk-local.sh production --server https://ton.domaine [--livekit wss://media.domaine]
 #   scripts/build-apk-local.sh preview   [--server https://preprod.domaine]
 #
 # --server  : adresse du serveur ForgeChat. OBLIGATOIRE pour la bêta (aucune adresse par défaut),
@@ -25,18 +25,16 @@
 # Le .env.local n'est PAS lu (EXPO_NO_DOTENV) : le serveur vient uniquement de --server.
 set -euo pipefail
 
-usage() { echo "usage : build-apk-local.sh preview|production [--server https://…] [--livekit wss://…] [--updates-repo propriétaire/dépôt] [--unsigned]" >&2; exit 1; }
+usage() { echo "usage : build-apk-local.sh preview|production [--server https://…] [--livekit wss://…] [--unsigned]" >&2; exit 1; }
 PROFILE=${1:-}
 case "$PROFILE" in preview | production) shift ;; *) usage ;; esac
 SERVER=""
 LIVEKIT=""
-UPDATES_REPO=""
 UNSIGNED=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --server) SERVER=${2:-}; shift 2 ;;
     --livekit) LIVEKIT=${2:-}; shift 2 ;;
-    --updates-repo) UPDATES_REPO=${2:-}; shift 2 ;;
     --unsigned) UNSIGNED=1; shift ;;
     *) usage ;;
   esac
@@ -49,13 +47,10 @@ node -e '
 const { distributedServerConfig } = require("./plugins/serverConfig.js")
 try { const c = distributedServerConfig(process.argv[1], process.argv[2], process.argv[3]); console.log("Serveur : " + (c.apiUrl || "(aucun : choisi dans l’app)") + (c.livekitHost ? " ; LiveKit : " + c.livekitHost : "")) }
 catch (e) { console.error("ERREUR : " + e.message); process.exit(1) }
-const { updatesRepo } = require("./plugins/updatesRepo.js")
-try { const r = updatesRepo(process.argv[1], process.argv[4]); console.log("Mises à jour : " + (r ? "github.com/" + r : "pas de vérification")) }
-catch (e) { console.error("ERREUR : " + e.message); process.exit(1) }
-' "$PROFILE" "$SERVER" "$LIVEKIT" "$UPDATES_REPO"
+' "$PROFILE" "$SERVER" "$LIVEKIT"
 
 export EXPO_NO_DOTENV=1 NODE_ENV=production APP_ENV=$PROFILE EXPO_PUBLIC_APP_ENV=$PROFILE
-export FORGECHAT_API_URL=$SERVER FORGECHAT_LIVEKIT_URL=$LIVEKIT FORGECHAT_UPDATES_REPO=$UPDATES_REPO
+export FORGECHAT_API_URL=$SERVER FORGECHAT_LIVEKIT_URL=$LIVEKIT
 FIREBASE_DIR=$HOME/.config/forgechat-dev/firebase
 if [ "${FORGECHAT_PUSH:-on}" = off ]; then
   unset GOOGLE_SERVICES_JSON EAS_PROJECT_ID

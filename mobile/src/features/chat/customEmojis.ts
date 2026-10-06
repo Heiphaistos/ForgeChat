@@ -24,7 +24,7 @@ export function safeEmojiUrl(url: unknown): string | null {
     return resolveMediaUrl(url)
   }
   const u = parseSafeUrl(url)
-  return u && u.protocol === 'https:' ? u.toString() : null
+  return u && u.protocol === 'https:' ? resolveMediaUrl(u.toString()) : null
 }
 
 /** Table nom → URL ; entrées au nom invalide ou à l'URL refusée ignorées. Premier arrivé gagne. */

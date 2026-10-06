@@ -17,7 +17,7 @@ interface SettingsState {
   pushPreview: boolean
   /** Confirmer avant d'ouvrir un lien externe. */
   confirmLinks: boolean
-  /** Vérifier au démarrage (une fois par jour) s'il existe une nouvelle version sur GitHub. */
+  /** Vérifier au démarrage (une fois par jour) s'il existe une nouvelle version sur le serveur ForgeChat. */
   updateCheck: boolean
   /** Date (ms) de la dernière vérification automatique. */
   updateLastCheckAt: number

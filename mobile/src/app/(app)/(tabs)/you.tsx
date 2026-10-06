@@ -87,6 +87,7 @@ export default function YouScreen() {
       <Text style={styles.version}>
         ForgeChat {APP_VERSION}
         {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${apiHost() || 'aucun serveur'}`}
+        {'\n'}Application mobile créée par aerwx · ForgeChat par Heiphaistos
       </Text>
 
       <Sheet

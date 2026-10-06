@@ -52,7 +52,6 @@ extra() { unzip -p "$APK" assets/app.config 2>/dev/null | node -e 'let s="";proc
 SERVER_URL=$(extra apiUrl)
 SERVER_HOST=$(echo "$SERVER_URL" | sed -E 's#^[a-z]+://([^/:]+).*#\1#')
 LIVEKIT_HOST=$(extra livekitHost)
-UPDATES_REPO=$(extra updatesRepo)
 # Push Android : config Firebase (ressource google_app_id) ET projet EAS (jeton push Expo).
 if ! "$AAPT2" dump resources "$APK" 2>/dev/null | grep -q "string/google_app_id"; then
   FCM="ABSENT (pas de notifications push)"
@@ -104,7 +103,7 @@ echo "  package      $PACKAGE $VERSION (versionCode $CODE)"
 echo "  clair (OS)   $CLEARTEXT"
 echo "  push (FCM)   $FCM"
 echo "  serveur      ${SERVER_URL:-(choisi dans l’app)}${LIVEKIT_HOST:+ ; LiveKit $LIVEKIT_HOST}"
-[ "$PACKAGE" = "$BETA_PACKAGE" ] && echo "  mises à jour ${UPDATES_REPO:+github.com/}${UPDATES_REPO:-pas de vérification}"
+[ "$PACKAGE" = "$BETA_PACKAGE" ] && echo "  mises à jour ${SERVER_URL:+$SERVER_URL/desktop/mobile.json}"
 echo "  SHA-256      $FILE_SHA256"
 echo "  certificat   SHA-256 $CERT_SHA256"
 echo "               SHA-1   $CERT_SHA1"

@@ -4,7 +4,9 @@ import { parseInline } from '@/lib/markdown'
 describe('safeEmojiUrl', () => {
   it('accepte /uploads/ (résolu sur le serveur) et https', () => {
     expect(safeEmojiUrl('/uploads/emojis/emoji_1.png')).toMatch(/^https?:\/\/[^/]+\/uploads\/emojis\/emoji_1\.png$/)
-    expect(safeEmojiUrl('https://cdn.example.org/e.gif')).toBe('https://cdn.example.org/e.gif')
+    expect(safeEmojiUrl('https://static1.klipy.com/e.gif')).toBe('https://static1.klipy.com/e.gif')
+    // Hôte quelconque refusé : pixel espion (IP des membres).
+    expect(safeEmojiUrl('https://cdn.example.org/e.gif')).toBeNull()
   })
 
   it('refuse tout le reste', () => {

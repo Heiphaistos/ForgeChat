@@ -4,7 +4,7 @@ import * as LocalAuthentication from 'expo-local-authentication'
 import { useEffect, useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { Row, Section, SwitchRow } from '@/components/ui'
-import { UPDATES_REPO } from '@/config/env'
+import { UPDATES_MANIFEST_URL } from '@/config/env'
 import { checkForUpdateNow } from '@/features/updates/useUpdateCheck'
 import { useAuth } from '@/stores/auth'
 import { biometricAvailability } from '@/stores/lock'
@@ -74,10 +74,10 @@ export default function SecuritySettings() {
         />
       </Section>
 
-      {UPDATES_REPO ? (
+      {UPDATES_MANIFEST_URL ? (
         <Section
           title="Mises à jour"
-          footer="Une fois par jour au démarrage, l'app demande à GitHub le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi."
+          footer="Une fois par jour au démarrage, l'app demande au serveur ForgeChat le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi."
         >
           <SwitchRow
             icon="cloud-download-outline"

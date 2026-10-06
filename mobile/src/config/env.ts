@@ -9,7 +9,6 @@ type Extra = {
   apiUrl?: string
   appEnv?: string
   livekitHost?: string | null
-  updatesRepo?: string | null
   eas?: { projectId?: string }
 }
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra
@@ -103,11 +102,12 @@ export function setApiOrigin(next: string): void {
 
 export const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0'
 
-/** Dépôt GitHub des releases (« propriétaire/dépôt ») ; null = pas de vérification des mises à jour. */
-export const UPDATES_REPO: string | null =
-  APP_ENV === 'production' && typeof extra.updatesRepo === 'string' && /^[\w-]+\/[\w.-]+$/.test(extra.updatesRepo)
-    ? extra.updatesRepo
-    : null
+/**
+ * Manifeste des mises à jour, publié par le serveur ForgeChat lui-même (dossier /desktop/ du VPS) ;
+ * null = pas de vérification (APK DEV, LAN, développement).
+ */
+export const UPDATES_MANIFEST_URL: string | null =
+  APP_ENV === 'production' && BUILD_API_ORIGIN ? `${BUILD_API_ORIGIN}/desktop/mobile.json` : null
 
 /** Limites alignées sur le serveur */
 export const LIMITS = {

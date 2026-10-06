@@ -1,19 +1,18 @@
-import { compareVersions, fetchAvailableUpdate, isDue, parseLatestRelease, parseVersion, CHECK_INTERVAL_MS } from '@/features/updates/updateCheck'
+import { compareVersions, fetchAvailableUpdate, isDue, parseManifest, parseVersion, CHECK_INTERVAL_MS } from '@/features/updates/updateCheck'
 
 /**
- * Vérification des mises à jour (releases GitHub) : format des versions, validation de la réponse,
- * une seule requête anonyme, désactivable et limitée à une fois par jour.
+ * Vérification des mises à jour (manifeste publié par le serveur ForgeChat) : format des versions,
+ * validation du manifeste, une seule requête anonyme, désactivable et limitée à une fois par jour.
  */
 
-const REPO = 'exemple/forgechat-releases'
-const release = (over: Record<string, unknown> = {}) => ({
-  tag_name: 'v1.2.0',
-  html_url: `https://github.com/${REPO}/releases/tag/v1.2.0`,
-  draft: false,
-  prerelease: false,
-  assets: [{ browser_download_url: 'https://github.com/x/y/releases/download/v1.2.0/app.apk' }],
+const MANIFEST = 'https://chat.exemple.org/desktop/mobile.json'
+const SHA = 'a'.repeat(64)
+const manifest = (android: Record<string, unknown> = {}, over: Record<string, unknown> = {}) => ({
+  version: '1.2.0',
+  platforms: { android: { url: 'ForgeChat-1.2.0.apk', sha256: SHA, ...android } },
   ...over,
 })
+const APK = 'https://chat.exemple.org/desktop/ForgeChat-1.2.0.apk'
 const response = (status: number, body: unknown = {}) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response
 
@@ -35,20 +34,22 @@ describe('versions', () => {
   })
 })
 
-describe('réponse de GitHub', () => {
-  it('accepte une release publiée de ce dépôt et renvoie sa page (pas l’APK)', () => {
-    expect(parseLatestRelease(release(), REPO)).toEqual({ version: '1.2.0', url: `https://github.com/${REPO}/releases/tag/v1.2.0` })
+describe('manifeste du serveur', () => {
+  it('accepte un APK du même serveur (URL relative ou absolue)', () => {
+    expect(parseManifest(manifest(), MANIFEST)).toEqual({ version: '1.2.0', url: APK, sha256: SHA })
+    expect(parseManifest(manifest({ url: APK }), MANIFEST)).toEqual({ version: '1.2.0', url: APK, sha256: SHA })
   })
 
-  it('refuse brouillon, pré-version, autre dépôt, numéro invalide, réponse vide', () => {
-    expect(parseLatestRelease(release({ draft: true }), REPO)).toBeNull()
-    expect(parseLatestRelease(release({ prerelease: true }), REPO)).toBeNull()
-    expect(parseLatestRelease(release({ html_url: 'https://github.com/pirate/forgechat/releases/tag/v1.2.0' }), REPO)).toBeNull()
-    expect(parseLatestRelease(release({ html_url: 'https://exemple.invalid/releases/tag/v1.2.0' }), REPO)).toBeNull()
-    expect(parseLatestRelease(release({ html_url: `https://github.com/${REPO}/releases/x" onclick="` }), REPO)).toBeNull()
-    expect(parseLatestRelease(release({ tag_name: 'nightly' }), REPO)).toBeNull()
-    expect(parseLatestRelease(null, REPO)).toBeNull()
-    expect(parseLatestRelease({ message: 'Not Found' }, REPO)).toBeNull()
+  it('refuse autre hôte, HTTP, hors /desktop/, pas un .apk, empreinte invalide, numéro invalide', () => {
+    expect(parseManifest(manifest({ url: 'https://pirate.example/desktop/x.apk' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({ url: 'http://chat.exemple.org/desktop/x.apk' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({ url: '/uploads/x.apk' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({ url: 'javascript:alert(1)' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({ url: 'ForgeChat.exe' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({ sha256: 'abc' }), MANIFEST)).toBeNull()
+    expect(parseManifest(manifest({}, { version: 'nightly' }), MANIFEST)).toBeNull()
+    expect(parseManifest({ version: '1.2.0', platforms: {} }, MANIFEST)).toBeNull()
+    expect(parseManifest(null, MANIFEST)).toBeNull()
   })
 
   it('une fois par jour au plus', () => {
@@ -60,36 +61,33 @@ describe('réponse de GitHub', () => {
   })
 })
 
-describe('requête vers GitHub', () => {
-  it('une seule requête GET anonyme vers l’API publique, sans corps ni identifiant', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(response(200, release()))
-    await expect(fetchAvailableUpdate(REPO, '1.0.0', fetchMock)).resolves.toEqual({
-      version: '1.2.0',
-      url: `https://github.com/${REPO}/releases/tag/v1.2.0`,
-    })
+describe('requête vers le serveur', () => {
+  it('une seule requête GET anonyme, sans corps ni identifiant', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', fetchMock)).resolves.toEqual({ version: '1.2.0', url: APK, sha256: SHA })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe(`https://api.github.com/repos/${REPO}/releases/latest`)
+    expect(url).toBe(MANIFEST)
     expect(init.method).toBe('GET')
     expect(init.credentials).toBe('omit')
     expect(init.body).toBeUndefined()
-    expect(Object.keys(init.headers)).toEqual(['Accept'])
+    expect(init.headers.Authorization).toBeUndefined()
   })
 
-  it('rien à proposer : même version, version plus ancienne, aucune release (404)', async () => {
-    await expect(fetchAvailableUpdate(REPO, '1.2.0', jest.fn().mockResolvedValue(response(200, release())))).resolves.toBeNull()
-    await expect(fetchAvailableUpdate(REPO, '2.0.0', jest.fn().mockResolvedValue(response(200, release())))).resolves.toBeNull()
-    await expect(fetchAvailableUpdate(REPO, '1.0.0', jest.fn().mockResolvedValue(response(404)))).resolves.toBeNull()
+  it('rien à proposer : même version, version plus ancienne, aucune publication (404)', async () => {
+    await expect(fetchAvailableUpdate(MANIFEST, '1.2.0', jest.fn().mockResolvedValue(response(200, manifest())))).resolves.toBeNull()
+    await expect(fetchAvailableUpdate(MANIFEST, '2.0.0', jest.fn().mockResolvedValue(response(200, manifest())))).resolves.toBeNull()
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', jest.fn().mockResolvedValue(response(404)))).resolves.toBeNull()
   })
 
-  it('erreur de GitHub (limite de requêtes…) : échec signalé à l’appelant', async () => {
-    await expect(fetchAvailableUpdate(REPO, '1.0.0', jest.fn().mockResolvedValue(response(403)))).rejects.toThrow('403')
+  it('erreur du serveur : échec signalé à l’appelant', async () => {
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', jest.fn().mockResolvedValue(response(503)))).rejects.toThrow('503')
   })
 })
 
 describe('vérification automatique au démarrage', () => {
   const mockAlert = jest.fn()
-  let env: { UPDATES_REPO: string | null; APP_VERSION: string }
+  let env: { UPDATES_MANIFEST_URL: string | null; APP_VERSION: string }
 
   function load() {
     jest.resetModules()
@@ -107,12 +105,12 @@ describe('vérification automatique au démarrage', () => {
 
   beforeEach(() => {
     mockAlert.mockClear()
-    env = { UPDATES_REPO: REPO, APP_VERSION: '1.0.0' }
+    env = { UPDATES_MANIFEST_URL: MANIFEST, APP_VERSION: '1.0.0' }
   })
 
   it('propose la nouvelle version, puis ne revérifie pas avant 24 h', async () => {
     const { run, settings } = load()
-    const fetchMock = jest.fn().mockResolvedValue(response(200, release()))
+    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
     const now = 1_800_000_000_000
     await expect(run(now, fetchMock)).resolves.toMatchObject({ version: '1.2.0' })
     expect(mockAlert).toHaveBeenCalledWith('Nouvelle version disponible', expect.stringContaining('1.2.0'), expect.any(Array))
@@ -129,8 +127,8 @@ describe('vérification automatique au démarrage', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('build sans dépôt de releases (APK DEV, développement) : aucune requête', async () => {
-    env = { UPDATES_REPO: null, APP_VERSION: '1.0.0' }
+  it('build sans manifeste de mises à jour (APK DEV, développement) : aucune requête', async () => {
+    env = { UPDATES_MANIFEST_URL: null, APP_VERSION: '1.0.0' }
     const { run } = load()
     const fetchMock = jest.fn()
     await run(Date.now(), fetchMock)
@@ -140,29 +138,10 @@ describe('vérification automatique au démarrage', () => {
   it('version ignorée : pas de proposition ; réseau en panne : silencieux', async () => {
     const { run, settings } = load()
     settings.updateSkippedVersion = '1.2.0'
-    await expect(run(Date.now(), jest.fn().mockResolvedValue(response(200, release())))).resolves.toBeNull()
+    await expect(run(Date.now(), jest.fn().mockResolvedValue(response(200, manifest())))).resolves.toBeNull()
     settings.updateLastCheckAt = 0
     await expect(run(Date.now(), jest.fn().mockRejectedValue(new Error('hors ligne')))).resolves.toBeNull()
     expect(mockAlert).not.toHaveBeenCalled()
-  })
-})
-
-describe('dépôt des releases fixé au build', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { updatesRepo } = require('../plugins/updatesRepo.js') as typeof import('../plugins/updatesRepo')
-
-  it('seulement pour la bêta, au format propriétaire/dépôt', () => {
-    expect(updatesRepo('production', 'exemple/forgechat-releases')).toBe('exemple/forgechat-releases')
-    expect(updatesRepo('production', ' exemple/repo.android ')).toBe('exemple/repo.android')
-    expect(updatesRepo('production', undefined)).toBeNull()
-    expect(updatesRepo('preview', 'exemple/forgechat-releases')).toBeNull()
-    expect(updatesRepo('development', 'exemple/forgechat-releases')).toBeNull()
-  })
-
-  it('refuse tout le reste', () => {
-    for (const bad of ['exemple', 'exemple/a/b', 'https://github.com/exemple/x', '-x/y', 'x/..', 'x/y z', 'x/y?z']) {
-      expect(() => updatesRepo('production', bad)).toThrow('FORGECHAT_UPDATES_REPO invalide')
-    }
   })
 })
 
