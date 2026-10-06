@@ -21,7 +21,7 @@ temps réel : un utilisateur mobile peut discuter et **s'appeler** avec un utili
 | Compte | Connexion (+ 2FA TOTP / codes de secours), inscription, déconnexion de cet appareil ou de tous |
 | Serveurs | Liste (rail), salons par catégorie, non-lus, créer / rejoindre (code ou lien), inviter, membres |
 | Chat (salons, DM, groupes) | Temps réel, historique infini, répondre, modifier, supprimer, réactions, épingler, signaler, copier, mentions, indicateur de saisie, Markdown (gras, italique, barré, code, citations, spoilers, liens) |
-| Barre de saisie | Emoji (catégories du web, récents, emojis du serveur), stickers (globaux + du serveur), réponses rapides (sur l'appareil), messages éphémères (salons : 5 min → 7 j), messages vocaux (2 min). GIF : affichage de ceux envoyés depuis le web (Tenor), pas d'envoi |
+| Barre de saisie | Emoji (catégories du web, récents, emojis du serveur), stickers (globaux + du serveur), réponses rapides (sur l'appareil), messages éphémères (salons : 5 min → 7 j), messages vocaux (2 min). GIF : du téléphone (restent animés), du serveur, et recherche KLIPY via le serveur (si le serveur a le patch) |
 | Pièces jointes | Photos / vidéos / caméra / fichiers, aperçu, visionneuse plein écran (métadonnées EXIF/GPS retirées) |
 | Messages privés | Liste des conversations, DM 1:1, groupes, quitter un groupe |
 | Amis | En ligne / tous / en attente / bloqués, ajouter par pseudo, accepter, refuser, retirer, bloquer |
