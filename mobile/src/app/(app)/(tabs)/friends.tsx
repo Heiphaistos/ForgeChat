@@ -28,7 +28,10 @@ export default function FriendsScreen() {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <IconButton icon="person-add" label="Ajouter un ami" color={colors.success} onPress={() => router.push('/friends/add')} />
+        <View style={{ flexDirection: 'row' }}>
+          <IconButton icon="call-outline" label="Historique des appels" onPress={() => router.push('/friends/calls')} />
+          <IconButton icon="person-add" label="Ajouter un ami" color={colors.success} onPress={() => router.push('/friends/add')} />
+        </View>
       ),
     })
   }, [navigation])

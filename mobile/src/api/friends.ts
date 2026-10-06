@@ -14,6 +14,36 @@ export const friendsApi = {
   remove: (userId: string) => http.delete(path`/friends/${userId}`),
   block: (userId: string) => http.post(path`/friends/block/${userId}`),
   unblock: (userId: string) => http.delete(path`/friends/block/${userId}`),
+  /** Lien d'invitation d'ami (valable 7 jours). */
+  createInvite: () => http.post<{ code: string; url: string }>('/friends/invite'),
+  suggestions: () => http.get<FriendSuggestion[]>('/friends/suggestions'),
+  calls: () => http.get<CallEntry[]>('/friends/calls'),
+  /** Surnom privé donné à un ami ; '' si aucun. */
+  nickname: (userId: string) => http.get<{ nickname: string }>(path`/friends/${userId}/nickname`),
+  /** '' = retirer le surnom. */
+  setNickname: (userId: string, nickname: string) => http.put(path`/friends/${userId}/nickname`, { nickname }),
+}
+
+export interface FriendSuggestion {
+  id: string
+  username: string
+  discriminator: string
+  avatar: string | null
+  status: string
+  mutual_friends: number
+  mutual_servers: number
+}
+
+export interface CallEntry {
+  id: string
+  call_type: string
+  status: string
+  direction: 'outgoing' | 'incoming'
+  started_at: string
+  ended_at: string | null
+  duration_s: number | null
+  dm_id: string | null
+  other_user: { id: string; username: string; avatar: string | null }
 }
 
 export interface FriendInvite {
