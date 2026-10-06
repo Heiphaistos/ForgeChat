@@ -1,0 +1,153 @@
+/* Site public de ForgeChat (pages hors application).
+   Toutes les couleurs et durées passent par les variables ci-dessous : changer de thème = changer
+   ce bloc. Animations en CSS natif (+ IntersectionObserver dans SiteLayout), coupées si le système
+   demande moins d'animations. */
+.site {
+  --bg: #0d0e12;
+  --bg-2: #14161c;
+  --card: #181a21;
+  --line: #262933;
+  --text: #eceef3;
+  --muted: #9aa0ad;
+  --accent: #5865f2;
+  --accent-2: #f2994a;
+  --accent-3: #3ddc97;
+  --radius: 18px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t: 700ms;
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  overflow-x: clip;
+}
+.site a { color: inherit; }
+.site-wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+.site-muted { color: var(--muted); }
+.site-skip { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; }
+.site-skip:focus { left: 8px; }
+.site :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; border-radius: 6px; }
+
+/* ── En-tête ─────────────────────────────────────────────────────────── */
+.site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid var(--line);
+}
+.site-header-row { display: flex; align-items: center; gap: 24px; height: 64px; }
+.site-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.1rem; text-decoration: none; }
+.site-brand img { border-radius: 9px; }
+.site-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.site-nav-link { position: relative; padding: 8px 12px; border-radius: 10px; color: var(--muted); text-decoration: none; font-size: .95rem; transition: color .2s, background .2s; }
+.site-nav-link:hover { color: var(--text); background: var(--card); }
+.site-nav-link[aria-current='page'] { color: var(--text); }
+.site-nav-link[aria-current='page']::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  animation: site-grow .5s var(--ease);
+}
+.site-nav-cta { margin-left: 8px; }
+.site-menu-btn { display: none; margin-left: auto; background: none; border: 0; color: var(--text); padding: 8px; cursor: pointer; }
+@media (max-width: 900px) {
+  .site-menu-btn { display: block; }
+  .site-nav {
+    position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; align-items: stretch;
+    padding: 12px 16px 20px; background: var(--bg-2); border-bottom: 1px solid var(--line);
+    clip-path: inset(0 0 100% 0); transition: clip-path .35s var(--ease); visibility: hidden;
+  }
+  .site-nav.is-open { clip-path: inset(0 0 0 0); visibility: visible; }
+  .site-nav-link { padding: 12px; }
+  .site-nav-cta { margin: 8px 0 0; text-align: center; }
+}
+
+/* ── Boutons ─────────────────────────────────────────────────────────── */
+.site-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px 20px; border-radius: 12px; font-weight: 700; text-decoration: none; border: 1px solid transparent;
+  transition: transform .2s var(--ease), box-shadow .2s, background .2s; cursor: pointer;
+}
+.site-btn:hover { transform: translateY(-2px); }
+.site-btn:active { transform: translateY(0) scale(.98); }
+.site-btn-primary { background: linear-gradient(135deg, var(--accent), #7b5cff); color: #fff; box-shadow: 0 10px 30px -10px var(--accent); }
+.site-btn-primary:hover { box-shadow: 0 16px 40px -12px var(--accent); }
+.site-btn-ghost { border-color: var(--line); background: var(--card); color: var(--text); }
+.site-btn small { display: block; font-weight: 500; font-size: .75rem; opacity: .8; }
+
+/* ── Sections et titres ──────────────────────────────────────────────── */
+.site-hero { position: relative; padding: clamp(64px, 12vw, 140px) 0 clamp(48px, 8vw, 96px); isolation: isolate; }
+.site-hero::before {
+  content: ''; position: absolute; inset: -20% -10% auto; height: 120%; z-index: -1;
+  background:
+    radial-gradient(40% 50% at 20% 30%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 70%),
+    radial-gradient(35% 45% at 80% 20%, color-mix(in srgb, var(--accent-2) 35%, transparent), transparent 70%),
+    radial-gradient(30% 40% at 60% 80%, color-mix(in srgb, var(--accent-3) 25%, transparent), transparent 70%);
+  filter: blur(40px); opacity: .55;
+  animation: site-drift 18s ease-in-out infinite alternate;
+}
+.site-eyebrow { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--muted); font-size: .85rem; }
+.site-h1 { font-size: clamp(2.2rem, 6vw, 4.4rem); line-height: 1.05; letter-spacing: -.03em; font-weight: 900; margin: 20px 0; }
+.site .grad { background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent)); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: site-shine 8s linear infinite; }
+.site-h2 { font-size: clamp(1.6rem, 3.5vw, 2.4rem); line-height: 1.15; letter-spacing: -.02em; font-weight: 800; margin: 0 0 12px; }
+.site-h3 { font-size: 1.15rem; font-weight: 700; margin: 0 0 6px; }
+.site-lead { font-size: clamp(1.05rem, 2vw, 1.25rem); color: var(--muted); max-width: 680px; }
+.site-section { padding: clamp(48px, 8vw, 96px) 0; }
+.site-section-alt { background: var(--bg-2); border-block: 1px solid var(--line); }
+.site-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+
+/* ── Grilles et cartes ───────────────────────────────────────────────── */
+.site-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+.site-card {
+  position: relative; padding: 24px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line);
+  transition: transform .35s var(--ease), border-color .35s, box-shadow .35s;
+}
+.site-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); box-shadow: 0 20px 50px -30px var(--accent); }
+.site-card-link { text-decoration: none; display: block; }
+.site-card .ico { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; margin-bottom: 14px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.site-card.is-mine { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.site-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .75rem; font-weight: 700; background: color-mix(in srgb, var(--accent-3) 18%, transparent); color: var(--accent-3); }
+
+/* ── Tutoriels pas à pas ─────────────────────────────────────────────── */
+.site-steps { counter-reset: step; display: grid; gap: 14px; padding: 0; margin: 24px 0 0; list-style: none; }
+.site-steps > li { counter-increment: step; position: relative; padding: 18px 18px 18px 72px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.site-steps > li::before {
+  content: counter(step); position: absolute; left: 18px; top: 16px; width: 38px; height: 38px; border-radius: 12px;
+  display: grid; place-items: center; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+.site-steps p { margin: 4px 0 0; color: var(--muted); }
+.site-mock { margin-top: 12px; padding: 14px; border-radius: 12px; background: var(--bg); border: 1px dashed var(--line); font-size: .9rem; color: var(--muted); }
+.site-mock b { color: var(--text); }
+.site-note { padding: 16px 18px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line)); background: color-mix(in srgb, var(--accent-2) 8%, var(--card)); }
+.site-code { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: .85rem; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); word-break: break-all; }
+.site-code button { margin-left: auto; }
+
+.site-faq details { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0 18px; margin-bottom: 10px; }
+.site-faq summary { cursor: pointer; padding: 16px 0; font-weight: 700; list-style: none; }
+.site-faq summary::after { content: '+'; float: right; transition: transform .3s var(--ease); color: var(--accent); font-size: 1.2rem; }
+.site-faq details[open] summary::after { transform: rotate(45deg); }
+.site-faq details p { margin: 0 0 16px; color: var(--muted); }
+
+/* ── Pied de page ────────────────────────────────────────────────────── */
+.site-footer { border-top: 1px solid var(--line); padding: 48px 0; background: var(--bg-2); }
+.site-footer-grid { display: grid; gap: 32px; grid-template-columns: 2fr 1fr 1fr; }
+.site-footer nav { display: flex; flex-direction: column; gap: 6px; }
+.site-footer nav a { color: var(--muted); text-decoration: none; }
+.site-footer nav a:hover { color: var(--text); }
+.site-footer-brand { font-weight: 900; font-size: 1.2rem; margin: 0 0 8px; }
+.site-footer-title { font-weight: 700; margin: 0 0 6px; }
+@media (max-width: 720px) { .site-footer-grid { grid-template-columns: 1fr; } }
+
+/* ── Motion design ───────────────────────────────────────────────────── */
+.site .reveal { opacity: 0; transform: translateY(28px) scale(.98); filter: blur(6px); transition: opacity var(--t) var(--ease), transform var(--t) var(--ease), filter var(--t) var(--ease); transition-delay: calc(var(--i, 0) * 80ms); }
+.site .reveal.is-visible { opacity: 1; transform: none; filter: none; }
+.site-float { animation: site-float 6s ease-in-out infinite; }
+@keyframes site-drift { to { transform: translate3d(4%, 6%, 0) rotate(8deg) scale(1.1); } }
+@keyframes site-shine { to { background-position: 300% 0; } }
+@keyframes site-float { 50% { transform: translateY(-12px); } }
+@keyframes site-grow { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .site *, .site *::before, .site *::after { animation: none !important; transition: none !important; }
+  .site .reveal { opacity: 1; transform: none; filter: none; }
+}

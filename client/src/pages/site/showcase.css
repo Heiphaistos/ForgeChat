@@ -1,0 +1,121 @@
+/* Accueil : titre cinétique, démo épinglée de l'application, fonctionnalités horizontales.
+   Variables de couleur héritées de .site (site.css). */
+
+/* ── Titre cinétique + projecteur ────────────────────────────────────── */
+.kt-line { display: block; overflow: hidden; padding-bottom: .08em; }
+.kt-char { display: inline-block; will-change: transform; }
+.site-hero-spot::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(500px circle at var(--mx, 50%) var(--my, 30%), color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%);
+}
+.site-grid-bg {
+  position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 56px 56px; mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 70%); opacity: .5;
+}
+
+/* ── Démo épinglée de l'application ──────────────────────────────────── */
+.sd-stage {
+  min-height: 100vh; display: grid; grid-template-columns: minmax(260px, .7fr) 1.3fr; gap: 40px; align-items: center;
+  width: min(1280px, 100% - 32px); margin-inline: auto; padding: 72px 0 24px;
+}
+.sd-captions { position: relative; z-index: 2; min-height: 260px; }
+.sd-caption { position: absolute; top: 48px; left: 0; right: 0; }
+.sd-caption-0 { position: relative; top: 0; margin-top: 16px; }
+.sd-progress { position: absolute; left: 0; right: 0; bottom: -40px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.sd-progress i { display: block; height: 100%; width: 25%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.sd-scene { position: relative; perspective: 1400px; }
+.sd-window {
+  display: grid; grid-template-columns: 56px 190px 1fr; height: min(560px, 70vh); border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--line); background: #1e1f24; transform-style: preserve-3d; font-size: .88rem;
+  box-shadow: 0 60px 120px -40px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .03), 0 30px 80px -40px var(--accent);
+}
+.sd-rail { background: #121317; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 0; }
+.sd-srv { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: #2a2c33; font-weight: 800; }
+.sd-srv.is-on { border-radius: 12px; background: var(--accent); color: #fff; }
+.sd-add { color: var(--accent-3); }
+.sd-chans { background: #17181c; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; position: relative; }
+.sd-srvname { font-weight: 800; margin: 0 0 10px; padding: 0 6px 10px; border-bottom: 1px solid var(--line); }
+.sd-cat { margin: 10px 6px 2px; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.sd-chan { margin: 0; display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; color: var(--muted); }
+.sd-chan.is-on { background: #2a2c33; color: var(--text); }
+.sd-voice-user { margin: 0 0 0 18px; display: flex; align-items: center; gap: 8px; padding: 3px 6px; color: var(--muted); font-size: .82rem; }
+.sd-av { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .72rem; color: #111; }
+.sd-msg .sd-av, .sd-pmsg .sd-av { width: 34px; height: 34px; font-size: .9rem; }
+.sd-speaking { box-shadow: 0 0 0 2px #17181c, 0 0 0 4px var(--accent-3); animation: sd-talk 1.1s ease-in-out infinite; }
+.sd-voicebar {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 8px 10px; border-radius: 10px; background: #121317;
+  display: flex; justify-content: space-between; align-items: center; font-size: .78rem;
+}
+.sd-voicebar span:last-child { display: flex; gap: 8px; color: var(--muted); }
+.sd-live { color: var(--accent-3); font-weight: 700; }
+.sd-main { display: flex; flex-direction: column; min-width: 0; position: relative; }
+.sd-top { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 700; }
+.sd-top-ico { margin-left: auto; display: flex; gap: 12px; color: var(--muted); }
+.sd-msgs { flex: 1; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; justify-content: flex-end; }
+.sd-msg { display: flex; gap: 10px; }
+.sd-msg p { margin: 2px 0 0; }
+.sd-msg small { color: var(--muted); font-size: .7rem; }
+.sd-typing { margin: 0; color: var(--muted); font-size: .78rem; }
+.sd-typing span { animation: sd-dot 1.2s infinite; }
+.sd-typing span:nth-child(2) { animation-delay: .2s; }
+.sd-typing span:nth-child(3) { animation-delay: .4s; }
+.sd-share {
+  position: absolute; top: 56px; right: 16px; width: 46%; border-radius: 12px; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent-3) 50%, var(--line)); background: #0f1014; box-shadow: 0 20px 60px -20px #000;
+}
+.sd-share-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-size: .75rem; color: var(--accent-3); background: #121317; }
+.sd-share-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; aspect-ratio: 16 / 9; }
+.sd-share-line { display: block; height: 10px; border-radius: 6px; background: #2a2c33; }
+.sd-share-accent { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.sd-input { margin: 0 16px 14px; padding: 10px 14px; border-radius: 10px; background: #2a2c33; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.sd-input svg:last-child { margin-left: auto; }
+.sd-phone {
+  position: absolute; right: -2%; bottom: -6%; width: 210px; height: 430px; border-radius: 34px; padding: 34px 12px 12px;
+  background: #17181c; border: 6px solid #2a2c33; box-shadow: 0 40px 90px -20px #000, 0 0 60px -20px var(--accent);
+  display: flex; flex-direction: column; gap: 10px; font-size: .78rem;
+}
+.sd-notch { position: absolute; top: 8px; left: 50%; width: 70px; height: 18px; margin-left: -35px; border-radius: 12px; background: #000; }
+.sd-toast {
+  position: absolute; top: 34px; left: 8px; right: 8px; z-index: 2; padding: 8px 10px; border-radius: 14px;
+  background: rgba(40, 42, 50, .95); backdrop-filter: blur(10px); font-size: .72rem; box-shadow: 0 10px 30px -10px #000;
+}
+.sd-toast b { display: block; color: var(--accent); }
+.sd-phone-title { margin: 66px 0 0; font-weight: 800; display: flex; align-items: center; gap: 4px; }
+.sd-pmsg { display: flex; gap: 8px; }
+.sd-pmsg p { margin: 0; }
+.sd-pvoice {
+  margin-top: auto; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--accent-3) 14%, #121317);
+  color: var(--accent-3); display: flex; gap: 6px; align-items: center; font-weight: 700;
+}
+@keyframes sd-talk { 50% { box-shadow: 0 0 0 2px #17181c, 0 0 0 6px color-mix(in srgb, var(--accent-3) 60%, transparent); } }
+@keyframes sd-dot { 50% { opacity: .2; } }
+@media (max-width: 900px) {
+  .sd-stage { grid-template-columns: 1fr; padding-top: 80px; gap: 16px; align-content: start; }
+  .sd-captions { min-height: 170px; }
+  .sd-caption { top: 36px; }
+  .sd-progress { bottom: -12px; }
+  .sd-window { grid-template-columns: 44px 1fr; height: 420px; font-size: .8rem; }
+  .sd-chans { display: none; }
+  .sd-share { width: 70%; }
+  .sd-phone { width: 160px; height: 320px; right: 6px; bottom: -48px; border-radius: 26px; padding-top: 28px; font-size: .68rem; }
+  .sd-phone > .sd-pmsg:nth-child(6) { display: none; } /* 3e message : pas la place */
+}
+@media (prefers-reduced-motion: reduce) {
+  .sd-caption { position: relative; top: 0; }
+  .sd-share, .sd-phone { position: relative; inset: auto; width: auto; margin-top: 16px; }
+}
+
+/* ── Fonctionnalités horizontales ────────────────────────────────────── */
+.hf { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 72px 0 48px; overflow: hidden; }
+.hf-track { display: flex; gap: 20px; padding: 40px 32px 32px; width: max-content; perspective: 1200px; }
+.hf-card { width: 360px; min-height: 260px; flex: none; counter-increment: hf; }
+.hf-track { counter-reset: hf; }
+.hf-card::after {
+  content: counter(hf, decimal-leading-zero); position: absolute; right: 20px; top: 14px; font-size: 3.2rem; font-weight: 900;
+  line-height: 1; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+@media (max-width: 899px) {
+  .hf-track { width: auto; overflow-x: auto; scroll-snap-type: x mandatory; padding: 24px 16px; }
+  .hf-card { width: 80vw; scroll-snap-align: center; }
+}

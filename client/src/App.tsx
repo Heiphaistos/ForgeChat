@@ -36,7 +36,13 @@ import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 
 // Lazy loading pour les pages non-critiques au premier affichage
-const LandingPage = lazy(() => import('./pages/LandingPage'))
+const AccueilPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AccueilPage })))
+const FonctionnalitesPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.FonctionnalitesPage })))
+const NouveautesPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.NouveautesPage })))
+const AidePage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AidePage })))
+const AProposPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AProposPage })))
+const TelechargerPage = lazy(() => import('./pages/site/TelechargerPage'))
+const TelechargerPlateformePage = lazy(() => import('./pages/site/TelechargerPage').then(m => ({ default: m.TelechargerPlateformePage })))
 // Login/Register embarquent Logo3D (three.js, vendor-three ~150KB gzip) --
 // plus "légers" depuis son ajout, donc plus question de les charger en eager.
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -1065,6 +1071,12 @@ function AppInner() {
       <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/fonctionnalites" element={<FonctionnalitesPage />} />
+          <Route path="/telecharger" element={<TelechargerPage />} />
+          <Route path="/telecharger/:plateforme" element={<TelechargerPlateformePage />} />
+          <Route path="/nouveautes" element={<NouveautesPage />} />
+          <Route path="/aide" element={<AidePage />} />
+          <Route path="/a-propos" element={<AProposPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/mentions-legales" element={<MentionsLegalesPage />} />
           <Route path="/confidentialite" element={<ConfidentialitePage />} />
@@ -1187,7 +1199,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 function HomeRoute() {
   const { user, loading } = useAuth()
-  if (!isTauri) return <LandingPage />
+  if (!isTauri) return <AccueilPage />
   if (loading) return (
     <div className="flex items-center justify-center h-screen bg-fc-bg">
       <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
