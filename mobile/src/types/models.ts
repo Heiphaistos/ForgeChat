@@ -68,6 +68,8 @@ export interface Channel {
   has_voice_password?: boolean
   archived?: boolean
   hidden?: boolean
+  /** Créateur : règle de suppression (channel_access::deletion_refusal). */
+  created_by?: string | null
 }
 
 export interface Category {
@@ -75,6 +77,47 @@ export interface Category {
   server_id: string
   name: string
   position: number
+  created_by?: string | null
+}
+
+/** Rôle de serveur (models/role.rs). `permissions` : masque de bits, jusqu'au bit 40. */
+export interface Role {
+  id: string
+  server_id: string
+  name: string
+  color: number
+  permissions: number
+  position: number
+  mentionable: boolean
+  hoisted: boolean
+  is_everyone: boolean
+}
+
+/** Réponse de GET /servers/:id (handlers/servers.rs::get_server). */
+export interface ServerDetail {
+  server: Server
+  channels: Channel[]
+  roles: Role[]
+  current_user_id: string
+  my_role_ids: string[]
+}
+
+export interface Ban {
+  user_id: string
+  username: string
+  discriminator: string
+  avatar: string | null
+  reason: string | null
+  banned_at: string
+  expires_at: string | null
+}
+
+export interface Invite {
+  code: string
+  uses: number
+  max_uses: number | null
+  expires_at: string | null
+  created_at: string
 }
 
 export interface Attachment {
@@ -241,6 +284,8 @@ export interface Member {
   status?: UserStatus
   nickname?: string | null
   is_owner?: boolean
+  role_ids?: string[]
+  timeout_until?: string | null
 }
 
 export interface Session {
