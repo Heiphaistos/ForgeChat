@@ -71,6 +71,7 @@ export default function YouScreen() {
 
       <Section title="Paramètres">
         <Row icon="shield-checkmark-outline" title="Sécurité et confidentialité" onPress={() => router.push('/settings/security')} chevron />
+        <Row icon="lock-closed-outline" title="Confidentialité et données" onPress={() => router.push('/settings/privacy')} chevron />
         <Row icon="phone-portrait-outline" title="Appareils connectés" onPress={() => router.push('/settings/sessions')} chevron />
         <Row icon="notifications-outline" title="Notifications" onPress={() => router.push('/settings/notifications')} chevron />
       </Section>

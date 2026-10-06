@@ -94,9 +94,12 @@ export default function SecuritySettings() {
         <Row
           icon="shield-checkmark-outline"
           title="Authentification à deux facteurs"
-          subtitle={user?.totp_enabled ? 'Activée' : 'Désactivée — à configurer depuis la version web'}
+          subtitle={user?.totp_enabled ? 'Activée' : 'Désactivée'}
+          onPress={() => router.push('/settings/two-factor')}
+          chevron
         />
         <Row icon="phone-portrait-outline" title="Appareils connectés" onPress={() => router.push('/settings/sessions')} chevron />
+        <Row icon="time-outline" title="Historique de connexion" onPress={() => router.push('/settings/login-history')} chevron />
         <Row
           icon="warning-outline"
           title="Déconnecter tous les appareils"

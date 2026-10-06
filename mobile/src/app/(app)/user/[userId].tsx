@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
+import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { friendsApi } from '@/api/friends'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
-import { Button, ErrorState, Loading, Section } from '@/components/ui'
+import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
+import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
 import { errorMessage } from '@/lib/http'
@@ -37,7 +39,8 @@ export default function UserScreen() {
       .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
+      <ProfileBanner uri={u.banner} name={u.username} />
       <View style={styles.header}>
         <Avatar uri={u.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus />
         <Text style={styles.name}>{u.username}</Text>
@@ -54,6 +57,29 @@ export default function UserScreen() {
             <MessageText content={u.bio} />
           </View>
         </Section>
+      ) : null}
+
+      {!isMe ? <MutualServers userId={u.id} /> : null}
+      {!isMe && relation.kind === 'friend' ? (
+        <SavedText
+          title="Surnom d’ami"
+          footer="Visible de toi seul, à la place de son pseudo."
+          queryKey={['friend-nickname', u.id]}
+          load={() => friendsApi.nickname(u.id).then((r) => r.nickname)}
+          save={(v) => friendsApi.setNickname(u.id, v).then(() => void queryClient.invalidateQueries({ queryKey: qk.friendsAll }))}
+          maxLength={64}
+        />
+      ) : null}
+      {!isMe ? (
+        <SavedText
+          title="Note"
+          footer="Note privée : visible de toi seul."
+          queryKey={['user-note', u.id]}
+          load={() => usersApi.note(u.id).then((r) => r.content)}
+          save={(v) => usersApi.setNote(u.id, v)}
+          maxLength={2000}
+          multiline
+        />
       ) : null}
 
       {!isMe ? (
@@ -103,6 +129,76 @@ export default function UserScreen() {
         <Button title="Modifier mon profil" onPress={() => router.push('/settings/profile')} />
       )}
     </ScrollView>
+  )
+}
+
+function MutualServers({ userId }: { userId: string }) {
+  const q = useQuery({ queryKey: ['mutual-servers', userId], queryFn: () => usersApi.mutualServers(userId) })
+  if (!q.data?.length) return null
+  return (
+    <Section title={`Serveurs en commun (${q.data.length})`}>
+      {q.data.map((s) => (
+        <Row
+          key={s.id}
+          title={s.name}
+          subtitle={s.member_role_names.length ? s.member_role_names.join(', ') : null}
+          right={<Avatar uri={s.icon} name={s.name} size={28} rounded={false} />}
+        />
+      ))}
+    </Section>
+  )
+}
+
+/** Champ texte privé enregistré côté serveur (note, surnom d'ami). */
+function SavedText({
+  title,
+  footer,
+  queryKey,
+  load,
+  save,
+  maxLength,
+  multiline,
+}: {
+  title: string
+  footer: string
+  queryKey: string[]
+  load: () => Promise<string>
+  save: (v: string) => Promise<unknown>
+  maxLength: number
+  multiline?: boolean
+}) {
+  const q = useQuery({ queryKey, queryFn: load })
+  /** null tant que rien n'est tapé : on affiche la valeur du serveur. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  if (q.data === undefined) return null
+  const value = draft ?? q.data
+  const submit = async () => {
+    setBusy(true)
+    try {
+      await save(value.trim())
+      queryClient.setQueryData(queryKey, value.trim())
+      setDraft(null)
+    } catch (e) {
+      Alert.alert('Enregistrement impossible', errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Section title={title} footer={footer}>
+      <View style={{ padding: spacing.md, gap: spacing.sm }}>
+        <TextField
+          accessibilityLabel={title}
+          value={value}
+          onChangeText={setDraft}
+          maxLength={maxLength}
+          multiline={multiline}
+          style={multiline ? { minHeight: 80, textAlignVertical: 'top' } : undefined}
+        />
+        {value.trim() !== q.data ? <Button title="Enregistrer" variant="secondary" onPress={() => void submit()} loading={busy} /> : null}
+      </View>
+    </Section>
   )
 }
 

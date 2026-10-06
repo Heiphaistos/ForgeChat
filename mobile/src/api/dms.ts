@@ -13,6 +13,8 @@ export const dmsApi = {
   removeGroupMember: (groupId: string, userId: string) => http.delete(path`/dms/groups/${groupId}/members/${userId}`),
   renameGroup: (groupId: string, name: string) =>
     http.patch<{ ok: boolean; name: string }>(path`/dms/groups/${groupId}/rename`, { name }),
+  /** Propriétaire seulement ; la cible doit être membre du groupe. */
+  transferGroupOwner: (groupId: string, userId: string) => http.patch(path`/dms/groups/${groupId}/owner`, { user_id: userId }),
   setSettings: (dmId: string, settings: { muted?: boolean; archived?: boolean }) =>
     http.patch(path`/dms/${dmId}/settings`, settings),
 }

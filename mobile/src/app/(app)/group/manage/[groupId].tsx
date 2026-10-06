@@ -55,6 +55,12 @@ export default function ManageGroupScreen() {
       { text: 'Retirer', style: 'destructive', onPress: () => act.mutate(() => dmsApi.removeGroupMember(groupId, userId)) },
     ])
 
+  const transfer = (userId: string, username: string) =>
+    Alert.alert('Transférer la propriété ?', `${username} deviendra propriétaire du groupe. Tu resteras membre.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Transférer', style: 'destructive', onPress: () => act.mutate(() => dmsApi.transferGroupOwner(groupId, userId)) },
+    ])
+
   const leave = () =>
     Alert.alert('Quitter le groupe ?', g.name, [
       { text: 'Annuler', style: 'cancel' },
@@ -92,6 +98,9 @@ export default function ManageGroupScreen() {
             right={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 <Avatar uri={m.avatar} name={m.username} size={28} userId={m.id} />
+                {g.owner_id === myId && m.id !== myId ? (
+                  <IconButton icon="ribbon-outline" label={`Transférer la propriété à ${m.username}`} onPress={() => transfer(m.id, m.username)} />
+                ) : null}
                 {canRemoveMember(g, myId, m.id) ? (
                   <IconButton icon="person-remove-outline" label={`Retirer ${m.username}`} color={colors.danger} onPress={() => remove(m.id, m.username)} />
                 ) : null}

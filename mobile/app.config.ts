@@ -174,6 +174,8 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
         data: [
           { scheme: 'https', host: apiHost, pathPrefix: '/invite/' },
           { scheme: 'https', host: apiHost, pathPrefix: '/friend-invite/' },
+          // Lien du mail « mot de passe oublié » (FRONTEND_URL/reset-password#token=…), si même hôte.
+          { scheme: 'https', host: apiHost, path: '/reset-password' },
         ],
         category: ['BROWSABLE', 'DEFAULT'],
       },
