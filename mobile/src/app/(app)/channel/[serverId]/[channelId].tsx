@@ -50,6 +50,7 @@ export default function ChannelScreen() {
                 label="Messages épinglés"
                 onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }) })}
               />
+              <IconButton icon="search-outline" label="Rechercher dans la conversation" onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }) })} />
               <IconButton icon="people-outline" label="Membres" onPress={() => router.push(`/server/${ids.serverId}/members`)} />
             </View>
           ),

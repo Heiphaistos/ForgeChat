@@ -68,6 +68,7 @@ export default function DmScreen() {
                 label="Messages épinglés"
                 onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })}
               />
+              <IconButton icon="search-outline" label="Rechercher dans la conversation" onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })} />
               {otherId ? (
                 <>
                   <IconButton icon="call-outline" label="Appel vocal" onPress={() => void call('voice')} />

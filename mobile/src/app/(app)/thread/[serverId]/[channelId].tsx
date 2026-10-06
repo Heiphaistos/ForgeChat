@@ -3,10 +3,14 @@ import { Stack } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { threadsApi } from '@/api/threads'
-import { Button, ErrorState, Loading, TextField } from '@/components/ui'
+import { Sheet, type SheetAction } from '@/components/Sheet'
+import { Button, ErrorState, IconButton, Loading, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ReplyThreadView } from '@/features/chat/ReplyThreadView'
-import { createThreadBody, olderCursor, type ThreadSummary } from '@/features/chat/threads'
+import { createThreadBody, olderCursor, sendWithAttachments, type ThreadSummary } from '@/features/chat/threads'
+import { PERM } from '@/features/servers/perms'
+import { useServerPerms } from '@/features/servers/menus'
+import { useAuth } from '@/stores/auth'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -55,10 +59,38 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
       .catch(() => undefined) // lecture non marquée : sans conséquence
   }, [lastId, serverId, channelId, thread.id])
   const refresh = () => queryClient.invalidateQueries({ queryKey: key })
+  const meId = useAuth((s) => s.user?.id)
+  const canModerate = useServerPerms(serverId).has(PERM.MANAGE_MESSAGES)
+  const [menu, setMenu] = useState(false)
+  // archive_thread : archiver = créateur ou MANAGE_MESSAGES ; verrouiller = MANAGE_MESSAGES.
+  const update = (body: { archived: boolean; locked?: boolean }) =>
+    threadsApi
+      .update(serverId, channelId, thread.id, body)
+      .then(() => queryClient.invalidateQueries({ queryKey: qk.threads(channelId) }))
+      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+  const menuActions: SheetAction[] = []
+  if (canModerate || thread.creatorId === meId)
+    menuActions.push({
+      label: thread.archived ? 'Désarchiver le fil' : 'Archiver le fil',
+      icon: 'archive-outline',
+      onPress: () => void update({ archived: !thread.archived }),
+    })
+  if (canModerate)
+    menuActions.push({
+      label: thread.locked ? 'Déverrouiller le fil' : 'Verrouiller le fil',
+      icon: thread.locked ? 'lock-open-outline' : 'lock-closed-outline',
+      onPress: () => void update({ archived: thread.archived, locked: !thread.locked }),
+    })
 
   return (
     <>
-      <Stack.Screen options={{ title: thread.title }} />
+      <Stack.Screen
+        options={{
+          title: thread.title,
+          headerRight: menuActions.length ? () => <IconButton icon="ellipsis-vertical" label="Gérer le fil" onPress={() => setMenu(true)} /> : undefined,
+        }}
+      />
+      <Sheet visible={menu} onClose={() => setMenu(false)} title={thread.title} actions={menuActions} />
       <ReplyThreadView
         messages={messages}
         isLoading={q.isLoading}
@@ -73,7 +105,18 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
             .then(refresh)
             .catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
         }
-        onSend={(t) => threadsApi.send(serverId, channelId, thread.id, t).then(refresh)}
+        onSend={(t, files) =>
+          sendWithAttachments(
+            t,
+            files,
+            (has) => threadsApi.send(serverId, channelId, thread.id, t, has),
+            (id, f) => threadsApi.upload(serverId, channelId, thread.id, id, f),
+            (id) => threadsApi.remove(serverId, channelId, thread.id, id),
+          ).finally(refresh)
+        }
+        onEdit={(m, t) => threadsApi.edit(serverId, channelId, thread.id, m.id, t).then(refresh)}
+        onDelete={(m) => threadsApi.remove(serverId, channelId, thread.id, m.id).then(refresh)}
+        canModerate={canModerate}
         disabledReason={thread.locked ? 'Ce fil est verrouillé.' : thread.archived ? 'Ce fil est archivé.' : null}
         placeholder={`Répondre dans ${thread.title}`}
         header={

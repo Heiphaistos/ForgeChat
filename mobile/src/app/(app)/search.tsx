@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { router } from 'expo-router'
+import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native'
 import { searchApi } from '@/api/search'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState } from '@/components/ui'
-import { useScrollTarget } from '@/features/chat/pins'
+import { conversationId } from '@/features/chat/adapters'
+import { conversationRefFromParams, useScrollTarget } from '@/features/chat/pins'
 import { SEARCH_DEBOUNCE_MS, searchQuery, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
@@ -15,12 +16,24 @@ import { colors, font, radius, spacing } from '@/theme'
 
 type Item = { kind: 'message'; v: SearchMessage } | { kind: 'user'; v: SearchUser } | { kind: 'channel'; v: SearchChannel }
 
-function openItem(item: Item) {
+function openMessage(m: SearchMessage, scoped: boolean) {
+  const c = m.conversation
+  useScrollTarget.getState().request(conversationId(c), m.id)
+  // Recherche ouverte depuis la conversation : on y retourne, elle défile jusqu'au message.
+  if (scoped) return router.back()
+  if (c.kind === 'channel') router.push({ pathname: '/channel/[serverId]/[channelId]', params: { serverId: c.serverId, channelId: c.channelId, name: m.channelName } })
+  else if (c.kind === 'dm') router.push(`/dm/${c.dmId}`)
+  else router.push(`/group/${c.groupId}`)
+}
+
+function where(m: SearchMessage): string {
+  return m.conversation.kind === 'channel' ? `#${m.channelName}` : m.conversation.kind === 'dm' ? `MP avec ${m.channelName}` : m.channelName
+}
+
+function openItem(item: Item, scoped: boolean) {
   switch (item.kind) {
     case 'message':
-      useScrollTarget.getState().request(item.v.channelId, item.v.id)
-      router.push({ pathname: '/channel/[serverId]/[channelId]', params: { serverId: item.v.serverId, channelId: item.v.channelId, name: item.v.channelName } })
-      return
+      return openMessage(item.v, scoped)
     case 'user':
       router.push(`/user/${item.v.id}`)
       return
@@ -31,6 +44,9 @@ function openItem(item: Item) {
 }
 
 export default function SearchScreen() {
+  // Avec kind + identifiants (comme l'écran des épinglés) : recherche limitée à cette conversation.
+  const scope = conversationRefFromParams(useLocalSearchParams<Record<string, string>>())
+  const scopeId = scope ? conversationId(scope) : ''
   const [input, setInput] = useState('')
   const [debounced, setDebounced] = useState<string | null>(null)
   useEffect(() => {
@@ -39,8 +55,8 @@ export default function SearchScreen() {
   }, [input])
 
   const results = useQuery({
-    queryKey: qk.search(debounced ?? ''),
-    queryFn: ({ signal }) => searchApi.global(debounced!, signal),
+    queryKey: [...qk.search(debounced ?? ''), scopeId],
+    queryFn: ({ signal }) => searchApi.global(debounced!, signal, scope),
     enabled: !!debounced,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -57,12 +73,13 @@ export default function SearchScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {scope ? <Stack.Screen options={{ title: 'Rechercher ici' }} /> : null}
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Messages, salons, personnes"
+          placeholder={scope ? 'Messages de cette conversation' : 'Messages, salons, personnes'}
           placeholderTextColor={colors.textFaint}
           selectionColor={colors.primary}
           autoFocus
@@ -76,7 +93,11 @@ export default function SearchScreen() {
         {results.isFetching ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       </View>
       {!debounced ? (
-        <EmptyState icon="search-outline" title="Rechercher" subtitle="Au moins 2 caractères. Les messages privés ne sont pas inclus." />
+        <EmptyState
+          icon="search-outline"
+          title="Rechercher"
+          subtitle={`Au moins 2 caractères. Filtres : de:pseudo, a:image, a:lien, a:fichier, avant:AAAA-MM-JJ, après:AAAA-MM-JJ${scope ? '' : ', dans:salon'}.`}
+        />
       ) : results.error ? (
         <ErrorState message={errorMessage(results.error)} onRetry={() => void results.refetch()} />
       ) : data && !sections.length ? (
@@ -90,7 +111,7 @@ export default function SearchScreen() {
           renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => openItem(item)}
+              onPress={() => openItem(item, !!scope)}
               style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
               accessibilityLabel={
@@ -102,7 +123,8 @@ export default function SearchScreen() {
                   <Avatar uri={item.v.authorAvatar} name={item.v.authorName} size={32} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.meta} numberOfLines={1}>
-                      {item.v.authorName} · #{item.v.channelName} · {formatShort(item.v.createdAt)}
+                      {item.v.authorName}
+                      {scope ? '' : ` · ${where(item.v)}`} · {formatShort(item.v.createdAt)}
                     </Text>
                     <Text style={styles.body} numberOfLines={3}>
                       {item.v.content ?? 'Pièce jointe'}

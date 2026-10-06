@@ -8,13 +8,13 @@ const U = '9b1f4c2e-0d3a-4e5b-8c6d-7e8f9a0b1c2d'
 describe('normalizeThreads', () => {
   it('lit threads.rs::list_threads et indexe par message d’origine', () => {
     const list = normalizeThreads([
-      { id: T, parent_message_id: P, title: 'Sujet', message_count: 3, unread_count: 1, archived: false, locked: true },
+      { id: T, parent_message_id: P, title: 'Sujet', creator_id: U.toUpperCase(), message_count: 3, unread_count: 1, archived: false, locked: true },
       { id: U, parent_message_id: null, title: 'Libre', message_count: 1 },
       { id: 'x', parent_message_id: P },
     ])
     expect(list).toEqual([
-      { id: T, parentMessageId: P, title: 'Sujet', messageCount: 3, unreadCount: 1, archived: false, locked: true },
-      { id: U, parentMessageId: null, title: 'Libre', messageCount: 1, unreadCount: 0, archived: false, locked: false },
+      { id: T, parentMessageId: P, title: 'Sujet', creatorId: U, messageCount: 3, unreadCount: 1, archived: false, locked: true },
+      { id: U, parentMessageId: null, title: 'Libre', creatorId: null, messageCount: 1, unreadCount: 0, archived: false, locked: false },
     ])
     const map = threadsByParent(list)
     expect(map.get(P)?.id).toBe(T)

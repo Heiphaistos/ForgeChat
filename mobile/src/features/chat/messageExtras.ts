@@ -128,3 +128,88 @@ export function normalizeEdits(raw: unknown): EditEntry[] {
     return editedAt ? [{ content: str(r.content), editedAt }] : []
   })
 }
+
+// ─── Lien, traduction, réactions ──────────────────────────────────────────────
+
+/** Lien partageable d'un message, même format que le web (MessageList.tsx / utils/searchLink.ts). */
+export function messageLink(origin: string, ref: ConversationRef, messageId: string): string {
+  const q = `?highlight=${messageId}`
+  switch (ref.kind) {
+    case 'channel':
+      return `${origin}/servers/${ref.serverId}/channels/${ref.channelId}${q}`
+    case 'dm':
+      return `${origin}/dms/${ref.dmId}${q}`
+    case 'group':
+      return `${origin}/dms/groups/${ref.groupId}${q}`
+  }
+}
+
+/**
+ * Traduire (messages.rs::translate_message) et « qui a réagi » (audit.rs::get_reaction_detail)
+ * ne cherchent le message que dans les salons et les DM 1:1 : rien pour les groupes.
+ */
+export const supportsTranslate = supportsMessageExtras
+export const supportsReactionDetail = supportsMessageExtras
+
+export interface ReactionUser {
+  id: string
+  username: string
+  avatar: string | null
+}
+
+/** GET /reactions?message_id=&emoji= : { emoji, count, users: [{ user_id, username, avatar }] }. */
+export function normalizeReactionUsers(raw: unknown): ReactionUser[] {
+  const users = obj(raw).users
+  if (!Array.isArray(users)) return []
+  return users.map(obj).flatMap((u) => {
+    const id = str(u.user_id)
+    const username = str(u.username)
+    return isUuid(id) && username ? [{ id: id.toLowerCase(), username, avatar: str(u.avatar) }] : []
+  })
+}
+
+// ─── Messages programmés (handlers/scheduled.rs) ──────────────────────────────
+
+export interface ScheduledItem {
+  id: string
+  content: string
+  sendAt: string
+}
+
+/** Bornes du serveur : dans le futur, au plus 30 jours. */
+export const SCHEDULE_MAX_DAYS = 30
+
+export function normalizeScheduled(raw: unknown): ScheduledItem[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map(obj).flatMap((r) => {
+    const id = str(r.id)
+    const sendAt = str(r.send_at)
+    return isUuid(id) && sendAt && r.sent !== true ? [{ id: id.toLowerCase(), content: str(r.content) ?? '', sendAt }] : []
+  })
+}
+
+/** Raison du refus (texte français) ou null si la date est acceptée par create_scheduled. */
+export function scheduleDateError(at: Date | null, now: Date): string | null {
+  if (!at) return 'Format JJ/MM/AAAA HH:MM, dans le futur.'
+  if (at.getTime() <= now.getTime()) return 'La date doit être dans le futur.'
+  if (at.getTime() > now.getTime() + SCHEDULE_MAX_DAYS * 86_400_000) return `Au plus ${SCHEDULE_MAX_DAYS} jours à l’avance.`
+  return null
+}
+
+// ─── Aperçu de lien (audit.rs::og_preview) ────────────────────────────────────
+
+export interface LinkPreviewData {
+  title: string | null
+  description: string | null
+  siteName: string | null
+  url: string
+}
+
+/** null si rien d'affichable (ni titre ni description) — comme LinkPreview.tsx. */
+export function normalizeOg(raw: unknown, requested: string): LinkPreviewData | null {
+  const r = obj(raw)
+  const title = str(r.title)?.trim() || null
+  const description = str(r.description)?.trim() || null
+  if (!title && !description) return null
+  return { title, description, siteName: str(r.site_name)?.trim() || null, url: str(r.url) ?? requested }
+}

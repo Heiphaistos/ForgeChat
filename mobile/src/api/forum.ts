@@ -2,7 +2,9 @@ import { LIMITS } from '@/config/env'
 import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizePost, normalizePosts, type ForumPost } from '@/features/forum/forum'
 import { http, path } from '@/lib/http'
-import type { ChatMessage } from '@/types/models'
+import type { Attachment, ChatMessage } from '@/types/models'
+import type { UploadFile } from './messages'
+import { uploadForm } from './threads'
 
 const base = (serverId: string, channelId: string) => path`/servers/${serverId}/channels/${channelId}/posts`
 
@@ -18,7 +20,24 @@ export const forumApi = {
     return { post: normalizePost(raw?.post), replies }
   },
   create: (serverId: string, channelId: string, body: { title: string; content?: string; tags: string[] }) => http.post(base(serverId, channelId), body),
-  reply: (serverId: string, channelId: string, postId: string, content: string) => http.post(base(serverId, channelId) + path`/${postId}/replies`, { content }),
+  /** Renvoie l'id de la réponse créée (pour y joindre ensuite des fichiers). */
+  async reply(serverId: string, channelId: string, postId: string, content: string, hasAttachments = false): Promise<string | null> {
+    const r = await http.post<{ reply?: { id?: unknown } }>(base(serverId, channelId) + path`/${postId}/replies`, { content, has_attachments: hasAttachments })
+    return typeof r?.reply?.id === 'string' ? r.reply.id : null
+  },
+  /** `content` : créateur seulement ; `pinned` / `locked` : MANAGE_MESSAGES. */
+  updatePost: (serverId: string, channelId: string, postId: string, patch: { content?: string; pinned?: boolean; locked?: boolean }) =>
+    http.patch(base(serverId, channelId) + path`/${postId}`, patch),
+  /** Créateur ou MANAGE_MESSAGES. */
+  deletePost: (serverId: string, channelId: string, postId: string) => http.delete(base(serverId, channelId) + path`/${postId}`),
+  /** Auteur seulement. */
+  editReply: (serverId: string, channelId: string, postId: string, replyId: string, content: string) =>
+    http.patch(base(serverId, channelId) + path`/${postId}/replies/${replyId}`, { content }),
+  /** Auteur ou MANAGE_MESSAGES. */
+  deleteReply: (serverId: string, channelId: string, postId: string, replyId: string) =>
+    http.delete(base(serverId, channelId) + path`/${postId}/replies/${replyId}`),
+  uploadReply: (serverId: string, channelId: string, postId: string, replyId: string, files: UploadFile[]) =>
+    http.upload<Attachment[]>(base(serverId, channelId) + path`/${postId}/replies/${replyId}/attachments`, uploadForm(files)),
   /** Bascule (ajout ou retrait) de ma réaction sur une réponse. */
   react: (serverId: string, channelId: string, postId: string, replyId: string, emoji: string) =>
     http.put(base(serverId, channelId) + path`/${postId}/replies/${replyId}/reactions/${emoji}`),

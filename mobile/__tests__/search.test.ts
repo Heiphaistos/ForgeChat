@@ -22,7 +22,7 @@ describe('normalizeSearch', () => {
       channels: [{ id: B, name: 'général', type: 'text', server_id: C, server_name: 'Serveur' }],
     })
     expect(r.messages).toEqual([
-      { id: A, content: 'salut', createdAt: AT, authorName: 'bob', authorAvatar: null, channelId: B, channelName: 'général', serverId: C },
+      { id: A, content: 'salut', createdAt: AT, authorName: 'bob', authorAvatar: null, channelName: 'général', conversation: { kind: 'channel', serverId: C, channelId: B } },
     ])
     expect(r.users).toEqual([{ id: A, username: 'bob', avatar: null, status: 'online' }])
     expect(r.channels).toEqual([{ id: B, name: 'général', type: 'text', serverId: C, serverName: 'Serveur' }])

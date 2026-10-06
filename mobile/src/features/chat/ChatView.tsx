@@ -6,8 +6,10 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 import { Image } from 'expo-image'
+import { Avatar } from '@/components/Avatar'
 import { Sheet, type SheetAction } from '@/components/Sheet'
-import { EmptyState, ErrorState, Loading } from '@/components/ui'
+import { Button, EmptyState, ErrorState, Loading } from '@/components/ui'
+import { apiOrigin } from '@/config/env'
 import { dmsApi } from '@/api/dms'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
@@ -25,8 +27,9 @@ import { Composer } from './Composer'
 import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
+import { messagesKey } from './cache'
 import { useScrollTarget } from './pins'
-import { supportsMessageExtras } from './messageExtras'
+import { messageLink, supportsMessageExtras, supportsReactionDetail, supportsTranslate, type ReactionUser } from './messageExtras'
 import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 
@@ -37,8 +40,6 @@ const useDrafts = create<{ drafts: Record<string, string>; set: (id: string, v: 
 }))
 
 const GROUP_WINDOW_MS = 5 * 60_000
-/** Pages plus anciennes chargées au maximum pour atteindre un message épinglé. */
-const MAX_SCROLL_PAGES = 5
 const HIGHLIGHT_MS = 2000
 
 function TypingIndicator({ conversationId }: { conversationId: string }) {
@@ -75,6 +76,8 @@ export function ChatView({
   const [editing, setEditing] = useState<ChatMessage | null>(null)
   const [selected, setSelected] = useState<ChatMessage | null>(null)
   const [paletteFor, setPaletteFor] = useState<ChatMessage | null>(null)
+  const [translations, setTranslations] = useState<Record<string, string>>({})
+  const [reactors, setReactors] = useState<{ emoji: string; users: ReactionUser[] } | null>(null)
   const listRef = useRef<FlatList<ChatMessage>>(null)
   // Distance haut de l'écran → haut de la vue (en-tête compris), mesurée nous-mêmes :
   // `automaticOffset` retombait par intermittence sur y = 0 (position relative au parent)
@@ -129,31 +132,46 @@ export function ChatView({
   const savedIds = useMemo(() => new Set((saved.data ?? []).map((s) => s.messageId)), [saved.data])
   const isPinned = (m: ChatMessage) => (conversation.kind === 'channel' ? m.pinned : pinnedIds.has(m.id))
 
-  // Défilement vers un message demandé par l'écran des épinglés (chargement de pages plus anciennes si besoin).
+  // Défilement vers un message demandé (épinglés, recherche, mentions). Absent des pages chargées :
+  // la conversation est rechargée autour de lui (?around=, comme le web), puis on y défile.
   const target = useScrollTarget((s) => (s.target?.conversationId === conv.id ? s.target.messageId : null))
   const highlightId = useScrollTarget((s) => s.highlightId)
-  const pagesLoaded = useRef(0)
-  const { messages, hasOlder, loadingOlder, loadOlder, isLoading } = conv
+  const jumping = useRef<string | null>(null)
+  const [detached, setDetached] = useState(false)
+  const { messages, hasOlder, isLoading } = conv
+  // Fin du saut (bouton « Revenir au présent » ou sortie de la conversation) : on repart des messages récents.
   useEffect(() => {
-    if (!target) {
-      pagesLoaded.current = 0
-      return
-    }
-    if (isLoading) return // conversation ouverte à l'instant : attendre la première page
+    if (!detached) return
+    const queryKey = messagesKey(conversation.kind, conv.id)
+    return () => void queryClient.resetQueries({ queryKey, exact: true })
+  }, [detached, conversation.kind, conv.id])
+  useEffect(() => {
+    if (!target || isLoading) return // conversation ouverte à l'instant : attendre la première page
     const index = messages.findIndex((m) => m.id === target)
     if (index >= 0) {
       listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true })
       useScrollTarget.getState().done(target)
-    } else if (hasOlder && pagesLoaded.current < MAX_SCROLL_PAGES) {
-      if (!loadingOlder) {
-        pagesLoaded.current += 1
-        loadOlder()
-      }
-    } else {
-      useScrollTarget.getState().done(null)
-      Alert.alert('Message introuvable', 'Il est trop ancien ou a été supprimé.')
+      return
     }
-  }, [target, messages, hasOlder, loadingOlder, loadOlder, isLoading])
+    const notFound = () => {
+      useScrollTarget.getState().done(null)
+      Alert.alert('Message introuvable', 'Il a peut-être été supprimé.')
+    }
+    if (!hasOlder) return notFound()
+    if (jumping.current === target) return
+    jumping.current = target
+    messagesApi
+      .around(conversation, target)
+      .then((page) => {
+        if (!page.some((m) => m.id === target)) return notFound()
+        queryClient.setQueryData(messagesKey(conversation.kind, conv.id), { pages: [page], pageParams: [undefined] })
+        setDetached(true)
+      })
+      .catch(notFound)
+      .finally(() => {
+        jumping.current = null
+      })
+  }, [target, messages, hasOlder, isLoading, conversation, conv.id])
   useEffect(() => {
     if (!highlightId) return
     const t = setTimeout(() => useScrollTarget.getState().done(null), HIGHLIGHT_MS)
@@ -239,12 +257,38 @@ export function ChatView({
       list.push({ label: 'Me le rappeler', icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
       if (m.editedAt) list.push({ label: 'Historique des modifications', icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
     }
+    if (!m.pending && supportsTranslate(conversation) && hasEditableText(m)) {
+      list.push(
+        translations[m.id]
+          ? { label: 'Masquer la traduction', icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }
+          : { label: 'Traduire en français', icon: 'language-outline', onPress: () => translate(m) },
+      )
+    }
+    if (!m.pending) list.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
     if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
     if (!mine && conversation.kind === 'channel') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
     // Suppression : l'auteur, ou un modérateur (le serveur tranche — 403 sinon).
     if (mine || conversation.kind === 'channel') list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
     return list
   }
+
+  const translate = (m: ChatMessage) =>
+    messagesApi
+      .translate(m.id)
+      .then((t) => setTranslations((prev) => ({ ...prev, [m.id]: t })))
+      .catch((e) => Alert.alert('Traduction impossible', errorMessage(e)))
+
+  const showReactors = useMemo(
+    () =>
+      supportsReactionDetail(conversation)
+        ? (m: ChatMessage, emoji: string) =>
+            void messagesApi
+              .reactionUsers(m.id, emoji)
+              .then((users) => setReactors({ emoji, users }))
+              .catch((e) => Alert.alert('Réactions indisponibles', errorMessage(e)))
+        : undefined,
+    [conversation],
+  )
 
   const onPressAuthor = useCallback((userId: string) => router.push(`/user/${userId}`), [])
   const onLongPress = useCallback((m: ChatMessage) => setSelected(m), [])
@@ -276,11 +320,13 @@ export function ChatView({
             channelId={channelId || undefined}
             thread={threadOf.get(item.id)}
             onOpenThread={openThread}
+            onReactionLongPress={showReactors}
+            translation={translations[item.id]}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations],
   )
 
   const quickReactions = useMemo(
@@ -347,6 +393,12 @@ export function ChatView({
   return (
     <CustomEmojiContext.Provider value={customEmojis}>
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={topOffset} onLayout={onKavLayout} style={{ flex: 1, backgroundColor: colors.bg }}>
+        {detached ? (
+          <View style={styles.detached}>
+            <Text style={styles.detachedText}>Tu consultes des messages plus anciens.</Text>
+            <Button title="Revenir au présent" variant="ghost" icon="arrow-down" onPress={() => setDetached(false)} />
+          </View>
+        ) : null}
         <View style={{ flex: 1 }}>{body}</View>
         <TypingIndicator conversationId={conv.id} />
         {denied ? null : (
@@ -370,8 +422,21 @@ export function ChatView({
             mentionCandidates={mentionCandidates}
             myId={me?.id ?? null}
             serverId={serverId || undefined}
+            channelId={channelId || undefined}
           />
         )}
+
+        <Sheet
+          visible={!!reactors}
+          onClose={() => setReactors(null)}
+          title={reactors ? `${reactors.emoji} · ${reactors.users.length} personne${reactors.users.length > 1 ? 's' : ''}` : undefined}
+          actions={(reactors?.users ?? []).map((u) => ({
+            label: u.username,
+            icon: 'person-outline',
+            leading: <Avatar uri={u.avatar} name={u.username} size={24} userId={u.id} />,
+            onPress: () => router.push(`/user/${u.id}`),
+          }))}
+        />
 
         <Sheet
           visible={!!selected}
@@ -422,6 +487,8 @@ export function ChatView({
 
 const styles = StyleSheet.create({
   highlight: { backgroundColor: colors.primary + '33' },
+  detached: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: spacing.lg, backgroundColor: colors.bgAlt },
+  detachedText: { color: colors.textMuted, fontSize: font.sm, flexShrink: 1 },
   typing: { height: 20, paddingHorizontal: spacing.lg, justifyContent: 'center' },
   typingText: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
