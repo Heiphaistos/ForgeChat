@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.heiphaistos.forgechat",
+      "sha256_cert_fingerprints": ["REMPLACER:PAR:L'EMPREINTE:SHA256:DU:CERTIFICAT:DE:SIGNATURE"]
+    }
+  }
+]

@@ -1,0 +1,88 @@
+import { Image } from 'expo-image'
+import { StyleSheet, Text, View } from 'react-native'
+import { resolveMediaUrl } from '@/lib/links'
+import { usePresenceOf } from '@/stores/presence'
+import { statusColor, statusHollow, statusLabel } from '@/lib/status'
+import { colors } from '@/theme'
+
+const PALETTE = ['#5865f2', '#3ba55c', '#faa61a', '#ed4245', '#eb459e', '#9b59b6', '#1abc9c']
+
+function colorFor(seed: string) {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  return PALETTE[Math.abs(h) % PALETTE.length]!
+}
+
+export function Avatar({
+  uri,
+  name,
+  size = 40,
+  userId,
+  status,
+  showStatus,
+  rounded = true,
+}: {
+  uri: string | null | undefined
+  name: string
+  size?: number
+  userId?: string
+  status?: string
+  showStatus?: boolean
+  rounded?: boolean
+}) {
+  const live = usePresenceOf(showStatus ? userId : undefined, status)
+  const src = resolveMediaUrl(uri)
+  const r = rounded ? size / 2 : size * 0.3
+  const dot = Math.max(10, size * 0.3)
+  return (
+    <View
+      style={{ width: size, height: size }}
+      accessible
+      accessibilityLabel={showStatus ? `Avatar de ${name}, ${statusLabel(live)}` : `Avatar de ${name}`}
+    >
+      {src ? (
+        <Image
+          source={{ uri: src }}
+          style={{ width: size, height: size, borderRadius: r, backgroundColor: colors.bgElevated }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={src}
+          transition={120}
+        />
+      ) : (
+        <View style={[styles.fallback, { width: size, height: size, borderRadius: r, backgroundColor: colorFor(name) }]}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.4 }}>{(name[0] ?? '?').toUpperCase()}</Text>
+        </View>
+      )}
+      {showStatus ? <StatusDot status={live} size={dot} /> : null}
+    </View>
+  )
+}
+
+/** Pastille de présence : couleur du web ; hors ligne / invisible en anneau creux. */
+export function StatusDot({ status, size = 12, ringColor = colors.bgAlt, inline }: { status: string | null | undefined; size?: number; ringColor?: string; inline?: boolean }) {
+  const c = statusColor(status)
+  const hollow = statusHollow(status)
+  return (
+    <View
+      style={[
+        inline ? null : styles.dot,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: inline ? c : ringColor,
+          backgroundColor: c,
+          borderWidth: inline ? 0 : 2.5,
+        },
+      ]}
+    >
+      {hollow ? <View style={{ flex: 1, margin: inline ? size * 0.22 : size * 0.12, borderRadius: size, backgroundColor: inline ? colors.bgAlt : ringColor }} /> : null}
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  fallback: { alignItems: 'center', justifyContent: 'center' },
+  dot: { position: 'absolute', right: -1, bottom: -1 },
+})
