@@ -245,7 +245,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     apiUrl: API_URL,
     appEnv: APP_ENV,
-    livekitHost: LIVEKIT_HOST,
+    ...(LIVEKIT_HOST ? { livekitHost: LIVEKIT_HOST } : {}),
     ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
   },
 })

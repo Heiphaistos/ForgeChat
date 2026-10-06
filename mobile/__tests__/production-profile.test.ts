@@ -44,7 +44,8 @@ describe('client-apk (profil EAS production)', () => {
     expect(cfg.android.package).toBe('org.heiphaistos.forgechat')
     expect(cfg.name).toBe('ForgeChat')
     expect(cfg.extra.apiUrl).toBe(SERVER)
-    expect(cfg.extra.livekitHost).toBeNull()
+    // Absent (jamais null : sérialisé en {} dans l'APK, voir src/config/env.ts).
+    expect(cfg.extra.livekitHost).toBeUndefined()
     expect(cfg.extra.appEnv).toBe('production')
     expect(cfg.icon).toBe('./assets/icon.png') // icône officielle, pas la variante DEV
   })

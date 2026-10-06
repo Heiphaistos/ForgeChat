@@ -78,7 +78,9 @@ export const apiHost = () => (origin ? new URL(origin).host : '')
 /** Nom d'hôte seul (sans port) du serveur : sert à valider l'adresse LiveKit reçue. */
 export const apiHostname = () => (origin ? new URL(origin).hostname : '')
 /** Hôte LiveKit fixé au build (bêta), s'il diffère de celui du serveur (FORGECHAT_LIVEKIT_URL). */
-export const BUILD_LIVEKIT_HOST: string | null = extra.livekitHost ?? null
+// Une chaîne seulement : la sérialisation de `extra` dans l'APK change un `null` en `{}`, qui ferait
+// planter la vérification de l'adresse LiveKit (`.toLowerCase()`) à chaque appel.
+export const BUILD_LIVEKIT_HOST: string | null = typeof extra.livekitHost === 'string' && extra.livekitHost ? extra.livekitHost : null
 
 /** Au démarrage, avant toute requête : applique le serveur choisi dans l'APK DEV (rien en production). */
 export async function loadServerChoice(): Promise<void> {
