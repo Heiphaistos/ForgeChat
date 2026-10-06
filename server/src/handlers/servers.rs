@@ -289,34 +289,48 @@ pub struct ReauthBody {
 }
 
 /// Confirmation forte avant une action irréversible : mot de passe obligatoire, et code de double
-/// authentification (ou code de secours) si elle est activée. 5 essais par quart d'heure.
+/// authentification (ou code de secours) si elle est activée. 5 échecs par quart d'heure.
 /// Erreurs : 400 « Mot de passe incorrect », 403 `totp_required` si le code manque, 400 si faux.
 pub async fn verify_reauth(state: &AppState, user_id: Uuid, body: &ReauthBody) -> Result<()> {
     use redis::AsyncCommands;
+    // Seuls les ÉCHECS comptent (comme à la connexion) : un propriétaire qui supprime plusieurs
+    // serveurs d'affilée avec le bon mot de passe n'est jamais bloqué.
+    let key = format!("reauth_fail:{user_id}");
     {
-        let key = format!("reauth:{user_id}");
         let mut redis = state.redis.lock().await;
-        let n: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
-        if n == 1 {
-            let _: () = redis.expire(&key, 900).await.unwrap_or(());
-        }
-        if n > 5 {
+        let echecs: i64 = redis.get(&key).await.unwrap_or(0);
+        if echecs >= 5 {
             return Err(AppError::TooManyRequests);
         }
     }
+    let echec = |state: &AppState| {
+        let key = key.clone();
+        let redis = state.redis.clone();
+        async move {
+            let mut redis = redis.lock().await;
+            let n: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
+            if n == 1 {
+                let _: () = redis.expire(&key, 900).await.unwrap_or(());
+            }
+        }
+    };
     let (hash, totp_enabled, secret): (String, bool, Option<String>) =
         sqlx::query_as("SELECT password_hash, totp_enabled, totp_secret FROM users WHERE id=$1")
             .bind(user_id)
             .fetch_one(&state.db)
             .await?;
     if body.password.is_empty() || !bcrypt::verify(&body.password, &hash).unwrap_or(false) {
+        echec(state).await;
         return Err(AppError::BadRequest("Mot de passe incorrect".into()));
     }
     if totp_enabled {
-        let code = body.totp_code.as_deref().map(str::trim).filter(|c| !c.is_empty()).ok_or(AppError::TotpRequired)?;
+        let Some(code) = body.totp_code.as_deref().map(str::trim).filter(|c| !c.is_empty()) else {
+            return Err(AppError::TotpRequired);
+        };
         let ok = secret.as_deref().is_some_and(|s| crate::handlers::totp::verify_totp(s, code))
             || crate::handlers::totp::verify_and_consume_backup_code(state, user_id, code).await?;
         if !ok {
+            echec(state).await;
             return Err(AppError::BadRequest("Code de double authentification incorrect".into()));
         }
     }
