@@ -192,6 +192,13 @@ pub async fn get_server(
     })))
 }
 
+/// Adresse d'invitation personnalisée valide : 3-30 caractères a-z, 0-9, tiret (pas en bord).
+pub fn valid_vanity(v: &str) -> bool {
+    (3..=30).contains(&v.len())
+        && v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !v.starts_with('-') && !v.ends_with('-')
+}
+
 pub async fn update_server(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -216,6 +223,18 @@ pub async fn update_server(
     // désérialiseur custom car ce champ cohabite avec des champs COALESCE.
     let category_provided = body.server_category.is_some();
     let category_value: Option<String> = body.server_category.flatten();
+
+    // Adresse d'invitation personnalisée : 3-30 caractères a-z, 0-9 et tirets, unique (migration 071).
+    if let Some(Some(v)) = &body.vanity_url {
+        if !valid_vanity(v) {
+            return Err(AppError::BadRequest("Adresse personnalisée : 3 à 30 caractères, lettres minuscules, chiffres et tirets".into()));
+        }
+        let prise: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE lower(vanity_url)=lower($1) AND id<>$2)")
+            .bind(v).bind(server_id).fetch_one(&state.db).await?;
+        if prise {
+            return Err(AppError::Conflict("Cette adresse est déjà prise".into()));
+        }
+    }
 
     let server = sqlx::query_as::<_, Server>(
         "UPDATE servers SET
@@ -387,8 +406,10 @@ pub async fn join_server(
     // /explore et /discover).
     let server_id = match &invite {
         Some(inv) => inv.server_id,
+        // … ou l'adresse personnalisée choisie par le propriétaire (invitation volontairement publique).
         None => sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM servers WHERE invite_code=$1 AND is_public=true"
+            "SELECT id FROM servers WHERE (invite_code=$1 AND is_public=true)
+                OR (vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)) LIMIT 1"
         )
             .bind(&code)
             .fetch_optional(&state.db)
@@ -1571,4 +1592,20 @@ pub async fn discover_servers(
     })).collect();
 
     Ok(Json(result))
+}
+
+#[cfg(test)]
+mod vanity_tests {
+    use super::valid_vanity;
+
+    #[test]
+    fn vanity_format() {
+        assert!(valid_vanity("jotunheim"));
+        assert!(valid_vanity("la-forge-2"));
+        assert!(!valid_vanity("ab"));
+        assert!(!valid_vanity("Majuscule"));
+        assert!(!valid_vanity("-tiret"));
+        assert!(!valid_vanity("a b c"));
+        assert!(!valid_vanity(&"a".repeat(31)));
+    }
 }

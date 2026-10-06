@@ -97,8 +97,25 @@ pub async fn get_invite_info(
     )
     .bind(&code)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Invitation introuvable".into()))?;
+    .await?;
+    use sqlx::Row;
+    // Adresse personnalisée (/invite/<adresse>) : aperçu du serveur, comme une invitation.
+    let Some(invite) = invite else {
+        let s = sqlx::query("SELECT id, name, icon, member_count FROM servers WHERE vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)")
+            .bind(&code)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Invitation introuvable".into()))?;
+        return Ok(Json(serde_json::json!({
+            "code": code.to_lowercase(),
+            "server": {
+                "id": s.get::<Uuid, _>("id"),
+                "name": s.get::<String, _>("name"),
+                "icon": s.get::<Option<String>, _>("icon"),
+                "member_count": s.get::<i32, _>("member_count"),
+            }
+        })));
+    };
 
     if let Some(exp) = invite.expires_at {
         if exp < Utc::now() {
@@ -118,7 +135,6 @@ pub async fn get_invite_info(
     .fetch_one(&state.db)
     .await?;
 
-    use sqlx::Row;
     Ok(Json(serde_json::json!({
         "code": invite.code,
         "server": {
