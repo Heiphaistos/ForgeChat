@@ -24,6 +24,10 @@ on:
       jobs:
         description: 'Jobs à lancer, séparés par des espaces (android ios windows linux macos)'
         required: true
+      abis:
+        description: 'Android : architectures (ex. x86_64 pour tester sur émulateur)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -95,6 +99,7 @@ jobs:
         env:
           FORGECHAT_PUSH: 'off'
           FORGECHAT_KEY_ALIAS: forgechat
+          FORGECHAT_ABIS: ${{ inputs.abis || 'arm64-v8a,armeabi-v7a' }}
         run: |
           set -euo pipefail
           npm ci --no-audit --no-fund
