@@ -25,6 +25,7 @@ describe('normalizePost (forum.rs::list_posts / get_post)', () => {
       id: A,
       title: 'Bienvenue',
       content: 'Présentez-vous',
+      creatorId: B,
       creatorName: 'alice',
       creatorAvatar: null,
       tags: ['aide', 'news'],

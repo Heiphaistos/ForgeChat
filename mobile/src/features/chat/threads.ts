@@ -5,6 +5,8 @@ export interface ThreadSummary {
   id: string
   parentMessageId: string | null
   title: string
+  /** Créateur : peut archiver son fil (verrouiller demande MANAGE_MESSAGES). */
+  creatorId: string | null
   messageCount: number
   unreadCount: number
   archived: boolean
@@ -23,6 +25,7 @@ export function normalizeThreads(raw: unknown): ThreadSummary[] {
             id: r.id.toLowerCase(),
             parentMessageId: isUuid(r.parent_message_id) ? r.parent_message_id.toLowerCase() : null,
             title: typeof r.title === 'string' ? r.title : 'Fil',
+            creatorId: isUuid(r.creator_id) ? r.creator_id.toLowerCase() : null,
             messageCount: num(r.message_count),
             unreadCount: num(r.unread_count),
             archived: r.archived === true,
@@ -53,4 +56,25 @@ export function createThreadBody(title: string, firstMessage: string, parentMess
 /** Curseur de la page suivante (plus ancienne) : id du plus ancien message reçu, si la page était pleine. */
 export function olderCursor<T extends { id: string }>(page: T[], pageSize: number): string | undefined {
   return page.length === pageSize ? page[0]?.id : undefined
+}
+
+/**
+ * Réponse avec pièces jointes (fil ou forum) : le message est créé, puis les fichiers y sont joints.
+ * Échec de l'envoi des fichiers d'un message sans texte : le message vide est supprimé.
+ */
+export async function sendWithAttachments<F>(
+  text: string,
+  files: F[],
+  create: (hasAttachments: boolean) => Promise<string | null>,
+  upload: (messageId: string, files: F[]) => Promise<unknown>,
+  remove: (messageId: string) => Promise<unknown>,
+): Promise<void> {
+  const id = await create(files.length > 0)
+  if (!id || !files.length) return
+  try {
+    await upload(id, files)
+  } catch (e) {
+    if (!text.trim()) await remove(id).catch(() => undefined)
+    throw e
+  }
 }

@@ -5,6 +5,8 @@ export interface ForumPost {
   id: string
   title: string
   content: string | null
+  /** Seul le créateur modifie le texte ; supprimer : créateur ou MANAGE_MESSAGES. */
+  creatorId: string | null
   creatorName: string
   creatorAvatar: string | null
   tags: string[]
@@ -25,6 +27,7 @@ export function normalizePost(raw: unknown): ForumPost | null {
     id: r.id.toLowerCase(),
     title: r.title,
     content: str(r.content),
+    creatorId: isUuid(r.creator_id) ? r.creator_id.toLowerCase() : null,
     creatorName: str(r.creator_username) ?? 'Inconnu',
     creatorAvatar: str(r.creator_avatar),
     tags: Array.isArray(r.tags) ? r.tags.filter((t): t is string => typeof t === 'string') : [],

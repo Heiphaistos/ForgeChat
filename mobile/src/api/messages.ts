@@ -1,7 +1,20 @@
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
 import { adaptMessage } from '@/features/chat/adapters'
-import { normalizeEdits, normalizeSaved, savedBody, type EditEntry, type SavedItem } from '@/features/chat/messageExtras'
+import {
+  normalizeEdits,
+  normalizeOg,
+  normalizeReactionUsers,
+  normalizeSaved,
+  normalizeScheduled,
+  savedBody,
+  type EditEntry,
+  type LinkPreviewData,
+  type ReactionUser,
+  type SavedItem,
+  type ScheduledItem,
+} from '@/features/chat/messageExtras'
+import { normalizeBotCommands, type SlashCommand } from '@/features/composer/commands'
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 
@@ -38,6 +51,12 @@ export const messagesApi = {
       query: { limit: LIMITS.pageSize, before },
       signal,
     })
+    return (Array.isArray(raw) ? raw : []).map((m) => adaptMessage(ref, m))
+  },
+
+  /** Messages autour d'un message ancien (?around=, moitié avant, moitié après), ordre chronologique. */
+  async around(ref: ConversationRef, messageId: string): Promise<ChatMessage[]> {
+    const raw = await http.get<unknown[]>(base(ref), { query: { around: messageId, limit: LIMITS.pageSize } })
     return (Array.isArray(raw) ? raw : []).map((m) => adaptMessage(ref, m))
   },
 
@@ -142,6 +161,39 @@ export const messagesApi = {
   unsave(messageId: string) {
     return http.delete(path`/saved/${messageId}`)
   },
+
+  /** Traduction en `lang` (salons et DM 1:1 seulement côté serveur). */
+  async translate(messageId: string, lang = 'fr'): Promise<string> {
+    const r = await http.post<{ translated?: unknown }>(path`/messages/${messageId}/translate`, { target_lang: lang })
+    if (typeof r?.translated !== 'string') throw new Error('Traduction indisponible')
+    return r.translated
+  },
+
+  /** Qui a réagi avec `emoji` (salons et DM 1:1 ; 100 personnes au plus). */
+  async reactionUsers(messageId: string, emoji: string): Promise<ReactionUser[]> {
+    return normalizeReactionUsers(await http.get<unknown>('/reactions', { query: { message_id: messageId, emoji } }))
+  },
+
+  /** Aperçu d'un lien (titre, description) ; le serveur filtre les adresses privées et les domaines. */
+  async linkPreview(url: string, signal?: AbortSignal): Promise<LinkPreviewData | null> {
+    return normalizeOg(await http.get<unknown>('/og', { query: { url }, signal }), url)
+  },
+
+  /** Emoji d'un serveur quelconque, par identifiant (« <:nom:id> »). */
+  emoji: (id: string) => http.get<{ url?: unknown; name?: unknown }>(path`/emojis/${id}`),
+
+  /** Commandes déclarées par les bots du serveur. */
+  async commands(serverId: string): Promise<SlashCommand[]> {
+    return normalizeBotCommands(await http.get<unknown>(path`/servers/${serverId}/commands`))
+  },
+
+  /** Mes messages programmés non encore envoyés dans ce salon. */
+  async scheduled(serverId: string, channelId: string): Promise<ScheduledItem[]> {
+    return normalizeScheduled(await http.get<unknown>(path`/servers/${serverId}/channels/${channelId}/scheduled`))
+  },
+  schedule: (serverId: string, channelId: string, content: string, sendAt: Date) =>
+    http.post(path`/servers/${serverId}/channels/${channelId}/scheduled`, { content, send_at: sendAt.toISOString() }),
+  cancelScheduled: (id: string) => http.delete(path`/scheduled/${id}`),
 
   /** Signalement (messages de salon uniquement côté serveur). */
   report(messageId: string, reason: ReportReason, comment?: string) {
