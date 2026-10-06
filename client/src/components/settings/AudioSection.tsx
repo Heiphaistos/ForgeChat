@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Field } from './shared'
 import { Mic, RefreshCw, Waves, Radio } from 'lucide-react'
 import { useVoice } from '../../store/voice'
+import { useCallStore } from '../../store/call'
 import { NOISE_ENGINES, getNoiseEngine, type NoiseEngine } from '../../lib/audio'
 
 export default function AudioSection() {
@@ -97,6 +98,7 @@ export default function AudioSection() {
     // micro pendant un appel n'avait aucun effet jusqu'au prochain join, sans rien
     // signaler à l'utilisateur.
     void setAudioInput(id)
+    void useCallStore.getState().setAudioInput()
     if (testStreamRef.current) {
       stopMicTest()
       setTimeout(startMicTest, 100)

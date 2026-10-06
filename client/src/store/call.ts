@@ -61,6 +61,9 @@ interface CallStore {
   toggleMic: () => void
   toggleCam: () => Promise<void>
   setDeafened: (v: boolean) => void
+  /** Micro / caméra choisis dans Réglages : remplacés à chaud pendant l'appel. */
+  setAudioInput: () => Promise<void>
+  setVideoInput: () => Promise<void>
 }
 
 // ── État module-level de l'appel DM actif (persiste hors du cycle de vie de tout composant) ──
@@ -170,13 +173,13 @@ async function _connect(lk: { url: string; token: string }, set: SetFn, get: () 
     .on(RoomEvent.ParticipantDisconnected, rp => {
       if (rp.identity !== partner()) return
       // Coupure du correspondant (réseau, onglet fermé) : 20 s pour revenir, sinon fin.
-      _partnerGoneTimer = setTimeout(() => { if (_room === room) _cleanup(set) }, 20_000)
+      _partnerGoneTimer = setTimeout(() => { if (_room === room) _endCall(set, get) }, 20_000)
     })
     .on(RoomEvent.Disconnected, reason => {
       if (_room !== room) return
       if (reason !== DisconnectReason.CLIENT_INITIATED) {
         toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
-        _cleanup(set)
+        _endCall(set, get)
       }
     })
 
@@ -185,7 +188,7 @@ async function _connect(lk: { url: string; token: string }, set: SetFn, get: () 
     await room.connect(lk.url, lk.token, { autoSubscribe: true, rtcConfig: res ? { iceServers: res.data.ice_servers } : undefined })
   } catch (e) {
     console.warn('[dm-call] connexion SFU', e)
-    if (_room === room) { toast.error('Impossible de joindre le serveur audio/vidéo.'); _cleanup(set) }
+    if (_room === room) { toast.error('Impossible de joindre le serveur audio/vidéo.'); _endCall(set, get) }
     return
   }
   if (_room !== room) return
@@ -215,7 +218,7 @@ async function _connect(lk: { url: string; token: string }, set: SetFn, get: () 
 // navigateur — l'appel DM partait sur le périphérique par défaut, brut (défaut A7).
 // ponytail: NS maison branchée dans le lot 4 (la chaîne WebAudio de voice.ts est en
 // cours de réécriture ; la dupliquer ici créerait un second exemplaire à corriger).
-function _audioConstraints(): MediaTrackConstraints {
+export function callAudioConstraints(): MediaTrackConstraints {
   const savedMicId = localStorage.getItem('fc_audio_input') || undefined
   return {
     echoCancellation: true,
@@ -225,7 +228,7 @@ function _audioConstraints(): MediaTrackConstraints {
   }
 }
 
-function _videoConstraints(): MediaTrackConstraints {
+export function callVideoConstraints(): MediaTrackConstraints {
   const savedCamId = localStorage.getItem('fc_video_input') || undefined
   return {
     width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
@@ -235,9 +238,9 @@ function _videoConstraints(): MediaTrackConstraints {
 
 // getUserMedia avec repli audio seul si la caméra est indisponible
 async function _getCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
-  const audio = _audioConstraints()
+  const audio = callAudioConstraints()
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? _videoConstraints() : false })
+    return await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? callVideoConstraints() : false })
   } catch {
     if (type === 'video') {
       try {
@@ -249,6 +252,26 @@ async function _getCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
     // Dernier repli : périphériques par défaut. Un `deviceId: { exact }` pointant sur un
     // micro débranché lève OverconstrainedError et rendrait tout appel DM impossible.
     return await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' })
+  }
+}
+
+/** Micro ou caméra choisis dans Réglages pendant l'appel : remplacés à chaud (replaceTrack). */
+async function _switchDevice(kind: 'audio' | 'video', set: SetFn, get: () => CallStore) {
+  const local = get().localStream
+  if (_native || !local || (kind === 'video' && get().camOff)) return
+  try {
+    const s = await navigator.mediaDevices.getUserMedia(kind === 'audio' ? { audio: callAudioConstraints() } : { video: callVideoConstraints() })
+    const t = s.getTracks()[0]
+    // Appel terminé (ou caméra coupée) pendant l'attente : ne rien remplacer.
+    if (!t || get().localStream !== local) { s.getTracks().forEach(x => x.stop()); return }
+    if (kind === 'audio') t.enabled = !get().micMuted
+    const pub = kind === 'audio' ? _micPub : _camPub
+    if (pub?.track) await pub.track.replaceTrack(t, { userProvidedTrack: true })
+    const old = kind === 'audio' ? local.getAudioTracks()[0] : local.getVideoTracks()[0]
+    old?.stop()
+    set(() => ({ localStream: new MediaStream([...local.getTracks().filter(x => x !== old), t]) }))
+  } catch {
+    toast.error(kind === 'audio' ? 'Impossible d\'utiliser ce microphone.' : 'Impossible d\'utiliser cette caméra.')
   }
 }
 
@@ -278,6 +301,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
     const offAccepted = ws.on('DM_CALL_ACCEPTED', async (d: any) => {
       if (d.dm_id !== get().dmId) return
       if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
+      // Appels croisés : sa sonnerie chez nous n'a plus lieu d'être.
+      if (get().incomingCall?.dmId === d.dm_id) set({ incomingCall: null })
       set({ callState: 'ringing' })
       if (!d.livekit?.url || !d.livekit?.token) { toast.error('Serveur audio/vidéo indisponible.'); _cleanup(set); return }
       await _connect(d.livekit, set, get)
@@ -287,6 +312,10 @@ export const useCallStore = create<CallStore>((set, get) => ({
     const offMedia = ws.on('DM_CALL_MEDIA', async (d: any) => {
       if (d.dm_id !== get().dmId || !_callInFlight) return
       if (d.session_id && _mySessionId && d.session_id !== _mySessionId) return
+      // Appels croisés : notre DM_CALL_INIT a décroché l'appel du correspondant ;
+      // notre propre délai d'appel sans réponse ne doit plus raccrocher.
+      if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
+      if (get().incomingCall?.dmId === d.dm_id) set({ incomingCall: null })
       if (!d.livekit?.url || !d.livekit?.token) { toast.error('Serveur audio/vidéo indisponible.'); _cleanup(set); return }
       await _connect(d.livekit, set, get)
     })
@@ -318,7 +347,15 @@ export const useCallStore = create<CallStore>((set, get) => ({
 
     const offSession = ws.on('SESSION_INIT', (d: any) => { _mySessionId = d.session_id ?? null })
 
-    return () => { offAccepted(); offMedia(); offEnded(); offDeclined(); offError(); offTaken(); offSession() }
+    // WebSocket coupé pendant qu'on sonnait : le serveur a classé l'appel « manqué »
+    // et fermé la sonnerie du correspondant. On sonnait sinon dans le vide 45 s.
+    const offOpen = ws.onOpen(() => {
+      if (get().callState !== 'calling') return
+      toast('Appel interrompu : connexion perdue pendant la sonnerie.', { icon: '📵' })
+      _endCall(set, get)
+    })
+
+    return () => { offAccepted(); offMedia(); offEnded(); offDeclined(); offError(); offTaken(); offSession(); offOpen() }
   },
 
   startCall: async (dmId, partnerId, type) => {
@@ -337,7 +374,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
     try {
       // Linux natif : micro et caméra capturés par le processus Rust.
       const stream = isNativeVoice() ? null : await _getCallMedia(type)
-      set({ localStream: stream })
+      // Caméra indisponible : appel en audio seul, bouton caméra prêt à la rallumer.
+      set({ localStream: stream, camOff: type === 'video' && !!stream && !stream.getVideoTracks().length })
       useWs.getState().send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
       set({ callState: 'calling' })
       // Auto-annulation après 45 secondes sans réponse
@@ -353,7 +391,18 @@ export const useCallStore = create<CallStore>((set, get) => ({
   },
 
   acceptCall: async (dmId, fromUserId, type) => {
-    if (_callInFlight) return
+    if (_callInFlight) {
+      const s = get()
+      // Appels croisés : on appelle déjà cette personne, décrocher son appel.
+      if (s.callState === 'calling' && s.partnerId === fromUserId && s.dmId === dmId) {
+        if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
+        useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
+        set({ callState: 'ringing' })
+      } else {
+        toast.error('Terminez d\'abord l\'appel en cours.')
+      }
+      return
+    }
     if (webrtcMissing() && !isNativeVoice()) {
       // Laisser sonner : l'appel peut être décroché dans le navigateur ouvert.
       toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
@@ -364,7 +413,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     try {
       // Linux natif : micro et caméra capturés par le processus Rust.
       const stream = isNativeVoice() ? null : await _getCallMedia(type)
-      set({ localStream: stream })
+      set({ localStream: stream, camOff: type === 'video' && !!stream && !stream.getVideoTracks().length })
       useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
       set({ callState: 'ringing' })
     } catch {
@@ -425,7 +474,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       return
     }
     try {
-      const vs = await navigator.mediaDevices.getUserMedia({ video: _videoConstraints() })
+      const vs = await navigator.mediaDevices.getUserMedia({ video: callVideoConstraints() })
       const vt = vs.getVideoTracks()[0]
       if (!vt) return
       if (_room?.state === 'connected') _camPub = await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, simulcast: true })
@@ -440,4 +489,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     get().remoteStream?.getAudioTracks().forEach(t => { t.enabled = !v })
     set({ deafened: v })
   },
+
+  setAudioInput: () => _switchDevice('audio', set, get),
+  setVideoInput: () => _switchDevice('video', set, get),
 }))
