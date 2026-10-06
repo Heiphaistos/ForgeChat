@@ -30,13 +30,18 @@ api.interceptors.request.use(cfg => {
 // Semaphore: une seule tentative de refresh à la fois, les autres attendent
 let refreshPromise: Promise<void> | null = null
 
+
+// Pages lisibles sans compte : un 401 n'y renvoie jamais vers /login (site public, pages légales).
+const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password',
+  '/fonctionnalites', '/telecharger', '/nouveautes', '/aide', '/a-propos', '/mentions-legales', '/confidentialite', '/cgu'])
+export const isPublicPath = (p: string) => PUBLIC_PATHS.has(p) || p.startsWith('/telecharger/')
+
 api.interceptors.response.use(
   r => r,
   async err => {
     const url: string = err.config?.url ?? ''
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
-    const publicPaths = ['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password']
-    const onPublicPage = typeof window !== 'undefined' && publicPaths.includes(window.location.pathname)
+    const onPublicPage = typeof window !== 'undefined' && isPublicPath(window.location.pathname)
 
     // Garde anti-boucle : si la requête déjà rejouée après un refresh échoue ENCORE en
     // 401 (bug serveur qui rejette un token pourtant valide, edge case), ne pas
@@ -69,7 +74,7 @@ api.interceptors.response.use(
         // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
         // /login?redirect=… ; un rechargement vers /login nu perdait la destination
         const { pathname, search } = window.location
-        if (!publicPaths.includes(pathname)) window.location.href = `/login?redirect=${encodeURIComponent(pathname + search)}`
+        if (!isPublicPath(pathname)) window.location.href = `/login?redirect=${encodeURIComponent(pathname + search)}`
       }
     }
     return Promise.reject(err)
