@@ -24,6 +24,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     reactions: m.reactions ?? [],
     pinned: !!m.pinned,
     expiresAt: m.expires_at ?? null,
+    pollId: m.poll_id ?? null,
   }
 }
 

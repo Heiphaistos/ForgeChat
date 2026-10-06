@@ -214,6 +214,8 @@ export interface ChatMessage {
   awaitingAttachments?: boolean
   /** Message éphémère (salons uniquement) : disparaît à cette date. */
   expiresAt?: string | null
+  /** Sondage attaché (salons uniquement). */
+  pollId?: string | null
 }
 
 export type ConversationRef =

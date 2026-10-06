@@ -36,4 +36,5 @@ export const qk = {
   mentions: ['mentions'] as const,
   user: (id: string) => ['user', id] as const,
   saved: ['saved'] as const,
+  poll: (id: string) => ['poll', id] as const,
 }

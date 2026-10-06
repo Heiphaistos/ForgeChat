@@ -11,6 +11,7 @@ import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
+import { PollCard } from './PollCard'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 
 interface Props {
@@ -23,6 +24,9 @@ interface Props {
   onReact: (m: ChatMessage, emoji: string) => void
   onPressAuthor: (userId: string) => void
   onRetry: (m: ChatMessage) => void
+  /** Salon courant (sondages) ; absent en DM et groupe. */
+  serverId?: string
+  channelId?: string
 }
 
 /**
@@ -102,6 +106,8 @@ export const MessageItem = memo(function MessageItem({
   onReact,
   onPressAuthor,
   onRetry,
+  serverId,
+  channelId,
 }: Props) {
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
@@ -159,6 +165,8 @@ export const MessageItem = memo(function MessageItem({
               {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <MessageText content={m.content} myName={myName} />}
             </View>
           ) : null}
+
+          {m.pollId && serverId && channelId ? <PollCard serverId={serverId} channelId={channelId} pollId={m.pollId} myId={myId} /> : null}
 
           <Attachments items={m.attachments} pending={m.pending} onLongPress={() => onLongPress(m)} />
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>Pièce jointe en cours d’envoi…</Text> : null}

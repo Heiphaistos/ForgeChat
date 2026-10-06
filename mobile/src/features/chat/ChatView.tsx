@@ -91,6 +91,7 @@ export function ChatView({
   const pinnedIds = useMemo(() => new Set((pins.data ?? []).map((p) => p.messageId)), [pins.data])
   // Autocomplétion @mention : membres du serveur (salon) ou participants (groupe). Rien en DM 1:1.
   const serverId = conversation.kind === 'channel' ? conversation.serverId : ''
+  const channelId = conversation.kind === 'channel' ? conversation.channelId : ''
   const groupId = conversation.kind === 'group' ? conversation.groupId : ''
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
@@ -249,11 +250,13 @@ export function ChatView({
             onReact={react}
             onPressAuthor={onPressAuthor}
             onRetry={onLongPress}
+            serverId={serverId || undefined}
+            channelId={channelId || undefined}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId],
   )
 
   const quickReactions = useMemo(

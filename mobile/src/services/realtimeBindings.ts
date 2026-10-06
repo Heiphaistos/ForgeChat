@@ -130,6 +130,13 @@ export function bindRealtime(): () => void {
     if (cid && mid) patchMessage('channel', cid, mid, (m) => ({ ...m, pinned: e.pinned === true }))
     if (cid) void queryClient.invalidateQueries({ queryKey: qk.pins(cid) })
   })
+  // Sondages (polls.rs) : l'événement ne porte pas les résultats, on relit le sondage.
+  for (const t of ['POLL_VOTE', 'POLL_CLOSED']) {
+    on(t, (e) => {
+      const pid = str(e.poll_id)
+      if (pid) void queryClient.invalidateQueries({ queryKey: qk.poll(pid) })
+    })
+  }
   for (const t of ['EMOJI_CREATE', 'EMOJI_DELETE']) {
     on(t, (e) => {
       const sid = str(e.server_id)
