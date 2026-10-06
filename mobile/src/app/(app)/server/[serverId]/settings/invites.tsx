@@ -11,10 +11,12 @@ import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import type { Invite } from '@/types/models'
 import { colors, spacing } from '@/theme'
+import { useAppearance } from '@/theme/prefs'
 
 /** Invitations actives (MANAGE_SERVER) : copier, révoquer, en créer une. */
 export default function InvitesScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
+  const streamer = useAppearance((st) => st.streamerMode)
   const sid = ids.serverId ?? ''
   const invites = useQuery({ queryKey: ['invites', sid], queryFn: () => serversApi.invites(sid), enabled: valid })
   // Retour de l'écran de création : afficher la nouvelle invitation.
@@ -57,7 +59,7 @@ export default function InvitesScreen() {
       renderItem={({ item }) => (
         <Row
           icon="link-outline"
-          title={item.code}
+          title={streamer ? '••••••' : item.code}
           subtitle={subtitle(item)}
           right={
             <>
