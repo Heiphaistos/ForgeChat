@@ -138,7 +138,7 @@ function formatRelativeTime(unix: number): string {
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
   // __/_ exigent une frontière de mot (comme CommonMark) -- sinon un identifiant
   // comme max_retries_value se retrouvait partiellement italicisé (_retries_).
-  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|(?<![\w_])__(.+?)__(?![\w_])|(?<![\w_])_(.+?)_(?![\w_])|~~(.+?)~~|\|\|(.+?)\|\||<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
+  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|(?<![\w_])__(.+?)__(?![\w_])|(?<![\w_])_(.+?)_(?![\w_])|~~(.+?)~~|\|\|(.+?)\|\||<a?:[a-z0-9_]{1,32}:[0-9a-f-]{36}>|<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
   const result: React.ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -233,6 +233,10 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         </a>
       )
       if (trailing) result.push(trailing)
+    } else if (/^<a?:[a-z0-9_]{1,32}:[0-9a-f-]{36}>$/.test(full)) {
+      // Emoji d'un autre serveur (<:nom:id>) : affiché partout, même hors de ce serveur.
+      const [, name, id] = full.slice(1, -1).split(':')
+      result.push(<RemoteEmoji key={match.index} id={id} name={name} />)
     } else if (full.startsWith(':') && full.endsWith(':') && customEmojis) {
       const name = full.slice(1, -1)
       const url = customEmojis[name]
@@ -323,5 +327,20 @@ function MentionChip({ raw }: { raw: string }) {
   const color = role?.color ? `#${role.color.toString(16).padStart(6, '0')}` : undefined
   return (
     <span className="mention" style={color ? { color, background: `${color}26` } : undefined}>@{name}</span>
+  )
+}
+
+/** Emoji d'un autre serveur : son image est retrouvée par identifiant (GET /emojis/:id, en cache). */
+function RemoteEmoji({ id, name }: { id: string; name: string }) {
+  const { data } = useQuery<{ url: string }>({
+    queryKey: ['emoji', id],
+    queryFn: () => api.get(`/emojis/${id}`).then(r => r.data),
+    staleTime: Infinity,
+    retry: false,
+  })
+  if (!data?.url) return <>{`:${name}:`}</>
+  return (
+    <img src={mediaUrl(data.url)} alt={name} title={`:${name}:`} loading="lazy" decoding="async"
+      className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
   )
 }

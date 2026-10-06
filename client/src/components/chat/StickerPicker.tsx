@@ -138,7 +138,7 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
 
 export default function StickerPicker({ serverId, onPick, onClose }: Props) {
   useEscapeKey(onClose)
-  const [tab, setTab] = useState<'server' | 'global'>(serverId ? 'server' : 'global')
+  const [tab, setTab] = useState<'server' | 'mine' | 'global'>(serverId ? 'server' : 'mine')
   const [globalCat, setGlobalCat] = useState(GLOBAL_CATEGORIES[0])
   const [hovered, setHovered] = useState<string | null>(null)
   const [showUpload, setShowUpload] = useState(false)
@@ -149,6 +149,15 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
     enabled: !!serverId && tab === 'server',
     staleTime: 30_000,
   })
+
+  // Stickers de tous ses serveurs, utilisables partout (gratuit, réservé à Nitro chez Discord).
+  const { data: myStickers = [] } = useQuery<(ServerSticker & { server_id: string; server_name: string })[]>({
+    queryKey: ['my_stickers'],
+    queryFn: () => api.get('/users/me/stickers').then(r => r.data),
+    enabled: tab === 'mine',
+    staleTime: 30_000,
+  })
+  const autres = myStickers.filter(s => s.server_id !== serverId)
 
   const pick = (sticker: Sticker) => { onPick(sticker); onClose() }
 
@@ -172,6 +181,15 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
         )}
         <button
           role="tab"
+          aria-selected={tab === 'mine'}
+          onClick={() => setTab('mine')}
+          className={`flex-1 py-2 text-xs font-semibold transition
+            ${tab === 'mine' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
+        >
+          Mes serveurs
+        </button>
+        <button
+          role="tab"
           aria-selected={tab === 'global'}
           onClick={() => setTab('global')}
           className={`flex-1 py-2 text-xs font-semibold transition
@@ -180,6 +198,33 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           Global
         </button>
       </div>
+
+      {/* ── Stickers de mes autres serveurs ── */}
+      {tab === 'mine' && (
+        autres.length === 0 ? (
+          <div role="status" className="py-6 text-center text-xs text-fc-muted px-4">Aucun sticker dans tes autres serveurs.</div>
+        ) : (
+          <div className="p-2 max-h-52 overflow-y-auto overscroll-contain space-y-2">
+            {[...new Set(autres.map(s => s.server_id))].map(sid => {
+              const liste = autres.filter(s => s.server_id === sid)
+              return (
+                <div key={sid}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-fc-muted px-1 mb-1">{liste[0].server_name}</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {liste.map(ss => (
+                      <button key={ss.id} onClick={() => pick({ id: ss.id, name: ss.name, url: ss.url, category: 'server' })}
+                        aria-label={`${ss.name} (${ss.server_name})`} title={ss.name}
+                        className="w-14 h-14 rounded-xl border border-fc-hover bg-fc-bg overflow-hidden hover:border-fc-accent hover:scale-105 active:scale-95 transition-transform">
+                        <img src={mediaUrl(ss.url)} alt={ss.name} className="w-full h-full object-contain" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      )}
 
       {/* ── Server tab ── */}
       {tab === 'server' && serverId && (

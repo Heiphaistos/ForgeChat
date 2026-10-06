@@ -41,6 +41,55 @@ pub async fn list_emojis(
     Ok(Json(emojis))
 }
 
+/// GET /users/me/emojis — emojis de tous les serveurs dont on est membre : comme Discord Nitro, mais
+/// gratuit, on peut les utiliser dans n'importe quel salon, MP ou groupe.
+pub async fn my_emojis(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT e.id, e.name, e.url, e.mime_type, e.server_id, s.name AS server_name
+         FROM custom_emojis e
+         JOIN server_members m ON m.server_id = e.server_id AND m.user_id = $1
+         JOIN servers s ON s.id = e.server_id
+         ORDER BY s.name, e.created_at
+         LIMIT 2000",
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "url": r.get::<String, _>("url"),
+        "animated": r.get::<String, _>("mime_type") == "image/gif",
+        "server_id": r.get::<Uuid, _>("server_id"),
+        "server_name": r.get::<String, _>("server_name"),
+    })).collect()))
+}
+
+/// GET /emojis/:id — un emoji par son identifiant, pour afficher `<:nom:id>` chez quelqu'un qui n'est
+/// pas membre du serveur d'origine (l'image est de toute façon servie publiquement par /uploads).
+pub async fn get_emoji(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(emoji_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let r = sqlx::query("SELECT id, name, url, mime_type FROM custom_emojis WHERE id=$1")
+        .bind(emoji_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Emoji introuvable".into()))?;
+    Ok(Json(serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "url": r.get::<String, _>("url"),
+        "animated": r.get::<String, _>("mime_type") == "image/gif",
+    })))
+}
+
 pub async fn create_emoji(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

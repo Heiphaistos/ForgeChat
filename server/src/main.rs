@@ -657,6 +657,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/emojis", get(handlers::emojis::list_emojis))
         .route("/servers/:server_id/emojis", post(handlers::emojis::create_emoji))
         .route("/servers/:server_id/emojis/:emoji_id", delete(handlers::emojis::delete_emoji))
+        // Emojis de tous ses serveurs (utilisables partout, gratuitement) et emoji par identifiant
+        .route("/users/me/emojis", get(handlers::emojis::my_emojis))
+        .route("/emojis/:emoji_id", get(handlers::emojis::get_emoji))
         // Bots
         .route("/servers/:server_id/bots", get(handlers::bots::list_bots))
         .route("/servers/:server_id/bots", post(handlers::bots::create_bot))
@@ -825,6 +828,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/stickers", get(handlers::stickers::list_stickers))
         .route("/servers/:server_id/stickers", post(handlers::stickers::create_sticker))
         .route("/servers/:server_id/stickers/:sticker_id", delete(handlers::stickers::delete_sticker))
+        .route("/users/me/stickers", get(handlers::stickers::my_stickers))
         // Bulk friend invitations via CSV
         .route("/friends/invite-bulk", post(handlers::friends::invite_bulk))
         // DM settings (mute/archive) + block

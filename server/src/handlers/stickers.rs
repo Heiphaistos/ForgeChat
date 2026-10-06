@@ -17,6 +17,33 @@ const MAX_STICKER_SIZE: usize = 512 * 1024; // 512 KB
 const MAX_STICKERS_PER_SERVER: i64 = 60;
 
 /// GET /api/servers/:id/stickers
+/// GET /users/me/stickers — stickers de tous ses serveurs, utilisables partout (MP, groupes, autres
+/// serveurs) : le message contient l'adresse de l'image, il s'affiche donc chez tout le monde.
+pub async fn my_stickers(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT st.id, st.name, st.url, st.server_id, s.name AS server_name
+         FROM server_stickers st
+         JOIN server_members m ON m.server_id = st.server_id AND m.user_id = $1
+         JOIN servers s ON s.id = st.server_id
+         ORDER BY s.name, st.created_at
+         LIMIT 2000",
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "url": r.get::<String, _>("url"),
+        "server_id": r.get::<Uuid, _>("server_id"),
+        "server_name": r.get::<String, _>("server_name"),
+    })).collect()))
+}
+
 pub async fn list_stickers(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

@@ -44,6 +44,8 @@ interface CustomEmoji {
   id: string
   name: string
   url: string
+  server_id: string
+  server_name: string
 }
 
 // Emojis récemment utilisés — persistés en localStorage, plus récent en premier
@@ -81,12 +83,15 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
     onClose()
   }
 
-  const { data: serverEmojis = [] } = useQuery<CustomEmoji[]>({
-    queryKey: ['custom_emojis', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/emojis`).then(r => r.data),
-    enabled: !!serverId && tab === 'server',
+  // Emojis de TOUS ses serveurs, utilisables partout (gratuit, ce que Discord réserve à Nitro).
+  // Serveur courant d'abord. Hors de ce serveur, un emoji s'écrit <:nom:id> (lu par utils/markdown).
+  const { data: allEmojis = [] } = useQuery<CustomEmoji[]>({
+    queryKey: ['my_emojis'],
+    queryFn: () => api.get('/users/me/emojis').then(r => r.data),
     staleTime: 60_000,
   })
+  const serverEmojis = [...allEmojis].sort((a, b) => Number(b.server_id === serverId) - Number(a.server_id === serverId))
+  const tokenOf = (e: CustomEmoji) => (e.server_id === serverId ? `:${e.name}:` : `<:${e.name}:${e.id}>`)
 
   const filtered = search.trim()
     ? CATEGORIES.flatMap(c => c.emojis).filter(e => e.includes(search.toLowerCase()))
@@ -118,8 +123,8 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
         </div>
       </div>
 
-      {/* Onglets Standard / Serveur */}
-      {serverId && (
+      {/* Onglets Standard / Mes serveurs */}
+      {allEmojis.length > 0 && (
         <div role="tablist" aria-label="Type d'emojis" className="flex border-b border-fc-hover">
           <button
             role="tab"
@@ -135,7 +140,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
             onClick={() => setTab('server')}
             className={`flex-1 py-1.5 text-xs font-semibold transition ${tab === 'server' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
           >
-            Serveur {serverEmojis.length > 0 ? `(${serverEmojis.length})` : ''}
+            Mes serveurs ({serverEmojis.length})
           </button>
         </div>
       )}
@@ -149,19 +154,29 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
               <p className="text-xs">Ajoutez-en dans les paramètres du serveur</p>
             </div>
           ) : (
-            <div className="grid grid-cols-8 gap-1">
-              {serverEmojis
-                .filter(e => !search.trim() || e.name.includes(search.toLowerCase()))
-                .map(emoji => (
-                  <button
-                    key={emoji.id}
-                    onClick={() => { onPick(`:${emoji.name}:`); onClose() }}
-                    aria-label={`:${emoji.name}:`}
-                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-fc-hover transition hover:scale-110"
-                  >
-                    <img src={mediaUrl(emoji.url)} alt={emoji.name} loading="lazy" decoding="async" className="w-6 h-6 object-contain" />
-                  </button>
-                ))}
+            <div className="space-y-2">
+              {[...new Set(serverEmojis.map(e => e.server_id))].map(sid => {
+                const liste = serverEmojis.filter(e => e.server_id === sid && (!search.trim() || e.name.includes(search.toLowerCase())))
+                if (!liste.length) return null
+                return (
+                  <div key={sid}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-fc-muted px-1 mb-1">{liste[0].server_name}</p>
+                    <div className="grid grid-cols-8 gap-1">
+                      {liste.map(emoji => (
+                        <button
+                          key={emoji.id}
+                          onClick={() => { onPick(tokenOf(emoji)); onClose() }}
+                          aria-label={`:${emoji.name}: (${emoji.server_name})`}
+                          title={`:${emoji.name}: · ${emoji.server_name}`}
+                          className="w-8 h-8 flex items-center justify-center rounded hover:bg-fc-hover transition hover:scale-110"
+                        >
+                          <img src={mediaUrl(emoji.url)} alt={emoji.name} loading="lazy" decoding="async" className="w-6 h-6 object-contain" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

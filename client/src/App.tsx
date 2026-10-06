@@ -765,12 +765,14 @@ function AppInner() {
       if (d.server_id) {
         qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
         qcHook.invalidateQueries({ queryKey: ['custom_emojis', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['my_emojis'] })
       }
     })
     const offEmojiDelete = on('EMOJI_DELETE', (d: any) => {
       if (d.server_id) {
         qcHook.invalidateQueries({ queryKey: ['emojis', d.server_id] })
         qcHook.invalidateQueries({ queryKey: ['custom_emojis', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['my_emojis'] })
       }
     })
     const offCategoryCreate = on('CATEGORY_CREATE', (d: any) => {
