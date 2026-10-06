@@ -7,7 +7,7 @@ import { canShareInCall } from '@/features/calls/screenShareLogic'
 import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
-import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf } from '@/services/livekit'
+import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions, ringtones } from '@/services/media'
 import type { ConversationSummary } from '@/types/models'
 import { getMyId, registerSignOutHook } from './auth'
@@ -98,7 +98,7 @@ const RING_TIMEOUT_MS = 45_000
 const CONNECT_TIMEOUT_MS = 30_000
 /** Coupure du correspondant (réseau, app fermée) : délai pour revenir, comme le web. */
 const PARTNER_GONE_MS = 20_000
-const CAMERA_OPTIONS = { resolution: { width: 640, height: 480, frameRate: 24 } }
+const CAMERA_OPTIONS = { resolution: CAMERA_RESOLUTION }
 
 /** Avatar d'un correspondant d'après les conversations déjà chargées (DM_CALL_INCOMING n'en a pas). */
 function avatarOf(userId: string): string | null {

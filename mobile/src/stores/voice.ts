@@ -5,7 +5,7 @@ import { voiceApi } from '@/api/voice'
 import type { LiveKitAccess } from '@/config/livekitUrl'
 import { logger } from '@/lib/logger'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
-import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf } from '@/services/livekit'
+import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions } from '@/services/media'
 import { getMyId, registerSignOutHook } from './auth'
 
@@ -112,7 +112,7 @@ const leftChannels = new Set<string>()
 const reactionTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 100
-const CAMERA_OPTIONS = { resolution: { width: 640, height: 480, frameRate: 24 } }
+const CAMERA_OPTIONS = { resolution: CAMERA_RESOLUTION }
 const REJOIN_TIMEOUT_MS = 15_000
 
 export const useVoice = create<VoiceState>((set, get) => {

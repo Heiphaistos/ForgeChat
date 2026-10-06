@@ -52,6 +52,12 @@ export function streamOf(track: Track | null | undefined): MediaStream | null {
 }
 
 /** Service au premier plan Android (modules/call-service) : micro et caméra gardés en arrière-plan. */
+/**
+ * Résolution de capture caméra commune (appels, salons vocaux, appels de groupe) : 720p à 30 i/s,
+ * comme le web. La diffusion multi-qualité (simulcast) de LiveKit baisse d'elle-même si le réseau ne suit pas.
+ */
+export const CAMERA_RESOLUTION = { width: 1280, height: 720, frameRate: 30 }
+
 const callService = requireOptionalNativeModule<{ start(title: string): void; stop(): void }>('ForgeCallService')
 
 /**

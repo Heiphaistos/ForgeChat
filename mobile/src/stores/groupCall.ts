@@ -4,7 +4,7 @@ import { DisconnectReason, Room, RoomEvent, Track, type RemoteParticipant } from
 import { voiceApi } from '@/api/voice'
 import { logger } from '@/lib/logger'
 import { realtime } from '@/lib/realtime'
-import { callAudio, leaveRoom, liveKitAccess, streamOf } from '@/services/livekit'
+import { callAudio, leaveRoom, liveKitAccess, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions, ringtones } from '@/services/media'
 import { registerSignOutHook } from './auth'
 
@@ -59,7 +59,7 @@ let ringTimer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
 
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v)
-const CAMERA_OPTIONS = { facingMode: 'user' as const, resolution: { width: 640, height: 480, frameRate: 24 } }
+const CAMERA_OPTIONS = { facingMode: 'user' as const, resolution: CAMERA_RESOLUTION }
 
 export const useGroupCall = create<GroupCallState>((set, get) => {
   const stopRing = () => {
