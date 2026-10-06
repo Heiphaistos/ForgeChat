@@ -1,13 +1,25 @@
-# ForgeChat Mobile (Android)
+# ForgeChat Mobile (Android et iPhone)
 
-Application native ForgeChat pour **Android**, construite avec **React Native + Expo (SDK 57)** et
-**TypeScript strict**. Elle parle au même backend Rust que le web et le desktop, avec le même protocole
-temps réel : un utilisateur mobile peut discuter et **s'appeler** avec un utilisateur web/desktop.
+Application native ForgeChat pour **Android** et **iPhone/iPad**, construite avec **React Native + Expo
+(SDK 57)** et **TypeScript strict**. Elle parle au même serveur que le web et les applications de bureau,
+avec le même protocole temps réel : un utilisateur mobile discute et **s'appelle** avec un utilisateur
+web ou bureau.
 
-> **Android uniquement pour l'instant.** Grâce à Expo, le code est en théorie compatible iOS, mais
-> **aucune version iOS n'a été construite ni testée** (pas de build, pas de compte Apple, pas de
-> configuration push APNs). Les mentions d'iOS dans le code et la doc décrivent ce qui est prévu, pas
-> une version qui existe.
+**Application créée par [aerwx](https://github.com/aerwx).** ForgeChat (serveur, web, bureau) par Heiphaistos.
+
+## Télécharger
+
+| Plateforme | Où | Mises à jour |
+|---|---|---|
+| Android 7+ | [forgechat.heiphaistos.org/telecharger/android](https://forgechat.heiphaistos.org/telecharger/android) ou les releases de ce dépôt | automatiques : l'app interroge `forgechat.heiphaistos.org/desktop/mobile.json` une fois par jour |
+| iPhone / iPad | [forgechat.heiphaistos.org/telecharger/iphone](https://forgechat.heiphaistos.org/telecharger/iphone) : web app, ou IPA via AltStore / SideStore (identifiant Apple gratuit) | source AltStore `https://forgechat.heiphaistos.org/desktop/altstore.json` |
+
+- **APK** signé avec la clé ForgeChat, certificat `CN=Heiphaistos & aerwx`,
+  SHA-256 `3C:5B:A3:B3:41:27:54:F7:55:AD:0F:85:D9:BD:FA:92:FB:10:F4:4C:ED:C6:80:A4:4F:41:59:D9:B5:1E:E2:AA`.
+- **IPA** non signée (pas d'App Store) : AltStore, SideStore ou Sideloadly la signent avec votre propre
+  identifiant Apple. Construite et compilée en CI (Xcode 26.4+), **pas encore testée sur un iPhone réel**.
+- Construction, signature et publication automatiques : tag `mobile-vX.Y.Z` sur le dépôt principal
+  [Heiphaistos/ForgeChat](https://github.com/Heiphaistos/ForgeChat) (`.github/workflows/applications.yml`).
 
 > Documentation complémentaire : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) ·
 > [`docs/SECURITY.md`](docs/SECURITY.md) · [`docs/SERVER_CHANGES.md`](docs/SERVER_CHANGES.md)
