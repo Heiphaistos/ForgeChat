@@ -8,7 +8,7 @@ import { formatDay, formatTime } from '@/lib/format'
 import { mentionsUser } from '@/lib/markdown'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
-import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, tenorGifUrl } from '@/features/composer/formats'
+import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
@@ -27,7 +27,7 @@ interface Props {
 
 /**
  * Contenu spécial envoyé par la barre de saisie (web ou app) : sticker ou GIF Tenor. null = texte
- * normal. Le GIF est la SEULE image chargée depuis un service externe (media.tenor.com), comme le web.
+ * normal. Les GIF sont les SEULES images chargées depuis un service externe (media.tenor.com, CDN KLIPY).
  */
 function SpecialContent({ content, pending }: { content: string; pending?: boolean }) {
   const sticker = parseSticker(content)
@@ -46,18 +46,18 @@ function SpecialContent({ content, pending }: { content: string; pending?: boole
       <Text style={styles.meta}>[sticker {sticker.name}]</Text>
     )
   }
-  const gif = tenorGifUrl(content)
-  return gif ? <TenorGif url={gif} /> : null
+  const gif = remoteGif(content)
+  return gif ? <RemoteGif url={gif.url} provider={gif.provider} /> : null
 }
 
-/** GIF Tenor animé ; introuvable ou hors ligne → simple lien (comme un message texte). */
-function TenorGif({ url }: { url: string }) {
+/** GIF animé (Tenor ou KLIPY) ; introuvable ou hors ligne → simple lien (comme un message texte). */
+function RemoteGif({ url, provider }: { url: string; provider: string }) {
   const [failed, setFailed] = useState(false)
   if (failed) return <MessageText content={url} myName="" />
   return (
-    <Pressable onPress={() => void openExternalUrl(url)} accessibilityRole="imagebutton" accessibilityLabel="GIF (Tenor)">
+    <Pressable onPress={() => void openExternalUrl(url)} accessibilityRole="imagebutton" accessibilityLabel={`GIF (${provider})`}>
       <Image source={{ uri: url }} style={styles.gif} contentFit="contain" autoplay cachePolicy="memory-disk" onError={() => setFailed(true)} />
-      <Text style={styles.meta}>GIF via Tenor</Text>
+      <Text style={styles.meta}>GIF via {provider}</Text>
     </Pressable>
   )
 }

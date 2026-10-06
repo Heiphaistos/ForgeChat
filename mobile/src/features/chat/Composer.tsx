@@ -10,7 +10,7 @@ import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { MESSAGE_TTL_OPTIONS } from '@/features/composer/data'
 import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
-import { EmojiPanel, QuickRepliesPanel, StickerPanel } from '@/features/composer/Panels'
+import { EmojiPanel, GifPanel, QuickRepliesPanel, StickerPanel, useGifSearchAvailable } from '@/features/composer/Panels'
 import { prepareVoiceRecording, VoiceRecorder } from '@/features/composer/VoiceRecorder'
 import { LIMITS } from '@/config/env'
 import { errorMessage } from '@/lib/http'
@@ -77,7 +77,8 @@ export function Composer({
   const safeBottom = useKeyboardSafeBottom(spacing.sm)
   const [sending, setSending] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [panel, setPanel] = useState<'emoji' | 'sticker' | 'quick' | 'ttl' | null>(null)
+  const [panel, setPanel] = useState<'emoji' | 'gif' | 'sticker' | 'quick' | 'ttl' | null>(null)
+  const gifSearch = useGifSearchAvailable()
   const [ttl, setTtl] = useState<number | null>(null)
   const [recording, setRecording] = useState(false)
   const customEmojis = useCustomEmojis()
@@ -329,6 +330,9 @@ export function Composer({
       {!editing && !recording ? (
         <View style={styles.toolbar}>
           <ToolButton icon="happy-outline" label="Emoji" onPress={() => setPanel('emoji')} />
+          <Pressable onPress={() => setPanel('gif')} style={styles.tool} hitSlop={4} accessibilityRole="button" accessibilityLabel="GIF">
+            <Text style={styles.gifLabel}>GIF</Text>
+          </Pressable>
           <ToolButton icon="sparkles-outline" label="Stickers" onPress={() => setPanel('sticker')} />
           <ToolButton icon="flash-outline" label="Réponses rapides" onPress={() => setPanel('quick')} />
           {serverId ? (
@@ -404,6 +408,16 @@ export function Composer({
       ) : null}
 
       <EmojiPanel visible={panel === 'emoji'} onClose={() => setPanel(null)} onPick={insertText} customEmojis={customEmojis} />
+      <GifPanel
+        // Recréé quand on apprend que la recherche existe : elle devient alors l'onglet par défaut.
+        key={gifSearch ? 'recherche' : 'sans-recherche'}
+        visible={panel === 'gif'}
+        onClose={() => setPanel(null)}
+        onSendContent={(c) => void sendDirect(c)}
+        onSendFile={(f) => void sendDirect('', [f])}
+        serverId={serverId}
+        searchAvailable={gifSearch}
+      />
       <StickerPanel visible={panel === 'sticker'} onClose={() => setPanel(null)} onSend={(c) => void sendDirect(c)} serverId={serverId} />
       <QuickRepliesPanel visible={panel === 'quick'} onClose={() => setPanel(null)} onPick={insertText} />
       <Sheet
@@ -443,6 +457,7 @@ function ToolButton({ icon, label, onPress, active }: { icon: React.ComponentPro
 const styles = StyleSheet.create({
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   tool: { width: 36, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  gifLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '800', borderWidth: 1.5, borderColor: colors.textMuted, borderRadius: 4, paddingHorizontal: 3 },
   ttlLabel: { color: colors.primary, fontSize: font.xs, marginLeft: spacing.xs, flexShrink: 1 },
   container: { backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingBottom: spacing.sm },
   contextBar: {

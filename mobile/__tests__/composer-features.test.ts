@@ -181,3 +181,66 @@ describe('envoi d’un message éphémère (protocole du serveur)', () => {
     for (const call of post.mock.calls.slice(2)) expect(call[1]).not.toHaveProperty('expires_at_seconds')
   })
 })
+
+describe('« Modifier » seulement pour un vrai texte', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { hasEditableText } = require('@/features/composer/formats') as typeof import('@/features/composer/formats')
+  const voice = { filename: 'voice-1760000000000.mp4', content_type: 'video/mp4' }
+  it('texte : oui ; vocal, sticker, GIF, photo seule : non', () => {
+    expect(hasEditableText({ content: 'salut', attachments: [] })).toBe(true)
+    expect(hasEditableText({ content: 'regarde', attachments: [{ filename: 'a.jpg', content_type: 'image/jpeg' }] })).toBe(true)
+    expect(hasEditableText({ content: '🎤 Message vocal (0:05)', attachments: [voice] })).toBe(false)
+    expect(hasEditableText({ content: '[sticker:🐱:cat]', attachments: [] })).toBe(false)
+    expect(hasEditableText({ content: '[sticker:logo](/uploads/stickers/a.png)', attachments: [] })).toBe(false)
+    expect(hasEditableText({ content: 'https://media.tenor.com/20wDoVQU3RAAAAAM/hello-hi.gif', attachments: [] })).toBe(false)
+    expect(hasEditableText({ content: null, attachments: [{ filename: 'a.jpg', content_type: 'image/jpeg' }] })).toBe(false)
+    expect(hasEditableText({ content: '   ', attachments: [] })).toBe(false)
+    // Le même texte écrit à la main (sans fichier vocal) reste un texte modifiable.
+    expect(hasEditableText({ content: '🎤 Message vocal (0:05)', attachments: [] })).toBe(true)
+  })
+})
+
+describe('GIF : KLIPY via le serveur, GIF du téléphone', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { remoteGif } = require('@/features/composer/formats') as typeof import('@/features/composer/formats')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { gifSearchEnabled, isKlipyMediaUrl, parseGifResults } = require('@/features/composer/gifs') as typeof import('@/features/composer/gifs')
+
+  it('message GIF : Tenor (anciens messages du web) et KLIPY reconnus, rien d’autre', () => {
+    expect(remoteGif('https://static.klipy.com/ii/4f/a1/hello.gif')).toEqual({ url: 'https://static.klipy.com/ii/4f/a1/hello.gif', provider: 'KLIPY' })
+    expect(remoteGif('https://static2.klipy.com/x/y.webp')?.provider).toBe('KLIPY')
+    expect(remoteGif('https://media.tenor.com/20wDoVQU3RAAAAAM/hello-hi.gif')?.provider).toBe('Tenor')
+    for (const bad of ['https://api.klipy.com/x.gif', 'http://static.klipy.com/x.gif', 'https://static.klipy.com.evil.invalid/x.gif', 'https://static.klipy.com/../x.gif', 'https://static.klipy.com/x.png'])
+      expect(remoteGif(bad)).toBeNull()
+  })
+
+  it('recherche cachée tant que le serveur n’a pas le patch (404, enabled: false, réponse bizarre)', () => {
+    expect(gifSearchEnabled({ enabled: true, provider: 'klipy' })).toBe(true)
+    expect(gifSearchEnabled({ enabled: false })).toBe(false)
+    expect(gifSearchEnabled({ enabled: 'true' })).toBe(false)
+    expect(gifSearchEnabled(null)).toBe(false)
+  })
+
+  it('résultats du serveur : seules les images du CDN KLIPY sont gardées', () => {
+    expect(isKlipyMediaUrl('https://static1.klipy.com/a.gif')).toBe(true)
+    expect(isKlipyMediaUrl('https://static.klipy.com:444/a.gif')).toBe(false)
+    expect(isKlipyMediaUrl('https://u:p@static.klipy.com/a.gif')).toBe(false)
+    const out = parseGifResults({
+      results: [
+        { id: '1', title: 'Salut', url: 'https://static.klipy.com/a/hi.gif', preview: 'https://static1.klipy.com/a/hi-tiny.gif', width: 480, height: 270 },
+        { id: '2', url: 'https://evil.invalid/x.gif', preview: 'https://static.klipy.com/p.gif' },
+        { id: '3', url: 'https://static.klipy.com/b.gif', preview: 'https://evil.invalid/p.gif', width: -1 },
+      ],
+      next: 'CAgQ.48',
+    })
+    expect(out.results.map((r) => r.id)).toEqual(['1', '3'])
+    expect(out.results[1]!.preview).toBe('https://static.klipy.com/b.gif')
+    expect(out.results[1]!.width).toBe(0)
+    expect(out.next).toBe('CAgQ.48')
+    expect(parseGifResults({ results: 'x', next: '../a' })).toEqual({ results: [], next: null })
+  })
+
+  it('GIF du téléphone : extension .gif acceptée par le serveur (envoyé tel quel, reste animé)', () => {
+    expect(ALLOWED_UPLOAD_EXTENSIONS.has('gif')).toBe(true)
+  })
+})

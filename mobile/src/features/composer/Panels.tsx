@@ -1,13 +1,18 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { Image } from 'expo-image'
-import { useState, type ReactNode } from 'react'
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import * as DocumentPicker from 'expo-document-picker'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { gifsApi } from '@/api/gifs'
 import { serversApi } from '@/api/servers'
+import type { LocalAttachment } from '@/features/chat/useConversation'
+import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
 import { EMOJI_CATEGORIES, GLOBAL_STICKERS, type QuickReply } from './data'
 import { formatSticker } from './formats'
+import { gifSearchEnabled, parseGifResults, type GifResult } from './gifs'
 import { parseServerStickers } from './stickers'
 import { QUICK_REPLY_LIMITS, useComposerPrefs } from './store'
 
@@ -180,6 +185,190 @@ export function StickerPanel({
   )
 }
 
+// ─── GIF ───────────────────────────────────────────────────────────────────────
+
+/** La recherche GIF du serveur est-elle disponible ? (patch « GIF via KLIPY » + clé). Sinon : cachée. */
+export function useGifSearchAvailable(): boolean {
+  const q = useQuery({
+    queryKey: ['gifs-status'],
+    queryFn: async () => gifSearchEnabled(await gifsApi.status()),
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+  return q.data === true
+}
+
+/**
+ * GIF : recherche KLIPY par le serveur (si disponible), GIF animés ajoutés au serveur (stickers .gif),
+ * et GIF du téléphone envoyés tels quels en pièce jointe (l'animation est conservée).
+ */
+export function GifPanel({
+  visible,
+  onClose,
+  onSendContent,
+  onSendFile,
+  serverId,
+  searchAvailable,
+}: {
+  visible: boolean
+  onClose: () => void
+  onSendContent: (content: string) => void
+  onSendFile: (file: LocalAttachment) => void
+  serverId?: string
+  searchAvailable: boolean
+}) {
+  const tabs = [
+    ...(searchAvailable ? [{ key: 'search', label: 'Recherche', a11y: 'Rechercher un GIF' }] : []),
+    ...(serverId ? [{ key: 'server', label: 'Serveur', a11y: 'GIF du serveur' }] : []),
+    { key: 'phone', label: 'Téléphone', a11y: 'GIF du téléphone' },
+  ]
+  const [tab, setTab] = useState<string>(tabs[0]!.key)
+  const current = tabs.some((t) => t.key === tab) ? tab : tabs[0]!.key
+  const send = (content: string) => {
+    onClose()
+    onSendContent(content)
+  }
+
+  const serverGifs = useQuery({
+    queryKey: ['stickers', serverId],
+    queryFn: () => serversApi.stickers(serverId!),
+    enabled: visible && !!serverId && current === 'server',
+    staleTime: 60_000,
+    select: (raw: unknown) => parseServerStickers(raw).filter((s) => /\.gif$/i.test(s.url)),
+  })
+
+  const pickPhoneGif = async () => {
+    const res = await DocumentPicker.getDocumentAsync({ type: 'image/gif', copyToCacheDirectory: true, multiple: false })
+    if (res.canceled || !res.assets[0]) return
+    const a = res.assets[0]
+    const name = (a.name || `gif-${Date.now()}.gif`).replace(/[^\p{L}\p{N}._ -]/gu, '_').replace(/\.[^.]*$/, '') + '.gif'
+    if (a.mimeType && a.mimeType !== 'image/gif') {
+      Alert.alert('Pas un GIF', 'Choisis un fichier .gif (les photos se partagent avec le bouton +).')
+      return
+    }
+    onClose()
+    onSendFile({ uri: a.uri, name, type: 'image/gif', size: a.size ?? null })
+  }
+
+  return (
+    <BottomPanel visible={visible} onClose={onClose} title="GIF">
+      <Tabs tabs={tabs} value={current} onChange={setTab} />
+      {current === 'search' ? (
+        <GifSearch visible={visible} onPick={(g) => send(g.url)} />
+      ) : current === 'server' ? (
+        <ScrollView style={styles.gridScroll} contentContainerStyle={styles.grid}>
+          {serverGifs.isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ margin: spacing.xl }} />
+          ) : serverGifs.data?.length ? (
+            serverGifs.data.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={() => send(formatSticker({ name: s.name, url: s.url }))}
+                style={styles.stickerCell}
+                accessibilityRole="button"
+                accessibilityLabel={`GIF ${s.name}`}
+              >
+                <Image source={{ uri: s.src }} style={{ width: 72, height: 72 }} contentFit="contain" autoplay />
+              </Pressable>
+            ))
+          ) : (
+            <Text style={styles.empty}>Aucun GIF ajouté à ce serveur (stickers animés .gif).</Text>
+          )}
+        </ScrollView>
+      ) : (
+        <View style={{ padding: spacing.lg, gap: spacing.md }}>
+          <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+            Envoie un fichier GIF de ton téléphone (téléchargements, galerie…). Il reste animé.
+          </Text>
+          <Pressable onPress={() => void pickPhoneGif()} style={[styles.button, { backgroundColor: colors.primary, flex: 0 }]} accessibilityRole="button">
+            <Text style={styles.buttonText}>Choisir un GIF</Text>
+          </Pressable>
+        </View>
+      )}
+    </BottomPanel>
+  )
+}
+
+/** Recherche KLIPY via le serveur ; tendances quand le champ est vide. */
+function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResult) => void }) {
+  const [text, setText] = useState('')
+  const [query, setQuery] = useState('')
+  const [items, setItems] = useState<GifResult[]>([])
+  const [next, setNext] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ctrl = useRef<AbortController | null>(null)
+  // 3 colonnes à taille fixe (une largeur en % + image en position absolue donnait des cases de taille nulle).
+  const cell = Math.floor((useWindowDimensions().width - spacing.sm * 2 - 8 * 3) / 3)
+
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(text.trim()), 400)
+    return () => clearTimeout(t)
+  }, [text])
+
+  const load = async (q: string, pos: string | null) => {
+    ctrl.current?.abort()
+    const c = new AbortController()
+    ctrl.current = c
+    setLoading(true)
+    setError(null)
+    try {
+      const raw = q ? await gifsApi.search(q, pos ?? undefined, c.signal) : await gifsApi.trending(pos ?? undefined, c.signal)
+      const page = parseGifResults(raw)
+      setItems((prev) => (pos ? [...prev, ...page.results] : page.results))
+      setNext(page.next)
+    } catch (e) {
+      if (!c.signal.aborted) setError(errorMessage(e))
+    } finally {
+      if (ctrl.current === c) setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!visible) return
+    const t = setTimeout(() => void load(query, null), 0)
+    return () => {
+      clearTimeout(t)
+      ctrl.current?.abort()
+    }
+  }, [query, visible])
+
+  return (
+    <View>
+      <TextInput
+        value={text}
+        onChangeText={setText}
+        placeholder="Search KLIPY"
+        placeholderTextColor={colors.textFaint}
+        style={[styles.input, { marginHorizontal: spacing.md, marginBottom: spacing.sm }]}
+        accessibilityLabel="Rechercher un GIF (KLIPY)"
+        returnKeyType="search"
+        maxLength={100}
+      />
+      <ScrollView
+        style={styles.gridScroll}
+        contentContainerStyle={styles.grid}
+        keyboardShouldPersistTaps="handled"
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent
+          if (!loading && next && layoutMeasurement.height + contentOffset.y > contentSize.height - 200) void load(query, next)
+        }}
+        scrollEventThrottle={200}
+      >
+        {items.map((g) => (
+          <Pressable key={g.id + g.url} onPress={() => onPick(g)} style={[styles.gifCell, { width: cell, height: cell }]} accessibilityRole="button" accessibilityLabel={g.title || 'GIF'}>
+            <Image source={{ uri: g.preview }} style={{ width: cell, height: cell }} contentFit="cover" autoplay />
+          </Pressable>
+        ))}
+        {loading ? <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg, width: '100%' }} /> : null}
+        {error ? <Text style={styles.empty}>{error}</Text> : null}
+        {!loading && !error && !items.length ? <Text style={styles.empty}>Aucun GIF trouvé.</Text> : null}
+      </ScrollView>
+      <Text style={styles.attribution}>Powered by KLIPY</Text>
+    </View>
+  )
+}
+
 // ─── Réponses rapides ─────────────────────────────────────────────────────────
 
 /** Réponses rapides (sur l'appareil) : insérées dans le message, modifiables. */
@@ -297,6 +486,8 @@ const styles = StyleSheet.create({
   emoji: { fontSize: 28 },
   stickerCell: { width: '25%', aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { color: colors.textMuted, padding: spacing.lg },
+  gifCell: { margin: 4, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.bgElevated },
+  attribution: { color: colors.textFaint, fontSize: font.xs, textAlign: 'right', paddingHorizontal: spacing.md },
   replyRow: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: 2 },
   replyLabel: { color: colors.text, fontSize: font.md, fontWeight: '700' },
   replyContent: { color: colors.textMuted, fontSize: font.sm },
