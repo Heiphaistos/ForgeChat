@@ -213,6 +213,7 @@ export default function VideoSection() {
             <option value="1200000">1,2 Mb/s (recommandé)</option>
             <option value="2500000">2,5 Mb/s</option>
             <option value="4000000">4 Mb/s</option>
+            <option value="6000000">6 Mb/s</option>
           </select>
         </div>
         <p className="text-xs text-fc-muted mt-1">
@@ -227,6 +228,7 @@ export default function VideoSection() {
             <option value="720">720p</option>
             <option value="1080">1080p (recommandé)</option>
             <option value="1440">1440p</option>
+            <option value="2160">2160p (4K)</option>
           </select>
           <select value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
@@ -239,6 +241,8 @@ export default function VideoSection() {
             <option value="1500000">1,5 Mb/s</option>
             <option value="4000000">4 Mb/s (recommandé)</option>
             <option value="8000000">8 Mb/s</option>
+            <option value="12000000">12 Mb/s (4K)</option>
+            <option value="20000000">20 Mb/s (4K, 60 images/s)</option>
           </select>
           <select value={screenHint} onChange={e => savePref('fc_screen_hint', e.target.value, setScreenHint)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
