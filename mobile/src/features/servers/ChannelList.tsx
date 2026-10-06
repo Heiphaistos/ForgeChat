@@ -1,16 +1,20 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
-import { useMemo } from 'react'
+import { Image } from 'expo-image'
+import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
+import { Avatar } from '@/components/Avatar'
 import { Badge, ErrorState, IconButton, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
+import { resolveMediaUrl } from '@/lib/links'
 import { qk, queryClient } from '@/lib/queryClient'
-import { useAuth } from '@/stores/auth'
 import { useUnread } from '@/stores/unread'
 import { useVoice } from '@/stores/voice'
-import type { Channel, Server } from '@/types/models'
+import type { Category, Channel, Server } from '@/types/models'
+import { channelSections } from './channels'
+import { CategoryMenu, ChannelMenu, ServerMenu, useServerPerms } from './menus'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
 import { unreadLabel } from '@/lib/format'
@@ -48,47 +52,39 @@ export function ChannelList({ server }: { server: Server }) {
   const categories = useQuery({ queryKey: qk.categories(server.id), queryFn: () => serversApi.categories(server.id) })
   const counts = useUnread((s) => s.counts)
   const voiceChannel = useVoice((s) => s.channelId)
-  // Le serveur exige MANAGE_CHANNELS ; ici on n'affiche le bouton qu'au propriétaire.
-  const isOwner = useAuth((s) => s.user?.id) === server.owner_id
+  const perms = useServerPerms(server.id)
+  const [menu, setMenu] = useState(false)
+  const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
+  const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
 
-  const sections = useMemo(() => {
-    const list = (channels.data ?? []).filter((c) => !c.hidden && !c.archived)
-    const cats = [...(categories.data ?? [])].sort((a, b) => a.position - b.position)
-    const byCat = new Map<string | null, Channel[]>()
-    for (const c of list) {
-      const key = c.category_id && cats.some((k) => k.id === c.category_id) ? c.category_id : null
-      byCat.set(key, [...(byCat.get(key) ?? []), c])
-    }
-    const sort = (arr: Channel[]) => [...arr].sort((a, b) => a.position - b.position)
-    const out: { title: string | null; data: Channel[] }[] = []
-    if (byCat.get(null)?.length) out.push({ title: null, data: sort(byCat.get(null)!) })
-    for (const k of cats) if (byCat.get(k.id)?.length) out.push({ title: k.name, data: sort(byCat.get(k.id)!) })
-    return out
-  }, [channels.data, categories.data])
+  const sections = useMemo(() => channelSections(channels.data ?? [], categories.data ?? []), [channels.data, categories.data])
 
   if (channels.isLoading) return <Loading />
   if (channels.error) return <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
 
-  const markServerRead = () =>
-    serversApi
-      .markRead(server.id)
-      .then(() => {
-        const { counts: c, serverOf } = useUnread.getState()
-        Object.keys(c).forEach((id) => serverOf[id] === server.id && useUnread.getState().clear(id))
-      })
-      .catch((e) => Alert.alert('Erreur', errorMessage(e)))
+  const banner = resolveMediaUrl(server.banner)
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
-      <View style={styles.header}>
-        <Text style={styles.serverName} numberOfLines={1}>
-          {server.name}
-        </Text>
-        {isOwner ? (
-          <IconButton icon="add" label="Créer un salon" onPress={() => router.push(`/server/${server.id}/channel-create`)} size={22} />
+      <Pressable
+        onPress={() => setMenu(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${server.name}, options du serveur`}
+        style={({ pressed }) => [pressed && { opacity: 0.8 }]}
+      >
+        {banner ? <Image source={{ uri: banner }} style={styles.banner} contentFit="cover" accessible={false} /> : null}
+        <View style={styles.header}>
+          {banner ? null : <Avatar uri={server.icon} name={server.name} size={28} rounded={false} />}
+          <Text style={styles.serverName} numberOfLines={1}>
+            {server.name}
+          </Text>
+          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+        </View>
+      </Pressable>
+      <View style={styles.toolbar}>
+        {perms.canCreateChannels ? (
+          <IconButton icon="add" label="Créer un salon" onPress={() => router.push(`/server/${server.id}/channel-create`)} size={20} />
         ) : null}
-        <IconButton icon="checkmark-done" label="Tout marquer comme lu" onPress={markServerRead} size={20} />
-        <IconButton icon="person-add-outline" label="Inviter" onPress={() => router.push(`/server/${server.id}/invite`)} size={20} />
         <IconButton icon="people-outline" label="Membres" onPress={() => router.push(`/server/${server.id}/members`)} size={20} />
       </View>
       <SectionList
@@ -102,21 +98,39 @@ export function ChannelList({ server }: { server: Server }) {
             onRefresh={() => {
               void queryClient.invalidateQueries({ queryKey: qk.channels(server.id) })
               void queryClient.invalidateQueries({ queryKey: qk.categories(server.id) })
+              void queryClient.invalidateQueries({ queryKey: qk.server(server.id) })
             }}
           />
         }
-        renderSectionHeader={({ section }) =>
-          section.title ? <Text style={styles.category}>{section.title.toUpperCase()}</Text> : <View style={{ height: spacing.sm }} />
-        }
+        renderSectionHeader={({ section }) => {
+          const cat = section.category
+          return cat ? (
+            <Pressable
+              onLongPress={() => setCategoryMenu(cat)}
+              accessibilityRole="header"
+              accessibilityHint="Appui long pour les options de la catégorie"
+              accessibilityActions={[{ name: 'longpress', label: 'Options de la catégorie' }]}
+              onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
+            >
+              <Text style={styles.category}>{cat.name.toUpperCase()}</Text>
+            </Pressable>
+          ) : (
+            <View style={{ height: spacing.sm }} />
+          )
+        }}
         renderItem={({ item }) => {
           const unread = counts[item.id] ?? 0
           const inVoice = voiceChannel === item.id
           return (
             <Pressable
               onPress={() => openChannel(server, item)}
+              onLongPress={() => setChannelMenu(item)}
               style={({ pressed }) => [styles.channel, (pressed || inVoice) && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
               accessibilityLabel={`Salon ${item.name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
+              accessibilityHint="Appui long pour les options du salon"
+              accessibilityActions={[{ name: 'longpress', label: 'Options du salon' }]}
+              onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setChannelMenu(item)}
             >
               <Ionicons name={channelIcon(item.type)} size={18} color={unread ? colors.text : colors.textMuted} />
               <Text style={[styles.channelName, unread ? { color: colors.text, fontWeight: '700' } : null]} numberOfLines={1}>
@@ -130,17 +144,20 @@ export function ChannelList({ server }: { server: Server }) {
         ListEmptyComponent={<Text style={[styles.category, { textAlign: 'center' }]}>Aucun salon</Text>}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
+      <ServerMenu server={server} visible={menu} onClose={() => setMenu(false)} />
+      <ChannelMenu server={server} channel={channelMenu} onClose={() => setChannelMenu(null)} />
+      <CategoryMenu server={server} category={categoryMenu} onClose={() => setCategoryMenu(null)} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  header: {
+  banner: { height: 96, width: '100%' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 52 },
+  toolbar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.xs,
-    height: 52,
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
