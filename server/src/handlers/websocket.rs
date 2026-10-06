@@ -448,6 +448,60 @@ async fn notify_call_taken(
     }).to_string()).await;
 }
 
+/// Décroche l'appel DM sonnant de `to` vers `user_id` : historique, accès au SFU
+/// pour les deux, extinction de la sonnerie des autres onglets.
+async fn accept_dm_call(
+    state: &AppState,
+    user_id: Uuid,
+    session_id: Uuid,
+    cached_username: &str,
+    to: Uuid,
+    dm_id: &serde_json::Value,
+) {
+    // Historique : appel décroché — started_at repart pour mesurer le temps de parole
+    let _ = sqlx::query(
+        "UPDATE call_history SET status='answered', started_at=NOW()
+         WHERE id = (SELECT id FROM call_history
+                     WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
+                     ORDER BY started_at DESC LIMIT 1)"
+    )
+    .bind(to).bind(user_id)
+    .execute(&state.db).await;
+    // Appels croisés : la sonnerie de l'appel inverse n'est plus qu'un doublon
+    // (sinon son expiration à 45 s raccrochait l'appel en cours).
+    let _ = sqlx::query("DELETE FROM call_history WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'")
+        .bind(user_id).bind(to)
+        .execute(&state.db).await;
+    // Accès au SFU pour les deux interlocuteurs, délivré seulement après
+    // la vérification de la conversation privée commune ci-dessus.
+    let room = crate::livekit::room_for_dm(user_id, to);
+    let media = |uid: Uuid, name: &str| state.livekit.as_ref().map(|lk| serde_json::json!({
+        "url": lk.public_url,
+        "room": room,
+        "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
+            crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }),
+    }));
+    let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+        .bind(to).fetch_optional(&state.db).await.ok().flatten()
+        .unwrap_or_else(|| to.to_string());
+    let event = serde_json::json!({
+        "type": "DM_CALL_ACCEPTED",
+        "from": user_id,
+        "dm_id": dm_id,
+        "livekit": media(to, &caller_name),
+    });
+    state.broadcast_to_user(to, event.to_string()).await;
+    // Seule la session qui a décroché se connecte (les autres onglets
+    // reçoivent aussi DM_CALL_TAKEN et ferment leur sonnerie).
+    state.broadcast_to_user(user_id, serde_json::json!({
+        "type": "DM_CALL_MEDIA",
+        "dm_id": dm_id,
+        "session_id": session_id,
+        "livekit": media(user_id, cached_username),
+    }).to_string()).await;
+    notify_call_taken(state, user_id, session_id, dm_id, "accepted").await;
+}
+
 /// N9 — limiteur de débit Redis générique, même motif que `TYPING_START` /
 /// `DM_CALL_INIT` : compteur INCR + EXPIRE sur la fenêtre.
 /// Retourne `true` si l'action est autorisée.
@@ -1357,6 +1411,16 @@ async fn handle_ws_message(
                 "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
             ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
             if is_blocked { return; }
+            // Appels croisés : `to` nous appelle déjà. Décrocher son appel plutôt que
+            // d'en ouvrir un second, sinon chacun sonnait chez l'autre sans jamais
+            // pouvoir répondre (le client refuse d'accepter pendant son propre appel).
+            let crossed: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM call_history WHERE caller_id=$1 AND callee_id=$2 AND status='ringing')"
+            ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+            if crossed {
+                accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"]).await;
+                return;
+            }
             // Informer l'appelant si le destinataire est hors ligne
             let is_online = state.clients.read().await.contains_key(&to);
             if !is_online {
@@ -1383,13 +1447,14 @@ async fn handle_ws_message(
             // Historique d'appels : nouvelle entrée en sonnerie
             let dm_uuid = msg["dm_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
             let call_type = msg["call_type"].as_str().unwrap_or("voice");
-            let _ = sqlx::query(
+            let call_id: Option<Uuid> = sqlx::query_scalar(
                 "INSERT INTO call_history (caller_id, callee_id, dm_id, call_type, status)
-                 VALUES ($1, $2, $3, $4, 'ringing')"
+                 VALUES ($1, $2, $3, $4, 'ringing')
+                 RETURNING id"
             )
             .bind(user_id).bind(to).bind(dm_uuid)
             .bind(if call_type == "video" { "video" } else { "voice" })
-            .execute(&state.db).await;
+            .fetch_optional(&state.db).await.ok().flatten();
 
             let event = serde_json::json!({
                 "type": "DM_CALL_INCOMING",
@@ -1407,16 +1472,17 @@ async fn handle_ws_message(
             // et seul le client décidait de l'abandon.
             let expiry_state = state.clone();
             let dm_val = msg["dm_id"].clone();
+            // Expiration de CET appel (id de l'INSERT) : viser « le dernier appel en
+            // sonnerie » raccrochait un rappel passé entre-temps au bout de 45 s.
             tokio::spawn(async move {
+                let Some(call_id) = call_id else { return };
                 tokio::time::sleep(std::time::Duration::from_secs(DM_RING_TIMEOUT_S)).await;
                 let expired = sqlx::query(
                     "UPDATE call_history SET status='missed', ended_at=NOW()
-                     WHERE id = (SELECT id FROM call_history
-                                 WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
-                                 ORDER BY started_at DESC LIMIT 1)
+                     WHERE id=$1 AND status='ringing'
                      RETURNING id"
                 )
-                .bind(user_id).bind(to)
+                .bind(call_id)
                 .fetch_optional(&expiry_state.db).await;
                 if matches!(expired, Ok(Some(_))) {
                     let ended = serde_json::json!({
@@ -1436,43 +1502,7 @@ async fn handle_ws_message(
                 return;
             };
             if !users_share_dm(state, user_id, to).await { return; }
-            // Historique : appel décroché — started_at repart pour mesurer le temps de parole
-            let _ = sqlx::query(
-                "UPDATE call_history SET status='answered', started_at=NOW()
-                 WHERE id = (SELECT id FROM call_history
-                             WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
-                             ORDER BY started_at DESC LIMIT 1)"
-            )
-            .bind(to).bind(user_id)
-            .execute(&state.db).await;
-            // Accès au SFU pour les deux interlocuteurs, délivré seulement après
-            // la vérification de la conversation privée commune ci-dessus.
-            let room = crate::livekit::room_for_dm(user_id, to);
-            let media = |uid: Uuid, name: &str| state.livekit.as_ref().map(|lk| serde_json::json!({
-                "url": lk.public_url,
-                "room": room,
-                "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
-                    crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }),
-            }));
-            let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
-                .bind(to).fetch_optional(&state.db).await.ok().flatten()
-                .unwrap_or_else(|| to.to_string());
-            let event = serde_json::json!({
-                "type": "DM_CALL_ACCEPTED",
-                "from": user_id,
-                "dm_id": msg["dm_id"],
-                "livekit": media(to, &caller_name),
-            });
-            state.broadcast_to_user(to, event.to_string()).await;
-            // Seule la session qui a décroché se connecte (les autres onglets
-            // reçoivent aussi DM_CALL_TAKEN et ferment leur sonnerie).
-            state.broadcast_to_user(user_id, serde_json::json!({
-                "type": "DM_CALL_MEDIA",
-                "dm_id": msg["dm_id"],
-                "session_id": session_id,
-                "livekit": media(user_id, &cached_username),
-            }).to_string()).await;
-            notify_call_taken(state, user_id, session_id, &msg["dm_id"], "accepted").await;
+            accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"]).await;
         }
 
         Some("DM_CALL_DECLINE") => {
