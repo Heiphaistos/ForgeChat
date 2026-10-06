@@ -96,14 +96,14 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
       <div
         role="button"
         tabIndex={0}
-        aria-label={file ? `Fichier sélectionné : ${file.name}` : 'Sélectionner un fichier image (PNG, WEBP ou GIF, max 512 Ko)'}
+        aria-label={file ? `Fichier sélectionné : ${file.name}` : 'Sélectionner un fichier image (PNG, WEBP ou GIF, max 2 Mo)'}
         onClick={() => fileRef.current?.click()}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click() }}
         className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-fc-hover
           text-fc-muted text-xs cursor-pointer hover:border-fc-accent hover:text-fc-accent transition"
       >
         <Upload size={13} aria-hidden />
-        <span className="truncate" aria-hidden>{file ? file.name : 'PNG / WEBP / GIF — max 512KB'}</span>
+        <span className="truncate" aria-hidden>{file ? file.name : 'PNG / WEBP / GIF — max 2 Mo'}</span>
         {file && (
           <button
             onClick={e => { e.stopPropagation(); setFile(null) }}

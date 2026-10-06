@@ -273,11 +273,14 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   useEffect(() => {
     const unsub = on('SOUNDBOARD_PLAY', (data: any) => {
       if (data.channel_id !== channel.id || data.user_id === user?.id) return
-      const sound = soundboardSounds.find(s => s.id === data.sound_id)
-      if (!sound) return
+      // Son d'un autre serveur : le serveur joint son adresse (seulement /uploads/).
+      const url = typeof data.file_url === 'string' && data.file_url.startsWith('/uploads/') && !data.file_url.includes('..')
+        ? data.file_url
+        : soundboardSounds.find(s => s.id === data.sound_id)?.file_url
+      if (!url) return
       const stored = localStorage.getItem('forgechat_soundboard_volume')
       const volume = stored ? Math.min(100, Math.max(0, parseInt(stored, 10))) : 80
-      const audio = new Audio(mediaUrl(sound.file_url))
+      const audio = new Audio(mediaUrl(url))
       audio.volume = volume / 100
       audio.play().catch(() => null)
     })

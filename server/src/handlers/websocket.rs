@@ -1648,10 +1648,23 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : non membre du serveur");
                         return;
                     }
+                    // Le son peut venir de N'IMPORTE LEQUEL de ses serveurs (gratuit, Nitro chez Discord) :
+                    // on joint son adresse, que les autres membres n'ont pas forcément en cache.
+                    let Ok(sid) = sound_id_val.parse::<Uuid>() else { return };
+                    let file_url: Option<String> = sqlx::query_scalar(
+                        "SELECT sb.file_url FROM soundboard sb
+                         JOIN server_members sm ON sm.server_id = sb.server_id AND sm.user_id = $2
+                         WHERE sb.id = $1"
+                    ).bind(sid).bind(user_id).fetch_optional(&state.db).await.unwrap_or(None);
+                    let Some(file_url) = file_url else {
+                        tracing::warn!(user_id = %user_id, "SOUNDBOARD_PLAY rejeté : son inconnu ou d'un serveur dont il n'est pas membre");
+                        return;
+                    };
                     let event = serde_json::json!({
                         "type": "SOUNDBOARD_PLAY",
                         "channel_id": channel_id_val,
                         "sound_id": sound_id_val,
+                        "file_url": file_url,
                         "user_id": user_id.to_string(),
                     });
                     state.broadcast_to_channel_members(cid, event.to_string()).await;

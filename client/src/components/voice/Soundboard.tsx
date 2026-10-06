@@ -22,7 +22,7 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VOLUME_KEY = 'forgechat_soundboard_volume'
-const MAX_FILE_SIZE = 512 * 1024 // 512 KB
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2 Mo (= server/src/handlers/soundboard.rs)
 const ALLOWED_FORMATS = ['audio/mpeg', 'audio/wav', 'audio/ogg']
 const ALLOWED_EXTS = ['.mp3', '.wav', '.ogg']
 
@@ -67,7 +67,7 @@ function UploadForm({
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > MAX_FILE_SIZE) {
-      setFileError('Fichier trop volumineux (max 512 KB)')
+      setFileError('Fichier trop volumineux (max 2 Mo)')
       return
     }
     const ext = '.' + f.name.split('.').pop()?.toLowerCase()
@@ -108,7 +108,7 @@ function UploadForm({
           className="flex items-center gap-2 w-full text-xs bg-fc-hover hover:bg-fc-accent/20 text-fc-muted hover:text-white border border-dashed border-fc-hover hover:border-fc-accent rounded px-2 py-2 transition"
         >
           <Upload size={12} />
-          {file ? file.name : 'Choisir un fichier (mp3 / wav / ogg, max 512 KB)'}
+          {file ? file.name : 'Choisir un fichier (mp3 / wav / ogg, max 2 Mo)'}
         </button>
         <input
           ref={fileRef}
@@ -151,7 +151,8 @@ function SoundButton({
   volume: number
   channelId: string
   serverId: string
-  onDelete: (id: string) => void
+  /** Absent pour les sons d'un autre serveur (pas supprimables d'ici). */
+  onDelete?: (id: string) => void
 }) {
   const { send } = useWs()
   const [playing, setPlaying] = useState(false)
@@ -184,13 +185,15 @@ function SoundButton({
         )}
       </button>
 
-      <button
-        onClick={e => { e.stopPropagation(); onDelete(sound.id) }}
-        className="absolute top-1 right-1 p-0.5 rounded bg-fc-red/80 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
-        title="Supprimer"
-      >
-        <Trash2 size={9} />
-      </button>
+      {onDelete && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(sound.id) }}
+          className="absolute top-1 right-1 p-0.5 rounded bg-fc-red/80 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
+          title="Supprimer"
+        >
+          <Trash2 size={9} />
+        </button>
+      )}
     </div>
   )
 }
@@ -211,6 +214,14 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       return res.data
     },
   })
+
+  // Sons de mes autres serveurs, jouables ici aussi.
+  const { data: mySounds = [] } = useQuery<(Sound & { server_id: string; server_name: string })[]>({
+    queryKey: ['my_soundboard'],
+    queryFn: () => api.get('/users/me/soundboard').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const autres = mySounds.filter(s => s.server_id !== serverId)
 
   const deleteMutation = useMutation({
     mutationFn: (soundId: string) =>
@@ -290,6 +301,19 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
             ))}
           </div>
         )}
+        {[...new Set(autres.map(s => s.server_id))].map(sid => {
+          const liste = autres.filter(s => s.server_id === sid)
+          return (
+            <div key={sid} className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-fc-muted mb-1">{liste[0].server_name}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {liste.map(sound => (
+                  <SoundButton key={sound.id} sound={sound} volume={volume} channelId={channelId} serverId={serverId} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Add button / Upload form */}

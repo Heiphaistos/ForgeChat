@@ -786,6 +786,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:id/soundboard", get(handlers::soundboard::list_sounds))
         .route("/servers/:id/soundboard", post(handlers::soundboard::upload_sound))
         .route("/servers/:server_id/soundboard/:sound_id", delete(handlers::soundboard::delete_sound))
+        .route("/users/me/soundboard", get(handlers::soundboard::my_sounds))
         // Events
         .route("/servers/:id/events", get(handlers::events::list_events))
         .route("/servers/:id/events", post(handlers::events::create_event))

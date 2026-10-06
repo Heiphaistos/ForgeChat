@@ -13,10 +13,9 @@ use crate::{
     state::AppState,
 };
 
-const MAX_STICKER_SIZE: usize = 512 * 1024; // 512 KB
-const MAX_STICKERS_PER_SERVER: i64 = 60;
+const MAX_STICKER_SIZE: usize = 2 * 1024 * 1024; // 2 Mo
+const MAX_STICKERS_PER_SERVER: i64 = 200;
 
-/// GET /api/servers/:id/stickers
 /// GET /users/me/stickers — stickers de tous ses serveurs, utilisables partout (MP, groupes, autres
 /// serveurs) : le message contient l'adresse de l'image, il s'affiche donc chez tout le monde.
 pub async fn my_stickers(
@@ -44,6 +43,7 @@ pub async fn my_stickers(
     })).collect()))
 }
 
+/// GET /api/servers/:id/stickers
 pub async fn list_stickers(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

@@ -14,7 +14,7 @@ use crate::{
     state::AppState,
 };
 
-const MAX_SOUND_BYTES: usize = 512 * 1024; // 512 KB
+const MAX_SOUND_BYTES: usize = 2 * 1024 * 1024; // 2 Mo (Discord : 512 Ko)
 const ALLOWED_EXTS: &[&str] = &["mp3", "wav", "ogg", "webm", "m4a"];
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -45,6 +45,34 @@ async fn ensure_member(
     Ok(())
 }
 
+/// GET /users/me/soundboard — sons de tous ses serveurs, jouables dans n'importe quel salon vocal
+/// (gratuit ; Discord le réserve à Nitro).
+pub async fn my_sounds(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT sb.id, sb.name, sb.emoji, sb.file_url, sb.server_id, s.name AS server_name
+         FROM soundboard sb
+         JOIN server_members m ON m.server_id = sb.server_id AND m.user_id = $1
+         JOIN servers s ON s.id = sb.server_id
+         ORDER BY s.name, sb.name
+         LIMIT 2000",
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "emoji": r.get::<Option<String>, _>("emoji"),
+        "file_url": r.get::<String, _>("file_url"),
+        "server_id": r.get::<Uuid, _>("server_id"),
+        "server_name": r.get::<String, _>("server_name"),
+    })).collect()))
+}
+
 pub async fn list_sounds(
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
@@ -63,7 +91,7 @@ pub async fn list_sounds(
     Ok(Json(sounds))
 }
 
-const MAX_SOUNDS_PER_SERVER: i64 = 50;
+const MAX_SOUNDS_PER_SERVER: i64 = 200;
 
 pub async fn upload_sound(
     Extension(claims): Extension<Claims>,
@@ -117,7 +145,7 @@ pub async fn upload_sound(
                 file_ext = filename.rsplit('.').next().map(|s| s.to_string());
                 let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
                 if data.len() > MAX_SOUND_BYTES {
-                    return Err(AppError::BadRequest("Fichier trop volumineux (max 512 KB)".into()));
+                    return Err(AppError::BadRequest("Fichier trop volumineux (max 2 Mo)".into()));
                 }
                 file_bytes = data.to_vec();
             }
