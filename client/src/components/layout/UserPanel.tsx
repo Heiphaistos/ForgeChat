@@ -283,7 +283,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && muted ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
-          title={joined ? (muted ? 'Réactiver le micro (Ctrl+Shift+M)' : 'Couper le micro (Ctrl+Shift+M)') : 'Pas dans un canal vocal'}
+          title={joined ? (muted ? 'Réactiver le micro (Ctrl+M)' : 'Couper le micro (Ctrl+M)') : 'Pas dans un canal vocal'}
         >
           {joined && muted ? <MicOff size={16} /> : <Mic size={16} />}
         </button>
@@ -294,7 +294,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
             joined && deafened ? 'text-red-400' : joined ? 'text-fc-muted hover:text-white' : 'text-fc-muted/30 cursor-default'
           }`}
-          title={joined ? (deafened ? 'Réactiver le son (Ctrl+Shift+D)' : 'Couper le son (Ctrl+Shift+D)') : 'Pas dans un canal vocal'}
+          title={joined ? (deafened ? 'Réactiver le son (Ctrl+D)' : 'Couper le son (Ctrl+D)') : 'Pas dans un canal vocal'}
         >
           {joined && deafened ? <VolumeX size={16} /> : <Headphones size={16} />}
         </button>

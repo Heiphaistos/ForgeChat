@@ -79,13 +79,16 @@ export default function VoiceHotkeys() {
   const screenSharing = useVoice(s => s.screenSharing)
   const pttHeld = useRef(false)
 
-  const { data: custom = {} } = useQuery<Record<string, string>>({
+  // Même requête que les Réglages : une liste { action, key_combo }. Lue comme un
+  // objet, aucun raccourci personnalisé n'était jamais appliqué.
+  const { data: custom = [] } = useQuery<{ action: string; key_combo: string }[]>({
     queryKey: ['keybindings'],
     queryFn: () => api.get('/user/keybindings').then(r => r.data),
     staleTime: 300_000,
   })
 
-  const binding = (action: string) => (custom as any)?.[action] || DEFAULTS[action]
+  const binding = (action: string) =>
+    (Array.isArray(custom) ? custom.find(k => k.action === action)?.key_combo : undefined) || DEFAULTS[action]
 
   // ── Raccourcis fenêtre ──────────────────────────────────────────────────
   useEffect(() => {

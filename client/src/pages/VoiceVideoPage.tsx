@@ -187,10 +187,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
   const {
     peers, localStream, localScreenStream, muted, deafened, videoEnabled, screenSharing,
-    localVideoUrl, localScreenUrl, nativeSpeakers, autoWatchStreams, watchStream,
+    localVideoUrl, localScreenUrl, nativeSpeakers, sfuSpeakers, autoWatchStreams, watchStream,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
-    roomParticipants, notice, clearNotice, recording: isRecording, setRecording,
+    roomParticipants, notice, clearNotice, error, clearError, recording: isRecording, setRecording,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
@@ -202,6 +202,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     ...remoteSpeaking,
     // Application Linux : orateurs actifs mesurés par le SFU (aucun flux local à analyser).
     ...Object.fromEntries(nativeSpeakers.map(id => [id, 1])),
+    // En sourdine les pistes reçues sont coupées, leur niveau reste à 0 : le SFU
+    // sait encore qui parle.
+    ...(deafened ? Object.fromEntries(sfuSpeakers.map(id => [id, 1])) : {}),
   }
 
   // Accumulateur temps de parole pour SpeakerStats (sinon totalSpeakingMs restait
@@ -350,6 +353,14 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     toast(notice, { duration: 6000, icon: 'ℹ️' })
     clearNotice()
   }, [notice, clearNotice])
+
+  // Erreurs survenues EN appel (caméra, partage, média perdu) : seul le lobby les
+  // affichait, elles restaient invisibles une fois dans le salon.
+  useEffect(() => {
+    if (!error || !isInThisChannel) return
+    toast.error(error)
+    clearError()
+  }, [error, isInThisChannel, clearError])
 
   // Volume par participant : état local de la popover
   const [volumeTarget, setVolumeTarget] = useState<{ userId: string; username: string; kind: 'voice' | 'screen' } | null>(null)
