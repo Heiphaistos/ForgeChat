@@ -271,10 +271,14 @@ export default function ServerSidebar() {
           setServerOrder(data.order)
           try { localStorage.setItem('fc_server_order', JSON.stringify(data.order)) } catch { /* cache seulement */ }
         }
+      } else {
+        // Rien en ligne : la disposition de ce navigateur devient la référence.
+        api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => {})
       }
       layoutLoaded.current = true
     }).catch(() => { /* hors ligne : on garde le cache local, sans écraser le serveur */ })
     return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement unique au montage
   }, [])
   useEffect(() => {
     if (!layoutLoaded.current) return
