@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight, Lock } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
+import NsfwGate, { useNsfwOk } from '../components/chat/NsfwGate'
 import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
@@ -51,6 +52,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const params = useParams<{ serverId?: string; channelId?: string }>()
   const serverId = params.serverId
   const channelId = forcedChannelId ?? params.channelId
+  // Salons 18+ : confirmation d'âge une fois par salon et par appareil (avant tout retour anticipé).
+  const [nsfwOk, confirmerNsfw] = useNsfwOk(channelId)
 
   const { setSplitChannelId } = useContext(SplitContext)
   const { openSidebar } = useMobile()
@@ -433,6 +436,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const currentChannel = channels.find((c: any) => c.id === channelId)
   const isAnnouncement = currentChannel?.type === 'announcement'
+
+  if (currentChannel?.is_nsfw && !nsfwOk) {
+    return <NsfwGate name={currentChannel.name} onConfirm={confirmerNsfw} onBack={() => (onClose ? onClose() : window.history.back())} />
+  }
 
   // Canal Scène — roster speakers/audience + main levée, mesh vocal en écoute
   // seule pour l'audience (cf. StageChannel.tsx)
