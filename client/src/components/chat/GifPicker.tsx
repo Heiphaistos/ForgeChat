@@ -5,9 +5,8 @@ import { Search, X, Loader2 } from 'lucide-react'
 
 import api from '../../api/client'
 
-// GIF via le serveur (KLIPY, routes /api/gifs/*) : la clé API reste sur le serveur.
-// L'API Tenor appelée auparavant depuis le navigateur a fermé le 30/06/2026.
-const LIMIT = 24 // = PAGE_SIZE du serveur (handlers/gifs.rs)
+// GIF via le serveur (routes /api/gifs/* : GIPHY, ou Wikimedia Commons sans clé) : la clé API reste
+// sur le serveur. L'API Tenor appelée auparavant depuis le navigateur a fermé le 30/06/2026.
 
 // GIFs placeholder pour le mode démo (GIF non configurés sur le serveur ou indisponibles)
 const DEMO_GIFS = [
@@ -46,6 +45,14 @@ export default function GifPicker({ onPick, onClose }: Props) {
   const [nextPos, setNextPos] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
+  // Source annoncée par le serveur (texte du champ et mention exigée par GIPHY).
+  const [source, setSource] = useState({ placeholder: 'Rechercher un GIF', attribution: '' })
+  useEffect(() => {
+    api.get('/gifs/status').then(({ data }) => setSource({
+      placeholder: typeof data?.search_placeholder === 'string' ? data.search_placeholder : 'Rechercher un GIF',
+      attribution: typeof data?.attribution === 'string' ? data.attribution : '',
+    })).catch(() => {})
+  }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -77,7 +84,8 @@ export default function GifPicker({ onPick, onClose }: Props) {
       }))
       setGifs(prev => append ? [...prev, ...parsed] : parsed)
       setNextPos(data.next ?? undefined)
-      setHasMore(!!data.next && parsed.length === LIMIT)
+      // Wikimedia peut renvoyer moins de 24 résultats (images non animées écartées) : seul « next » compte.
+      setHasMore(!!data.next)
       setDemoMode(false)
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
@@ -136,7 +144,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search KLIPY"
+            placeholder={source.placeholder}
             aria-label="Chercher un GIF"
             enterKeyHint="search"
             inputMode="search"
@@ -239,6 +247,9 @@ export default function GifPicker({ onPick, onClose }: Props) {
           </div>
         )}
       </div>
+    {source.attribution && !demoMode && (
+        <p className="px-2 py-1 border-t border-fc-hover text-[10px] text-fc-muted text-right flex-shrink-0">{source.attribution}</p>
+      )}
     </PickerShell>
   )
 }

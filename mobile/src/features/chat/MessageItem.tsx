@@ -27,7 +27,7 @@ interface Props {
 
 /**
  * Contenu spécial envoyé par la barre de saisie (web ou app) : sticker ou GIF Tenor. null = texte
- * normal. Les GIF sont les SEULES images chargées depuis un service externe (media.tenor.com, CDN KLIPY).
+ * normal. Les GIF sont les SEULES images chargées depuis un service externe (GIPHY, Wikimedia ; Tenor et KLIPY pour les anciens messages).
  */
 function SpecialContent({ content, pending, onLongPress }: { content: string; pending?: boolean; onLongPress?: () => void }) {
   const sticker = parseSticker(content)
@@ -50,7 +50,7 @@ function SpecialContent({ content, pending, onLongPress }: { content: string; pe
   return gif ? <RemoteGif url={gif.url} provider={gif.provider} onLongPress={onLongPress} /> : null
 }
 
-/** GIF animé (Tenor ou KLIPY) ; introuvable ou hors ligne → simple lien (comme un message texte). */
+/** GIF animé (GIPHY, Wikimedia, Tenor ou KLIPY) ; introuvable ou hors ligne → simple lien (comme un message texte). */
 function RemoteGif({ url, provider, onLongPress }: { url: string; provider: string; onLongPress?: () => void }) {
   const [failed, setFailed] = useState(false)
   if (failed) return <MessageText content={url} myName="" />

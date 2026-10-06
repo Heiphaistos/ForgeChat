@@ -12,7 +12,7 @@ import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
 import { EMOJI_CATEGORIES, GLOBAL_STICKERS, type QuickReply } from './data'
 import { formatSticker } from './formats'
-import { gifSearchEnabled, parseGifResults, type GifResult } from './gifs'
+import { gifSearchEnabled, gifSource, parseGifResults, type GifResult } from './gifs'
 import { parseServerStickers } from './stickers'
 import { QUICK_REPLY_LIMITS, useComposerPrefs } from './store'
 
@@ -187,19 +187,16 @@ export function StickerPanel({
 
 // ─── GIF ───────────────────────────────────────────────────────────────────────
 
-/** La recherche GIF du serveur est-elle disponible ? (patch « GIF via KLIPY » + clé). Sinon : cachée. */
+const useGifStatus = () =>
+  useQuery({ queryKey: ['gifs-status'], queryFn: () => gifsApi.status(), staleTime: 10 * 60_000, retry: false })
+
+/** La recherche GIF du serveur est-elle disponible ? Sinon : onglet caché. */
 export function useGifSearchAvailable(): boolean {
-  const q = useQuery({
-    queryKey: ['gifs-status'],
-    queryFn: async () => gifSearchEnabled(await gifsApi.status()),
-    staleTime: 10 * 60_000,
-    retry: false,
-  })
-  return q.data === true
+  return gifSearchEnabled(useGifStatus().data)
 }
 
 /**
- * GIF : recherche KLIPY par le serveur (si disponible), GIF animés ajoutés au serveur (stickers .gif),
+ * GIF : recherche par le serveur (GIPHY ou Wikimedia, si disponible), GIF animés ajoutés au serveur (stickers .gif),
  * et GIF du téléphone envoyés tels quels en pièce jointe (l'animation est conservée).
  */
 export function GifPanel({
@@ -289,8 +286,9 @@ export function GifPanel({
   )
 }
 
-/** Recherche KLIPY via le serveur ; tendances quand le champ est vide. */
+/** Recherche GIF via le serveur ; tendances quand le champ est vide. */
 function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResult) => void }) {
+  const source = gifSource(useGifStatus().data)
   const [text, setText] = useState('')
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<GifResult[]>([])
@@ -338,10 +336,10 @@ function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResul
       <TextInput
         value={text}
         onChangeText={setText}
-        placeholder="Search KLIPY"
+        placeholder={source.placeholder}
         placeholderTextColor={colors.textFaint}
         style={[styles.input, { marginHorizontal: spacing.md, marginBottom: spacing.sm }]}
-        accessibilityLabel="Rechercher un GIF (KLIPY)"
+        accessibilityLabel="Rechercher un GIF"
         returnKeyType="search"
         maxLength={100}
       />
@@ -364,7 +362,7 @@ function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResul
         {error ? <Text style={styles.empty}>{error}</Text> : null}
         {!loading && !error && !items.length ? <Text style={styles.empty}>Aucun GIF trouvé.</Text> : null}
       </ScrollView>
-      <Text style={styles.attribution}>Powered by KLIPY</Text>
+      {source.attribution ? <Text style={styles.attribution}>{source.attribution}</Text> : null}
     </View>
   )
 }

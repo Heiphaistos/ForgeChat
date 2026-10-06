@@ -1,6 +1,7 @@
 /**
- * Recherche de GIF via le serveur (KLIPY). Le serveur ne renvoie que des images de son CDN ; l'app
- * le revérifie avant d'afficher ou d'envoyer quoi que ce soit.
+ * Recherche de GIF via le serveur (GIPHY, ou Wikimedia Commons sans clé). Le serveur ne renvoie que
+ * des images de ces CDN, sans paramètres ; l'app le revérifie avant d'afficher ou d'envoyer quoi que
+ * ce soit (même liste que server/src/handlers/gifs.rs).
  */
 
 export interface GifResult {
@@ -14,22 +15,30 @@ export interface GifResult {
   height: number
 }
 
-const KLIPY_HOST = /^static\d{0,2}\.klipy\.com$/
+const GIF_HOST = /^(?:media\d?\.giphy\.com|i\.giphy\.com|upload\.wikimedia\.org|thumb\.wikimedia\.org)$/
 
-/** Image du CDN KLIPY, en https, sans port ni identifiants. */
-export function isKlipyMediaUrl(raw: unknown): raw is string {
+/** Image d'un CDN de GIF connu, en https, sans port, identifiants ni paramètres. */
+export function isGifMediaUrl(raw: unknown): raw is string {
   if (typeof raw !== 'string' || raw.length > 500) return false
   try {
     const u = new URL(raw)
-    return u.protocol === 'https:' && !u.port && !u.username && !u.password && KLIPY_HOST.test(u.hostname) && !/[\s"'<>]/.test(raw)
+    return u.protocol === 'https:' && !u.port && !u.username && !u.password && !u.search && GIF_HOST.test(u.hostname) &&
+      /\.(gif|webp)$/i.test(u.pathname) && !/[\s"'<>]/.test(raw)
   } catch {
     return false
   }
 }
 
-/** GET /gifs/status : la recherche n'est proposée que si le serveur l'a activée (patch + clé). */
+/** GET /gifs/status : la recherche n'est proposée que si le serveur l'a activée. */
 export function gifSearchEnabled(raw: unknown): boolean {
   return !!raw && typeof raw === 'object' && (raw as { enabled?: unknown }).enabled === true
+}
+
+/** Texte du champ de recherche et mention de la source (exigée par GIPHY), fournis par le serveur. */
+export function gifSource(raw: unknown): { placeholder: string; attribution: string } {
+  const r = (raw ?? {}) as { search_placeholder?: unknown; attribution?: unknown }
+  const txt = (v: unknown, d: string) => (typeof v === 'string' && v.length <= 60 ? v : d)
+  return { placeholder: txt(r.search_placeholder, 'Rechercher un GIF'), attribution: txt(r.attribution, '') }
 }
 
 /** GET /gifs/search|trending → résultats valides et jeton de page suivante. */
@@ -38,8 +47,8 @@ export function parseGifResults(raw: unknown): { results: GifResult[]; next: str
   const results: GifResult[] = []
   if (Array.isArray(r.results)) {
     for (const g of r.results as Record<string, unknown>[]) {
-      if (!isKlipyMediaUrl(g?.url)) continue
-      const preview = isKlipyMediaUrl(g.preview) ? g.preview : g.url
+      if (!isGifMediaUrl(g?.url)) continue
+      const preview = isGifMediaUrl(g.preview) ? g.preview : g.url
       const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(v, 4096) : 0)
       results.push({
         id: typeof g.id === 'string' ? g.id.slice(0, 64) : g.url,
@@ -51,6 +60,6 @@ export function parseGifResults(raw: unknown): { results: GifResult[]; next: str
       })
     }
   }
-  const next = typeof r.next === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(r.next) ? r.next : null
+  const next = typeof r.next === 'string' && /^\d{1,6}$/.test(r.next) ? r.next : null
   return { results, next }
 }

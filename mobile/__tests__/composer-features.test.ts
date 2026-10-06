@@ -200,43 +200,48 @@ describe('« Modifier » seulement pour un vrai texte', () => {
   })
 })
 
-describe('GIF : KLIPY via le serveur, GIF du téléphone', () => {
+describe('GIF : GIPHY ou Wikimedia via le serveur, GIF du téléphone', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { remoteGif } = require('@/features/composer/formats') as typeof import('@/features/composer/formats')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { gifSearchEnabled, isKlipyMediaUrl, parseGifResults } = require('@/features/composer/gifs') as typeof import('@/features/composer/gifs')
+  const { gifSearchEnabled, gifSource, isGifMediaUrl, parseGifResults } = require('@/features/composer/gifs') as typeof import('@/features/composer/gifs')
 
-  it('message GIF : Tenor (anciens messages du web) et KLIPY reconnus, rien d’autre', () => {
-    expect(remoteGif('https://static.klipy.com/ii/4f/a1/hello.gif')).toEqual({ url: 'https://static.klipy.com/ii/4f/a1/hello.gif', provider: 'KLIPY' })
-    expect(remoteGif('https://static2.klipy.com/x/y.webp')?.provider).toBe('KLIPY')
+  it('message GIF : GIPHY, Wikimedia et les anciens Tenor/KLIPY reconnus, rien d’autre', () => {
+    expect(remoteGif('https://media2.giphy.com/media/abc123/giphy.gif')).toEqual({ url: 'https://media2.giphy.com/media/abc123/giphy.gif', provider: 'GIPHY' })
+    expect(remoteGif('https://upload.wikimedia.org/wikipedia/commons/8/8f/Chat.gif')?.provider).toBe('Wikimedia')
+    expect(remoteGif('https://static.klipy.com/ii/4f/a1/hello.gif')?.provider).toBe('KLIPY')
     expect(remoteGif('https://media.tenor.com/20wDoVQU3RAAAAAM/hello-hi.gif')?.provider).toBe('Tenor')
-    for (const bad of ['https://api.klipy.com/x.gif', 'http://static.klipy.com/x.gif', 'https://static.klipy.com.evil.invalid/x.gif', 'https://static.klipy.com/../x.gif', 'https://static.klipy.com/x.png'])
+    for (const bad of ['https://api.giphy.com/x.gif', 'http://media.giphy.com/media/a/x.gif', 'https://media.giphy.com.evil.invalid/media/a/x.gif',
+      'https://media.giphy.com/media/../x.gif', 'https://upload.wikimedia.org/wikipedia/commons/x.png', 'https://media2.giphy.com/media/a/giphy.gif?cid=1'])
       expect(remoteGif(bad)).toBeNull()
   })
 
-  it('recherche cachée tant que le serveur n’a pas le patch (404, enabled: false, réponse bizarre)', () => {
-    expect(gifSearchEnabled({ enabled: true, provider: 'klipy' })).toBe(true)
+  it('recherche cachée si le serveur ne la propose pas ; texte et mention fournis par le serveur', () => {
+    expect(gifSearchEnabled({ enabled: true, provider: 'giphy' })).toBe(true)
     expect(gifSearchEnabled({ enabled: false })).toBe(false)
     expect(gifSearchEnabled({ enabled: 'true' })).toBe(false)
     expect(gifSearchEnabled(null)).toBe(false)
+    expect(gifSource({ search_placeholder: 'Rechercher sur GIPHY', attribution: 'Powered by GIPHY' })).toEqual({ placeholder: 'Rechercher sur GIPHY', attribution: 'Powered by GIPHY' })
+    expect(gifSource(null)).toEqual({ placeholder: 'Rechercher un GIF', attribution: '' })
   })
 
-  it('résultats du serveur : seules les images du CDN KLIPY sont gardées', () => {
-    expect(isKlipyMediaUrl('https://static1.klipy.com/a.gif')).toBe(true)
-    expect(isKlipyMediaUrl('https://static.klipy.com:444/a.gif')).toBe(false)
-    expect(isKlipyMediaUrl('https://u:p@static.klipy.com/a.gif')).toBe(false)
+  it('résultats du serveur : seules les images des CDN connus, sans paramètres, sont gardées', () => {
+    expect(isGifMediaUrl('https://i.giphy.com/media/abc/200w.webp')).toBe(true)
+    expect(isGifMediaUrl('https://media.giphy.com:444/media/a/a.gif')).toBe(false)
+    expect(isGifMediaUrl('https://u:p@media.giphy.com/media/a/a.gif')).toBe(false)
+    expect(isGifMediaUrl('https://media.giphy.com/media/a/a.gif?rid=1')).toBe(false)
     const out = parseGifResults({
       results: [
-        { id: '1', title: 'Salut', url: 'https://static.klipy.com/a/hi.gif', preview: 'https://static1.klipy.com/a/hi-tiny.gif', width: 480, height: 270 },
-        { id: '2', url: 'https://evil.invalid/x.gif', preview: 'https://static.klipy.com/p.gif' },
-        { id: '3', url: 'https://static.klipy.com/b.gif', preview: 'https://evil.invalid/p.gif', width: -1 },
+        { id: '1', title: 'Salut', url: 'https://media1.giphy.com/media/a/giphy.gif', preview: 'https://media1.giphy.com/media/a/100w.gif', width: 480, height: 270 },
+        { id: '2', url: 'https://evil.invalid/x.gif', preview: 'https://media.giphy.com/media/a/p.gif' },
+        { id: '3', url: 'https://upload.wikimedia.org/wikipedia/commons/b/bb/B.gif', preview: 'https://evil.invalid/p.gif', width: -1 },
       ],
-      next: 'CAgQ.48',
+      next: '24',
     })
     expect(out.results.map((r) => r.id)).toEqual(['1', '3'])
-    expect(out.results[1]!.preview).toBe('https://static.klipy.com/b.gif')
+    expect(out.results[1]!.preview).toBe('https://upload.wikimedia.org/wikipedia/commons/b/bb/B.gif')
     expect(out.results[1]!.width).toBe(0)
-    expect(out.next).toBe('CAgQ.48')
+    expect(out.next).toBe('24')
     expect(parseGifResults({ results: 'x', next: '../a' })).toEqual({ results: [], next: null })
   })
 

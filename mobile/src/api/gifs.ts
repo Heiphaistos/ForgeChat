@@ -1,8 +1,8 @@
 import { http } from '@/lib/http'
 
 /**
- * GIF par le serveur (routes /api/gifs/*, patch serveur « GIF via KLIPY ») : la clé API reste sur
- * le serveur, l'app ne contacte jamais l'API KLIPY directement. Réponses brutes, validées par
+ * GIF par le serveur (routes /api/gifs/* : GIPHY, ou Wikimedia Commons sans clé) : la clé API reste
+ * sur le serveur, l'app ne contacte jamais le fournisseur directement. Réponses brutes, validées par
  * features/composer/gifs.ts.
  */
 export const gifsApi = {
