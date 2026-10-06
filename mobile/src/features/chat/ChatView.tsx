@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { dmsApi } from '@/api/dms'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
+import { threadsApi } from '@/api/threads'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { ApiError, errorMessage } from '@/lib/http'
@@ -25,6 +26,8 @@ import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
 import { MessageItem } from './MessageItem'
 import { useScrollTarget } from './pins'
+import { supportsMessageExtras } from './messageExtras'
+import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
@@ -90,6 +93,7 @@ export function ChatView({
   const pinnedIds = useMemo(() => new Set((pins.data ?? []).map((p) => p.messageId)), [pins.data])
   // Autocomplétion @mention : membres du serveur (salon) ou participants (groupe). Rien en DM 1:1.
   const serverId = conversation.kind === 'channel' ? conversation.serverId : ''
+  const channelId = conversation.kind === 'channel' ? conversation.channelId : ''
   const groupId = conversation.kind === 'group' ? conversation.groupId : ''
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
@@ -103,6 +107,26 @@ export function ChatView({
         : (group.data?.members ?? []).map((m) => ({ id: m.id, username: m.username, avatar: m.avatar })),
     [serverId, members.data, group.data],
   )
+  // Fils du salon (100 plus récents) : badge sous le message d'origine.
+  const threads = useQuery({
+    queryKey: [...qk.threads(channelId), 'list'],
+    queryFn: () => threadsApi.list(serverId, channelId, { limit: 100 }),
+    enabled: !!channelId,
+    staleTime: 60_000,
+  })
+  const threadOf = useMemo(() => threadsByParent(threads.data ?? []), [threads.data])
+  const openThread = useCallback(
+    (m: ChatMessage) =>
+      router.push({
+        pathname: '/thread/[serverId]/[channelId]',
+        params: { serverId, channelId, parent: m.id, preview: (m.content ?? '').slice(0, 100) },
+      }),
+    [serverId, channelId],
+  )
+  // Enregistrés : lus seulement quand le menu d'un message est ouvert (libellé Enregistrer / Retirer).
+  const extras = supportsMessageExtras(conversation)
+  const saved = useQuery({ queryKey: qk.saved, queryFn: messagesApi.saved, enabled: extras && !!selected })
+  const savedIds = useMemo(() => new Set((saved.data ?? []).map((s) => s.messageId)), [saved.data])
   const isPinned = (m: ChatMessage) => (conversation.kind === 'channel' ? m.pinned : pinnedIds.has(m.id))
 
   // Défilement vers un message demandé par l'écran des épinglés (chargement de pages plus anciennes si besoin).
@@ -196,6 +220,25 @@ export function ChatView({
             .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
       })
     }
+    if (channelId && !m.pending) {
+      if (threadOf.has(m.id)) list.push({ label: 'Ouvrir le fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+      else if (!readOnly) list.push({ label: 'Créer un fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+    }
+    if (extras && !m.pending) {
+      const messageId = m.id
+      list.push({ label: 'Transférer', icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
+      const isSaved = savedIds.has(m.id)
+      list.push({
+        label: isSaved ? 'Retirer des enregistrés' : 'Enregistrer',
+        icon: isSaved ? 'bookmark' : 'bookmark-outline',
+        onPress: () =>
+          (isSaved ? messagesApi.unsave(m.id) : messagesApi.save(conversation, m))
+            .then(() => queryClient.invalidateQueries({ queryKey: qk.saved }))
+            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+      })
+      list.push({ label: 'Me le rappeler', icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
+      if (m.editedAt) list.push({ label: 'Historique des modifications', icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
+    }
     if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
     if (!mine && conversation.kind === 'channel') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
     // Suppression : l'auteur, ou un modérateur (le serveur tranche — 403 sinon).
@@ -229,11 +272,15 @@ export function ChatView({
             onReact={react}
             onPressAuthor={onPressAuthor}
             onRetry={onLongPress}
+            serverId={serverId || undefined}
+            channelId={channelId || undefined}
+            thread={threadOf.get(item.id)}
+            onOpenThread={openThread}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread],
   )
 
   const quickReactions = useMemo(

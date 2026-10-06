@@ -25,11 +25,19 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false, ...OWN_BOTTOM }} />
       <Stack.Screen name="channel/[serverId]/[channelId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="dm/[dmId]" options={{ title: '', ...OWN_BOTTOM }} />
+      <Stack.Screen name="thread/[serverId]/[channelId]" options={{ title: 'Fil', ...OWN_BOTTOM }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/index" options={{ title: 'Forum' }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/new" options={{ title: 'Nouvelle publication', presentation: 'modal' }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/[postId]" options={{ title: 'Publication', ...OWN_BOTTOM }} />
       <Stack.Screen name="group/[groupId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="group/create" options={{ title: 'Nouveau groupe', presentation: 'modal' }} />
       <Stack.Screen name="group/manage/[groupId]" options={{ title: 'Gérer le groupe' }} />
       <Stack.Screen name="pins" options={{ title: 'Messages épinglés', presentation: 'modal' }} />
       <Stack.Screen name="search" options={{ title: 'Rechercher' }} />
+      <Stack.Screen name="saved" options={{ title: 'Messages enregistrés' }} />
+      <Stack.Screen name="forward" options={{ title: 'Transférer', presentation: 'modal' }} />
+      <Stack.Screen name="remind" options={{ title: 'Me le rappeler', presentation: 'modal' }} />
+      <Stack.Screen name="edits" options={{ title: 'Historique des modifications', presentation: 'modal' }} />
       <Stack.Screen name="voice/[serverId]/[channelId]" options={{ title: 'Salon vocal', ...OWN_BOTTOM }} />
       <Stack.Screen name="call" options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false, ...OWN_BOTTOM }} />
       <Stack.Screen name="group-call" options={{ headerShown: false, presentation: 'fullScreenModal', ...OWN_BOTTOM }} />

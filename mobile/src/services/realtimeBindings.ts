@@ -11,6 +11,7 @@ import { fromDmMessage, fromGroupMessage, fromServerMessage } from '@/features/c
 import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
+import { showReminder } from '@/services/push'
 import { getMyId, useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { useTyping } from '@/stores/typing'
@@ -129,6 +130,39 @@ export function bindRealtime(): () => void {
     if (cid && mid) patchMessage('channel', cid, mid, (m) => ({ ...m, pinned: e.pinned === true }))
     if (cid) void queryClient.invalidateQueries({ queryKey: qk.pins(cid) })
   })
+  // Fils (threads.rs, uploads.rs) : liste du salon (badges, compteurs) et messages du fil.
+  for (const t of ['THREAD_CREATE', 'THREAD_UPDATE', 'THREAD_MESSAGE', 'THREAD_MESSAGE_DELETE']) {
+    on(t, (e) => {
+      const cid = str(e.channel_id)
+      if (cid) void queryClient.invalidateQueries({ queryKey: qk.threads(cid) })
+    })
+  }
+  for (const t of ['THREAD_MESSAGE', 'THREAD_MESSAGE_EDIT', 'THREAD_MESSAGE_DELETE', 'THREAD_REACTION_TOGGLE', 'THREAD_ATTACHMENT_ADDED']) {
+    on(t, (e) => {
+      const tid = str(e.thread_id)
+      if (tid) void queryClient.invalidateQueries({ queryKey: qk.threadMessages(tid) })
+    })
+  }
+  // Forums (forum.rs) : liste des publications du salon et publication ouverte.
+  for (const t of ['FORUM_POST_CREATE', 'FORUM_POST_UPDATE', 'FORUM_POST_DELETE', 'FORUM_REPLY_CREATE', 'FORUM_REPLY_DELETE']) {
+    on(t, (e) => {
+      const cid = str(e.channel_id)
+      if (cid) void queryClient.invalidateQueries({ queryKey: qk.forum(cid) })
+    })
+  }
+  for (const t of ['FORUM_POST_UPDATE', 'FORUM_REPLY_CREATE', 'FORUM_REPLY_EDIT', 'FORUM_REPLY_DELETE', 'FORUM_REPLY_REACTION', 'FORUM_REPLY_ATTACHMENT_ADDED']) {
+    on(t, (e) => {
+      const pid = str(e.post_id)
+      if (pid) void queryClient.invalidateQueries({ queryKey: qk.forumPost(pid) })
+    })
+  }
+  // Sondages (polls.rs) : l'événement ne porte pas les résultats, on relit le sondage.
+  for (const t of ['POLL_VOTE', 'POLL_CLOSED']) {
+    on(t, (e) => {
+      const pid = str(e.poll_id)
+      if (pid) void queryClient.invalidateQueries({ queryKey: qk.poll(pid) })
+    })
+  }
   for (const t of ['EMOJI_CREATE', 'EMOJI_DELETE']) {
     on(t, (e) => {
       const sid = str(e.server_id)
@@ -284,6 +318,9 @@ export function bindRealtime(): () => void {
     if (id && id === getMyId() && isObj(e.user)) useAuth.getState().setUser(e.user as never)
     if (id) void queryClient.invalidateQueries({ queryKey: qk.user(id) })
   })
+
+  // ── Rappels de messages (reminders.rs) ─────────────────────────────────────
+  on('REMINDER', (e) => void showReminder(typeof e.content === 'string' ? e.content : null))
 
   // Nettoyage périodique des indicateurs de saisie expirés
   const pruneTimer = setInterval(() => useTyping.getState().prune(), 2000)

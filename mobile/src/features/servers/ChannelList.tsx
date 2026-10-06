@@ -40,6 +40,8 @@ export function channelIcon(type: string): IconName {
 export function openChannel(server: Server, ch: Channel) {
   if (ch.type === 'text' || ch.type === 'announcement') {
     router.push({ pathname: '/channel/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name } })
+  } else if (ch.type === 'forum') {
+    router.push({ pathname: '/forum/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name } })
   } else if (VOICE_TYPES.has(ch.type)) {
     router.push({ pathname: '/voice/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name, locked: ch.has_voice_password ? '1' : '0' } })
   } else {

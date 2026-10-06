@@ -23,7 +23,7 @@ test('une socket bloquée à l’ouverture est abandonnée puis remplacée', asy
   await jest.advanceTimersByTimeAsync(0)
   expect(sockets).toHaveLength(1)
   await jest.advanceTimersByTimeAsync(15_000)
-  expect(sockets[0].close).toHaveBeenCalled()
+  expect(sockets[0]?.close).toHaveBeenCalled()
   await jest.advanceTimersByTimeAsync(2_000)
   expect(sockets).toHaveLength(2)
   realtime.stop()

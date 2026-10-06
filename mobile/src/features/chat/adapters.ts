@@ -24,6 +24,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     reactions: m.reactions ?? [],
     pinned: !!m.pinned,
     expiresAt: m.expires_at ?? null,
+    pollId: m.poll_id ?? null,
   }
 }
 
@@ -65,6 +66,37 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     forwardedFrom: null,
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
+    pinned: false,
+  }
+}
+
+/**
+ * Message de fil (threads.rs::get_thread_messages) ou réponse de forum (forum.rs::get_post) :
+ * { id, user_id, content, reply_to?, reply_to_content?, reply_to_username?, edited_at, created_at,
+ *   author: { id, username, avatar }, reactions, attachments }. null si inexploitable.
+ */
+export function fromThreadMessage(raw: unknown): ChatMessage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  const author = (m.author && typeof m.author === 'object' ? m.author : {}) as Record<string, unknown>
+  const s = (v: unknown) => (typeof v === 'string' ? v : null)
+  const id = s(m.id)
+  const createdAt = s(m.created_at)
+  if (!id || !createdAt) return null
+  const replyId = s(m.reply_to)
+  return {
+    id,
+    content: s(m.content),
+    createdAt,
+    editedAt: s(m.edited_at),
+    authorId: s(author.id) ?? s(m.user_id) ?? '',
+    authorName: s(author.username) ?? s(m.author_username) ?? 'Inconnu',
+    authorAvatar: s(author.avatar),
+    authorIsBot: false,
+    reply: replyId ? { id: replyId, authorName: s(m.reply_to_username), content: s(m.reply_to_content) } : null,
+    forwardedFrom: null,
+    attachments: Array.isArray(m.attachments) ? (m.attachments as ChatMessage['attachments']) : [],
+    reactions: Array.isArray(m.reactions) ? (m.reactions as ChatMessage['reactions']) : [],
     pinned: false,
   }
 }

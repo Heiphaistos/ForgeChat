@@ -11,6 +11,8 @@ import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
 import { Attachments } from './Attachments'
+import { PollCard } from './PollCard'
+import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 
 interface Props {
@@ -23,6 +25,12 @@ interface Props {
   onReact: (m: ChatMessage, emoji: string) => void
   onPressAuthor: (userId: string) => void
   onRetry: (m: ChatMessage) => void
+  /** Salon courant (sondages) ; absent en DM et groupe. */
+  serverId?: string
+  channelId?: string
+  /** Fil ouvert depuis ce message (salons). */
+  thread?: ThreadSummary
+  onOpenThread?: (m: ChatMessage) => void
 }
 
 /**
@@ -102,6 +110,10 @@ export const MessageItem = memo(function MessageItem({
   onReact,
   onPressAuthor,
   onRetry,
+  serverId,
+  channelId,
+  thread,
+  onOpenThread,
 }: Props) {
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
@@ -160,6 +172,8 @@ export const MessageItem = memo(function MessageItem({
             </View>
           ) : null}
 
+          {m.pollId && serverId && channelId ? <PollCard serverId={serverId} channelId={channelId} pollId={m.pollId} myId={myId} /> : null}
+
           <Attachments items={m.attachments} pending={m.pending} onLongPress={() => onLongPress(m)} />
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>Pièce jointe en cours d’envoi…</Text> : null}
 
@@ -171,6 +185,24 @@ export const MessageItem = memo(function MessageItem({
             <Pressable onPress={() => onRetry(m)} style={styles.failed} accessibilityRole="button">
               <Ionicons name="alert-circle" size={16} color={colors.danger} />
               <Text style={{ color: colors.danger, fontSize: font.sm }}>Échec de l’envoi — toucher pour les options</Text>
+            </Pressable>
+          ) : null}
+
+          {thread && onOpenThread ? (
+            <Pressable
+              onPress={() => onOpenThread(m)}
+              style={styles.thread}
+              accessibilityRole="button"
+              accessibilityLabel={`Ouvrir le fil ${thread.title}, ${thread.messageCount} message${thread.messageCount > 1 ? 's' : ''}`}
+            >
+              <Ionicons name="chatbubbles-outline" size={14} color={colors.primary} />
+              <Text style={styles.threadTitle} numberOfLines={1}>
+                {thread.title}
+              </Text>
+              <Text style={[styles.meta, { marginTop: 0 }]}>
+                {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
+                {thread.unreadCount ? ` · ${thread.unreadCount} non lu${thread.unreadCount > 1 ? 's' : ''}` : ''}
+              </Text>
             </Pressable>
           ) : null}
 
@@ -209,6 +241,8 @@ const styles = StyleSheet.create({
   replyText: { color: colors.textMuted, fontSize: font.sm, flex: 1 },
   forward: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   meta: { color: colors.textFaint, fontSize: font.xs, marginTop: 2 },
+  thread: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: colors.bgAlt, borderRadius: radius.sm, paddingHorizontal: 8, paddingVertical: 5 },
+  threadTitle: { color: colors.text, fontSize: font.sm, fontWeight: '600', flexShrink: 1 },
   failed: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   reaction: {
