@@ -12,6 +12,7 @@ import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
+import { useT } from '../../i18n'
 
 export interface MessageRowProps {
   msg: any
@@ -101,6 +102,7 @@ function MessageRow({
   onForward, onReply, onOpenThread, onPinMessage, onPublishMessage, onToggleTranslation, onToggleReminder,
   onReport, onDeleteRequest,
 }: MessageRowProps) {
+  const t = useT()
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -134,7 +136,7 @@ function MessageRow({
       {isFirstUnread && (
         <div className="flex items-center gap-2 my-2 px-2 select-none">
           <div className="flex-1 h-px bg-red-400/60" />
-          <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">Nouveaux messages</span>
+          <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">{t('msg.newMessages')}</span>
           <div className="flex-1 h-px bg-red-400/60" />
         </div>
       )}
@@ -164,7 +166,7 @@ function MessageRow({
                 className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
                 onContextMenu={e => onAvatarContextMenu(e, msg)}
-                title={`Profil de ${msg.author_username}`}
+                title={t('msg.profileOf', { name: msg.author_username })}
               >
                 {msg.author_avatar
                   ? <img src={mediaUrl(msg.author_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
@@ -190,7 +192,7 @@ function MessageRow({
               {msg.author_verified && (
                 <span
                   className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-fc-accent text-white text-[10px] font-bold ml-0.5 flex-shrink-0"
-                  title="Utilisateur vérifié"
+                  title={t('msg.verified')}
                 >✓</span>
               )}
               {msg.author_is_bot && (
@@ -217,7 +219,7 @@ function MessageRow({
               {msg.pinned && (
                 <div className="flex items-center gap-1 mb-1 text-xs text-amber-400/80">
                   <Pin size={10} />
-                  <span>Épinglé</span>
+                  <span>{t('msg.pinned')}</span>
                 </div>
               )}
               {/* Indicateur de réponse */}
@@ -233,7 +235,7 @@ function MessageRow({
                   <span className="italic truncate max-w-xs">
                     {typeof msg.reply_to_content === 'string' && msg.reply_to_content
                       ? stripMarkdown(msg.reply_to_content).slice(0, 80) + (msg.reply_to_content.length > 80 ? '…' : '')
-                      : 'Message original supprimé'}
+                      : t('msg.originalDeleted')}
                   </span>
                 </button>
               )}
@@ -243,7 +245,7 @@ function MessageRow({
                 <div className="mb-1 pl-3 border-l-2 border-indigo-400/40 bg-indigo-500/5 rounded-r py-1 pr-2">
                   <div className="flex items-center gap-1.5 text-xs text-indigo-300 mb-0.5">
                     <Forward size={10} className="flex-shrink-0" />
-                    <span>Transféré de <span className="font-semibold">@{msg.forward_from_username ?? 'inconnu'}</span></span>
+                    <span>{t('msg.forwardedFrom')} <span className="font-semibold">@{msg.forward_from_username ?? t('msg.unknown')}</span></span>
                   </div>
                 </div>
               )}
@@ -271,9 +273,9 @@ function MessageRow({
                       <button
                         onClick={() => onOpenEditHistory(msg.id)}
                         className="text-xs text-fc-muted ml-1.5 hover:text-fc-accent hover:underline transition"
-                        title="Voir l'historique des modifications"
+                        title={t('msg.editHistory')}
                       >
-                        (modifié)
+                        {t('msg.edited')}
                       </button>
                     )}
                     {msg.expires_at && (
@@ -283,7 +285,7 @@ function MessageRow({
                     )}
                     {translation && (
                       <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
-                        <span className="text-xs text-fc-accent font-medium mr-1.5">Traduction :</span>
+                        <span className="text-xs text-fc-accent font-medium mr-1.5">{t('msg.translation')}</span>
                         {translation}
                         <button
                           onClick={() => onToggleTranslation(msg.id)}
@@ -414,7 +416,7 @@ function MessageRow({
                           ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
                           ${isSuper ? 'super-reaction' : ''}
                           ${isPopping ? 'animate-bounce' : ''}`}
-                        title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi${isSuper ? ' (super réaction)' : ''}`}
+                        title={t(r.count === 1 ? 'msg.reacted.one' : 'msg.reacted.other', { n: r.count }) + (isSuper ? t('msg.superSuffix') : '')}
                       >
                         {/* Super : la clé suit le compteur, l'animation se rejoue à chaque nouvelle super réaction (et au survol/toucher via le CSS). */}
                         <span key={isSuper ? r.count : undefined} className={isSuper ? 'super-reaction-emoji' : undefined}>
@@ -431,7 +433,7 @@ function MessageRow({
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleReactionPicker(msg.id) }}
                       className="flex items-center justify-center w-7 h-[28px] md:h-[22px] rounded-full text-xs border bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent hover:text-white transition-all duration-150"
-                      title="Ajouter une réaction"
+                      title={t('msg.addReaction')}
                     >
                       +
                     </button>
@@ -466,8 +468,8 @@ function MessageRow({
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleEmojiPicker(msg.id) }}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                title="Réagir"
-                aria-label="Ajouter une réaction"
+                title={t('msg.react')}
+                aria-label={t('msg.addReaction')}
                 aria-expanded={showEmojiPicker}
               >
                 <SmilePlus size={14} />
@@ -490,12 +492,12 @@ function MessageRow({
                   </div>
                   {onAddSuperReaction && (
                     <div className="flex gap-1 items-center border-t border-fc-hover mt-1 pt-1">
-                      <Sparkles size={14} className="text-fuchsia-400 mx-1 flex-shrink-0" aria-label="Super réaction" />
+                      <Sparkles size={14} className="text-fuchsia-400 mx-1 flex-shrink-0" aria-label={t('msg.superReaction')} />
                       {quickEmojis.map(emoji => (
                         <button
                           key={emoji}
                           onClick={() => onAddSuperReaction(msg.id, emoji)}
-                          title="Super réaction"
+                          title={t('msg.superReaction')}
                           className="super-reaction text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
                         >
                           <span className="super-reaction-emoji">{emoji}</span>
@@ -510,8 +512,8 @@ function MessageRow({
             <button
               onClick={() => onSaveMessage(msg.id)}
               className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-              title="Sauvegarder"
-              aria-label="Sauvegarder le message"
+              title={t('msg.save')}
+              aria-label={t('msg.saveLabel')}
             >
               <Bookmark size={14} />
             </button>
@@ -519,8 +521,8 @@ function MessageRow({
             <button
               onClick={() => onCopyMarkdown(msg.content ?? '')}
               className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-              title="Copier en Markdown"
-              aria-label="Copier le message en Markdown"
+              title={t('msg.copyMarkdown')}
+              aria-label={t('msg.copyMarkdownLabel')}
             >
               <Copy size={14} />
             </button>
@@ -528,8 +530,8 @@ function MessageRow({
             <button
               onClick={() => onCopyLink(msg.id)}
               className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-              title="Copier le lien"
-              aria-label="Copier le lien du message"
+              title={t('msg.copyLink')}
+              aria-label={t('msg.copyLinkLabel')}
             >
               <Link size={14} />
             </button>
@@ -537,8 +539,8 @@ function MessageRow({
             <button
               onClick={() => onForward(msg.id)}
               className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-              title="Transférer"
-              aria-label="Transférer le message"
+              title={t('msg.forward')}
+              aria-label={t('msg.forwardLabel')}
             >
               <Forward size={14} />
             </button>
@@ -547,8 +549,8 @@ function MessageRow({
               <button
                 onClick={() => onReply(msg)}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                title="Répondre"
-                aria-label="Répondre au message"
+                title={t('msg.reply')}
+                aria-label={t('msg.replyLabel')}
               >
                 <CornerUpLeft size={14} />
               </button>
@@ -558,8 +560,8 @@ function MessageRow({
               <button
                 onClick={() => onOpenThread(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                title="Ouvrir thread"
-                aria-label="Ouvrir le fil de discussion"
+                title={t('msg.openThread')}
+                aria-label={t('msg.openThreadLabel')}
               >
                 <MessagesSquare size={14} />
               </button>
@@ -569,8 +571,8 @@ function MessageRow({
               <button
                 onClick={() => onPinMessage(msg.id, !!msg.pinned)}
                 className={`p-1.5 rounded hover:bg-fc-hover transition ${msg.pinned ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                title={msg.pinned ? 'Désépingler' : 'Épingler'}
-                aria-label={msg.pinned ? 'Désépingler le message' : 'Épingler le message'}
+                title={msg.pinned ? t('msg.unpin') : t('msg.pin')}
+                aria-label={msg.pinned ? t('msg.unpinLabel') : t('msg.pinLabel')}
                 aria-pressed={msg.pinned}
               >
                 <Pin size={14} />
@@ -581,8 +583,8 @@ function MessageRow({
               <button
                 onClick={() => onPublishMessage(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                title="Publier vers les serveurs abonnés"
-                aria-label="Publier le message vers les serveurs abonnés"
+                title={t('msg.publish')}
+                aria-label={t('msg.publishLabel')}
               >
                 <Megaphone size={14} />
               </button>
@@ -592,8 +594,8 @@ function MessageRow({
               <button
                 onClick={() => onStartEdit(msg.id, msg.content ?? '')}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-                title="Modifier"
-                aria-label="Modifier le message"
+                title={t('msg.edit')}
+                aria-label={t('msg.editLabel')}
               >
                 <Pencil size={14} />
               </button>
@@ -602,8 +604,8 @@ function MessageRow({
             <button
               onClick={() => onToggleTranslation(msg.id)}
               className={`p-1.5 rounded hover:bg-fc-hover transition ${translation ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title={translation ? 'Masquer la traduction' : 'Traduire en français'}
-              aria-label={translation ? 'Masquer la traduction' : 'Traduire le message en français'}
+              title={translation ? t('msg.hideTranslation') : t('msg.translate')}
+              aria-label={translation ? t('msg.hideTranslation') : t('msg.translateLabel')}
               aria-pressed={!!translation}
               disabled={isTranslating}
             >
@@ -614,7 +616,7 @@ function MessageRow({
               <button
                 onClick={() => onToggleReminder(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-                title="Me rappeler"
+                title={t('msg.remindMe')}
               >
                 <Bell size={14} />
               </button>
@@ -637,8 +639,8 @@ function MessageRow({
               <button
                 onClick={() => onReport(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
-                title="Signaler ce message"
-                aria-label="Signaler ce message"
+                title={t('msg.report')}
+                aria-label={t('msg.report')}
               >
                 <Flag size={14} />
               </button>
@@ -647,8 +649,8 @@ function MessageRow({
             <button
               onClick={() => onDeleteRequest(msg.id)}
               className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
-              title="Supprimer"
-              aria-label="Supprimer le message"
+              title={t('msg.delete')}
+              aria-label={t('msg.deleteLabel')}
             >
               <Trash2 size={14} />
             </button>
@@ -664,6 +666,7 @@ function MessageRow({
 function EditingArea({
   initialContent, onConfirm, onCancel,
 }: { initialContent: string; onConfirm: (content: string) => void; onCancel: () => void }) {
+  const t = useT()
   const editRef = useRef<HTMLTextAreaElement>(null)
   const [content, setContent] = useState(initialContent)
 
@@ -695,13 +698,13 @@ function EditingArea({
         className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent resize-none"
       />
       <div className="flex items-center gap-2 mt-1 text-xs text-fc-muted">
-        <span>Entrée pour confirmer · Échap pour annuler</span>
+        <span>{t('msg.editHint')}</span>
         <div className="ml-auto flex gap-1">
           <button onClick={() => { if (content.trim()) onConfirm(content.trim()); else onCancel() }} className="flex items-center gap-1 px-2 py-1 bg-fc-green hover:bg-green-500 text-white rounded transition">
-            <Check size={12} /> Enregistrer
+            <Check size={12} /> {t('msg.saveEdit')}
           </button>
           <button onClick={onCancel} className="flex items-center gap-1 px-2 py-1 bg-fc-hover hover:bg-fc-hover/80 text-fc-muted rounded transition">
-            <X size={12} /> Annuler
+            <X size={12} /> {t('msg.cancel')}
           </button>
         </div>
       </div>

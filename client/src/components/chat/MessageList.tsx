@@ -19,6 +19,7 @@ import { stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import { useRoleDecor } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
+import { t as tr, useT } from '../../i18n'
 import MessageRow from './MessageRow'
 import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
 
@@ -74,6 +75,7 @@ export default function MessageList({
   loadError = false,
   onRetryLoad,
 }: Props) {
+  const t = useT()
   const { user } = useAuth()
   const nav = useNavigate()
   const avatarCtxMenu = useContextMenu()
@@ -456,7 +458,7 @@ export default function MessageList({
       serverId
         ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
         : api.put(`/dms/${channelId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
-    onError: () => toast.error('Impossible de retirer la réaction'),
+    onError: () => toast.error(tr('msg.removeReactionFailed')),
   })
 
   // Lit l'état frais via useChat.getState() plutôt que de fermer sur `messages` —
@@ -481,12 +483,12 @@ export default function MessageList({
     const mine = msg?.reactions?.some(r => r.emoji === emoji && r.is_super && r.me)
     const url = `/servers/${serverId}/channels/${channelId}/messages/${msgId}/super-reactions/${encodeURIComponent(emoji)}`
     if (mine) {
-      api.delete(url).catch(() => toast.error('Impossible de retirer la super réaction'))
+      api.delete(url).catch(() => toast.error(tr('msg.removeSuperFailed')))
       return
     }
     api.put(url)
-      .then(r => toast.success(`Super réaction ! Encore ${r.data?.remaining ?? 0} aujourd'hui`))
-      .catch((e: any) => toast.error(e.response?.data?.error ?? 'Impossible de poser la super réaction'))
+      .then(r => toast.success(tr('msg.superLeft', { n: r.data?.remaining ?? 0 })))
+      .catch((e: any) => toast.error(e.response?.data?.error ?? tr('msg.superFailed')))
   }, [serverId, channelId])
 
   const startLongPress = useCallback((e: React.TouchEvent, msg: any) => {
@@ -553,8 +555,8 @@ export default function MessageList({
     // server_id: null en DM — le backend attend Option<Uuid>, "" échoue en 422
     mutationFn: ({ message_id, channel_id, server_id }: { message_id: string; channel_id: string; server_id: string | null }) =>
       api.post('/saved', { message_id, channel_id, server_id }),
-    onSuccess: () => toast.success('Message sauvegardé'),
-    onError: () => toast.error('Erreur lors de la sauvegarde'),
+    onSuccess: () => toast.success(tr('msg.saved')),
+    onError: () => toast.error(tr('msg.saveFailed')),
   })
 
   const reactionHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -611,7 +613,7 @@ export default function MessageList({
       const { data } = await api.post(`/messages/${messageId}/translate`, { target_lang: 'fr' })
       setTranslations(prev => ({ ...prev, [messageId]: data.translated }))
     } catch {
-      toast.error('Traduction indisponible')
+      toast.error(tr('msg.translateUnavailable'))
     } finally {
       setTranslatingId(null)
     }
@@ -634,16 +636,16 @@ export default function MessageList({
     e.preventDefault()
     e.stopPropagation()
     avatarCtxMenu.open(e, [
-      { label: 'Voir le profil', onClick: () => nav(`/users/${msg.author_id}`) },
-      { label: 'Envoyer un message', onClick: () => {
+      { label: tr('dms.viewProfile'), onClick: () => nav(`/users/${msg.author_id}`) },
+      { label: tr('msg.sendMessage'), onClick: () => {
         // Même bug que MemberList.tsx (déjà corrigé) : /dms n'existe pas en POST
         // (seul GET /dms existe), la vraie route est /dms/:user_id sans body,
         // et la réponse est { dm_id } pas { id } -- catch muet en plus.
         api.post(`/dms/${msg.author_id}`)
           .then(r => nav(`/dms/${r.data.dm_id}`))
-          .catch(() => toast.error("Impossible d'ouvrir la conversation"))
+          .catch(() => toast.error(tr('msg.openDmFailed')))
       }, disabled: msg.author_id === user?.id },
-      { label: `Mentionner @${msg.author_username}`, onClick: () => {
+      { label: tr('msg.mention', { name: msg.author_username }), onClick: () => {
         const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
         if (el) {
           const pos = el.selectionStart ?? el.value.length
@@ -659,7 +661,7 @@ export default function MessageList({
         }
       }},
       { separator: true },
-      { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(msg.author_id) },
+      { label: tr('servers.copyId'), onClick: () => navigator.clipboard.writeText(msg.author_id) },
     ])
   }, [nav, user?.id])
 
@@ -692,11 +694,11 @@ export default function MessageList({
   [saveMessage, channelId, serverId])
   const handleCopyMarkdown = useCallback((content: string) => {
     navigator.clipboard.writeText(content)
-    toast.success('Copié en Markdown !')
+    toast.success(tr('msg.copiedMarkdown'))
   }, [])
   const handleCopyLink = useCallback((msgId: string) => {
     navigator.clipboard.writeText(messageLink(msgId))
-    toast.success('Lien copié !')
+    toast.success(tr('msg.linkCopiedBang'))
   }, [messageLink])
   const handleForward = useCallback((msgId: string) => setForwardingMsg({ id: msgId }), [])
   const handleReport = useCallback((msgId: string) => setReportingMsg(msgId), [])
@@ -1064,8 +1066,8 @@ export default function MessageList({
                 key={emoji}
                 onClick={() => { toggleReaction(contextMenu.msg.id, emoji); setContextMenu(null) }}
                 className="text-xl hover:scale-125 transition-transform active:scale-110 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-fc-hover"
-                title={`Réagir ${emoji}`}
-                aria-label={`Réagir avec ${emoji}`}
+                title={t('msg.reactWith', { emoji })}
+                aria-label={t('msg.reactWithLabel', { emoji })}
               >
                 {emoji}
               </button>
@@ -1073,8 +1075,8 @@ export default function MessageList({
             <button
               onClick={() => { setFullEmojiFor(contextMenu.msg.id); setContextMenu(null) }}
               className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg hover:bg-fc-hover text-fc-muted hover:text-white transition"
-              title="Plus de réactions"
-              aria-label="Choisir une autre réaction"
+              title={t('msg.moreReactions')}
+              aria-label={t('msg.otherReaction')}
             >
               <SmilePlus size={20} aria-hidden />
             </button>
@@ -1084,18 +1086,18 @@ export default function MessageList({
               onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null) }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
-              <Copy size={14} /> Copier le texte
+              <Copy size={14} /> {t('msg.copyText')}
             </button>
           )}
           <button
             onClick={() => {
               navigator.clipboard.writeText(messageLink(contextMenu.msg.id))
-              toast.success('Lien copié')
+              toast.success(t('msg.linkCopied'))
               setContextMenu(null)
             }}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
-            <Link size={14} /> Copier le lien
+            <Link size={14} /> {t('msg.copyLink')}
           </button>
           {typeof navigator.share === 'function' && (
             <button
@@ -1109,14 +1111,14 @@ export default function MessageList({
               }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
-              <Share2 size={14} /> Partager
+              <Share2 size={14} /> {t('msg.share')}
             </button>
           )}
           <button
             onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-muted text-xs"
           >
-            <Copy size={12} /> Copier l'ID du message
+            <Copy size={12} /> {t('msg.copyId')}
           </button>
 
           <div className="border-t border-fc-hover my-1" />
@@ -1125,7 +1127,7 @@ export default function MessageList({
             onClick={() => { onReply?.(contextMenu.msg); setContextMenu(null) }}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
-            <CornerUpLeft size={14} /> Répondre
+            <CornerUpLeft size={14} /> {t('msg.reply')}
           </button>
 
           {onOpenThread && (
@@ -1133,7 +1135,7 @@ export default function MessageList({
               onClick={() => { onOpenThread(contextMenu.msg.id); setContextMenu(null) }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
-              <MessagesSquare size={14} /> Créer un fil
+              <MessagesSquare size={14} /> {t('msg.createThread')}
             </button>
           )}
 
@@ -1141,7 +1143,7 @@ export default function MessageList({
             onClick={() => { setForwardingMsg({ id: contextMenu.msg.id }); setContextMenu(null) }}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
           >
-            <Forward size={14} className="rotate-180" /> Transférer
+            <Forward size={14} className="rotate-180" /> {t('msg.forward')}
           </button>
 
           {onPinMessage && (
@@ -1149,7 +1151,7 @@ export default function MessageList({
               onClick={() => { onPinMessage(contextMenu.msg.id, !!contextMenu.msg.pinned); setContextMenu(null) }}
               className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
             >
-              <Pin size={14} /> {contextMenu.msg.pinned ? 'Désépingler' : 'Épingler'}
+              <Pin size={14} /> {contextMenu.msg.pinned ? t('msg.unpin') : t('msg.pin')}
             </button>
           )}
 
@@ -1161,14 +1163,14 @@ export default function MessageList({
                   onClick={() => { startEdit(contextMenu.msg.id); setContextMenu(null) }}
                   className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-text"
                 >
-                  <Pencil size={14} /> Modifier
+                  <Pencil size={14} /> {t('msg.edit')}
                 </button>
               )}
               <button
                 onClick={() => { setDeleteConfirmId(contextMenu.msg.id); setContextMenu(null) }}
                 className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-red"
               >
-                <Trash2 size={14} /> Supprimer
+                <Trash2 size={14} /> {t('msg.delete')}
               </button>
             </>
           )}
@@ -1180,7 +1182,7 @@ export default function MessageList({
                 onClick={() => { setReportingMsg(contextMenu.msg.id); setContextMenu(null) }}
                 className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-red"
               >
-                <Flag size={14} /> Signaler
+                <Flag size={14} /> {t('msg.reportShort')}
               </button>
             </>
           )}
@@ -1191,23 +1193,23 @@ export default function MessageList({
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] px-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-fc-channel rounded-xl shadow-2xl w-full max-w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-fc-hover">
-              <h3 className="text-white font-semibold">Supprimer le message</h3>
+              <h3 className="text-white font-semibold">{t('msg.deleteTitle')}</h3>
             </div>
             <div className="px-5 py-4">
-              <p className="text-fc-text text-sm">Êtes-vous sûr de vouloir supprimer ce message ? Cette action est irréversible.</p>
+              <p className="text-fc-text text-sm">{t('msg.deleteConfirm')}</p>
             </div>
             <div className="px-5 pb-4 flex justify-end gap-3">
               <button
                 onClick={() => setDeleteConfirmId(null)}
                 className="px-4 py-2 rounded text-sm text-fc-text hover:text-white hover:bg-fc-hover transition"
               >
-                Annuler
+                {t('msg.cancel')}
               </button>
               <button
                 onClick={() => { onDeleteMessage(deleteConfirmId); setDeleteConfirmId(null) }}
                 className="px-4 py-2 rounded text-sm font-medium bg-fc-red hover:bg-red-500 text-white transition"
               >
-                Supprimer
+                {t('msg.delete')}
               </button>
             </div>
           </div>
