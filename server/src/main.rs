@@ -846,6 +846,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/theme", get(handlers::user_settings::get_theme).put(handlers::user_settings::put_theme))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
+        .route("/user/keybindings", delete(handlers::user_settings::reset_all_keybindings))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))
         // Email preferences
         .route("/user/email-prefs", get(handlers::user_settings::get_email_prefs))
