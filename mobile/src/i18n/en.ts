@@ -1,7 +1,20 @@
 // Traduction anglaise. Une clé absente ici s'affiche en français (repli).
 import type { Key } from './fr'
+import * as settings from './parts/settings'
+import * as server from './parts/server'
+import * as serverSettings from './parts/serverSettings'
+import * as social from './parts/social'
+import * as panels from './parts/panels'
+import * as stores from './parts/stores'
 
 export const en: Partial<Record<Key, string>> = {
+  ...settings.en,
+  ...server.en,
+  ...serverSettings.en,
+  ...social.en,
+  ...panels.en,
+  ...stores.en,
+
   // --- Commun ---
   'common.cancel': 'Cancel',
   'common.confirm': 'Confirm',

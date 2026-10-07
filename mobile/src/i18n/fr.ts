@@ -1,6 +1,21 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
+// Clés par lot d'écrans dans parts/ (fichiers < 800 lignes).
+import * as settings from './parts/settings'
+import * as server from './parts/server'
+import * as serverSettings from './parts/serverSettings'
+import * as social from './parts/social'
+import * as panels from './parts/panels'
+import * as stores from './parts/stores'
+
 export const fr = {
+  ...settings.fr,
+  ...server.fr,
+  ...serverSettings.fr,
+  ...social.fr,
+  ...panels.fr,
+  ...stores.fr,
+
   // --- Commun ---
   'common.cancel': 'Annuler',
   'common.confirm': 'Confirmer',
