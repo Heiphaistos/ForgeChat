@@ -5,6 +5,7 @@ import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import ProfileCosmetics from './ProfileCosmetics'
+import ProfileIdentity from './ProfileIdentity'
 import { useT } from '../../i18n'
 
 interface Props {
@@ -118,7 +119,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/apng"
             className="hidden"
             onChange={e => {
               const file = e.target.files?.[0]
@@ -175,6 +176,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
       >
         {saveBio.isPending ? t('common.saving') : t('settings.profile.save')}
       </button>
+
+      <ProfileIdentity user={user} updateMe={updateMe} />
 
       <ProfileCosmetics user={user} updateMe={updateMe} />
     </div>

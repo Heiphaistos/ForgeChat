@@ -1,4 +1,5 @@
 import api from '../api/client'
+import { listAccounts, otherAccountIds } from '../lib/accounts'
 
 // Abonnement Web Push du navigateur (server/src/push.rs). Le serveur ne pousse
 // que lorsque l'utilisateur n'a aucune session ouverte ; le service worker
@@ -40,21 +41,24 @@ export async function enableWebPush(): Promise<WebPushResult> {
   if ((await Notification.requestPermission()) !== 'granted') return 'denied'
   const sub = (await reg.pushManager.getSubscription())
     ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlToBytes(data.public_key) })
-  await api.post('/push/subscribe', sub.toJSON())
+  await api.post('/push/subscribe', { ...sub.toJSON(), other_accounts: otherAccountIds() })
   return 'ok'
 }
 
-export async function disableWebPush(): Promise<void> {
+/** Ce compte ne reçoit plus de notifications ici. `keepBrowser` : d'autres comptes de ce
+ *  navigateur gardent l'abonnement (plusieurs comptes). */
+export async function disableWebPush(keepBrowser = false): Promise<void> {
   const sub = await currentSubscription().catch(() => null)
   if (!sub) return
   await api.post('/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {})
-  await sub.unsubscribe().catch(() => false)
+  if (!keepBrowser) await sub.unsubscribe().catch(() => false)
 }
 
 /** Au démarrage : rattache un abonnement existant au compte connecté. */
 export async function syncWebPush(): Promise<void> {
   const sub = await currentSubscription().catch(() => null)
   if (sub && Notification.permission === 'granted') {
-    await api.post('/push/subscribe', sub.toJSON()).catch(() => {})
+    await listAccounts()
+    await api.post('/push/subscribe', { ...sub.toJSON(), other_accounts: otherAccountIds() }).catch(() => {})
   }
 }

@@ -3,13 +3,15 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useNavigate } from 'react-router-dom'
-import api, { mediaUrl } from '../../api/client'
+import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
 import UserPopup from '../UserPopup'
 import { useMemberModeration } from './MemberModeration'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
+import AnimatedImg from '../ui/AnimatedImg'
+import UserName from '../ui/UserName'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { t as tr, useT, type Key } from '../../i18n'
 
@@ -73,7 +75,7 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
         <AvatarDecoration id={m.avatar_decoration} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
-            ? <img src={mediaUrl(m.avatar)} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+            ? <AnimatedImg src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
         </AvatarDecoration>
@@ -85,7 +87,7 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
       </div>
       <div className="min-w-0">
         <div className={`text-sm font-medium truncate ${m.liveStatus === 'offline' || m.liveStatus === 'invisible' ? 'text-fc-muted' : 'text-fc-text group-hover:text-white'}`}>
-          <span style={decor?.style}>{m.nickname ?? m.username}</span>
+          <UserName userId={m.user_id} name={m.username} nickname={m.nickname} roleStyle={decor?.style} roleOverrides={decor?.overridesName} />
           {decor?.icon && <span className="ml-1"><RoleIcon icon={decor.icon} title={decor.iconTitle} /></span>}
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
@@ -241,7 +243,7 @@ export default function MemberList({ serverId, onClose }: Props) {
       onScroll={measure}
       role="complementary"
       aria-label={t('channel.members')}
-      className="absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
+      className="fc-member-list absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
     >
       {/* Header mobile avec fermeture (la liste est un overlay plein écran) */}
       <div className="lg:hidden flex items-center justify-between px-2 py-2 border-b border-fc-bg mb-2">

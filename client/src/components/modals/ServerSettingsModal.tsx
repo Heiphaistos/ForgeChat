@@ -47,6 +47,7 @@ interface Server {
   default_notification_level?: string
   banner_url?: string | null
   server_category?: string | null
+  role_color_overrides_name?: boolean
   boost_level?: number
   boost_count?: number
   raid_protection?: boolean
@@ -133,6 +134,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
   const [welcomeMessage, setWelcomeMessage] = useState(server.welcome_message ?? '')
   const [bannerUrl, setBannerUrl] = useState(server.banner ?? '')
   const [isPublic, setIsPublic] = useState(server.is_public)
+  const [roleColorWins, setRoleColorWins] = useState(server.role_color_overrides_name !== false)
   const [verificationEnabled, setVerificationEnabled] = useState(server.verification_enabled ?? false)
   const [verificationRules, setVerificationRules] = useState(server.verification_rules ?? '')
   const [showDelete, setShowDelete] = useState(false)
@@ -197,6 +199,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       vanity_url: vanityUrl.trim() || null,
       content_filter: explicitFilter,
       server_category: serverCategory || null,
+      role_color_overrides_name: roleColorWins,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
@@ -505,6 +508,18 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     className={`w-11 h-6 rounded-full transition relative ${isPublic ? 'bg-fc-green' : 'bg-fc-muted'}`}
                   >
                     <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isPublic ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 p-4 bg-fc-channel rounded-lg">
+                  <div>
+                    <div className="font-medium text-white text-sm">{t('srv.roleColorWins')}</div>
+                    <div className="text-xs text-fc-muted">{t('srv.roleColorWinsDesc')}</div>
+                  </div>
+                  <button onClick={() => setRoleColorWins(!roleColorWins)} role="switch" aria-checked={roleColorWins} aria-label={t('srv.roleColorWins')}
+                    className={`w-11 h-6 flex-shrink-0 rounded-full transition relative ${roleColorWins ? 'bg-fc-green' : 'bg-fc-muted'}`}
+                  >
+                    <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${roleColorWins ? 'left-6' : 'left-1'}`} />
                   </button>
                 </div>
 

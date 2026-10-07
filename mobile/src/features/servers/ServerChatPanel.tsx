@@ -90,7 +90,7 @@ function PanelContent({ serverId, channelId, onBack, backLabel }: { serverId: st
         </View>
         <ChannelActions serverId={serverId} channelId={channelId} name={info.name} isAnnouncement={info.isAnnouncement} />
       </View>
-      <ChannelBody serverId={serverId} channelId={channelId} name={info.name} nsfw={!!info.channel?.is_nsfw} publishable={info.publishable} />
+      <ChannelBody serverId={serverId} channelId={channelId} name={info.name} nsfw={!!info.channel?.is_nsfw} publishable={info.publishable} autoThreads={!!info.channel?.auto_threads} />
     </>
   )
 }

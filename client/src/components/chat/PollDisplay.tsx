@@ -63,6 +63,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
   const { user } = useAuth()
   const { on } = useWs()
   const [pendingOptionId, setPendingOptionId] = useState<string | null>(null)
+  const [showVoters, setShowVoters] = useState(false)
 
   useEffect(() => {
     const offVote = on('POLL_VOTE', (d: any) => {
@@ -82,6 +83,14 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
         .then(r => openPoll(channelId, r.data)),
     staleTime: 30_000,
     retry: false,
+  })
+
+  // Sondage non anonyme : qui a voté pour quoi (pseudos, jamais le texte des options côté serveur).
+  const { data: voters } = useQuery<Record<string, { id: string; username: string }[]>>({
+    queryKey: ['poll_voters', pollId, poll?.total_votes],
+    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/polls/${pollId}/voters`).then(r => r.data),
+    enabled: showVoters && !!poll && !poll.anonymous,
+    staleTime: 10_000,
   })
 
   const voteMutation = useMutation({
@@ -158,6 +167,12 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
             <span aria-live="polite" aria-atomic="true" className="text-xs text-fc-muted">
               {poll.total_votes} vote{poll.total_votes !== 1 ? 's' : ''}
             </span>
+            {poll.anonymous && (
+              <span className="text-[10px] uppercase tracking-wide bg-fc-hover text-fc-muted px-1.5 py-0.5 rounded">{tr('poll.anonymousBadge')}</span>
+            )}
+            {poll.multiple_choice && (
+              <span className="text-[10px] uppercase tracking-wide bg-fc-hover text-fc-muted px-1.5 py-0.5 rounded">{tr('poll.multiple')}</span>
+            )}
             {poll.ends_at && (
               <span className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-400' : 'text-fc-muted'}`}>
                 <Clock size={10} aria-hidden />
@@ -242,10 +257,22 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   label={`${option.text} : ${percent}% (${option.votes} vote${option.votes !== 1 ? 's' : ''})`}
                 />
               )}
+              {showVoters && voters && (
+                <p className="text-[11px] text-fc-muted px-2 break-words">
+                  {(voters[option.id] ?? []).map(v => v.username).join(', ') || tr('poll.noVoters')}
+                </p>
+              )}
             </div>
           )
         })}
       </div>
+
+      {!poll.anonymous && (hasVoted || isExpired) && poll.total_votes > 0 && (
+        <button type="button" onClick={() => setShowVoters(v => !v)} aria-expanded={showVoters}
+          className="mt-2 text-xs text-fc-accent hover:underline">
+          {tr(showVoters ? 'poll.hideVoters' : 'poll.showVoters')}
+        </button>
+      )}
 
       {/* Footer état */}
       {isExpired && (

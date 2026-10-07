@@ -5,6 +5,7 @@ import { AccessibilityInfo, Alert, Animated, Easing, Pressable, StyleSheet, Text
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
 import { SystemCard } from '@/features/community/SystemCard'
+import { UserName } from '@/components/UserName'
 import { useT } from '@/i18n'
 import { formatDay, formatTime, unreadLabel } from '@/lib/format'
 import { mentionsUser, previewUrl } from '@/lib/markdown'
@@ -234,9 +235,15 @@ export const MessageItem = memo(function MessageItem({
         <View style={{ flex: 1, minWidth: 0 }}>
           {grouped ? null : (
             <View style={styles.header}>
-              <Text style={[styles.author, decor?.color ? { color: decor.color } : null]} numberOfLines={1} onPress={() => onPressAuthor(m.authorId)}>
-                {m.authorName}
-              </Text>
+              <UserName
+                userId={m.authorIsBot ? undefined : m.authorId}
+                name={m.authorName}
+                roleColor={decor?.color}
+                serverId={serverId}
+                style={styles.author}
+                showTag
+                onPress={() => onPressAuthor(m.authorId)}
+              />
               <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />
               {m.authorIsBot ? <Text style={styles.bot}>BOT</Text> : null}
               <Text style={styles.time}>{formatTime(m.createdAt)}</Text>
@@ -286,7 +293,9 @@ export const MessageItem = memo(function MessageItem({
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>{t('msg.uploading')}</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>{t('msg.edited')}</Text> : null}
-          {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : null}
+          {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : m.expireOnRead ? (
+            <Text style={[styles.meta, { color: colors.danger }]}>{t('messaging.disappear.afterReadBadge')}</Text>
+          ) : null}
           {m.pinned ? <Text style={styles.meta}>{t('msg.pinned')}</Text> : null}
 
           {m.failed ? (

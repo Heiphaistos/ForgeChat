@@ -36,6 +36,8 @@ import { useMobile } from '../../contexts/MobileContext'
 import { useMemberModeration } from '../chat/MemberModeration'
 import { t as tr, useT } from '../../i18n'
 import { openMessages, type RawMsg } from '../../e2e/conversations'
+import AnimatedImg from '../ui/AnimatedImg'
+import UserName from '../ui/UserName'
 
 /** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
 const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
@@ -735,7 +737,7 @@ export default function ChannelSidebar() {
               <div className="relative flex-shrink-0">
                 <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
                   {dm.avatar
-                    ? <img src={mediaUrl(dm.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ? <AnimatedImg src={dm.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : dm.username.charAt(0).toUpperCase()}
                 </div>
                 {/* Indicateur de présence coloré (vert/jaune/rouge/gris) */}
@@ -743,9 +745,7 @@ export default function ChannelSidebar() {
               </div>
               <div className="min-w-0 text-left flex-1">
                 <div className="flex items-baseline justify-between gap-1.5">
-                  <span className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
-                    {dm.username}
-                  </span>
+                  <UserName userId={dm.other_user_id} name={dm.username} className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`} />
                   {dm.last_message_at && (
                     <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
                   )}
@@ -1109,7 +1109,7 @@ export default function ChannelSidebar() {
                     ? <img src={mediaUrl(p.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : p.username.charAt(0).toUpperCase()}
                 </div>
-                <span className="text-[11px] truncate flex-1">{p.username}</span>
+                <UserName userId={p.userId} name={p.username} className="text-[11px] truncate flex-1" />
                 {p.serverDeafened && <VolumeX size={9} className="text-red-500 flex-shrink-0" aria-label={t('voice.serverDeafened')} />}
                 {p.muted && <MicOff size={9} className={`${p.serverMuted ? 'text-red-500' : 'text-red-400'} flex-shrink-0`} aria-label={p.serverMuted ? t('voice.serverMuted') : t('voice.micOff')} />}
                 {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}

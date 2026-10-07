@@ -2,12 +2,13 @@ import * as ImagePicker from 'expo-image-picker'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, Pressable, ScrollView, Text } from 'react-native'
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading, T, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
+import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/pickAnimated'
 import { shownProfile } from '@/features/servers/memberProfile'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -18,7 +19,7 @@ import { useAuth } from '@/stores/auth'
 import type { Member } from '@/types/models'
 import { colors, font, spacing } from '@/theme'
 
-const BANNER_MAX_BYTES = 10 * 1024 * 1024 // member_profile::image_column
+const BANNER_MAX_BYTES = PROFILE_IMAGE_MAX_BYTES // member_profile::image_column
 
 /** « Mon profil sur ce serveur » : pseudo, avatar, bannière et bio visibles sur ce serveur seulement.
  *  Vide : profil du compte. */
@@ -81,15 +82,24 @@ function ServerProfileForm({
       Alert.alert(t('server.nickname.tooBig'), t('server.nickname.maxSize', { n: max / 1024 / 1024 }))
       return
     }
+    await upload(kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
+  }
+
+  const upload = async (kind: 'avatar' | 'banner', file: { uri: string; name: string; type: string }) => {
     setUploading(kind)
     try {
-      await serversApi.uploadServerProfileImage(serverId, kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
+      await serversApi.uploadServerProfileImage(serverId, kind, file)
       await refresh()
     } catch (e) {
       Alert.alert(t('server.nickname.uploadFailed'), errorMessage(e))
     } finally {
       setUploading(null)
     }
+  }
+
+  const pickAnimated = async (kind: 'avatar' | 'banner') => {
+    const file = await pickAnimatedImage()
+    if (file) await upload(kind, file)
   }
 
   const clear = (kind: 'avatar' | 'banner') =>
@@ -117,6 +127,10 @@ function ServerProfileForm({
         disabled={uploading !== null}
         onPress={() => void pick('banner')}
       />
+      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        <Button title={t('settings.animated.avatar')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('avatar')} style={{ flex: 1 }} />
+        <Button title={t('settings.animated.banner')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('banner')} style={{ flex: 1 }} />
+      </View>
       {member?.server_banner ? <Button title={t('server.nickname.resetBanner')} variant="ghost" onPress={() => void clear('banner')} /> : null}
       <TextField label={t('server.nickname.nick')} value={nick} onChangeText={setNick} maxLength={32} placeholder={me.username} autoCorrect={false} />
       <TextField label={t('server.nickname.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline placeholder={me.bio || t('server.nickname.bioPlaceholder')} error={error} />

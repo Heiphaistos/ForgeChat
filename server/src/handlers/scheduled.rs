@@ -54,12 +54,7 @@ pub async fn create_scheduled(
     if body.content.chars().count() > 4000 {
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
-    if body.send_at <= Utc::now() {
-        return Err(AppError::BadRequest("La date doit être dans le futur".into()));
-    }
-    if body.send_at > Utc::now() + chrono::Duration::days(30) {
-        return Err(AppError::BadRequest("Planification max 30 jours dans le futur".into()));
-    }
+    check_send_at(body.send_at)?;
     // Plafond : sans lui, 5 000 messages programmés pour la même minute partaient
     // d'un bloc, en contournant l'anti-spam (5 messages / 3 s) et le slowmode.
     let pending: i64 = sqlx::query_scalar(
@@ -127,6 +122,128 @@ pub async fn list_scheduled(
     .await?;
 
     Ok(Json(msgs))
+}
+
+/// GET /api/scheduled : tous mes messages « À envoyer » (contenu chiffré), avec salon et serveur.
+pub async fn list_all_scheduled(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT sm.id, sm.channel_id, sm.content, sm.send_at, sm.created_at, sm.enc, sm.client_msg_id,
+                c.name AS channel_name, c.server_id, s.name AS server_name
+         FROM scheduled_messages sm
+         JOIN channels c ON c.id = sm.channel_id
+         JOIN servers s ON s.id = c.server_id
+         WHERE sm.user_id=$1 AND sm.sent=FALSE
+         ORDER BY sm.send_at ASC LIMIT 100"
+    )
+    .bind(claims.sub)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "channel_id": r.get::<Uuid, _>("channel_id"),
+        "user_id": claims.sub,
+        "content": r.get::<Option<String>, _>("content"),
+        "send_at": r.get::<DateTime<Utc>, _>("send_at"),
+        "created_at": r.get::<DateTime<Utc>, _>("created_at"),
+        "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+        "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+        "channel_name": r.get::<String, _>("channel_name"),
+        "server_id": r.get::<Option<Uuid>, _>("server_id"),
+        "server_name": r.get::<String, _>("server_name"),
+    })).collect()))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateScheduledRequest {
+    pub send_at: Option<DateTime<Utc>>,
+    /// Nouveau contenu chiffré (même format qu'à la création).
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
+}
+
+/// Bornes communes de la date d'envoi (création et modification).
+fn check_send_at(at: DateTime<Utc>) -> Result<()> {
+    if at <= Utc::now() {
+        return Err(AppError::BadRequest("La date doit être dans le futur".into()));
+    }
+    if at > Utc::now() + chrono::Duration::days(30) {
+        return Err(AppError::BadRequest("Planification max 30 jours dans le futur".into()));
+    }
+    Ok(())
+}
+
+/// Mon message programmé encore en attente : son salon (sinon 404, jamais celui d'un autre).
+async fn my_pending(state: &AppState, id: Uuid, user: Uuid) -> Result<(Uuid, Uuid)> {
+    let row: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT sm.channel_id, c.server_id FROM scheduled_messages sm JOIN channels c ON c.id = sm.channel_id
+         WHERE sm.id=$1 AND sm.user_id=$2 AND sm.sent=FALSE"
+    )
+    .bind(id)
+    .bind(user)
+    .fetch_optional(&state.db)
+    .await?;
+    match row {
+        Some((channel_id, Some(server_id))) => Ok((server_id, channel_id)),
+        _ => Err(AppError::NotFound("Message programmé introuvable".into())),
+    }
+}
+
+/// PATCH /api/scheduled/:id { send_at?, enc?, client_msg_id? } : modifier la date ou le texte (rechiffré).
+pub async fn update_scheduled(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(scheduled_id): Path<Uuid>,
+    Json(body): Json<UpdateScheduledRequest>,
+) -> Result<Json<ScheduledMessage>> {
+    let (server_id, channel_id) = my_pending(&state, scheduled_id, claims.sub).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    if let Some(at) = body.send_at {
+        check_send_at(at)?;
+    }
+    let enc = match body.enc.as_ref().filter(|v| !v.is_null()) {
+        Some(e) => crate::handlers::e2e_channel::check_content(
+            &state.db, channel_id, false, Some(e), body.client_msg_id, false,
+        ).await?,
+        None => None,
+    };
+    let msg = sqlx::query_as::<_, ScheduledMessage>(
+        "UPDATE scheduled_messages SET
+            send_at = COALESCE($3, send_at),
+            enc = COALESCE($4, enc),
+            client_msg_id = CASE WHEN $4 IS NULL THEN client_msg_id ELSE $5 END,
+            content = CASE WHEN $4 IS NULL THEN content ELSE NULL END
+         WHERE id=$1 AND user_id=$2 AND sent=FALSE RETURNING *"
+    )
+    .bind(scheduled_id)
+    .bind(claims.sub)
+    .bind(body.send_at)
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Message programmé introuvable".into()))?;
+    Ok(Json(msg))
+}
+
+/// POST /api/scheduled/:id/send : envoyer maintenant (échéance ramenée à maintenant, envoi immédiat).
+pub async fn send_scheduled_now(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(scheduled_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let (server_id, channel_id) = my_pending(&state, scheduled_id, claims.sub).await?;
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    sqlx::query("UPDATE scheduled_messages SET send_at = NOW() WHERE id=$1 AND user_id=$2 AND sent=FALSE")
+        .bind(scheduled_id)
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
+    dispatch_scheduled_messages(state.clone()).await;
+    Ok(Json(serde_json::json!({ "ok": true })))
 }
 
 pub async fn delete_scheduled(
@@ -201,29 +318,42 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
             continue;
         }
 
-        // Insérer dans messages + marquer envoyé dans une transaction atomique
+        // Messages éphémères du salon : appliqués à l'heure de l'envoi.
+        let expires_at = crate::handlers::disappearing::setting(&state.db, crate::handlers::e2e_conv::Conv::Channel(channel_id))
+            .await
+            .ok()
+            .and_then(|ttl| crate::handlers::disappearing::expiry(ttl, Utc::now()).0);
+
+        // Insérer dans messages + marquer envoyé dans une transaction atomique. Le message est
+        // d'abord réservé (`sent` FALSE → TRUE) : « Envoyer maintenant » et la tâche de fond
+        // peuvent tourner en même temps, un seul des deux l'envoie.
         let insert = async {
             let mut tx = state.db.begin().await?;
+            let claimed = sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1 AND sent=FALSE")
+                .bind(sched_id)
+                .execute(&mut *tx)
+                .await?;
+            if claimed.rows_affected() == 0 {
+                return Ok(None);
+            }
             let msg_row = sqlx::query(
-                "INSERT INTO messages (channel_id, user_id, content, enc, client_msg_id) VALUES ($1, $2, $3, $4, $5) RETURNING *"
+                "INSERT INTO messages (channel_id, user_id, content, enc, client_msg_id, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
             )
             .bind(channel_id)
             .bind(user_id)
             .bind(&content)
             .bind(&enc)
             .bind(cmid)
+            .bind(expires_at)
             .fetch_one(&mut *tx)
             .await?;
-            sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")
-                .bind(sched_id)
-                .execute(&mut *tx)
-                .await?;
             tx.commit().await?;
-            Ok::<_, sqlx::Error>(msg_row)
+            Ok::<_, sqlx::Error>(Some(msg_row))
         }.await;
 
         match insert {
-            Ok(msg_row) => {
+            Ok(None) => {}
+            Ok(Some(msg_row)) => {
                 let msg_id: Uuid = msg_row.get("id");
 
                 // Mettre à jour last_message_id du canal
@@ -257,7 +387,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     author_verified: row.try_get("is_verified").unwrap_or(false),
                     attachments: vec![],
                     reactions: vec![],
-                    expires_at: None,
+                    expires_at,
                     poll_id: None,
                     e2e: crate::models::message::MsgE2e::from_row(&msg_row),
                 };

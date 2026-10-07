@@ -1,3 +1,4 @@
+import { router } from 'expo-router'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -44,18 +45,20 @@ export function PollCreator({ visible, onClose, serverId, channelId }: { visible
   const [options, setOptions] = useState(['', ''])
   const [multiple, setMultiple] = useState(false)
   const [hours, setHours] = useState<number | null>(null)
+  const [anonymous, setAnonymous] = useState(false)
   const t = useT()
   const create = useMutation({
     mutationFn: async () => {
       const body = pollBody(question, options, multiple, hours)
       if (typeof body === 'string') throw new Error(body)
-      await pollsApi.create(serverId, channelId, body)
+      await pollsApi.create(serverId, channelId, { ...body, anonymous })
     },
     onSuccess: () => {
       setQuestion('')
       setOptions(['', ''])
       setMultiple(false)
       setHours(null)
+      setAnonymous(false)
       onClose()
     },
     onError: (e) => Alert.alert(t('panel.poll.failed'), e2eErrorText(e) ?? errorMessage(e)),
@@ -91,6 +94,7 @@ export function PollCreator({ visible, onClose, serverId, channelId }: { visible
       ) : null}
       <Section>
         <SwitchRow icon="checkbox-outline" title={t('panel.poll.multiple')} value={multiple} onValueChange={setMultiple} />
+        <SwitchRow icon="eye-off-outline" title={t('messaging.poll.anonymous')} value={anonymous} onValueChange={setAnonymous} />
       </Section>
       <Text style={styles.label}>{t('panel.poll.duration')}</Text>
       <View style={styles.chips}>
@@ -195,7 +199,10 @@ export function ScheduleSheet({
       ) : (
         <Text style={styles.hint}>{t('panel.schedule.hint')}</Text>
       )}
-      <Text style={styles.label}>{t('panel.schedule.pending')}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={styles.label}>{t('panel.schedule.pending')}</Text>
+        <Button title={t('messaging.sched.seeAll')} variant="ghost" onPress={() => { onClose(); router.push('/scheduled') }} />
+      </View>
       {list.isLoading ? (
         <Text style={styles.hint}>{t('panel.schedule.loading')}</Text>
       ) : list.error ? (

@@ -1,4 +1,4 @@
-//! Tickets de support. Avec les tickets natifs activés (088), ouvrir un ticket crée
+//! Tickets de support. Avec les tickets natifs activés (092), ouvrir un ticket crée
 //! un SALON PRIVÉ (le membre + les rôles d'équipe) : la conversation y est chiffrée
 //! de bout en bout comme dans tout salon, la transcription est l'historique chiffré
 //! du salon (exportée et déchiffrée par l'appli). Le serveur ne garde aucun texte

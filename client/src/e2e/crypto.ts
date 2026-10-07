@@ -250,6 +250,34 @@ export async function decryptMessage(
   return body
 }
 
+// ─── Brouillons synchronisés (§14) ───────────────────────────────────────────
+export const draftInfo = (userId: string) => `forgechat draft v1|${userId}`
+export const draftAad = (userId: string, convId: string) => `draft v1|${userId}|${convId}`
+/** Brouillon chiffré rangé par le serveur (blob opaque). */
+export interface DraftBlob { v: 1; iv: string; ct: string }
+
+/** Clé des brouillons : HKDF(ECDH(ma clé privée, ma clé publique)) ; seul le détenteur de la clé de compte la recalcule. */
+export async function draftKey(priv: CryptoKey, pub: Uint8Array, userId: string): Promise<Uint8Array> {
+  return hkdf(await ecdh(priv, pub), new Uint8Array(0), draftInfo(userId))
+}
+
+/** Chiffre le texte d'un brouillon, lié à son auteur et à sa conversation (AAD). */
+export async function sealDraft(
+  key: Uint8Array, userId: string, convId: string, text: string, iv: Uint8Array = randomBytes(IV_BYTES),
+): Promise<DraftBlob> {
+  const ct = await aesGcmEncrypt(key, iv, utf8(JSON.stringify({ t: text })), draftAad(userId, convId))
+  return { v: 1, iv: b64uEncode(iv), ct: b64uEncode(ct) }
+}
+
+/** Texte d'un brouillon ; lève une erreur s'il a été altéré ou déplacé vers une autre conversation. */
+export async function openDraft(key: Uint8Array, userId: string, convId: string, b: DraftBlob): Promise<string> {
+  if (b.v !== 1) throw new Error('version inconnue')
+  const pt = await aesGcmDecrypt(key, b64uDecode(b.iv), b64uDecode(b.ct), draftAad(userId, convId))
+  const body = JSON.parse(new TextDecoder().decode(pt)) as { t?: unknown }
+  if (typeof body?.t !== 'string') throw new Error('contenu invalide')
+  return body.t
+}
+
 // ─── Médias : vocal, appels, caméra, partage d'écran (§5) ────────────────────
 /** Taille de l'anneau de clés de LiveKit : index de clé = époque modulo cette taille. */
 export const MEDIA_KEYRING = 16

@@ -5,6 +5,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { serversApi } from '@/api/servers'
 import { userRoute } from '@/features/servers/memberProfile'
 import { Avatar } from '@/components/Avatar'
+import { UserName } from '@/components/UserName'
 import { ErrorState, Loading } from '@/components/ui'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -67,9 +68,16 @@ export default function MembersScreen() {
             <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-                <Text style={[styles.name, { flexShrink: 1 }, decorOf(item.user_id)?.color ? { color: decorOf(item.user_id)?.color ?? undefined } : null]} numberOfLines={1}>
-                  {item.nickname || item.username} {item.is_owner ? '👑' : ''}
-                </Text>
+                <UserName
+                  userId={item.user_id}
+                  name={item.username}
+                  nickname={item.nickname}
+                  roleColor={decorOf(item.user_id)?.color}
+                  serverId={ids.serverId}
+                  style={[styles.name, { flexShrink: 1 }]}
+                  showTag
+                />
+                {item.is_owner ? <Text>👑</Text> : null}
                 <RoleIcon icon={decorOf(item.user_id)?.icon} title={decorOf(item.user_id)?.iconTitle} />
               </View>
               {item.nickname ? <Text style={styles.sub}>{item.username}</Text> : null}

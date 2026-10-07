@@ -8,6 +8,8 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as community from './parts/community'
+import * as messaging from './parts/messaging'
+import * as comfort from './parts/comfort'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -18,6 +20,8 @@ export const en: Partial<Record<Key, string>> = {
   ...stores.en,
   ...e2e.en,
   ...community.en,
+  ...messaging.en,
+  ...comfort.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
@@ -37,11 +41,21 @@ export const en: Partial<Record<Key, string>> = {
   'appearance.notSyncedBody': 'Kept on this device only.\n{error}',
   'appearance.themeSaved': 'Theme saved',
   'appearance.reopenForTheme': 'Close and reopen the app to apply the theme.',
-  'appearance.restartAndroid': 'Restart the app to apply the colors and text size.',
-  'appearance.restartIos': 'Close and reopen the app to apply the colors and text size.',
+  'appearance.restartAndroid': 'Restart the app to apply the colors, density and text size.',
+  'appearance.restartIos': 'Close and reopen the app to apply the colors, density and text size.',
   'appearance.restartNow': 'Restart now',
   'appearance.theme': 'Theme',
-  'appearance.themeFooter': 'Same themes as on the web. The theme is specific to this device.',
+  'appearance.themeFooter': 'Same themes as on the web and desktop, synced with your account.',
+  'appearance.themeBase': 'Theme',
+  'appearance.themeGradient': 'Gradients',
+  'appearance.themeClassic': 'Classics',
+  'appearance.themeCustom': 'My themes',
+  'appearance.customFooter': 'Create, edit, import or export your themes in Settings → Appearance on the web or desktop: they show up here.',
+  'appearance.density': 'Density',
+  'appearance.densityFooter': 'Spacing across the app, specific to this device.',
+  'appearance.densityCompact': 'Compact',
+  'appearance.densityNormal': 'Normal',
+  'appearance.densityComfortable': 'Comfortable',
   'appearance.themeLabel': 'Theme {name}',
   'appearance.accent': 'Accent color',
   'appearance.accentLabel': 'Accent {color}',

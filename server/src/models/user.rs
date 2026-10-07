@@ -40,6 +40,17 @@ pub struct User {
     pub profile_color_accent: Option<i32>,
     #[sqlx(default)]
     pub profile_effect: Option<String>,
+    #[sqlx(default)]
+    pub display_name: Option<String>,
+    /// Style du pseudo (models/profile_style.rs), JSON déjà validé.
+    #[sqlx(default)]
+    pub name_style: Option<serde_json::Value>,
+    #[sqlx(default)]
+    pub profile_tag: Option<String>,
+    #[sqlx(default)]
+    pub profile_links: Option<serde_json::Value>,
+    #[sqlx(default)]
+    pub custom_status_expires_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -79,6 +90,11 @@ pub struct UserPublic {
     pub profile_color_primary: Option<i32>,
     pub profile_color_accent: Option<i32>,
     pub profile_effect: Option<String>,
+    pub display_name: Option<String>,
+    pub name_style: Option<serde_json::Value>,
+    pub profile_tag: Option<String>,
+    pub profile_links: Option<serde_json::Value>,
+    pub custom_status_expires_at: Option<DateTime<Utc>>,
 }
 
 impl From<User> for UserPublic {
@@ -106,6 +122,11 @@ impl From<User> for UserPublic {
             profile_color_primary: u.profile_color_primary,
             profile_color_accent: u.profile_color_accent,
             profile_effect: u.profile_effect,
+            display_name: u.display_name,
+            name_style: u.name_style,
+            profile_tag: u.profile_tag,
+            profile_links: u.profile_links,
+            custom_status_expires_at: u.custom_status_expires_at,
         }
     }
 }
@@ -150,6 +171,16 @@ pub struct UpdateProfileRequest {
     pub profile_color_accent: Option<i32>,
     /// "" = aucun effet.
     pub profile_effect: Option<String>,
+    /// "" = retirer (on retombe sur le nom d'utilisateur).
+    pub display_name: Option<String>,
+    /// Absent = inchangé ; null = style par défaut (models/profile_style.rs).
+    pub name_style: Option<serde_json::Value>,
+    /// Étiquette perso courte ; "" = retirer.
+    pub profile_tag: Option<String>,
+    /// Liste [{label, url}] ; [] ou null = aucun lien.
+    pub profile_links: Option<serde_json::Value>,
+    /// Avec `custom_status` : effacer le statut après N minutes (0 = jamais).
+    pub custom_status_clear_after: Option<i64>,
 }
 
 /// Catalogue des décorations d'avatar (mêmes identifiants côté web et mobile).

@@ -8,6 +8,10 @@ import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from '../components/ui/ProfileDecor'
 import { useT, t as tr, intlLocale } from '../i18n'
+import AnimatedImg from '../components/ui/AnimatedImg'
+import UserName from '../components/ui/UserName'
+import ProfileLinks from '../components/ui/ProfileLinks'
+import { renderMarkdown } from '../utils/markdown'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +32,10 @@ interface UserPublic {
   profile_color_primary?: number | null
   profile_color_accent?: number | null
   profile_effect?: string | null
+  display_name?: string | null
+  pronouns?: string | null
+  custom_status_emoji?: string | null
+  profile_links?: { label: string; url: string }[] | null
 }
 
 interface MutualServer {
@@ -77,7 +85,7 @@ function BioSection({ bio }: { bio: string }) {
 
   return (
     <div>
-      <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{displayed}</p>
+      <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap break-words">{renderMarkdown(displayed)}</div>
       {bio.length > BIO_MAX && (
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -259,8 +267,8 @@ export default function UserProfilePage() {
           {/* Banner */}
           <div className="relative h-48">
             {user.banner ? (
-              <img
-                src={mediaUrl(user.banner)}
+              <AnimatedImg
+                src={user.banner}
                 alt=""
                 loading="lazy"
                 decoding="async"
@@ -283,7 +291,7 @@ export default function UserProfilePage() {
                 <AvatarDecoration id={user.avatar_decoration} size={88}>
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
-                    <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    <AnimatedImg src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>
                   )}
@@ -315,11 +323,14 @@ export default function UserProfilePage() {
             {/* Nom + statut */}
             <div className="mb-3">
               <h1 className="text-xl font-bold text-white leading-tight">
-                {user.username}
-                <span aria-hidden className="text-fc-muted font-normal text-base">#{user.discriminator}</span>
+                <UserName userId={user.id} name={user.username} withTag />
+                <span aria-hidden className="text-fc-muted font-normal text-base">
+                  {user.display_name ? ` ${user.username}` : ''}#{user.discriminator}
+                </span>
               </h1>
-              {user.custom_status && (
-                <p className="text-sm text-fc-muted mt-0.5">{user.custom_status}</p>
+              {user.pronouns && <p className="text-xs text-fc-muted mt-0.5">{user.pronouns}</p>}
+              {(user.custom_status || user.custom_status_emoji) && (
+                <p className="text-sm text-fc-muted mt-0.5">{user.custom_status_emoji} {user.custom_status}</p>
               )}
               {user.activity_type && user.activity_name && (
                 <p className="text-xs text-fc-muted mt-0.5 capitalize">
@@ -341,6 +352,7 @@ export default function UserProfilePage() {
                 <BioSection bio={user.bio} />
               </section>
             )}
+            <ProfileLinks links={user.profile_links} />
 
             {/* Membre depuis */}
             <section className="mb-4">

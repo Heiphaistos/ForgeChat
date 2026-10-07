@@ -23,7 +23,7 @@ import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import type { ChatMessage } from '@/types/models'
-import { colors, font, radius, spacing } from '@/theme'
+import { colors, font, outline, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { useCustomEmojis } from './customEmojis'
 import { restoreAfterSendError } from './sendErrors'
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   thumb: { width: 90, height: 70, borderRadius: radius.sm, backgroundColor: colors.bgElevated },
   removeFile: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 10, padding: 2 },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingTop: spacing.sm },
-  attach: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  attach: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center', ...outline },
   input: {
     flex: 1,
     minHeight: 40,
@@ -646,6 +646,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     color: colors.text,
     fontSize: font.md,
+    ...outline,
   },
   send: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   mentions: { maxHeight: 200, marginHorizontal: spacing.sm, marginTop: spacing.sm, borderRadius: radius.md, backgroundColor: colors.bgAlt },

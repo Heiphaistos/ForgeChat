@@ -203,3 +203,14 @@ test('fichiers : message {t, f}, entrées validées, types MIME sûrs', async ()
   for (const m of ['text/html', 'image/svg+xml', 'application/xhtml+xml', 'text/xml', 'application/javascript'])
     assert.equal(c.safeMime(m), 'application/octet-stream')
 })
+
+test('brouillon chiffré par la clé de compte', async () => {
+  const x = V.draft
+  const priv = await c.importPrivateKey(d(x.priv), d(x.pub))
+  assert.equal(e(await c.draftKey(priv, d(x.pub), x.userId)), x.key)
+  assert.deepEqual(await c.sealDraft(d(x.key), x.userId, x.convId, x.text, d(x.iv)), x.blob)
+  assert.equal(await c.openDraft(d(x.key), x.userId, x.convId, x.blob), x.text)
+  // Déplacé vers une autre conversation ou un autre compte : refusé.
+  await assert.rejects(c.openDraft(d(x.key), x.userId, V.draft.userId, x.blob))
+  await assert.rejects(c.openDraft(d(x.key), x.convId, x.convId, x.blob))
+})

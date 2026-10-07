@@ -46,6 +46,12 @@ pub struct Channel {
     /// salons du propriétaire. NULL si le compte a été supprimé.
     #[sqlx(default)]
     pub created_by: Option<Uuid>,
+    /// Messages éphémères du salon (migration 088) : durée en secondes, NULL = désactivé.
+    #[sqlx(default)]
+    pub disappear_seconds: Option<i32>,
+    /// Fils automatiques : chaque message ouvre son fil.
+    #[sqlx(default)]
+    pub auto_threads: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,7 +98,7 @@ pub struct Category {
     pub position: i32,
     #[sqlx(default)]
     pub created_by: Option<Uuid>,
-    /// Réservée aux administrateurs (088) : masquée aux autres, ses salons naissent privés.
+    /// Réservée aux administrateurs (092) : masquée aux autres, ses salons naissent privés.
     #[sqlx(default)]
     pub staff_only: bool,
 }

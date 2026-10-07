@@ -27,9 +27,9 @@ pub struct ServerEvent {
     pub max_attendees: Option<i32>,
     pub attendee_count: Option<i64>,
     pub user_rsvp: Option<String>,
-    /// none | daily | weekly | monthly (088) : l'occurrence passée est reportée à la suivante.
+    /// none | daily | weekly | monthly (092) : l'occurrence passée est reportée à la suivante.
     pub recurrence: String,
-    /// Rappel aux participants N minutes avant le début (088).
+    /// Rappel aux participants N minutes avant le début (092).
     pub reminder_minutes: Option<i32>,
 }
 

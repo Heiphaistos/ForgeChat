@@ -34,10 +34,13 @@ pub struct Server {
     pub require_2fa_for_moderation: bool,
     pub server_locale: String,
     pub max_video_channel_users: i32,
-    /// Étiquettes de l'annuaire des serveurs publics (088).
+    /// Étiquettes de l'annuaire des serveurs publics (092).
     #[sqlx(default)]
     #[serde(default)]
     pub discovery_tags: Vec<String>,
+    /// La couleur du rôle remplace la couleur perso du pseudo dans ce serveur (migration 088).
+    #[sqlx(default)]
+    pub role_color_overrides_name: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +73,7 @@ pub struct UpdateServerRequest {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub server_category: Option<Option<String>>,
     pub discovery_tags: Option<Vec<String>>,
+    pub role_color_overrides_name: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

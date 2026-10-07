@@ -17,6 +17,7 @@ import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useThreadNotifications } from './hooks/useThreadNotifications'
 import { useUpdateNotifier } from './hooks/useUpdateNotifier'
+import { useGlobalShortcuts } from './hooks/useShortcuts'
 import api from './api/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
@@ -26,12 +27,8 @@ import { stripMarkdown } from './utils/mdShortcuts'
 import { mentionsToText } from './utils/mentions'
 import { syncWebPush } from './utils/webPush'
 
-function hexToRgb(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `${r} ${g} ${b}`
-}
+import { useThemeStore, asDensity } from './theme/themeStore'
+import { fontStack } from './theme/fonts'
 
 // Imports statiques pour le chemin critique
 import MainLayout from './components/layout/MainLayout'
@@ -39,6 +36,9 @@ import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
+import AppLockOverlay from './components/AppLockOverlay'
+import { setOfflineOwner } from './lib/offline'
+import { sendOutbox } from './lib/outboxSend'
 import { startAfkWatch } from './store/afk'
 import { useGameActivity } from './hooks/useGameActivity'
 
@@ -70,6 +70,7 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
 const QuickSwitcher = lazy(() => import('./components/QuickSwitcher'))
 const CommandPalette = lazy(() => import('./components/CommandPalette'))
 const SavedPage = lazy(() => import('./pages/SavedPage'))
+const ScheduledPage = lazy(() => import('./pages/ScheduledPage'))
 const ExplorePage = lazy(() => import('./pages/ExplorePage'))
 const ServerDiscoveryPage = lazy(() => import('./pages/ServerDiscoveryPage'))
 const ActivityFeedPage = lazy(() => import('./pages/ActivityFeedPage'))
@@ -140,8 +141,6 @@ function AppInner() {
   const initVoiceListeners = useVoice(s => s.initGlobalListeners)
   const initDmCallListeners = useCallStore(s => s.initGlobalListeners)
   const initGroupCallListeners = useGroupCall(s => s.initGlobalListeners)
-  const toggleMute = useVoice(s => s.toggleMute)
-  const toggleDeafen = useVoice(s => s.toggleDeafen)
   const updateUserInMessages = useChat(s => s.updateUserInMessages)
   const nav = useNavigate()
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false)
@@ -202,39 +201,12 @@ function AppInner() {
 
   useEffect(() => { fetchMe() }, [])
 
-  // Appliquer le thème sauvegardé au démarrage
-  useEffect(() => {
-    const saved = localStorage.getItem('fc_theme') || 'dark'
-    document.documentElement.setAttribute('data-theme', saved)
-  }, [])
-
-  // Thème du compte (choisi sur un autre appareil) : il remplace celui de ce navigateur.
+  // Thème, thèmes perso et disposition du compte (choisis sur un autre appareil) :
+  // le thème local est déjà appliqué au chargement de theme/themeStore.
   useEffect(() => {
     if (!user) return
-    api.get('/user/theme').then(({ data }) => {
-      const t = typeof data?.theme === 'string' ? data.theme : null
-      if (!t || t === localStorage.getItem('fc_theme')) return
-      localStorage.setItem('fc_theme', t)
-      document.documentElement.setAttribute('data-theme', t)
-    }).catch(() => {})
+    useThemeStore.getState().loadRemote().catch(() => {})
   }, [user])
-
-  // Synchroniser la barre de statut mobile (meta theme-color) avec le fond du
-  // thème actif — recalculé à chaque changement de data-theme, sans mapping manuel
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (!meta) return
-    const sync = () => {
-      requestAnimationFrame(() => {
-        const bg = getComputedStyle(document.body).backgroundColor
-        if (bg) meta.setAttribute('content', bg)
-      })
-    }
-    sync()
-    const obs = new MutationObserver(sync)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => obs.disconnect()
-  }, [])
 
   // Appliquer le zoom sauvegardé au démarrage
   useEffect(() => {
@@ -287,6 +259,17 @@ function AppInner() {
     return onOpen(() => { fetchUnread() })
   }, [user?.id, onOpen, fetchUnread])
 
+  // Hors ligne : données gardées pour ce compte ; file d'envoi vidée au retour du réseau.
+  useEffect(() => {
+    if (!user) return
+    setOfflineOwner(user.id)
+    const flush = () => { void sendOutbox() }
+    flush()
+    window.addEventListener('online', flush)
+    const offOpen = onOpen(flush)
+    return () => { window.removeEventListener('online', flush); offOpen() }
+  }, [user?.id, onOpen])
+
   // Forcer reconnexion WS immédiate quand l'onglet redevient visible
   // (évite le backoff excessif si le navigateur a suspendu la connexion)
   useEffect(() => {
@@ -320,29 +303,17 @@ function AppInner() {
         root.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
 
         // Densité
-        const density = (d.interface_density as string | undefined) ?? 'normal'
-        root.setAttribute('data-density', density)
-        localStorage.setItem('fc_density', density)
+        useThemeStore.getState().setDensity(asDensity(d.interface_density))
 
-        // Typographie
-        const fontFamily = (d.font_family as string | undefined) ?? 'Inter'
-        root.style.setProperty('--fc-font-family', `'${fontFamily}', sans-serif`)
+        // Typographie (polices connues uniquement)
+        root.style.setProperty('--fc-font-family', fontStack(d.font_family))
         const fontSize = typeof d.font_size_px === 'number' ? d.font_size_px : 14
         root.style.setProperty('--fc-font-size', `${fontSize}px`)
 
-        // Couleurs personnalisées
-        if (typeof d.accent_color === 'string' && d.accent_color) {
-          root.style.setProperty('--fc-accent-rgb', hexToRgb(d.accent_color))
-        }
-        if (typeof d.font_color === 'string' && d.font_color)
-          root.style.setProperty('--fc-text', d.font_color)
-        if (typeof d.bg_color === 'string' && d.bg_color)
-          root.style.setProperty('--fc-bg', d.bg_color)
+        // Accent du compte (remplace celui des thèmes prédéfinis, partagé avec le mobile)
+        useThemeStore.getState().setAccent(typeof d.accent_color === 'string' ? d.accent_color : null)
 
-        // Glassmorphism, forme avatar, affichage messages
-        root.setAttribute('data-glassmorphism', String(d.glassmorphism ?? false))
         root.setAttribute('data-avatar-shape', (d.avatar_shape as string | undefined) ?? 'round')
-        root.setAttribute('data-message-display', (d.message_display as string | undefined) ?? 'normal')
 
         // Largeur sidebar — sync vers localStorage uniquement si pas déjà forcée par l'utilisateur
         if (typeof d.sidebar_width_px === 'number' && !localStorage.getItem('fc_sidebar_width'))
@@ -385,6 +356,7 @@ function AppInner() {
         const patch: Record<string, unknown> = {}
         if (d.custom_status !== undefined) patch.custom_status = d.custom_status
         if (d.custom_status_emoji !== undefined) patch.custom_status_emoji = d.custom_status_emoji
+        if (d.custom_status_expires_at !== undefined) patch.custom_status_expires_at = d.custom_status_expires_at
         if (Object.keys(patch).length > 0) updateMe(patch)
       }
     })
@@ -897,6 +869,7 @@ function AppInner() {
       const u = d.user
       if (!u?.id) return
       updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null)
+      useNameStyles.getState().set(u.id, u)
       qcHook.invalidateQueries({ queryKey: ['members'] })
       qcHook.invalidateQueries({ queryKey: ['user', u.id] })
     })
@@ -1020,109 +993,25 @@ function AppInner() {
     return () => { offKicked(); offBanned(); offServerDelete(); offRemove(); offLeave(); offUnban() }
   }, [user?.id])
 
-  // Raccourcis clavier globaux
+  // Raccourcis clavier globaux (personnalisables : Réglages > Raccourcis clavier)
+  useGlobalShortcuts({
+    togglePalette: () => setShowCommandPalette(q => !q),
+    toggleQuickSwitcher: () => setShowQuickSwitcher(q => !q),
+    toggleHelp: () => setShowKeyboardShortcuts(q => !q),
+    closeAll: () => { setShowQuickSwitcher(false); setShowCommandPalette(false); setShowKeyboardShortcuts(false) },
+  })
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setShowCommandPalette(q => !q)
-      }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'K') {
-        e.preventDefault()
-        setShowQuickSwitcher(q => !q)
-      }
-      if (e.key === 'Escape') {
-        setShowQuickSwitcher(false)
-        setShowCommandPalette(false)
-        setShowKeyboardShortcuts(false)
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault()
-        nav('/settings')
-      }
-      if (e.key === '?' && !isInput && !e.ctrlKey && !e.metaKey) {
-        setShowKeyboardShortcuts(q => !q)
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-        e.preventDefault()
-        setShowKeyboardShortcuts(q => !q)
-      }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault()
-        useUnread.getState().markAllRead()
-        qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
-        toast.success(tr('toast.allRead'))
-      }
-      // Ctrl+Shift+M — couper/réactiver le micro (vocal)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
-        e.preventDefault()
-        toggleMute()
-      }
-      // Ctrl+Shift+D — couper/réactiver le son (vocal)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'd' || e.key === 'D')) {
-        e.preventDefault()
-        toggleDeafen()
-      }
-      // Ctrl+F — ouvrir la recherche dans le canal courant
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'f') {
-        const isChannel = /\/servers\/[^/]+\/channels\/[^/]+/.test(window.location.pathname)
-        const isDm = /\/dm\//.test(window.location.pathname)
-        if (isChannel || isDm) {
-          e.preventDefault()
-          window.dispatchEvent(new CustomEvent('forgechat:toggle-search'))
-        }
-      }
-      // Ctrl+Alt+Arrow — serveur précédent/suivant (l'auto-redirect ouvre le
-      // dernier canal visité du serveur cible)
-      if (e.altKey && (e.ctrlKey || e.metaKey) && !isInput &&
-          (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        e.preventDefault()
-        const servers = (qcHook.getQueryData<any[]>(['servers']) ?? [])
-        if (servers.length === 0) return
-        const curId = window.location.pathname.match(/\/servers\/([^/]+)/)?.[1]
-        const idx = servers.findIndex((s: any) => s.id === curId)
-        const next = e.key === 'ArrowDown'
-          ? (idx + 1) % servers.length
-          : (idx - 1 + servers.length) % servers.length
-        nav(`/servers/${servers[next].id}`)
-        return
-      }
-      // Alt+Arrow — navigation entre canaux non-lus (ou tous les canaux)
-      if (e.altKey && !e.ctrlKey && !e.metaKey && !isInput &&
-          (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        e.preventDefault()
-        const m = window.location.pathname.match(/\/servers\/([^/]+)(?:\/channels\/([^/]+))?/)
-        if (!m) return
-        const svId = m[1]; const chId = m[2] ?? ''
-        const srvData = qcHook.getQueryData<{ channels: any[] }>(['server', svId])
-        const navChs = (srvData?.channels ?? []).filter((c: any) =>
-          !c.archived && !c.hidden && (c.type === 'text' || c.type === 'announcement')
-        )
-        if (navChs.length === 0) return
-        const unread = navChs.filter((c: any) => (useUnread.getState().counts[c.id] ?? 0) > 0)
-        const list = unread.length > 0 ? unread : navChs
-        const idx = list.findIndex((c: any) => c.id === chId)
-        const next = e.key === 'ArrowDown'
-          ? (idx + 1) % list.length
-          : (idx - 1 + list.length) % list.length
-        nav(`/servers/${svId}/channels/${list[next].id}`)
-      }
-    }
     // Ouverture du QuickSwitcher depuis le bouton loupe du rail (mobile sans Ctrl+K)
     const openQs = () => setShowQuickSwitcher(true)
     // Modale des raccourcis depuis la palette de commandes
     const openShortcuts = () => setShowKeyboardShortcuts(true)
     window.addEventListener('forgechat:open-quick-switcher', openQs)
     window.addEventListener('forgechat:open-shortcuts', openShortcuts)
-    window.addEventListener('keydown', handler)
     return () => {
       window.removeEventListener('forgechat:open-quick-switcher', openQs)
       window.removeEventListener('forgechat:open-shortcuts', openShortcuts)
-      window.removeEventListener('keydown', handler)
     }
-  }, [nav, qcHook, toggleMute, toggleDeafen])
+  }, [])
 
   return (
     <>
@@ -1150,6 +1039,7 @@ function AppInner() {
             <Route path="friends" element={<FriendsPage />} />
             <Route path="users/:userId" element={<UserProfilePage />} />
             <Route path="saved" element={<SavedPage />} />
+            <Route path="scheduled" element={<ScheduledPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="discovery" element={<ServerDiscoveryPage />} />
             <Route path="activity" element={<ActivityFeedPage />} />
@@ -1182,6 +1072,7 @@ function AppInner() {
         {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
       </Suspense>
       <ConfirmModal />
+      {user && <AppLockOverlay userId={user.id} />}
       {/* Bannière de reconnexion WS */}
       {showDisconnectBanner && (
         <div className="fixed top-0 inset-x-0 z-[9998] flex items-center justify-center gap-2 bg-yellow-600/95 text-white text-xs font-medium py-1.5 px-4">
@@ -1216,6 +1107,7 @@ import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { t as tr, useLang, intlLocale } from './i18n'
+import { useNameStyles } from './store/nameStyles'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

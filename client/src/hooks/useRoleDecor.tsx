@@ -17,6 +17,8 @@ export interface RoleDecor {
   style?: CSSProperties
   icon?: string
   iconTitle?: string
+  /** Réglage du serveur : la couleur du rôle remplace la couleur perso du pseudo. */
+  overridesName?: boolean
 }
 
 const hex = (c: number) => '#' + (c >>> 0).toString(16).padStart(6, '0')
@@ -58,6 +60,14 @@ export function useRoleDecor(serverId?: string) {
     staleTime: 300_000,
   })
   const showColors = settings?.show_role_colors !== false
+  // Même clé et même requête que ChannelSidebar : servi depuis le cache.
+  const { data: server } = useQuery<{ server?: { role_color_overrides_name?: boolean } }>({
+    queryKey: ['server', serverId],
+    queryFn: () => api.get(`/servers/${serverId}`).then(r => r.data),
+    enabled,
+    staleTime: 60_000,
+  })
+  const overridesName = server?.server?.role_color_overrides_name !== false
 
   const map = useMemo(() => {
     const byId = new Map(roles.map(r => [r.id, r]))
@@ -74,10 +84,11 @@ export function useRoleDecor(serverId?: string) {
         style: showColors && colored ? roleNameStyle(colored.color, colored.secondary_color) : undefined,
         icon: withIcon?.icon ?? undefined,
         iconTitle: withIcon?.name,
+        overridesName,
       })
     }
     return out
-  }, [roles, members, showColors])
+  }, [roles, members, showColors, overridesName])
 
   return useCallback((userId: string): RoleDecor | undefined => map.get(userId), [map])
 }

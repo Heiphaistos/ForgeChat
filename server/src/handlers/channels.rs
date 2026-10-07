@@ -63,6 +63,8 @@ pub async fn get_channels(
             "default_sort": r.get::<String, _>("default_sort"),
             "require_tag": r.get::<bool, _>("require_tag"),
             "created_by": r.get::<Option<Uuid>, _>("created_by"),
+            "disappear_seconds": r.get::<Option<i32>, _>("disappear_seconds"),
+            "auto_threads": r.get::<bool, _>("auto_threads"),
         })
     }).collect();
 

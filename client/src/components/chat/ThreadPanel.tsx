@@ -30,6 +30,8 @@ interface Props {
   parentMessageId?: string
   /** Fil ouvert directement (liste des fils, notification) */
   threadId?: string
+  /** Salon à fils automatiques : le fil est créé à la première réponse, titré par ce texte. */
+  autoTitle?: string
   onClose: () => void
 }
 
@@ -38,7 +40,7 @@ const PAGE_SIZE = 50
 // Brouillons par message parent — module-level, survivent à la fermeture du fil
 const threadDrafts = new Map<string, string>()
 
-export default function ThreadPanel({ serverId, channelId, parentMessageId, threadId: directThreadId, onClose }: Props) {
+export default function ThreadPanel({ serverId, channelId, parentMessageId, threadId: directThreadId, autoTitle, onClose }: Props) {
   // Clé de brouillon : le message parent, ou le fil ouvert directement
   const draftKey = parentMessageId ?? directThreadId ?? ''
   const { user } = useAuth()
@@ -268,7 +270,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     // Salon chiffré : titre ET premier message chiffrés (portée du nouveau fil), fichiers aussi (clés dans le message, §12).
     mutationFn: async () => {
       const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
-      const res = await createThreadE2E(serverId, channelId, newTitle.trim(), input.trim(), parentMessageId,
+      const res = await createThreadE2E(serverId, channelId, newTitle.trim() || autoTitle || '', input.trim(), parentMessageId,
         body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body), filesExtra(prepared))
       return Object.assign(res, { prepared })
     },
@@ -376,8 +378,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         </button>
       </div>
 
-      {/* Créer thread */}
-      {!threadId && !isLoading && (
+      {/* Créer thread (fils automatiques : créé à la première réponse, sans étape) */}
+      {!threadId && !isLoading && !autoTitle && (
         <div className="p-3 border-b border-fc-bg bg-fc-bg/30">
           {!creating ? (
             <button

@@ -6,10 +6,12 @@ import { serversApi } from '@/api/servers'
 import { IconButton } from '@/components/ui'
 import { ChannelLock } from '@/e2e/ChannelLock'
 import { ChatView } from '@/features/chat/ChatView'
+import { DisappearingButton } from '@/features/chat/DisappearingButton'
 import { pinsParams } from '@/features/chat/pins'
 import { useT } from '@/i18n'
 import { qk } from '@/lib/queryClient'
 import { useLastChannel } from '@/stores/lastChannel'
+import { rememberConvName } from '@/e2e/searchIndex'
 import type { Channel } from '@/types/models'
 import { colors, font } from '@/theme'
 import { useServerPerms } from './menus'
@@ -53,6 +55,7 @@ export function ChannelActions({ serverId, channelId, name, isAnnouncement }: { 
   return (
     <View style={{ flexDirection: 'row' }}>
       <ChannelLock serverId={serverId} channelId={channelId} />
+      <DisappearingButton kind="channel" id={channelId} serverId={serverId} />
       {isAnnouncement ? (
         <IconButton
           icon="megaphone-outline"
@@ -73,24 +76,30 @@ export function ChannelBody({
   name,
   nsfw,
   publishable,
+  autoThreads,
 }: {
   serverId: string
   channelId: string
   name: string
   nsfw: boolean
   publishable: boolean
+  /** Fils automatiques : répondre ouvre le fil du message. */
+  autoThreads?: boolean
 }) {
   const t = useT()
   // Dernier salon consulté de ce serveur : rouvert au prochain appui sur le serveur dans le rail.
   useEffect(() => {
     useLastChannel.getState().remember(serverId, channelId)
   }, [serverId, channelId])
+  // Nom du salon pour le filtre dans: de la recherche locale.
+  useEffect(() => rememberConvName(channelId, name, serverId), [channelId, name, serverId])
   return (
     <VerificationGate serverId={serverId}>
       <OnboardingGate serverId={serverId}>
         <NsfwGate channelId={channelId} name={name} nsfw={nsfw}>
           <ChatView
             publishable={publishable}
+            autoThreads={autoThreads}
             conversation={{ kind: 'channel', serverId, channelId }}
             placeholder={t('conv.channelPlaceholder', { name })}
             header={
