@@ -23,6 +23,7 @@ const ENTRIES: Record<Exclude<SettingsSection, 'danger'>, { title: string; icon:
   audit: { title: "Journal d'audit", icon: 'document-text-outline', path: 'settings/audit' },
   automod: { title: 'AutoMod', icon: 'shield-checkmark-outline', path: 'settings/automod' },
   stats: { title: 'Statistiques', icon: 'stats-chart-outline', path: 'settings/stats' },
+  onboarding: { title: 'Accueil des nouveaux membres', icon: 'sparkles-outline', path: 'settings/onboarding' },
 }
 
 /** Paramètres du serveur : seules les rubriques autorisées par les droits de l'utilisateur. */

@@ -121,6 +121,8 @@ export function serverPerms(detail: ServerDetail | undefined, meId: string | und
     isOwner,
     isAdmin,
     has,
+    /** Le serveur pose des questions d'accueil (modifiables par chaque membre). */
+    hasOnboarding: !!detail?.member?.has_onboarding,
     /** Strictement au-dessus de la cible ; le propriétaire n'est jamais une cible. */
     outranks: (target: MemberRank) => {
       if (target.is_owner || target.user_id === ownerId || target.user_id === meId) return false
@@ -163,6 +165,7 @@ export type ServerMenuKey =
   | 'createCategory'
   | 'settings'
   | 'nickname'
+  | 'onboarding'
   | 'copyId'
   | 'leave'
   | 'delete'
@@ -182,6 +185,7 @@ export type SettingsSection =
   | 'audit'
   | 'automod'
   | 'stats'
+  | 'onboarding'
   | 'danger'
 
 /** Rubriques des paramètres du serveur, d'après les gardes des routes Rust correspondantes. */
@@ -198,7 +202,7 @@ export function settingsSections(p: ServerPerms): SettingsSection[] {
   if (p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) out.push('reports', 'bans') // reports.rs : BAN_MEMBERS | BAN_TEMP
   // Invitations, emojis, stickers, webhooks, audit, AutoMod, statistiques : MANAGE_SERVER
   if (manageServer) out.push('invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats')
-  if (p.isOwner) out.push('danger') // transfert et suppression : require_owner
+  if (p.isOwner) out.push('onboarding', 'danger') // accueil, transfert et suppression : require_owner
   return out
 }
 
@@ -211,6 +215,7 @@ export function serverMenuKeys(p: ServerPerms): ServerMenuKey[] {
   if (p.canCreateChannels) out.push('createChannel', 'createCategory')
   if (settingsSections(p).length) out.push('settings')
   out.push('nickname')
+  if (p.hasOnboarding) out.push('onboarding')
   if (p.loaded) out.push('boost')
   out.push('copyId')
   if (p.loaded) out.push(p.isOwner ? 'delete' : 'leave')

@@ -7,6 +7,7 @@ import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
 import { useServerPerms } from '@/features/servers/menus'
+import { OnboardingGate } from '@/features/servers/Onboarding'
 import { PERM } from '@/features/servers/perms'
 import { VerificationGate } from '@/features/servers/VerificationGate'
 import { useRouteParams } from '@/lib/params'
@@ -68,17 +69,19 @@ export default function ChannelScreen() {
         }}
       />
       <VerificationGate serverId={ids.serverId}>
-        <ChatView
-          publishable={isAnnouncement && perms.has(PERM.MANAGE_MESSAGES)}
-          conversation={{ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }}
-          placeholder={`Envoyer un message dans #${name}`}
-          header={
-            <View style={{ padding: 16 }}>
-              <Text style={{ color: colors.text, fontSize: font.xl, fontWeight: '800' }}>Bienvenue dans #{name} !</Text>
-              <Text style={{ color: colors.textMuted }}>C’est le début du salon.</Text>
-            </View>
-          }
-        />
+        <OnboardingGate serverId={ids.serverId}>
+          <ChatView
+            publishable={isAnnouncement && perms.has(PERM.MANAGE_MESSAGES)}
+            conversation={{ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }}
+            placeholder={`Envoyer un message dans #${name}`}
+            header={
+              <View style={{ padding: 16 }}>
+                <Text style={{ color: colors.text, fontSize: font.xl, fontWeight: '800' }}>Bienvenue dans #{name} !</Text>
+                <Text style={{ color: colors.textMuted }}>C’est le début du salon.</Text>
+              </View>
+            }
+          />
+        </OnboardingGate>
       </VerificationGate>
     </>
   )
