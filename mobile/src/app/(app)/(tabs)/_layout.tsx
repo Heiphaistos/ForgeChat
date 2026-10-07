@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
+import { useUi } from '@/stores/ui'
 import { directUnread, useUnread } from '@/stores/unread'
 import { useQuery } from '@tanstack/react-query'
 import { friendsApi } from '@/api/friends'
@@ -15,6 +16,9 @@ export default function TabsLayout() {
   const dmUnread = directUnread(counts, serverOf)
   const friends = useQuery({ queryKey: qk.friends('pending'), queryFn: () => friendsApi.list('pending') })
   const pendingReceived = friends.data?.counts.pending_received ?? 0
+  // Salon de serveur ouvert sur l'accueil : plein écran, sans barre d'onglets (comme Discord).
+  const chatOpen = useUi((s) => s.chatOpen && s.selectedServerId !== null)
+  const tabBarStyle = { backgroundColor: colors.bgDeep, borderTopColor: colors.border }
 
   return (
     <Tabs
@@ -22,7 +26,7 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: colors.bgAlt },
         headerTintColor: colors.text,
         headerTitleStyle: { fontWeight: '700' },
-        tabBarStyle: { backgroundColor: colors.bgDeep, borderTopColor: colors.border },
+        tabBarStyle,
         tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.textFaint,
         tabBarBadgeStyle: { backgroundColor: colors.danger, fontSize: 10 },
@@ -34,6 +38,7 @@ export default function TabsLayout() {
           title: t('tabs.home'),
           tabBarAccessibilityLabel: dmUnread > 0 ? t('tabs.homeUnread', { unread: unreadLabel(dmUnread) }) : t('tabs.home'),
           headerShown: false,
+          tabBarStyle: chatOpen ? { display: 'none' } : tabBarStyle,
           tabBarBadge: dmUnread > 0 ? (dmUnread > 99 ? '99+' : dmUnread) : undefined,
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />,
         }}
