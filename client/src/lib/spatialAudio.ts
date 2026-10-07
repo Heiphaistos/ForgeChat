@@ -1,6 +1,6 @@
 // Voix spatiale (casque) : chaque participant est placé sur un arc devant soi, de gauche à
 // droite dans l'ordre du salon. Réglage local `fc_spatial_audio` (« true »). Calcul pur, testé
-// (scripts/spatialAudio.test.mjs) ; le mobile utilise la même règle.
+// (scripts/spatialAudio.test.mjs). Pas sur mobile : le système y mélange les voix avant lecture.
 
 export const SPATIAL_KEY = 'fc_spatial_audio'
 

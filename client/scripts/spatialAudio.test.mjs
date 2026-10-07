@@ -1,4 +1,4 @@
-// Voix spatiale : node --test scripts/spatialAudio.test.mjs (mêmes cas : mobile/__tests__/spatial-audio.test.ts)
+// Voix spatiale (web et bureau) : node --test scripts/spatialAudio.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spatialAzimuth, spatialPosition } from '../src/lib/spatialAudio.ts'
