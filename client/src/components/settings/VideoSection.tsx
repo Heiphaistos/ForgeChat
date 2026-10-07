@@ -3,6 +3,7 @@ import { Field } from './shared'
 import { Camera, RefreshCw, ShieldCheck, ShieldX, Monitor } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
+import { useClipsSetting } from '../../lib/clipBuffer'
 
 export default function VideoSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
@@ -20,6 +21,8 @@ export default function VideoSection() {
   const [screenBitrate, setScreenBitrate] = useState(() => localStorage.getItem('fc_screen_bitrate') ?? '4000000')
   const autoWatchStreams = useVoice(s => s.autoWatchStreams)
   const setAutoWatchStreams = useVoice(s => s.setAutoWatchStreams)
+  const clipsEnabled = useClipsSetting(s => s.enabled)
+  const setClipsEnabled = useClipsSetting(s => s.setEnabled)
   const [screenHint, setScreenHint] = useState(() => localStorage.getItem('fc_screen_hint') ?? 'motion')
   const [camBlur, setCamBlur] = useState(() => localStorage.getItem('fc_cam_blur') ?? 'false')
 
@@ -269,6 +272,13 @@ export default function VideoSection() {
           Regarder automatiquement les streams
         </label>
         <p className="text-xs text-fc-muted mt-1">Désactivé, un stream n'est téléchargé qu'après un clic sur « Regarder » : utile sur une connexion lente ou avec plusieurs streams à la fois.</p>
+      </Field>
+      <Field label="Clips">
+        <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" checked={clipsEnabled} onChange={e => setClipsEnabled(e.target.checked)} className="accent-fc-accent" />
+          Garder les 30 dernières secondes des streams pour les clipper
+        </label>
+        <p className="text-xs text-fc-muted mt-1">Bouton « Clip » sur un stream affiché (ou Alt+C) : le clip se télécharge ou s'envoie dans un salon texte. Tout reste sur ton appareil tant que tu n'envoies rien ; consomme un peu de mémoire et de processeur pendant qu'un stream est affiché.</p>
       </Field>
     </div>
   )
