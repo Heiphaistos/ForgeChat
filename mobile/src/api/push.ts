@@ -7,6 +7,8 @@ export interface PushRegistration {
   /** Si false, le serveur n'envoie que « Nouveau message » (pas d'aperçu du contenu). */
   show_preview: boolean
   device_name?: string
+  /** Secret de cette installation : un jeton déjà lié ne change de compte que depuis le même appareil. */
+  device_id?: string
 }
 
 export const pushApi = {

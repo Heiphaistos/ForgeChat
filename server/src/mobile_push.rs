@@ -86,6 +86,19 @@ pub struct RegisterDeviceBody {
     pub provider: Option<String>,
     pub show_preview: Option<bool>,
     pub device_name: Option<String>,
+    /// Secret aléatoire de l'installation de l'app (16 à 128 caractères), jamais montré.
+    pub device_id: Option<String>,
+}
+
+/// Empreinte du secret d'installation : `None` si absent, erreur si mal formé.
+fn device_key_hash(device_id: Option<&str>) -> Result<Option<String>> {
+    let Some(id) = device_id else { return Ok(None) };
+    if !(16..=128).contains(&id.len()) || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(AppError::BadRequest("Identifiant d'appareil invalide".into()));
+    }
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+    Ok(Some(base64::engine::general_purpose::STANDARD.encode(Sha256::digest(id.as_bytes()))))
 }
 
 /// POST /api/push/devices
@@ -125,20 +138,33 @@ pub async fn register_device(
         .map(|n| n.chars().filter(|c| !c.is_control()).take(64).collect::<String>())
         .filter(|n| !n.trim().is_empty());
 
-    // Un jeton identifie un téléphone : il suit le dernier compte connecté dessus.
-    sqlx::query(
-        "INSERT INTO push_devices (user_id, token, platform, show_preview, device_name)
-         VALUES ($1, $2, $3, $4, $5)
+    let key_hash = device_key_hash(body.device_id.as_deref())?;
+
+    // Un jeton identifie un téléphone : il suit le dernier compte connecté dessus, mais seulement
+    // si la demande vient de la même installation (même secret). Sans ce contrôle, un compte qui
+    // connaît le jeton d'un autre téléphone le détournait. Une ligne sans secret (app antérieure)
+    // ne se laisse reprendre que par une demande sans secret, comme avant.
+    let kept = sqlx::query_scalar::<_, Uuid>(
+        "INSERT INTO push_devices (user_id, token, platform, show_preview, device_name, device_key_hash)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform,
-             show_preview = EXCLUDED.show_preview, device_name = EXCLUDED.device_name, last_seen_at = NOW()"
+             show_preview = EXCLUDED.show_preview, device_name = EXCLUDED.device_name, last_seen_at = NOW(),
+             device_key_hash = COALESCE(EXCLUDED.device_key_hash, push_devices.device_key_hash)
+         WHERE push_devices.user_id = EXCLUDED.user_id
+            OR push_devices.device_key_hash IS NOT DISTINCT FROM EXCLUDED.device_key_hash
+         RETURNING id"
     )
     .bind(claims.sub)
     .bind(&body.token)
     .bind(&body.platform)
     .bind(body.show_preview.unwrap_or(false))
     .bind(&device_name)
-    .execute(&state.db)
+    .bind(&key_hash)
+    .fetch_optional(&state.db)
     .await?;
+    if kept.is_none() {
+        return Err(AppError::Conflict("Ce jeton push est déjà lié à un autre appareil".into()));
+    }
 
     sqlx::query(
         "DELETE FROM push_devices WHERE id IN (
@@ -339,6 +365,16 @@ async fn deliver(state: &AppState, cfg: &MobilePushConfig, messages: &[serde_jso
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_key_format() {
+        assert_eq!(device_key_hash(None).unwrap(), None);
+        let a = device_key_hash(Some("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")).unwrap().unwrap();
+        assert_eq!(a, device_key_hash(Some("0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0")).unwrap().unwrap());
+        assert!(a.len() <= 64);
+        assert!(device_key_hash(Some("court")).is_err());
+        assert!(device_key_hash(Some("pas d'espace ni d'apostrophe!")).is_err());
+    }
 
     #[test]
     fn expo_token_format() {

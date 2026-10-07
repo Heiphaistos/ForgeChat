@@ -1,4 +1,5 @@
 import Constants from 'expo-constants'
+import * as Crypto from 'expo-crypto'
 import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import * as SecureStore from 'expo-secure-store'
@@ -22,6 +23,8 @@ import { useUnread } from '@/stores/unread'
  */
 
 const TOKEN_KEY = 'fc.push_token.v1'
+/** Secret de l'installation, conservé à la déconnexion (changement de compte sur le même téléphone). */
+const DEVICE_KEY = 'fc.push_device.v1'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v)
 
@@ -128,6 +131,14 @@ async function getStoredToken() {
   }
 }
 
+async function getDeviceId(): Promise<string> {
+  const known = await SecureStore.getItemAsync(DEVICE_KEY).catch(() => null)
+  if (known) return known
+  const id = Crypto.randomUUID()
+  await SecureStore.setItemAsync(DEVICE_KEY, id)
+  return id
+}
+
 /** Jeton push enregistré pour cet appareil (sinon : mode sans Google par défaut, services/keepAlive). */
 export const hasPushToken = async () => !!(await getStoredToken())
 
@@ -159,6 +170,7 @@ export async function syncPushRegistration(): Promise<void> {
       provider: 'expo',
       show_preview: pushPreview,
       device_name: Device.modelName ?? undefined,
+      device_id: await getDeviceId(),
     })
     await SecureStore.setItemAsync(TOKEN_KEY, token)
   } catch (e) {
