@@ -83,6 +83,7 @@ async fn main() -> anyhow::Result<()> {
             interval.tick().await;
             cleanup_expired_attachments(&cleanup_state, &cleanup_upload_dir).await;
             handlers::diagnostics::purge_old(&cleanup_state).await;
+            purge_retention(&cleanup_state).await;
         }
     });
 
@@ -346,6 +347,26 @@ async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
 
     if count > 0 {
         tracing::info!("Nettoyage : {} pièces jointes expirées supprimées", count);
+    }
+}
+
+/// Durées de conservation annoncées sur la page de confidentialité : au-delà, la ligne disparaît.
+async fn purge_retention(state: &AppState) {
+    const PURGES: &[(&str, &str)] = &[
+        ("sessions inactives", "DELETE FROM user_sessions WHERE last_seen < NOW() - INTERVAL '30 days'"),
+        ("jetons de session expirés", "DELETE FROM refresh_tokens WHERE expires_at < NOW()"),
+        ("inscriptions non confirmées", "DELETE FROM pending_registrations WHERE expires_at < NOW()"),
+        ("téléphones inactifs", "DELETE FROM push_devices WHERE last_seen_at < NOW() - INTERVAL '60 days'"),
+        ("journal d'audit", "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'"),
+        ("signalements de MP traités",
+         "DELETE FROM dm_reports WHERE status IN ('resolved', 'dismissed') AND COALESCE(resolved_at, created_at) < NOW() - INTERVAL '90 days'"),
+        ("signalements de messages traités",
+         "DELETE FROM message_reports WHERE status IN ('resolved', 'dismissed') AND created_at < NOW() - INTERVAL '90 days'"),
+    ];
+    for (what, sql) in PURGES {
+        if let Err(e) = sqlx::query(sql).execute(&state.db).await {
+            tracing::warn!("Purge ({what}) : {e}");
+        }
     }
 }
 
