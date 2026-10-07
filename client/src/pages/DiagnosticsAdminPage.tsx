@@ -13,7 +13,6 @@ interface ReportSummary {
   id: string
   created_at: string
   last_seen: string
-  user_id: string | null
   platform: string
   app_version: string | null
   kind: string
@@ -23,7 +22,6 @@ interface ReportSummary {
 }
 
 interface ReportDetail extends Omit<ReportSummary, 'has_log'> {
-  username: string | null
   stack: string | null
   log: string | null
   user_agent: string | null
@@ -129,7 +127,6 @@ export default function DiagnosticsAdminPage() {
                     <>
                       <div className="space-y-0.5 break-words">
                         <div>Première fois : {fmt(detail.data.created_at)}</div>
-                        <div>Utilisateur : {detail.data.username ?? detail.data.user_id ?? 'anonyme'}</div>
                         {detail.data.url && <div>URL : {detail.data.url}</div>}
                         {detail.data.user_agent && <div>Navigateur : {detail.data.user_agent}</div>}
                       </div>

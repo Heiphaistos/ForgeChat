@@ -531,7 +531,7 @@ pub async fn get_login_history(
     use sqlx::Row;
 
     let rows = sqlx::query(
-        "SELECT id, device_info, ip_address, last_seen, created_at
+        "SELECT id, device_info, last_seen, created_at
          FROM user_sessions
          WHERE user_id = $1
          ORDER BY last_seen DESC
@@ -545,7 +545,6 @@ pub async fn get_login_history(
     let result = rows.iter().map(|r| serde_json::json!({
         "id": r.get::<uuid::Uuid, _>("id").to_string(),
         "device_info": r.get::<Option<String>, _>("device_info"),
-        "ip_address": r.get::<Option<String>, _>("ip_address"),
         "last_seen": r.get::<chrono::DateTime<chrono::Utc>, _>("last_seen").to_rfc3339(),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
     })).collect();

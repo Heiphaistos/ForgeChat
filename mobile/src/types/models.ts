@@ -315,7 +315,6 @@ export interface Member {
 export interface Session {
   id: string
   device: string | null
-  ip: string | null
   last_seen: string
   created_at: string
 }

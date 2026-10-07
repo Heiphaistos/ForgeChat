@@ -93,14 +93,10 @@ export const fr = {
   'settings.twoFactor.enable': 'Activer',
 
   // --- Appareils connectés ---
-  'settings.sessions.mobileApp': 'Application mobile',
-  'settings.sessions.desktopApp': 'Application desktop',
-  'settings.sessions.browser': 'Navigateur',
   'settings.sessions.revokeFailed': 'Révocation impossible',
   'settings.sessions.header': 'Si tu ne reconnais pas une session, révoque-la puis change ton mot de passe.',
   'settings.sessions.empty': 'Aucune session',
-  'settings.sessions.unknownIp': 'IP inconnue',
-  'settings.sessions.meta': '{ip} · actif {when}',
+  'settings.sessions.meta': 'Actif {when}',
   'settings.sessions.revokeA11y': 'Révoquer cette session',
   'settings.sessions.revokeTitle': 'Révoquer cette session ?',
   'settings.sessions.revokeBody': "L'appareil concerné sera déconnecté (y compris celui-ci s'il s'agit de lui).",
@@ -329,14 +325,10 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'settings.twoFactor.enable': 'Enable',
 
   // --- Appareils connectés ---
-  'settings.sessions.mobileApp': 'Mobile app',
-  'settings.sessions.desktopApp': 'Desktop app',
-  'settings.sessions.browser': 'Browser',
   'settings.sessions.revokeFailed': 'Couldn’t revoke',
   'settings.sessions.header': 'If you don’t recognize a session, revoke it and then change your password.',
   'settings.sessions.empty': 'No sessions',
-  'settings.sessions.unknownIp': 'Unknown IP',
-  'settings.sessions.meta': '{ip} · active {when}',
+  'settings.sessions.meta': 'Active {when}',
   'settings.sessions.revokeA11y': 'Revoke this session',
   'settings.sessions.revokeTitle': 'Revoke this session?',
   'settings.sessions.revokeBody': 'That device will be logged out (including this one if it’s the same).',

@@ -10,6 +10,7 @@ mod notify;
 mod push;
 mod mobile_push;
 mod net_guard;
+mod privacy;
 
 use axum::{
     middleware as axum_middleware,
@@ -84,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
             interval.tick().await;
             cleanup_expired_attachments(&cleanup_state, &cleanup_upload_dir).await;
             handlers::diagnostics::purge_old(&cleanup_state).await;
+            purge_retention(&cleanup_state).await;
         }
     });
 
@@ -350,6 +352,26 @@ async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
     }
 }
 
+/// Durées de conservation annoncées sur la page de confidentialité : au-delà, la ligne disparaît.
+async fn purge_retention(state: &AppState) {
+    const PURGES: &[(&str, &str)] = &[
+        ("sessions inactives", "DELETE FROM user_sessions WHERE last_seen < NOW() - INTERVAL '30 days'"),
+        ("jetons de session expirés", "DELETE FROM refresh_tokens WHERE expires_at < NOW()"),
+        ("inscriptions non confirmées", "DELETE FROM pending_registrations WHERE expires_at < NOW()"),
+        ("téléphones inactifs", "DELETE FROM push_devices WHERE last_seen_at < NOW() - INTERVAL '60 days'"),
+        ("journal d'audit", "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'"),
+        ("signalements de MP traités",
+         "DELETE FROM dm_reports WHERE status IN ('resolved', 'dismissed') AND COALESCE(resolved_at, created_at) < NOW() - INTERVAL '90 days'"),
+        ("signalements de messages traités",
+         "DELETE FROM message_reports WHERE status IN ('resolved', 'dismissed') AND created_at < NOW() - INTERVAL '90 days'"),
+    ];
+    for (what, sql) in PURGES {
+        if let Err(e) = sqlx::query(sql).execute(&state.db).await {
+            tracing::warn!("Purge ({what}) : {e}");
+        }
+    }
+}
+
 async fn send_dm_notifications(state: &AppState) {
     use sqlx::Row;
     use uuid::Uuid;
@@ -408,13 +430,13 @@ async fn send_dm_notifications(state: &AppState) {
 
         match email::send_email(&state.config, &email, "Nouveaux messages directs — ForgeChat", html).await {
             Ok(true) => {
-                tracing::info!("Email DM digest envoyé à {} ({} non-lus)", username, count);
+                tracing::debug!("Email DM digest envoyé ({} non-lus)", count);
             }
             Ok(false) => {
-                tracing::debug!("SMTP non configuré, email ignoré pour {}", username);
+                tracing::debug!("SMTP non configuré, email ignoré");
             }
             Err(e) => {
-                tracing::error!("Erreur envoi email DM à {}: {}", username, e);
+                tracing::error!("Erreur envoi email DM : {}", privacy::redact_emails(&e.to_string()));
                 continue;
             }
         }
@@ -451,7 +473,6 @@ async fn send_birthday_notifications(state: &AppState) {
 
     for row in birthday_users {
         let username: String = row.get("username");
-        let user_id: Uuid = row.get("id");
         let server_id: Uuid = row.get("server_id");
 
         let channel = sqlx::query(
@@ -497,7 +518,7 @@ async fn send_birthday_notifications(state: &AppState) {
                     }
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;
-                tracing::info!("Anniversaire envoyé pour {} (user {}) dans server {}", username, user_id, server_id);
+                tracing::debug!("Message d'anniversaire envoyé");
             }
         }
     }

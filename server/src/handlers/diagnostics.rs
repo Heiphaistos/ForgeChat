@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::password_reset::{client_ip, over_limit},
-    middleware::auth::{verify_token, Claims},
+    handlers::password_reset::over_limit,
+    middleware::auth::Claims,
     state::AppState,
 };
 
@@ -28,13 +28,12 @@ pub const MAX_BODY_BYTES: usize = 320 * 1024;
 const MAX_MESSAGE: usize = 2_000;
 const MAX_STACK: usize = 20_000;
 const MAX_LOG: usize = 200_000;
-const MAX_SHORT: usize = 512;
 const MAX_URL: usize = 2_000;
 /// Rapports par IP et par heure.
 const RATE_MAX: i64 = 30;
 const RATE_WINDOW_SECS: i64 = 3600;
 /// Rétention, appliquée par la boucle de maintenance de main.rs.
-pub const RETENTION_DAYS: i32 = 30;
+pub const RETENTION_DAYS: i32 = 14;
 
 const KINDS: &[&str] = &[
     "js_error",
@@ -154,22 +153,6 @@ fn normalize_platform(p: Option<&str>) -> String {
     }
 }
 
-/// Utilisateur connecté si un jeton valide accompagne le rapport (facultatif).
-fn optional_user(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
-    let token = headers
-        .get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(';').find_map(|p| p.trim().strip_prefix("access_token=").map(str::to_string)))
-        .or_else(|| {
-            headers
-                .get("Authorization")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.strip_prefix("Bearer "))
-                .map(str::to_string)
-        })?;
-    verify_token(&token, &state.config.jwt_secret, &state.config.jwt_issuer).map(|c| c.sub)
-}
-
 fn fingerprint(parts: &[&str]) -> String {
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
@@ -190,7 +173,7 @@ pub async fn submit_report(
     if !KINDS.contains(&body.kind.as_str()) {
         return Err(AppError::BadRequest("Type de rapport invalide".into()));
     }
-    let ip = client_ip(&headers, &addr);
+    let ip = crate::privacy::client_key(&headers, &addr);
     if over_limit(&state, &format!("diag_ip:{ip}"), RATE_MAX, RATE_WINDOW_SECS).await {
         return Err(AppError::TooManyRequests);
     }
@@ -205,10 +188,10 @@ pub async fn submit_report(
         .filter(|s| !s.trim().is_empty())
         .map(|s| scrub_secrets(&truncate_tail(s, MAX_LOG)));
     let header_ua = headers.get("user-agent").and_then(|v| v.to_str().ok());
-    let user_agent = clean(body.user_agent.as_deref().or(header_ua), MAX_SHORT);
+    // Anonyme : ni compte, ni user-agent brut, seulement navigateur + version et système.
+    let user_agent = body.user_agent.as_deref().or(header_ua).map(|ua| crate::privacy::device_label(ua, true));
     // Jamais de query string ni de fragment : ils portent parfois des jetons.
     let url = clean(body.url.as_deref().map(|u| u.split(['?', '#']).next().unwrap_or("")), MAX_URL);
-    let user_id = optional_user(&state, &headers);
 
     // Même erreur = même empreinte. Un signalement manuel reste toujours distinct.
     let unique = if body.kind == "manual" { Uuid::new_v4().to_string() } else { String::new() };
@@ -224,15 +207,13 @@ pub async fn submit_report(
 
     sqlx::query(
         "INSERT INTO client_reports
-            (user_id, platform, app_version, kind, message, stack, log, user_agent, url, fingerprint)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            (platform, app_version, kind, message, stack, log, user_agent, url, fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (fingerprint) DO UPDATE SET
             count = client_reports.count + 1,
             last_seen = NOW(),
-            log = COALESCE(EXCLUDED.log, client_reports.log),
-            user_id = COALESCE(EXCLUDED.user_id, client_reports.user_id)",
+            log = COALESCE(EXCLUDED.log, client_reports.log)",
     )
-    .bind(user_id)
     .bind(&platform)
     .bind(&version)
     .bind(&body.kind)
@@ -272,7 +253,6 @@ pub struct ReportSummary {
     pub id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub last_seen: chrono::DateTime<chrono::Utc>,
-    pub user_id: Option<Uuid>,
     pub platform: String,
     pub app_version: Option<String>,
     pub kind: String,
@@ -286,8 +266,6 @@ pub struct ReportDetail {
     pub id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub last_seen: chrono::DateTime<chrono::Utc>,
-    pub user_id: Option<Uuid>,
-    pub username: Option<String>,
     pub platform: String,
     pub app_version: Option<String>,
     pub kind: String,
@@ -311,7 +289,7 @@ pub async fn list_reports(
     let platform = q.platform.filter(|s| !s.is_empty());
     let kind = q.kind.filter(|s| !s.is_empty());
     let items: Vec<ReportSummary> = sqlx::query_as(
-        "SELECT id, created_at, last_seen, user_id, platform, app_version, kind,
+        "SELECT id, created_at, last_seen, platform, app_version, kind,
                 LEFT(message, 300) AS message, count, (log IS NOT NULL) AS has_log
          FROM client_reports
          WHERE ($1::text IS NULL OR platform = $1) AND ($2::text IS NULL OR kind = $2)
@@ -343,10 +321,10 @@ pub async fn get_report(
 ) -> Result<Json<ReportDetail>> {
     require_admin(&claims)?;
     let report: Option<ReportDetail> = sqlx::query_as(
-        "SELECT r.id, r.created_at, r.last_seen, r.user_id, u.username, r.platform, r.app_version,
-                r.kind, r.message, r.stack, r.log, r.user_agent, r.url, r.count
-         FROM client_reports r LEFT JOIN users u ON u.id = r.user_id
-         WHERE r.id = $1",
+        "SELECT id, created_at, last_seen, platform, app_version,
+                kind, message, stack, log, user_agent, url, count
+         FROM client_reports
+         WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(&state.db)

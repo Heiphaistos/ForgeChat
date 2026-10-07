@@ -135,24 +135,37 @@ export function ConfidentialitePage() {
       </Block>
       <Block title="Sessions et sécurité">
         <p>
-          Chaque connexion crée une session (appareil et navigateur, adresse IP, dernière activité), visible et révocable dans vos paramètres ;
-          elle est supprimée à la déconnexion ou à la réinitialisation du mot de passe. Base légale : intérêt légitime (sécurité du compte).
+          Chaque connexion crée une session visible et révocable dans vos paramètres. Elle ne garde qu'une étiquette d'appareil (par exemple
+          « Firefox · Linux » ou « ForgeChat Android »), sa date de création et sa dernière activité : <strong className="text-white">ni adresse
+          IP, ni identifiant détaillé du navigateur</strong>. Elle est supprimée à la déconnexion, à la réinitialisation du mot de passe, à la
+          révocation, ou après 30 jours sans activité. Base légale : intérêt légitime (sécurité du compte).
         </p>
         <p>
-          Le serveur web enregistre pour chaque requête l'adresse IP, la date, l'adresse demandée et le navigateur utilisé. Finalité : sécurité,
-          prévention des abus et diagnostic. Conservation : 12 mois maximum.
+          Contre les abus (essais de mots de passe, inscriptions en masse), le serveur compte les tentatives pendant 15 minutes à 1 heure. Ces
+          compteurs vivent uniquement en mémoire et n'utilisent jamais votre adresse IP ou e-mail en clair, seulement une empreinte calculée avec
+          une clé tirée au hasard et renouvelée chaque jour, que rien ne permet de relier d'un jour à l'autre.
+        </p>
+        <p>
+          Le serveur web ne tient pas de journal des requêtes. Les journaux techniques du service sont limités à 30 Mo et s'écrasent d'eux-mêmes ;
+          ils ne contiennent ni adresse e-mail, ni adresse IP, ni nom d'utilisateur, au plus l'identifiant interne d'un compte (refus anti-abus,
+          erreurs). Seul le journal d'erreurs du serveur web (requêtes malformées, pannes) peut contenir une adresse IP ; il est effacé par
+          la rotation automatique du système.
         </p>
       </Block>
       <Block title="Rapports d'erreurs">
         <p>
-          Quand l'application plante ou n'arrive pas à démarrer, elle envoie automatiquement un rapport technique à ce serveur : plateforme, version,
-          message d'erreur, pile d'appels, navigateur et page concernée, et votre identifiant si vous êtes connecté. Ces rapports, lus uniquement par
-          l'administrateur, sont effacés 30 jours après leur dernière occurrence. Base légale : intérêt légitime (corriger les pannes).
+          Quand l'application plante ou n'arrive pas à démarrer, elle envoie automatiquement un rapport technique anonyme : plateforme, version,
+          message d'erreur, pile d'appels, navigateur et système (par exemple « Chrome 129 · Windows ») et page concernée, sans aucun lien avec
+          votre compte. Ces rapports, lus uniquement par l'administrateur, sont effacés 14 jours après leur dernière occurrence. Base légale :
+          intérêt légitime (corriger les pannes).
         </p>
       </Block>
       <Block title="Appels vocaux et vidéo">
         <p>
-          Les appels passent par le serveur de visioconférence de ForgeChat, hébergé sur la même machine. Ils ne sont pas enregistrés.
+          Les appels passent par le serveur de visioconférence de ForgeChat, hébergé sur la même machine. Ils ne sont pas enregistrés. Le relais
+          réseau (TURN), utilisé quand une connexion directe est impossible, reçoit un identifiant aléatoire valable une heure, jamais celui de
+          votre compte, et ne tient aucun journal. Les mesures de qualité d'appel envoyées au serveur ne contiennent ni votre compte ni votre
+          navigateur.
         </p>
       </Block>
       <Block title="E-mails">
@@ -184,6 +197,19 @@ export function ConfidentialitePage() {
           </li>
         </ul>
         <p>Aucune police n'est chargée depuis un service tiers.</p>
+      </Block>
+      <Block title="Durées de conservation">
+        <ul className="list-disc pl-5 space-y-2">
+          <li>Compte, messages, fichiers : jusqu'à leur suppression (voir plus haut).</li>
+          <li>Sessions : jusqu'à la déconnexion, ou 30 jours sans activité.</li>
+          <li>Inscriptions non confirmées et liens de réinitialisation du mot de passe : jusqu'à leur expiration (30 minutes pour un lien).</li>
+          <li>Téléphones enregistrés pour les notifications : 60 jours sans activité.</li>
+          <li>Journal d'audit des serveurs : 90 jours.</li>
+          <li>Signalements traités ou rejetés : 90 jours ; ceux en attente restent jusqu'à leur traitement.</li>
+          <li>Rapports d'erreurs : 14 jours après leur dernière occurrence.</li>
+          <li>Compteurs anti-abus : 1 heure au plus, en mémoire uniquement.</li>
+        </ul>
+        <p>Ces effacements sont automatiques et vérifiés toutes les heures.</p>
       </Block>
       <Block title="Cookies et stockage local">
         <p>

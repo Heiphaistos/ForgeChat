@@ -9,12 +9,11 @@ import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 import { Ionicons } from '@expo/vector-icons'
 
-function deviceLabel(ua: string | null): { label: string; icon: 'phone-portrait-outline' | 'desktop-outline' | 'globe-outline' } {
-  const s = ua ?? ''
-  if (/forgechat-mobile|okhttp|CFNetwork|Darwin/i.test(s)) return { label: tr('settings.sessions.mobileApp'), icon: 'phone-portrait-outline' }
-  if (/tauri|Electron/i.test(s)) return { label: tr('settings.sessions.desktopApp'), icon: 'desktop-outline' }
-  const browser = /Firefox/.test(s) ? 'Firefox' : /Edg\//.test(s) ? 'Edge' : /Chrome/.test(s) ? 'Chrome' : /Safari/.test(s) ? 'Safari' : tr('settings.sessions.browser')
-  return { label: browser, icon: 'globe-outline' }
+/** Le serveur ne garde qu'une étiquette (« Chrome · Windows », « ForgeChat Android »), ni IP ni user-agent. */
+function deviceLabel(label: string | null): { label: string; icon: 'phone-portrait-outline' | 'desktop-outline' | 'globe-outline' } {
+  if (!label) return { label: tr('settings.loginHistory.unknownDevice'), icon: 'globe-outline' }
+  if (/Android|iOS/.test(label)) return { label, icon: 'phone-portrait-outline' }
+  return { label, icon: label.startsWith('ForgeChat') ? 'desktop-outline' : 'globe-outline' }
 }
 
 export default function SessionsScreen() {
@@ -48,7 +47,7 @@ export default function SessionsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>{d.label}</Text>
               <Text style={styles.sub} numberOfLines={1}>
-                {t('settings.sessions.meta', { ip: item.ip ?? t('settings.sessions.unknownIp'), when: formatRelative(item.last_seen) })}
+                {t('settings.sessions.meta', { when: formatRelative(item.last_seen) })}
               </Text>
             </View>
             <IconButton

@@ -13,7 +13,7 @@ pub async fn send_email(config: &Config, to: &str, subject: &str, html_body: Str
         &config.smtp_user,
         &config.smtp_pass,
     ) else {
-        tracing::warn!("SMTP non configuré — email non envoyé à {}", to);
+        tracing::warn!("SMTP non configuré — e-mail non envoyé");
         return Ok(false);
     };
 
@@ -44,7 +44,7 @@ pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> a
         &config.smtp_user,
         &config.smtp_pass,
     ) else {
-        tracing::warn!("SMTP non configuré — inscription en attente pour {}", to);
+        tracing::warn!("SMTP non configuré — e-mail de vérification non envoyé");
         return Ok(false);
     };
 

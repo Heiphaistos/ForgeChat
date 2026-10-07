@@ -18,7 +18,6 @@ export interface UpdateProfile {
 export interface LoginEntry {
   id: string
   device_info: string | null
-  ip_address: string | null
   last_seen: string
   created_at: string
 }

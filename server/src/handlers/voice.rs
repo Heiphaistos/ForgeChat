@@ -13,7 +13,7 @@ const TURN_TTL_S: u64 = 3600;
 ///
 /// Deux modes TURN :
 /// - **éphémère** (recommandé) si `TURN_STATIC_AUTH_SECRET` est défini :
-///   `username = "<expiry_unix>:<user_id>"`, `credential = base64(HMAC-SHA1(secret, username))`,
+///   `username = "<expiry_unix>:<aléatoire>"`, `credential = base64(HMAC-SHA1(secret, username))`,
 ///   valable `TURN_TTL_S`. Le secret ne quitte jamais le serveur (correctif N6).
 /// - **statique** en repli si seule `TURN_PASSWORD` est fournie (ancien comportement).
 ///
@@ -21,7 +21,7 @@ const TURN_TTL_S: u64 = 3600;
 /// (0 = credentials statiques, pas d'expiration).
 pub async fn get_ice_config(
     State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
+    Extension(_claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Uniquement les serveurs STUN configurés (STUN_URLS) : aucun STUN public par défaut, qui
     // verrait l'adresse IP de chaque participant. Sans STUN_URLS ni TURN, la liste est vide.
@@ -40,7 +40,13 @@ pub async fn get_ice_config(
                 .map(|d| d.as_secs())
                 .unwrap_or(0)
                 + TURN_TTL_S;
-            let username = format!("{}:{}", expiry, claims.sub);
+            // Partie aléatoire, pas l'identifiant du compte : coturn ne voit ni ne journalise
+            // qui relaie. Il ne vérifie que HMAC(secret, nom complet) et l'expiration.
+            let nonce: String = rand::Rng::sample_iter(rand::thread_rng(), &rand::distributions::Alphanumeric)
+                .take(16)
+                .map(char::from)
+                .collect();
+            let username = format!("{}:{}", expiry, nonce);
             let credential = turn_credential(secret, &username)?;
             ttl = TURN_TTL_S;
             servers.push(serde_json::json!({
@@ -181,7 +187,7 @@ pub async fn get_voice_state(
 /// Loguées en `info`, aucun stockage DB.
 pub async fn post_voice_telemetry(
     State(_state): State<AppState>,
-    Extension(claims): Extension<Claims>,
+    Extension(_claims): Extension<Claims>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Garde-fou : un payload obèse ne doit pas noyer les logs.
@@ -189,7 +195,8 @@ pub async fn post_voice_telemetry(
     if payload.len() > 16 * 1024 {
         return Err(AppError::BadRequest("Télémétrie trop volumineuse (max 16 Ko)".into()));
     }
-    tracing::info!(target: "voice_telemetry", user_id = %claims.sub, stats = %payload, "voice telemetry");
+    // Anonyme : ni compte ni user-agent, seulement l'état de l'appel.
+    tracing::info!(target: "voice_telemetry", stats = %payload, "voice telemetry");
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

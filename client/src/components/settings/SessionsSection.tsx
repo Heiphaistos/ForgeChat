@@ -1,33 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
-import { Monitor, Smartphone, Trash2, Globe, Shield, Clock, Cpu } from 'lucide-react'
+import { Monitor, Smartphone, Trash2, Shield, Clock, Cpu } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useT, t as tr, dateLocale, intlLocale } from '../../i18n'
 
 interface Session {
   id: string
   device: string | null
-  ip: string | null
   last_seen: string
   created_at: string
   current?: boolean
 }
 
+// Le serveur ne garde qu'une étiquette (« Chrome · Windows », « ForgeChat Android »), ni IP ni user-agent.
 function parseDevice(device: string | null): { label: string; Icon: typeof Monitor } {
   if (!device) return { label: tr('settings.sessions.unknownDevice'), Icon: Monitor }
-  const d = device.toLowerCase()
-  if (d.includes('mobile') || d.includes('android') || d.includes('iphone') || d.includes('ios'))
-    return { label: device, Icon: Smartphone }
-  return { label: device, Icon: Monitor }
-}
-
-function getBrowser(device: string | null): string {
-  if (!device) return ''
-  if (device.toLowerCase().includes('chrome')) return 'Chrome'
-  if (device.toLowerCase().includes('firefox')) return 'Firefox'
-  if (device.toLowerCase().includes('safari')) return 'Safari'
-  if (device.toLowerCase().includes('edge')) return 'Edge'
-  return ''
+  return { label: device, Icon: /Android|iOS/.test(device) ? Smartphone : Monitor }
 }
 
 export default function SessionsSection() {
@@ -62,16 +50,11 @@ export default function SessionsSection() {
   return (
     <div className="space-y-6">
       {/* Résumé */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
           <Cpu size={18} className="mx-auto text-fc-accent mb-1" />
           <p className="text-lg font-bold text-white">{sessions.length}</p>
           <p className="text-xs text-fc-muted">{t(sessions.length > 1 ? 'settings.sessions.active.other' : 'settings.sessions.active.one')}</p>
-        </div>
-        <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
-          <Globe size={18} className="mx-auto text-fc-muted mb-1" />
-          <p className="text-lg font-bold text-white">{new Set(sessions.map(s => s.ip)).size}</p>
-          <p className="text-xs text-fc-muted">{t(new Set(sessions.map(s => s.ip)).size > 1 ? 'settings.sessions.ips.other' : 'settings.sessions.ips.one')}</p>
         </div>
         <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
           <Shield size={18} className="mx-auto text-fc-green mb-1" />
@@ -92,13 +75,9 @@ export default function SessionsSection() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-white truncate">{parseDevice(current.device).label}</p>
-                  {getBrowser(current.device) && (
-                    <span className="text-xs bg-fc-hover text-fc-muted px-1.5 py-0.5 rounded">{getBrowser(current.device)}</span>
-                  )}
                   <span className="text-xs bg-fc-green/20 text-fc-green px-2 py-0.5 rounded-full">{t('settings.sessions.currentBadge')}</span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fc-muted">
-                  <span className="flex items-center gap-1"><Globe size={11} /> {current.ip ?? '—'}</span>
                   <span className="flex items-center gap-1"><Clock size={11} />
                     {t('settings.sessions.connected', { when: formatDistanceToNow(new Date(current.last_seen), { addSuffix: true, locale }) })}
                   </span>
@@ -130,17 +109,14 @@ export default function SessionsSection() {
           <div className="space-y-2">
             {others.map(s => {
               const { label, Icon } = parseDevice(s.device)
-              const browser = getBrowser(s.device)
               return (
                 <div key={s.id} className="flex items-start gap-3 p-3 bg-fc-channel rounded-xl border border-fc-hover">
                   <Icon size={18} className="text-fc-muted flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm text-white truncate">{label}</p>
-                      {browser && <span className="text-xs bg-fc-hover text-fc-muted px-1.5 py-0.5 rounded">{browser}</span>}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-fc-muted">
-                      <span className="flex items-center gap-1"><Globe size={10} /> {s.ip ?? '—'}</span>
                       <span className="flex items-center gap-1"><Clock size={10} />
                         {formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale })}
                       </span>

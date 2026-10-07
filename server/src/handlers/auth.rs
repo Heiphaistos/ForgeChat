@@ -72,13 +72,7 @@ pub async fn register(
     Json(body): Json<RegisterRequest>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
     {
-        let client_ip = headers
-            .get("x-real-ip")
-            .or_else(|| headers.get("x-forwarded-for"))
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-            .unwrap_or_else(|| addr.ip().to_string());
-        let key = format!("register_attempts:{}", client_ip);
+        let key = format!("register_attempts:{}", crate::privacy::client_key(&headers, &addr));
         let mut redis = state.redis.lock().await;
         let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
         let count = count.unwrap_or(0);
@@ -158,7 +152,7 @@ pub async fn verify_email(
         .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
 
     {
-        let key = format!("verify_attempts:{}", email);
+        let key = format!("verify_attempts:{}", crate::privacy::pseudonym(&email));
         let mut redis = state.redis.lock().await;
         let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
         let count = count.unwrap_or(0);
@@ -208,7 +202,7 @@ pub async fn verify_email(
         .await?;
 
     {
-        let key = format!("verify_attempts:{}", email);
+        let key = format!("verify_attempts:{}", crate::privacy::pseudonym(&email));
         let mut redis = state.redis.lock().await;
         let _: () = redis.del(&key).await.unwrap_or(());
     }
@@ -229,12 +223,7 @@ pub async fn login(
     headers: axum::http::HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
-    let client_ip = headers
-        .get("x-real-ip")
-        .or_else(|| headers.get("x-forwarded-for"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-        .unwrap_or_else(|| addr.ip().to_string());
+    let client_ip = crate::privacy::client_key(&headers, &addr);
 
     check_login_rate_limit(&state, &client_ip).await?;
 
@@ -294,22 +283,16 @@ pub async fn login(
         // (encodages différents). Sans corrélation possible, revoke_session ne pouvait
         // pas retrouver quel refresh_token invalider -- "Révoquer" ne faisait rien.
         let token_hash = hash_token(&refresh_token);
+        // Étiquette d'appareil seulement, ni user-agent brut ni IP.
         let device = headers.get("user-agent")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("Unknown")
-            .chars().take(200).collect::<String>();
-        let ip = headers.get("x-real-ip")
-            .or_else(|| headers.get("x-forwarded-for"))
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-            .unwrap_or_else(|| addr.ip().to_string());
+            .map(|ua| crate::privacy::device_label(ua, false));
         sqlx::query_scalar(
-            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info, ip_address) VALUES ($1, $2, $3, $4) RETURNING id"
+            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info) VALUES ($1, $2, $3) RETURNING id"
         )
         .bind(user.id)
         .bind(&token_hash)
         .bind(&device)
-        .bind(&ip)
         .fetch_one(&state.db)
         .await
         .ok()
@@ -515,6 +498,11 @@ pub async fn logout(
         .bind(claims.sub)
         .execute(&state.db)
         .await?;
+    // Plus aucun jeton de rafraîchissement : les lignes de session ne désignent plus rien.
+    sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
     sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .execute(&state.db)
@@ -569,7 +557,7 @@ pub async fn list_sessions(
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
 ) -> Result<axum::Json<serde_json::Value>> {
     let sessions = sqlx::query(
-        "SELECT id, device_info, ip_address, last_seen, created_at FROM user_sessions WHERE user_id = $1 ORDER BY last_seen DESC LIMIT 20",
+        "SELECT id, device_info, last_seen, created_at FROM user_sessions WHERE user_id = $1 ORDER BY last_seen DESC LIMIT 20",
     )
     .bind(claims.sub)
     .fetch_all(&state.db)
@@ -581,7 +569,6 @@ pub async fn list_sessions(
             "id": s.get::<uuid::Uuid, _>("id").to_string(),
             "current": claims.sid == Some(s.get::<uuid::Uuid, _>("id")),
             "device": s.get::<Option<String>, _>("device_info"),
-            "ip": s.get::<Option<String>, _>("ip_address"),
             "last_seen": s.get::<chrono::DateTime<chrono::Utc>, _>("last_seen").to_rfc3339(),
             "created_at": s.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         })
