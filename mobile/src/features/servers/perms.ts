@@ -87,6 +87,23 @@ export const toggleBit = (perms: number, bit: number) => Number(BigInt(Math.trun
 /** Couleur d'un rôle (entier RVB) en « #rrggbb » ; 0 = sans couleur. */
 export const roleColorHex = (c: number) => (c ? `#${(c >>> 0).toString(16).padStart(6, '0')}` : null)
 
+/** Habillage du pseudo d'un membre : couleur du rôle coloré le plus haut, icône du rôle à icône le plus haut. */
+export interface RoleDecor {
+  color: string | null
+  icon: string | null
+  iconTitle: string | null
+}
+
+export function roleDecorOf(roles: Role[], roleIds: string[] | undefined): RoleDecor | undefined {
+  const ids = new Set(roleIds ?? [])
+  const mine = roles.filter((r) => !r.is_everyone && ids.has(r.id)).sort((a, b) => b.position - a.position)
+  const colored = mine.find((r) => r.color)
+  const withIcon = mine.find((r) => r.icon)
+  if (!colored && !withIcon) return undefined
+  // ponytail: pas de dégradé de texte sans dépendance (masked-view + linear-gradient) : première couleur seule.
+  return { color: colored ? roleColorHex(colored.color) : null, icon: withIcon?.icon ?? null, iconTitle: withIcon?.name ?? null }
+}
+
 export interface MemberRank {
   user_id: string
   is_owner?: boolean

@@ -91,6 +91,10 @@ export interface Role {
   mentionable: boolean
   hoisted: boolean
   is_everyone: boolean
+  /** Seconde couleur du dégradé de pseudo (le mobile n'affiche que la première). */
+  secondary_color?: number | null
+  /** Emoji ou image `/uploads/role-icon-…`. */
+  icon?: string | null
 }
 
 /** Réponse de GET /servers/:id (handlers/servers.rs::get_server). */
