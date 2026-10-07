@@ -121,6 +121,16 @@ export const fr = {
   'store.time.day': 'jour',
   'store.time.in': 'dans {label}',
   'store.time.ago': 'il y a {label}',
+
+  // --- Partage d'écran et adresse audio/vidéo (screenShareLogic.ts, livekitUrl.ts) ---
+  'store.screen.warning': 'Tout ce qui s’affiche sur ton écran sera visible, y compris les notifications.',
+  'store.screen.waitConnected': 'Attends que l’appel soit établi.',
+  'store.screen.videoOnly': 'Le partage d’écran n’est disponible qu’en appel vidéo.',
+  'store.livekit.missing': 'Adresse du serveur audio/vidéo absente.',
+  'store.livekit.invalid': 'Adresse du serveur audio/vidéo invalide.',
+  'store.livekit.cleartext': 'Serveur audio/vidéo refusé : connexion non chiffrée.',
+  'store.livekit.unexpected': 'Serveur audio/vidéo refusé : adresse inattendue.',
+  'store.livekit.lanOnly': 'Serveur audio/vidéo refusé : ws:// seulement vers une IP du réseau local.',
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -233,4 +243,14 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'store.time.day': 'day',
   'store.time.in': 'in {label}',
   'store.time.ago': '{label} ago',
+
+  // --- Partage d'écran et adresse audio/vidéo (screenShareLogic.ts, livekitUrl.ts) ---
+  'store.screen.warning': 'Everything shown on your screen will be visible, including notifications.',
+  'store.screen.waitConnected': 'Wait for the call to connect.',
+  'store.screen.videoOnly': 'Screen sharing is only available in video calls.',
+  'store.livekit.missing': 'Audio/video server address missing.',
+  'store.livekit.invalid': 'Invalid audio/video server address.',
+  'store.livekit.cleartext': 'Audio/video server rejected: unencrypted connection.',
+  'store.livekit.unexpected': 'Audio/video server rejected: unexpected address.',
+  'store.livekit.lanOnly': 'Audio/video server rejected: ws:// only to a local network IP.',
 }

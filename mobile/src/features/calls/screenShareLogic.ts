@@ -6,17 +6,18 @@
  * VOICE_STATE_UPDATE et STREAM_START / STREAM_END). En appel 1:1, le correspondant ne voit qu'une
  * vidéo : l'écran remplace la caméra le temps du partage.
  */
+import { t } from '@/i18n'
 
-export const SCREEN_SHARE_WARNING =
-  'Tout ce qui s’affiche sur ton écran sera visible, y compris les notifications.'
+/** Avertissement avant partage (traduit à l'affichage). */
+export const SCREEN_SHARE_WARNING = () => t('store.screen.warning')
 
 /** Partage possible en appel 1:1 : appel vidéo établi (le web n'affiche rien en appel vocal). */
 export const canShareInCall = (phase: string, callType: string) => phase === 'connected' && callType === 'video'
 
 /** Raison affichée quand le bouton de partage est indisponible en appel 1:1, sinon null. */
 export function callShareUnavailableReason(phase: string, callType: string): string | null {
-  if (phase !== 'connected') return 'Attends que l’appel soit établi.'
-  if (callType !== 'video') return 'Le partage d’écran n’est disponible qu’en appel vidéo.'
+  if (phase !== 'connected') return t('store.screen.waitConnected')
+  if (callType !== 'video') return t('store.screen.videoOnly')
   return null
 }
 

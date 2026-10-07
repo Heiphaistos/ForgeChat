@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { messagesApi, type UploadFile } from '@/api/messages'
 import { ALLOWED_UPLOAD_EXTENSIONS, LIMITS } from '@/config/env'
+import { t } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
 import { logger } from '@/lib/logger'
 import { realtime } from '@/lib/realtime'
@@ -47,8 +48,8 @@ export function uploadExtension(name: string): string {
 export function validateAttachment(f: LocalAttachment): string | null {
   const ext = uploadExtension(f.name)
   if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext))
-    return `Type de fichier .${ext || '?'} non autorisé par le serveur. Formats acceptés : images (jpg, png, gif, webp), vidéos (mp4, mov, webm, mkv), audio (mp3, ogg, wav, flac), documents (pdf, txt, md, Office) et archives (zip, 7z, rar, tar, gz).`
-  if (f.size != null && f.size > LIMITS.uploadMaxBytes) return 'Fichier trop volumineux (max 500 Mo)'
+    return t('panel.attach.badType', { ext: ext || '?' })
+  if (f.size != null && f.size > LIMITS.uploadMaxBytes) return t('panel.attach.tooBig')
   return null
 }
 

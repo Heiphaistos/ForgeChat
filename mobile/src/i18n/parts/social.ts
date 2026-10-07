@@ -114,10 +114,6 @@ export const fr = {
   'social.forward.placeholder': 'Rechercher un salon ou un serveur',
   'social.forward.searchLabel': 'Rechercher un salon',
   'social.forward.itemLabel': 'Transférer vers {name}, serveur {server}',
-  'social.remind.in20m': 'Dans 20 minutes',
-  'social.remind.in1h': 'Dans 1 heure',
-  'social.remind.in3h': 'Dans 3 heures',
-  'social.remind.tomorrow9': 'Demain à 9 h',
   'social.remind.done': 'Rappel programmé',
   'social.remind.on': 'Le {date}',
   'social.remind.failed': 'Rappel impossible',
@@ -225,6 +221,10 @@ export const fr = {
   'social.notFound.title': 'Introuvable',
   'social.notFound.body': 'Cette page n’existe pas',
   'social.notFound.home': 'Retour à l’accueil',
+
+  // --- Création de groupe (features/groups/rules.ts) ---
+  'social.group.errMin': 'Choisis au moins {n} amis.',
+  'social.group.errMax': '{n} amis au maximum.',
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -341,10 +341,6 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'social.forward.placeholder': 'Search for a channel or server',
   'social.forward.searchLabel': 'Search for a channel',
   'social.forward.itemLabel': 'Forward to {name}, server {server}',
-  'social.remind.in20m': 'In 20 minutes',
-  'social.remind.in1h': 'In 1 hour',
-  'social.remind.in3h': 'In 3 hours',
-  'social.remind.tomorrow9': 'Tomorrow at 9 AM',
   'social.remind.done': 'Reminder set',
   'social.remind.on': 'On {date}',
   'social.remind.failed': 'Couldn’t set reminder',
@@ -452,4 +448,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'social.notFound.title': 'Not found',
   'social.notFound.body': 'This page doesn’t exist',
   'social.notFound.home': 'Back to home',
+
+  // --- Création de groupe (features/groups/rules.ts) ---
+  'social.group.errMin': 'Pick at least {n} friends.',
+  'social.group.errMax': '{n} friends at most.',
 }

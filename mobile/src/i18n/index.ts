@@ -62,6 +62,9 @@ export function t(key: Key, vars?: Vars): string {
   return translate(DICTS[useLang.getState().lang], fr, key, vars)
 }
 
+/** Locale Intl de la langue active (dates, nombres). */
+export const dateLocale = () => (useLang.getState().lang === 'fr' ? 'fr-FR' : 'en-US')
+
 /** Dans un composant : se re-rend quand la langue change. */
 export function useT() {
   const lang = useLang((s) => s.lang)

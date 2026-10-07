@@ -1,3 +1,4 @@
+import { dateLocale, t as tr } from '@/i18n'
 import builtin from './builtinServerTemplates.json'
 
 /**
@@ -91,8 +92,8 @@ export function parseRemoteTemplates(raw: unknown): { public: ServerTemplate[]; 
     const created = typeof t.created_at === 'string' ? new Date(t.created_at) : null
     const fallback =
       source === 'mine' && created && !Number.isNaN(created.getTime())
-        ? `Créé le ${created.toLocaleDateString('fr-FR')}`
-        : `Utilisé ${usage} fois`
+        ? tr('server.template.created', { date: created.toLocaleDateString(dateLocale()) })
+        : tr('server.template.used', { n: usage })
     return { id, name, description: str(t.description, 300) ?? fallback, data: parseTemplateData(t.template_data), source }
   }
   const list = (v: unknown, source: TemplateSource) =>
@@ -148,5 +149,5 @@ export function utf8Length(s: string): number {
 /** Message d'erreur du nom de serveur, ou null s'il est valide (2 à 100 octets, comme le serveur). */
 export function serverNameError(name: string): string | null {
   const len = utf8Length(name.trim())
-  return len < 2 || len > 100 ? 'Le nom doit faire entre 2 et 100 caractères.' : null
+  return len < 2 || len > 100 ? tr('server.create.nameError') : null
 }

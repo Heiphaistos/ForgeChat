@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { isCleartextAllowedHost } from './serverUrl'
 
 /**
@@ -26,25 +27,25 @@ const URL_RE = /^(wss?):\/\/([a-z0-9.-]+)(?::(\d{1,5}))?(\/[a-z0-9._~\-/]*)?$/i
 const IPV4_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/
 
 export function checkLiveKitUrl(raw: unknown, policy: LiveKitUrlPolicy): LiveKitUrlCheck {
-  if (typeof raw !== 'string' || raw.length > 512) return { ok: false, reason: 'Adresse du serveur audio/vidéo absente.' }
+  if (typeof raw !== 'string' || raw.length > 512) return { ok: false, reason: t('store.livekit.missing') }
   const m = URL_RE.exec(raw.trim())
-  if (!m) return { ok: false, reason: 'Adresse du serveur audio/vidéo invalide.' }
+  if (!m) return { ok: false, reason: t('store.livekit.invalid') }
   const scheme = (m[1] ?? '').toLowerCase()
   const host = (m[2] ?? '').toLowerCase()
   const port = m[3] === undefined ? null : Number(m[3])
   if (!host || host.startsWith('.') || host.endsWith('.') || host.includes('..')) {
-    return { ok: false, reason: 'Adresse du serveur audio/vidéo invalide.' }
+    return { ok: false, reason: t('store.livekit.invalid') }
   }
-  if (port !== null && (port < 1 || port > 65535)) return { ok: false, reason: 'Adresse du serveur audio/vidéo invalide.' }
+  if (port !== null && (port < 1 || port > 65535)) return { ok: false, reason: t('store.livekit.invalid') }
 
   if (policy.appEnv === 'production') {
-    if (scheme !== 'wss') return { ok: false, reason: 'Serveur audio/vidéo refusé : connexion non chiffrée.' }
+    if (scheme !== 'wss') return { ok: false, reason: t('store.livekit.cleartext') }
     const expected = (policy.pinnedHost || policy.apiHost).toLowerCase()
     if (IPV4_RE.test(host) || host !== expected) {
-      return { ok: false, reason: 'Serveur audio/vidéo refusé : adresse inattendue.' }
+      return { ok: false, reason: t('store.livekit.unexpected') }
     }
   } else if (scheme === 'ws' && !isCleartextAllowedHost(host)) {
-    return { ok: false, reason: 'Serveur audio/vidéo refusé : ws:// seulement vers une IP du réseau local.' }
+    return { ok: false, reason: t('store.livekit.lanOnly') }
   }
   return { ok: true, url: `${scheme}://${host}${port === null ? '' : `:${port}`}${m[4] ?? ''}`, host }
 }

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import type { Friend, GroupDetails } from '@/types/models'
 
 /** Bornes de handlers/group_dms.rs : 2 à 9 autres membres à la création, 10 membres au total. */
@@ -14,8 +15,8 @@ export function groupCreateIds(selected: readonly string[], myId: string | null)
 /** Message d'erreur si la sélection ne passera pas côté serveur, sinon null. */
 export function groupCreateError(selected: readonly string[], myId: string | null): string | null {
   const n = groupCreateIds(selected, myId).length
-  if (n < GROUP_MIN_OTHERS) return `Choisis au moins ${GROUP_MIN_OTHERS} amis.`
-  if (n > GROUP_MAX_OTHERS) return `${GROUP_MAX_OTHERS} amis au maximum.`
+  if (n < GROUP_MIN_OTHERS) return t('social.group.errMin', { n: GROUP_MIN_OTHERS })
+  if (n > GROUP_MAX_OTHERS) return t('social.group.errMax', { n: GROUP_MAX_OTHERS })
   return null
 }
 

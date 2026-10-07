@@ -4,13 +4,10 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { messagesApi } from '@/api/messages'
 import { Button, ErrorState, Row, Section, TextField } from '@/components/ui'
 import { formatReminderInput, parseReminderInput, reminderPresets } from '@/features/chat/messageExtras'
-import { useT, type Key } from '@/i18n'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, font, spacing } from '@/theme'
-
-// Même ordre que reminderPresets().
-const PRESET_KEYS: Key[] = ['social.remind.in20m', 'social.remind.in1h', 'social.remind.in3h', 'social.remind.tomorrow9']
 
 /** « Me le rappeler » (comme ReminderModal) : le serveur renvoie un événement REMINDER à l'échéance. */
 export default function RemindScreen() {
@@ -41,8 +38,8 @@ export default function RemindScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
       <Section title={t('screen.remind')}>
-        {reminderPresets(new Date()).map((p, i) => (
-          <Row key={p.label} icon="alarm-outline" title={PRESET_KEYS[i] ? t(PRESET_KEYS[i]) : p.label} subtitle={formatReminderInput(p.date)} onPress={() => !busy && schedule(p.date)} />
+        {reminderPresets(new Date()).map((p) => (
+          <Row key={p.label} icon="alarm-outline" title={t(p.label)} subtitle={formatReminderInput(p.date)} onPress={() => !busy && schedule(p.date)} />
         ))}
       </Section>
       <View style={{ gap: spacing.sm }}>

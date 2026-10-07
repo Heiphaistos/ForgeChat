@@ -9,20 +9,9 @@ import { Button, IconButton, Row, Section, SwitchRow, TextField } from '@/compon
 import { LIMITS } from '@/config/env'
 import { formatReminderInput, parseReminderInput, reminderPresets, scheduleDateError } from '@/features/chat/messageExtras'
 import { POLL_DURATIONS, POLL_OPTION_MAX_CHARS, POLL_OPTIONS_MAX, POLL_QUESTION_MAX, pollBody } from '@/features/chat/polls'
-import { useT, type Key } from '@/i18n'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
-
-/** Durées de polls.ts (par nombre d'heures) et choix rapides de reminderPresets (même ordre), traduits au rendu. */
-const DURATION_KEYS: Readonly<Record<string, Key>> = {
-  null: 'panel.poll.durNone',
-  1: 'panel.poll.dur1h',
-  4: 'panel.poll.dur4h',
-  24: 'panel.poll.dur24h',
-  72: 'panel.poll.dur3d',
-  168: 'panel.poll.dur1w',
-}
-const PRESET_KEYS: readonly Key[] = ['panel.schedule.in20m', 'panel.schedule.in1h', 'panel.schedule.in3h', 'panel.schedule.tomorrow9']
 
 /** Feuille plein contenu au-dessus du clavier (formulaires de la barre de saisie). */
 export function FormSheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title: string; children: ReactNode }) {
@@ -106,7 +95,6 @@ export function PollCreator({ visible, onClose, serverId, channelId }: { visible
       <View style={styles.chips}>
         {POLL_DURATIONS.map((d) => {
           const on = hours === d.hours
-          const k = DURATION_KEYS[String(d.hours)]
           return (
             <Pressable
               key={d.label}
@@ -115,7 +103,7 @@ export function PollCreator({ visible, onClose, serverId, channelId }: { visible
               accessibilityRole="radio"
               accessibilityState={{ checked: on }}
             >
-              <Text style={[styles.chipText, on && { color: colors.text }]}>{k ? t(k) : d.label}</Text>
+              <Text style={[styles.chipText, on && { color: colors.text }]}>{t(d.label)}</Text>
             </Pressable>
           )
         })}
@@ -182,8 +170,8 @@ export function ScheduleSheet({
           </View>
           {tooLong ? <Text style={{ color: colors.danger }}>{t('panel.schedule.tooLong', { max: LIMITS.messageMaxChars })}</Text> : null}
           <Section title={t('composer.send')}>
-            {reminderPresets(new Date()).map((p, i) => (
-              <Row key={p.label} icon="time-outline" title={PRESET_KEYS[i] ? t(PRESET_KEYS[i]) : p.label} subtitle={formatReminderInput(p.date)} onPress={() => !schedule.isPending && !tooLong && schedule.mutate(p.date)} />
+            {reminderPresets(new Date()).map((p) => (
+              <Row key={p.label} icon="time-outline" title={t(p.label)} subtitle={formatReminderInput(p.date)} onPress={() => !schedule.isPending && !tooLong && schedule.mutate(p.date)} />
             ))}
           </Section>
           <TextField

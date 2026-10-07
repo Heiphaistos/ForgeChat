@@ -1,3 +1,4 @@
+import { t, type Key } from '@/i18n'
 import { isUuid } from '@/lib/params'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 
@@ -76,7 +77,7 @@ export function savedConversation(s: SavedItem): ConversationRef {
 // ─── Rappels ──────────────────────────────────────────────────────────────────
 
 export interface ReminderPreset {
-  label: string
+  label: Key
   date: Date
 }
 
@@ -84,10 +85,10 @@ export interface ReminderPreset {
 export function reminderPresets(now: Date): ReminderPreset[] {
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0, 0, 0)
   return [
-    { label: 'Dans 20 minutes', date: new Date(now.getTime() + 20 * 60_000) },
-    { label: 'Dans 1 heure', date: new Date(now.getTime() + 60 * 60_000) },
-    { label: 'Dans 3 heures', date: new Date(now.getTime() + 3 * 60 * 60_000) },
-    { label: 'Demain à 9 h', date: tomorrow },
+    { label: 'panel.schedule.in20m', date: new Date(now.getTime() + 20 * 60_000) },
+    { label: 'panel.schedule.in1h', date: new Date(now.getTime() + 60 * 60_000) },
+    { label: 'panel.schedule.in3h', date: new Date(now.getTime() + 3 * 60 * 60_000) },
+    { label: 'panel.schedule.tomorrow9', date: tomorrow },
   ]
 }
 
@@ -188,11 +189,11 @@ export function normalizeScheduled(raw: unknown): ScheduledItem[] {
   })
 }
 
-/** Raison du refus (texte français) ou null si la date est acceptée par create_scheduled. */
+/** Raison du refus (traduite) ou null si la date est acceptée par create_scheduled. */
 export function scheduleDateError(at: Date | null, now: Date): string | null {
-  if (!at) return 'Format JJ/MM/AAAA HH:MM, dans le futur.'
-  if (at.getTime() <= now.getTime()) return 'La date doit être dans le futur.'
-  if (at.getTime() > now.getTime() + SCHEDULE_MAX_DAYS * 86_400_000) return `Au plus ${SCHEDULE_MAX_DAYS} jours à l’avance.`
+  if (!at) return t('panel.schedule.errFormat')
+  if (at.getTime() <= now.getTime()) return t('panel.schedule.errPast')
+  if (at.getTime() > now.getTime() + SCHEDULE_MAX_DAYS * 86_400_000) return t('panel.schedule.errTooFar', { days: SCHEDULE_MAX_DAYS })
   return null
 }
 

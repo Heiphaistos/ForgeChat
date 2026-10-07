@@ -1,9 +1,11 @@
+import { dateLocale, type Key } from '@/i18n'
+
 /** Types d'événement acceptés par handlers/events.rs. */
-export const EVENT_TYPES = [
-  { value: 'event', label: 'Événement' },
-  { value: 'meeting', label: 'Réunion' },
-  { value: 'stream', label: 'Live' },
-  { value: 'other', label: 'Autre' },
+export const EVENT_TYPES: { value: string; label: Key }[] = [
+  { value: 'event', label: 'server.eventType.event' },
+  { value: 'meeting', label: 'server.eventType.meeting' },
+  { value: 'stream', label: 'server.eventType.stream' },
+  { value: 'other', label: 'server.eventType.other' },
 ]
 
 /**
@@ -30,4 +32,4 @@ export function defaultEventFields(now = new Date()) {
 
 /** « samedi 12 oct. à 20:30 » */
 export const formatEventDate = (iso: string) =>
-  new Date(iso).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  new Date(iso).toLocaleString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

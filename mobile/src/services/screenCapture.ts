@@ -18,7 +18,7 @@ export const screenShareSupported = Platform.OS === 'android'
 /** Avertit avant de partager : résout true si l'utilisateur confirme. */
 export function confirmScreenShare(): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert(t('store.screen.confirmTitle'), SCREEN_SHARE_WARNING, [
+    Alert.alert(t('store.screen.confirmTitle'), SCREEN_SHARE_WARNING(), [
       { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
       { text: t('store.screen.share'), onPress: () => resolve(true) },
     ], { cancelable: true, onDismiss: () => resolve(false) })

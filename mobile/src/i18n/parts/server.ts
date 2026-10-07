@@ -215,6 +215,20 @@ export const fr = {
   'server.follows.following': 'Annonces suivies',
   'server.follows.none': 'Aucune',
   'server.follows.unfollow': 'Ne plus suivre {server} #{channel}',
+
+  // --- Types d'événement, modèles, suppression (features/servers) ---
+  'server.eventType.event': 'Événement',
+  'server.eventType.meeting': 'Réunion',
+  'server.eventType.stream': 'Live',
+  'server.eventType.other': 'Autre',
+  'server.template.created': 'Créé le {date}',
+  'server.template.used': 'Utilisé {n} fois',
+  'server.create.nameError': 'Le nom doit faire entre 2 et 100 caractères.',
+  'server.deleteRules.typeName': 'Recopie le nom du serveur pour confirmer.',
+  'server.deleteRules.totp': 'Entre ton code de double authentification ou un code de secours.',
+  'server.deleteRules.failedRetry': "Le serveur n'a pas pu être supprimé. Réessaie.",
+  'server.deleteRules.ownerOnly': 'Seul le propriétaire peut supprimer ce serveur.',
+  'server.deleteRules.failedLater': "Le serveur n'a pas pu être supprimé. Réessaie plus tard.",
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -433,4 +447,18 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'server.follows.following': 'Followed announcements',
   'server.follows.none': 'None',
   'server.follows.unfollow': 'Unfollow {server} #{channel}',
+
+  // --- Types d'événement, modèles, suppression (features/servers) ---
+  'server.eventType.event': 'Event',
+  'server.eventType.meeting': 'Meeting',
+  'server.eventType.stream': 'Live',
+  'server.eventType.other': 'Other',
+  'server.template.created': 'Created on {date}',
+  'server.template.used': 'Used {n} times',
+  'server.create.nameError': 'The name must be between 2 and 100 characters.',
+  'server.deleteRules.typeName': 'Type the server name to confirm.',
+  'server.deleteRules.totp': 'Enter your two-factor code or a backup code.',
+  'server.deleteRules.failedRetry': 'The server couldn’t be deleted. Try again.',
+  'server.deleteRules.ownerOnly': 'Only the owner can delete this server.',
+  'server.deleteRules.failedLater': 'The server couldn’t be deleted. Try again later.',
 }

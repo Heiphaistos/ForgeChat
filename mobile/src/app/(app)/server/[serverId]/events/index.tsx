@@ -73,7 +73,7 @@ export default function EventsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
                   <T variant="label">
-                    {EVENT_TYPES.find((et) => et.value === e.event_type)?.label ?? e.event_type} · {formatEventDate(e.start_time)}
+                    {(() => { const et = EVENT_TYPES.find((x) => x.value === e.event_type); return et ? t(et.label) : e.event_type })()} · {formatEventDate(e.start_time)}
                   </T>
                   <T variant="subtitle">{e.name}</T>
                 </View>

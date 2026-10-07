@@ -74,7 +74,7 @@ export default function NewEventScreen() {
         </View>
       </View>
       <Section>
-        <ChoiceRow icon="pricetag-outline" title="Type" value={type} options={EVENT_TYPES} onChange={setType} />
+        <ChoiceRow icon="pricetag-outline" title="Type" value={type} options={EVENT_TYPES.map((et) => ({ value: et.value, label: t(et.label) }))} onChange={setType} />
         <ChoiceRow icon="hourglass-outline" title={t('server.eventNew.duration')} value={duration} options={DURATIONS.map((m) => ({ value: m, label: m === 0 ? t('server.eventNew.noDuration') : m < 60 ? `${m} min` : `${m / 60} h` }))} onChange={setDuration} />
         <ChoiceRow
           icon="chatbubble-outline"

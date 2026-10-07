@@ -182,6 +182,19 @@ export const fr = {
   'panel.stream.close': 'Fermer la vidéo',
   'panel.avatar': 'Avatar de {name}',
   'panel.avatarStatus': 'Avatar de {name}, {status}',
+
+  // --- Validation (polls.ts, messageExtras.ts, gifs.ts, useConversation.ts) ---
+  'panel.poll.errQuestion': 'La question est obligatoire.',
+  'panel.poll.errQuestionLong': 'Question trop longue ({max} caractères max).',
+  'panel.poll.errOptionCount': 'Entre {min} et {max} options.',
+  'panel.poll.errDuplicate': 'Deux options sont identiques.',
+  'panel.schedule.errFormat': 'Format JJ/MM/AAAA HH:MM, dans le futur.',
+  'panel.schedule.errPast': 'La date doit être dans le futur.',
+  'panel.schedule.errTooFar': 'Au plus {days} jours à l’avance.',
+  'panel.gif.searchDefault': 'Rechercher un GIF',
+  'panel.attach.badType':
+    'Type de fichier .{ext} non autorisé par le serveur. Formats acceptés : images (jpg, png, gif, webp), vidéos (mp4, mov, webm, mkv), audio (mp3, ogg, wav, flac), documents (pdf, txt, md, Office) et archives (zip, 7z, rar, tar, gz).',
+  'panel.attach.tooBig': 'Fichier trop volumineux (max 500 Mo)',
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -367,4 +380,17 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'panel.stream.close': 'Close video',
   'panel.avatar': 'Avatar of {name}',
   'panel.avatarStatus': 'Avatar of {name}, {status}',
+
+  // --- Validation (polls.ts, messageExtras.ts, gifs.ts, useConversation.ts) ---
+  'panel.poll.errQuestion': 'A question is required.',
+  'panel.poll.errQuestionLong': 'Question too long ({max} characters max).',
+  'panel.poll.errOptionCount': 'Between {min} and {max} options.',
+  'panel.poll.errDuplicate': 'Two options are the same.',
+  'panel.schedule.errFormat': 'Format DD/MM/YYYY HH:MM, in the future.',
+  'panel.schedule.errPast': 'The date must be in the future.',
+  'panel.schedule.errTooFar': 'At most {days} days ahead.',
+  'panel.gif.searchDefault': 'Search GIFs',
+  'panel.attach.badType':
+    'File type .{ext} is not allowed by the server. Accepted formats: images (jpg, png, gif, webp), videos (mp4, mov, webm, mkv), audio (mp3, ogg, wav, flac), documents (pdf, txt, md, Office) and archives (zip, 7z, rar, tar, gz).',
+  'panel.attach.tooBig': 'File too large (max 500 MB)',
 }

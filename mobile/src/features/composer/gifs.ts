@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 /**
  * Recherche de GIF via le serveur (GIPHY, KLIPY, ou Wikimedia Commons sans clé). Le serveur ne renvoie que
  * des images de ces CDN, sans paramètres ; l'app le revérifie avant d'afficher ou d'envoyer quoi que
@@ -38,7 +39,7 @@ export function gifSearchEnabled(raw: unknown): boolean {
 export function gifSource(raw: unknown): { placeholder: string; attribution: string } {
   const r = (raw ?? {}) as { search_placeholder?: unknown; attribution?: unknown }
   const txt = (v: unknown, d: string) => (typeof v === 'string' && v.length <= 60 ? v : d)
-  return { placeholder: txt(r.search_placeholder, 'Rechercher un GIF'), attribution: txt(r.attribution, '') }
+  return { placeholder: txt(r.search_placeholder, t('panel.gif.searchDefault')), attribution: txt(r.attribution, '') }
 }
 
 /** GET /gifs/search|trending → résultats valides et jeton de page suivante. */
