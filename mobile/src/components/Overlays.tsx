@@ -9,6 +9,7 @@ import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { errorMessage } from '@/lib/http'
 import { useConnection } from '@/lib/realtime'
+import { useOffline } from '@/lib/offline'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
@@ -73,11 +74,16 @@ export function ConnectionBanner() {
     const timer = setTimeout(() => setDelayed(status), status === 'reconnecting' ? 2500 : 0)
     return () => clearTimeout(timer)
   }, [status])
+  const { fromCache, pending } = useOffline()
   const visible = status === 'reconnecting' && delayed === 'reconnecting'
-  if (!signedIn || !visible) return null
+  if (!signedIn || (!visible && !pending)) return null
   return (
     <View style={[styles.banner, { top: insets.top }]} pointerEvents="none" accessibilityLiveRegion="polite">
-      <Text style={styles.bannerText}>{t('overlay.reconnecting')}</Text>
+      <Text style={styles.bannerText}>
+        {[visible && t(fromCache ? 'offline.banner' : 'overlay.reconnecting'), pending > 0 && t('offline.pending', { n: pending })]
+          .filter(Boolean)
+          .join(' · ')}
+      </Text>
     </View>
   )
 }

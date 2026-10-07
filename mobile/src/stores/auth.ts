@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '@/api/auth'
-import { ensureAccessToken, onSessionExpired } from '@/lib/http'
+import { ApiError, ensureAccessToken, onSessionExpired } from '@/lib/http'
 import { logger } from '@/lib/logger'
 import { queryClient } from '@/lib/queryClient'
 import { realtime } from '@/lib/realtime'
@@ -13,6 +13,8 @@ import { useUnread } from './unread'
 import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
 import { t } from '@/i18n'
 import { clearAccountKey, rememberPassword } from '@/e2e/accountKey'
+import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
+import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
 
 /**
  * Cycle de vie de la session.
@@ -53,13 +55,21 @@ interface AuthState {
   signOutLocally: (notice?: string) => Promise<void>
   setUser: (patch: Partial<User>) => void
   clearNotice: () => void
+  /** Met le compte actif de côté (il reste connecté) pour se connecter à un autre. */
+  addAccount: () => Promise<void>
+  /** Passe sur un compte mis de côté ; false s'il est inconnu ou si sa session a expiré. */
+  switchAccount: (id: string) => Promise<boolean>
 }
 
-async function wipeLocal() {
+/** `keep` : changement de compte, la clé E2E et les données hors ligne du compte restent. */
+async function wipeLocal(keep = false) {
+  const uid = useAuth.getState().user?.id ?? (await tokens.getUserId())
   realtime.stop()
   await Promise.allSettled([...signOutHooks].map(async (h) => h()))
   await tokens.clear()
-  await clearAccountKey()
+  await clearAccountKey(uid, keep)
+  if (uid && !keep) await forgetOfflineData(uid)
+  else await setOfflineOwner(null)
   queryClient.clear()
   usePresence.getState().reset()
   useUnread.getState().reset()
@@ -71,6 +81,7 @@ export const useAuth = create<AuthState>((set, get) => {
   const acceptSession = async (res: AuthResponse) => {
     await tokens.setRefreshToken(res.refresh_token)
     await tokens.setUserId(res.user.id)
+    await setOfflineOwner(res.user.id)
     tokens.setAccessToken(res.access_token)
     queryClient.setQueryData(['me'], res.user)
     set({ status: 'signedIn', user: res.user, notice: null })
@@ -90,7 +101,11 @@ export const useAuth = create<AuthState>((set, get) => {
         return
       }
       try {
-        await ensureAccessToken()
+        await setOfflineOwner(await tokens.getUserId())
+        // Sans réseau : la session continue sur les données gardées (lib/offline) si elles existent.
+        await ensureAccessToken().catch((e: unknown) => {
+          if (!(e instanceof ApiError && e.isNetwork)) throw e
+        })
         const me = await authApi.me()
         queryClient.setQueryData(['me'], me)
         set({ status: 'signedIn', user: me })
@@ -145,6 +160,32 @@ export const useAuth = create<AuthState>((set, get) => {
     },
 
     clearNotice: () => set({ notice: null }),
+
+    addAccount: async () => {
+      const u = get().user
+      const refresh = await tokens.getRefreshToken()
+      if (!u || !refresh) return
+      await putAccount({ id: u.id, username: u.username, avatar: u.avatar }, refresh)
+      await wipeLocal(true)
+      set({ status: 'signedOut', user: null, notice: null })
+    },
+
+    switchAccount: async (id) => {
+      if (!(await listAccounts()).some((a) => a.id === id)) return false
+      const u = get().user
+      const current = await tokens.getRefreshToken()
+      if (u && current) await putAccount({ id: u.id, username: u.username, avatar: u.avatar }, current).catch(() => undefined)
+      if (u) await wipeLocal(true)
+      const token = await takeAccount(id)
+      if (!token) {
+        set({ status: 'signedOut', user: null })
+        return false
+      }
+      await tokens.setRefreshToken(token)
+      await tokens.setUserId(id)
+      await get().bootstrap()
+      return get().status === 'signedIn'
+    },
   }
 })
 
