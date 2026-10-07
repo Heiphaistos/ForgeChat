@@ -15,7 +15,7 @@ export interface ServerSideSettings {
   /** « HH:MM:SS » (TIME Postgres) ou null. */
   quiet_hours_start: string | null
   quiet_hours_end: string | null
-  /** Apparence partagée avec le web (le thème lui-même n'est pas stocké par le serveur). */
+  /** Apparence partagée avec le web (le thème lui-même : /user/theme). */
   accent_color: string | null
   time_format: string
   streamer_mode: boolean
@@ -33,6 +33,8 @@ export const settingsApi = {
   /** Thème partagé avec le web et le bureau (null : jamais choisi). */
   theme: () => http.get<{ theme: string | null }>('/user/theme'),
   setTheme: (theme: string) => http.put<{ ok: boolean }>('/user/theme', { theme }),
+  /** Thèmes perso et disposition du compte (validés à la lecture : features/appearance/sync.ts). */
+  themeStudio: () => http.get<{ customs?: unknown; layout?: unknown } | null>('/user/theme-studio'),
   emailPrefs: () => http.get<{ dm_unread_notify: boolean }>('/user/email-prefs'),
   setEmailPrefs: (dmUnreadNotify: boolean) =>
     http.put<{ dm_unread_notify: boolean }>('/user/email-prefs', { dm_unread_notify: dmUnreadNotify }),

@@ -1,8 +1,9 @@
-import { serverAppearancePatch } from '@/features/appearance/sync'
+import { serverAppearancePatch, serverThemePatch } from '@/features/appearance/sync'
 import { formatTime } from '@/lib/format'
-import { colors } from '@/theme'
-import { isLightTheme, resolvePalette, THEMES } from '@/theme/palettes'
+import { colors, outlined } from '@/theme'
+import { isLightTheme, isOutlined, paletteFromSpec, resolvePalette, THEMES } from '@/theme/palettes'
 import { DEFAULT_PREFS, parsePrefs } from '@/theme/prefs'
+import { contrast, findTheme, PRESETS, sanitizeTheme } from '@/theme/themeCore'
 
 const HEX = /^#[0-9a-f]{6}$/i
 
@@ -16,7 +17,8 @@ describe('palettes', () => {
   })
 
   it('reprend tous les thèmes du web avec des couleurs complètes', () => {
-    expect(THEMES).toHaveLength(28)
+    expect(THEMES).toHaveLength(PRESETS.length)
+    expect(THEMES.filter((t) => t.group === 'gradient').length).toBeGreaterThanOrEqual(25)
     for (const t of THEMES) {
       for (const k of ['bg', 'bgAlt', 'bgDeep', 'bgElevated', 'bgHover', 'primary', 'primaryPressed', 'text', 'textMuted', 'textFaint'] as const) {
         expect(t.palette[k]).toMatch(HEX)
@@ -27,12 +29,41 @@ describe('palettes', () => {
   })
 
   it('thèmes clairs : texte sombre sur fond clair', () => {
-    for (const id of ['light', 'winter']) {
+    for (const id of ['light', 'winter', 'g-lavender', 'g-mint']) {
       expect(isLightTheme(id)).toBe(true)
       const p = resolvePalette(id)
       const lum = (c: string) => parseInt(c.slice(1, 3), 16) + parseInt(c.slice(3, 5), 16) + parseInt(c.slice(5, 7), 16)
       expect(lum(p.bg)).toBeGreaterThan(lum(p.text) + 300)
     }
+  })
+
+  it('AMOLED : noir pur partout sauf le survol, avec bordures', () => {
+    const p = resolvePalette('darker')
+    for (const k of ['bg', 'bgAlt', 'bgDeep', 'bgElevated', 'codeBg'] as const) expect(p[k]).toBe('#000000')
+    expect(isOutlined('darker')).toBe(true)
+    expect(isOutlined('dark')).toBe(false)
+    expect(outlined).toBe(false)
+  })
+
+  it('texte lisible (AA) sur les fonds de tous les thèmes, dégradés compris', () => {
+    for (const t of THEMES) {
+      for (const bg of [t.palette.bg, t.palette.bgAlt, t.palette.bgDeep]) {
+        expect(contrast(t.palette.text, bg)).toBeGreaterThanOrEqual(4.5)
+        expect(contrast(t.palette.textMuted, bg)).toBeGreaterThanOrEqual(4.5)
+      }
+      if (t.group === 'gradient') expect(t.gradient).toMatch(/^linear-gradient\(\d+deg, #[0-9a-f]{6}/)
+    }
+  })
+
+  it("thème perso : ses couleurs et son accent, jamais l'accent du compte", () => {
+    const custom = sanitizeTheme({ name: 'Perso', colors: { bg: '#102030', accent: '#ff00aa', text: '#ffffff' } })
+    expect(custom).not.toBeNull()
+    const p = resolvePalette('c-abcd1234', '#00ff00', custom)
+    expect(p.bg).toBe('#102030')
+    expect(p.primary).toBe('#ff00aa')
+    expect(p).toEqual(paletteFromSpec(custom!))
+    // Sans ses couleurs (pas encore synchronisé) : Sombre.
+    expect(resolvePalette('c-abcd1234', null, null)).toEqual(resolvePalette('dark'))
   })
 
   it("applique l'accent personnalisé valide seulement", () => {
@@ -57,7 +88,14 @@ describe('préférences', () => {
       timeFormat: '12h',
       textScale: 1.15,
       streamerMode: true,
+      custom: null,
+      density: 'normal',
     })
+    const withCustom = parsePrefs(JSON.stringify({ theme: 'c-abcd1234', density: 'compact', custom: { colors: { bg: '#123456' }, image: { url: 'https://a.fr/b.png' } } }))
+    expect(withCustom.density).toBe('compact')
+    expect(withCustom.custom?.colors.bg).toBe('#123456')
+    expect(withCustom.custom?.image).toBeNull()
+    expect(parsePrefs(JSON.stringify({ custom: { colors: 'x' }, density: 'énorme' }))).toMatchObject({ custom: null, density: 'normal' })
   })
 
   it('ne reprend du serveur que ce qui diffère', () => {
@@ -68,6 +106,27 @@ describe('préférences', () => {
       streamerMode: true,
     })
     expect(serverAppearancePatch({ accent_color: 'n/a', time_format: 'autre' }, { ...DEFAULT_PREFS, accent: '#123456' })).toEqual({ accent: null })
+  })
+})
+
+describe('thème du compte', () => {
+  const nord = { ...findTheme('nord')!, id: 'c-abcd1234' }
+
+  it('thème prédéfini : appliqué, thème perso local oublié', () => {
+    expect(serverThemePatch('dracula', [], DEFAULT_PREFS)).toEqual({ theme: 'dracula', custom: null })
+    expect(serverThemePatch('dark', [], DEFAULT_PREFS)).toBeNull()
+    expect(serverThemePatch('inconnu', [], DEFAULT_PREFS)).toBeNull()
+    expect(serverThemePatch(null, [], DEFAULT_PREFS)).toBeNull()
+  })
+
+  it('thème perso : seulement si ses couleurs sont connues, copiées sans image', () => {
+    expect(serverThemePatch('c-abcd1234', [], DEFAULT_PREFS)).toBeNull()
+    const patch = serverThemePatch('c-abcd1234', [{ ...nord, image: { url: 'https://a.fr/b.png', blur: 0, dim: 0.4 } }], DEFAULT_PREFS)
+    expect(patch?.theme).toBe('c-abcd1234')
+    expect(patch?.custom?.colors.bg).toBe(nord.colors.bg)
+    expect(patch?.custom?.image).toBeNull()
+    // Déjà à jour : rien à changer.
+    expect(serverThemePatch('c-abcd1234', [nord], { ...DEFAULT_PREFS, ...patch })).toBeNull()
   })
 })
 

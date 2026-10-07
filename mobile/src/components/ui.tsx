@@ -16,7 +16,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native'
-import { colors, font, radius, spacing } from '@/theme'
+import { colors, font, outline, outlined, radius, spacing } from '@/theme'
 import { useT } from '@/i18n'
 import { unreadLabel } from '@/lib/format'
 import { eyeIcon, eyeLabel, maskOnAppState } from '@/lib/passwordVisibility'
@@ -70,6 +70,7 @@ export function Button({ title, variant = 'primary', loading, icon, disabled, st
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: bg, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 },
+        variant === 'secondary' && outline,
         variant === 'ghost' && styles.buttonGhost,
         style,
       ]}
@@ -352,7 +353,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: font.md,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: outlined ? colors.border : 'transparent',
   },
   sectionTitle: {
     color: colors.textMuted,
@@ -362,7 +363,7 @@ export const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
-  sectionBody: { backgroundColor: colors.bgAlt, borderRadius: radius.lg, overflow: 'hidden' },
+  sectionBody: { backgroundColor: colors.bgAlt, borderRadius: radius.lg, overflow: 'hidden', ...outline },
   sectionFooter: { color: colors.textFaint, fontSize: font.xs, marginTop: spacing.sm, marginHorizontal: spacing.xs },
   row: {
     flexDirection: 'row',

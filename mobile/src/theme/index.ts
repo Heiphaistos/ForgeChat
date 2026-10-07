@@ -1,14 +1,21 @@
-import { isLightTheme, resolvePalette, type Palette } from './palettes'
-import { appearance } from './prefs'
+import { isLightTheme, isOutlined, resolvePalette, type Palette } from './palettes'
+import { appearance, DENSITIES } from './prefs'
 
 /**
  * Design tokens — palette du thème choisi (Réglages → Apparence), mêmes thèmes que le web.
  * Remplie ici, au chargement du module : tout `StyleSheet.create` qui importe `colors` la voit déjà.
  */
-export const colors: Palette = resolvePalette(appearance.theme, appearance.accent)
+export const colors: Palette = resolvePalette(appearance.theme, appearance.accent, appearance.custom)
 
 /** Thème clair : barre d'état sombre, thème de navigation clair. */
-export const isLight = isLightTheme(appearance.theme)
+export const isLight = isLightTheme(appearance.theme, appearance.custom)
+
+/**
+ * Thème à bordures fines (AMOLED) : cartes, champs et feuilles sont noirs comme le fond,
+ * leur contour passe par `outline` (à étaler dans le style des surfaces surélevées).
+ */
+export const outlined = isOutlined(appearance.theme, appearance.custom)
+export const outline = outlined ? { borderWidth: 1, borderColor: colors.border } : {}
 
 /** Couleurs de présence : voir lib/status.ts (mêmes que le web). */
 export const statusColors: Record<string, string> = {
@@ -20,7 +27,10 @@ export const statusColors: Record<string, string> = {
   offline: '#80848e',
 }
 
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const
+const densityScale = DENSITIES.find((d) => d.value === appearance.density)?.scale ?? 1
+const spaced = (n: number) => Math.round(n * densityScale)
+/** Espacements, multipliés par la densité choisie (Réglages → Apparence). */
+export const spacing = { xs: spaced(4), sm: spaced(8), md: spaced(12), lg: spaced(16), xl: spaced(24), xxl: spaced(32) } as const
 export const radius = { sm: 6, md: 10, lg: 16, full: 999 } as const
 const scaled = (n: number) => Math.round(n * appearance.textScale)
 export const font = {
