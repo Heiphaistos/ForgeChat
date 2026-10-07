@@ -40,7 +40,12 @@ describe('permissions affichées', () => {
   it('propriétaire : tout, supprimer au lieu de quitter', () => {
     const p = serverPerms(detail([]), OWNER)
     expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'events', 'createChannel', 'createCategory', 'settings', 'nickname', 'boost', 'copyId', 'delete'])
-    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'danger'])
+    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'onboarding', 'danger'])
+  })
+
+  it('questions d’accueil : chaque membre peut revoir ses réponses', () => {
+    const p = serverPerms({ ...detail([]), member: { verified_at: null, has_onboarding: true } }, ME)
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'nickname', 'onboarding', 'boost', 'copyId', 'leave'])
   })
 
   it('administrateur (bit 31) : tout sauf vue d’ensemble et zone de danger (réservées au propriétaire)', () => {

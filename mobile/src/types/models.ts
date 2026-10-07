@@ -105,6 +105,8 @@ export interface ServerDetail {
   roles: Role[]
   current_user_id: string
   my_role_ids: string[]
+  /** Mon adhésion : barrière de vérification et onboarding (questions d'accueil). */
+  member?: { verified_at: string | null; has_onboarding?: boolean; onboarding_pending?: boolean } | null
 }
 
 export interface Ban {

@@ -45,3 +45,5 @@ pub mod privacy;
 pub mod desktop;
 pub mod discord_import;
 pub mod diagnostics;
+pub mod announcements;
+pub mod onboarding;

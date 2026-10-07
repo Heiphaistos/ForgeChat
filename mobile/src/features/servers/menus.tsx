@@ -110,6 +110,8 @@ function serverAction(key: ServerMenuKey, s: Server): SheetAction {
       return { label: 'Paramètres du serveur', icon: 'settings-outline', onPress: go(`/server/${s.id}/settings`) }
     case 'nickname':
       return { label: 'Modifier mon profil de serveur', icon: 'person-circle-outline', onPress: go(`/server/${s.id}/nickname`) }
+    case 'onboarding':
+      return { label: 'Mes réponses d’accueil', icon: 'sparkles-outline', onPress: go(`/server/${s.id}/onboarding`) }
     case 'copyId':
       return { label: "Copier l'ID du serveur", icon: 'copy-outline', onPress: () => copy(s.id, 'ID') }
     case 'leave':

@@ -26,6 +26,8 @@ import ThreadPanel from '../components/chat/ThreadPanel'
 import ThreadSidebar from '../components/chat/ThreadSidebar'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
+import FollowChannelModal from '../components/modals/FollowChannelModal'
+import OnboardingModal from '../components/modals/OnboardingModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
@@ -97,6 +99,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const [timeoutUntil, setTimeoutUntil] = useState<Date | null>(null)
   const [showNotifModal, setShowNotifModal] = useState(false)
+  const [showFollow, setShowFollow] = useState(false)
   const bellRef = useRef<HTMLButtonElement>(null)
 
   // All hooks first — no conditional hooks
@@ -398,6 +401,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     )
   }
 
+  // Onboarding : questions d'accueil, après la barrière de vérification.
+  if (serverData?.member?.onboarding_pending) {
+    return <OnboardingModal serverId={serverId} serverName={server?.name ?? ''} />
+  }
+
   const channels: any[] = serverData?.channels ?? []
 
   if (!channelId && serverLoading) {
@@ -513,6 +521,15 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
+            {isAnnouncement && (
+              <button
+                onClick={() => setShowFollow(true)}
+                className="px-2 py-1 text-xs font-medium rounded border border-fc-hover text-fc-muted hover:text-white hover:bg-fc-hover transition"
+                title="Recevoir ces annonces dans un salon de votre serveur"
+              >
+                Suivre
+              </button>
+            )}
             {currentChannel && (
               <span className="hidden md:flex">
                 <ExportConversationButton
@@ -690,6 +707,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                   .then(() => toast.success(pinned ? 'Message désépinglé' : 'Message épinglé'))
                   .catch(() => toast.error(pinned ? 'Désépinglage impossible' : 'Épinglage impossible'))
               }
+              onPublishMessage={isAnnouncement && canManageMessages ? (msgId) =>
+                api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/crosspost`)
+                  .then(r => toast.success(`Annonce publiée vers ${r.data?.delivered ?? 0} salon(s) abonné(s)`))
+                  .catch((e: any) => toast.error(e?.response?.data?.error ?? 'Publication impossible'))
+                : undefined}
               onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}
               initialHighlightId={highlightMessageId}
@@ -822,6 +844,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       )}
 
       {/* Liste membres */}
+      {showFollow && currentChannel && <FollowChannelModal channelId={currentChannel.id} channelName={currentChannel.name} onClose={() => setShowFollow(false)} />}
       {showMembers && !activeThreadId && !activeDirectThreadId && !showPinned && !showSearch && !showThreadSidebar && <MemberList serverId={serverId} onClose={() => setShowMembers(false)} />}
     </div>
   )

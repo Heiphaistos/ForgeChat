@@ -1,7 +1,7 @@
 import { mediaUrl } from '../../api/client'
 import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone } from 'lucide-react'
 import { format } from 'date-fns'
 import { renderMarkdown } from '../../utils/markdown'
 import ReminderModal from './ReminderModal'
@@ -76,6 +76,8 @@ export interface MessageRowProps {
   onReply?: (msg: any) => void
   onOpenThread?: (msgId: string) => void
   onPinMessage?: (msgId: string, pinned: boolean) => void
+  /** Salon d'annonces : publier le message vers les salons abonnés. */
+  onPublishMessage?: (msgId: string) => void
   onToggleTranslation: (msgId: string) => void
   onToggleReminder: (msgId: string) => void
   onReport: (msgId: string) => void
@@ -93,7 +95,7 @@ function MessageRow({
   onJumpToMessage, onOpenEditHistory, onOpenLightbox, onToggleReaction, onToggleEmojiPicker,
   onAddQuickReaction, onPickReaction, onToggleReactionPicker, onReactionHover, onReactionHoverEnd,
   onReactionTouchStart, onReactionTouchEnd, onSaveMessage, onCopyMarkdown, onCopyLink,
-  onForward, onReply, onOpenThread, onPinMessage, onToggleTranslation, onToggleReminder,
+  onForward, onReply, onOpenThread, onPinMessage, onPublishMessage, onToggleTranslation, onToggleReminder,
   onReport, onDeleteRequest,
 }: MessageRowProps) {
   const isImage = (ct: string) => ct.startsWith('image/')
@@ -545,6 +547,17 @@ function MessageRow({
                 aria-pressed={msg.pinned}
               >
                 <Pin size={14} />
+              </button>
+            )}
+
+            {onPublishMessage && msg.type !== 'crosspost' && (
+              <button
+                onClick={() => onPublishMessage(msg.id)}
+                className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
+                title="Publier vers les serveurs abonnés"
+                aria-label="Publier le message vers les serveurs abonnés"
+              >
+                <Megaphone size={14} />
               </button>
             )}
 

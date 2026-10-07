@@ -4,10 +4,11 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Images, Radio, ChevronRight,
   Mic, MicOff, VolumeX, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil,
+  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil, Sparkles,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import OnboardingModal from '../modals/OnboardingModal'
 import api, { mediaUrl } from '../../api/client'
 import { useContextMenu } from '../ui/ContextMenu'
 import ServerBoostBanner from '../server/ServerBoostBanner'
@@ -220,6 +221,7 @@ export default function ChannelSidebar() {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
   useEffect(() => {
     const open = () => setShowSettings(true)
@@ -1204,6 +1206,14 @@ export default function ChannelSidebar() {
               >
                 <Settings size={16} /> Paramètres du serveur
               </button>
+              {data?.member?.has_onboarding && (
+                <button
+                  onClick={() => { setShowOnboarding(true); setMenuOpen(false) }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
+                >
+                  <Sparkles size={16} /> Mes réponses d'accueil
+                </button>
+              )}
               {isOwnerOrAdmin && (
                 <>
                   <div className="border-t border-fc-hover my-1" />
@@ -1379,6 +1389,9 @@ export default function ChannelSidebar() {
       )}
       {showInvite && server && (
         <InviteModal serverId={server.id} serverName={server.name} onClose={() => setShowInvite(false)} />
+      )}
+      {showOnboarding && server && (
+        <OnboardingModal serverId={server.id} serverName={server.name} onClose={() => setShowOnboarding(false)} />
       )}
       {showSettings && server && (
         <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} isAdmin={isOwnerOrAdmin} />

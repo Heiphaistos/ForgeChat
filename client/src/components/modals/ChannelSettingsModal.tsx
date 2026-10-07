@@ -7,6 +7,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useAuth } from '../../store/auth'
 import { useServerPerms } from '../../hooks/useServerPerms'
 import { deleteWithBackup } from '../../lib/deleteWithBackup'
+import ChannelFollowsSection from './ChannelFollowsSection'
 
 const SLOWMODE_OPTIONS = [
   { label: 'Désactivé', value: 0 },
@@ -598,11 +599,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                 </div>
               </div>
 
-              {channel.type === 'announcement' && (
-                <div className="p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/30">
-                  <h4 className="text-sm font-semibold text-yellow-300 mb-1">Canal d'annonces</h4>
-                  <p className="text-xs text-fc-muted">Les membres d'autres serveurs peuvent s'abonner à ce canal pour recevoir vos annonces directement dans leurs propres canaux.</p>
-                </div>
+              {(channel.type === 'announcement' || channel.type === 'text') && (
+                <ChannelFollowsSection channelId={channel.id} isAnnouncement={channel.type === 'announcement'} />
               )}
 
               {channel.type === 'stage' && (

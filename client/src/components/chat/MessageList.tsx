@@ -30,6 +30,7 @@ interface Props {
   onOpenThread?: (msgId: string) => void
   onAddReaction?: (msgId: string, emoji: string) => void
   onPinMessage?: (msgId: string, pinned: boolean) => void
+  onPublishMessage?: (msgId: string) => void
   onReply?: (msg: any) => void
   onLoadMore?: () => Promise<boolean>
   initialHighlightId?: string | null
@@ -65,6 +66,7 @@ export default function MessageList({
   onOpenThread,
   onAddReaction,
   onPinMessage,
+  onPublishMessage,
   onReply,
   onLoadMore,
   initialHighlightId,
@@ -389,6 +391,8 @@ export default function MessageList({
   useEffect(() => { onOpenThreadRef.current = onOpenThread }, [onOpenThread])
   const onPinMessageRef = useRef(onPinMessage)
   useEffect(() => { onPinMessageRef.current = onPinMessage }, [onPinMessage])
+  const onPublishMessageRef = useRef(onPublishMessage)
+  useEffect(() => { onPublishMessageRef.current = onPublishMessage }, [onPublishMessage])
 
   // Le brouillon d'édition vit désormais dans MessageRow (état local) — le parent ne
   // reçoit que le texte final à la confirmation, ce qui évite de re-render toute la
@@ -658,6 +662,7 @@ export default function MessageList({
   const stableOnReply = useCallback((msg: any) => { onReplyRef.current?.(msg) }, [])
   const stableOnOpenThread = useCallback((msgId: string) => { onOpenThreadRef.current?.(msgId) }, [])
   const stableOnPinMessage = useCallback((msgId: string, pinned: boolean) => { onPinMessageRef.current?.(msgId, pinned) }, [])
+  const stableOnPublishMessage = useCallback((msgId: string) => { onPublishMessageRef.current?.(msgId) }, [])
   const handlePickReaction = useCallback((msgId: string, emoji: string) => {
     toggleReaction(msgId, emoji)
     setReactionPickerFor(null)
@@ -813,6 +818,7 @@ export default function MessageList({
               onReply={onReply ? stableOnReply : undefined}
               onOpenThread={onOpenThread ? stableOnOpenThread : undefined}
               onPinMessage={onPinMessage ? stableOnPinMessage : undefined}
+              onPublishMessage={onPublishMessage ? stableOnPublishMessage : undefined}
               onToggleTranslation={handleToggleTranslation}
               onToggleReminder={handleToggleReminder}
               onReport={handleReport}
