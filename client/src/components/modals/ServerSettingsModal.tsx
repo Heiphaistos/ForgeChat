@@ -20,6 +20,7 @@ import FeedsTab from './FeedsTab'
 import StatsTab from './StatsTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
+import MyServerProfileTab from './MyServerProfileTab'
 
 interface Server {
   id: string
@@ -56,7 +57,7 @@ interface Props {
   isAdmin?: boolean
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
+type Tab = 'general' | 'profile' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -302,6 +303,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       label: null,
       tabs: [
         { id: 'general' as Tab, label: 'Général' },
+        { id: 'profile' as Tab, label: 'Mon profil sur ce serveur' },
       ],
     },
     {
@@ -822,6 +824,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
               </div>
             )}
 
+            {tab === 'profile' && <MyServerProfileTab serverId={server.id} />}
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
             {tab === 'stats'   && <StatsTab serverId={server.id} />}
             {tab === 'roles'   && <RolesTab serverId={server.id} />}

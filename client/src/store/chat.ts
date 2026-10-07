@@ -65,6 +65,8 @@ interface ReactionCount {
   emoji: string
   count: number
   me: boolean
+  /** Super réaction : pastille à part de la réaction normale du même emoji. */
+  is_super?: boolean
 }
 
 interface ChatState {
@@ -79,8 +81,8 @@ interface ChatState {
   updateUserInMessages: (userId: string, username: string, avatar: string | null) => void
   setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
-  addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean) => void
-  removeReaction: (channelId: string, msgId: string, emoji: string, userId: string, wasMe: boolean) => void
+  addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean, isSuper?: boolean) => void
+  removeReaction: (channelId: string, msgId: string, emoji: string, userId: string, wasMe: boolean, isSuper?: boolean) => void
 }
 
 export const useChat = create<ChatState>()(
@@ -151,26 +153,26 @@ export const useChat = create<ChatState>()(
       if (s.typing[channelId]) delete s.typing[channelId][userId]
     }),
 
-    addReaction: (channelId, msgId, emoji, _userId, me) => set(s => {
+    addReaction: (channelId, msgId, emoji, _userId, me, isSuper = false) => set(s => {
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
       const msg = msgs.find(m => m.id === msgId)
       if (!msg) return
-      const r = msg.reactions.find(r => r.emoji === emoji)
+      const r = msg.reactions.find(r => r.emoji === emoji && !!r.is_super === isSuper)
       if (r) { r.count++; if (me) r.me = true }
-      else msg.reactions.push({ emoji, count: 1, me })
+      else msg.reactions.push({ emoji, count: 1, me, is_super: isSuper })
     }),
 
-    removeReaction: (channelId, msgId, emoji, _userId, wasMe) => set(s => {
+    removeReaction: (channelId, msgId, emoji, _userId, wasMe, isSuper = false) => set(s => {
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
       const msg = msgs.find(m => m.id === msgId)
       if (!msg) return
-      const r = msg.reactions.find(r => r.emoji === emoji)
+      const r = msg.reactions.find(r => r.emoji === emoji && !!r.is_super === isSuper)
       if (r) {
         r.count--
         if (wasMe) r.me = false
-        if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x.emoji !== emoji)
+        if (r.count <= 0) msg.reactions = msg.reactions.filter(x => x !== r)
       }
     }),
   }))

@@ -189,6 +189,34 @@ a:focus-visible,
   .reaction-pop { animation: none; }
 }
 
+/* Super réaction : pastille irisée, emoji qui jaillit avec un halo. Jouée à
+   l'apparition (et à chaque nouvelle super réaction, clé = compteur), rejouée
+   au survol ou au toucher. */
+.super-reaction {
+  border-color: #d946ef !important;
+  background-image: linear-gradient(135deg, rgba(217, 70, 239, 0.25), rgba(56, 189, 248, 0.25));
+  box-shadow: 0 0 8px rgba(217, 70, 239, 0.45);
+}
+@keyframes super-reaction-burst {
+  0%   { transform: scale(1) rotate(0); filter: drop-shadow(0 0 0 rgba(217, 70, 239, 0)); }
+  30%  { transform: scale(1.9) rotate(-12deg); filter: drop-shadow(0 0 10px rgba(217, 70, 239, 0.9)); }
+  60%  { transform: scale(0.9) rotate(8deg); filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8)); }
+  100% { transform: scale(1) rotate(0); filter: drop-shadow(0 0 0 rgba(217, 70, 239, 0)); }
+}
+.super-reaction-emoji {
+  display: inline-block;
+  animation: super-reaction-burst 0.9s ease-out;
+}
+.super-reaction:hover .super-reaction-emoji,
+.super-reaction:active .super-reaction-emoji {
+  animation: super-reaction-burst 0.9s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .super-reaction-emoji,
+  .super-reaction:hover .super-reaction-emoji,
+  .super-reaction:active .super-reaction-emoji { animation: none; }
+}
+
 /* Thème clair */
 [data-theme="light"] body { background: #f2f3f5; color: #060607; }
 [data-theme="light"] .bg-fc-bg { background-color: #f2f3f5 !important; }

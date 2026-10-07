@@ -175,10 +175,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         if (d.channel_id === channelId) deleteMessage(channelId, d.message_id)
       }),
       on('REACTION_ADD', (d: any) => {
-        if (d.channel_id === channelId) addReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId)
+        if (d.channel_id === channelId) addReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId, !!d.is_super)
       }),
       on('REACTION_REMOVE', (d: any) => {
-        if (d.channel_id === channelId) removeReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId)
+        if (d.channel_id === channelId) removeReaction(channelId, d.message_id, d.emoji, d.user_id, d.user_id === meId, !!d.is_super)
       }),
       on('TYPING_START', (d: any) => {
         if (d.channel_id === channelId) {
