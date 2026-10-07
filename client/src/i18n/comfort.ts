@@ -78,6 +78,14 @@ export const comfortFr = {
   'lock.confirmCode': 'Confirmer le code',
   'lock.codeRule': 'Le code doit faire 4 à 32 caractères',
   'lock.mismatch': 'Les deux codes ne correspondent pas',
+  // --- Plusieurs comptes ---
+  'accounts.title': 'Comptes',
+  'accounts.active': 'Compte actif',
+  'accounts.switchTo': 'Passer sur {name}',
+  'accounts.forget': 'Retirer {name} de cet appareil',
+  'accounts.add': 'Ajouter un compte',
+  'accounts.resume': 'Reprendre un compte de cet appareil :',
+  'accounts.error': 'Changement de compte impossible',
 } as const
 
 export const comfortEn: Partial<Record<keyof typeof comfortFr, string>> = {
@@ -155,4 +163,11 @@ export const comfortEn: Partial<Record<keyof typeof comfortFr, string>> = {
   'lock.confirmCode': 'Confirm the code',
   'lock.codeRule': 'The code must be 4 to 32 characters',
   'lock.mismatch': 'The two codes do not match',
+  'accounts.title': 'Accounts',
+  'accounts.active': 'Active account',
+  'accounts.switchTo': 'Switch to {name}',
+  'accounts.forget': 'Remove {name} from this device',
+  'accounts.add': 'Add an account',
+  'accounts.resume': 'Resume an account from this device:',
+  'accounts.error': 'Could not switch account',
 }

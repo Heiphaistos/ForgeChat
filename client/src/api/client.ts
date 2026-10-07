@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { clearLocalSession } from '../lib/localSession'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const SERVER_URL = isTauri ? 'https://forgechat.heiphaistos.org' : ''
@@ -70,7 +71,7 @@ api.interceptors.response.use(
         err.config._retried = true
         return api(err.config)
       } catch {
-        if (isTauri) localStorage.clear()
+        if (isTauri) clearLocalSession()
         // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
         // /login?redirect=… ; un rechargement vers /login nu perdait la destination
         const { pathname, search } = window.location
