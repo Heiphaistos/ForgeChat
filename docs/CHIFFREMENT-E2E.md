@@ -131,6 +131,8 @@ Contrairement aux MP (clair permis tant qu'un membre n'a pas de clé), un salon 
 ### Applis (web et mobile)
 - Modules cœur : `e2e/conversations.ts` (kind `channel`, `sealBody` avec portée, distribution par lots, `completeChannelKeys`, rechiffrement de l'historique des salons), `e2e/channelText.ts` (mentions en métadonnées, AutoMod, première URL ; fonctions pures testées à l'identique des deux côtés), `e2e/serverKey.ts` (§11).
 - Aperçus de liens : l'expéditeur demande `/og` (le serveur voit l'URL un instant, ne la stocke pas) et met l'aperçu dans le contenu chiffré ; les destinataires ne demandent rien au serveur pour un message chiffré.
+- Écrans branchés (web et mobile) : messages, réponses, éditions, épingles, fils (titres compris), forums et salons médias, sondages, messages programmés, enregistrés, mentions, recherche locale, transfert (rechiffré pour un salon cible chiffré), signalement, badge « non chiffré », cadenas d'en-tête, onglet « Chiffrement » des réglages du serveur (§11), invitation du propriétaire, transfert de propriété.
+- Limites connues : renommer un fil chiffré est masqué (le serveur ne renomme qu'en clair) ; l'AutoMod de l'appli ne vérifie pas les options de sondage ni le titre d'une publication, ni l'édition sur mobile ; un message programmé chiffré ne notifie pas ses mentions (le serveur le recopie sans métadonnées) ; une publication de forum chiffrée n'a pas d'aperçu de lien ; la récupération du serveur ne couvre que les messages des salons (pas les fils, forums ni sondages) et l'export mobile passe par la feuille de partage (taille bornée, export salon par salon au-delà).
 
 ### Anciennes applis
 - Web : servie par le serveur, à jour au rechargement.
