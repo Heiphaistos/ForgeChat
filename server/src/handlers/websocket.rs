@@ -778,7 +778,7 @@ async fn handle_ws_message(
             let rights = crate::handlers::voice_moderation::voice_rights(state, user_id, server_id, channel_id, perms).await;
             // P2-2 — déplacé par un modérateur : ni mot de passe ni limite de places.
             let moved = crate::handlers::voice_moderation::take_move_grant(state, user_id, channel_id).await;
-            let listen_only = msg["listen_only"].as_bool().unwrap_or(false);
+            let mut listen_only = msg["listen_only"].as_bool().unwrap_or(false);
             let Some(livekit) = state.livekit.clone() else {
                 state.broadcast_to_user(user_id, serde_json::json!({
                     "type": "VOICE_JOIN_ERROR",
@@ -791,7 +791,7 @@ async fn handle_ws_message(
 
             // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
-                "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id FROM channels WHERE id=$1"
+                "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id, type::text AS ch_type FROM channels WHERE id=$1"
             )
             .bind(channel_id)
             .fetch_optional(&state.db)
@@ -809,6 +809,16 @@ async fn handle_ws_message(
                 let is_auto_create: bool = row.get("is_auto_create");
                 let auto_create_name: Option<String> = row.get("auto_create_name");
                 let server_id_col: Option<Uuid> = row.get("server_id");
+                // Scène : seuls les orateurs désignés (STAGE_INVITE_SPEAK) reçoivent le droit de
+                // parler, quel que soit le listen_only envoyé par le client.
+                let ch_type: Option<String> = row.try_get("ch_type").ok();
+                if ch_type.as_deref() == Some("stage") && !listen_only {
+                    let is_speaker = state.stage_speakers.read().await
+                        .get(&channel_id).is_some_and(|s| s.contains(&user_id));
+                    if !is_speaker {
+                        listen_only = true;
+                    }
+                }
 
                 // Vérification mot de passe vocal
                 if let Some(hash) = password_hash.as_ref().filter(|_| !moved) {
