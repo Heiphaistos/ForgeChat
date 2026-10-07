@@ -805,6 +805,7 @@ pub async fn send_dm(
     .bind(client_msg_id)
     .fetch_one(&state.db)
     .await?;
+    crate::handlers::badges::count_message(&state, claims.sub);
 
     use sqlx::Row;
     let msg_id: Uuid = msg.get("id");
@@ -1045,6 +1046,7 @@ pub async fn get_friends_v2(
             })
         })
         .collect();
+    crate::handlers::social::enrich_friends(&state, claims.sub, &mut result).await;
 
     // Bloqués gérés séparément
     if filter == "blocked" {
@@ -1151,43 +1153,6 @@ pub async fn cancel_friend_request(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-/// GET /friends/:id/note
-pub async fn get_friend_note(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(target_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>> {
-    use sqlx::Row;
-    let row = sqlx::query(
-        "SELECT note, updated_at FROM friend_notes WHERE user_id=$1 AND target_id=$2"
-    ).bind(claims.sub).bind(target_id).fetch_optional(&state.db).await?;
-
-    let (note, updated_at) = row.map(|r| (
-        r.get::<String, _>("note"),
-        Some(r.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"))
-    )).unwrap_or_else(|| (String::new(), None));
-
-    Ok(Json(serde_json::json!({ "note": note, "updated_at": updated_at })))
-}
-
-/// PUT /friends/:id/note { note }
-#[derive(serde::Deserialize)]
-pub struct NoteBody { pub note: String }
-
-pub async fn set_friend_note(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(target_id): Path<Uuid>,
-    Json(body): Json<NoteBody>,
-) -> Result<Json<serde_json::Value>> {
-    let note = body.note.chars().take(2000).collect::<String>();
-    sqlx::query(
-        "INSERT INTO friend_notes (user_id, target_id, note, updated_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (user_id, target_id) DO UPDATE SET note=EXCLUDED.note, updated_at=NOW()"
-    ).bind(claims.sub).bind(target_id).bind(&note).execute(&state.db).await?;
-    Ok(Json(serde_json::json!({ "ok": true })))
-}
-
 /// GET /friends/:id/nickname
 pub async fn get_friend_nickname(
     State(state): State<AppState>,
@@ -1262,6 +1227,9 @@ pub async fn create_friend_group(
     use sqlx::Row;
     let name = body.name.trim().chars().take(64).collect::<String>();
     if name.is_empty() { return Err(AppError::BadRequest("Nom requis".into())); }
+    if !body.color.as_deref().is_none_or(crate::handlers::social::valid_group_color) {
+        return Err(AppError::BadRequest("Couleur invalide (#RRGGBB)".into()));
+    }
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM friend_groups WHERE user_id=$1")
         .bind(claims.sub).fetch_one(&state.db).await?;
     if count >= 20 { return Err(AppError::BadRequest("Maximum 20 groupes".into())); }
@@ -1284,6 +1252,12 @@ pub async fn update_friend_group(
     Path(group_id): Path<Uuid>,
     Json(body): Json<GroupUpdateBody>,
 ) -> Result<Json<serde_json::Value>> {
+    if body.name.as_deref().is_some_and(|n| n.trim().is_empty()) {
+        return Err(AppError::BadRequest("Nom requis".into()));
+    }
+    if !body.color.as_deref().is_none_or(crate::handlers::social::valid_group_color) {
+        return Err(AppError::BadRequest("Couleur invalide (#RRGGBB)".into()));
+    }
     if let Some(ref name) = body.name {
         sqlx::query("UPDATE friend_groups SET name=$1 WHERE id=$2 AND user_id=$3")
             .bind(name.trim().chars().take(64).collect::<String>())

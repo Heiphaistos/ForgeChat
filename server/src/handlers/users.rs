@@ -83,8 +83,7 @@ pub async fn get_user(
         // pourtant `UserPublic` (partagé entre get_me et get_user) les incluait sans
         // distinction : n'importe quel utilisateur authentifié pouvait récupérer la date
         // de naissance exacte de n'importe qui via GET /users/:id, sans même être ami.
-        public.birthday = None;
-        public.totp_enabled = false;
+        public = public.for_others();
     }
 
     Ok(Json(public))
@@ -114,6 +113,10 @@ pub async fn update_me(
         if !valid.contains(&at.as_str()) {
             return Err(AppError::BadRequest("activity_type invalide".into()));
         }
+    }
+    // Colonnes VARCHAR(100) : une saisie plus longue (« J'écoute… ») donnait une erreur 500.
+    if [&body.activity_name, &body.activity_detail].iter().any(|v| v.as_deref().is_some_and(|s| s.chars().count() > 100)) {
+        return Err(AppError::BadRequest("Activité : 100 caractères max".into()));
     }
 
     if let Some(ref p) = body.pronouns {
@@ -179,6 +182,7 @@ pub async fn update_me(
             activity_name = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($8, '') ELSE activity_name END,
             activity_detail = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($9, '') ELSE activity_detail END,
             birthday = CASE WHEN $11 THEN NULL WHEN $10::DATE IS NOT NULL THEN $10 ELSE birthday END,
+            birthday_has_year = CASE WHEN $10::DATE IS NOT NULL THEN TRUE ELSE birthday_has_year END,
             pronouns = COALESCE($12, pronouns),
             avatar_decoration = CASE WHEN $13::VARCHAR IS NOT NULL THEN NULLIF($13, '') ELSE avatar_decoration END,
             profile_color_primary = CASE WHEN $14::INT IS NULL THEN profile_color_primary WHEN $14 < 0 THEN NULL ELSE $14 END,
@@ -246,7 +250,8 @@ pub async fn update_me(
         crate::handlers::presence::refresh(&state, claims.sub).await;
     }
 
-    let public_full = UserPublic::from(user.clone());
+    // Date de naissance et 2FA : jamais diffusées aux autres (voir get_user).
+    let public_full = UserPublic::from(user.clone()).for_others();
     let mut public_no_activity = public_full.clone();
     public_no_activity.activity_type = None;
     public_no_activity.activity_name = None;
@@ -255,8 +260,8 @@ pub async fn update_me(
     let event_full = serde_json::json!({ "type": "USER_UPDATE", "user": public_full }).to_string();
     let event_no_activity = serde_json::json!({ "type": "USER_UPDATE", "user": public_no_activity }).to_string();
 
-    // Soi-même voit toujours sa propre activité complète (autres onglets/appareils)
-    state.broadcast_to_user(claims.sub, event_full.clone()).await;
+    // Soi-même voit toujours sa propre fiche complète (autres onglets/appareils)
+    state.broadcast_to_user(claims.sub, serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) }).to_string()).await;
 
     let visible_to: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT sm2.user_id
@@ -860,55 +865,6 @@ pub async fn get_activity_feed(
     let page = if off < items.len() { items[off..end].to_vec() } else { vec![] };
 
     Ok(Json(page))
-}
-
-/// GET /api/users/:id/achievements — badges calculés
-pub async fn get_user_achievements(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<Vec<serde_json::Value>>> {
-    use sqlx::Row;
-
-    let row = sqlx::query(
-        "SELECT u.created_at,
-                (SELECT COUNT(*) FROM messages WHERE user_id = $1) as msg_count,
-                (SELECT COUNT(*) FROM server_members WHERE user_id = $1) as server_count,
-                (SELECT COUNT(*) FROM servers WHERE owner_id = $1) as owned_count
-         FROM users u WHERE u.id = $1"
-    )
-    .bind(user_id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
-
-    let created_at = row.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
-    let msg_count: i64 = row.get("msg_count");
-    let server_count: i64 = row.get("server_count");
-    let owned_count: i64 = row.get("owned_count");
-    let age_days = (chrono::Utc::now() - created_at).num_days();
-
-    let mut badges: Vec<serde_json::Value> = Vec::new();
-
-    if age_days <= 30 {
-        badges.push(serde_json::json!({ "id": "early_adopter", "name": "Early Adopter", "icon": "🌟", "description": "A rejoint dans les 30 premiers jours" }));
-    }
-    if msg_count >= 1 {
-        badges.push(serde_json::json!({ "id": "first_message", "name": "Premier message", "icon": "💬", "description": "A envoyé son premier message" }));
-    }
-    if msg_count >= 100 {
-        badges.push(serde_json::json!({ "id": "chatterbox", "name": "Bavard", "icon": "🗣️", "description": "100 messages envoyés" }));
-    }
-    if msg_count >= 1000 {
-        badges.push(serde_json::json!({ "id": "veteran", "name": "Vétéran", "icon": "⚔️", "description": "1000 messages envoyés" }));
-    }
-    if server_count >= 3 {
-        badges.push(serde_json::json!({ "id": "social", "name": "Sociable", "icon": "🤝", "description": "Membre de 3+ serveurs" }));
-    }
-    if owned_count >= 1 {
-        badges.push(serde_json::json!({ "id": "founder", "name": "Fondateur", "icon": "👑", "description": "A créé un serveur" }));
-    }
-
-    Ok(Json(badges))
 }
 
 pub async fn get_mutual_servers(

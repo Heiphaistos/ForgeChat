@@ -344,6 +344,7 @@ pub async fn send_message(
     .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&state.db)
     .await?;
+    crate::handlers::badges::count_message(&state, claims.sub);
 
     sqlx::query("UPDATE channels SET last_message_id=$1 WHERE id=$2")
         .bind(msg.get::<Uuid, _>("id"))

@@ -119,7 +119,7 @@ async fn handle_socket(
         let connected_ids: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
         if !connected_ids.is_empty() {
             let rows = sqlx::query(
-                "SELECT DISTINCT u.id, u.status, u.activity_type, u.activity_name, u.activity_detail
+                "SELECT DISTINCT u.id, u.status
                  FROM users u
                  WHERE u.id = ANY($1) AND u.id != $2 AND u.status <> 'offline'
                    AND (
@@ -143,13 +143,16 @@ async fn handle_socket(
             .unwrap_or_default();
 
             if !rows.is_empty() {
-                let users: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
-                    "user_id": r.get::<Uuid, _>("id"),
-                    "status": r.get::<String, _>("status"),
-                    "activity_type": r.get::<Option<String>, _>("activity_type"),
-                    "activity_name": r.get::<Option<String>, _>("activity_name"),
-                    "activity_detail": r.get::<Option<String>, _>("activity_detail"),
-                })).collect();
+                let ids: Vec<Uuid> = rows.iter().map(|r| r.get::<Uuid, _>("id")).collect();
+                let rich = crate::handlers::presence::load_rich(&state, &ids).await;
+                let friends = crate::handlers::presence::friends_of(&state, user_id).await;
+                let users: Vec<serde_json::Value> = rows.iter().map(|r| {
+                    let id: Uuid = r.get("id");
+                    let mut u = rich.get(&id).cloned().unwrap_or_default().view(false, friends.contains(&id));
+                    u["user_id"] = serde_json::json!(id);
+                    u["status"] = r.get::<String, _>("status").into();
+                    u
+                }).collect();
 
                 let init_event = serde_json::json!({
                     "type": "PRESENCE_INIT",
@@ -518,6 +521,8 @@ async fn accept_dm_call(
         "livekit": media(user_id, cached_username, accepter_e2ee),
     }).to_string()).await;
     notify_call_taken(state, user_id, session_id, dm_id, "accepted").await;
+    crate::handlers::presence::call_changed(state, vec![user_id, to]);
+    crate::handlers::badges::voice_together(state, vec![user_id, to]);
 }
 
 /// N9 — limiteur de débit Redis générique, même motif que `TYPING_START` /
@@ -1593,6 +1598,7 @@ async fn handle_ws_message(
                 "dm_id": msg["dm_id"],
             });
             state.broadcast_to_user(to, event.to_string()).await;
+            crate::handlers::presence::call_changed(state, vec![user_id, to]);
             // Fin d'appel : les deux quittent le SFU, même si un client ne le fait pas.
             if let Some(lk) = state.livekit.clone() {
                 let http = state.http_client.clone();

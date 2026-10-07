@@ -97,6 +97,16 @@ pub struct UserPublic {
     pub custom_status_expires_at: Option<DateTime<Utc>>,
 }
 
+impl UserPublic {
+    /// Fiche vue par quelqu'un d'autre : ni date de naissance (birthdays.rs décide
+    /// du jour et du mois montrés), ni état de la double authentification.
+    pub fn for_others(mut self) -> Self {
+        self.birthday = None;
+        self.totp_enabled = false;
+        self
+    }
+}
+
 impl From<User> for UserPublic {
     fn from(u: User) -> Self {
         Self {

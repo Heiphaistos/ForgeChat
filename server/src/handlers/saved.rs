@@ -166,16 +166,46 @@ pub async fn unsave_message(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-// Notes privées utilisateur
+// ─── Notes privées sur une personne (lot « Profil et social ») ───────────────
+// Chiffrées sur l'appareil avec la clé de compte de leur auteur : le serveur ne
+// garde qu'un blob opaque {v, iv, ct}. `content` = ancien texte en clair, rendu
+// une dernière fois à son auteur pour que son appli le rechiffre, puis effacé.
+
+/// Taille maximale du chiffré en base64url (2000 caractères de 4 octets + tag).
+const NOTE_CT_MAX_B64: usize = 11_000;
+
 #[derive(Serialize)]
 pub struct UserNote {
+    pub enc: Option<serde_json::Value>,
     pub content: String,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NoteEnc {
+    pub v: u8,
+    pub iv: String,
+    pub ct: String,
+}
+
+impl NoteEnc {
+    fn valid(&self) -> bool {
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let len = |s: &str, max: usize| (s.len() <= max).then(|| URL_SAFE_NO_PAD.decode(s).ok().map(|b| b.len())).flatten();
+        self.v == 1 && len(&self.iv, 16) == Some(12) && len(&self.ct, NOTE_CT_MAX_B64).is_some_and(|n| n >= 16)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SetNoteBody {
-    pub content: String,
+    /// null = supprimer la note.
+    #[serde(default)]
+    pub enc: Option<NoteEnc>,
+    /// Texte en clair des anciennes applis : refusé.
+    #[serde(default)]
+    pub content: Option<String>,
 }
 
 pub async fn get_note(
@@ -184,15 +214,13 @@ pub async fn get_note(
     Path(target_id): Path<Uuid>,
 ) -> Result<Json<UserNote>, AppError> {
     use sqlx::Row;
-    let row = sqlx::query("SELECT content, updated_at FROM user_notes WHERE user_id=$1 AND target_user_id=$2")
+    let row = sqlx::query("SELECT enc, content, updated_at FROM user_notes WHERE user_id=$1 AND target_user_id=$2")
         .bind(claims.sub).bind(target_id)
         .fetch_optional(&state.db).await?;
-
-    if let Some(r) = row {
-        Ok(Json(UserNote { content: r.get("content"), updated_at: r.get("updated_at") }))
-    } else {
-        Ok(Json(UserNote { content: String::new(), updated_at: Utc::now() }))
-    }
+    Ok(Json(match row {
+        Some(r) => UserNote { enc: r.get("enc"), content: r.get("content"), updated_at: Some(r.get("updated_at")) },
+        None => UserNote { enc: None, content: String::new(), updated_at: None },
+    }))
 }
 
 pub async fn set_note(
@@ -201,15 +229,54 @@ pub async fn set_note(
     Path(target_id): Path<Uuid>,
     Json(body): Json<SetNoteBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    if body.content.chars().count() > 2000 {
-        return Err(AppError::BadRequest("Note trop longue (max 2000 chars)".into()));
+    if body.content.is_some_and(|c| !c.is_empty()) {
+        return Err(AppError::BadRequest(
+            "PLAINTEXT_REFUSED : les notes privées sont chiffrées, mets à jour ForgeChat pour les modifier.".into(),
+        ));
     }
-    sqlx::query(
-        "INSERT INTO user_notes (user_id, target_user_id, content, updated_at)
-         VALUES ($1,$2,$3,NOW())
-         ON CONFLICT (user_id, target_user_id) DO UPDATE SET content=$3, updated_at=NOW()"
-    )
-    .bind(claims.sub).bind(target_id).bind(&body.content)
-    .execute(&state.db).await?;
+    if crate::handlers::password_reset::over_limit(&state, &format!("note:{}", claims.sub), 120, 600).await {
+        return Err(AppError::TooManyRequests);
+    }
+    match body.enc {
+        None => {
+            sqlx::query("DELETE FROM user_notes WHERE user_id=$1 AND target_user_id=$2")
+                .bind(claims.sub).bind(target_id)
+                .execute(&state.db).await?;
+        }
+        Some(enc) => {
+            if !enc.valid() {
+                return Err(AppError::BadRequest("Note chiffrée invalide".into()));
+            }
+            let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id=$1)")
+                .bind(target_id).fetch_one(&state.db).await?;
+            if !exists {
+                return Err(AppError::NotFound("Utilisateur introuvable".into()));
+            }
+            let json = serde_json::json!({ "v": enc.v, "iv": enc.iv, "ct": enc.ct });
+            // Le clair éventuel (ancienne note) disparaît en même temps.
+            sqlx::query(
+                "INSERT INTO user_notes (user_id, target_user_id, content, enc, updated_at)
+                 VALUES ($1,$2,'',$3,NOW())
+                 ON CONFLICT (user_id, target_user_id) DO UPDATE SET content='', enc=$3, updated_at=NOW()"
+            )
+            .bind(claims.sub).bind(target_id).bind(&json)
+            .execute(&state.db).await?;
+        }
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NoteEnc;
+
+    #[test]
+    fn note_chiffree_valide() {
+        let ok = || NoteEnc { v: 1, iv: "AAAAAAAAAAAAAAAA".into(), ct: "A".repeat(22) };
+        assert!(ok().valid());
+        assert!(!NoteEnc { v: 2, ..ok() }.valid());
+        assert!(!NoteEnc { iv: "AAAA".into(), ..ok() }.valid());
+        assert!(!NoteEnc { ct: "A".repeat(20_000), ..ok() }.valid());
+        assert!(!NoteEnc { ct: "pas du base64 !".into(), ..ok() }.valid());
+    }
 }
