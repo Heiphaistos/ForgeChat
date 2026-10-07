@@ -84,6 +84,14 @@
       "ct": "Y3CxjRd7pr-rOZgGkpKdGQcWpGA4doPzhS3DuOOg4bJp42sLZxfVdr5-ME8id-v3nhbkb-ZkLe8"
     }
   },
+  "media": {
+    "conv": "group:0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21",
+    "epoch": 2,
+    "convKey": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "info": "forgechat media v1|group:0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21|2",
+    "keyIndex": 2,
+    "key": "XCDy7oMxlwytClv8HDxPUmKtdw1uZciU9YkZBYnX9EA"
+  },
   "recoveryNormalize": [
     [
       "7k3qz-m9xw2-pb4td-0vh1r",

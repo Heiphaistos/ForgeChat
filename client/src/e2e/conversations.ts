@@ -104,11 +104,12 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
   return epoch
 }
 
-/** Champs chiffrés d'un envoi ou d'une édition ; null = texte en clair permis (membre sans clé). */
-export async function seal(kind: ConvKind, id: string, text: string, clientMsgId?: string | null):
-  Promise<{ enc: c.EncPayload; client_msg_id: string } | null> {
+/**
+ * Clé de l'époque courante, créée au besoin (première utilisation, rotation après
+ * un départ). Sert aux messages et aux médias (vocal, appels : e2e/media.ts).
+ */
+export async function currentKey(kind: ConvKind, id: string): Promise<{ epoch: number; key: Uint8Array; me: string }> {
   const st = await load(kind, id)
-  if (!st.allKeyed) return null
   const me = myId()
   if (useAccountKey.getState().status !== 'ready' || !me) throw new Error('E2E_LOCKED')
   let epoch = st.current
@@ -123,6 +124,15 @@ export async function seal(kind: ConvKind, id: string, text: string, clientMsgId
   }
   const key = epoch === null ? null : await keyFor(kind, id, epoch)
   if (epoch === null || !key) throw new Error('E2E_WAITING')
+  return { epoch, key, me }
+}
+
+/** Champs chiffrés d'un envoi ou d'une édition ; null = texte en clair permis (membre sans clé). */
+export async function seal(kind: ConvKind, id: string, text: string, clientMsgId?: string | null):
+  Promise<{ enc: c.EncPayload; client_msg_id: string } | null> {
+  const st = await load(kind, id)
+  if (!st.allKeyed) return null
+  const { epoch, key, me } = await currentKey(kind, id)
   const cmid = clientMsgId ?? crypto.randomUUID()
   return { enc: await c.encryptMessage(key, c.convName(kind, id), epoch, me, cmid, { t: text }), client_msg_id: cmid }
 }

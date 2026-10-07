@@ -242,3 +242,18 @@ export async function decryptMessage(
   if (!body || typeof body.t !== 'string') throw new Error('contenu invalide')
   return body
 }
+
+// ─── Médias : vocal, appels, caméra, partage d'écran (§5) ────────────────────
+/** Taille de l'anneau de clés de LiveKit : index de clé = époque modulo cette taille. */
+export const MEDIA_KEYRING = 16
+export const mediaInfo = (conv: string, epoch: number) => `forgechat media v1|${conv}|${epoch}`
+export const mediaKeyIndex = (epoch: number) => epoch % MEDIA_KEYRING
+
+/**
+ * Clé de média d'une époque, en base64url : c'est cette chaîne qui est donnée à
+ * LiveKit (web, mobile et bureau natif la dérivent ensuite tous par PBKDF2, le
+ * seul chemin commun à tous les SDK LiveKit).
+ */
+export async function mediaKey(convKey: Uint8Array, conv: string, epoch: number): Promise<string> {
+  return b64uEncode(await hkdf(convKey, new Uint8Array(0), mediaInfo(conv, epoch), AES_KEY_BYTES))
+}

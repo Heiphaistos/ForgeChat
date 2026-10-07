@@ -102,3 +102,15 @@ test('message chiffré : AAD conversation|époque|auteur|id client', async () =>
   assert.notEqual(m1.iv, m2.iv)
   assert.equal(c.generateConvKey().length, 32)
 })
+
+test('clé de média (vocal, appels) : HKDF de la clé d\'époque, index = époque modulo l\'anneau', async () => {
+  const x = V.media
+  assert.equal(c.mediaInfo(x.conv, x.epoch), x.info)
+  assert.equal(await c.mediaKey(d(x.convKey), x.conv, x.epoch), x.key)
+  assert.equal(c.mediaKeyIndex(x.epoch), x.keyIndex)
+  assert.equal(c.mediaKeyIndex(c.MEDIA_KEYRING + 3), 3)
+  // Autre époque ou autre conversation : autre clé.
+  assert.notEqual(await c.mediaKey(d(x.convKey), x.conv, x.epoch + 1), x.key)
+  assert.notEqual(await c.mediaKey(d(x.convKey), 'channel:autre', x.epoch), x.key)
+  assert.equal(d(x.key).length, 32)
+})

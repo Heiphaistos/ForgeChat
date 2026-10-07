@@ -25,6 +25,9 @@ const convKey = { conv, epoch: 2, sender: ids.a, member: ids.b, key: e(seq(32, 1
 convKey.wrapped = await c.wrapConvKey(await c.importPrivateKey(d(A.priv), d(A.pub)), d(B.pub), d(convKey.key), conv, 2, ids.b, ids.a, d(convKey.iv))
 const message = { conv, epoch: 2, author: ids.a, clientMsgId: ids.msg, key: convKey.key, iv: e(seq(12, 180)), body: { t: 'Réponse chiffrée 🔐 **gras**' } }
 message.enc = await c.encryptMessage(d(message.key), conv, 2, ids.a, ids.msg, message.body, d(message.iv))
+// Clé de média (vocal, appels) de l'époque 2, dérivée de la clé de conversation ci-dessus.
+const media = { conv, epoch: 2, convKey: convKey.key, info: c.mediaInfo(conv, 2), keyIndex: c.mediaKeyIndex(2) }
+media.key = await c.mediaKey(d(convKey.key), conv, 2)
 const wrapOpts = { salt: seq(16, 50), iv: seq(12, 70), iterations: ITER }
 
 const vectors = {
@@ -46,6 +49,7 @@ const vectors = {
   // Clé d'époque enveloppée par A pour B, puis message chiffré avec cette clé.
   convKey,
   message,
+  media,
   recoveryNormalize: [
     ['7k3qz-m9xw2-pb4td-0vh1r', '7K3QZM9XW2PB4TD0VH1R'],
     [' 7K3QZ M9XW2 PB4TD OVHIR ', '7K3QZM9XW2PB4TD0VH1R'],

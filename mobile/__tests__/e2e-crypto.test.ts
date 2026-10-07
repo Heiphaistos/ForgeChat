@@ -82,3 +82,12 @@ test('message chiffré : mêmes octets que le web, AAD vérifiée', async () => 
   await expect(c.decryptMessage(d(x.key), x.conv, x.enc, 'usurpateur', x.clientMsgId)).rejects.toThrow()
   await expect(c.decryptMessage(d(x.key), x.conv, x.enc, x.author, 'autre-id')).rejects.toThrow()
 })
+
+test('clé de média : mêmes octets que le web, index = époque modulo l’anneau', async () => {
+  const x = V.media
+  expect(c.mediaInfo(x.conv, x.epoch)).toBe(x.info)
+  expect(await c.mediaKey(d(x.convKey), x.conv, x.epoch)).toBe(x.key)
+  expect(c.mediaKeyIndex(x.epoch)).toBe(x.keyIndex)
+  expect(c.mediaKeyIndex(c.MEDIA_KEYRING + 3)).toBe(3)
+  expect(await c.mediaKey(d(x.convKey), x.conv, x.epoch + 1)).not.toBe(x.key)
+})
