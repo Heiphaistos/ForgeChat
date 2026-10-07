@@ -25,6 +25,9 @@ use tower_http::{
     trace::TraceLayer,
 };
 use axum::extract::DefaultBodyLimit;
+
+/// Corps des routes publiques et des petits réglages JSON (anti-saturation mémoire).
+const SMALL_JSON_LIMIT: usize = 64 * 1024;
 use axum::http::{header, HeaderValue};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -196,12 +199,13 @@ async fn main() -> anyhow::Result<()> {
         // l'interroge au lancement, avant toute authentification.
         .route("/api/desktop/latest", get(handlers::desktop::get_latest))
         // Auth publique
-        .route("/api/auth/register", post(handlers::auth::register))
-        .route("/api/auth/verify-email", post(handlers::auth::verify_email))
-        .route("/api/auth/login", post(handlers::auth::login))
-        .route("/api/auth/refresh", post(handlers::auth::refresh))
-        .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password))
-        .route("/api/auth/reset-password", post(handlers::password_reset::reset_password))
+        // Corps limité à 64 Ko : routes sans compte, quelques champs texte seulement.
+        .route("/api/auth/register", post(handlers::auth::register).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/reset-password", post(handlers::password_reset::reset_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
         // Invitation amis (lecture publique — affiche le profil de l'invitant)
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))
@@ -241,10 +245,10 @@ async fn main() -> anyhow::Result<()> {
                 ))
                 .service(ServeDir::new(&config.upload_dir))
         )
-        // 50 Mo partout ailleurs : un corps JSON est lu entier en mémoire, 1,1 Go ici permettait
-        // de saturer la RAM sans compte (/api/auth/login). Seules les pièces jointes, écrites sur
-        // le disque au fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
-        .layer(DefaultBodyLimit::max(52_428_800))
+        // 12 Mo partout ailleurs (plus gros envoi hors pièce jointe : une bannière de 10 Mo) : un
+        // corps JSON est lu entier en mémoire. Seules les pièces jointes, écrites sur le disque au
+        // fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
+        .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -795,7 +799,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/channel-notif", get(handlers::user_settings::get_all_channel_notification_overrides))
         .route("/user/channel-notif/:channel_id", get(handlers::user_settings::get_channel_notification_override))
         .route("/user/channel-notif/:channel_id", post(handlers::user_settings::set_channel_notification_override))
-        .route("/users/me/server-layout", get(handlers::user_settings::get_server_layout).put(handlers::user_settings::put_server_layout))
+        .route("/users/me/server-layout", get(handlers::user_settings::get_server_layout).put(handlers::user_settings::put_server_layout).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/user/theme", get(handlers::user_settings::get_theme).put(handlers::user_settings::put_theme))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))

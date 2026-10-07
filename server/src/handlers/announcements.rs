@@ -199,7 +199,9 @@ pub async fn crosspost_message(
     if over_limit(&state, &format!("crosspost:{channel_id}"), MAX_PUBLISH_PER_HOUR, 3600).await {
         return Err(AppError::TooManyRequests);
     }
-    // Atomique : deux clics simultanés ne publient pas deux fois.
+    // Une seule transaction : deux clics simultanés ne publient pas deux fois, et un échec en cours
+    // de route ne laisse pas le message « publié » à moitié livré.
+    let mut tx = state.db.begin().await?;
     let msg = sqlx::query(
         "UPDATE messages SET crossposted_at=NOW()
          WHERE id=$1 AND channel_id=$2 AND crossposted_at IS NULL AND type <> 'crosspost' AND COALESCE(content, '') <> ''
@@ -207,11 +209,12 @@ pub async fn crosspost_message(
     )
     .bind(message_id)
     .bind(channel_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&mut *tx)
     .await?
     .ok_or_else(|| AppError::Conflict("Message introuvable, vide ou déjà publié".into()))?;
     let author_id: Uuid = msg.get("user_id");
-    let content: String = msg.get("content");
+    // Copie dans des serveurs tiers : @everyone/@here neutralisés.
+    let content = defuse_mass_mentions(&msg.get::<String, _>("content"));
     let display = format!("{} • #{}", source.get::<String, _>("server_name"), source.get::<String, _>("channel_name"));
     let icon: Option<String> = source.get("icon");
 
@@ -220,10 +223,11 @@ pub async fn crosspost_message(
          WHERE f.source_channel_id=$1"
     )
     .bind(channel_id)
-    .fetch_all(&state.db)
+    .fetch_all(&mut *tx)
     .await?;
     let author = sqlx::query("SELECT discriminator FROM users WHERE id=$1")
-        .bind(author_id).fetch_one(&state.db).await?;
+        .bind(author_id).fetch_one(&mut *tx).await?;
+    let mut created = Vec::with_capacity(targets.len());
 
     // ponytail: texte seul, les pièces jointes ne sont pas recopiées (leurs fichiers
     // sont supprimés avec le message source) ; les copier sur disque si besoin.
@@ -239,10 +243,10 @@ pub async fn crosspost_message(
         .bind(&content)
         .bind(&display)
         .bind(&icon)
-        .fetch_one(&state.db)
+        .fetch_one(&mut *tx)
         .await?;
         let id: Uuid = row.get("id");
-        sqlx::query("UPDATE channels SET last_message_id=$1 WHERE id=$2").bind(id).bind(target).execute(&state.db).await?;
+        sqlx::query("UPDATE channels SET last_message_id=$1 WHERE id=$2").bind(id).bind(target).execute(&mut *tx).await?;
         let full = MessageWithAuthor {
             id,
             channel_id: target,
@@ -268,9 +272,29 @@ pub async fn crosspost_message(
             expires_at: None,
             poll_id: None,
         };
+        created.push((target, target_server, full));
+    }
+    tx.commit().await?;
+    for (target, target_server, full) in created {
         state.broadcast_to_channel_members(target, serde_json::json!({
             "type": "MESSAGE_CREATE", "server_id": target_server, "message": full,
         }).to_string()).await;
     }
     Ok(Json(serde_json::json!({ "ok": true, "delivered": targets.len() })))
+}
+
+/// `@everyone` / `@here` rendus inertes (U+200B après l'arobase) : une annonce recopiée ne doit
+/// pas pouvoir mentionner tout un serveur qu'elle ne gère pas.
+fn defuse_mass_mentions(s: &str) -> String {
+    s.replace("@everyone", "@\u{200B}everyone").replace("@here", "@\u{200B}here")
+}
+
+#[cfg(test)]
+mod crosspost_tests {
+    #[test]
+    fn mentions_de_masse_neutralisees() {
+        let out = super::defuse_mass_mentions("Salut @everyone et @here !");
+        assert!(!out.contains("@everyone") && !out.contains("@here"));
+        assert!(out.contains("everyone") && out.contains("Salut"));
+    }
 }

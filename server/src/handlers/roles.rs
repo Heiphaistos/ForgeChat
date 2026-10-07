@@ -257,8 +257,10 @@ pub async fn upload_role_icon(
     let field = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))?
         .ok_or_else(|| AppError::BadRequest("Aucun fichier reçu".into()))?;
-    let ext = role_icon_ext(field.file_name().unwrap_or(""))
+    role_icon_ext(field.file_name().unwrap_or(""))
         .ok_or_else(|| AppError::BadRequest("Icône : image png, jpg, gif ou webp uniquement".into()))?;
+    // Type annoncé vérifié aussi (pas seulement l'extension du nom), comme pour les avatars.
+    let ext = crate::handlers::uploads::image_ext(field.content_type().unwrap_or(""))?;
 
     let upload_dir = std::path::PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
