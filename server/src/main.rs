@@ -143,6 +143,7 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             purge_expired_messages(&ephemeral_state).await;
+            handlers::disappearing::purge_private(&ephemeral_state).await;
         }
     });
 
@@ -761,6 +762,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id", get(handlers::polls::get_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/vote", post(handlers::polls::vote_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/close", post(handlers::polls::close_poll))
+        .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/voters", get(handlers::polls::poll_voters))
         // Webhooks
         .route("/servers/:server_id/webhooks", get(handlers::webhooks::list_webhooks))
         .route("/servers/:server_id/webhooks", post(handlers::webhooks::create_webhook))
@@ -816,7 +818,15 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Messages programmés
         .route("/servers/:server_id/channels/:channel_id/scheduled", post(handlers::scheduled::create_scheduled))
         .route("/servers/:server_id/channels/:channel_id/scheduled", get(handlers::scheduled::list_scheduled))
-        .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled))
+        .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled).patch(handlers::scheduled::update_scheduled))
+        .route("/scheduled", get(handlers::scheduled::list_all_scheduled))
+        .route("/scheduled/:scheduled_id/send", post(handlers::scheduled::send_scheduled_now))
+        // Messages éphémères (MP, groupes) et réglages de discussion des salons
+        .route("/disappearing/:kind/:id", get(handlers::disappearing::get_setting).put(handlers::disappearing::set_setting))
+        .route("/servers/:server_id/channels/:channel_id/messaging", put(handlers::disappearing::set_channel_messaging))
+        // Brouillons chiffrés synchronisés
+        .route("/drafts", get(handlers::drafts::list_drafts))
+        .route("/drafts/:conv_id", put(handlers::drafts::put_draft).delete(handlers::drafts::delete_draft))
         // ICE config pour WebRTC (STUN + TURN)
         .route("/voice/ice-config", get(handlers::voice::get_ice_config))
         // Bootstrap REST de l'état vocal (N11) + télémétrie WebRTC (F9)

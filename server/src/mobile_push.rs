@@ -251,11 +251,32 @@ pub struct Notice {
     /// Texte sans contenu (par défaut).
     pub generic: String,
     pub target: Target,
+    /// Message notifié : l'appli y répond ou y réagit depuis la notification.
+    pub message_id: Option<Uuid>,
 }
 
 impl Notice {
     pub fn new(title: impl Into<String>, preview: &str, generic: impl Into<String>, target: Target) -> Self {
-        Self { title: clean(&title.into(), 100), preview: clean(preview, PREVIEW_MAX_CHARS), generic: generic.into(), target }
+        Self { title: clean(&title.into(), 100), preview: clean(preview, PREVIEW_MAX_CHARS), generic: generic.into(), target, message_id: None }
+    }
+
+    pub fn with_message(mut self, id: Uuid) -> Self {
+        self.message_id = Some(id);
+        self
+    }
+
+    /// Données lues par l'appli : cible, message, et catégorie « message » (réponse rapide et
+    /// réactions depuis la notification, `src/services/notificationActions.ts`).
+    fn data(&self) -> serde_json::Value {
+        let mut d = self.target.data();
+        if let Some(id) = self.message_id {
+            d["message_id"] = json!(id);
+        }
+        d
+    }
+
+    fn category(&self) -> Option<&'static str> {
+        (!matches!(self.target, Target::MissedCall { .. })).then_some("message")
     }
 }
 
@@ -273,15 +294,19 @@ fn build_messages(n: &Notice, devices: &[(String, bool)]) -> Vec<serde_json::Val
     devices
         .iter()
         .map(|(token, show_preview)| {
-            json!({
+            let mut m = json!({
                 "to": token,
                 "title": n.title,
                 "body": if *show_preview { &n.preview } else { &n.generic },
-                "data": n.target.data(),
+                "data": n.data(),
                 "sound": "default",
                 "priority": "high",
                 "channelId": "messages",
-            })
+            });
+            if let Some(c) = n.category() {
+                m["categoryId"] = json!(c);
+            }
+            m
         })
         .collect()
 }
@@ -409,7 +434,13 @@ mod tests {
             assert_eq!(m["channelId"], "messages");
             assert_eq!(m["priority"], "high");
             assert_eq!(m["data"], json!({ "kind": "dm", "dm_id": dm }));
+            assert_eq!(m["categoryId"], "message");
         }
+        let msg = Uuid::new_v4();
+        let with = build_messages(&n.clone().with_message(msg), &[("ExponentPushToken[a]".into(), false)]);
+        assert_eq!(with[0]["data"], json!({ "kind": "dm", "dm_id": dm, "message_id": msg }));
+        let call = Notice::new("bob", "", "Appel manqué", Target::MissedCall { dm_id: None, caller: dm });
+        assert!(build_messages(&call, &[("ExponentPushToken[a]".into(), false)])[0].get("categoryId").is_none());
     }
 
     #[test]

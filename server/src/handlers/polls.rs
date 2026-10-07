@@ -61,6 +61,12 @@ pub async fn create_poll(
         return Err(AppError::BadRequest("Entre 2 et 10 options requises".into()));
     }
 
+    if let Some(end) = body.ends_at {
+        if end <= Utc::now() || end > Utc::now() + chrono::Duration::days(365) {
+            return Err(AppError::BadRequest("Date limite invalide (dans le futur, un an au plus)".into()));
+        }
+    }
+
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
     let has_text = !body.question.trim().is_empty() || body.options.iter().any(|o| !o.trim().is_empty());
     let enc = crate::handlers::e2e_channel::check_content(
@@ -263,7 +269,7 @@ pub async fn vote_poll(
 ) -> Result<Json<serde_json::Value>, AppError> {
     require_member(&state, claims.sub, server_id).await?;
     use sqlx::Row;
-    let row = sqlx::query("SELECT multiple_choice, ends_at, channel_id FROM polls WHERE id=$1 AND server_id=$2")
+    let row = sqlx::query("SELECT multiple_choice, anonymous, ends_at, channel_id FROM polls WHERE id=$1 AND server_id=$2")
         .bind(poll_id)
         .bind(server_id)
         .fetch_optional(&state.db)
@@ -308,11 +314,13 @@ pub async fn vote_poll(
     }
     tx.commit().await?;
 
+    // Sondage anonyme : l'événement ne dit pas qui a voté.
+    let anonymous: bool = row.get("anonymous");
     let event = serde_json::json!({
         "type": "POLL_VOTE",
         "poll_id": poll_id,
         "channel_id": poll_channel_id,
-        "user_id": claims.sub,
+        "user_id": if anonymous { None } else { Some(claims.sub) },
     });
     state.broadcast_to_channel_members(poll_channel_id, event.to_string()).await;
 
@@ -363,4 +371,44 @@ pub async fn close_poll(
     }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// GET .../polls/:poll_id/voters : qui a voté pour quoi (sondage non anonyme seulement).
+pub async fn poll_voters(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, _channel_id, poll_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    use sqlx::Row;
+    let row = sqlx::query("SELECT channel_id, anonymous FROM polls WHERE id=$1 AND server_id=$2")
+        .bind(poll_id)
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
+    require_member_and_channel(&state, claims.sub, server_id, row.get("channel_id")).await?;
+    if row.get::<bool, _>("anonymous") {
+        return Err(AppError::Forbidden);
+    }
+    let rows = sqlx::query(
+        "SELECT pv.option_id, u.id, u.username, u.avatar
+         FROM poll_votes pv JOIN users u ON u.id = pv.user_id
+         WHERE pv.poll_id=$1 ORDER BY u.username LIMIT 2000"
+    )
+    .bind(poll_id)
+    .fetch_all(&state.db)
+    .await?;
+    let mut out = serde_json::Map::new();
+    for r in &rows {
+        let opt: Uuid = r.get("option_id");
+        let entry = out.entry(opt.to_string()).or_insert_with(|| serde_json::json!([]));
+        if let Some(list) = entry.as_array_mut() {
+            list.push(serde_json::json!({
+                "id": r.get::<Uuid, _>("id"),
+                "username": r.get::<String, _>("username"),
+                "avatar": r.get::<Option<String>, _>("avatar"),
+            }));
+        }
+    }
+    Ok(Json(serde_json::Value::Object(out)))
 }
