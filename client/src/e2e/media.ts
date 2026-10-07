@@ -9,14 +9,12 @@
 // Le serveur dit si la salle exige le chiffrement (`livekit.e2ee`) ; chaque appli
 // annonce le sien (`e2ee: true` dans VOICE_JOIN / GROUP_CALL_JOIN / DM_CALL_*),
 // que le serveur reporte dans l'attribut LiveKit `e2ee = "1"` de son jeton.
-import {
-  BaseKeyProvider, RoomEvent, createKeyMaterialFromString, isE2EESupported,
-  type Room, type RoomOptions,
-} from 'livekit-client'
+import { RoomEvent, isE2EESupported, type Room, type RoomOptions } from 'livekit-client'
 import { isNativeVoice, nativeSetKey, type NativeMediaKey } from '../lib/nativeVoice'
 import { useWs } from '../store/ws'
 import { currentKey, forgetConv, type ConvKind } from './conversations'
 import * as c from './crypto'
+import { MediaKeyProvider } from './mediaKeyProvider'
 
 /** Conversation dont la clé chiffre les médias : `dm`, `group` ou `channel` (salon vocal). */
 export type MediaKind = ConvKind | 'channel'
@@ -29,18 +27,6 @@ export const mediaE2EESupported = () => isE2EESupported()
  * Application Linux : le vocal natif (SDK LiveKit Rust) chiffre lui-même.
  */
 export const e2eeClaim = () => (mediaE2EESupported() || isNativeVoice() ? { e2ee: true } : {})
-
-/** Clé partagée par tous les participants, index choisi par nous (époque modulo l'anneau). */
-class MediaKeyProvider extends BaseKeyProvider {
-  constructor() {
-    // Comme ExternalE2EEKeyProvider : clé partagée, jamais de ratchet automatique
-    // (une trame illisible d'un pair ne doit pas faire jeter la bonne clé).
-    super({ sharedKey: true, ratchetWindowSize: 0, failureTolerance: -1, keyringSize: c.MEDIA_KEYRING })
-  }
-  async setMediaKey(key: string, index: number) {
-    this.onSetEncryptionKey(await createKeyMaterialFromString(key), undefined, index)
-  }
-}
 
 export interface MediaE2EE {
   /** À passer dans les options de la Room. */
