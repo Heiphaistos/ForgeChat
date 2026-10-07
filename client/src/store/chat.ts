@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import type { EncPayload, MsgBody } from '../e2e/crypto'
+import type { E2EState } from '../e2e/conversations'
 
 // ─── Draft Store (localStorage) ───────────────────────────────────────────────
 
@@ -60,7 +62,17 @@ interface Message {
   reactions: ReactionCount[]
   poll_id?: string | null
   expires_at?: string | null
+  // Chiffrement de bout en bout (salons) : `content` est le texte déchiffré ici.
+  enc?: EncPayload | null
+  client_msg_id?: string | null
+  purged?: boolean
+  /** Envoyé en clair (bot, webhook, système, ancien message, membre sans clé). */
+  unencrypted?: boolean
+  e2e?: E2EState
+  /** Contenu déchiffré complet (aperçu de lien `p`…). */
+  e2e_body?: MsgBody
 }
+export type ChatMessage = Message
 
 interface ReactionCount {
   emoji: string

@@ -11,6 +11,10 @@ export interface ThreadSummary {
   unreadCount: number
   archived: boolean
   locked: boolean
+  /** Id tiré par l'appli à la création : portée AAD du titre et des messages (threadScope). */
+  clientId: string | null
+  /** Titre chiffré (déchiffré par e2e/channels.openThreadTitle) : pas de renommage en clair. */
+  titleEncrypted: boolean
 }
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
@@ -30,6 +34,8 @@ export function normalizeThreads(raw: unknown): ThreadSummary[] {
             unreadCount: num(r.unread_count),
             archived: r.archived === true,
             locked: r.locked === true,
+            clientId: isUuid(r.client_id) ? r.client_id.toLowerCase() : null,
+            titleEncrypted: r.title_encrypted === true,
           },
         ]
       : [],

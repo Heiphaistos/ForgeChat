@@ -10,6 +10,8 @@ import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
 import toast from 'react-hot-toast'
+import { channelPreview } from '../e2e/channels'
+import type { EncPayload } from '../e2e/crypto'
 
 interface SavedMessage {
   id: string
@@ -24,6 +26,10 @@ interface SavedMessage {
   attachments?: Attachment[]
   created_at: string
   saved_at: string
+  // Message de salon chiffré : `content` est null côté serveur.
+  enc?: EncPayload | null
+  client_msg_id?: string | null
+  author_id?: string
 }
 
 interface Attachment {
@@ -162,7 +168,11 @@ export default function SavedPage() {
 
   const { data: saved = [], isLoading } = useQuery<SavedMessage[]>({
     queryKey: ['saved_messages'],
-    queryFn: () => api.get('/saved').then(r => r.data),
+    // Message de salon chiffré : aucune copie côté serveur, l'original est déchiffré ici.
+    queryFn: async () => {
+      const list: SavedMessage[] = (await api.get('/saved')).data
+      return Promise.all(list.map(async m => (m.server_id && m.enc ? { ...m, content: await channelPreview(m) } : m)))
+    },
   })
 
   const remove = useMutation({

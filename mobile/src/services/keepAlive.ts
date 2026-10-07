@@ -116,9 +116,13 @@ export function bindKeepAlive(): () => void {
     // Aperçu d'un MP/groupe chiffré : déchiffré ici, sur l'appareil.
     const kind = e.type === 'DM_MESSAGE' ? 'dm' : e.type === 'GROUP_DM_MESSAGE' ? 'group' : null
     const id = kind === 'dm' ? e.dm_id : e.group_id
+    // Mention dans un salon chiffré : aperçu déchiffré avec la clé du salon (sinon texte d'attente).
+    const mention = e.type === 'MENTION_CREATE' && e.mention && typeof e.mention === 'object' ? (e.mention as Record<string, unknown>) : null
     const ev = kind && typeof id === 'string' && e.message && typeof e.message === 'object'
       ? { ...e, message: await openRaw(kind, id, e.message as Record<string, unknown>) }
-      : e
+      : mention && typeof mention.channel_id === 'string'
+        ? { ...e, mention: await openRaw('channel', mention.channel_id, mention) }
+        : e
     const n = noticeFor(ev, context())
     if (n) show(n, 'messages')
   }

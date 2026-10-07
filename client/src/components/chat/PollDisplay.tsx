@@ -7,6 +7,8 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { dateLocale, t as tr } from '../../i18n'
+import { openPoll } from '../../e2e/channelScopes'
+import type { EncPayload } from '../../e2e/crypto'
 
 interface PollOption {
   id: string
@@ -26,6 +28,9 @@ interface Poll {
   ends_at: string | null
   options: PollOption[]
   total_votes: number
+  /** Sondage chiffré : question et options déchiffrées ici. */
+  enc?: EncPayload | null
+  client_msg_id?: string | null
 }
 
 interface Props {
@@ -73,8 +78,8 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
     queryKey: ['poll', pollId],
     queryFn: () =>
       api
-        .get(`/servers/${serverId}/channels/${channelId}/polls/${pollId}`)
-        .then(r => r.data),
+        .get<Poll>(`/servers/${serverId}/channels/${channelId}/polls/${pollId}`)
+        .then(r => openPoll(channelId, r.data)),
     staleTime: 30_000,
     retry: false,
   })

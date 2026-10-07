@@ -16,6 +16,10 @@ export interface ForumPost {
   lastActivity: string
   /** Salon média : image ou vidéo de la publication (`/uploads/…`). */
   mediaUrl: string | null
+  /** Id tiré à la création : portée AAD du contenu et des réponses (postScope). */
+  clientMsgId: string | null
+  /** Contenu chiffré : déchiffré ('ok') ou en attente d'une clé ('locked') par e2e/channels.openPost. */
+  e2e?: 'ok' | 'locked'
 }
 
 /** Extension imposée par forum_upload, d'après le type MIME du fichier choisi ; null = format refusé. */
@@ -50,6 +54,8 @@ export function normalizePost(raw: unknown): ForumPost | null {
     replyCount: typeof r.reply_count === 'number' && r.reply_count > 0 ? r.reply_count : 0,
     lastActivity: str(r.last_reply_at) ?? createdAt,
     mediaUrl: typeof r.media_url === 'string' && r.media_url.startsWith('/uploads/') ? r.media_url : null,
+    clientMsgId: isUuid(r.client_msg_id) ? r.client_msg_id.toLowerCase() : null,
+    ...(r.e2e === 'ok' || r.e2e === 'locked' ? { e2e: r.e2e } : {}),
   }
 }
 

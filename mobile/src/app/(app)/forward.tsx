@@ -5,6 +5,7 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons'
 import { messagesApi } from '@/api/messages'
 import { serversApi } from '@/api/servers'
+import { forwardText, mustEncrypt } from '@/e2e/conversations'
 import { EmptyState, ErrorState, Loading, TextField } from '@/components/ui'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -35,8 +36,12 @@ export default function ForwardScreen() {
   if (servers.isLoading) return <Loading />
   if (servers.error) return <ErrorState message={errorMessage(servers.error)} onRetry={() => void servers.refetch()} />
 
-  const forward = (target: { id: string; name: string }) =>
-    Alert.alert(t('social.forward.confirm'), t('social.forward.to', { name: target.name }), [
+  const forward = async (target: { id: string; name: string }) => {
+    // Chiffrement : rechiffré pour un salon cible chiffré, sinon copié en clair (source chiffrée).
+    const src = forwardText.get(ids.messageId)
+    const sealed = !!src && (await mustEncrypt('channel', target.id).catch(() => false))
+    const notice = sealed ? t('e2e.forward.encrypted') : src?.encrypted ? t('e2e.forward.notice') : null
+    Alert.alert(t('social.forward.confirm'), notice ? `${t('social.forward.to', { name: target.name })}\n\n${notice}` : t('social.forward.to', { name: target.name }), [
       { text: t('common.cancel'), style: 'cancel' },
       {
         text: t('chat.forward'),
@@ -53,6 +58,7 @@ export default function ForwardScreen() {
         },
       },
     ])
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -67,7 +73,7 @@ export default function ForwardScreen() {
         renderItem={({ item }) => (
           <Pressable
             disabled={sending}
-            onPress={() => forward(item)}
+            onPress={() => void forward(item)}
             style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
             accessibilityRole="button"
             accessibilityLabel={t('social.forward.itemLabel', { name: item.name, server: item.serverName })}

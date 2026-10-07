@@ -18,7 +18,7 @@ const VALID_REASONS: &[&str] = &["spam", "harassment", "nsfw", "other"];
 pub struct CreateReportInput {
     pub reason: String,
     pub comment: Option<String>,
-    /// Message privé chiffré : texte déchiffré par le signaleur (le serveur ne peut pas le lire).
+    /// Message chiffré (MP ou salon) : texte déchiffré par le signaleur (le serveur ne peut pas le lire).
     pub content: Option<String>,
 }
 
@@ -36,7 +36,7 @@ pub async fn create_report(
 
     use sqlx::Row;
     let msg = sqlx::query(
-        "SELECT m.user_id as author_id, c.server_id
+        "SELECT m.user_id as author_id, c.server_id, m.channel_id, m.enc IS NOT NULL AS encrypted
          FROM messages m JOIN channels c ON c.id = m.channel_id
          WHERE m.id = $1",
     )
@@ -52,6 +52,14 @@ pub async fn create_report(
     let author_id: Uuid = msg.get("author_id");
 
     require_member(&state, claims.sub, server_id).await?;
+    // Message chiffré : seule copie lisible = celle que le signaleur, qui voit le salon, choisit d'envoyer.
+    let encrypted: bool = msg.get("encrypted");
+    let content: Option<String> = if encrypted {
+        crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, msg.get("channel_id")).await?;
+        body.content.as_deref().map(str::trim).filter(|s| !s.is_empty() && s.chars().count() <= 4000).map(str::to_string)
+    } else {
+        None
+    };
 
     // Rate limit : max 10 reports par heure
     let recent_count: i64 = sqlx::query_scalar(
@@ -78,8 +86,8 @@ pub async fn create_report(
         .map(|s| s.trim().to_string());
 
     sqlx::query(
-        "INSERT INTO message_reports (reporter_id, message_id, server_id, reason, comment)
-         VALUES ($1, $2, $3, $4, $5)
+        "INSERT INTO message_reports (reporter_id, message_id, server_id, reason, comment, content)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (reporter_id, message_id) DO NOTHING",
     )
     .bind(claims.sub)
@@ -87,6 +95,7 @@ pub async fn create_report(
     .bind(server_id)
     .bind(&body.reason)
     .bind(comment)
+    .bind(content)
     .execute(&state.db)
     .await?;
 
@@ -109,7 +118,8 @@ pub async fn list_reports(
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT r.id, r.reason, r.comment, r.status, r.created_at,
-                r.message_id, m.content as message_content,
+                r.message_id, COALESCE(r.content, m.content) as message_content,
+                (m.enc IS NOT NULL) AS encrypted,
                 u.username as reporter_username, u.id as reporter_id
          FROM message_reports r
          LEFT JOIN messages m ON m.id = r.message_id
@@ -133,6 +143,8 @@ pub async fn list_reports(
                 "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
                 "message_id": r.get::<Uuid, _>("message_id"),
                 "message_content": r.get::<Option<String>, _>("message_content"),
+                // Texte fourni par le signaleur (message chiffré) : non vérifiable par le serveur.
+                "encrypted": r.get::<Option<bool>, _>("encrypted").unwrap_or(false),
                 "reporter_username": r.get::<String, _>("reporter_username"),
                 "reporter_id": r.get::<Uuid, _>("reporter_id"),
             })

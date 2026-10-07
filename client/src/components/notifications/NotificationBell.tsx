@@ -6,6 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PickerShell from '../ui/PickerShell'
 import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
+import { channelPreview } from '../../e2e/channels'
+import type { EncPayload } from '../../e2e/crypto'
 
 interface MentionItem {
   message_id: string
@@ -16,7 +18,10 @@ interface MentionItem {
   author_id: string
   author_username: string
   author_avatar: string | null
-  content: string
+  /** Null pour un message chiffré : aperçu déchiffré à la lecture. */
+  content: string | null
+  enc?: EncPayload | null
+  client_msg_id?: string | null
   created_at: string
 }
 
@@ -40,7 +45,10 @@ export default function NotificationBell() {
 
   const { data: mentions = [] } = useQuery<MentionItem[]>({
     queryKey: ['user_mentions'],
-    queryFn: () => api.get('/user/mentions').then(r => r.data),
+    queryFn: async () => {
+      const list: MentionItem[] = (await api.get('/user/mentions')).data
+      return Promise.all(list.map(async m => ({ ...m, content: await channelPreview(m) })))
+    },
     // Plus de sondage : MENTION_CREATE et READ_STATE_UPDATE tiennent ce cache à jour (App.tsx)
     staleTime: Infinity,
   })
@@ -148,7 +156,7 @@ export default function NotificationBell() {
                           </span>
                           <span className="text-[10px] text-fc-muted ml-auto">{timeAgo(m.created_at)}</span>
                         </div>
-                        <p className="text-xs text-fc-muted leading-relaxed">{truncate(m.content)}</p>
+                        <p className="text-xs text-fc-muted leading-relaxed">{truncate(m.content ?? '')}</p>
                         <p className="text-[10px] text-fc-muted/60 mt-0.5">{m.server_name}</p>
                       </div>
                     </div>

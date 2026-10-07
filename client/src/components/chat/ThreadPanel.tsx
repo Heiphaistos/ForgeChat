@@ -17,6 +17,9 @@ import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { dateLocale, t as tr } from '../../i18n'
+import { channelSendError } from '../../e2e/channels'
+import { createThread as createThreadE2E, openThreadMessages, openThreads, sendScoped, threadScopeOf } from '../../e2e/channelScopes'
+import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 
 interface Props {
   serverId: string
@@ -84,7 +87,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     queryKey: ['threads', channelId, 'one', lookup ?? parentMessageId],
     queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/threads`, {
       params: lookup ? { thread_id: lookup } : { parent_message_id: parentMessageId },
-    }).then(r => r.data),
+    }).then(r => openThreads(channelId, r.data)),
     enabled: !!(lookup || parentMessageId),
   })
   const thread = found[0]
@@ -100,13 +103,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['thread-messages', threadId],
+    // Fil chiffré : messages déchiffrés avec la portée du fil (attend son client_id).
+    queryKey: ['thread-messages', threadId, thread?.client_id],
     queryFn: ({ pageParam }) => api.get<any[]>(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
       params: { limit: PAGE_SIZE, ...(pageParam ? { before: pageParam } : {}) },
-    }).then(r => r.data),
+    }).then(r => openThreadMessages(channelId, thread, r.data)),
     initialPageParam: null as string | null,
     getNextPageParam: last => (last.length === PAGE_SIZE ? last[0]?.id ?? null : null),
-    enabled: !!threadId,
+    enabled: !!threadId && thread?.id === threadId,
   })
   const messages: any[] = msgPages ? [...msgPages.pages].reverse().flat() : []
   const lastMsgId: string | undefined = messages[messages.length - 1]?.id
@@ -163,6 +167,12 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
+    // Clés du salon reçues : titre et messages en attente s'ouvrent.
+    const offKeys = on('E2E_KEYS', (d: any) => {
+      if (d.conv_kind !== 'channel' || d.conv_id !== channelId) return
+      qc.invalidateQueries({ queryKey: ['threads', channelId] })
+      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
+    })
     const offDelete = on('THREAD_MESSAGE_DELETE', (d: any) => {
       if (d.thread_id === threadId) {
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
@@ -184,7 +194,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offMsg(); offAtt(); offUpdate(); offEdit(); offDelete(); offReact(); offTyping() }
+    return () => { offMsg(); offAtt(); offUpdate(); offEdit(); offKeys(); offDelete(); offReact(); offTyping() }
   }, [threadId, channelId, on, qc])
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
@@ -210,14 +220,17 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   })
 
   const editMessage = useMutation({
+    // Même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message en clair.
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
-      api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}`, { content }),
+      sendScoped(serverId, channelId, scope(), content,
+        body => api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}`, body),
+        { clientMsgId: messages.find(m => m.id === msgId)?.client_msg_id }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       setEditingMsgId(null)
       toast.success('Message modifié')
     },
-    onError: () => toast.error('Impossible de modifier'),
+    onError: (e) => toast.error(channelSendError(e, 'Impossible de modifier')),
   })
 
   const deleteMessage = useMutation({
@@ -239,15 +252,20 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     if (lastMsgId) hadMessages.current = true
   }, [lastMsgId])
 
+  /** Portée du fil ouvert (AAD) : envoi et édition seulement une fois le fil chargé. */
+  const scope = () => {
+    const s = threadScopeOf(channelId, thread)
+    if (!s) throw new Error('E2E_WAITING')
+    return s
+  }
+
   const attachUrl = (tid: string, msgId: string) =>
     `/servers/${serverId}/channels/${channelId}/threads/${tid}/messages/${msgId}/attachments`
 
   const createThread = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/threads`, {
-      title: newTitle.trim() || undefined,
-      first_message: input.trim(),
-      parent_message_id: parentMessageId,
-    }),
+    // Salon chiffré : titre ET premier message chiffrés avec la portée du nouveau fil.
+    mutationFn: () => createThreadE2E(serverId, channelId, newTitle.trim(), input.trim(), parentMessageId,
+      body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body)),
     onSuccess: async (res) => {
       const tid = res.data.thread?.id
       const files = pending.files
@@ -263,15 +281,16 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         qc.invalidateQueries({ queryKey: ['thread-messages', tid] })
       }
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
   })
 
   const sendMessage = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
-      content: input.trim(),
-      reply_to: replyTo?.id,
-      has_attachments: pending.files.length > 0,
-    }),
+    mutationFn: () => sendScoped(serverId, channelId, scope(), input.trim(),
+      body => api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
+        ...body,
+        reply_to: replyTo?.id,
+        has_attachments: pending.files.length > 0,
+      })),
     onSuccess: async (res) => {
       const files = pending.files
       const msgId: string | undefined = res.data?.message?.id
@@ -284,7 +303,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
   })
 
   // archive_thread (threads.rs) impose déjà côté serveur qu'un fil archivé/verrouillé
@@ -395,14 +414,17 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
             ) : (
               <span className="text-sm font-medium text-white truncate flex-1">{thread.title}</span>
             )}
-            <button
-              onClick={() => setRenaming(thread.title)}
-              title="Renommer le fil"
-              aria-label="Renommer le fil"
-              className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition flex-shrink-0"
-            >
-              <Pencil size={13} />
-            </button>
+            {/* Titre chiffré : le serveur ne sait renommer qu'en clair, pas de nouveau titre lisible par lui. */}
+            {!thread.title_enc && (
+              <button
+                onClick={() => setRenaming(thread.title)}
+                title="Renommer le fil"
+                aria-label="Renommer le fil"
+                className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition flex-shrink-0"
+              >
+                <Pencil size={13} />
+              </button>
+            )}
             {thread.locked && <Lock size={12} className="text-fc-muted flex-shrink-0" aria-label="Fil verrouillé" />}
             <button
               onClick={() => toggleArchive.mutate()}
@@ -565,6 +587,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                   {msg.edited_at && (
                     <span className="text-[9px] text-fc-muted/60" title="Message modifié">(modifié)</span>
                   )}
+                  {msg.unencrypted === true && <UnencryptedBadge />}
                   {editingMsgId !== msg.id && !isLocked && (
                     <button
                       onClick={() => setReplyTo({ id: msg.id, username: msg.author?.username ?? '', content: msg.content ?? '' })}
@@ -581,7 +604,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                       aria-label="Réagir au message"
                     ><SmilePlus size={12} aria-hidden /></button>
                   )}
-                  {isMe && editingMsgId !== msg.id && (
+                  {isMe && editingMsgId !== msg.id && msg.e2e !== 'locked' && (
                     <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-0.5 transition">
                       <button
                         onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
@@ -641,6 +664,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                     <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
                     <AttachmentList attachments={msg.attachments} />
                     {linkPreviewEnabled && msg.content && (() => {
+                      // Message chiffré : aperçu calculé par l'expéditeur, jamais demandé au serveur.
+                      if (msg.enc) return msg.e2e_body?.p ? <LinkPreview url={extractFirstUrl(msg.content) ?? ''} data={msg.e2e_body.p} /> : null
                       const url = extractFirstUrl(msg.content)
                       return url ? <LinkPreview url={url} /> : null
                     })()}

@@ -61,7 +61,7 @@ async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
     let rows = sqlx::query(
         "SELECT * FROM (
             SELECT m.id, m.user_id, COALESCE(m.webhook_display_name, u.username) AS author_username,
-                   m.content, m.created_at, m.edited_at, m.reply_to
+                   m.content, m.enc, m.client_msg_id, m.created_at, m.edited_at, m.reply_to
             FROM messages m LEFT JOIN users u ON u.id = m.user_id
             WHERE m.channel_id=$1 AND (m.expires_at IS NULL OR m.expires_at > NOW())
             ORDER BY m.created_at DESC, m.id DESC LIMIT $2
@@ -99,6 +99,9 @@ async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
             "author_id": r.get::<Option<Uuid>, _>("user_id"),
             "author_username": r.get::<Option<String>, _>("author_username"),
             "content": r.get::<Option<String>, _>("content"),
+            // Message chiffré : copié tel quel (déchiffrable avec les clés du salon).
+            "enc": r.get::<Option<Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "reply_to": r.get::<Option<Uuid>, _>("reply_to"),

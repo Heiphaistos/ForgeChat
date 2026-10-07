@@ -1,4 +1,4 @@
-// Messages chiffrés des MP et groupes côté web (docs/CHIFFREMENT-E2E.md §4.1, §6).
+// Messages chiffrés des MP, groupes et salons côté web (docs/CHIFFREMENT-E2E.md §4.1, §6, §10).
 // Clés d'époque gardées EN MÉMOIRE seulement (jamais stockées) : rechargées
 // depuis les enveloppes du serveur et ouvertes avec la clé de compte.
 import api from '../api/client'
@@ -7,17 +7,35 @@ import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 
-export type ConvKind = 'dm' | 'group'
+export type ConvKind = 'dm' | 'group' | 'channel'
 
 interface Envelope { epoch: number; wrapped: c.ConvWrapped; wrapped_by: string | null; wrapped_by_pub: string }
-interface KeysResponse { current_epoch: number | null; rotate_needed: boolean; all_keyed: boolean; envelopes: Envelope[] }
+/** Clé de récupération du serveur d'un salon (§11). */
+export interface ServerKeyInfo { server_id: string; public: string; fingerprint: string }
+interface KeysResponse {
+  current_epoch: number | null; rotate_needed: boolean; all_keyed: boolean; envelopes: Envelope[]
+  /** « Il faut chiffrer » : MP/groupe quand tous ont une clé, salon dès que j'en ai une. */
+  encrypt?: boolean
+  /** Salon : membres munis d'une clé auxquels l'époque courante manque. */
+  missing?: string[]
+  server_key?: ServerKeyInfo | null
+  /** Salon : époques que je détiens, pas encore enveloppées pour la clé du serveur. */
+  server_missing?: number[]
+}
 export interface ConvMember { user_id: string; username: string; public: string | null; fingerprint: string | null }
 
-interface ConvState { keys: Map<number, Uint8Array>; current: number | null; rotate: boolean; allKeyed: boolean; at: number }
+interface ConvState {
+  keys: Map<number, Uint8Array>; current: number | null; rotate: boolean; encrypt: boolean
+  missing: string[]; serverKey: ServerKeyInfo | null; serverMissing: number[]; at: number
+}
+
+/** Enveloppes par requête (borne du serveur) : un grand salon se distribue par lots. */
+const BATCH = 200
 
 const cache = new Map<string, ConvState>()
 const loading = new Map<string, Promise<ConvState>>()
 const asked = new Map<string, number>()
+const completed = new Map<string, number>()
 
 const myId = () => useAuth.getState().user?.id ?? null
 const base = (kind: ConvKind, id: string) => `/e2e/conversations/${kind}/${id}`
@@ -45,7 +63,10 @@ async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
       } catch { /* enveloppe pour une ancienne clé ou altérée : on la redemandera */ }
     }
   }
-  return { keys, current: data.current_epoch, rotate: data.rotate_needed, allKeyed: data.all_keyed, at: Date.now() }
+  return {
+    keys, current: data.current_epoch, rotate: data.rotate_needed, encrypt: data.encrypt ?? data.all_keyed,
+    missing: data.missing ?? [], serverKey: data.server_key ?? null, serverMissing: data.server_missing ?? [], at: Date.now(),
+  }
 }
 
 /** État de la conversation ; `force` recharge (au plus une fois par seconde). */
@@ -61,6 +82,11 @@ async function load(kind: ConvKind, id: string, force = false): Promise<ConvStat
   const st = await p
   cache.set(name, st)
   return st
+}
+
+/** Faut-il chiffrer ici ? (salon : dès que j'ai une clé de compte). */
+export async function mustEncrypt(kind: ConvKind, id: string): Promise<boolean> {
+  return (await load(kind, id)).encrypt
 }
 
 /** Demande les clés manquantes aux autres membres (au plus une fois par minute). */
@@ -79,25 +105,76 @@ async function keyFor(kind: ConvKind, id: string, epoch: number): Promise<Uint8A
   return key
 }
 
-export const getMembers = (kind: ConvKind, id: string) =>
-  api.get<ConvMember[]>(`${base(kind, id)}/members`).then(r => r.data)
+/** Membres (salon : seulement ceux qui ont une clé), une page ; `member` : un seul. */
+export const getMembers = (kind: ConvKind, id: string, params?: { after?: string; member?: string }) =>
+  api.get<ConvMember[]>(`${base(kind, id)}/members`, { params }).then(r => r.data)
 
-/** Nouvelle époque (0 à la première conversation chiffrée, n+1 après un départ). */
+/** Tous les membres, page après page (grands salons). */
+export async function getAllMembers(kind: ConvKind, id: string): Promise<ConvMember[]> {
+  const all: ConvMember[] = []
+  for (let after: string | undefined; ;) {
+    const page = await getMembers(kind, id, after ? { after } : undefined)
+    all.push(...page)
+    if (page.length < 1000) return all
+    after = page[page.length - 1]?.user_id
+  }
+}
+
+type Keyed = ConvMember & { public: string; fingerprint: string }
+const keyedOnly = (list: ConvMember[]) => list.filter((m): m is Keyed => !!m.public && !!m.fingerprint)
+
+async function wrapFor(priv: CryptoKey, me: string, conv: string, epoch: number, key: Uint8Array, list: Keyed[]) {
+  return Promise.all(list.map(async m => ({
+    member_id: m.user_id,
+    member_fp: m.fingerprint,
+    wrapped: await c.wrapConvKey(priv, c.b64uDecode(m.public), key, conv, epoch, m.user_id, me),
+  })))
+}
+
+/** Enveloppe d'une époque de salon pour la clé de récupération du serveur. */
+async function serverEnvelope(priv: CryptoKey, me: string, conv: string, epoch: number, key: Uint8Array, sk: ServerKeyInfo) {
+  return {
+    server_fp: sk.fingerprint,
+    wrapped: await c.wrapConvKey(priv, c.b64uDecode(sk.public), key, conv, epoch, c.serverMember(sk.server_id), me),
+  }
+}
+
+/** Distribue une époque existante à des membres, par lots (redistribution). */
+async function postBatches(kind: ConvKind, id: string, epoch: number, key: Uint8Array, list: Keyed[]) {
+  const priv = useAccountKey.getState().priv
+  const me = myId()
+  if (!priv || !me) return
+  for (let i = 0; i < list.length; i += BATCH) {
+    const envelopes = await wrapFor(priv, me, c.convName(kind, id), epoch, key, list.slice(i, i + BATCH))
+    await api.post(`${base(kind, id)}/keys`, { epoch, envelopes }).catch(() => {})
+  }
+}
+
+/** Nouvelle époque (0 à la première conversation chiffrée, n+1 après un départ ou une perte d'accès). */
 async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<number> {
   const priv = useAccountKey.getState().priv
   const me = myId()
   if (!priv || !me) throw new Error('E2E_LOCKED')
-  const members = await getMembers(kind, id)
-  if (members.some(m => !m.public || !m.fingerprint)) throw new Error('E2E_MEMBERS')
+  const members = await getAllMembers(kind, id)
+  if (kind !== 'channel' && members.some(m => !m.public || !m.fingerprint)) throw new Error('E2E_MEMBERS')
+  const keyed = keyedOnly(members)
   const epoch = st.current === null ? 0 : st.current + 1
   const key = c.generateConvKey()
   const conv = c.convName(kind, id)
-  const envelopes = await Promise.all(members.map(async m => ({
-    member_id: m.user_id,
-    member_fp: m.fingerprint,
-    wrapped: await c.wrapConvKey(priv, c.b64uDecode(m.public!), key, conv, epoch, m.user_id, me),
-  })))
-  await api.post(`${base(kind, id)}/keys`, { epoch, create: true, envelopes })
+  if (kind !== 'channel') {
+    await api.post(`${base(kind, id)}/keys`, { epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, keyed) })
+  } else {
+    // Salon : moi + un premier lot (et la clé du serveur), le reste ensuite sans bloquer l'envoi.
+    const self = keyed.find(m => m.user_id === me)
+    if (!self) throw new Error('E2E_LOCKED')
+    const others = keyed.filter(m => m.user_id !== me)
+    const first = [self, ...others.slice(0, BATCH - 1)]
+    await api.post(`${base(kind, id)}/keys`, {
+      epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first),
+      server_envelope: st.serverKey ? await serverEnvelope(priv, me, conv, epoch, key, st.serverKey) : undefined,
+    })
+    void postBatches(kind, id, epoch, key, others.slice(BATCH - 1))
+  }
   st.keys.set(epoch, key)
   st.current = epoch
   st.rotate = false
@@ -117,9 +194,16 @@ export async function currentKey(kind: ConvKind, id: string): Promise<{ epoch: n
     try {
       epoch = await createEpoch(kind, id, st)
     } catch (e) {
-      // Un autre membre a créé l'époque en même temps : on prend la sienne.
-      if (errorCode(e) !== 'EPOCH_STALE') throw e
-      epoch = (await load(kind, id, true)).current
+      const code = errorCode(e)
+      if (code === 'SERVER_KEY_REQUIRED') {
+        // Clé de récupération créée entre-temps : on recharge pour l'inclure.
+        epoch = await createEpoch(kind, id, await load(kind, id, true))
+      } else if (code === 'EPOCH_STALE') {
+        // Un autre membre a créé l'époque en même temps : on prend la sienne.
+        epoch = (await load(kind, id, true)).current
+      } else {
+        throw e
+      }
     }
   }
   const key = epoch === null ? null : await keyFor(kind, id, epoch)
@@ -127,27 +211,40 @@ export async function currentKey(kind: ConvKind, id: string): Promise<{ epoch: n
   return { epoch, key, me }
 }
 
-/** Champs chiffrés d'un envoi ou d'une édition ; null = texte en clair permis (membre sans clé). */
-export async function seal(kind: ConvKind, id: string, text: string, clientMsgId?: string | null):
+/** Options d'un contenu de salon : portée dans l'AAD (fil, publication, sondage) et id client imposé. */
+export interface SealOpts { clientMsgId?: string | null; scope?: string }
+
+/** Chiffre `body` si la conversation l'exige ; null = texte en clair permis (transition). */
+export async function sealBody(kind: ConvKind, id: string, body: c.MsgBody, opts: SealOpts = {}):
   Promise<{ enc: c.EncPayload; client_msg_id: string } | null> {
   const st = await load(kind, id)
-  if (!st.allKeyed) return null
+  if (!st.encrypt) return null
   const { epoch, key, me } = await currentKey(kind, id)
-  const cmid = clientMsgId ?? crypto.randomUUID()
-  return { enc: await c.encryptMessage(key, c.convName(kind, id), epoch, me, cmid, { t: text }), client_msg_id: cmid }
+  const cmid = opts.clientMsgId ?? crypto.randomUUID()
+  const enc = await c.encryptMessage(key, opts.scope ?? c.convName(kind, id), epoch, me, cmid, body)
+  return { enc, client_msg_id: cmid }
 }
+
+/** Champs chiffrés d'un envoi ou d'une édition de texte seul. */
+export const seal = (kind: ConvKind, id: string, text: string, clientMsgId?: string | null) =>
+  sealBody(kind, id, { t: text }, { clientMsgId })
 
 /**
  * Envoie `text` chiffré si la conversation l'exige ; une seule nouvelle tentative
- * après un refus lié à l'état (époque périmée, clair refusé).
+ * après un refus lié à l'état (époque périmée, clair refusé). `extra` complète le
+ * contenu chiffré (aperçu de lien `p`, titre…) ; `scope` : portée de salon.
  */
 export async function withSeal<T>(
   kind: ConvKind, id: string, text: string,
   post: (body: { content: string | null; enc?: c.EncPayload; client_msg_id?: string }) => Promise<T>,
   clientMsgId?: string | null,
+  opts: { scope?: string; extra?: Record<string, unknown> } = {},
 ): Promise<T> {
+  const hasExtra = !!opts.extra && Object.keys(opts.extra).length > 0
   for (let attempt = 0; ; attempt++) {
-    const sealed = text ? await seal(kind, id, text, clientMsgId) : null
+    const sealed = text || hasExtra
+      ? await sealBody(kind, id, { ...opts.extra, t: text }, { clientMsgId, scope: opts.scope })
+      : null
     try {
       return await post(sealed ? { content: null, ...sealed } : { content: text || null })
     } catch (e) {
@@ -158,52 +255,82 @@ export async function withSeal<T>(
   }
 }
 
-/** Texte lisible d'un contenu chiffré ; null si la clé manque ou si le contenu a été altéré. */
-export async function openText(
-  kind: ConvKind, id: string, enc: c.EncPayload, author: string, clientMsgId: string | null | undefined,
-): Promise<string | null> {
+/** Contenu déchiffré complet ({t, p?, title?, o?…}) ; null si la clé manque ou s'il a été altéré. */
+export async function openBody(
+  kind: ConvKind, id: string, enc: c.EncPayload, author: string, clientMsgId: string | null | undefined, scope?: string,
+): Promise<c.MsgBody | null> {
   if (!clientMsgId) return null
   try {
     const key = await keyFor(kind, id, enc.epoch)
-    return key ? (await c.decryptMessage(key, c.convName(kind, id), enc, author, clientMsgId)).t : null
+    return key ? await c.decryptMessage(key, scope ?? c.convName(kind, id), enc, author, clientMsgId) : null
   } catch {
     return null
   }
 }
 
-/** Message reçu du serveur (MP ou groupe). */
+/** Texte lisible d'un contenu chiffré ; null si la clé manque ou si le contenu a été altéré. */
+export async function openText(
+  kind: ConvKind, id: string, enc: c.EncPayload, author: string, clientMsgId: string | null | undefined, scope?: string,
+): Promise<string | null> {
+  return (await openBody(kind, id, enc, author, clientMsgId, scope))?.t ?? null
+}
+
+/** Texte d'attente d'un contenu illisible : clé de compte absente, ou clé de conversation pas encore reçue. */
+export const lockedText = () => t(useAccountKey.getState().status === 'ready' ? 'e2e.msg.locked' : 'e2e.msg.needKey')
+
+/** Message reçu du serveur (MP, groupe, salon, fil, forum). */
 export interface RawMsg {
   id: string
   content?: string | null
   enc?: c.EncPayload | null
   client_msg_id?: string | null
   purged?: boolean
-  sender_id: string
+  /** Auteur : `sender_id` (MP/groupe), `author_id` (salon) ou `user_id` (fil, forum). */
+  sender_id?: string
+  author_id?: string
+  user_id?: string
+  reply_to_enc?: c.EncPayload | null
+  reply_to_client_msg_id?: string | null
+  reply_to_sender_id?: string | null
+  reply_to_author_id?: string | null
+  reply_to_content?: string | null
 }
 export type E2EState = 'ok' | 'locked'
-export type Opened<T> = T & { e2e?: E2EState }
+/** `e2e_body` : contenu déchiffré complet (aperçu de lien `p`, etc.). */
+export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody }
+
+const authorOf = (m: RawMsg) => m.sender_id ?? m.author_id ?? m.user_id ?? ''
 
 /**
- * Remplace `content` par le texte déchiffré. Un message illisible garde `enc`
- * (pour le rouvrir quand la clé arrive) et affiche un texte d'attente.
+ * Remplace `content` (et l'aperçu de la réponse citée) par le texte déchiffré.
+ * Un message illisible garde `enc` (pour le rouvrir quand la clé arrive) et
+ * affiche un texte d'attente.
  */
-export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, m: T): Promise<Opened<T>> {
+export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, m: T, scope?: string): Promise<Opened<T>> {
   if (m.purged && !m.enc) return { ...m, content: t('e2e.msg.purged') }
-  if (!m.enc) return m
-  const text = await openText(kind, id, m.enc, m.sender_id, m.client_msg_id)
-  return text === null ? { ...m, content: t('e2e.msg.locked'), e2e: 'locked' } : { ...m, content: text, e2e: 'ok' }
+  let out: Opened<T> = m
+  if (m.enc) {
+    const body = await openBody(kind, id, m.enc, authorOf(m), m.client_msg_id, scope)
+    out = body === null ? { ...m, content: lockedText(), e2e: 'locked' } : { ...m, content: body.t, e2e: 'ok', e2e_body: body }
+  }
+  const replyAuthor = m.reply_to_author_id ?? m.reply_to_sender_id
+  if (m.reply_to_enc && replyAuthor) {
+    const text = await openText(kind, id, m.reply_to_enc, replyAuthor, m.reply_to_client_msg_id, scope)
+    out = { ...out, reply_to_content: text ?? lockedText() }
+  }
+  return out
 }
 
-export const openMessages = <T extends RawMsg>(kind: ConvKind, id: string, list: T[]) =>
-  Promise.all(list.map(m => openMessage(kind, id, m)))
+export const openMessages = <T extends RawMsg>(kind: ConvKind, id: string, list: T[], scope?: string) =>
+  Promise.all(list.map(m => openMessage(kind, id, m, scope)))
 
 /** Messages verrouillés qui s'ouvrent maintenant (après E2E_KEYS). */
-export async function reopenLocked(kind: ConvKind, id: string, list: readonly unknown[]): Promise<Map<string, Opened<RawMsg>>> {
+export async function reopenLocked(kind: ConvKind, id: string, list: readonly unknown[], scope?: string): Promise<Map<string, Opened<RawMsg>>> {
   forgetConv(kind, id)
   const out = new Map<string, Opened<RawMsg>>()
   for (const m of list as Opened<RawMsg>[]) {
     if (m.e2e !== 'locked') continue
-    const o = await openMessage(kind, id, m)
+    const o = await openMessage(kind, id, m, scope)
     if (o.e2e === 'ok') out.set(m.id, o)
   }
   return out
@@ -211,7 +338,7 @@ export async function reopenLocked(kind: ConvKind, id: string, list: readonly un
 
 /** Réponse à KEY_REQUEST : enveloppe toutes nos époques pour le demandeur. */
 export async function answerKeyRequest(d: { conv_kind?: string; conv_id?: string; member_id?: string }) {
-  const kind = d.conv_kind === 'dm' || d.conv_kind === 'group' ? d.conv_kind : null
+  const kind = d.conv_kind === 'dm' || d.conv_kind === 'group' || d.conv_kind === 'channel' ? d.conv_kind : null
   const me = myId()
   const priv = useAccountKey.getState().priv
   if (!kind || !d.conv_id || !d.member_id || !me || !priv || d.member_id === me) return
@@ -219,41 +346,102 @@ export async function answerKeyRequest(d: { conv_kind?: string; conv_id?: string
   await new Promise(r => setTimeout(r, Math.random() * 1500))
   const st = await load(kind, d.conv_id).catch(() => null)
   if (!st || st.keys.size === 0) return
-  const target = (await getMembers(kind, d.conv_id).catch(() => [])).find(m => m.user_id === d.member_id)
-  if (!target?.public || !target.fingerprint) return
-  const conv = c.convName(kind, d.conv_id)
-  for (const [epoch, key] of st.keys) {
-    const wrapped = await c.wrapConvKey(priv, c.b64uDecode(target.public), key, conv, epoch, target.user_id, me)
-    await api.post(`${base(kind, d.conv_id)}/keys`, {
-      epoch, envelopes: [{ member_id: target.user_id, member_fp: target.fingerprint, wrapped }],
-    }).catch(() => {})
-  }
+  const target = keyedOnly(await getMembers(kind, d.conv_id, { member: d.member_id }).catch(() => []))
+    .find(m => m.user_id === d.member_id)
+  if (!target) return
+  for (const [epoch, key] of st.keys) await postBatches(kind, d.conv_id, epoch, key, [target])
+}
+
+/**
+ * Salon : complète les clés qui manquent (au plus une fois par minute) — membres
+ * arrivés ou ayant gagné l'accès depuis l'époque courante, et époques pas encore
+ * enveloppées pour la clé de récupération du serveur.
+ */
+export async function completeChannelKeys(channelId: string) {
+  const name = c.convName('channel', channelId)
+  if (Date.now() - (completed.get(name) ?? 0) < 60_000) return
+  completed.set(name, Date.now())
+  const priv = useAccountKey.getState().priv
+  const me = myId()
+  if (!priv || !me) return
+  try {
+    const st = await load('channel', channelId, true)
+    if (st.missing.length && st.keys.size) {
+      const wanted = new Set(st.missing)
+      const targets = keyedOnly(await getAllMembers('channel', channelId)).filter(m => wanted.has(m.user_id))
+      for (const [epoch, key] of st.keys) await postBatches('channel', channelId, epoch, key, targets)
+    }
+    const sk = st.serverKey
+    if (sk) {
+      const conv = c.convName('channel', channelId)
+      for (const epoch of st.serverMissing) {
+        const key = st.keys.get(epoch)
+        if (!key) continue
+        await api.post(`${base('channel', channelId)}/keys`, {
+          epoch, envelopes: [], server_envelope: await serverEnvelope(priv, me, conv, epoch, key, sk),
+        }).catch(() => {})
+      }
+    }
+  } catch { /* hors ligne : au prochain passage */ }
 }
 
 // ─── Rechiffrement de l'historique (§6) ─────────────────────────────────────
 interface Legacy { conv_kind: ConvKind; conv_id: string; id: string; content: string }
+/** Ancien texte d'un salon : message, message de fil, réponse ou publication de forum. */
+interface ChannelLegacy extends Legacy {
+  item: 'message' | 'thread_message' | 'forum_reply' | 'forum_post'
+  title: string | null
+  scope_id: string | null
+}
 let reencrypting = false
 
-/** Rechiffre en arrière-plan, par lots, mes anciens messages encore en clair. */
+/** Contenu chiffré d'un ancien texte de salon, avec la portée de son fil ou de sa publication. */
+async function sealLegacyItem(m: ChannelLegacy) {
+  const ch = m.conv_id
+  switch (m.item) {
+    case 'message': return seal('channel', ch, m.content)
+    case 'thread_message': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.threadScope(ch, m.scope_id) }) : null
+    case 'forum_reply': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.postScope(ch, m.scope_id) }) : null
+    case 'forum_post':
+      // La publication garde son id client : ses réponses y sont liées.
+      return m.scope_id
+        ? sealBody('channel', ch, { t: m.content, title: m.title ?? '' }, { scope: c.postScope(ch, m.scope_id), clientMsgId: m.scope_id })
+        : null
+  }
+}
+
+async function reencryptRounds<T extends Legacy>(url: string, put: (m: T) => Promise<boolean>) {
+  for (let round = 0; round < 40; round++) {
+    const { data } = await api.get<T[]>(url, { params: { limit: 50 } })
+    let done = 0
+    for (const m of data) {
+      try {
+        if (await put(m)) done++
+      } catch { /* clé en attente, message supprimé : au prochain passage */ }
+    }
+    if (done === 0) return
+    await new Promise(r => setTimeout(r, 1000))
+  }
+}
+
+/** Rechiffre en arrière-plan, par lots, mes anciens messages encore en clair (MP, groupes, salons). */
 export async function reencryptLegacy() {
   if (reencrypting || useAccountKey.getState().status !== 'ready') return
   reencrypting = true
   try {
-    for (let round = 0; round < 40; round++) {
-      const { data } = await api.get<Legacy[]>('/e2e/legacy', { params: { limit: 50 } })
-      let done = 0
-      for (const m of data) {
-        try {
-          const sealed = await seal(m.conv_kind, m.conv_id, m.content)
-          if (!sealed) continue
-          const path = m.conv_kind === 'dm' ? `/dms/${m.conv_id}` : `/dms/groups/${m.conv_id}`
-          await api.put(`${path}/messages/${m.id}/encrypt`, sealed)
-          done++
-        } catch { /* clé en attente, message supprimé : au prochain passage */ }
-      }
-      if (done === 0) break
-      await new Promise(r => setTimeout(r, 1000))
-    }
+    await reencryptRounds<Legacy>('/e2e/legacy', async m => {
+      const sealed = await seal(m.conv_kind, m.conv_id, m.content)
+      if (!sealed) return false
+      const path = m.conv_kind === 'dm' ? `/dms/${m.conv_id}` : `/dms/groups/${m.conv_id}`
+      await api.put(`${path}/messages/${m.id}/encrypt`, sealed)
+      return true
+    })
+    await reencryptRounds<ChannelLegacy>('/e2e/legacy/channels', async m => {
+      const sealed = await sealLegacyItem(m)
+      if (!sealed) return false
+      await api.put(`/e2e/legacy/channel/${m.item}/${m.id}`, sealed)
+      return true
+    })
   } catch { /* hors ligne : reprise au prochain démarrage */ } finally {
     reencrypting = false
   }
@@ -289,6 +477,7 @@ export function sendErrorText(e: unknown, fallback: string): string {
   const m = e instanceof Error ? e.message : ''
   if (m === 'E2E_WAITING') return t('e2e.send.waiting')
   if (m === 'E2E_LOCKED') return t('e2e.send.locked')
+  if (m === 'AUTOMOD') return t('e2e.send.automod')
   if (errorCode(e) === 'PLAINTEXT_REFUSED') return t('e2e.send.update')
   return fallback
 }

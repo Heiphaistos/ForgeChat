@@ -34,22 +34,28 @@ function Checkbox({ value, onChange, label }: { value: boolean; onChange: (v: bo
   )
 }
 
-/** Code de récupération : affiché une seule fois, copie/partage, « je l'ai noté ». */
-export function RecoveryCodeModal({ code, onDone }: { code: string; onDone: () => void }) {
+/**
+ * Code de récupération : affiché une seule fois, copie/partage, « je l'ai noté ».
+ * `texts` : titre, description et en-tête du fichier (code d'un serveur) ; défaut : code du compte.
+ */
+export function RecoveryCodeModal({ code, onDone, texts }: {
+  code: string; onDone: () => void; texts?: { title: string; desc: string; fileHeader: string }
+}) {
   const t = useT()
   const [noted, setNoted] = useState(false)
   const shown = formatRecoveryCode(code)
+  const fileHeader = texts?.fileHeader ?? tr('e2e.recovery.fileHeader')
   return (
     <Modal visible animationType="slide" onRequestClose={() => noted && onDone()}>
       <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={s.page}>
-        <T variant="title">{t('e2e.recovery.title')}</T>
-        <T variant="muted">{t('e2e.recovery.desc')}</T>
+        <T variant="title">{texts?.title ?? t('e2e.recovery.title')}</T>
+        <T variant="muted">{texts?.desc ?? t('e2e.recovery.desc')}</T>
         <Text selectable style={s.code}>{shown}</Text>
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Button style={{ flex: 1 }} variant="secondary" icon="copy-outline" title={t('e2e.recovery.copy')}
             onPress={() => void Clipboard.setStringAsync(shown).then(() => Alert.alert(tr('e2e.recovery.copied')))} />
           <Button style={{ flex: 1 }} variant="secondary" icon="share-outline" title={t('e2e.recovery.share')}
-            onPress={() => void Share.share({ message: `${tr('e2e.recovery.fileHeader')}\n\n${shown}` })} />
+            onPress={() => void Share.share({ message: `${fileHeader}\n\n${shown}` })} />
         </View>
         <Checkbox value={noted} onChange={setNoted} label={t('e2e.recovery.noted')} />
         <Button title={t('e2e.recovery.done')} disabled={!noted} onPress={onDone} />

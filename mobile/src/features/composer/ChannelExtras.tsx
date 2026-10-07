@@ -11,6 +11,7 @@ import { formatReminderInput, parseReminderInput, reminderPresets, scheduleDateE
 import { POLL_DURATIONS, POLL_OPTION_MAX_CHARS, POLL_OPTIONS_MAX, POLL_QUESTION_MAX, pollBody } from '@/features/chat/polls'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
+import { e2eErrorText } from '@/e2e/conversations'
 import { colors, font, radius, spacing } from '@/theme'
 
 /** Feuille plein contenu au-dessus du clavier (formulaires de la barre de saisie). */
@@ -57,7 +58,7 @@ export function PollCreator({ visible, onClose, serverId, channelId }: { visible
       setHours(null)
       onClose()
     },
-    onError: (e) => Alert.alert(t('panel.poll.failed'), errorMessage(e)),
+    onError: (e) => Alert.alert(t('panel.poll.failed'), e2eErrorText(e) ?? errorMessage(e)),
   })
   const setOption = (i: number, v: string) => setOptions((prev) => prev.map((o, j) => (j === i ? v : o)))
   return (
@@ -149,7 +150,7 @@ export function ScheduleSheet({
       void list.refetch()
       onScheduled()
     },
-    onError: (e) => Alert.alert(t('panel.schedule.failed'), errorMessage(e)),
+    onError: (e) => Alert.alert(t('panel.schedule.failed'), e2eErrorText(e) ?? errorMessage(e)),
   })
   const cancel = useMutation({
     mutationFn: (id: string) => messagesApi.cancelScheduled(id),

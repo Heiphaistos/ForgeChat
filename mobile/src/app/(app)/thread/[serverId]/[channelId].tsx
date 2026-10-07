@@ -3,6 +3,7 @@ import { Stack } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { threadsApi } from '@/api/threads'
+import { e2eErrorText } from '@/e2e/conversations'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, ErrorState, IconButton, Loading, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
@@ -47,7 +48,7 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
   const key = qk.threadMessages(thread.id)
   const q = useInfiniteQuery({
     queryKey: key,
-    queryFn: ({ pageParam }) => threadsApi.messages(serverId, channelId, thread.id, pageParam),
+    queryFn: ({ pageParam }) => threadsApi.messages(serverId, channelId, thread, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => olderCursor(last, LIMITS.pageSize),
   })
@@ -74,7 +75,8 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
       .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
   const menuActions: SheetAction[] = []
   if (canModerate || thread.creatorId === meId) {
-    menuActions.push({ label: t('social.thread.rename'), icon: 'create-outline', onPress: () => setRenameText(thread.title) })
+    // Titre chiffré : le serveur ne sait renommer qu'en clair, ce qui le révélerait.
+    if (!thread.titleEncrypted) menuActions.push({ label: t('social.thread.rename'), icon: 'create-outline', onPress: () => setRenameText(thread.title) })
     menuActions.push({
       label: thread.archived ? t('social.thread.unarchive') : t('social.thread.archive'),
       icon: 'archive-outline',
@@ -134,12 +136,12 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
           sendWithAttachments(
             body,
             files,
-            (has) => threadsApi.send(serverId, channelId, thread.id, body, has),
+            (has) => threadsApi.send(serverId, channelId, thread, body, has),
             (id, f) => threadsApi.upload(serverId, channelId, thread.id, id, f),
             (id) => threadsApi.remove(serverId, channelId, thread.id, id),
           ).finally(refresh)
         }
-        onEdit={(m, body) => threadsApi.edit(serverId, channelId, thread.id, m.id, body).then(refresh)}
+        onEdit={(m, body) => threadsApi.edit(serverId, channelId, thread, m, body).then(refresh)}
         onDelete={(m) => threadsApi.remove(serverId, channelId, thread.id, m.id).then(refresh)}
         canModerate={canModerate}
         disabledReason={thread.locked ? t('social.thread.locked') : thread.archived ? t('social.thread.archived') : null}
@@ -165,9 +167,9 @@ function CreateThread({ serverId, channelId, parent, preview }: { serverId: stri
     if (!body) return
     setBusy(true)
     threadsApi
-      .create(serverId, channelId, body)
+      .create(serverId, channelId, title, body.first_message, parent)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.threads(channelId) }))
-      .catch((e) => Alert.alert(t('social.thread.createFailed'), errorMessage(e)))
+      .catch((e) => Alert.alert(t('social.thread.createFailed'), e2eErrorText(e) ?? errorMessage(e)))
       .finally(() => setBusy(false))
   }
   return (

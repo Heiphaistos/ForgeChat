@@ -4,6 +4,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native'
 import { searchApi } from '@/api/search'
+import { lockedText, mustEncrypt } from '@/e2e/conversations'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState } from '@/components/ui'
 import { conversationId } from '@/features/chat/adapters'
@@ -61,10 +62,11 @@ export default function SearchScreen() {
     queryKey: [...qk.search(debounced ?? ''), scopeId],
     queryFn: async ({ signal }) => {
       const r = await searchApi.global(debounced!, signal, scope)
-      if (!scope || scope.kind === 'channel') return r
-      // MP/groupe chiffré : recherche locale dans les messages déchiffrés sur l'appareil.
+      // Salon où je chiffre : le serveur ne cherche que les messages en clair (et par métadonnées).
+      if (!scope || (scope.kind === 'channel' && !(await mustEncrypt('channel', scope.channelId).catch(() => false)))) return { ...r, local: false }
+      // Conversation chiffrée : recherche locale dans les messages déchiffrés sur l'appareil.
       const cached = flattenNewestFirst(queryClient.getQueryData<MessagesData>(messagesKey(scope.kind, scopeId)))
-      return { ...r, messages: withLocalResults(r.messages, cached, debounced!, scope, t('social.search.here')) }
+      return { ...r, local: scope.kind === 'channel', messages: withLocalResults(r.messages, cached, debounced!, scope, t('social.search.here')) }
     },
     enabled: !!debounced,
     placeholderData: keepPreviousData,
@@ -101,6 +103,7 @@ export default function SearchScreen() {
         />
         {results.isFetching ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       </View>
+      {debounced && results.data?.local ? <Text style={styles.notice}>{t('e2e.search.channelLocal')}</Text> : null}
       {!debounced ? (
         <EmptyState
           icon="search-outline"
@@ -136,7 +139,8 @@ export default function SearchScreen() {
                       {scope ? '' : ` · ${where(item.v)}`} · {formatShort(item.v.createdAt)}
                     </Text>
                     <Text style={styles.body} numberOfLines={3}>
-                      {item.v.content ?? t('msg.attachment')}
+                      {/* Message chiffré : le serveur n'a pas le texte. */}
+                      {item.v.content ?? lockedText()}
                     </Text>
                   </View>
                 </>
@@ -183,5 +187,6 @@ const styles = StyleSheet.create({
   section: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   meta: { color: colors.textMuted, fontSize: font.xs },
+  notice: { color: colors.textMuted, fontSize: font.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   body: { color: colors.text, fontSize: font.md },
 })

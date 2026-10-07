@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { messagesApi } from '@/api/messages'
+import type { LinkPreviewData } from './messageExtras'
 import { useT } from '@/i18n'
 import { openExternalUrl } from '@/lib/links'
 import { colors, font, radius, spacing } from '@/theme'
@@ -9,16 +10,20 @@ import { colors, font, radius, spacing } from '@/theme'
 /**
  * Aperçu d'un lien (GET /og), comme LinkPreview.tsx côté web. Sans image : elle viendrait d'un
  * hôte quelconque (pixel espion, fuite de l'IP) — même règle que lib/links.resolveMediaUrl.
+ * `given` : aperçu déjà connu (message chiffré : calculé par l'expéditeur) — aucun appel à /og,
+ * le serveur ne doit pas voir les liens lus.
  */
-export function LinkPreview({ url }: { url: string }) {
+export function LinkPreview({ url, given }: { url: string; given?: LinkPreviewData | null }) {
   const t = useT()
-  const { data } = useQuery({
+  const query = useQuery({
     queryKey: ['og', url],
     queryFn: ({ signal }) => messagesApi.linkPreview(url, signal),
     staleTime: 3_600_000,
     gcTime: 3_600_000,
     retry: false,
+    enabled: given === undefined,
   })
+  const data = given === undefined ? query.data : given
   if (!data) return null
   const host = (() => {
     try {

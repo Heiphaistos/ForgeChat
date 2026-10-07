@@ -5,7 +5,10 @@ import {
   appendMessage,
   applyReactionDelta,
   applyReactionToggle,
+  flattenNewestFirst,
   mergeAttachments,
+  messagesKey,
+  type MessagesData,
   patchMessage,
   removeMessage,
 } from '@/features/chat/cache'
@@ -90,23 +93,32 @@ export function bindRealtime(): () => void {
   })
 
   // ── Salons de serveur ──────────────────────────────────────────────────────
-  on('MESSAGE_CREATE', (e) => {
+  on('MESSAGE_CREATE', async (e) => {
     if (!isObj(e.message)) return
-    const raw = e.message as unknown as ServerMessage
-    const channelId = str(raw.channel_id)
-    if (!channelId || !str(raw.id)) return
+    const channelId = str(e.message.channel_id)
+    if (!channelId || !str(e.message.id)) return
+    // Salon chiffré : texte déchiffré ici, sur l'appareil.
+    const raw = (await openRaw('channel', channelId, e.message)) as unknown as ServerMessage
     const msg = { ...fromServerMessage(raw), awaitingAttachments: e.pending_attachments === true }
     appendMessage('channel', channelId, msg)
     if (msg.authorId !== getMyId()) useUnread.getState().increment(channelId, str(e.server_id))
     useTyping.getState().remove(channelId, msg.authorId)
   })
-  on('MESSAGE_UPDATE', (e) => {
+  on('MESSAGE_UPDATE', async (e) => {
     const cid = str(e.channel_id)
     const mid = str(e.message_id)
     if (!cid || !mid) return
+    // Édition chiffrée : auteur = celui du message en mémoire (lié à l'AAD).
+    const author = str(e.author_id) ?? flattenNewestFirst(queryClient.getQueryData<MessagesData>(messagesKey('channel', cid))).find((m) => m.id === mid)?.authorId
+    const text = isObj(e.enc)
+      ? author ? await openText('channel', cid, e.enc as unknown as EncPayload, author, str(e.client_msg_id)) : null
+      : typeof e.content === 'string' ? e.content : null
     patchMessage('channel', cid, mid, (m) => ({
       ...m,
-      content: typeof e.content === 'string' ? e.content : m.content,
+      content: text ?? m.content,
+      clientMsgId: str(e.client_msg_id) ?? m.clientMsgId,
+      // Nouveau contenu chiffré : l'aperçu de lien n'est plus celui de l'ancien texte.
+      ...(isObj(e.enc) ? { e2e: text === null ? m.e2e : 'ok', preview: text === null ? m.preview : null, unencrypted: false } : {}),
       editedAt: str(e.edited_at) ?? new Date().toISOString(),
     }))
   })
@@ -197,14 +209,21 @@ export function bindRealtime(): () => void {
   }
   on('KEY_REQUEST', (e) => void answerKeyRequest(e))
   on('E2E_KEYS', (e) => {
-    const kind = e.conv_kind === 'dm' || e.conv_kind === 'group' ? e.conv_kind : null
+    const kind = e.conv_kind === 'dm' || e.conv_kind === 'group' || e.conv_kind === 'channel' ? e.conv_kind : null
     const id = str(e.conv_id)
     if (!kind || !id) return
     // Clés reçues : on relit la conversation, les messages en attente s'ouvrent.
     forgetConv(kind, id)
     void queryClient.invalidateQueries({ queryKey: ['messages', kind, id] })
     void queryClient.invalidateQueries({ queryKey: qk.pins(id) })
+    if (kind === 'channel') {
+      // Fils, forums, sondages et programmés du salon utilisent la même clé.
+      for (const key of [qk.threads(id), qk.forum(id), ['thread-messages'], ['forum-post'], ['poll'], ['scheduled', id], qk.saved, qk.mentions])
+        void queryClient.invalidateQueries({ queryKey: key })
+    }
   })
+  // Clé de récupération du serveur créée ou changée : les prochaines époques doivent l'inclure.
+  on('SERVER_KEY', () => forgetConv())
 
   // ── DM 1:1 ────────────────────────────────────────────────────────────────
   on('DM_MESSAGE', async (e) => {

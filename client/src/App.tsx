@@ -2,7 +2,9 @@ import { useEffect, useState, useRef, useCallback, lazy, Suspense, type ReactNod
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import E2EGate from './e2e/E2EGate'
+import type { EncPayload } from './e2e/crypto'
 import { openText } from './e2e/conversations'
+import { channelPreview } from './e2e/channels'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
 import { useGroupCall } from './store/groupCall'
@@ -119,7 +121,11 @@ interface MentionEvent {
   server_id: string
   channel_name: string
   author_username: string
-  content: string
+  /** Null pour un message chiffré (`enc`) : déchiffré pour l'aperçu. */
+  content: string | null
+  enc?: EncPayload | null
+  client_msg_id?: string | null
+  author_id?: string
 }
 
 function AppInner() {
@@ -432,13 +438,14 @@ function AppInner() {
   // Mentions (résolues côté serveur) et synchronisation des lectures entre appareils
   useEffect(() => {
     if (!user) return
-    const offMention = on('MENTION_CREATE', (raw) => {
+    const offMention = on('MENTION_CREATE', async (raw) => {
       const d = raw as { notify?: boolean; mention?: MentionEvent }
-      const m = d.mention
-      if (!m) return
-      mentionedMessageIds.add(m.message_id)
-      setTimeout(() => mentionedMessageIds.delete(m.message_id), 60_000)
-      if (isViewing(m.channel_id)) return
+      if (!d.mention) return
+      mentionedMessageIds.add(d.mention.message_id)
+      setTimeout(() => mentionedMessageIds.delete(d.mention!.message_id), 60_000)
+      if (isViewing(d.mention.channel_id)) return
+      // Salon chiffré : aperçu déchiffré sur l'appareil.
+      const m = { ...d.mention, content: await channelPreview(d.mention) }
       useUnread.getState().addMention(m.channel_id, m.server_id)
       qcHook.setQueryData<MentionEvent[]>(['user_mentions'], old =>
         [m, ...(old ?? []).filter(x => x.message_id !== m.message_id)].slice(0, 50))
@@ -495,14 +502,14 @@ function AppInner() {
     const offLeave = on('VOICE_USER_LEFT', () => { if (!user.focus_mode) playLeave() })
     // Les mentions et réponses sont notifiées par MENTION_CREATE (règle serveur).
     // Ici : seulement les salons au niveau « Tous les messages », hors sourdine.
-    const offMsg = on('MESSAGE_CREATE', (d: any) => {
+    const offMsg = on('MESSAGE_CREATE', async (d: any) => {
       const msg = d.message
       if (!msg?.channel_id || !d.server_id || msg.author_id === user.id || user.focus_mode) return
       if (mentionedMessageIds.has(msg.id) || isViewing(msg.channel_id)) return
       if (isChannelMuted(msg.channel_id) || isServerMuted(d.server_id)) return
       if (effectiveNotifLevel(msg.channel_id, d.server_id) !== 'all') return
       if (!document.hasFocus()) playMessage()
-      alertUser(msg.author_username ?? 'Message', msg.content ?? '',
+      alertUser(msg.author_username ?? 'Message', await channelPreview(msg),
         `/servers/${d.server_id}/channels/${msg.channel_id}?highlight=${msg.id}`, '💬')
     })
     return () => { offJoin(); offLeave(); offMsg() }

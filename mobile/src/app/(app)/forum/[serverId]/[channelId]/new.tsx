@@ -5,6 +5,7 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { forumApi } from '@/api/forum'
+import { e2eErrorText } from '@/e2e/conversations'
 import { Button, ErrorState, IconButton, TextField } from '@/components/ui'
 import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, normalizeTag, toggleTag } from '@/features/forum/forum'
 import { TagChips } from '@/features/forum/TagChips'
@@ -59,7 +60,7 @@ export default function NewPostScreen() {
         void queryClient.invalidateQueries({ queryKey: qk.forum(ids.channelId) })
         router.back()
       })
-      .catch((e) => Alert.alert(t('chat.publishFailed'), errorMessage(e)))
+      .catch((e) => Alert.alert(t('chat.publishFailed'), e2eErrorText(e) ?? errorMessage(e)))
       .finally(() => setBusy(false))
   }
   const addTag = () => {

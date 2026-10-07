@@ -9,6 +9,7 @@ import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { messageLink } from '../../utils/searchLink'
 import { useT } from '../../i18n'
+import { lockedText } from '../../e2e/conversations'
 
 const FILTER_HELP = [
   ['from:pseudo', 'messages de cet auteur'],
@@ -25,9 +26,14 @@ interface Props {
   onClose: () => void
   /** Conversation chiffrée : le serveur ne peut pas chercher, on filtre les messages déjà déchiffrés. */
   localMessages?: readonly { id: string; content: string | null; created_at: string; author_username?: string; author_avatar?: string | null; e2e?: string }[]
+  /**
+   * Salon chiffré : les messages chargés sont filtrés ici, et le serveur cherche
+   * quand même (messages en clair, filtres from:/has:/before:…).
+   */
+  channelEncrypted?: boolean
 }
 
-export default function SearchPanel({ serverId, channelId, channelName, onClose, localMessages }: Props) {
+export default function SearchPanel({ serverId, channelId, channelName, onClose, localMessages, channelEncrypted }: Props) {
   useEscapePanel(onClose)
   const t = useT()
   const [query, setQuery] = useState('')
@@ -58,18 +64,27 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
     }).then(r => r.data as { messages: any[]; next_cursor: string | null }),
     initialPageParam: '',
     getNextPageParam: last => last.next_cursor ?? undefined,
-    enabled: search.trim().length >= 2 && !(localMessages && !everywhere),
+    enabled: search.trim().length >= 2 && !(localMessages && !everywhere && !channelEncrypted),
   })
+  // MP/groupe chiffré : uniquement local ; salon chiffré : local + serveur.
+  const localOnly = !!localMessages && !everywhere && !channelEncrypted
   const highlightText = useMemo(() => search.split(/\s+/).filter(w => !/^[a-z]+:\S+/i.test(w)).join(' '), [search])
   const results = useMemo(() => {
-    if (!localMessages || everywhere) return data?.pages.flatMap(p => p.messages) ?? []
     const q = highlightText.trim().toLowerCase()
-    if (q.length < 2) return []
-    return localMessages
+    const local = !localMessages || everywhere || q.length < 2 ? [] : localMessages
       .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
-      .map(m => ({ ...m, kind: 'dm', channel_id: channelId }))
+      .map(m => ({ ...m, kind: serverId ? 'channel' : 'dm', channel_id: channelId, server_id: serverId || undefined }))
       .reverse()
-  }, [data, localMessages, everywhere, highlightText, channelId])
+    if (localOnly) return local
+    // Résultat chiffré du serveur (filtres seulement) : texte déchiffré s'il est chargé, sinon texte d'attente.
+    const loaded = new Map((localMessages ?? []).map(m => [m.id, m.content]))
+    const server = (data?.pages.flatMap(p => p.messages) ?? [])
+      .map(m => m.content == null ? { ...m, content: loaded.get(m.id) ?? lockedText() } : m)
+    if (!local.length) return server
+    const ids = new Set(server.map(m => m.id))
+    return [...server, ...local.filter(m => !ids.has(m.id))]
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+  }, [data, localMessages, everywhere, highlightText, channelId, serverId, localOnly])
 
   // Réinitialiser la sélection à chaque nouvelle liste de résultats
   useEffect(() => { setSelIdx(-1) }, [results])
@@ -139,7 +154,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
           <input type="checkbox" checked={everywhere} onChange={e => setEverywhere(e.target.checked)} className="accent-fc-accent" />
           Chercher partout (salons, messages privés, groupes)
         </label>
-        {localMessages && !everywhere && <p className="mt-1.5 text-xs text-fc-muted">{t('e2e.search.local')}</p>}
+        {localMessages && !everywhere && <p className="mt-1.5 text-xs text-fc-muted">{t(channelEncrypted ? 'e2e.search.channelLocal' : 'e2e.search.local')}</p>}
         {search && (
           <div className="flex items-center gap-1 mt-1.5 text-xs text-fc-muted">
             <Hash size={10} aria-hidden />

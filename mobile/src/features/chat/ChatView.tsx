@@ -256,7 +256,8 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
             .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       })
     }
-    if (publishable && conversation.kind === 'channel' && !m.pending && hasEditableText(m)) {
+    // Publication dans les salons abonnés : refusée par le serveur pour un message chiffré (§4.3).
+    if (publishable && conversation.kind === 'channel' && !m.pending && !m.e2e && hasEditableText(m)) {
       const { serverId: sid, channelId: cid } = conversation
       list.push({
         label: t('chat.publish'),
@@ -278,8 +279,9 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
         label: t('chat.forward'),
         icon: 'arrow-redo-outline',
         onPress: () => {
-          // MP chiffré : le texte déchiffré reste en mémoire pour l'écran de transfert.
-          if (m.e2e === 'ok' && m.content) forwardText.set(messageId, m.content)
+          // Texte gardé en mémoire pour l'écran de transfert (rechiffré si le salon cible est chiffré).
+          if (hasEditableText(m) && m.content) forwardText.set(messageId, { text: m.content, encrypted: m.e2e === 'ok' })
+          else forwardText.delete(messageId)
           router.push({ pathname: '/forward', params: { messageId } })
         },
       })

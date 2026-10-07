@@ -15,8 +15,12 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct CreateScheduledRequest {
+    #[serde(default)]
     pub content: String,
     pub send_at: DateTime<Utc>,
+    /// Chiffré à la création (même format qu'un message du salon), recopié tel quel à l'envoi.
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -24,10 +28,12 @@ pub struct ScheduledMessage {
     pub id: Uuid,
     pub channel_id: Uuid,
     pub user_id: Uuid,
-    pub content: String,
+    pub content: Option<String>,
     pub send_at: DateTime<Utc>,
     pub sent: bool,
     pub created_at: DateTime<Utc>,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn create_scheduled(
@@ -38,7 +44,11 @@ pub async fn create_scheduled(
 ) -> Result<Json<ScheduledMessage>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
-    if body.content.trim().is_empty() {
+    let has_text = !body.content.trim().is_empty();
+    let enc = crate::handlers::e2e_channel::check_content(
+        &state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false,
+    ).await?;
+    if !has_text && enc.is_none() {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
     if body.content.chars().count() > 4000 {
@@ -76,18 +86,23 @@ pub async fn create_scheduled(
     // Même check que messages.rs/threads.rs/forum.rs/bots.rs/webhooks.rs :
     // sans lui, un message programmé contournait entièrement le filtre AutoMod
     // du serveur (mots interdits, liens, mentions, spam, majuscules).
-    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, body.content.trim()).await {
-        return Err(err);
+    // Chiffré : appliqué par l'appli avant chiffrement.
+    if enc.is_none() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, body.content.trim()).await {
+            return Err(err);
+        }
     }
 
     let msg = sqlx::query_as::<_, ScheduledMessage>(
-        "INSERT INTO scheduled_messages (channel_id, user_id, content, send_at)
-         VALUES ($1, $2, $3, $4) RETURNING *"
+        "INSERT INTO scheduled_messages (channel_id, user_id, content, send_at, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(channel_id)
     .bind(claims.sub)
-    .bind(body.content.trim())
+    .bind(Some(body.content.trim()).filter(|_| enc.is_none()))
     .bind(body.send_at)
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&state.db)
     .await?;
 
@@ -154,7 +169,9 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         let sched_id: Uuid = row.get("id");
         let channel_id: Uuid = row.get("channel_id");
         let user_id: Uuid = row.get("user_id");
-        let content: String = row.get("content");
+        let content: Option<String> = row.get("content");
+        let enc: Option<serde_json::Value> = row.get("enc");
+        let cmid: Option<Uuid> = row.get("client_msg_id");
         let server_id: Uuid = row.get("server_id");
 
         // Revalider au moment de l'envoi (pas seulement à la programmation) : jusqu'à
@@ -188,11 +205,13 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         let insert = async {
             let mut tx = state.db.begin().await?;
             let msg_row = sqlx::query(
-                "INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
+                "INSERT INTO messages (channel_id, user_id, content, enc, client_msg_id) VALUES ($1, $2, $3, $4, $5) RETURNING *"
             )
             .bind(channel_id)
             .bind(user_id)
             .bind(&content)
+            .bind(&enc)
+            .bind(cmid)
             .fetch_one(&mut *tx)
             .await?;
             sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")
@@ -219,7 +238,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                 let full_msg = MessageWithAuthor {
                     id: msg_id,
                     channel_id,
-                    content: Some(content),
+                    content,
                     r#type: msg_row.get("type"),
                     reply_to: None,
                     reply_to_content: None,
@@ -240,6 +259,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     reactions: vec![],
                     expires_at: None,
                     poll_id: None,
+                    e2e: crate::models::message::MsgE2e::from_row(&msg_row),
                 };
 
                 let event = serde_json::json!({

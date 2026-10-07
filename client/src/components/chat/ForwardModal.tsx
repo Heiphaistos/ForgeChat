@@ -5,6 +5,7 @@ import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useT } from '../../i18n'
+import { mustEncrypt, seal, sendErrorText } from '../../e2e/conversations'
 
 interface Props {
   messageId: string
@@ -12,6 +13,8 @@ interface Props {
   sourceServerId: string
   /** Message chiffré : texte déchiffré à copier (le salon cible n'est pas chiffré). */
   plaintext?: string | null
+  /** Texte lisible du message (clair ou déchiffré) : rechiffré si le salon cible est chiffré. */
+  sourceText?: string | null
   onClose: () => void
 }
 
@@ -28,7 +31,7 @@ interface Channel {
   server_id: string
 }
 
-export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, plaintext, onClose }: Props) {
+export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, plaintext, sourceText, onClose }: Props) {
   const t = useT()
   useEscapeKey(onClose)
   const [search, setSearch] = useState('')
@@ -66,16 +69,25 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
     // messages OU dm_messages ; sourceServerId/sourceChannelId n'existent pas
     // en contexte DM (serverId="" transmis par MessageList), donc jamais utilisés
     // ici pour construire l'URL (uniquement pour l'UX d'auto-expansion ci-dessus).
-    mutationFn: (destChannelId: string) =>
-      api.post(`/messages/${messageId}/forward`, {
-        channel_id: destChannelId,
-        content: plaintext ?? undefined,
-      }),
+    // Salon cible chiffré : copie chiffrée pour lui (jamais de clair) ; sinon texte déchiffré si la source est chiffrée.
+    mutationFn: async (destChannelId: string) => {
+      if (await mustEncrypt('channel', destChannelId)) {
+        const sealed = sourceText ? await seal('channel', destChannelId, sourceText) : null
+        if (!sealed) throw new Error('E2E_LOCKED')
+        return api.post(`/messages/${messageId}/forward`, { channel_id: destChannelId, ...sealed })
+      }
+      return api.post(`/messages/${messageId}/forward`, { channel_id: destChannelId, content: plaintext ?? undefined })
+    },
     onSuccess: () => {
       toast.success(t('forward.done'))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('forward.error')),
+    onError: (e: any) => toast.error(sendErrorText(e, e.response?.data?.error ?? t('forward.error'))),
+  })
+  const { data: destEncrypted } = useQuery({
+    queryKey: ['e2e_channel_forward', selectedChannelId],
+    queryFn: () => mustEncrypt('channel', selectedChannelId!),
+    enabled: !!selectedChannelId,
   })
 
   // Filtre par recherche
@@ -125,7 +137,9 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
           </button>
         </div>
 
-        {plaintext != null && <p className="px-4 pt-3 text-xs text-fc-yellow">{t('e2e.forward.notice')}</p>}
+        {destEncrypted
+          ? <p className="px-4 pt-3 text-xs text-fc-muted">{t('e2e.forward.encrypted')}</p>
+          : plaintext != null && <p className="px-4 pt-3 text-xs text-fc-yellow">{t('e2e.forward.notice')}</p>}
 
         {/* Barre de recherche */}
         <div className="px-4 py-2 border-b border-fc-hover flex-shrink-0">

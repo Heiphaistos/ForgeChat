@@ -289,73 +289,7 @@ impl AppState {
     /// (même règle que `hidden_channels`). Sert aussi aux mentions, où les
     /// destinataires ne sont pas forcément connectés.
     pub async fn channel_audience_among(&self, channel_id: Uuid, candidates: &[Uuid]) -> Vec<Uuid> {
-        use sqlx::Row;
-        if candidates.is_empty() { return vec![]; }
-
-        let Some(server_id) = self.channel_server_id(channel_id).await else { return vec![]; };
-
-        // Base : appartenance + permissions combinées (rôles + @everyone)
-        let rows = sqlx::query(
-            "SELECT sm.user_id, sm.is_owner,
-                    COALESCE(BIT_OR(r.permissions), 0)
-                    | COALESCE((SELECT permissions FROM roles WHERE server_id=$1 AND is_everyone=true), 0)
-                    AS combined_perms
-             FROM server_members sm
-             LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
-             LEFT JOIN roles r ON r.id = mr.role_id
-             WHERE sm.server_id = $1 AND sm.user_id = ANY($2)
-             GROUP BY sm.user_id, sm.is_owner"
-        )
-        .bind(server_id)
-        .bind(candidates)
-        .fetch_all(&self.db)
-        .await
-        .unwrap_or_default();
-        if rows.is_empty() { return vec![]; }
-
-        let overrides = self.channel_overrides(channel_id).await;
-        if overrides.is_empty() {
-            // Aucun override : comportement historique (tous les membres connectés)
-            return rows.iter().map(|r| r.get::<Uuid, _>("user_id")).collect();
-        }
-
-        let everyone_role = self.everyone_role_id(server_id).await;
-        let member_ids: Vec<Uuid> = rows.iter().map(|r| r.get::<Uuid, _>("user_id")).collect();
-        let role_rows = sqlx::query(
-            "SELECT user_id, role_id FROM member_roles WHERE server_id=$1 AND user_id = ANY($2)"
-        )
-        .bind(server_id)
-        .bind(&member_ids)
-        .fetch_all(&self.db)
-        .await
-        .unwrap_or_default();
-
-        let mut roles_by_user: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
-        for r in &role_rows {
-            roles_by_user
-                .entry(r.get::<Uuid, _>("user_id"))
-                .or_default()
-                .insert(r.get::<Uuid, _>("role_id"));
-        }
-
-        let view = crate::models::role::Permissions::VIEW_CHANNEL;
-        rows.iter()
-            .filter_map(|r| {
-                let uid: Uuid = r.get("user_id");
-                // Même base que `hidden_channels` : VIEW_CHANNEL est acquis sauf refus
-                // explicite par override. Sans cet alignement, un salon lisible en REST
-                // ne recevait plus aucun message en direct dès qu'il portait un override.
-                let perms = apply_channel_overrides(
-                    r.get::<i64, _>("combined_perms") | view,
-                    r.get::<bool, _>("is_owner"),
-                    uid,
-                    roles_by_user.get(&uid),
-                    everyone_role,
-                    &overrides,
-                );
-                if perms & view != 0 { Some(uid) } else { None }
-            })
-            .collect()
+        channel_audience_among(&self.db, channel_id, candidates).await
     }
 
     /// Masque de permissions effectif d'un utilisateur **sur un canal donné**
@@ -587,6 +521,99 @@ impl AppState {
 /// des serveurs existants ont un @everyone sans ce bit. Un salon privé
 /// (importé de Discord : deny @everyone + allow rôle) reste donc privé sans
 /// verrouiller les serveurs existants.
+/// Parmi `candidates`, ceux qui sont membres du serveur du salon et le voient
+/// (même règle que `hidden_channels`). Sert à la diffusion, aux mentions et aux
+/// membres autorisés d'un salon chiffré.
+pub async fn channel_audience_among(db: &PgPool, channel_id: Uuid, candidates: &[Uuid]) -> Vec<Uuid> {
+    use sqlx::Row;
+    if candidates.is_empty() { return vec![]; }
+
+    let Some(server_id) = sqlx::query_scalar::<_, Option<Uuid>>("SELECT server_id FROM channels WHERE id=$1")
+        .bind(channel_id)
+        .fetch_optional(db)
+        .await
+        .ok()
+        .flatten()
+        .flatten() else { return vec![]; };
+
+    // Base : appartenance + permissions combinées (rôles + @everyone)
+    let rows = sqlx::query(
+        "SELECT sm.user_id, sm.is_owner,
+                COALESCE(BIT_OR(r.permissions), 0)
+                | COALESCE((SELECT permissions FROM roles WHERE server_id=$1 AND is_everyone=true), 0)
+                AS combined_perms
+         FROM server_members sm
+         LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+         LEFT JOIN roles r ON r.id = mr.role_id
+         WHERE sm.server_id = $1 AND sm.user_id = ANY($2)
+         GROUP BY sm.user_id, sm.is_owner"
+    )
+    .bind(server_id)
+    .bind(candidates)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    if rows.is_empty() { return vec![]; }
+
+    let overrides: Vec<(Uuid, String, i64, i64)> = sqlx::query_as(
+        "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
+    )
+    .bind(channel_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    if overrides.is_empty() {
+        // Aucun override : comportement historique (tous les membres connectés)
+        return rows.iter().map(|r| r.get::<Uuid, _>("user_id")).collect();
+    }
+
+    let everyone_role: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM roles WHERE server_id=$1 AND is_everyone=true LIMIT 1"
+    )
+    .bind(server_id)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    let member_ids: Vec<Uuid> = rows.iter().map(|r| r.get::<Uuid, _>("user_id")).collect();
+    let role_rows = sqlx::query(
+        "SELECT user_id, role_id FROM member_roles WHERE server_id=$1 AND user_id = ANY($2)"
+    )
+    .bind(server_id)
+    .bind(&member_ids)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let mut roles_by_user: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
+    for r in &role_rows {
+        roles_by_user
+            .entry(r.get::<Uuid, _>("user_id"))
+            .or_default()
+            .insert(r.get::<Uuid, _>("role_id"));
+    }
+
+    let view = crate::models::role::Permissions::VIEW_CHANNEL;
+    rows.iter()
+        .filter_map(|r| {
+            let uid: Uuid = r.get("user_id");
+            // Même base que `hidden_channels` : VIEW_CHANNEL est acquis sauf refus
+            // explicite par override. Sans cet alignement, un salon lisible en REST
+            // ne recevait plus aucun message en direct dès qu'il portait un override.
+            let perms = apply_channel_overrides(
+                r.get::<i64, _>("combined_perms") | view,
+                r.get::<bool, _>("is_owner"),
+                uid,
+                roles_by_user.get(&uid),
+                everyone_role,
+                &overrides,
+            );
+            if perms & view != 0 { Some(uid) } else { None }
+        })
+        .collect()
+}
+
+
 pub async fn hidden_channels(
     db: &PgPool,
     user_id: Uuid,

@@ -1,3 +1,5 @@
+import type { LinkPreviewData } from '@/features/chat/messageExtras'
+
 /**
  * Modèles de données, alignés sur les réponses JSON du serveur Rust
  * (server/src/models/*.rs et handlers/*.rs).
@@ -174,6 +176,12 @@ export interface ServerMessage {
   reactions: Reaction[]
   poll_id?: string | null
   expires_at?: string | null
+  client_msg_id?: string | null
+  /** Texte en clair (bot, webhook, système, ancien message, membre sans clé). */
+  unencrypted?: boolean
+  /** Posés par e2e/conversations.openRaw ; `e2e_body.p` = aperçu de lien de l'expéditeur. */
+  e2e?: 'ok' | 'locked'
+  e2e_body?: { t: string; p?: unknown }
 }
 
 /** Message privé 1:1 (handlers/friends.rs::get_dm_messages). */
@@ -242,8 +250,12 @@ export interface ChatMessage {
   pollId?: string | null
   /** MP/groupe chiffré : id client lié à l'AAD (réutilisé à l'édition). */
   clientMsgId?: string | null
-  /** MP/groupe chiffré : déchiffré sur l'appareil ('ok') ou en attente d'une clé ('locked'). */
+  /** Message chiffré : déchiffré sur l'appareil ('ok') ou en attente d'une clé ('locked'). */
   e2e?: 'ok' | 'locked'
+  /** Salon : message envoyé en clair (badge « non chiffré »). */
+  unencrypted?: boolean
+  /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */
+  preview?: LinkPreviewData | null
 }
 
 export type ConversationRef =
@@ -350,6 +362,9 @@ export interface MentionItem {
   author_avatar: string | null
   content: string | null
   created_at: string
+  /** Salon chiffré : contenu à déchiffrer (clé du salon, auteur `author_id`). */
+  enc?: unknown
+  client_msg_id?: string | null
 }
 
 export interface InviteInfo {

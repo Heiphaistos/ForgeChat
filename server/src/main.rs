@@ -671,6 +671,13 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/e2e/conversations/:kind/:id/keys/request", post(handlers::e2e_conv::request_keys))
         .route("/e2e/conversations/:kind/:id/members", get(handlers::e2e_conv::get_members))
         .route("/e2e/legacy", get(handlers::e2e_conv::my_legacy_messages))
+        // Salons chiffrés : rechiffrement de l'historique, clé de récupération du serveur (§10, §11)
+        .route("/e2e/legacy/channels", get(handlers::e2e_channel::my_legacy_items))
+        .route("/e2e/legacy/channel/:item/:id", put(handlers::e2e_channel::encrypt_legacy_item).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/e2e/server-key", get(handlers::e2e_server_key::get_server_key).put(handlers::e2e_server_key::put_server_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/e2e/server-key/recovery", put(handlers::e2e_server_key::put_recovery).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/e2e/server-key/owner", put(handlers::e2e_server_key::put_owner_wrapped).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/e2e/recovery", get(handlers::e2e_server_key::get_recovery))
         .route("/dms/:dm_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_dm_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/dms/groups/:group_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_group_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         // Unread
@@ -774,6 +781,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // AutoMod
         .route("/servers/:server_id/automod", get(handlers::audit::get_automod))
         .route("/servers/:server_id/automod", put(handlers::audit::set_automod))
+        .route("/servers/:server_id/automod/rules", get(handlers::audit::get_automod_rules))
         // Server discovery
         .route("/explore", get(handlers::audit::discover_servers))
         // Super réactions (074) et profil par serveur (075)

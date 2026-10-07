@@ -205,13 +205,15 @@ pub async fn crosspost_message(
     let msg = sqlx::query(
         "UPDATE messages SET crossposted_at=NOW()
          WHERE id=$1 AND channel_id=$2 AND crossposted_at IS NULL AND type <> 'crosspost' AND COALESCE(content, '') <> ''
+           AND enc IS NULL
          RETURNING user_id, content"
     )
     .bind(message_id)
     .bind(channel_id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or_else(|| AppError::Conflict("Message introuvable, vide ou déjà publié".into()))?;
+    // Message chiffré : la copie exigerait la clé du salon cible (désactivé, §4.3).
+    .ok_or_else(|| AppError::Conflict("Message introuvable, vide, chiffré ou déjà publié".into()))?;
     let author_id: Uuid = msg.get("user_id");
     // Copie dans des serveurs tiers : @everyone/@here neutralisés.
     let content = defuse_mass_mentions(&msg.get::<String, _>("content"));
@@ -271,6 +273,7 @@ pub async fn crosspost_message(
             reactions: vec![],
             expires_at: None,
             poll_id: None,
+            e2e: crate::models::message::MsgE2e::plain(true),
         };
         created.push((target, target_server, full));
     }

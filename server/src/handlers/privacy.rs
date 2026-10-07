@@ -35,7 +35,7 @@ pub async fn export_user_data(
         // semaines), sans jamais l'indiquer -- l'utilisateur recevait un fichier
         // qui se présentait comme complet mais ne l'était pas.
         sqlx::query(
-            "SELECT m.content, m.created_at, c.name as channel_name
+            "SELECT m.content, m.enc IS NOT NULL AS encrypted, m.created_at, c.name as channel_name
              FROM messages m
              JOIN channels c ON c.id = m.channel_id
              WHERE m.user_id = $1
@@ -94,6 +94,8 @@ pub async fn export_user_data(
         "messages": messages.iter().map(|m| serde_json::json!({
             "content": m.get::<Option<String>, _>("content"),
             "channel": m.get::<String, _>("channel_name"),
+            // Chiffré de bout en bout : le serveur n'en a pas le texte.
+            "encrypted": m.get::<bool, _>("encrypted"),
             "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         })).collect::<Vec<_>>(),
         "dm_messages": dm_messages.iter().map(|m| serde_json::json!({

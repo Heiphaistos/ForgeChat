@@ -4,6 +4,7 @@ import { router, Stack } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import { forumApi } from '@/api/forum'
+import { e2eErrorText } from '@/e2e/conversations'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
 import { Sheet, type SheetAction } from '@/components/Sheet'
@@ -50,13 +51,14 @@ export default function PostScreen() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: key })
   const refreshList = () => queryClient.invalidateQueries({ queryKey: qk.forum(ids.channelId) })
   const fail = (e: unknown) => Alert.alert(t('common.actionFailed'), errorMessage(e))
-  const patchPost = (patch: { content?: string; pinned?: boolean; locked?: boolean }) =>
+  const patchPost = (patch: { pinned?: boolean; locked?: boolean }) =>
     forumApi.updatePost(ids.serverId, ids.channelId, ids.postId, patch).then(() => Promise.all([refresh(), refreshList()]))
 
   // update_post / delete_post : texte = créateur ; épingler, verrouiller = MANAGE_MESSAGES ; supprimer = les deux.
   const mine = !!post?.creatorId && post.creatorId === meId
   const menuActions: SheetAction[] = []
-  if (post && mine) menuActions.push({ label: t('social.post.editText'), icon: 'create-outline', onPress: () => setEditText(post.content ?? '') })
+  // Publication chiffrée illisible (clé en attente) : rien à modifier.
+  if (post && mine && post.e2e !== 'locked') menuActions.push({ label: t('social.post.editText'), icon: 'create-outline', onPress: () => setEditText(post.content ?? '') })
   if (post && canModerate) {
     menuActions.push({ label: post.pinned ? t('chat.unpin') : t('chat.pin'), icon: 'pin-outline', onPress: () => void patchPost({ pinned: !post.pinned }).catch(fail) })
     menuActions.push({
@@ -89,11 +91,13 @@ export default function PostScreen() {
     })
 
   const saveText = () => {
-    if (editText === null) return
+    if (editText === null || !post) return
     setSaving(true)
-    patchPost({ content: editText.trim() })
+    forumApi
+      .editPost(ids.serverId, ids.channelId, post, editText.trim())
+      .then(() => Promise.all([refresh(), refreshList()]))
       .then(() => setEditText(null))
-      .catch(fail)
+      .catch((e) => Alert.alert(t('common.actionFailed'), e2eErrorText(e) ?? errorMessage(e)))
       .finally(() => setSaving(false))
   }
 
@@ -135,7 +139,7 @@ export default function PostScreen() {
           sendWithAttachments(
             body,
             files,
-            (has) => forumApi.reply(ids.serverId, ids.channelId, ids.postId, body, has),
+            (has) => (post ? forumApi.reply(ids.serverId, ids.channelId, post, body, has) : Promise.resolve(null)),
             (id, f) => forumApi.uploadReply(ids.serverId, ids.channelId, ids.postId, id, f),
             (id) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, id),
           ).finally(() => {
@@ -143,7 +147,7 @@ export default function PostScreen() {
             void refreshList()
           })
         }
-        onEdit={(m, body) => forumApi.editReply(ids.serverId, ids.channelId, ids.postId, m.id, body).then(refresh)}
+        onEdit={(m, body) => (post ? forumApi.editReply(ids.serverId, ids.channelId, post, m, body).then(refresh) : Promise.resolve())}
         onDelete={(m) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, m.id).then(() => Promise.all([refresh(), refreshList()]))}
         canModerate={canModerate}
         disabledReason={post?.locked ? t('social.post.locked') : null}

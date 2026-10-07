@@ -19,7 +19,10 @@ import {
 import { normalizeBotCommands, type SlashCommand } from '@/features/composer/commands'
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
-import { forwardText, openRawList, withSeal } from '@/e2e/conversations'
+import { forwardText, mustEncrypt, openRaw, openRawList, seal, withSeal } from '@/e2e/conversations'
+import { isBotCommand, sendChannelText } from '@/e2e/channels'
+import { firstUrl, mentionMeta } from '@/e2e/channelText'
+import { queryClient } from '@/lib/queryClient'
 
 /**
  * API de messagerie unifiée : un seul contrat quel que soit le type de
@@ -47,16 +50,37 @@ export interface UploadFile {
   size?: number | null
 }
 
-/** MP et groupes : conversation chiffrable de bout en bout. */
-function e2eConv(ref: ConversationRef): ['dm' | 'group', string] | null {
-  return ref.kind === 'dm' ? ['dm', ref.dmId] : ref.kind === 'group' ? ['group', ref.groupId] : null
+/** Conversation chiffrable de bout en bout (MP, groupe, salon) : [kind, id] du module e2e. */
+function e2eConv(ref: ConversationRef): ['dm' | 'group' | 'channel', string] {
+  return ref.kind === 'dm' ? ['dm', ref.dmId] : ref.kind === 'group' ? ['group', ref.groupId] : ['channel', ref.channelId]
 }
 
-/** Messages bruts déchiffrés sur l'appareil (MP et groupes), puis adaptés. */
+/** Messages bruts déchiffrés sur l'appareil, puis adaptés. */
 async function adaptList(ref: ConversationRef, raw: unknown): Promise<ChatMessage[]> {
-  const list = Array.isArray(raw) ? raw : []
   const conv = e2eConv(ref)
-  return (conv ? await openRawList(conv[0], conv[1], list) : list).map((m) => adaptMessage(ref, m))
+  return (await openRawList(conv[0], conv[1], Array.isArray(raw) ? raw : [])).map((m) => adaptMessage(ref, m))
+}
+
+/** Commandes des bots du serveur (même cache que la barre de saisie). */
+const botCommandNames = (serverId: string) =>
+  queryClient
+    .fetchQuery({ queryKey: ['server-commands', serverId], queryFn: () => messagesApi.commands(serverId), staleTime: 60_000 })
+    .then((list) => list.map((c) => c.name))
+    .catch(() => [] as string[])
+
+/**
+ * Salon : mentions toujours envoyées en métadonnées ; texte chiffré dès que j'ai une clé
+ * (AutoMod et aperçu de lien faits ici), sauf commande de bot connue qui part en clair.
+ */
+async function sendChannel(ref: Extract<ConversationRef, { kind: 'channel' }>, text: string, extra: Record<string, unknown>): Promise<ChatMessage> {
+  const meta = { ...extra, ...mentionMeta(text) }
+  if (text.startsWith('/') && isBotCommand(text, await botCommandNames(ref.serverId)))
+    return adaptMessage(ref, await http.post<unknown>(base(ref), { content: text, ...meta }))
+  const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }), { preview: true })
+  const m = adaptMessage(ref, sent.result)
+  if (!sent.encrypted) return m
+  // Le serveur ne renvoie pas le texte : on garde celui saisi et l'aperçu calculé.
+  return { ...m, content: text, e2e: 'ok', unencrypted: false, preview: normalizeOg(sent.extra.p, firstUrl(text) ?? '') }
 }
 
 export const messagesApi = {
@@ -84,19 +108,25 @@ export const messagesApi = {
       // Messages éphémères : seuls les salons les gèrent côté serveur (comme le web).
       ...(ref.kind === 'channel' && input.expiresInSeconds ? { expires_at_seconds: input.expiresInSeconds } : {}),
     }
+    if (ref.kind === 'channel') return sendChannel(ref, input.content ?? '', extra)
     const conv = e2eConv(ref)
-    if (!conv) return adaptMessage(ref, await http.post<unknown>(base(ref), { content: input.content, ...extra }))
     // MP/groupe : chiffré sur l'appareil ; le serveur ne renvoie pas le texte, on garde celui saisi.
     const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }))
     const m = adaptMessage(ref, raw)
     return raw?.enc ? { ...m, content: input.content, e2e: 'ok' } : m
   },
 
-  /** Édition ; MP/groupe chiffré : même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */
-  edit(ref: ConversationRef, messageId: string, content: string, clientMsgId?: string | null) {
+  /** Édition chiffrée : même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */
+  async edit(ref: ConversationRef, messageId: string, content: string, clientMsgId?: string | null): Promise<void> {
+    const url = base(ref) + path`/${messageId}`
+    const cmid = clientMsgId ?? Crypto.randomUUID()
+    if (ref.kind === 'channel') {
+      // `content` est une chaîne côté serveur : vide quand le texte est chiffré.
+      await sendChannelText(ref.serverId, ref.channelId, content, (body) => http.patch(url, { ...body, content: body.content ?? '' }), { clientMsgId: cmid, edit: true })
+      return
+    }
     const conv = e2eConv(ref)
-    if (!conv) return http.patch(base(ref) + path`/${messageId}`, { content })
-    return withSeal(conv[0], conv[1], content, (body) => http.patch(base(ref) + path`/${messageId}`, body), clientMsgId ?? Crypto.randomUUID())
+    await withSeal(conv[0], conv[1], content, (body) => http.patch(url, body), cmid)
   },
 
   remove(ref: ConversationRef, messageId: string) {
@@ -157,17 +187,26 @@ export const messagesApi = {
           : path`/dms/groups/${ref.groupId}/pins`
     const raw = await http.get<unknown>(p)
     const conv = e2eConv(ref)
-    if (!conv || !Array.isArray(raw)) return normalizePins(ref.kind, raw)
-    // MP : { message: {...} } ; groupe : le message lui-même.
-    if (ref.kind === 'group') return normalizePins(ref.kind, await openRawList('group', conv[1], raw))
+    if (!Array.isArray(raw)) return normalizePins(ref.kind, raw)
+    // MP : { message: {...} } ; salon et groupe : le message lui-même.
+    if (ref.kind !== 'dm') return normalizePins(ref.kind, await openRawList(conv[0], conv[1], raw))
     const msgs = await openRawList('dm', conv[1], raw.map((r) => (r as { message?: unknown }).message ?? null))
     return normalizePins(ref.kind, raw.map((r, i) => ({ ...(r as object), message: msgs[i] })))
   },
 
-  /** Copie le message (salon ou DM) dans un salon textuel ; le serveur applique les règles d'envoi du salon cible. */
-  forward(messageId: string, channelId: string) {
-    // MP chiffré : texte déchiffré mémorisé par l'écran de conversation (le salon cible n'est pas chiffré).
-    return http.post(path`/messages/${messageId}/forward`, { channel_id: channelId, content: forwardText.get(messageId) })
+  /**
+   * Copie le message (salon ou DM) dans un salon textuel ; le serveur applique les règles d'envoi du salon cible.
+   * Salon cible chiffré : le texte (mémorisé par l'écran de conversation) est chiffré pour lui ;
+   * sinon une source chiffrée part en clair (`content`, avertissement à l'écran de transfert).
+   */
+  async forward(messageId: string, channelId: string) {
+    const src = forwardText.get(messageId)
+    const url = path`/messages/${messageId}/forward`
+    if (src?.text && (await mustEncrypt('channel', channelId))) {
+      const sealed = await seal('channel', channelId, src.text)
+      if (sealed) return http.post(url, { channel_id: channelId, ...sealed })
+    }
+    return http.post(url, { channel_id: channelId, content: src?.encrypted ? src.text : undefined })
   },
 
   /** Rappel livré par l'événement temps réel REMINDER à l'échéance (reminders.rs). */
@@ -179,8 +218,16 @@ export const messagesApi = {
     return normalizeEdits(await http.get<unknown>(path`/messages/${messageId}/edits`))
   },
 
+  /** Messages de salon chiffrés : déchiffrés ici avec la clé du salon (auteur `author_id`). */
   async saved(): Promise<SavedItem[]> {
-    return normalizeSaved(await http.get<unknown>('/saved'))
+    const raw = await http.get<unknown>('/saved')
+    if (!Array.isArray(raw)) return normalizeSaved(raw)
+    const out: unknown[] = []
+    for (const r of raw) {
+      const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>
+      out.push(o.server_id && o.enc && typeof o.channel_id === 'string' ? await openRaw('channel', o.channel_id, o) : r)
+    }
+    return normalizeSaved(out)
   },
 
   save(ref: ConversationRef, m: ChatMessage) {
@@ -219,15 +266,18 @@ export const messagesApi = {
 
   /** Mes messages programmés non encore envoyés dans ce salon. */
   async scheduled(serverId: string, channelId: string): Promise<ScheduledItem[]> {
-    return normalizeScheduled(await http.get<unknown>(path`/servers/${serverId}/channels/${channelId}/scheduled`))
+    const raw = await http.get<unknown>(path`/servers/${serverId}/channels/${channelId}/scheduled`)
+    return normalizeScheduled(await openRawList('channel', channelId, Array.isArray(raw) ? raw : []))
   },
+  /** Chiffré à la création (portée du salon) ; AutoMod appliqué avant. */
   schedule: (serverId: string, channelId: string, content: string, sendAt: Date) =>
-    http.post(path`/servers/${serverId}/channels/${channelId}/scheduled`, { content, send_at: sendAt.toISOString() }),
+    sendChannelText(serverId, channelId, content, (body) =>
+      http.post(path`/servers/${serverId}/channels/${channelId}/scheduled`, { ...body, content: body.content ?? '', send_at: sendAt.toISOString() })),
   cancelScheduled: (id: string) => http.delete(path`/scheduled/${id}`),
 
   /** Signalement (messages de salon uniquement côté serveur). */
   report(messageId: string, reason: ReportReason, comment?: string, plaintext?: string | null) {
-    // MP chiffré : le signaleur joint le texte déchiffré (seul moyen de modérer).
+    // Message chiffré (MP ou salon) : le signaleur joint le texte déchiffré (seul moyen de modérer).
     return http.post(path`/messages/${messageId}/report`, { reason, comment, content: plaintext ?? undefined })
   },
 }

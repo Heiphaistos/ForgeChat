@@ -24,22 +24,26 @@ function Overlay({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Textes d'un code de récupération autre que celui du compte (clé du serveur). */
+export interface RecoveryTexts { title: string; desc: string; fileHeader: string; fileName: string }
+
 /** Code de récupération : affiché une seule fois, copie/téléchargement, « je l'ai noté ». */
-export function RecoveryCodeModal({ code, onDone }: { code: string; onDone: () => void }) {
+export function RecoveryCodeModal({ code, onDone, texts }: { code: string; onDone: () => void; texts?: RecoveryTexts }) {
   const t = useT()
   const [noted, setNoted] = useState(false)
   const shown = formatRecoveryCode(code)
   const copy = () => navigator.clipboard.writeText(shown).then(() => toast.success(t('e2e.recovery.copied')), () => {})
   const download = () => {
-    const url = URL.createObjectURL(new Blob([`${t('e2e.recovery.fileHeader')}\n\n${shown}\n`], { type: 'text/plain' }))
-    const a = Object.assign(document.createElement('a'), { href: url, download: 'forgechat-code-de-recuperation.txt' })
+    const header = texts?.fileHeader ?? t('e2e.recovery.fileHeader')
+    const url = URL.createObjectURL(new Blob([`${header}\n\n${shown}\n`], { type: 'text/plain' }))
+    const a = Object.assign(document.createElement('a'), { href: url, download: texts?.fileName ?? 'forgechat-code-de-recuperation.txt' })
     a.click()
     URL.revokeObjectURL(url)
   }
   return (
     <Overlay>
-      <h2 className="text-xl font-bold text-white mb-2">{t('e2e.recovery.title')}</h2>
-      <p className="text-sm text-fc-muted mb-4">{t('e2e.recovery.desc')}</p>
+      <h2 className="text-xl font-bold text-white mb-2">{texts?.title ?? t('e2e.recovery.title')}</h2>
+      <p className="text-sm text-fc-muted mb-4">{texts?.desc ?? t('e2e.recovery.desc')}</p>
       <div className="font-mono text-lg text-center text-white bg-fc-input rounded py-3 mb-3 select-all tracking-wider">{shown}</div>
       <div className="flex gap-2 mb-4">
         <button type="button" onClick={copy} className="flex-1 flex items-center justify-center gap-2 py-2 bg-fc-hover text-white rounded text-sm">
@@ -169,7 +173,9 @@ export default function E2EGate() {
     void reencryptLegacy()
     const offReq = on('KEY_REQUEST', (d: any) => { void answerKeyRequest(d) })
     const offKeys = on('E2E_KEYS', (d: any) => forgetConv(d.conv_kind, d.conv_id))
-    return () => { offReq(); offKeys() }
+    // Clé de récupération d'un serveur créée ou changée : les prochaines époques doivent l'inclure.
+    const offServerKey = on('SERVER_KEY', () => forgetConv())
+    return () => { offReq(); offKeys(); offServerKey() }
   }, [status, on])
   useEffect(() => { if (!userId) forgetConv() }, [userId])
 

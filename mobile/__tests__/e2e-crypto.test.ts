@@ -29,6 +29,27 @@ test('AES-GCM + AAD', async () => {
   await expect(c.aesGcmDecrypt(d(x.key), d(x.iv), d(x.ct), x.aad + 'x')).rejects.toThrow()
 })
 
+test('salons : portée du fil, de la publication et du sondage', async () => {
+  for (const x of [V.threadMessage, V.forumPost, V.poll]) {
+    expect(await c.encryptMessage(d(x.key), x.scope, x.epoch, x.author, x.clientMsgId, x.body, d(x.iv))).toEqual(x.enc)
+    expect(await c.decryptMessage(d(x.key), x.scope, x.enc, x.author, x.clientMsgId)).toEqual(x.body)
+  }
+  const x = V.threadMessage
+  await expect(c.decryptMessage(d(x.key), x.scope.split('/')[0], x.enc, x.author, x.clientMsgId)).rejects.toThrow()
+  expect(c.threadScope('a', 'b')).toBe('channel:a/thread:b')
+})
+
+test('clé de récupération du serveur : mêmes octets que le web', async () => {
+  const x = V.serverKey
+  expect(await c.wrapServerKey(d(x.ownerPriv), d(x.serverPub), d(x.serverPriv), x.serverId, x.owner, d(x.iv))).toEqual(x.ownerWrapped)
+  expect(await c.wrapServerKey(d(x.serverPriv), d(x.ownerPub), d(x.serverPriv), x.serverId, x.owner, d(x.iv))).toEqual(x.ownerWrapped)
+  expect(e(await c.unwrapServerKey(d(x.ownerPriv), d(x.serverPub), x.ownerWrapped, x.serverId, x.owner))).toBe(x.serverPriv)
+  const code = c.normalizeRecoveryCode(x.recoveryCode)!
+  expect(e(await c.unwrapKey(x.recovery, code, c.serverRecoveryAad(x.serverId), x.iterations))).toBe(x.serverPriv)
+  const s = V.serverEpoch
+  expect(e(await c.unwrapConvKey(d(x.serverPriv), d(x.ownerPub), s.wrapped, s.conv, s.epoch, s.member, s.sender))).toBe(s.key)
+})
+
 test('PBKDF2', async () => {
   const x = V.pbkdf2
   expect(e(await c.pbkdf2(x.password, d(x.salt), x.iterations))).toBe(x.key)

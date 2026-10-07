@@ -37,6 +37,10 @@ pub struct SavedMessage {
     pub channel_name: Option<String>,
     pub server_name: Option<String>,
     pub attachments: Vec<crate::models::message::Attachment>,
+    /// Message de salon chiffré : aucune copie du texte, l'appli déchiffre l'original.
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
+    pub author_id: Option<Uuid>,
 }
 
 pub async fn save_message(
@@ -62,12 +66,14 @@ pub async fn save_message(
             return Err(AppError::Forbidden);
         }
     }
-    // MP chiffré de bout en bout : aucune copie du texte en clair côté serveur.
-    let encrypted: bool = body.server_id.is_none()
-        && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND enc IS NOT NULL)")
-            .bind(body.message_id)
-            .fetch_one(&state.db)
-            .await?;
+    // Message chiffré de bout en bout (MP ou salon) : aucune copie du texte en clair côté serveur.
+    let encrypted: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND enc IS NOT NULL)
+             OR EXISTS(SELECT 1 FROM messages WHERE id=$1 AND enc IS NOT NULL)",
+    )
+    .bind(body.message_id)
+    .fetch_one(&state.db)
+    .await?;
     let content = if encrypted { None } else { body.content };
     sqlx::query(
         "INSERT INTO saved_messages (user_id, message_id, channel_id, server_id, content, author_username, author_avatar)
@@ -102,7 +108,8 @@ pub async fn get_saved(
                 sm.content, sm.author_username, sm.author_avatar, sm.saved_at,
                 COALESCE(m.created_at, sm.saved_at) as created_at,
                 c.name as channel_name,
-                s.name as server_name
+                s.name as server_name,
+                m.enc, m.client_msg_id, m.user_id AS author_id
          FROM saved_messages sm
          LEFT JOIN messages m ON m.id = sm.message_id
          LEFT JOIN channels c ON c.id = sm.channel_id
@@ -137,6 +144,9 @@ pub async fn get_saved(
             channel_name: r.get("channel_name"),
             server_name: r.get("server_name"),
             attachments: all_attachments.iter().filter(|a| a.message_id == mid).cloned().collect(),
+            enc: r.get("enc"),
+            client_msg_id: r.get("client_msg_id"),
+            author_id: r.get("author_id"),
         }
     }).collect();
 

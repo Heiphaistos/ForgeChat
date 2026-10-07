@@ -9,6 +9,7 @@ import Animated from 'react-native-reanimated'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { ErrorState, Loading } from '@/components/ui'
 import { LIMITS } from '@/config/env'
+import { e2eErrorText } from '@/e2e/conversations'
 import { hasEditableText } from '@/features/composer/formats'
 import { QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
@@ -89,7 +90,7 @@ export function ReplyThreadView({
         setEditing(null)
         setFiles((prev) => prev.filter((f) => !sent.includes(f)))
       })
-      .catch((e) => Alert.alert(editing ? t('social.reply.editFailed') : t('composer.sendFailed'), errorMessage(e)))
+      .catch((e) => Alert.alert(editing ? t('social.reply.editFailed') : t('composer.sendFailed'), e2eErrorText(e) ?? errorMessage(e)))
       .finally(() => setSending(false))
   }
 
@@ -115,7 +116,7 @@ export function ReplyThreadView({
   const actionsFor = (m: ChatMessage): SheetAction[] => {
     const mine = !!me && m.authorId === me.id
     const list: SheetAction[] = []
-    if (m.content) list.push({ label: t('chat.copyText'), icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
+    if (m.content && m.e2e !== 'locked') list.push({ label: t('chat.copyText'), icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
     if (mine && onEdit && hasEditableText(m) && !disabledReason)
       list.push({
         label: t('chat.edit'),

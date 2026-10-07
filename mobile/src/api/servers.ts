@@ -1,3 +1,4 @@
+import { serverKeyForNewOwner } from '@/e2e/serverKey'
 import { http, path } from '@/lib/http'
 import type { Ban, Category, Channel, Invite, InviteInfo, Member, Role, Server, ServerDetail } from '@/types/models'
 
@@ -70,7 +71,9 @@ export const serversApi = {
     fd.append(kind, file as unknown as Blob)
     return http.upload<{ icon?: string; banner?: string }>(path`/servers/${id}/${kind}`, fd)
   },
-  transfer: (id: string, userId: string, password: string) => http.post(path`/servers/${id}/transfer`, { user_id: userId, password }),
+  /** Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code). */
+  transfer: async (id: string, userId: string, password: string) =>
+    http.post(path`/servers/${id}/transfer`, { user_id: userId, password, server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
   /** Pseudo sur ce serveur ; null = retirer. */
   setNickname: (id: string, nickname: string | null) => http.patch(path`/servers/${id}/nickname`, { nickname }),
   /** Profil propre à ce serveur : bio (null = celle du compte). */

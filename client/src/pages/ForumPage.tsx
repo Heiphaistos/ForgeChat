@@ -16,6 +16,10 @@ import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { useTypeToFocus } from '../hooks/useTypeToFocus'
 import { useT } from '../i18n'
+import { channelSendError } from '../e2e/channels'
+import { completeChannelKeys } from '../e2e/conversations'
+import { openPost, openPosts, sealPost } from '../e2e/channelScopes'
+import { ChannelLock } from '../e2e/ChannelBadge'
 import UserPopup from '../components/UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 
@@ -49,18 +53,20 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
   })
 
   const create = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/posts`, {
-      title: title.trim(),
-      content: content.trim() || undefined,
-      tags,
-      ...(mediaFile ? { media_url: mediaFile } : {}),
-    }),
+    // Salon chiffré : titre et contenu chiffrés ensemble (portée de la publication), tags et média en clair.
+    mutationFn: () => sealPost(serverId, channelId, title.trim(), content.trim(), body =>
+      api.post(`/servers/${serverId}/channels/${channelId}/posts`, {
+        ...body,
+        content: body.content ?? undefined,
+        tags,
+        ...(mediaFile ? { media_url: mediaFile } : {}),
+      })),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
       toast.success(t('forum.created'))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? t('common.error'))),
   })
 
   const addTag = () => {
@@ -222,7 +228,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
     queryKey: ['forum', channelId],
     queryFn: ({ pageParam }) => api.get<ForumPost[]>(`/servers/${serverId}/channels/${channelId}/posts`, {
       params: { limit: POST_PAGE, ...(pageParam ? { before: pageParam } : {}) },
-    }).then(r => r.data),
+    }).then(r => openPosts(channelId, r.data)),
     initialPageParam: null as string | null,
     getNextPageParam: last => (last.length === POST_PAGE ? last[last.length - 1]?.id ?? null : null),
     enabled: !!channelId,
@@ -246,7 +252,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
     if (found) { setSelectedPostState(found); return }
     // Post hors de la page chargée : le demander directement
     api.get(`/servers/${serverId}/channels/${channelId}/posts/${urlPostId}`, { params: { limit: 1 } })
-      .then(r => { if (r.data?.post) setSelectedPostState(r.data.post) })
+      .then(async r => { if (r.data?.post) setSelectedPostState(await openPost(channelId, r.data.post as ForumPost)) })
       .catch(() => {})
   }, [urlPostId, allPosts.length, postsLoading])
 
@@ -294,8 +300,14 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
         if (d.post_id) qc.invalidateQueries({ queryKey: ['forum-post', d.post_id] })
       }
     })
-    return () => { offCreate(); offUpdate(); offDelete(); offReply() }
+    // Clés du salon reçues : publications en attente s'ouvrent.
+    const offKeys = on('E2E_KEYS', (d: any) => {
+      if (d.conv_kind === 'channel' && d.conv_id === channelId) qc.invalidateQueries({ queryKey: ['forum', channelId] })
+    })
+    return () => { offCreate(); offUpdate(); offDelete(); offReply(); offKeys() }
   }, [channelId, on, qc, selectedPost?.id])
+  // Salon chiffré : clés distribuées aux membres arrivés depuis, et à la clé du serveur.
+  useEffect(() => { void completeChannelKeys(channelId) }, [channelId])
 
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
@@ -325,6 +337,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
         </button>
         {media ? <Images size={18} className="text-fc-muted flex-shrink-0" /> : <MessagesSquare size={18} className="text-fc-muted flex-shrink-0" />}
         <span className="font-semibold text-white">{channel.name}</span>
+        <ChannelLock channelId={channelId} />
         {channel.topic && (
           <>
             <div className="w-px h-4 bg-fc-hover mx-1" />

@@ -28,6 +28,23 @@ impl ParsedMentions {
     pub fn is_empty(&self) -> bool {
         self.users.is_empty() && self.roles.is_empty() && self.names.is_empty() && !self.everyone && !self.here
     }
+
+    /// Mentions déclarées en métadonnées par l'appli (message chiffré) : le
+    /// serveur notifie sans lire le texte. Bornées : 100 membres, 20 rôles.
+    pub fn from_meta(m: &crate::models::message::MentionMeta) -> Self {
+        ParsedMentions {
+            users: m.mentions.iter().flatten().take(100).copied().collect(),
+            roles: m.mention_roles.iter().flatten().take(20).copied().collect(),
+            names: HashSet::new(),
+            everyone: m.mention_everyone.unwrap_or(false),
+            here: m.mention_here.unwrap_or(false),
+        }
+    }
+
+    /// Nombre de mentions (règle AutoMod « mentions max »).
+    pub fn count(&self) -> usize {
+        self.users.len() + self.roles.len() + self.names.len() + usize::from(self.everyone) + usize::from(self.here)
+    }
 }
 
 /// Retire les blocs ``` et `code` : une mention citée en code ne notifie pas.
@@ -150,7 +167,13 @@ pub struct ChannelMessage<'a> {
     pub author_id: Uuid,
     pub author_username: &'a str,
     pub author_avatar: Option<&'a str>,
-    pub content: &'a str,
+    /// Texte en clair ; None pour un message chiffré (jamais lu par le serveur).
+    pub content: Option<&'a str>,
+    /// Mentions résolues (texte en clair analysé, ou métadonnées d'un message chiffré).
+    pub mentions: ParsedMentions,
+    /// Contenu chiffré transmis tel quel dans MENTION_CREATE (aperçu déchiffré par l'appli).
+    pub enc: Option<&'a serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
     /// Auteur du message cité : une réponse le notifie (comportement Discord).
     pub reply_author: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -161,7 +184,7 @@ pub struct ChannelMessage<'a> {
 /// reçoit `MENTION_CREATE` d'abord et ne double pas la notification.
 pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) -> anyhow::Result<()> {
     use sqlx::Row;
-    let parsed = parse_mentions(m.content);
+    let parsed = &m.mentions;
     if parsed.is_empty() && m.reply_author.is_none() {
         return Ok(());
     }
@@ -333,6 +356,8 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
         "author_username": m.author_username,
         "author_avatar": m.author_avatar,
         "content": m.content,
+        "enc": m.enc,
+        "client_msg_id": m.client_msg_id,
         "created_at": m.created_at,
     });
     let mut offline: Vec<Uuid> = Vec::new();
@@ -349,7 +374,11 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
             }
         }
     }
-    let body: String = humanize(m.content, &names).chars().take(200).collect();
+    // Message chiffré : aucun texte dans les notifications poussées par le serveur.
+    let body: String = match m.content {
+        Some(c) => humanize(c, &names).chars().take(200).collect(),
+        None => "Message chiffré".into(),
+    };
     crate::mobile_push::spawn_send(state, offline.clone(), crate::mobile_push::Notice::new(
         format!("{} · #{}", server_name, channel_name),
         &format!("{} : {}", m.author_username, body),
@@ -404,6 +433,27 @@ pub fn push_direct(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn encrypted_message_mentions_come_from_metadata_only() {
+        use crate::models::message::MentionMeta;
+        let (u, r) = (Uuid::new_v4(), Uuid::new_v4());
+        let meta = MentionMeta {
+            mentions: Some(vec![u; 3]),
+            mention_roles: Some(vec![r]),
+            mention_everyone: Some(true),
+            mention_here: None,
+        };
+        let p = ParsedMentions::from_meta(&meta);
+        assert_eq!(p.users, HashSet::from([u]));
+        assert_eq!(p.roles, HashSet::from([r]));
+        assert!(p.everyone && !p.here && p.names.is_empty());
+        assert_eq!(p.count(), 3);
+        // Bornes : 100 membres au plus.
+        let many = MentionMeta { mentions: Some((0..500).map(|_| Uuid::new_v4()).collect()), ..Default::default() };
+        assert_eq!(ParsedMentions::from_meta(&many).users.len(), 100);
+        assert!(ParsedMentions::from_meta(&MentionMeta::default()).is_empty());
+    }
 
     #[test]
     fn parses_tokens_and_legacy_text() {

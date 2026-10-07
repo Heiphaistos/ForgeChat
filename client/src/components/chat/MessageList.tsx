@@ -425,6 +425,11 @@ export default function MessageList({
     const m = messages.find(x => x.id === id) as { content: string | null; enc?: unknown; e2e?: string } | undefined
     return m?.enc && m.e2e === 'ok' ? m.content : undefined
   }
+  // Texte lisible du message (clair ou déchiffré) : rechiffré pour un salon cible chiffré.
+  const readableText = (id: string) => {
+    const m = messages.find(x => x.id === id) as { content: string | null; e2e?: string } | undefined
+    return m && m.e2e !== 'locked' ? m.content : null
+  }
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
   const density = useMemo(() => localStorage.getItem('fc_density') ?? 'normal', [])
@@ -987,6 +992,7 @@ export default function MessageList({
         <ForwardModal
           messageId={forwardingMsg.id}
           plaintext={encryptedText(forwardingMsg.id)}
+          sourceText={readableText(forwardingMsg.id)}
           sourceChannelId={channelId}
           sourceServerId={serverId}
           onClose={() => setForwardingMsg(null)}

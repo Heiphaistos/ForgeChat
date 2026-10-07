@@ -69,6 +69,7 @@ export default function AppLayout() {
         <Stack.Screen name="server/[serverId]/settings/bans" options={{ title: t('screen.bans') }} />
         <Stack.Screen name="server/[serverId]/settings/invites" options={{ title: t('screen.invites') }} />
         <Stack.Screen name="server/[serverId]/settings/transfer" options={{ title: t('screen.transfer') }} />
+        <Stack.Screen name="server/[serverId]/settings/encryption" options={{ title: t('e2e.serverKey.title') }} />
         <Stack.Screen name="user/[userId]" options={{ title: t('screen.profile'), presentation: 'modal' }} />
         <Stack.Screen name="friends/add" options={{ title: t('friends.add'), presentation: 'modal' }} />
         <Stack.Screen name="settings/profile" options={{ title: t('you.profile') }} />

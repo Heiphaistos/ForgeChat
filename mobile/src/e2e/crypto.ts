@@ -193,8 +193,15 @@ export interface EncPayload { v: 1; epoch: number; iv: string; ct: string }
 /** Contenu en clair d'un message, avant chiffrement. */
 export interface MsgBody { t: string; [k: string]: unknown }
 
-/** Identifiant de conversation dans l'AAD : `dm:<id>` ou `group:<id>`. */
-export const convName = (kind: 'dm' | 'group', id: string) => `${kind}:${id}`
+/** Identifiant de conversation dans l'AAD : `dm:<id>`, `group:<id>` ou `channel:<id>`. */
+export const convName = (kind: 'dm' | 'group' | 'channel', id: string) => `${kind}:${id}`
+/**
+ * Portée d'un contenu de salon dans l'AAD des messages (§10) : la clé reste celle
+ * du salon, la portée lie le contenu à son fil, sa publication ou son sondage.
+ */
+export const threadScope = (channelId: string, threadClientId: string) => `channel:${channelId}/thread:${threadClientId}`
+export const postScope = (channelId: string, postClientId: string) => `channel:${channelId}/post:${postClientId}`
+export const pollScope = (channelId: string, pollClientId: string) => `channel:${channelId}/poll:${pollClientId}`
 export const ckInfo = (conv: string, epoch: number, member: string) => `forgechat ck v1|${conv}|${epoch}|${member}`
 export const ckAad = (conv: string, epoch: number, member: string, sender: string) => `ck v1|${conv}|${epoch}|${member}|${sender}`
 export const msgAad = (conv: string, epoch: number, author: string, clientMsgId: string) =>
@@ -261,4 +268,37 @@ export const mediaKeyIndex = (epoch: number) => epoch % MEDIA_KEYRING
  */
 export async function mediaKey(convKey: Uint8Array, conv: string, epoch: number): Promise<string> {
   return b64uEncode(await hkdf(convKey, new Uint8Array(0), mediaInfo(conv, epoch), AES_KEY_BYTES))
+}
+
+// ─── Clé de récupération d'un serveur (§11) ─────────────────────────────────
+/** Membre virtuel « clé du serveur » des enveloppes d'époque d'un salon. */
+export const serverMember = (serverId: string) => `server:${serverId}`
+/** AAD de la clé privée du serveur chiffrée par son code de récupération (format de `wrapKey`). */
+export const serverRecoveryAad = (serverId: string) => `forgechat server-recovery v1|${serverId}`
+const skInfo = (serverId: string, owner: string) => `forgechat sk v1|${serverId}|${owner}`
+const skAad = (serverId: string, owner: string) => `sk v1|${serverId}|${owner}`
+
+/**
+ * Enveloppe le scalaire de la clé du serveur pour le propriétaire `owner` :
+ * AES-GCM(HKDF(ECDH(priv, otherPub))). Côté propriétaire `priv` = sa clé de compte
+ * et `otherPub` = clé publique du serveur ; à un transfert, l'ancien propriétaire
+ * passe la clé du serveur et la clé publique du nouveau (même secret ECDH).
+ */
+export async function wrapServerKey(
+  priv: Uint8Array, otherPub: Uint8Array, serverPriv: Uint8Array, serverId: string, owner: string,
+  iv: Uint8Array = randomBytes(IV_BYTES),
+): Promise<ConvWrapped> {
+  const k = await hkdf(await ecdh(priv, otherPub), new Uint8Array(0), skInfo(serverId, owner))
+  return { v: 1, iv: b64uEncode(iv), ct: b64uEncode(await aesGcmEncrypt(k, iv, serverPriv, skAad(serverId, owner))) }
+}
+
+/** Ouvre l'enveloppe du propriétaire (sa clé de compte, clé publique du serveur). */
+export async function unwrapServerKey(
+  ownerPriv: Uint8Array, serverPub: Uint8Array, w: ConvWrapped, serverId: string, owner: string,
+): Promise<Uint8Array> {
+  if (w.v !== 1) throw new Error('version inconnue')
+  const k = await hkdf(await ecdh(ownerPriv, serverPub), new Uint8Array(0), skInfo(serverId, owner))
+  const key = await aesGcmDecrypt(k, b64uDecode(w.iv), b64uDecode(w.ct), skAad(serverId, owner))
+  if (key.length !== 32) throw new Error('clé de serveur invalide')
+  return key
 }

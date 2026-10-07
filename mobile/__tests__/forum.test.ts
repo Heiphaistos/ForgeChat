@@ -34,6 +34,7 @@ describe('normalizePost (forum.rs::list_posts / get_post)', () => {
       replyCount: 4,
       lastActivity: '2026-10-02T10:00:00Z',
       mediaUrl: null,
+      clientMsgId: null,
     })
   })
 

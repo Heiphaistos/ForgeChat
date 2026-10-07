@@ -309,6 +309,7 @@ pub async fn bot_send_message(
         reactions: vec![],
         expires_at: None,
         poll_id: None,
+        e2e: crate::models::message::MsgE2e::plain(true),
     };
 
     let event = serde_json::json!({ "type": "MESSAGE_CREATE", "server_id": body.server_id, "message": full_msg });

@@ -1,3 +1,4 @@
+import { openRaw } from '@/e2e/conversations'
 import { http, path } from '@/lib/http'
 import type { MentionItem, UnreadItem, User } from '@/types/models'
 
@@ -65,6 +66,13 @@ export const usersApi = {
   setNote: (id: string, content: string) => http.put(path`/notes/${id}`, { content }),
   unread: () => http.get<UnreadItem[]>('/unread'),
   markAllRead: () => http.post('/unread/mark-all'),
-  mentions: () => http.get<MentionItem[]>('/user/mentions'),
+  /** Mentions non lues ; celles d'un salon chiffré sont déchiffrées sur l'appareil pour l'aperçu. */
+  mentions: async (): Promise<MentionItem[]> => {
+    const list = await http.get<MentionItem[]>('/user/mentions')
+    const out: MentionItem[] = []
+    for (const m of Array.isArray(list) ? list : [])
+      out.push(m.enc ? ((await openRaw('channel', m.channel_id, m as unknown as Record<string, unknown>)) as unknown as MentionItem) : m)
+    return out
+  },
   deleteAccount: (password: string) => http.delete('/users/me', { body: { password } }),
 }

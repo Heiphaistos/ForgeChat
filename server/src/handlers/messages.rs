@@ -9,10 +9,11 @@ use redis::AsyncCommands;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
+    handlers::e2e_channel,
     handlers::servers::{require_member_and_channel, require_permission, require_permission_and_channel},
     models::role::Permissions,
     middleware::auth::Claims,
-    models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, SendMessageRequest},
+    models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, MsgE2e, SendMessageRequest},
     state::AppState,
 };
 
@@ -50,7 +51,8 @@ pub async fn get_messages(
         let half = limit / 2;
         let before_rows = sqlx::query(
             "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
+                    rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
@@ -64,7 +66,8 @@ pub async fn get_messages(
 
         let after_rows = sqlx::query(
             "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
+                    rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
@@ -92,7 +95,8 @@ pub async fn get_messages(
 
         sqlx::query(
             "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
+                    rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
@@ -106,7 +110,8 @@ pub async fn get_messages(
     } else {
         sqlx::query(
             "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
-                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
+                    rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
+                    rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
              JOIN users u ON u.id = m.user_id
              LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
@@ -187,6 +192,7 @@ pub async fn get_messages(
             reactions,
             expires_at: row.try_get("expires_at").ok().flatten(),
             poll_id: row.try_get("poll_id").ok().flatten(),
+            e2e: MsgE2e::from_row(row),
         });
     }
 
@@ -224,7 +230,8 @@ pub async fn send_message(
 
     // Refuser si content vide ET pas de pièces jointes annoncées
     let content_empty = body.content.as_deref().map(|c| c.trim().is_empty()).unwrap_or(true);
-    if content_empty && !body.has_attachments.unwrap_or(false) {
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
+    if content_empty && !body.has_attachments.unwrap_or(false) && !has_enc {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
@@ -234,6 +241,17 @@ pub async fn send_message(
             return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
         }
     }
+
+    // Chiffrement de bout en bout : clair refusé si l'auteur a une clé (sauf commande
+    // de bot), époque courante exigée. Avant le slowmode : la nouvelle tentative
+    // après EPOCH_STALE ne doit pas être bloquée par lui.
+    let exempt = match body.content.as_deref() {
+        Some(c) if !content_empty => e2e_channel::is_bot_command(&state.db, server_id, c.trim()).await,
+        _ => false,
+    };
+    let enc = e2e_channel::check_content(
+        &state.db, channel_id, claims.sub, !content_empty, body.enc.as_ref(), body.client_msg_id, exempt,
+    ).await?;
 
     // Enforcement du slowmode
     let slowmode: i32 = sqlx::query_scalar(
@@ -285,29 +303,36 @@ pub async fn send_message(
         }
     }
 
-    let content_str: Option<String> = body.content.clone();
+    let content_str: Option<String> = if enc.is_some() { None } else { body.content.clone() };
 
-    // Enforcement AutoMod
+    // Mentions : lues dans le texte en clair, ou déclarées en métadonnées par
+    // l'appli pour un message chiffré (le serveur ne lit jamais ce texte).
+    let mentions = match content_str.as_deref() {
+        Some(c) => crate::notify::parse_mentions(c),
+        None => crate::notify::ParsedMentions::from_meta(&body.mentions),
+    };
+
+    // Enforcement AutoMod (message chiffré : appliqué par l'appli, mentions ici)
     if let Some(content) = content_str.as_deref() {
         if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, content).await {
             return Err(err);
         }
+    } else if let Some(err) = crate::handlers::audit::check_automod_mentions(&state, server_id, mentions.count()).await {
+        return Err(err);
     }
 
     // @everyone / @here sans MENTION_EVERYONE : le message part quand même mais
     // ne notifie personne (comportement Discord ; voir `notify::dispatch_channel_mentions`).
-    let mention_everyone = content_str.as_deref().is_some_and(|c| {
-        let p = crate::notify::parse_mentions(c);
-        p.everyone || p.here
-    }) && require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE).await.is_ok();
+    let mention_everyone = (mentions.everyone || mentions.here)
+        && require_permission(&state, claims.sub, server_id, Permissions::MENTION_EVERYONE).await.is_ok();
 
     // Messages éphémères : 10 s à 7 jours. Une valeur énorme faisait paniquer le
     // calcul de date, une valeur négative supprimait le message à l'envoi.
     let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s.clamp(10, 7 * 86_400)));
 
     let msg = sqlx::query(
-        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"
     )
     .bind(channel_id)
     .bind(claims.sub)
@@ -315,6 +340,8 @@ pub async fn send_message(
     .bind(body.reply_to)
     .bind(mention_everyone)
     .bind(expires_at)
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&state.db)
     .await?;
 
@@ -338,22 +365,26 @@ pub async fn send_message(
 
     use sqlx::Row;
     let reply_to_id: Option<Uuid> = msg.get("reply_to");
-    let (reply_to_content, reply_to_username, reply_author) = if let Some(rid) = reply_to_id {
-        let row = sqlx::query(
-            "SELECT m.content, m.user_id, u.username FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id=$1"
+    let reply_row = match reply_to_id {
+        Some(rid) => sqlx::query(
+            "SELECT m.content, m.user_id, u.username, m.enc, m.client_msg_id FROM messages m JOIN users u ON u.id = m.user_id WHERE m.id=$1"
         )
         .bind(rid)
         .fetch_optional(&state.db)
         .await
-        .unwrap_or(None);
-        if let Some(r) = row {
-            (r.get::<Option<String>, _>("content"), Some(r.get::<String, _>("username")), Some(r.get::<Uuid, _>("user_id")))
-        } else {
-            (None, None, None)
-        }
-    } else {
-        (None, None, None)
+        .unwrap_or(None),
+        None => None,
     };
+    let (reply_to_content, reply_to_username, reply_author) = match &reply_row {
+        Some(r) => (r.get::<Option<String>, _>("content"), Some(r.get::<String, _>("username")), Some(r.get::<Uuid, _>("user_id"))),
+        None => (None, None, None),
+    };
+    let mut e2e = MsgE2e::from_row(&msg);
+    if let Some(r) = &reply_row {
+        e2e.reply_to_enc = r.get("enc");
+        e2e.reply_to_client_msg_id = r.get("client_msg_id");
+        e2e.reply_to_author_id = reply_author;
+    }
 
     let full_msg = MessageWithAuthor {
         id: msg.get("id"),
@@ -379,6 +410,7 @@ pub async fn send_message(
         reactions: vec![],
         expires_at: msg.try_get("expires_at").ok().flatten(),
         poll_id: None,
+        e2e,
     };
 
     // Mentions : enregistrées et notifiées AVANT MESSAGE_CREATE, pour que le
@@ -390,14 +422,17 @@ pub async fn send_message(
         author_id: claims.sub,
         author_username: &full_msg.author_username,
         author_avatar: full_msg.author_avatar.as_deref(),
-        content: full_msg.content.as_deref().unwrap_or(""),
+        content: full_msg.content.as_deref(),
+        mentions,
+        enc: full_msg.e2e.enc.as_ref(),
+        client_msg_id: full_msg.e2e.client_msg_id,
         reply_author,
         created_at: full_msg.created_at,
     }).await {
         tracing::warn!("Mentions non traitées pour le message {} : {e}", full_msg.id);
     }
 
-    let pending_attachments = body.has_attachments.unwrap_or(false) && full_msg.content.is_none();
+    let pending_attachments = body.has_attachments.unwrap_or(false) && full_msg.content.is_none() && full_msg.e2e.enc.is_none();
     let event = serde_json::json!({
         "type": "MESSAGE_CREATE",
         "server_id": server_id,
@@ -433,8 +468,8 @@ pub async fn edit_message(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
     crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
-    let owner = sqlx::query_scalar::<_, bool>(
-        "SELECT user_id=$2 FROM messages WHERE id=$1 AND channel_id=$3"
+    let (owner, existing_cmid) = sqlx::query_as::<_, (bool, Option<Uuid>)>(
+        "SELECT user_id=$2, client_msg_id FROM messages WHERE id=$1 AND channel_id=$3"
     )
     .bind(message_id)
     .bind(claims.sub)
@@ -447,42 +482,64 @@ pub async fn edit_message(
         return Err(AppError::Forbidden);
     }
 
-    if body.content.trim().is_empty() {
-        return Err(AppError::BadRequest("Contenu vide".into()));
-    }
+    let has_text = !body.content.trim().is_empty();
     if body.content.chars().count() > 4000 {
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
-
-    // AutoMod : appliqué à la création (send_message) mais oublié à l'édition --
-    // un message anodin pouvait être édité vers un contenu que l'AutoMod aurait
-    // bloqué à la création (contournement du filtre de mots/mentions/liens).
-    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &body.content).await {
-        return Err(err);
+    // Édition chiffrée : même `client_msg_id` que le message (lié à l'AAD).
+    let cmid = existing_cmid.or(body.client_msg_id);
+    let enc = e2e_channel::check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), cmid, false).await?;
+    if !has_text && enc.is_none() {
+        return Err(AppError::BadRequest("Contenu vide".into()));
     }
 
-    // Sauvegarder l'ancienne version dans l'historique
-    sqlx::query(
-        "INSERT INTO message_edits (message_id, content)
-         SELECT $1, content FROM messages WHERE id=$1 AND content IS NOT NULL"
-    )
-    .bind(message_id)
-    .execute(&state.db)
-    .await?;
+    if let Some(enc) = &enc {
+        // Aucun texte en clair gardé : ni l'ancienne version, ni l'historique.
+        sqlx::query("DELETE FROM message_edits WHERE message_id=$1").bind(message_id).execute(&state.db).await?;
+        sqlx::query("UPDATE saved_messages SET content=NULL WHERE message_id=$1").bind(message_id).execute(&state.db).await?;
+        sqlx::query("UPDATE messages SET enc=$2, content=NULL, client_msg_id=$3, edited_at=NOW() WHERE id=$1")
+            .bind(message_id)
+            .bind(enc)
+            .bind(cmid)
+            .execute(&state.db)
+            .await?;
+    } else {
+        // AutoMod : appliqué à la création (send_message) mais oublié à l'édition --
+        // un message anodin pouvait être édité vers un contenu que l'AutoMod aurait
+        // bloqué à la création (contournement du filtre de mots/mentions/liens).
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &body.content).await {
+            return Err(err);
+        }
 
-    sqlx::query(
-        "UPDATE messages SET content=$2, edited_at=NOW() WHERE id=$1"
-    )
-    .bind(message_id)
-    .bind(&body.content)
-    .execute(&state.db)
-    .await?;
+        // Sauvegarder l'ancienne version dans l'historique
+        sqlx::query(
+            "INSERT INTO message_edits (message_id, content)
+             SELECT $1, content FROM messages WHERE id=$1 AND content IS NOT NULL"
+        )
+        .bind(message_id)
+        .execute(&state.db)
+        .await?;
+
+        // Jamais de texte en clair par-dessus un message chiffré.
+        let done = sqlx::query(
+            "UPDATE messages SET content=$2, edited_at=NOW() WHERE id=$1 AND enc IS NULL"
+        )
+        .bind(message_id)
+        .bind(&body.content)
+        .execute(&state.db)
+        .await?;
+        if done.rows_affected() == 0 {
+            return Err(AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()));
+        }
+    }
 
     let event = serde_json::json!({
         "type": "MESSAGE_UPDATE",
         "message_id": message_id,
         "channel_id": channel_id,
-        "content": body.content,
+        "content": if enc.is_some() { serde_json::Value::Null } else { serde_json::Value::String(body.content) },
+        "enc": enc,
+        "client_msg_id": enc.as_ref().and(cmid),
         "edited_at": chrono::Utc::now(),
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
@@ -736,7 +793,8 @@ pub async fn search_messages(
     let pattern = format!("%{}%", q_esc);
     let rows = sqlx::query(
         "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
-                rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
+                rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
+                    rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
          FROM messages m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
@@ -774,6 +832,7 @@ pub async fn search_messages(
         reactions: vec![],
         expires_at: r.try_get("expires_at").ok().flatten(),
         poll_id: r.try_get("poll_id").ok().flatten(),
+        e2e: MsgE2e::from_row(r),
     }).collect();
 
     Ok(Json(result))
@@ -846,7 +905,7 @@ pub async fn forward_message(
     // d'appartenance intégrée) plutôt que d'exiger server_id/channel_id du client,
     // qui n'existent pas en contexte DM.
     let server_src = sqlx::query(
-        "SELECT m.content, COALESCE(m.webhook_display_name, u.username) as author_username,
+        "SELECT m.content, m.enc IS NOT NULL AS encrypted, COALESCE(m.webhook_display_name, u.username) as author_username,
                 m.channel_id, c.server_id
          FROM messages m
          JOIN users u ON u.id = m.user_id
@@ -859,12 +918,28 @@ pub async fn forward_message(
     .fetch_optional(&state.db)
     .await?;
 
+    // Texte déchiffré par l'appli quand la source est chiffrée (le serveur ne peut pas le lire).
+    let supplied = || -> Result<Option<String>> {
+        let text = body.content.as_deref().map(str::trim).unwrap_or_default();
+        if text.is_empty() || text.chars().count() > 4000 {
+            return Err(AppError::BadRequest("Contenu du message chiffré requis".into()));
+        }
+        Ok(Some(text.to_string()))
+    };
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
     let (src_content, src_author): (Option<String>, String) = if let Some(row) = server_src {
         // Le salon source doit être VISIBLE : transférer un message d'un salon
         // privé en révélait le contenu dans un salon public.
         let (src_channel, src_server): (Uuid, Uuid) = (row.get("channel_id"), row.get("server_id"));
         require_member_and_channel(&state, claims.sub, src_server, src_channel).await?;
-        (row.try_get("content").ok().flatten(), row.get("author_username"))
+        let content = if has_enc {
+            None
+        } else if row.get::<bool, _>("encrypted") {
+            supplied()?
+        } else {
+            row.try_get("content").ok().flatten()
+        };
+        (content, row.get("author_username"))
     } else {
         let dm_row = sqlx::query(
             "SELECT dm.content, dm.enc IS NOT NULL AS encrypted, u.username as author_username
@@ -878,13 +953,11 @@ pub async fn forward_message(
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(|| AppError::NotFound("Message source introuvable".into()))?;
-        let content: Option<String> = if dm_row.get::<bool, _>("encrypted") {
+        let content: Option<String> = if has_enc {
+            None
+        } else if dm_row.get::<bool, _>("encrypted") {
             // Le serveur ne peut pas lire un MP chiffré : l'appli transmet le texte déchiffré.
-            let text = body.content.as_deref().map(str::trim).unwrap_or_default();
-            if text.is_empty() || text.chars().count() > 4000 {
-                return Err(AppError::BadRequest("Contenu du message chiffré requis".into()));
-            }
-            Some(text.to_string())
+            supplied()?
         } else {
             dm_row.try_get("content").ok().flatten()
         };
@@ -905,6 +978,13 @@ pub async fn forward_message(
     // Mêmes règles qu'un envoi normal : salon masqué, lecture seule, annonces,
     // timeout, AutoMod. Le transfert contournait tout.
     crate::handlers::servers::require_can_post(&state, claims.sub, dest_server_id, body.channel_id, false).await?;
+    // Salon cible chiffré : l'appli envoie une copie chiffrée pour lui (clair refusé si j'ai une clé).
+    let enc = e2e_channel::check_content(
+        &state.db, body.channel_id, claims.sub, src_content.is_some(), body.enc.as_ref(), body.client_msg_id, false,
+    ).await?;
+    if src_content.is_none() && enc.is_none() {
+        return Err(AppError::BadRequest("Message vide".into()));
+    }
     if let Some(content) = src_content.as_deref() {
         if let Some(err) = crate::handlers::audit::check_automod(&state, dest_server_id, claims.sub, content).await {
             return Err(err);
@@ -913,14 +993,16 @@ pub async fn forward_message(
 
     // Insérer le message forwardé dans le canal cible
     let new_msg = sqlx::query(
-        "INSERT INTO messages (channel_id, user_id, content, forward_from_id, forward_from_username)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        "INSERT INTO messages (channel_id, user_id, content, forward_from_id, forward_from_username, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *"
     )
     .bind(body.channel_id)
     .bind(claims.sub)
     .bind(&src_content)
     .bind(message_id)
     .bind(&src_author)
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&state.db)
     .await?;
 
@@ -966,6 +1048,7 @@ pub async fn forward_message(
         reactions: vec![],
         expires_at: None,
         poll_id: None,
+        e2e: MsgE2e::from_row(&new_msg),
     };
 
     // Diffusion aux seuls membres qui voient le salon de destination.

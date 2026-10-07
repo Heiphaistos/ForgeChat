@@ -47,6 +47,8 @@ export default function ServerSettingsScreen() {
           .map((s) => (
             <Row key={s} icon={ENTRIES[s].icon} title={t(ENTRIES[s].title)} chevron onPress={() => go(ENTRIES[s].path)} />
           ))}
+        {/* Clé de récupération du serveur : propriétaire seulement (description pour les autres). */}
+        <Row icon="key-outline" title={t('e2e.serverKey.title')} chevron onPress={() => go('settings/encryption')} />
       </Section>
       {sections.includes('danger') ? (
         <Section title={t('serverSettings.danger')}>
