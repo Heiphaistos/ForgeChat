@@ -3,6 +3,7 @@ import { Plus, Trash2, Rss, Youtube, Github, MessageSquare, ToggleLeft, ToggleRi
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { SERVER_URL } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, intlLocale } from '../../i18n'
 
 interface Channel {
   id: string
@@ -35,7 +36,7 @@ const FEED_TYPES = [
 ]
 
 function FeedTypeBadge({ type }: { type: string }) {
-  const def = FEED_TYPES.find(t => t.value === type) ?? FEED_TYPES[0]
+  const def = FEED_TYPES.find(ft => ft.value === type) ?? FEED_TYPES[0]
   const { Icon, color, bg, label } = def
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${bg} ${color}`}>
@@ -46,6 +47,7 @@ function FeedTypeBadge({ type }: { type: string }) {
 }
 
 export default function FeedsTab({ serverId, channels }: Props) {
+  const t = useT()
   const qc = useQueryClient()
 
   const [selectedChannelId, setSelectedChannelId] = useState('')
@@ -69,8 +71,8 @@ export default function FeedsTab({ serverId, channels }: Props) {
 
   const saveGithubToken = useMutation({
     mutationFn: () => api.put(`/servers/${serverId}/channels/${selectedChannelId}/github-webhook-token`, { token: githubToken }),
-    onSuccess: () => { setTokenSaved(true); toast.success('Token enregistré') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur enregistrement token'),
+    onSuccess: () => { setTokenSaved(true); toast.success(t('feeds.tokenSaved')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('feeds.tokenError')),
   })
 
   const textChannels = channels.filter(c => c.type === 'text')
@@ -95,18 +97,18 @@ export default function FeedsTab({ serverId, channels }: Props) {
       setNewName('')
       setNewUrl('')
       setNewType('rss')
-      toast.success('Flux RSS ajouté')
+      toast.success(t('feeds.added'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création flux'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('feeds.addError')),
   })
 
   const deleteFeed = useMutation({
     mutationFn: (feedId: string) => api.delete(`/servers/${serverId}/feeds/${feedId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['feeds', serverId, selectedChannelId] })
-      toast.success('Flux supprimé')
+      toast.success(t('feeds.deleted'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.adv.deleteError')),
   })
 
   const toggleFeed = useMutation({
@@ -114,7 +116,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['feeds', serverId, selectedChannelId] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur toggle'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const webhookBase = SERVER_URL || (typeof window !== 'undefined' ? window.location.origin : '')
@@ -129,7 +131,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
     navigator.clipboard.writeText(webhookUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-    toast.success('URL copiée')
+    toast.success(t('webhooks.copied'))
   }
 
   const canCreate =
@@ -142,18 +144,18 @@ export default function FeedsTab({ serverId, channels }: Props) {
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
           <Rss size={18} className="text-orange-400" aria-hidden />
-          Flux RSS / YouTube / GitHub
+          {t('feeds.title')}
         </h3>
         <p className="text-sm text-fc-muted mb-3">
-          Abonnez un canal à des flux RSS, YouTube ou GitHub. Les nouveaux contenus sont postés automatiquement toutes les 5 minutes.
+          {t('feeds.intro')}
         </p>
 
         {/* Lien RSSDI */}
         <div className="mb-5 p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-xl flex items-center gap-3">
           <Rss size={18} className="text-indigo-400 flex-shrink-0" aria-hidden />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white">Importer depuis RSSDI</p>
-            <p className="text-xs text-fc-muted">Accédez à votre agrégateur de flux RSS personnel pour trouver et copier des URLs de flux.</p>
+            <p className="text-sm font-medium text-white">{t('feeds.rssdi')}</p>
+            <p className="text-xs text-fc-muted">{t('feeds.rssdiDesc')}</p>
           </div>
           <a
             href="https://rssdi.heiphaistos.org"
@@ -161,14 +163,14 @@ export default function FeedsTab({ serverId, channels }: Props) {
             rel="noopener noreferrer"
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition flex-shrink-0"
           >
-            Ouvrir RSSDI
+            {t('feeds.openRssdi')}
           </a>
         </div>
 
         {/* Sélection du canal */}
         <div className="mb-5">
           <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2" htmlFor="feeds-channel-select">
-            Canal à surveiller
+            {t('feeds.channel')}
           </label>
           <select
             id="feeds-channel-select"
@@ -176,7 +178,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
             onChange={e => setSelectedChannelId(e.target.value)}
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
           >
-            <option value="">Sélectionner un canal</option>
+            <option value="">{t('webhooks.pickChannel')}</option>
             {textChannels.map(c => (
               <option key={c.id} value={c.id}>#{c.name}</option>
             ))}
@@ -187,14 +189,14 @@ export default function FeedsTab({ serverId, channels }: Props) {
         {selectedChannelId && (
           <div className="p-4 bg-fc-channel rounded-lg mb-6 space-y-3">
             <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-              Ajouter un flux
+              {t('feeds.add')}
             </div>
             <input
               value={newName}
               onChange={e => setNewName(e.target.value)}
-              placeholder="Nom du flux (ex: Hacker News)"
+              placeholder={t('feeds.namePh')}
               maxLength={100}
-              aria-label="Nom du flux"
+              aria-label={t('feeds.name')}
               enterKeyHint="next"
               autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
@@ -202,9 +204,9 @@ export default function FeedsTab({ serverId, channels }: Props) {
             <input
               value={newUrl}
               onChange={e => setNewUrl(e.target.value)}
-              placeholder="URL du flux (https://...)"
+              placeholder={t('feeds.urlPh')}
               maxLength={2048}
-              aria-label="URL du flux"
+              aria-label={t('feeds.url')}
               enterKeyHint="done"
               inputMode="url"
               autoCapitalize="none"
@@ -214,11 +216,11 @@ export default function FeedsTab({ serverId, channels }: Props) {
             <select
               value={newType}
               onChange={e => setNewType(e.target.value)}
-              aria-label="Type de flux"
+              aria-label={t('feeds.type')}
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
             >
-              {FEED_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {FEED_TYPES.map(ft => (
+                <option key={ft.value} value={ft.value}>{ft.label}</option>
               ))}
             </select>
             <button
@@ -228,7 +230,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
               className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
             >
               <Plus size={14} aria-hidden />
-              {createFeed.isPending ? 'Ajout...' : 'Ajouter le flux'}
+              {createFeed.isPending ? t('feeds.adding') : t('feeds.addButton')}
             </button>
           </div>
         )}
@@ -236,10 +238,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
         {/* Liste des feeds */}
         {selectedChannelId && (
           isLoading ? (
-            <div role="status" aria-label="Chargement des flux" className="text-center text-fc-muted py-10 text-sm">Chargement...</div>
+            <div role="status" aria-label={t('feeds.loading')} className="text-center text-fc-muted py-10 text-sm">{t('common.loading')}</div>
           ) : feeds.length === 0 ? (
             <div role="status" className="text-center text-fc-muted py-10 text-sm">
-              Aucun flux abonné sur ce canal.
+              {t('feeds.none')}
             </div>
           ) : (
             <div className="space-y-2">
@@ -261,7 +263,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
                     <div className="text-xs text-fc-muted font-mono truncate">{feed.feed_url}</div>
                     {feed.last_checked_at && (
                       <div className="text-xs text-fc-muted mt-0.5">
-                        Vérifié : {new Date(feed.last_checked_at).toLocaleString('fr-FR')}
+                        {t('feeds.checked', { date: new Date(feed.last_checked_at).toLocaleString(intlLocale()) })}
                       </div>
                     )}
                   </div>
@@ -270,7 +272,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
                   <button
                     onClick={() => toggleFeed.mutate(feed.id)}
                     disabled={toggleFeed.isPending}
-                    aria-label={feed.enabled ? `Désactiver le flux ${feed.name}` : `Activer le flux ${feed.name}`}
+                    aria-label={feed.enabled ? t('feeds.disable', { name: feed.name }) : t('feeds.enable', { name: feed.name })}
                     aria-pressed={feed.enabled}
                     className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition flex-shrink-0"
                   >
@@ -284,7 +286,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
                   <button
                     onClick={() => deleteFeed.mutate(feed.id)}
                     disabled={deleteFeed.isPending}
-                    aria-label={`Supprimer le flux ${feed.name}`}
+                    aria-label={t('feeds.delete', { name: feed.name })}
                     className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
                   >
                     <Trash2 size={14} aria-hidden />
@@ -299,12 +301,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
           <Github size={18} className="text-gray-300" aria-hidden />
-          Webhooks GitHub entrants
+          {t('feeds.ghTitle')}
         </h3>
         <p className="text-sm text-fc-muted mb-5">
-          Configurez un webhook GitHub pour recevoir les événements push, pull request et issues directement dans un canal.
-          Sélectionnez un canal ci-dessus puis copiez l'URL à renseigner dans les paramètres GitHub de votre dépôt
-          (Settings → Webhooks → Add webhook, Content type: <code className="text-xs bg-fc-hover px-1 rounded">application/json</code>).
+          {t('feeds.ghIntro')} <code className="text-xs bg-fc-hover px-1 rounded">application/json</code>{t('feeds.ghIntroEnd')}
         </p>
 
         {selectedChannelId ? (
@@ -312,14 +312,14 @@ export default function FeedsTab({ serverId, channels }: Props) {
             {!tokenSaved ? (
               <>
                 <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-                  1. Générer un secret pour ce canal
+                  {t('feeds.ghStep1')}
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     value={githubToken}
                     onChange={e => setGithubToken(e.target.value)}
-                    placeholder="Cliquez sur Générer, ou saisissez un secret (min. 16 caractères)"
-                    aria-label="Secret du webhook GitHub"
+                    placeholder={t('feeds.ghSecretPh')}
+                    aria-label={t('feeds.ghSecret')}
                     className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-xs font-mono outline-none focus:ring-2 focus:ring-fc-accent"
                   />
                   <button
@@ -327,7 +327,7 @@ export default function FeedsTab({ serverId, channels }: Props) {
                     className="flex items-center gap-1.5 px-3 py-2 bg-fc-hover hover:bg-fc-accent/30 text-white rounded text-sm font-medium transition flex-shrink-0"
                   >
                     <KeyRound size={14} aria-hidden />
-                    Générer
+                    {t('feeds.generate')}
                   </button>
                 </div>
                 <button
@@ -336,43 +336,43 @@ export default function FeedsTab({ serverId, channels }: Props) {
                   aria-busy={saveGithubToken.isPending}
                   className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
                 >
-                  {saveGithubToken.isPending ? 'Enregistrement...' : 'Enregistrer et générer l\'URL'}
+                  {saveGithubToken.isPending ? t('common.recording') : t('feeds.saveAndUrl')}
                 </button>
               </>
             ) : (
               <>
                 <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-                  URL du webhook — copiez-la maintenant, le secret ne sera plus jamais affiché
+                  {t('feeds.ghUrlWarning')}
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     readOnly
                     value={webhookUrl}
-                    aria-label="URL du webhook GitHub"
+                    aria-label={t('feeds.ghUrl')}
                     className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-xs font-mono outline-none select-all"
                     onFocus={e => e.target.select()}
                   />
                   <button
                     onClick={copyWebhookUrl}
-                    aria-label={copied ? 'URL copiée' : "Copier l'URL du webhook GitHub"}
+                    aria-label={copied ? t('webhooks.copied') : t('feeds.ghCopy')}
                     className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition flex-shrink-0"
                   >
                     {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
-                    <span aria-hidden>{copied ? 'Copié !' : 'Copier'}</span>
+                    <span aria-hidden>{copied ? t('feeds.copied') : t('feeds.copy')}</span>
                   </button>
                 </div>
                 <button onClick={() => setTokenSaved(false)} className="text-xs text-fc-muted hover:text-white transition">
-                  Générer un nouveau secret
+                  {t('feeds.newSecret')}
                 </button>
               </>
             )}
             <div className="text-xs text-fc-muted space-y-1">
-              <div>Événements supportés : <span className="text-white">push</span>, <span className="text-white">pull_request</span>, <span className="text-white">issues</span></div>
+              <div>{t('feeds.events')} <span className="text-white">push</span>, <span className="text-white">pull_request</span>, <span className="text-white">issues</span></div>
             </div>
           </div>
         ) : (
           <div role="status" className="text-center text-fc-muted py-6 text-sm bg-fc-channel/40 rounded-lg">
-            Sélectionnez un canal pour obtenir l'URL du webhook GitHub.
+            {t('feeds.pickForGh')}
           </div>
         )}
       </div>
