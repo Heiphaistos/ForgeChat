@@ -49,8 +49,7 @@ function exportText(channels: RecoveredChannel[]) {
   return channels.map(ch => [
     `# ${ch.name}`,
     ...ch.messages.map(m => `[${m.created_at}] ${m.author} : ${m.text ?? tr('e2e.serverKey.unreadable')}`
-      + (m.files ?? []).map(f => `
-  📎 ${f.name} (${f.size} o)`).join('')),
+      + (m.files ?? []).map(f => `\n  📎 ${f.name} (${f.size} o)`).join('')),
   ].join('\n')).join('\n\n') + '\n'
 }
 
