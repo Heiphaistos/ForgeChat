@@ -69,3 +69,28 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 4. Fichiers chiffrés (web + mobile, flux par blocs).
 5. Vocal/appels/écran E2EE (LiveKit).
 6. Purge J+30, pages légales, codes de sécurité, tests de bout en bout (deux comptes, trois appareils, rotation).
+
+## 9. Étape 2 réalisée : MP 1:1 et groupes (texte)
+
+### Formats
+- Conversation dans l'AAD : `dm:<dm_id>` ou `group:<group_id>`.
+- Enveloppe de clé d'époque : `{v:1, iv, ct}` (ct = 32 o + tag), clé = HKDF(ECDH(émetteur, membre), sel vide, `forgechat ck v1|<conv>|<epoch>|<membre>`), AAD `ck v1|<conv>|<epoch>|<membre>|<émetteur>`.
+- Message : `enc = {v:1, epoch, iv, ct}`, clair = JSON `{t: texte}`, AAD `msg v1|<conv>|<epoch>|<auteur>|<client_msg_id>` ; `client_msg_id` = UUID tiré par l'appli, gardé à l'édition. `content` reste NULL.
+- Vecteurs `convKey` et `message` dans `docs/e2e-vectors.json` (web et mobile).
+
+### Serveur (migration 086)
+- `conversation_epochs(conv_kind, conv_id, current_epoch, rotate_needed)`, `conversation_keys(conv_kind, conv_id, epoch, member_id, member_fp, wrapped, wrapped_by, wrapped_by_pub)`, colonnes `enc`, `client_msg_id`, `purged` sur `dm_messages` et `group_dm_messages`, `e2e_rollout(started_at)`.
+- `GET /e2e/conversations/:kind/:id/keys` : MES enveloppes, époque courante, `rotate_needed`, `all_keyed`.
+- `POST /e2e/conversations/:kind/:id/keys` `{epoch, create?, envelopes:[{member_id, member_fp, wrapped}]}` : seulement pour des membres et leur clé actuelle (sinon 403 / 409 KEY_CHANGED) ; `create` = époque 0 ou courante+1 après un départ, enveloppes pour exactement les membres munis d'une clé (409 MEMBERS_CHANGED / EPOCH_STALE pour le perdant d'une course). Diffuse `E2E_KEYS` aux destinataires.
+- `POST /e2e/conversations/:kind/:id/keys/request` : diffuse `KEY_REQUEST {conv_kind, conv_id, member_id}` (aussi émis à l'ajout d'un membre).
+- `GET /e2e/conversations/:kind/:id/members` : membres, clés publiques, empreintes.
+- `GET /e2e/legacy` + `PUT /dms/:id/messages/:mid/encrypt`, `PUT /dms/groups/:id/messages/:mid/encrypt` `{enc, client_msg_id}` : rechiffrement par l'auteur seulement, message encore en clair seulement (sinon 409 NOT_LEGACY) ; efface aussi l'historique d'éditions et la copie des messages enregistrés.
+- Envoi/édition : `enc` + `client_msg_id` ; clair refusé si tous les membres ont une clé (400 `PLAINTEXT_REFUSED : …phrase…`), époque périmée ou rotation en attente : 409 EPOCH_STALE. Départ/exclusion d'un groupe : `rotate_needed`, enveloppes du partant supprimées.
+- Purge horaire : 30 jours après `e2e_rollout.started_at`, le clair des messages ANTÉRIEURS au déploiement devient NULL + `purged` (nombre seul journalisé). Les messages en clair postérieurs (membre sans clé, transition) ne sont pas purgés ; ils sont rechiffrés par leur auteur dès que tous ont une clé.
+- Recherche serveur : ne trouve plus les messages chiffrés (pas de texte) ; les applis cherchent dans les messages déchiffrés. Signalement et transfert d'un MP chiffré : texte fourni par l'appli (`content`). Traduction : impossible (404). Messages enregistrés : pas de copie du texte pour un MP chiffré.
+- Push serveur (Expo, Web Push) : corps « Message chiffré » ; l'aperçu n'est déchiffré que par l'appli ouverte ou le mode « sans Google ».
+- Anciennes routes de l'essai précédent (`/dms/:id/e2e`, `/users/me/pubkey`, `/users/:id/pubkey`) retirées ; tables `user_pubkeys` et `dm_e2e_messages` laissées en place (à supprimer après accord).
+
+### Anciennes applis
+- Web : servie par le serveur, toujours à jour au rechargement.
+- Mobile/bureau d'avant cette étape : un message chiffré arrive avec `content = null` et s'affiche comme une bulle vide (auteur et heure, sans texte, aucune erreur). L'envoi de texte dans une conversation dont tous les membres ont une clé échoue avec le message du serveur « PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire. ». Tant qu'un membre n'a pas de clé (appli ancienne jamais connectée avec la nouvelle version), la conversation reste en clair.
