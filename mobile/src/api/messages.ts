@@ -21,6 +21,7 @@ import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 import { forwardText, mustEncrypt, openRaw, openRawList, seal, withSeal } from '@/e2e/conversations'
 import { isBotCommand, sendChannelText } from '@/e2e/channels'
+import type { FileEntry } from '@/e2e/crypto'
 import { firstUrl, mentionMeta } from '@/e2e/channelText'
 import { queryClient } from '@/lib/queryClient'
 
@@ -51,7 +52,7 @@ export interface UploadFile {
 }
 
 /** Conversation chiffrable de bout en bout (MP, groupe, salon) : [kind, id] du module e2e. */
-function e2eConv(ref: ConversationRef): ['dm' | 'group' | 'channel', string] {
+export function e2eConv(ref: ConversationRef): ['dm' | 'group' | 'channel', string] {
   return ref.kind === 'dm' ? ['dm', ref.dmId] : ref.kind === 'group' ? ['group', ref.groupId] : ['channel', ref.channelId]
 }
 
@@ -72,15 +73,18 @@ const botCommandNames = (serverId: string) =>
  * Salon : mentions toujours envoyées en métadonnées ; texte chiffré dès que j'ai une clé
  * (AutoMod et aperçu de lien faits ici), sauf commande de bot connue qui part en clair.
  */
-async function sendChannel(ref: Extract<ConversationRef, { kind: 'channel' }>, text: string, extra: Record<string, unknown>): Promise<ChatMessage> {
+async function sendChannel(
+  ref: Extract<ConversationRef, { kind: 'channel' }>, text: string, extra: Record<string, unknown>, files?: FileEntry[],
+): Promise<ChatMessage> {
   const meta = { ...extra, ...mentionMeta(text) }
   if (text.startsWith('/') && isBotCommand(text, await botCommandNames(ref.serverId)))
     return adaptMessage(ref, await http.post<unknown>(base(ref), { content: text, ...meta }))
-  const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }), { preview: true })
+  const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }),
+    { preview: true, extra: files?.length ? { f: files } : undefined })
   const m = adaptMessage(ref, sent.result)
   if (!sent.encrypted) return m
-  // Le serveur ne renvoie pas le texte : on garde celui saisi et l'aperçu calculé.
-  return { ...m, content: text, e2e: 'ok', unencrypted: false, preview: normalizeOg(sent.extra.p, firstUrl(text) ?? '') }
+  // Le serveur ne renvoie pas le texte : on garde celui saisi, l'aperçu calculé et les clés des fichiers.
+  return { ...m, content: text || null, e2e: 'ok', unencrypted: false, preview: normalizeOg(sent.extra.p, firstUrl(text) ?? ''), ...(files?.length ? { files } : {}) }
 }
 
 export const messagesApi = {
@@ -100,7 +104,7 @@ export const messagesApi = {
 
   async send(
     ref: ConversationRef,
-    input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null },
+    input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null; files?: FileEntry[] },
   ): Promise<ChatMessage> {
     const extra = {
       reply_to: input.replyTo ?? undefined,
@@ -108,12 +112,13 @@ export const messagesApi = {
       // Messages éphémères : seuls les salons les gèrent côté serveur (comme le web).
       ...(ref.kind === 'channel' && input.expiresInSeconds ? { expires_at_seconds: input.expiresInSeconds } : {}),
     }
-    if (ref.kind === 'channel') return sendChannel(ref, input.content ?? '', extra)
+    if (ref.kind === 'channel') return sendChannel(ref, input.content ?? '', extra, input.files)
     const conv = e2eConv(ref)
     // MP/groupe : chiffré sur l'appareil ; le serveur ne renvoie pas le texte, on garde celui saisi.
-    const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }))
+    const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }), null,
+      { extra: input.files?.length ? { f: input.files } : undefined })
     const m = adaptMessage(ref, raw)
-    return raw?.enc ? { ...m, content: input.content, e2e: 'ok' } : m
+    return raw?.enc ? { ...m, content: input.content, e2e: 'ok', ...(input.files?.length ? { files: input.files } : {}) } : m
   },
 
   /** Édition chiffrée : même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */

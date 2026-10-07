@@ -24,6 +24,7 @@ import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
 import { useLock } from '@/stores/lock'
 import { useSettings } from '@/stores/settings'
 import { colors, isLight } from '@/theme'
+import { clearFileCache } from '@/e2e/files'
 
 void SplashScreen.preventAutoHideAsync()
 /** Le lien de lancement n'est rejoué qu'une fois par process (jamais après une reconnexion). */
@@ -66,6 +67,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (status !== 'booting') void SplashScreen.hideAsync()
+    // Fichiers déchiffrés temporaires (§12) : effacés au démarrage et à la déconnexion.
+    if (status !== 'signedIn') clearFileCache()
   }, [status])
 
   useEffect(() => {

@@ -2,7 +2,8 @@ import * as Crypto from 'expo-crypto'
 import { LIMITS } from '@/config/env'
 import { checkAutomod, openPost, sealPost, sendChannelText } from '@/e2e/channels'
 import { completeChannelKeys, mustEncrypt, openRawList } from '@/e2e/conversations'
-import { postScope } from '@/e2e/crypto'
+import { postScope, type FileEntry } from '@/e2e/crypto'
+import { withPreparedUploads } from '@/e2e/files'
 import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizePost, normalizePosts, type ForumPost } from '@/features/forum/forum'
 import { http, path } from '@/lib/http'
@@ -13,6 +14,9 @@ import { uploadForm } from './threads'
 const base = (serverId: string, channelId: string) => path`/servers/${serverId}/channels/${channelId}/posts`
 /** Portée AAD des réponses d'une publication (clé du salon). */
 const replyScope = (channelId: string, post: ForumPost) => (post.clientMsgId ? postScope(channelId, post.clientMsgId) : undefined)
+
+/** Médias chiffrés envoyés pendant cette session (adresse → clé), repris à la création de la publication. */
+const sealedMedia = new Map<string, FileEntry>()
 
 /** Salons forum (handlers/forum.rs, tags : channels.rs::get_channel_tags). */
 export const forumApi = {
@@ -38,26 +42,33 @@ export const forumApi = {
     const text = `${body.title}\n${body.content ?? ''}`.trim()
     if (await mustEncrypt('channel', channelId)) await checkAutomod(serverId, text)
     const cmid = Crypto.randomUUID()
-    const sealed = await sealPost(channelId, body.title, body.content ?? '', cmid)
+    const media = body.media_url ? sealedMedia.get(body.media_url) : undefined
+    const sealed = await sealPost(channelId, body.title, body.content ?? '', cmid, media ? [media] : undefined)
     if (!sealed) return http.post(base(serverId, channelId), body)
     void completeChannelKeys(channelId)
     return http.post(base(serverId, channelId), { ...body, title: '', content: null, enc: sealed.enc, client_msg_id: cmid })
   },
   /** Nouveau texte d'une publication (créateur) : chiffré avec son id client (titre compris) dès que j'ai une clé. */
   async editPost(serverId: string, channelId: string, post: ForumPost, content: string) {
-    const sealed = post.clientMsgId ? await sealPost(channelId, post.title, content, post.clientMsgId) : null
+    // Le média chiffré garde sa clé dans la publication modifiée.
+    const sealed = post.clientMsgId ? await sealPost(channelId, post.title, content, post.clientMsgId, post.files?.filter((f) => f.u === post.mediaUrl)) : null
     return http.patch(base(serverId, channelId) + path`/${post.id}`, sealed ? { enc: sealed.enc } : { content })
   },
   /** Image ou vidéo d'une publication de salon média (uploads.rs::forum_upload) ; renvoie son URL. */
   async uploadMedia(serverId: string, channelId: string, file: UploadFile): Promise<string | null> {
-    const r = await http.upload<{ url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm([file]))
-    return typeof r?.url === 'string' ? r.url : null
+    // Auteur muni d'une clé : média chiffré ici, sa clé ira dans la publication chiffrée (§12).
+    return withPreparedUploads('channel', channelId, [file], async (p) => {
+      const r = await http.upload<{ url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm(p.uploads))
+      const url = typeof r?.url === 'string' ? r.url : null
+      if (url && p.entries?.[0]) sealedMedia.set(url, { ...p.entries[0], u: url })
+      return url
+    })
   },
   /** Renvoie l'id de la réponse créée (pour y joindre ensuite des fichiers). */
-  async reply(serverId: string, channelId: string, post: ForumPost, content: string, hasAttachments = false): Promise<string | null> {
+  async reply(serverId: string, channelId: string, post: ForumPost, content: string, hasAttachments = false, files?: FileEntry[]): Promise<string | null> {
     const { result: r } = await sendChannelText(serverId, channelId, content, (body) =>
       http.post<{ reply?: { id?: unknown } }>(base(serverId, channelId) + path`/${post.id}/replies`, { ...body, content: body.content ?? '', has_attachments: hasAttachments }),
-    { scope: replyScope(channelId, post) })
+    { scope: replyScope(channelId, post), extra: files?.length ? { f: files } : undefined })
     return typeof r?.reply?.id === 'string' ? r.reply.id : null
   },
   /** `pinned` / `locked` : MANAGE_MESSAGES (le texte passe par `editPost`). */

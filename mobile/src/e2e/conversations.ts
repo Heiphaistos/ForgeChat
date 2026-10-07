@@ -454,6 +454,9 @@ export function e2eErrorText(e: unknown): string | null {
   if (m === 'E2E_WAITING') return t('e2e.send.waiting')
   if (m === 'E2E_LOCKED') return t('e2e.send.locked')
   if (m === 'AUTOMOD') return t('e2e.send.automod')
+  // Fichiers chiffrés (e2e/files.ts) : limite mobile, chiffrement indisponible.
+  if (m === 'E2E_FILE_TOO_BIG') return t('e2e.file.tooBig')
+  if (m === 'E2E_FILES_UNAVAILABLE') return t('e2e.file.unavailable')
   if (errorCode(e) === 'PLAINTEXT_REFUSED') return t('e2e.send.update')
   return null
 }

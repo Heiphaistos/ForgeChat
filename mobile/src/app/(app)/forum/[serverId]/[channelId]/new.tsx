@@ -23,6 +23,8 @@ export default function NewPostScreen() {
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['media'])
   const media = text.media === '1'
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  // Aperçu local du média choisi (un média chiffré n'est pas lisible depuis le serveur).
+  const [localUri, setLocalUri] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -44,9 +46,10 @@ export default function NewPostScreen() {
     if (!ext) return Alert.alert(t('social.newPost.badFormat'), t('social.newPost.formats'))
     setUploading(true)
     try {
-      setMediaUrl(await forumApi.uploadMedia(ids.serverId, ids.channelId, { uri: a.uri, name: `media.${ext}`, type: a.mimeType ?? '' }))
+      setMediaUrl(await forumApi.uploadMedia(ids.serverId, ids.channelId, { uri: a.uri, name: `media.${ext}`, type: a.mimeType ?? '', size: a.fileSize ?? null }))
+      setLocalUri(a.uri)
     } catch (e) {
-      Alert.alert(t('composer.sendFailed'), errorMessage(e))
+      Alert.alert(t('composer.sendFailed'), e2eErrorText(e) ?? errorMessage(e))
     } finally {
       setUploading(false)
     }
@@ -73,7 +76,7 @@ export default function NewPostScreen() {
       {media ? (
         <>
           {mediaUrl && !isVideoMedia(mediaUrl) ? (
-            <Image source={{ uri: resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
+            <Image source={{ uri: localUri ?? resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
           ) : mediaUrl ? (
             <Text style={styles.label}>{t('social.newPost.videoReady')}</Text>
           ) : null}

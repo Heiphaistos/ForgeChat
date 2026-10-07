@@ -1,4 +1,5 @@
 import { isUuid } from '@/lib/params'
+import { fileEntries, type FileEntry } from '@/e2e/crypto'
 
 /** Publication d'un salon forum (forum.rs::list_posts / get_post). */
 export interface ForumPost {
@@ -16,6 +17,8 @@ export interface ForumPost {
   lastActivity: string
   /** Salon média : image ou vidéo de la publication (`/uploads/…`). */
   mediaUrl: string | null
+  /** Médias chiffrés de la publication (clés, §12). */
+  files?: FileEntry[]
   /** Id tiré à la création : portée AAD du contenu et des réponses (postScope). */
   clientMsgId: string | null
   /** Contenu chiffré : déchiffré ('ok') ou en attente d'une clé ('locked') par e2e/channels.openPost. */
@@ -56,6 +59,7 @@ export function normalizePost(raw: unknown): ForumPost | null {
     mediaUrl: typeof r.media_url === 'string' && r.media_url.startsWith('/uploads/') ? r.media_url : null,
     clientMsgId: isUuid(r.client_msg_id) ? r.client_msg_id.toLowerCase() : null,
     ...(r.e2e === 'ok' || r.e2e === 'locked' ? { e2e: r.e2e } : {}),
+    ...(fileEntries(r.e2e_body).length ? { files: fileEntries(r.e2e_body) } : {}),
   }
 }
 

@@ -1,7 +1,8 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import * as Crypto from 'expo-crypto'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { messagesApi, type UploadFile } from '@/api/messages'
+import { e2eConv, messagesApi, type UploadFile } from '@/api/messages'
+import { prepareUploads, type PreparedUploads } from '@/e2e/files'
 import { ALLOWED_UPLOAD_EXTENSIONS, LIMITS } from '@/config/env'
 import { t } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
@@ -174,14 +175,21 @@ export function useConversation(ref: ConversationRef) {
       // ci-dessous, qui concerne un message déjà confirmé (id réel, plus tmp-) —
       // les fusionner ferait retomber sur un patch(tempId) devenu sans effet.
       let real: ChatMessage
+      // Conversation chiffrée : fichiers chiffrés dans le cache avant l'envoi, leurs clés vont
+      // dans le message chiffré ; les blobs du cache sont effacés après l'envoi (§12).
+      let prepared: PreparedUploads | null = null
       try {
+        const [kind, convId] = e2eConv(stableRef)
+        prepared = await prepareUploads(kind, convId, files)
         real = await messagesApi.send(stableRef, {
           content: text || null,
           replyTo: opts.replyTo?.id ?? null,
           hasAttachments: files.length > 0,
           expiresInSeconds: opts.expiresInSeconds ?? null,
+          files: prepared.entries,
         })
       } catch (e) {
+        prepared?.cleanup()
         // Le composer récupère le texte et les fichiers (sendErrors.restoreAfterSendError) :
         // on retire la bulle pour ne pas les afficher en double.
         removeMessage(stableRef.kind, id, tempId)
@@ -191,7 +199,7 @@ export function useConversation(ref: ConversationRef) {
 
       if (files.length) {
         try {
-          const uploaded = await messagesApi.upload(stableRef, real.id, files)
+          const uploaded = await messagesApi.upload(stableRef, real.id, prepared.uploads)
           patchMessage(stableRef.kind, id, real.id, (m) => ({ ...m, attachments: uploaded, awaitingAttachments: false }))
         } catch (e) {
           if (!text) {
@@ -207,6 +215,8 @@ export function useConversation(ref: ConversationRef) {
             }))
           }
           throw new AttachmentUploadError(`Pièce jointe non envoyée : ${errorMessage(e)}`)
+        } finally {
+          prepared.cleanup()
         }
       }
     },

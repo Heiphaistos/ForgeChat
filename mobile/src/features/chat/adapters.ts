@@ -1,5 +1,6 @@
 import type { ChatMessage, ConversationRef, DmMessage, GroupMessage, ServerMessage } from '@/types/models'
 import { firstUrl } from '@/e2e/channelText'
+import { fileEntries } from '@/e2e/crypto'
 import { normalizeOg } from './messageExtras'
 
 /**
@@ -59,9 +60,10 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
   }
 }
 
-/** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`). */
+/** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`, les clés des fichiers dans `files`). */
 function e2eFields(m: { client_msg_id?: string | null; e2e?: 'ok' | 'locked' }) {
-  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}) }
+  const files = fileEntries((m as { e2e_body?: unknown }).e2e_body)
+  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}), ...(files.length ? { files } : {}) }
 }
 
 export function fromGroupMessage(m: GroupMessage): ChatMessage {
@@ -115,8 +117,7 @@ export function fromThreadMessage(raw: unknown): ChatMessage | null {
     reactions: Array.isArray(m.reactions) ? (m.reactions as ChatMessage['reactions']) : [],
     pinned: false,
     // Fil ou forum chiffré (déchiffré par e2e/conversations.openRaw avec la portée du fil ou de la publication).
-    clientMsgId: s(m.client_msg_id),
-    ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}),
+    ...e2eFields({ client_msg_id: s(m.client_msg_id), ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}), e2e_body: m.e2e_body } as Parameters<typeof e2eFields>[0]),
     ...(m.unencrypted === true ? { unencrypted: true } : {}),
   }
 }
