@@ -39,6 +39,7 @@ import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import DisappearingControl from '../components/chat/DisappearingControl'
 import { ThreadCountsContext } from '../components/chat/threadCounts'
+import { rememberConvName } from '../e2e/searchIndex'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -406,6 +407,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     const m = useChat.getState().messagesByChannel[channelId ?? '']?.find(x => x.id === msgId)
     return (m?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || t('autothread.reply')
   }
+
+  // Noms des salons pour le filtre dans: de la recherche locale.
+  useEffect(() => {
+    for (const c of serverData?.channels ?? []) rememberConvName(c.id, c.name, serverId)
+  }, [serverData?.channels, serverId])
 
   // Titre de page contextuel : "#canal — Serveur | ForgeChat"
   const _titleCh: string | undefined = (serverData?.channels ?? []).find((c: any) => c.id === channelId)?.name

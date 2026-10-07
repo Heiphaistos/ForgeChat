@@ -23,6 +23,7 @@ import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawM
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import DisappearingControl from '../components/chat/DisappearingControl'
+import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 
@@ -128,6 +129,9 @@ export default function DMPage() {
   const partnerAvatar = dmInfo?.avatar ?? null
   const partnerId = dmInfo?.other_user_id ?? ''
   const status = partnerId ? getStatus(partnerId) : 'offline'
+
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (dmId && dmInfo?.username) rememberConvName(dmId, dmInfo.username) }, [dmId, dmInfo?.username])
 
   useEffect(() => {
     if (partnerName === 'Utilisateur') return

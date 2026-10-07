@@ -14,6 +14,7 @@ import {
 } from './accountKey'
 import { answerKeyRequest, forgetConv, reencryptLegacy } from './conversations'
 import { startDraftSync } from './drafts'
+import { startSearchIndex } from './searchIndex'
 
 const inputCls = 'w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent'
 const btnCls = 'w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50'
@@ -177,8 +178,11 @@ export default function E2EGate() {
     // Clé de récupération d'un serveur créée ou changée : les prochaines époques doivent l'inclure.
     const offServerKey = on('SERVER_KEY', () => forgetConv())
     // Brouillons chiffrés, synchronisés entre appareils.
-    const offDrafts = startDraftSync(on as (type: string, h: (d: unknown) => void) => () => void)
-    return () => { offReq(); offKeys(); offServerKey(); offDrafts() }
+    const sub = on as (type: string, h: (d: unknown) => void) => () => void
+    const offDrafts = startDraftSync(sub)
+    // Index local de recherche : messages supprimés ou échus retirés.
+    const offIndex = startSearchIndex(sub)
+    return () => { offReq(); offKeys(); offServerKey(); offDrafts(); offIndex() }
   }, [status, on])
   useEffect(() => { if (!userId) forgetConv() }, [userId])
 

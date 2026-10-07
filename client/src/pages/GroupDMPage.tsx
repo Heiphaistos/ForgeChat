@@ -27,6 +27,7 @@ import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import DisappearingControl from '../components/chat/DisappearingControl'
 import { AfterReadBadge, EphemeralBadge } from '../components/chat/messageListShared'
+import { rememberConvName, searchLocal } from '../e2e/searchIndex'
 import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
@@ -162,6 +163,8 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/dms/groups/${groupId}`).then(r => r.data),
     enabled: !!groupId,
   })
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (group) rememberConvName(group.id, group.name) }, [group?.id, group?.name])
   // Appel de groupe : participants connus au chargement, puis mis à jour par GROUP_CALL_UPDATE.
   const joinGroupCall = useGroupCall(s => s.join)
   const setCallActive = useGroupCall(s => s.setActive)
@@ -227,15 +230,28 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/dms/groups/${groupId}/messages/search?q=${encodeURIComponent(searchQuery)}`).then(r => r.data),
     enabled: !!groupId && searchQuery.trim().length >= 2 && !encrypted,
   })
+  // Index local des messages déjà déchiffrés sur cet appareil (filtres de:, a:fichier).
+  const { data: indexedResults = [] } = useQuery({
+    queryKey: ['search_local', groupId, searchQuery],
+    queryFn: () => searchLocal(searchQuery, groupId),
+    enabled: !!groupId && encrypted && searchQuery.trim().length >= 2,
+    staleTime: 5_000,
+  })
   const searchResults = useMemo(() => {
     if (!encrypted) return serverResults
     const q = searchQuery.trim().toLowerCase()
     if (q.length < 2) return []
-    return allMessages
+    const loaded = allMessages
       .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
       .map(m => ({ ...m, author_username: m.sender_username, author_avatar: m.sender_avatar }))
       .reverse()
-  }, [encrypted, serverResults, searchQuery, allMessages])
+    const ids = new Set(loaded.map(m => m.id))
+    const fromIndex = indexedResults.filter(m => !ids.has(m.id)).map(m => ({
+      id: m.id, content: m.text, created_at: m.createdAt, edited_at: null, sender_id: m.authorId,
+      sender_username: m.authorName, sender_avatar: null, author_username: m.authorName, author_avatar: null,
+    }))
+    return [...loaded, ...fromIndex].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  }, [encrypted, serverResults, searchQuery, allMessages, indexedResults])
 
   // Initialiser les messages une seule fois par groupId
   useEffect(() => {

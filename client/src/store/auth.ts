@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
-import { useChat } from './chat'
+import { useChat, useDraft } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
 import { useWs } from './ws'
@@ -9,6 +9,7 @@ import { useChannelNotif, EMPTY_NOTIF_STATE } from './channelNotif'
 import { disableWebPush } from '../utils/webPush'
 import { queryClient } from '../main'
 import { clearAccountKey, rememberPassword } from '../e2e/accountKey'
+import { clearSearchIndex } from '../e2e/searchIndex'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -75,6 +76,9 @@ export const useAuth = create<AuthState>()(
       await api.post('/auth/logout', body).catch(() => {})
       if (isTauri) localStorage.clear()
       await clearAccountKey()
+      // Aucun texte déchiffré ne reste sur l'appareil : index de recherche et brouillons (resynchronisés à la connexion).
+      await clearSearchIndex()
+      useDraft.setState({ drafts: {} })
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
