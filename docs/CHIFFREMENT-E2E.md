@@ -50,8 +50,8 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Annonces suivies (crosspost) : désactivées pour les salons chiffrés dans un premier temps (la copie exigerait la clé du salon cible).
 
 ## 5. Vocal, appels, partage d'écran
-- LiveKit E2EE (insertable streams / frame cryptor) avec un fournisseur de clé externe : clé de média = HKDF(clé de conversation de l'époque courante, info "forgechat media v1|<conv>|<epoch>"). Nouvelle époque = nouvelle clé (ratchet LiveKit sur changement).
-- Web : `livekit-client` E2EE (worker) ; mobile : `@livekit/react-native` E2EE (à vérifier sur la version installée). Un participant sans E2EE ne peut pas rejoindre un salon chiffré (message « mets à jour l'appli »).
+- LiveKit E2EE (trames chiffrées AES-GCM, insertable streams / frame cryptor) avec un fournisseur de clé externe : clé de média = HKDF(clé de conversation de l'époque courante, info "forgechat media v1|<conv>|<epoch>"). Nouvelle époque = nouvelle clé, nouvel index dans l'anneau de LiveKit.
+- Livré à l'étape 5 : détails au §10.
 
 ## 6. Historique existant (rechiffrement puis purge)
 - Le serveur garde les anciens messages en clair marqués `legacy`.
@@ -94,3 +94,40 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 ### Anciennes applis
 - Web : servie par le serveur, toujours à jour au rechargement.
 - Mobile/bureau d'avant cette étape : un message chiffré arrive avec `content = null` et s'affiche comme une bulle vide (auteur et heure, sans texte, aucune erreur). L'envoi de texte dans une conversation dont tous les membres ont une clé échoue avec le message du serveur « PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire. ». Tant qu'un membre n'a pas de clé (appli ancienne jamais connectée avec la nouvelle version), la conversation reste en clair.
+
+## 10. Étape 5 réalisée : vocal, appels, caméra, partage d'écran
+
+### Clé de média
+- `clé de média = HKDF-SHA256(clé de conversation de l'époque, sel vide, "forgechat media v1|<conv>|<epoch>", 32 o)`, encodée en base64url ; `<conv>` = `dm:<id>`, `group:<id>` ou `channel:<id du salon vocal>`.
+- Cette **chaîne** est donnée à LiveKit, qui en dérive la clé AES-GCM des trames par PBKDF2 (sel `LKFrameEncryptionKey`) : c'est le seul chemin de dérivation commun au worker web, au FrameCryptor natif du mobile et au SDK Rust (le chemin HKDF de LiveKit n'existe que sur le web).
+- Index de clé = `époque mod 16` (anneau de 16 clés). Clé partagée par tous les participants, aucun ratchet automatique (`ratchetWindowSize 0`, `failureTolerance -1`) : une trame illisible ne fait jamais jeter la bonne clé.
+- Nouvelle époque pendant l'appel (départ d'un membre puis rotation, événement `E2E_KEYS`) : chaque appli relit l'époque courante, pose la nouvelle clé à son index et chiffre aussitôt avec ; les trames encore à l'ancien index restent lisibles (clé gardée dans l'anneau). Rejoindre un appel crée l'époque si besoin (première fois, rotation en attente), comme l'envoi d'un message (`currentKey`).
+- Vecteur commun `media` dans `docs/e2e-vectors.json` (web `scripts/e2e.test.mjs`, mobile `__tests__/e2e-crypto.test.ts`), recoupé avec une implémentation HKDF indépendante (Python).
+- Chiffrés : micro, caméra, partage d'écran et son du partage (toutes les pistes publiées), et les paquets du canal de données LiveKit (option `encryption`, réactions…).
+
+### Serveur
+- L'accès LiveKit joint au client porte `e2ee: true` quand la conversation de la salle est chiffrée (même règle que le texte : tous ses membres ont une clé de compte, `e2e_conv::media_e2ee`) : `VOICE_EXISTING_PEERS.livekit` (conversation `channel:<salon>`), `GROUP_CALL_MEDIA.livekit` (`group`), `DM_CALL_ACCEPTED/DM_CALL_MEDIA.livekit` (`dm`, plus `conv_id` : la conversation privée retrouvée par la paire d'utilisateurs, jamais l'id envoyé par le client). Erreur de base : `e2ee: true` (échec propre plutôt que clair).
+- Générique sur `kind` : tant que le type `channel` n'existe pas côté serveur (`Conv::parse` le refuse), les salons vocaux restent en clair ; ils passent en chiffré **sans autre changement** dès que `channel` est ajouté à `Conv` (membres = VIEW_CHANNEL) et que les applis savent créer ses époques.
+- Les applis à jour annoncent `e2ee: true` dans `VOICE_JOIN`, `GROUP_CALL_JOIN`, `DM_CALL_INIT`, `DM_CALL_ACCEPT` ; le jeton LiveKit porte alors l'attribut de participant `e2ee = "1"` (pour l'appelant d'un MP, l'annonce est gardée 60 s dans Redis `call_e2ee:<appelant>:<appelé>` jusqu'au décroché).
+
+### Applis
+- **Web** (`client/src/e2e/media.ts`, `mediaKeyProvider.ts`) : `Room({ encryption: { keyProvider, worker } })` + `setE2EEEnabled(true)` avant `connect`, worker `livekit-client/e2ee-worker` empaqueté par Vite (`new Worker(new URL(...), { type: 'module' })`, fichier servi depuis l'origine : CSP `worker-src 'self' blob:` déjà présente dans nginx et dans `desktop/src-tauri/tauri.conf.json`). Appels privés (`store/call.ts`), de groupe (`store/groupCall.ts`), salons vocaux (`store/voiceSfu.ts`).
+- **Mobile** (`mobile/src/e2e/media.ts`) : `RNE2EEManager` + sous-classe de `RNKeyProvider` (module natif déjà présent dans `@livekit/react-native-webrtc` 144, **aucune configuration native supplémentaire**). Le `RNKeyProvider` d'origine ne suit l'index d'émission qu'en mode « une clé par participant » : la sous-classe le fournit, et les chiffreurs d'émission déjà créés reçoivent le nouvel index (champ privé `frameCryptors` du SDK, accès documenté dans le code). Appels privés, de groupe, salons vocaux.
+- **Bureau Windows** : vue web WebView2, chemin web.
+- **Bureau Linux** (voix native Rust, SDK LiveKit 0.9.1, FrameCryptor natif, sans nouvelle crate) : `nv_connect` reçoit `{ key, index }` du web et rejoint avec `E2eeOptions { Gcm }` ; `nv_set_key` pose la clé d'une nouvelle époque. Le SDK crée ses chiffreurs d'émission à l'index 0 : l'index courant leur est donné après chaque publication et changement de clé.
+- **Jamais de connexion en clair** à une salle `e2ee: true` : clé verrouillée, clé en attente, navigateur sans insertable streams ni RTCRtpScriptTransform → message clair (« Déverrouille ta clé… », « Clé en attente… », « Ce navigateur ne sait pas chiffrer… ») et pas de connexion.
+- Cadenas « Appel chiffré de bout en bout » dans l'écran d'appel privé, l'appel de groupe et le salon vocal (web et mobile, fr + en) ; participant sans l'attribut `e2ee = "1"` : « X n'a pas une version à jour de ForgeChat et n'entend que du bruit chiffré : il faut mettre à jour ForgeChat. »
+- Clips (enregistrement local des dernières secondes) : ils enregistrent les pistes reçues, qui sont déjà déchiffrées (le déchiffrement a lieu avant le décodeur) ; le test navigateur ci-dessous lit justement le son par cette piste.
+
+### Anciennes applis
+- Une appli d'avant cette étape rejoint une salle chiffrée sans chiffrer : elle n'entend que du bruit (trames illisibles) et les applis à jour ne l'entendent pas (trames rejetées) ; son propre micro part en clair jusqu'au SFU (inévitable, l'appli ne sait pas chiffrer). Les applis à jour affichent l'alerte « mets à jour ForgeChat ».
+
+### Tests
+- Unitaires : vecteur `media` (web + mobile), `__tests__/e2e-media.test.ts` (clé et index donnés au fournisseur natif, nouvelle époque pendant l'appel, refus sans clé), `livekit.rs` (attribut `e2ee` du jeton), `livekit-url.test.ts` (champs `e2ee` / `conv_id`).
+- Navigateur, **local uniquement** : `client/scripts/e2ee-media.playwright.mjs` + `client/e2ee-harness/` contre un `livekit-server` local lié à 127.0.0.1 (clé `devkey`). Mesuré le 2026-10-07 (LiveKit 1.13.7, Chromium 151) : même clé → 440 Hz reçu à −28 dB, piste annoncée chiffrée ; clé d'une autre conversation au même index → aucun son (6 erreurs « InvalidKey ») ; clé d'une autre époque → aucun son (« MissingKey »). Lancer : `PW_MODULE=<…>/node_modules/playwright/index.mjs node scripts/e2ee-media.playwright.mjs` (Playwright n'est pas une dépendance du projet).
+
+### Limites connues
+- Interopérabilité web ↔ mobile ↔ Linux natif : même format de trame LiveKit et même dérivation PBKDF2 (compatibilité annoncée par LiveKit pour le chemin « chaîne ») ; **vérifiée seulement de navigateur à navigateur**, pas encore sur un téléphone ni sur l'appli Linux (à faire avec deux appareils réels).
+- Appli Linux native : pas d'alerte « participant à mettre à jour » (le processus natif ne remonte pas les attributs des participants) ; le chiffrement lui-même est actif.
+- Salons vocaux : chiffrés seulement quand le type de conversation `channel` existe (étape 3).
+
