@@ -88,8 +88,18 @@ export const serversApi = {
   moveChannel: (channelId: string, categoryId: string | null) => http.patch(path`/channels/${channelId}/move`, { category_id: categoryId }),
   deleteCategory: (serverId: string, categoryId: string) => http.delete(path`/servers/${serverId}/categories/${categoryId}`),
   createRole: (serverId: string, name: string) => http.post<Role>(path`/servers/${serverId}/roles`, { name: name.trim() }),
-  updateRole: (serverId: string, roleId: string, patch: { name?: string; color?: number; permissions?: number; hoisted?: boolean; mentionable?: boolean }) =>
-    http.patch<Role>(path`/servers/${serverId}/roles/${roleId}`, patch),
+  /** `secondary_color` négatif = retirer le dégradé ; `icon` : emoji, ou "" pour retirer l'icône. */
+  updateRole: (
+    serverId: string,
+    roleId: string,
+    patch: { name?: string; color?: number; permissions?: number; hoisted?: boolean; mentionable?: boolean; secondary_color?: number; icon?: string },
+  ) => http.patch<Role>(path`/servers/${serverId}/roles/${roleId}`, patch),
+  /** Image d'icône du rôle (png/jpg/gif/webp, 256 Ko max). */
+  uploadRoleIcon: (serverId: string, roleId: string, file: { uri: string; name: string; type: string }) => {
+    const fd = new FormData()
+    fd.append('icon', file as unknown as Blob)
+    return http.upload<Role>(path`/servers/${serverId}/roles/${roleId}/icon`, fd)
+  },
   deleteRole: (serverId: string, roleId: string) => http.delete(path`/servers/${serverId}/roles/${roleId}`),
   /** Tous les rôles sauf @everyone, du plus haut au plus bas (features/servers/reorder). */
   reorderRoles: (serverId: string, roleIds: string[]) => http.patch(path`/servers/${serverId}/roles/order`, { role_ids: roleIds }),

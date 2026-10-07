@@ -10,6 +10,7 @@ import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
 import MediaContent from '../chat/MediaContent'
+import LightboxModal from '../chat/LightboxModal'
 import EmojiPicker from '../chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../chat/LinkPreview'
 import { AttachmentList, PendingFiles, usePendingFiles, uploadPendingFiles, type SimpleAttachment } from '../chat/ThreadAttachments'
@@ -36,6 +37,25 @@ export interface ForumPost {
   reply_count: number
   last_reply_at?: string
   created_at: string
+  /** Salon média : image ou vidéo de la publication. */
+  media_url?: string | null
+}
+
+export const isVideoUrl = (u: string) => /\.(mp4|webm|mov)$/i.test(u)
+
+/** Média d'une publication de salon média, en grand (image : plein écran au clic). */
+function PostMedia({ url }: { url: string }) {
+  const [open, setOpen] = useState(false)
+  if (isVideoUrl(url)) {
+    return <video src={mediaUrl(url)} controls playsInline preload="metadata" className="w-full max-h-[70vh] rounded-lg bg-black" />
+  }
+  return (
+    <>
+      <img src={mediaUrl(url)} alt="" decoding="async" onClick={() => setOpen(true)}
+        className="w-full max-h-[70vh] object-contain rounded-lg bg-black cursor-zoom-in" />
+      {open && <LightboxModal images={[url]} initialIndex={0} onClose={() => setOpen(false)} />}
+    </>
+  )
 }
 
 export interface ForumReply {
@@ -338,6 +358,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           }
         }}
       >
+        {(data?.post?.media_url ?? post.media_url) && <PostMedia url={(data?.post?.media_url ?? post.media_url)!} />}
+
         {/* Post original */}
         {data?.post?.content && (
           <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover group">

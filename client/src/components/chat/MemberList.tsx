@@ -9,6 +9,7 @@ import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
 import UserPopup from '../UserPopup'
 import { useMemberModeration } from './MemberModeration'
+import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 
 interface Props {
   serverId: string
@@ -42,7 +43,7 @@ const STATUS_LABELS: Record<string, string> = {
   invisible: 'Invisible',
 }
 
-function MemberRow({ m, onClick, onContextMenu, onLongPress }: { m: any; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
+function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; decor?: RoleDecor; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
   const statusLabel = STATUS_LABELS[m.liveStatus] ?? 'Hors ligne'
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   return (
@@ -79,7 +80,8 @@ function MemberRow({ m, onClick, onContextMenu, onLongPress }: { m: any; onClick
       </div>
       <div className="min-w-0">
         <div className={`text-sm font-medium truncate ${m.liveStatus === 'offline' || m.liveStatus === 'invisible' ? 'text-fc-muted' : 'text-fc-text group-hover:text-white'}`}>
-          {m.nickname ?? m.username}
+          <span style={decor?.style}>{m.nickname ?? m.username}</span>
+          {decor?.icon && <span className="ml-1"><RoleIcon icon={decor.icon} title={decor.iconTitle} /></span>}
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
         {m.activity_type && m.activity_name ? (
@@ -110,6 +112,7 @@ export default function MemberList({ serverId, onClose }: Props) {
     staleTime: 5 * 60_000,
   })
 
+  const roleDecor = useRoleDecor(serverId)
   const presenceStatuses = usePresence(s => s.statuses)
   // Activité en direct (WS) : remplace l'ancien rechargement toutes les 30 s
   const presenceActivities = usePresence(s => s.activities)
@@ -269,7 +272,7 @@ export default function MemberList({ serverId, onClose }: Props) {
                   {it.label}
                 </div>
               ) : (
-                <MemberRow m={it.m} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
+                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
               )}
             </div>
           )

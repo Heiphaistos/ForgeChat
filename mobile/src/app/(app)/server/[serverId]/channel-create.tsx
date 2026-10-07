@@ -12,6 +12,7 @@ import { colors, spacing } from '@/theme'
 const TYPES = [
   { type: 'text', label: 'Textuel', icon: 'chatbubble-outline' },
   { type: 'voice', label: 'Vocal', icon: 'volume-medium' },
+  { type: 'media', label: 'Médias', icon: 'images-outline' },
   { type: 'category', label: 'Catégorie', icon: 'folder-open-outline' },
 ] as const
 

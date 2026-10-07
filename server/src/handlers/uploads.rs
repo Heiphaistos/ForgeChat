@@ -24,6 +24,9 @@ pub const ALLOWED_EXTENSIONS: &[&str] = &[
     "bin",
 ];
 
+/// Médias acceptés par les forums et les salons médias (images et vidéos).
+pub const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"];
+
 /// Écrit un fichier reçu morceau par morceau sur le disque, sans jamais le charger entier en
 /// mémoire (jusqu'à 500 Mo par fichier). Au-delà de `max` octets, le fichier partiel est supprimé
 /// et l'envoi refusé. Rend la taille écrite.
@@ -360,8 +363,6 @@ pub async fn forum_upload(
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
-
-    const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"];
 
     let upload_dir = PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await

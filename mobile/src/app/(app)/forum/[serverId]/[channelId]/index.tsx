@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { Stack, router } from 'expo-router'
 import { useMemo } from 'react'
@@ -7,17 +8,18 @@ import { forumApi } from '@/api/forum'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { LIMITS } from '@/config/env'
-import { nextPostsCursor, type ForumPost } from '@/features/forum/forum'
+import { isVideoMedia, nextPostsCursor, type ForumPost } from '@/features/forum/forum'
 import { TagChips } from '@/features/forum/TagChips'
 import { formatRelative } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
+import { resolveMediaUrl } from '@/lib/links'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 
-/** Salon forum : publications (épinglées d'abord, ordre du salon), comme ForumPage. */
+/** Salon forum : publications (épinglées d'abord, ordre du salon), comme ForumPage. Salon média (media=1) : grille de vignettes. */
 export default function ForumScreen() {
-  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name'])
+  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name', 'media'])
   const q = useInfiniteQuery({
     queryKey: qk.forum(ids.channelId ?? ''),
     queryFn: ({ pageParam }) => forumApi.posts(ids.serverId, ids.channelId, pageParam),
@@ -28,6 +30,7 @@ export default function ForumScreen() {
   const posts = useMemo(() => q.data?.pages.flat() ?? [], [q.data])
   if (!valid) return <ErrorState message="Lien de salon invalide." />
   const name = text.name || 'forum'
+  const media = text.media === '1'
 
   const open = (p: ForumPost) =>
     router.push({ pathname: '/forum/[serverId]/[channelId]/[postId]', params: { serverId: ids.serverId, channelId: ids.channelId, postId: p.id, title: p.title } })
@@ -41,7 +44,7 @@ export default function ForumScreen() {
             <IconButton
               icon="add"
               label="Nouvelle publication"
-              onPress={() => router.push({ pathname: '/forum/[serverId]/[channelId]/new', params: { serverId: ids.serverId, channelId: ids.channelId } })}
+              onPress={() => router.push({ pathname: '/forum/[serverId]/[channelId]/new', params: { serverId: ids.serverId, channelId: ids.channelId, media: media ? '1' : '0' } })}
             />
           ),
         }}
@@ -52,6 +55,9 @@ export default function ForumScreen() {
         <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : (
         <FlatList
+          key={media ? 'grid' : 'list'}
+          numColumns={media ? 3 : 1}
+          columnWrapperStyle={media ? { gap: spacing.xs } : undefined}
           style={{ backgroundColor: colors.bg }}
           contentContainerStyle={{ padding: spacing.md, gap: spacing.sm, flexGrow: 1 }}
           data={posts}
@@ -61,7 +67,23 @@ export default function ForumScreen() {
           onEndReachedThreshold={0.4}
           ListFooterComponent={q.isFetchingNextPage ? <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg }} /> : null}
           ListEmptyComponent={<EmptyState icon="albums-outline" title="Aucune publication" subtitle="Touche + pour lancer la discussion." />}
-          renderItem={({ item: p }) => (
+          renderItem={({ item: p }) => media ? (
+            <Pressable
+              onPress={() => open(p)}
+              style={styles.tile}
+              accessibilityRole="button"
+              accessibilityLabel={`${p.title}, par ${p.creatorName}, ${p.replyCount} réponse${p.replyCount > 1 ? 's' : ''}`}
+            >
+              {p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
+                <Image source={{ uri: resolveMediaUrl(p.mediaUrl) ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              ) : (
+                <Ionicons name="play-circle" size={36} color={colors.text} />
+              )}
+              <Text style={styles.tileCaption} numberOfLines={1}>
+                {p.title}
+              </Text>
+            </Pressable>
+          ) : (
             <Pressable
               onPress={() => open(p)}
               style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.bgHover }]}
@@ -104,4 +126,6 @@ const styles = StyleSheet.create({
   snippet: { color: colors.textSecondary, fontSize: font.sm },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   meta: { color: colors.textMuted, fontSize: font.xs, flexShrink: 1 },
+  tile: { flex: 1 / 3, aspectRatio: 1, borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.bgAlt, alignItems: 'center', justifyContent: 'center' },
+  tileCaption: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 4, color: '#fff', fontSize: font.xs, backgroundColor: 'rgba(0,0,0,0.55)' },
 })

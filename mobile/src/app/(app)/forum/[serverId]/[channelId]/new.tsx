@@ -1,19 +1,26 @@
 import { useQuery } from '@tanstack/react-query'
+import { Image } from 'expo-image'
+import * as ImagePicker from 'expo-image-picker'
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { forumApi } from '@/api/forum'
 import { Button, ErrorState, IconButton, TextField } from '@/components/ui'
-import { createPostBody, MAX_TAGS, normalizeTag, toggleTag } from '@/features/forum/forum'
+import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, normalizeTag, toggleTag } from '@/features/forum/forum'
 import { TagChips } from '@/features/forum/TagChips'
 import { errorMessage } from '@/lib/http'
+import { resolveMediaUrl } from '@/lib/links'
+import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, spacing } from '@/theme'
 
-/** Nouvelle publication (comme CreatePostModal) : titre, texte facultatif, 5 tags au plus. */
+/** Nouvelle publication (comme CreatePostModal) : titre, texte facultatif, 5 tags au plus. Salon média : image ou vidéo obligatoire. */
 export default function NewPostScreen() {
-  const { valid, ids } = useRouteParams(['serverId', 'channelId'] as const)
+  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['media'])
+  const media = text.media === '1'
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -24,7 +31,23 @@ export default function NewPostScreen() {
   if (!valid) return <ErrorState message="Lien de salon invalide." />
   const officialTags = official.data ?? []
 
-  const body = createPostBody(title, content, tags)
+  const body = media && !mediaUrl ? null : createPostBody(title, content, tags, mediaUrl)
+  const pickMedia = async () => {
+    if (!(await ensurePhotoAccess())) return
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'] })
+    const a = res.canceled ? undefined : res.assets[0]
+    if (!a) return
+    const ext = mediaExtension(a.mimeType)
+    if (!ext) return Alert.alert('Format refusé', 'Images JPEG, PNG, GIF, WEBP ou vidéos MP4, MOV, WEBM.')
+    setUploading(true)
+    try {
+      setMediaUrl(await forumApi.uploadMedia(ids.serverId, ids.channelId, { uri: a.uri, name: `media.${ext}`, type: a.mimeType ?? '' }))
+    } catch (e) {
+      Alert.alert('Envoi impossible', errorMessage(e))
+    } finally {
+      setUploading(false)
+    }
+  }
   const submit = () => {
     if (!body) return
     setBusy(true)
@@ -44,7 +67,17 @@ export default function NewPostScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} keyboardShouldPersistTaps="handled">
-      <TextField label="Titre" accessibilityLabel="Titre de la publication" value={title} onChangeText={setTitle} maxLength={200} />
+      {media ? (
+        <>
+          {mediaUrl && !isVideoMedia(mediaUrl) ? (
+            <Image source={{ uri: resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel="Média choisi" />
+          ) : mediaUrl ? (
+            <Text style={styles.label}>Vidéo prête à publier</Text>
+          ) : null}
+          <Button title={mediaUrl ? 'Changer le média' : 'Choisir une image ou une vidéo'} variant="secondary" icon="images-outline" loading={uploading} onPress={() => void pickMedia()} />
+        </>
+      ) : null}
+      <TextField label={media ? 'Légende' : 'Titre'} accessibilityLabel={media ? 'Légende du média' : 'Titre de la publication'} value={title} onChangeText={setTitle} maxLength={200} />
       <TextField
         label="Message (facultatif)"
         accessibilityLabel="Message de la publication, facultatif"
@@ -85,5 +118,6 @@ export default function NewPostScreen() {
 
 const styles = StyleSheet.create({
   label: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
+  preview: { width: '100%', aspectRatio: 1, backgroundColor: '#000', borderRadius: 8 },
   tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 })

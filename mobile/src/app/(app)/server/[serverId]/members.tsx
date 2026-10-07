@@ -8,6 +8,7 @@ import { ErrorState, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
+import { RoleIcon, useRoleDecor } from '@/features/servers/roleDecor'
 import { usePresence } from '@/stores/presence'
 import { colors, font, radius, spacing } from '@/theme'
 
@@ -17,6 +18,7 @@ export default function MembersScreen() {
   const manage = text.manage === '1'
   const q = useQuery({ queryKey: qk.members(ids.serverId ?? ''), queryFn: () => serversApi.members(ids.serverId), enabled: valid })
   const statuses = usePresence((s) => s.statuses)
+  const decorOf = useRoleDecor(ids.serverId ?? '')
   const [search, setSearch] = useState('')
 
   const sorted = useMemo(() => {
@@ -61,9 +63,12 @@ export default function MembersScreen() {
           >
             <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.name} numberOfLines={1}>
-                {item.nickname || item.username} {item.is_owner ? '👑' : ''}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                <Text style={[styles.name, { flexShrink: 1 }, decorOf(item.user_id)?.color ? { color: decorOf(item.user_id)?.color ?? undefined } : null]} numberOfLines={1}>
+                  {item.nickname || item.username} {item.is_owner ? '👑' : ''}
+                </Text>
+                <RoleIcon icon={decorOf(item.user_id)?.icon} title={decorOf(item.user_id)?.iconTitle} />
+              </View>
               {item.nickname ? <Text style={styles.sub}>{item.username}</Text> : null}
             </View>
           </Pressable>

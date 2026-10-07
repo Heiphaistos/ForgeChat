@@ -1,6 +1,6 @@
 import { mediaUrl } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
-import { Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, Users } from 'lucide-react'
+import { Hash, Volume2, Video, Megaphone, MessagesSquare, Images, Radio, Users } from 'lucide-react'
 
 interface Channel {
   id: string
@@ -30,6 +30,7 @@ function channelIcon(type: string) {
     case 'video': return <Video size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
     case 'announcement': return <Megaphone size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
     case 'forum': return <MessagesSquare size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
+    case 'media': return <Images size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
     case 'stage': return <Radio size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
     default: return <Hash size={16} className="flex-shrink-0 text-fc-muted" aria-hidden />
   }

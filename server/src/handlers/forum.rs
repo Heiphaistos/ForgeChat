@@ -29,6 +29,8 @@ pub struct ForumPost {
     pub reply_count: i32,
     pub last_reply_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Média d'une publication de salon média (`/uploads/<uuid>.<ext>`).
+    pub media_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -46,6 +48,15 @@ pub struct CreatePostReq {
     pub title: String,
     pub content: Option<String>,
     pub tags: Option<Vec<String>>,
+    /// URL rendue par POST .../forum-uploads ; obligatoire dans un salon média.
+    pub media_url: Option<String>,
+}
+
+/// Média d'un fichier téléversé par `forum_upload` : `/uploads/<uuid>.<ext image/vidéo>`.
+fn is_valid_media_url(url: &str) -> bool {
+    let Some((stem, ext)) = url.strip_prefix("/uploads/").and_then(|f| f.rsplit_once('.')) else { return false };
+    stem.len() == 36 && Uuid::parse_str(stem).is_ok()
+        && super::uploads::FORUM_EXTENSIONS.contains(&ext)
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,6 +123,7 @@ pub async fn list_posts(
             "reply_count": r.get::<i32, _>("reply_count"),
             "last_reply_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_reply_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "media_url": r.get::<Option<String>, _>("media_url"),
         })
     }).collect();
 
@@ -143,12 +155,20 @@ pub async fn create_post(
 
     let tags = body.tags.unwrap_or_default();
 
-    let require_tag: bool = sqlx::query_scalar(
-        "SELECT require_tag FROM channels WHERE id = $1"
+    let (require_tag, channel_type): (bool, String) = sqlx::query_as(
+        "SELECT require_tag, type FROM channels WHERE id = $1"
     )
     .bind(channel_id)
     .fetch_one(&state.db)
     .await?;
+    // Salon média : chaque publication porte une image ou une vidéo.
+    let media_url = body.media_url.as_deref().map(str::trim).filter(|u| !u.is_empty());
+    if media_url.is_some_and(|u| !is_valid_media_url(u)) {
+        return Err(AppError::BadRequest("Média invalide".into()));
+    }
+    if channel_type == "media" && media_url.is_none() {
+        return Err(AppError::BadRequest("Une publication de salon média exige une image ou une vidéo".into()));
+    }
     if require_tag && tags.is_empty() {
         return Err(AppError::BadRequest("Ce canal exige au moins un tag".into()));
     }
@@ -177,14 +197,15 @@ pub async fn create_post(
     }
 
     let post = sqlx::query_as::<_, ForumPost>(
-        "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *"
+        "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags, media_url)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(channel_id)
     .bind(&title)
     .bind(content_str.as_deref())
     .bind(claims.sub)
     .bind(&tags)
+    .bind(media_url)
     .fetch_one(&state.db)
     .await?;
 
@@ -273,6 +294,7 @@ pub async fn get_post(
         "locked": post_row.get::<bool, _>("locked"),
         "reply_count": post_row.get::<i32, _>("reply_count"),
         "created_at": post_row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "media_url": post_row.get::<Option<String>, _>("media_url"),
     });
 
     let replies: Vec<serde_json::Value> = reply_rows.iter().map(|r| {
@@ -510,6 +532,9 @@ pub async fn delete_post(
     }
 
     // Fichiers joints aux réponses : récupérés avant la cascade pour les supprimer du disque.
+    // ponytail: le média d'un salon média (media_url) reste sur le disque, comme les
+    // fichiers de forum_upload cités dans le texte : rien ne garantit qu'un seul post
+    // le référence. Ajouter un propriétaire au fichier si le disque le demande.
     let attachment_urls: Vec<String> = sqlx::query_scalar(
         "SELECT a.url FROM attachments a JOIN forum_replies fr ON fr.id = a.forum_reply_id WHERE fr.post_id = $1"
     )
@@ -641,3 +666,19 @@ pub async fn delete_reply(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_media_url;
+
+    #[test]
+    fn media_urls() {
+        let id = "0b6f3c2e-8d1a-4c5e-9f7a-1b2c3d4e5f60";
+        assert!(is_valid_media_url(&format!("/uploads/{id}.png")));
+        assert!(is_valid_media_url(&format!("/uploads/{id}.mp4")));
+        assert!(!is_valid_media_url(&format!("/uploads/{id}.pdf")));
+        assert!(!is_valid_media_url(&format!("/uploads/x/{id}.png")));
+        assert!(!is_valid_media_url(&format!("https://evil.test/{id}.png")));
+        assert!(!is_valid_media_url("/uploads/../secret.png"));
+    }
+}

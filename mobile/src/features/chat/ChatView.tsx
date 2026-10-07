@@ -32,6 +32,7 @@ import { useScrollTarget } from './pins'
 import { messageLink, supportsMessageExtras, supportsReactionDetail, supportsTranslate, type ReactionUser } from './messageExtras'
 import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
+import { useRoleDecor } from '@/features/servers/roleDecor'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
 const useDrafts = create<{ drafts: Record<string, string>; set: (id: string, v: string) => void }>((set) => ({
@@ -99,6 +100,7 @@ export function ChatView({
   const channelId = conversation.kind === 'channel' ? conversation.channelId : ''
   const groupId = conversation.kind === 'group' ? conversation.groupId : ''
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
+  const decorOf = useRoleDecor(serverId)
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
   // Emojis personnalisés du serveur (salons uniquement) : texte, réactions et palette.
   const emojiQuery = useQuery({ queryKey: qk.emojis(serverId), queryFn: () => serversApi.emojis(serverId), enabled: !!serverId, staleTime: 60_000 })
@@ -323,11 +325,12 @@ export function ChatView({
             onOpenThread={openThread}
             onReactionLongPress={showReactors}
             translation={translations[item.id]}
+            decor={serverId ? decorOf(item.authorId) : undefined}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations, decorOf],
   )
 
   const quickReactions = useMemo(

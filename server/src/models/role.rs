@@ -14,6 +14,12 @@ pub struct Role {
     pub hoisted: bool,
     pub is_everyone: bool,
     pub created_at: DateTime<Utc>,
+    /// Seconde couleur du dégradé de pseudo (color → secondary_color).
+    #[serde(default)]
+    pub secondary_color: Option<i32>,
+    /// Emoji unicode ou image `/uploads/role-icon-<uuid>.<ext>`.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,6 +39,10 @@ pub struct UpdateRoleRequest {
     pub mentionable: Option<bool>,
     pub hoisted: Option<bool>,
     pub position: Option<i32>,
+    /// Négatif = retirer le dégradé.
+    pub secondary_color: Option<i32>,
+    /// Chaîne vide = retirer l'icône ; sinon emoji (image : POST .../icon).
+    pub icon: Option<String>,
 }
 
 // Bitfield permissions (comme Discord)
@@ -87,4 +97,63 @@ impl Permissions {
         | Self::PRIORITY_SPEAKER | Self::CREATE_CHANNELS | Self::EDIT_CHANNELS
         | Self::DELETE_CHANNELS | Self::DELETE_OWN_CHANNELS | Self::BAN_TEMP
         | Self::STREAM | Self::ADMINISTRATOR;
+}
+
+/// Couleur RGB 24 bits (0x000000-0xFFFFFF).
+pub fn is_valid_color(c: i32) -> bool {
+    (0..=0xFF_FFFF).contains(&c)
+}
+
+pub const ROLE_ICON_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp"];
+
+/// Préfixe des icônes de rôle téléversées (`/uploads/role-icon-<uuid>.<ext>`,
+/// à plat pour que `remove_upload_files` puisse les supprimer).
+pub const ROLE_ICON_PREFIX: &str = "/uploads/role-icon-";
+
+/// Emoji d'icône de rôle : 1 à 8 caractères, au moins un non ASCII, ASCII limité
+/// aux chiffres/#/* des keycaps, ni espace ni caractère de contrôle.
+/// `None` = entrée invalide.
+pub fn normalize_role_emoji(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    let n = s.chars().count();
+    let ascii_ok = |c: char| !c.is_ascii() || c.is_ascii_digit() || c == '#' || c == '*';
+    let ok = (1..=8).contains(&n)
+        && s.chars().any(|c| !c.is_ascii())
+        && s.chars().all(|c| ascii_ok(c) && !c.is_control() && !c.is_whitespace());
+    ok.then(|| s.to_string())
+}
+
+/// Extension d'image autorisée pour une icône de rôle, d'après le nom de fichier.
+pub fn role_icon_ext(file_name: &str) -> Option<String> {
+    let ext = std::path::Path::new(file_name).extension()?.to_str()?.to_lowercase();
+    ROLE_ICON_EXTENSIONS.contains(&ext.as_str()).then_some(ext)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colors() {
+        assert!(is_valid_color(0));
+        assert!(is_valid_color(0xFF_FFFF));
+        assert!(!is_valid_color(-1));
+        assert!(!is_valid_color(0x100_0000));
+    }
+
+    #[test]
+    fn icons() {
+        assert_eq!(normalize_role_emoji(" 🔥 ").as_deref(), Some("🔥"));
+        assert!(normalize_role_emoji("1️⃣").is_some());
+        assert!(normalize_role_emoji("👨‍👩‍👧").is_some());
+        assert!(normalize_role_emoji("abc").is_none());
+        assert!(normalize_role_emoji("<b>🔥</b>").is_none());
+        assert!(normalize_role_emoji("🔥🔥🔥🔥🔥🔥🔥🔥🔥").is_none());
+        assert!(normalize_role_emoji("🔥 x").is_none());
+        assert!(normalize_role_emoji("/uploads/role-icon-x.png").is_none());
+        assert_eq!(role_icon_ext("Logo.PNG").as_deref(), Some("png"));
+        assert!(role_icon_ext("x.svg").is_none());
+        assert!(role_icon_ext("x").is_none());
+        assert!(role_icon_ext("x.png.html").is_none());
+    }
 }

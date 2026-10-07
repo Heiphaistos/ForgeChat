@@ -19,7 +19,12 @@ export const forumApi = {
     const replies = Array.isArray(raw?.replies) ? raw.replies.flatMap((r) => fromThreadMessage(r) ?? []) : []
     return { post: normalizePost(raw?.post), replies }
   },
-  create: (serverId: string, channelId: string, body: { title: string; content?: string; tags: string[] }) => http.post(base(serverId, channelId), body),
+  create: (serverId: string, channelId: string, body: { title: string; content?: string; tags: string[]; media_url?: string }) => http.post(base(serverId, channelId), body),
+  /** Image ou vidéo d'une publication de salon média (uploads.rs::forum_upload) ; renvoie son URL. */
+  async uploadMedia(serverId: string, channelId: string, file: UploadFile): Promise<string | null> {
+    const r = await http.upload<{ url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm([file]))
+    return typeof r?.url === 'string' ? r.url : null
+  },
   /** Renvoie l'id de la réponse créée (pour y joindre ensuite des fichiers). */
   async reply(serverId: string, channelId: string, postId: string, content: string, hasAttachments = false): Promise<string | null> {
     const r = await http.post<{ reply?: { id?: unknown } }>(base(serverId, channelId) + path`/${postId}/replies`, { content, has_attachments: hasAttachments })

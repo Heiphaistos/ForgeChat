@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { MessagesSquare, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
+import { MessagesSquare, Images, Play, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
 import { useMediaUpload } from '../components/chat/MediaContent'
-import PostView, { AttachButton, type ForumPost } from '../components/forum/PostView'
+import PostView, { AttachButton, isVideoUrl, type ForumPost } from '../components/forum/PostView'
 import EmojiPicker from '../components/chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
@@ -26,10 +26,13 @@ interface Props {
   serverId: string
   channelId: string
   canManageMessages?: boolean
+  /** Salon média : grille de vignettes, chaque publication exige une image ou une vidéo. */
+  media?: boolean
 }
 
-function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; channelId: string; onClose: () => void }) {
+function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: string; channelId: string; media?: boolean; onClose: () => void }) {
   const [title, setTitle] = useState('')
+  const [mediaFile, setMediaFile] = useState<string | null>(null)
   const [content, setContent] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -49,6 +52,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
       title: title.trim(),
       content: content.trim() || undefined,
       tags,
+      ...(mediaFile ? { media_url: mediaFile } : {}),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
@@ -80,14 +84,39 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
           <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition"><X size={20} aria-hidden /></button>
         </div>
         <div className="p-6 space-y-4">
+          {media && (
+            <div>
+              <span className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Média *</span>
+              {mediaFile ? (
+                <div className="relative">
+                  {isVideoUrl(mediaFile)
+                    ? <video src={mediaUrl(mediaFile)} controls playsInline className="w-full max-h-64 rounded bg-black" />
+                    : <img src={mediaUrl(mediaFile)} alt="" className="w-full max-h-64 object-contain rounded bg-black" />}
+                  <button onClick={() => setMediaFile(null)} aria-label="Retirer le média" className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black"><X size={14} aria-hidden /></button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => postUpload.pick(setMediaFile)}
+                  onDrop={e => postUpload.onDrop(e, setMediaFile)}
+                  onDragOver={postUpload.onDragOver}
+                  disabled={postUpload.uploading}
+                  className="w-full h-32 border-2 border-dashed border-fc-hover rounded flex flex-col items-center justify-center gap-1 text-fc-muted hover:text-white hover:border-fc-accent transition disabled:opacity-50"
+                >
+                  {postUpload.uploading ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <Images size={20} aria-hidden />}
+                  <span className="text-sm">Choisir ou déposer une image / vidéo</span>
+                </button>
+              )}
+            </div>
+          )}
           <div>
-            <label htmlFor="fp-title" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Titre *</label>
+            <label htmlFor="fp-title" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{media ? 'Légende *' : 'Titre *'}</label>
             <input
               id="fp-title"
               autoFocus
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="Titre du post..."
+              placeholder={media ? 'Légende du média...' : 'Titre du post...'}
               maxLength={200}
               enterKeyHint="next"
               autoCapitalize="sentences"
@@ -165,8 +194,8 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
         <div className="p-4 bg-fc-bg/50 rounded-b-lg flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">Annuler</button>
           <button
-            onClick={() => title.trim() && create.mutate()}
-            disabled={!title.trim() || create.isPending}
+            onClick={() => title.trim() && (!media || mediaFile) && create.mutate()}
+            disabled={!title.trim() || (media && !mediaFile) || create.isPending}
             className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
             {create.isPending ? 'Publication...' : 'Publier'}
@@ -177,7 +206,7 @@ function CreatePostModal({ serverId, channelId, onClose }: { serverId: string; c
   )
 }
 
-export default function ForumPage({ channel, serverId, channelId, canManageMessages }: Props) {
+export default function ForumPage({ channel, serverId, channelId, canManageMessages, media }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedPost, setSelectedPostState] = useState<ForumPost | null>(null)
   const [urlParams, setUrlParams] = useSearchParams()
@@ -292,7 +321,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
         >
           <ChevronLeft size={20} />
         </button>
-        <MessagesSquare size={18} className="text-fc-muted flex-shrink-0" />
+        {media ? <Images size={18} className="text-fc-muted flex-shrink-0" /> : <MessagesSquare size={18} className="text-fc-muted flex-shrink-0" />}
         <span className="font-semibold text-white">{channel.name}</span>
         {channel.topic && (
           <>
@@ -305,7 +334,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
           >
-            <Plus size={15} /> Nouveau post
+            <Plus size={15} /> {media ? 'Publier' : 'Nouveau post'}
           </button>
         </div>
       </div>
@@ -382,7 +411,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessagesSquare size={48} className="text-fc-muted opacity-30 mb-4" />
             <p className="text-fc-text font-semibold mb-1">Aucun post pour l'instant</p>
-            <p className="text-fc-muted text-sm mb-4">Soyez le premier à poster dans ce forum !</p>
+            <p className="text-fc-muted text-sm mb-4">{media ? 'Partagez la première image ou vidéo !' : 'Soyez le premier à poster dans ce forum !'}</p>
             <button
               onClick={() => setShowCreate(true)}
               className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
@@ -392,7 +421,33 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
           </div>
         )}
 
-        {posts.map((post) => (
+        {media && posts.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+            {posts.map(post => (
+              <button
+                key={post.id}
+                onClick={() => setSelectedPost(post)}
+                aria-label={post.title}
+                className="relative aspect-square rounded-lg overflow-hidden bg-fc-hover/30 group focus:outline-none focus:ring-2 focus:ring-fc-accent"
+              >
+                {post.media_url && (isVideoUrl(post.media_url)
+                  ? <>
+                      <video src={mediaUrl(post.media_url)} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                      <Play size={28} className="absolute inset-0 m-auto text-white drop-shadow" aria-hidden />
+                    </>
+                  : <img src={mediaUrl(post.media_url)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />)}
+                <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-left">
+                  <div className="text-xs text-white font-medium truncate">{post.title}</div>
+                  <div className="text-[11px] text-white/70 flex items-center gap-1">
+                    {post.pinned && <Pin size={10} aria-hidden />}
+                    <MessageSquare size={10} aria-hidden /> {post.reply_count}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {!media && posts.map((post) => (
           <button
             key={post.id}
             onClick={() => setSelectedPost(post)}
@@ -462,7 +517,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
       </div>
 
       {showCreate && (
-        <CreatePostModal serverId={serverId} channelId={channelId} onClose={() => setShowCreate(false)} />
+        <CreatePostModal serverId={serverId} channelId={channelId} media={media} onClose={() => setShowCreate(false)} />
       )}
     </div>
   )

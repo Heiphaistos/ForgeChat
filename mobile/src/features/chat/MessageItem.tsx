@@ -10,6 +10,8 @@ import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
+import { RoleIcon } from '@/features/servers/roleDecor'
+import type { RoleDecor } from '@/features/servers/perms'
 import { Attachments } from './Attachments'
 import { LinkPreview } from './LinkPreview'
 import { PollCard } from './PollCard'
@@ -36,6 +38,8 @@ interface Props {
   onReactionLongPress?: (m: ChatMessage, emoji: string) => void
   /** Traduction demandée depuis le menu du message. */
   translation?: string
+  /** Couleur et icône du rôle de l'auteur (salons). */
+  decor?: RoleDecor
 }
 
 /**
@@ -132,6 +136,7 @@ export const MessageItem = memo(function MessageItem({
   onOpenThread,
   onReactionLongPress,
   translation,
+  decor,
 }: Props) {
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
@@ -164,9 +169,10 @@ export const MessageItem = memo(function MessageItem({
         <View style={{ flex: 1, minWidth: 0 }}>
           {grouped ? null : (
             <View style={styles.header}>
-              <Text style={styles.author} numberOfLines={1} onPress={() => onPressAuthor(m.authorId)}>
+              <Text style={[styles.author, decor?.color ? { color: decor.color } : null]} numberOfLines={1} onPress={() => onPressAuthor(m.authorId)}>
                 {m.authorName}
               </Text>
+              <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />
               {m.authorIsBot ? <Text style={styles.bot}>BOT</Text> : null}
               <Text style={styles.time}>{formatTime(m.createdAt)}</Text>
             </View>

@@ -14,7 +14,21 @@ export interface ForumPost {
   locked: boolean
   replyCount: number
   lastActivity: string
+  /** Salon média : image ou vidéo de la publication (`/uploads/…`). */
+  mediaUrl: string | null
 }
+
+/** Extension imposée par forum_upload, d'après le type MIME du fichier choisi ; null = format refusé. */
+export function mediaExtension(mime: string | null | undefined): string | null {
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp',
+    'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm',
+  }
+  return (mime && map[mime.toLowerCase()]) || null
+}
+
+/** Vidéo d'après l'extension (forum_upload n'accepte que images et vidéos). */
+export const isVideoMedia = (url: string) => /\.(mp4|webm|mov)$/i.test(url)
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
@@ -35,6 +49,7 @@ export function normalizePost(raw: unknown): ForumPost | null {
     locked: r.locked === true,
     replyCount: typeof r.reply_count === 'number' && r.reply_count > 0 ? r.reply_count : 0,
     lastActivity: str(r.last_reply_at) ?? createdAt,
+    mediaUrl: typeof r.media_url === 'string' && r.media_url.startsWith('/uploads/') ? r.media_url : null,
   }
 }
 
@@ -58,10 +73,10 @@ export function toggleTag(tags: string[], tag: string): string[] {
  * caractères. Contenu vide omis (titre seul accepté). Les tags officiels du salon sont imposés par le
  * serveur quand il en existe.
  */
-export function createPostBody(title: string, content: string, tags: string[]) {
+export function createPostBody(title: string, content: string, tags: string[], mediaUrl?: string | null) {
   const t = title.trim()
   if (!t || [...t].length > 200) return null
-  return { title: t, content: content.trim() || undefined, tags }
+  return { title: t, content: content.trim() || undefined, tags, media_url: mediaUrl || undefined }
 }
 
 /** Curseur de la page suivante de publications : dernier reçu, si la page était pleine. */

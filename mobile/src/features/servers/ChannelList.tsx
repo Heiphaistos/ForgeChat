@@ -31,6 +31,8 @@ export function channelIcon(type: string): IconName {
       return 'megaphone-outline'
     case 'forum':
       return 'chatbox-ellipses-outline'
+    case 'media':
+      return 'images-outline'
     case 'stage':
       return 'radio-outline'
     default:
@@ -41,8 +43,9 @@ export function channelIcon(type: string): IconName {
 export function openChannel(server: Server, ch: Channel) {
   if (ch.type === 'text' || ch.type === 'announcement') {
     router.push({ pathname: '/channel/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name } })
-  } else if (ch.type === 'forum') {
-    router.push({ pathname: '/forum/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name } })
+  } else if (ch.type === 'forum' || ch.type === 'media') {
+    // Salon média = forum affiché en grille (media=1)
+    router.push({ pathname: '/forum/[serverId]/[channelId]', params: { serverId: server.id, channelId: ch.id, name: ch.name, media: ch.type === 'media' ? '1' : '0' } })
   } else if (VOICE_TYPES.has(ch.type)) {
     router.push({
       pathname: '/voice/[serverId]/[channelId]',
