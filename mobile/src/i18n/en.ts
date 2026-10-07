@@ -483,4 +483,12 @@ export const en: Partial<Record<Key, string>> = {
   'overlay.groupCall': 'Group call',
   'overlay.groupCallNamed': 'Group call: {name}',
   'overlay.voice': 'Voice: {name}',
+
+  // --- Erreurs réseau communes (messages côté client ; ceux du serveur restent tels quels) ---
+  'error.generic': 'Something went wrong',
+  'error.timeout': 'Request timed out',
+  'error.network': 'Network unavailable',
+  'error.status': 'Error {status}',
+  'error.rateLimited': 'Slow down! Try again in {s} s.',
+  'error.forbidden': "You don't have permission to do that.",
 }

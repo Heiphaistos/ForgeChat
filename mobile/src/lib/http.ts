@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod'
 import { APP_VERSION, apiBase } from '@/config/env'
+import { t } from '@/i18n'
 import { logger } from './logger'
 import { tokens } from './tokens'
 import { xhrFetch } from './xhrFetch'
@@ -99,7 +100,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
     return await fetch(url, { ...init, signal: controller.signal, credentials: 'omit' })
   } catch (e) {
     if (external?.aborted) throw e
-    throw new ApiError(0, controller.signal.aborted ? 'Délai dépassé' : 'Réseau indisponible', 'network')
+    throw new ApiError(0, t(controller.signal.aborted ? 'error.timeout' : 'error.network'), 'network')
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onAbort)
@@ -107,7 +108,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 async function parseError(res: Response): Promise<ApiError> {
-  let message = `Erreur ${res.status}`
+  let message = t('error.status', { status: res.status })
   let code: string | undefined
   let retryAfter: number | undefined
   try {
@@ -248,10 +249,10 @@ export const http = {
 }
 
 /** Message d'erreur lisible pour l'UI. */
-export function errorMessage(e: unknown, fallback = 'Une erreur est survenue'): string {
+export function errorMessage(e: unknown, fallback = t('error.generic')): string {
   if (e instanceof ApiError) {
-    if (e.code === 'rate_limited' && e.retryAfter) return `Doucement ! Réessaie dans ${e.retryAfter} s.`
-    if (e.status === 403 && e.message === 'Accès interdit') return "Tu n'as pas la permission de faire ça."
+    if (e.code === 'rate_limited' && e.retryAfter) return t('error.rateLimited', { s: e.retryAfter })
+    if (e.status === 403 && e.message === 'Accès interdit') return t('error.forbidden')
     return e.message
   }
   if (e instanceof Error && e.message) return e.message

@@ -482,6 +482,14 @@ export const fr = {
   'overlay.groupCall': 'Appel de groupe',
   'overlay.groupCallNamed': 'Appel de groupe : {name}',
   'overlay.voice': 'Vocal : {name}',
+
+  // --- Erreurs réseau communes (messages côté client ; ceux du serveur restent tels quels) ---
+  'error.generic': 'Une erreur est survenue',
+  'error.timeout': 'Délai dépassé',
+  'error.network': 'Réseau indisponible',
+  'error.status': 'Erreur {status}',
+  'error.rateLimited': 'Doucement ! Réessaie dans {s} s.',
+  'error.forbidden': "Tu n'as pas la permission de faire ça.",
 }
 
 export type Key = keyof typeof fr
