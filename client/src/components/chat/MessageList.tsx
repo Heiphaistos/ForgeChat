@@ -17,6 +17,7 @@ import ReportModal from './ReportModal'
 import LightboxModal from './LightboxModal'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
+import { useRoleDecor } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
 import MessageRow from './MessageRow'
 import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
@@ -106,6 +107,7 @@ export default function MessageList({
     enabled: !!serverId && explicitFilter === 'members_without_roles',
     staleTime: 60_000,
   })
+  const roleDecor = useRoleDecor(serverId || undefined)
   const noRoleAuthorIds = useMemo(
     () => new Set(membersDetailed.filter(m => (m.roles?.length ?? 0) === 0).map(m => m.user_id)),
     [membersDetailed]
@@ -770,6 +772,7 @@ export default function MessageList({
               linkPreviewEnabled={linkPreviewEnabled}
               explicitFilter={explicitFilter}
               noRoleAuthorIds={noRoleAuthorIds}
+              roleDecor={roleDecor(msg.author_id)}
               serverId={serverId}
               channelId={channelId}
               canManageMessages={canManageMessages}

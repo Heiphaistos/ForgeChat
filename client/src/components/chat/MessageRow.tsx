@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -32,6 +33,7 @@ export interface MessageRowProps {
   linkPreviewEnabled: boolean
   explicitFilter?: string
   noRoleAuthorIds?: Set<string>
+  roleDecor?: RoleDecor
   serverId: string
   channelId: string
   canManageMessages: boolean
@@ -83,7 +85,7 @@ export interface MessageRowProps {
 function MessageRow({
   msg, isOwn, isGrouped, isFirstUnread, isLiveMsg, deferRender, showDateDivider, dateLabel,
   isHighlighted, isEditing, compact, ultraCompact, showTimestamps, formatTs, formatShortTs,
-  customEmojiMap, linkPreviewEnabled, explicitFilter = 'none', noRoleAuthorIds, serverId, channelId, canManageMessages,
+  customEmojiMap, linkPreviewEnabled, explicitFilter = 'none', noRoleAuthorIds, roleDecor, serverId, channelId, canManageMessages,
   quickEmojis, showEmojiPicker, showReactionPicker, isReminderOpen, translation, isTranslating,
   poppingEmoji, bumpedEmojis,
   onStartEdit, onConfirmEdit, onCancelEdit, onOpenUserPopup, onAvatarContextMenu,
@@ -172,10 +174,12 @@ function MessageRow({
             <div className="flex items-baseline gap-2 mb-0.5">
               <button
                 className="font-semibold text-white text-sm hover:underline cursor-pointer"
+                style={roleDecor?.style}
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
               >
                 {msg.author_username}
               </button>
+              <RoleIcon icon={roleDecor?.icon} title={roleDecor?.iconTitle} />
               {msg.author_verified && (
                 <span
                   className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-fc-accent text-white text-[10px] font-bold ml-0.5 flex-shrink-0"

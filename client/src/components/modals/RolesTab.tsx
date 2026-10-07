@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Plus, Trash2, Save, Shield, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
+import { RoleIcon, roleNameStyle } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
 
 // Utilise des puissances de 2 comme nombres JS (safe jusqu'à 2**52 avec Number)
@@ -100,6 +101,8 @@ interface Role {
   mentionable: boolean
   hoisted: boolean
   is_everyone: boolean
+  secondary_color?: number | null
+  icon?: string | null
 }
 
 function PermGroup({
@@ -194,6 +197,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
   const [editPerms, setEditPerms] = useState(0)
   const [editHoisted, setEditHoisted] = useState(false)
   const [editMentionable, setEditMentionable] = useState(false)
+  // Dégradé : seconde couleur (null = couleur unie) ; icône : emoji ou image téléversée
+  const [editColor2, setEditColor2] = useState<string | null>(null)
+  const [editIcon, setEditIcon] = useState('')
   const [newName, setNewName] = useState('')
   const [activeTab, setActiveTab] = useState<'info' | 'perms' | 'members'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -210,6 +216,8 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     setEditPerms(r.permissions)
     setEditHoisted(r.hoisted)
     setEditMentionable(r.mentionable)
+    setEditColor2(r.secondary_color != null ? colorIntToHex(r.secondary_color) : null)
+    setEditIcon(r.icon ?? '')
     setActiveTab('info')
   }
 
@@ -230,6 +238,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
       permissions: editPerms,
       hoisted: editHoisted,
       mentionable: editMentionable,
+      secondary_color: editColor2 ? hexToColorInt(editColor2) : -1,
+      // Une image passe par POST .../icon : on n'envoie que l'emoji ou le retrait.
+      ...(editIcon.startsWith('/uploads/') ? {} : { icon: editIcon.trim() }),
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roles', serverId] })
@@ -237,6 +248,28 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     },
     onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
   })
+
+  const uploadIcon = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData()
+      form.append('icon', file)
+      const { data } = await api.post(`/servers/${serverId}/roles/${selected!.id}/icon`, form)
+      return data as Role
+    },
+    onSuccess: (role) => {
+      setEditIcon(role.icon ?? '')
+      qc.invalidateQueries({ queryKey: ['roles', serverId] })
+      toast.success('Icône mise à jour')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload icône'),
+  })
+  const pickIcon = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/png,image/jpeg,image/gif,image/webp'
+    input.onchange = () => { const f = input.files?.[0]; if (f) uploadIcon.mutate(f) }
+    input.click()
+  }
 
   const deleteRole = useMutation({
     mutationFn: (roleId: string) => api.delete(`/servers/${serverId}/roles/${roleId}`),
@@ -408,6 +441,46 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                   </div>
                 </div>
 
+                <div className="flex flex-wrap gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Dégradé</label>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setEditColor2(c => c ? null : '#ffffff')}
+                        role="switch" aria-checked={!!editColor2} aria-label="Pseudo en dégradé"
+                        className={`w-11 h-6 rounded-full relative transition flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editColor2 ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
+                        <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editColor2 ? 'left-[23px]' : 'left-[3px]'}`} />
+                      </button>
+                      {editColor2 && (
+                        <input type="color" value={editColor2} onChange={e => setEditColor2(e.target.value)}
+                          aria-label="Seconde couleur du dégradé"
+                          className="w-10 h-[38px] rounded-lg cursor-pointer border-0 bg-transparent p-0.5"
+                        />
+                      )}
+                    </div>
+                  </div>
+                  {!selected.is_everyone && (
+                    <div>
+                      <label htmlFor="role-icon-emoji" className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Icône</label>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 flex items-center justify-center bg-fc-input rounded-lg">
+                          <RoleIcon icon={editIcon} title={editName} />
+                        </span>
+                        <input id="role-icon-emoji" value={editIcon.startsWith('/uploads/') ? '' : editIcon}
+                          onChange={e => setEditIcon(e.target.value)} maxLength={16} placeholder="Emoji"
+                          className="w-20 px-2 py-2 bg-fc-input rounded-lg text-white text-sm outline-none"
+                        />
+                        <button type="button" onClick={pickIcon} disabled={uploadIcon.isPending}
+                          className="px-3 py-2 bg-fc-hover hover:bg-fc-hover/70 text-white rounded-lg text-xs transition disabled:opacity-50">
+                          {uploadIcon.isPending ? 'Envoi…' : 'Image'}
+                        </button>
+                        {editIcon && (
+                          <button type="button" onClick={() => setEditIcon('')} className="text-xs text-fc-muted hover:text-white transition">Retirer</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 block">Options</label>
                   <div className="space-y-3">
@@ -441,9 +514,10 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-white font-bold text-sm">A</div>
                     <div>
-                      <span className="text-sm font-semibold" style={{ color: editColor || '#dcddde' }}>
+                      <span className="text-sm font-semibold" style={roleNameStyle(hexToColorInt(editColor) || 0xdcddde, editColor2 ? hexToColorInt(editColor2) : null)}>
                         {editName || selected.name}
                       </span>
+                      <span className="ml-1"><RoleIcon icon={editIcon} title={editName} /></span>
                       <div className="text-xs text-fc-muted">Exemple de message</div>
                     </div>
                   </div>
