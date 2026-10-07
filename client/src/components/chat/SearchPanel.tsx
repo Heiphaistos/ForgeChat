@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import { X, Search, Hash, Loader2 } from 'lucide-react'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
 import { stripMarkdown } from '../../utils/mdShortcuts'
@@ -10,6 +10,8 @@ import { useFormatDate } from '../../hooks/useFormatDate'
 import { messageLink } from '../../utils/searchLink'
 import { useT } from '../../i18n'
 import { lockedText } from '../../e2e/conversations'
+import { clearSearchIndex, countIndexed, searchLocal } from '../../e2e/searchIndex'
+import toast from 'react-hot-toast'
 
 const FILTER_HELP = [
   ['from:pseudo', 'messages de cet auteur'],
@@ -66,6 +68,18 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
     getNextPageParam: last => last.next_cursor ?? undefined,
     enabled: search.trim().length >= 2 && !(localMessages && !everywhere && !channelEncrypted),
   })
+  // Index local des messages déjà déchiffrés sur cet appareil (texte jamais envoyé au serveur).
+  const qc = useQueryClient()
+  const { data: indexed = [] } = useQuery({
+    queryKey: ['search_local', everywhere ? 'all' : channelId, search],
+    queryFn: async () => (await searchLocal(search, everywhere ? undefined : channelId)).map(m => ({
+      id: m.id, content: m.text, created_at: m.createdAt, author_username: m.authorName, author_avatar: null,
+      kind: m.kind, channel_id: m.convId, server_id: m.serverId ?? undefined, channel_name: m.convName ?? '',
+    })),
+    enabled: search.trim().length >= 2,
+    staleTime: 5_000,
+  })
+  const { data: indexedCount = 0 } = useQuery({ queryKey: ['search_local_count'], queryFn: countIndexed, enabled: !search, staleTime: 10_000 })
   // MP/groupe chiffré : uniquement local ; salon chiffré : local + serveur.
   const localOnly = !!localMessages && !everywhere && !channelEncrypted
   const highlightText = useMemo(() => search.split(/\s+/).filter(w => !/^[a-z]+:\S+/i.test(w)).join(' '), [search])
@@ -75,16 +89,15 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
       .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
       .map(m => ({ ...m, kind: serverId ? 'channel' : 'dm', channel_id: channelId, server_id: serverId || undefined }))
       .reverse()
-    if (localOnly) return local
-    // Résultat chiffré du serveur (filtres seulement) : texte déchiffré s'il est chargé, sinon texte d'attente.
-    const loaded = new Map((localMessages ?? []).map(m => [m.id, m.content]))
-    const server = (data?.pages.flatMap(p => p.messages) ?? [])
+    // Résultat chiffré du serveur (filtres seulement) : texte déchiffré s'il est chargé ou indexé, sinon texte d'attente.
+    const loaded = new Map<string, string | null>([...indexed, ...(localMessages ?? [])].map(m => [m.id, m.content]))
+    const server = localOnly ? [] : (data?.pages.flatMap(p => p.messages) ?? [])
       .map(m => m.content == null ? { ...m, content: loaded.get(m.id) ?? lockedText() } : m)
-    if (!local.length) return server
-    const ids = new Set(server.map(m => m.id))
-    return [...server, ...local.filter(m => !ids.has(m.id))]
+    const seen = new Set<string>()
+    return [...server, ...local, ...indexed]
+      .filter(m => !seen.has(m.id) && !!seen.add(m.id))
       .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
-  }, [data, localMessages, everywhere, highlightText, channelId, serverId, localOnly])
+  }, [data, localMessages, everywhere, highlightText, channelId, serverId, localOnly, indexed])
 
   // Réinitialiser la sélection à chaque nouvelle liste de résultats
   useEffect(() => { setSelIdx(-1) }, [results])
@@ -180,6 +193,21 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
                 <li key={k}><code className="text-fc-text bg-fc-bg px-1 rounded">{k}</code> {d}</li>
               ))}
             </ul>
+            <div className="mt-4 text-left text-xs text-fc-muted space-y-1">
+              <p className="font-semibold text-fc-text">{t('lsearch.title')}</p>
+              <p>{t('lsearch.hint')}</p>
+              <p>{t('lsearch.filters')}</p>
+              <p>{t('lsearch.count', { n: indexedCount })}</p>
+              {indexedCount > 0 && (
+                <button type="button" className="text-fc-accent hover:underline"
+                  onClick={() => void clearSearchIndex().then(() => {
+                    qc.invalidateQueries({ queryKey: ['search_local_count'] })
+                    toast.success(t('lsearch.cleared'))
+                  })}>
+                  {t('lsearch.clear')}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

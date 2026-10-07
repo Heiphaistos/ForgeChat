@@ -64,6 +64,8 @@ pub async fn get_channels(
             "require_tag": r.get::<bool, _>("require_tag"),
             "created_by": r.get::<Option<Uuid>, _>("created_by"),
             "waiting_room": r.try_get::<bool, _>("waiting_room").unwrap_or(false),
+            "disappear_seconds": r.get::<Option<i32>, _>("disappear_seconds"),
+            "auto_threads": r.get::<bool, _>("auto_threads"),
         })
     }).collect();
 

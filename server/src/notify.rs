@@ -384,7 +384,7 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
         &format!("{} : {}", m.author_username, body),
         format!("{} t'a mentionné", m.author_username),
         crate::mobile_push::Target::Channel { server_id: m.server_id, channel_id: m.channel_id },
-    ));
+    ).with_message(m.message_id));
     crate::push::spawn_send_if_offline(state, offline, serde_json::json!({
         "title": format!("{} (#{}, {})", m.author_username, channel_name, server_name),
         "body": body,

@@ -4,6 +4,7 @@ import {
   Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
+import { Link as RouterLink } from 'react-router-dom'
 import { maybeCompressImage, formatBytes } from '../../utils/compressImage'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
@@ -217,6 +218,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const [pollQuestion, setPollQuestion] = useState('')
   const [pollOptions, setPollOptions] = useState(['', ''])
   const [pollMultiple, setPollMultiple] = useState(false)
+  const [pollAnonymous, setPollAnonymous] = useState(false)
+  const [pollEndsAt, setPollEndsAt] = useState('')
   const [cursorPos, setCursorPos] = useState(0)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const [msgTtl, setMsgTtl] = useState<number | null>(null)
@@ -369,13 +372,18 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     // Salon chiffré : question et options chiffrées (portée du sondage), textes vides côté serveur.
     mutationFn: () =>
       sealPoll(serverId ?? '', channelId, pollQuestion.trim(), pollOptions.map(o => o.trim()).filter(Boolean), body =>
-        api.post(`/servers/${serverId}/channels/${channelId}/polls`, { ...body, multiple_choice: pollMultiple })),
+        api.post(`/servers/${serverId}/channels/${channelId}/polls`, {
+          ...body, multiple_choice: pollMultiple, anonymous: pollAnonymous,
+          ends_at: pollEndsAt ? new Date(pollEndsAt).toISOString() : undefined,
+        })),
     onSuccess: () => {
       toast.success(tr('input.pollCreated'))
       setShowPollCreator(false)
       setPollQuestion('')
       setPollOptions(['', ''])
       setPollMultiple(false)
+      setPollAnonymous(false)
+      setPollEndsAt('')
     },
     onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
@@ -1311,11 +1319,14 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 onClose={() => setShowScheduled(false)}
                 desktopClassName="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
               >
-                <div className="px-4 py-3 border-b border-fc-hover">
+                <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
                     <CalendarClock size={14} className="text-fc-accent" />
                     {t('sched.title')}
                   </div>
+                  <RouterLink to="/scheduled" onClick={() => setShowScheduled(false)} className="text-xs text-fc-accent hover:underline">
+                    {t('sched.seeAll')}
+                  </RouterLink>
                 </div>
 
                 <div className="p-4 space-y-3">
@@ -1462,12 +1473,23 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     />
                     {t('poll.multiple')}
                   </label>
+                  <label className="flex items-center gap-2 text-sm text-fc-muted cursor-pointer">
+                    <input type="checkbox" checked={pollAnonymous} onChange={e => setPollAnonymous(e.target.checked)} className="accent-fc-accent" />
+                    {t('poll.anonymous')}
+                  </label>
+                  <label className="block text-xs text-fc-muted">
+                    {t('poll.deadline')}
+                    <input type="datetime-local" value={pollEndsAt} onChange={e => setPollEndsAt(e.target.value)}
+                      min={new Date(Date.now() + 60_000 - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16)}
+                      className="mt-1 w-full fc-input text-sm" />
+                  </label>
 
                   <button
                     onClick={() => {
                       const validOptions = pollOptions.map(o => o.trim()).filter(Boolean)
                       if (!pollQuestion.trim()) { toast.error(t('poll.questionRequired')); return }
                       if (validOptions.length < 2) { toast.error(t('poll.twoOptions')); return }
+                      if (pollEndsAt && new Date(pollEndsAt).getTime() <= Date.now()) { toast.error(t('poll.deadlineInvalid')); return }
                       createPoll.mutate()
                     }}
                     disabled={createPoll.isPending || !pollQuestion.trim()}

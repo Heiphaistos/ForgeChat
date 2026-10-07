@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
+import { indexMessage } from './searchIndex'
 
 export type ConvKind = 'dm' | 'group' | 'channel'
 
@@ -304,6 +305,17 @@ export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody }
 
 const authorOf = (m: RawMsg) => m.sender_id ?? m.author_id ?? m.user_id ?? ''
 
+function indexOpened(kind: ConvKind, id: string, m: RawMsg, body: c.MsgBody) {
+  const x = m as RawMsg & { created_at?: string; expires_at?: string | null; sender_username?: string; author_username?: string; username?: string }
+  if (!x.created_at || x.id.startsWith('temp')) return
+  indexMessage({
+    id: x.id, kind, convId: id, authorId: authorOf(m),
+    authorName: x.sender_username ?? x.author_username ?? x.username ?? '',
+    text: body.t, createdAt: x.created_at, expiresAt: x.expires_at ?? null,
+    hasFile: Array.isArray(body.f) && body.f.length > 0,
+  })
+}
+
 /**
  * Remplace `content` (et l'aperçu de la réponse citée) par le texte déchiffré.
  * Un message illisible garde `enc` (pour le rouvrir quand la clé arrive) et
@@ -315,6 +327,8 @@ export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, 
   if (m.enc) {
     const body = await openBody(kind, id, m.enc, authorOf(m), m.client_msg_id, scope)
     out = body === null ? { ...m, content: lockedText(), e2e: 'locked' } : { ...m, content: body.t, e2e: 'ok', e2e_body: body }
+    // Index local de recherche (messages de la conversation elle-même, pas des fils ni forums).
+    if (body && !scope) indexOpened(kind, id, m, body)
   }
   const replyAuthor = m.reply_to_author_id ?? m.reply_to_sender_id
   if (m.reply_to_enc && replyAuthor) {

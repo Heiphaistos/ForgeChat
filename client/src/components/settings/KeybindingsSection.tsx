@@ -1,164 +1,133 @@
-import { useState, useEffect, useRef } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RotateCcw, Pencil, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { RotateCcw, Pencil, X, AlertTriangle } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
-import { useT, type Key } from '../../i18n'
+import { useT, useLang, type Key } from '../../i18n'
+import { SHORTCUTS, comboFromEvent, comboProblem, canonical, findConflicts, prettyCombo, type ShortcutGroup } from '../../lib/shortcuts'
+import { useShortcutBindings, shortcutLabel } from '../../hooks/useShortcuts'
 
-const DEFAULT_KEYBINDINGS: { action: string; label: Key; default: string }[] = [
-  { action: 'toggle_mute', label: 'settings.keys.toggle_mute', default: 'Ctrl+M' },
-  { action: 'toggle_deafen', label: 'settings.keys.toggle_deafen', default: 'Ctrl+D' },
-  { action: 'push_to_talk', label: 'settings.keys.push_to_talk', default: 'Ctrl+Shift+Space' },
-  { action: 'toggle_screen_share', label: 'settings.keys.toggle_screen_share', default: 'Ctrl+Alt+S' },
-  { action: 'focus_chat', label: 'settings.keys.focus_chat', default: 'Ctrl+L' },
-  { action: 'search', label: 'settings.keys.search', default: 'Ctrl+K' },
-  { action: 'next_unread', label: 'settings.keys.next_unread', default: 'Alt+ArrowDown' },
-  { action: 'prev_unread', label: 'settings.keys.prev_unread', default: 'Alt+ArrowUp' },
-  { action: 'close_modal', label: 'settings.keys.close_modal', default: 'Escape' },
-  { action: 'toggle_emoji', label: 'settings.keys.toggle_emoji', default: 'Ctrl+E' },
-  { action: 'upload_file', label: 'settings.keys.upload_file', default: 'Ctrl+U' },
-  { action: 'toggle_sidebar', label: 'settings.keys.toggle_sidebar', default: 'Ctrl+Alt+M' },
-  { action: 'reply', label: 'settings.keys.reply', default: 'R' },
-  { action: 'edit_last', label: 'settings.keys.edit_last', default: 'ArrowUp' },
-  { action: 'mark_all_read', label: 'settings.keys.mark_all_read', default: 'Ctrl+Shift+A' },
-  { action: 'open_settings', label: 'settings.keys.open_settings', default: 'Ctrl+,' },
-  { action: 'hand_raise', label: 'settings.keys.hand_raise', default: 'Ctrl+Space' },
-  { action: 'toggle_camera', label: 'settings.keys.toggle_camera', default: 'Ctrl+Shift+C' },
-  { action: 'clip_stream', label: 'settings.keys.clip_stream', default: 'Alt+C' },
+const GROUPS: { id: ShortcutGroup; label: Key }[] = [
+  { id: 'nav', label: 'keys.group.nav' },
+  { id: 'chat', label: 'keys.group.chat' },
+  { id: 'voice', label: 'keys.group.voice' },
 ]
-
-function formatKey(e: KeyboardEvent): string {
-  const parts: string[] = []
-  if (e.ctrlKey) parts.push('Ctrl')
-  if (e.altKey) parts.push('Alt')
-  if (e.shiftKey) parts.push('Shift')
-  if (e.metaKey) parts.push('Meta')
-  const key = e.key
-  // Modificateur seul : attendre la vraie touche (« Ctrl » seul était enregistré
-  // à la première pression).
-  if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return ''
-  // ' ' donnait « Ctrl+  », illisible et ignoré par les raccourcis vocaux.
-  parts.push(key === ' ' ? 'Space' : key.length === 1 ? key.toUpperCase() : key)
-  return parts.join('+')
-}
 
 export default function KeybindingsSection() {
   const t = useT()
+  const lang = useLang(s => s.lang)
   const qc = useQueryClient()
+  const bindings = useShortcutBindings()
+  const conflicts = findConflicts(bindings)
   const [capturing, setCapturing] = useState<string | null>(null)
-  const [preview, setPreview] = useState('')
-  const captureRef = useRef<HTMLDivElement>(null)
 
-  const { data: saved = [] } = useQuery<{ action: string; key_combo: string }[]>({
-    queryKey: ['keybindings'],
-    queryFn: () => api.get('/user/keybindings').then(r => r.data),
-    staleTime: 30_000,
-  })
-
+  const refresh = () => qc.invalidateQueries({ queryKey: ['keybindings'] })
   const setMutation = useMutation({
-    mutationFn: (data: { action: string; key_combo: string }) =>
-      api.post('/user/keybindings', data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['keybindings'] })
-      setCapturing(null)
-      setPreview('')
-      toast.success(t('settings.keys.saved'))
-    },
+    mutationFn: (data: { action: string; key_combo: string }) => api.post('/user/keybindings', data),
+    onSuccess: () => { refresh(); setCapturing(null); toast.success(t('settings.keys.saved')) },
     onError: () => toast.error(t('common.error')),
   })
-
   const resetMutation = useMutation({
-    mutationFn: (action: string) => api.delete(`/user/keybindings/${action}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['keybindings'] }),
+    mutationFn: (action: string) => api.delete(`/user/keybindings/${encodeURIComponent(action)}`),
+    onSuccess: refresh,
   })
+  const resetAll = useMutation({
+    mutationFn: () => api.delete('/user/keybindings'),
+    onSuccess: () => { refresh(); toast.success(t('keys.resetAllDone')) },
+    onError: () => toast.error(t('common.error')),
+  })
+  const save = setMutation.mutate
 
   useEffect(() => {
     if (!capturing) return
-
     const handler = (e: KeyboardEvent) => {
       e.preventDefault()
-      const combo = formatKey(e)
-      if (combo && combo !== 'Escape') {
-        setPreview(combo)
-        setMutation.mutate({ action: capturing, key_combo: combo })
-      } else if (combo === 'Escape') {
-        setCapturing(null)
-        setPreview('')
+      e.stopPropagation()
+      if (e.key === 'Escape') { setCapturing(null); return }
+      const combo = comboFromEvent(e)
+      if (!combo) return
+      const problem = comboProblem(capturing, combo)
+      if (problem) { toast.error(t(`keys.problem.${problem}` as Key)); return }
+      const taken = SHORTCUTS.find(s => s.action !== capturing && canonical(bindings[s.action]) === canonical(combo))
+      if (taken) {
+        toast.error(t('keys.conflictWith', { combo: prettyCombo(combo, lang), action: t(shortcutLabel(taken.action)) }))
+        return
       }
+      save({ action: capturing, key_combo: combo })
     }
-
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [capturing])
-
-  const getCombo = (action: string) => {
-    const saved_kb = saved.find(k => k.action === action)
-    if (saved_kb) return saved_kb.key_combo
-    const def = DEFAULT_KEYBINDINGS.find(k => k.action === action)
-    return def?.default ?? '—'
-  }
-
-  const isCustom = (action: string) => saved.some(k => k.action === action)
+    // Phase de capture : aucun raccourci de l'appli ne se déclenche pendant la saisie.
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [capturing, bindings, lang, t, save])
 
   return (
-    <div className="space-y-4" ref={captureRef}>
-      <p className="text-sm text-fc-muted">
-        {t('settings.keys.intro')}
-      </p>
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-fc-muted">{t('settings.keys.intro')}</p>
+        <button
+          onClick={() => resetAll.mutate()}
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-fc-bg border border-fc-hover text-white hover:border-fc-accent transition"
+        >
+          <RotateCcw size={12} /> {t('keys.resetAll')}
+        </button>
+      </div>
 
       {capturing && (
-        <div className="p-3 bg-fc-accent/10 border border-fc-accent rounded-lg text-sm text-white animate-pulse">
-          {preview
-            ? t('settings.keys.combo', { combo: preview })
-            : t('settings.keys.press')}
+        <div role="status" className="p-3 bg-fc-accent/10 border border-fc-accent rounded-lg text-sm text-white animate-pulse">
+          {t('settings.keys.press')}
         </div>
       )}
 
-      <div className="space-y-1">
-        {DEFAULT_KEYBINDINGS.map(kb => {
-          const combo = getCombo(kb.action)
-          const custom = isCustom(kb.action)
-          const isCapturing = capturing === kb.action
-
-          return (
-            <div
-              key={kb.action}
-              className={`flex items-center justify-between px-4 py-3 rounded-xl transition ${
-                isCapturing
-                  ? 'bg-fc-accent/10 border border-fc-accent'
-                  : 'bg-fc-channel border border-transparent hover:border-fc-hover'
-              }`}
-            >
-              <span className="text-sm text-white">{t(kb.label)}</span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCapturing(isCapturing ? null : kb.action)}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono transition ${
-                    isCapturing
-                      ? 'bg-fc-accent text-white'
-                      : 'bg-fc-bg border border-fc-hover text-white hover:border-fc-accent'
-                  }`}
-                >
-                  {isCapturing ? <X size={10} /> : <Pencil size={10} />}
-                  {isCapturing ? t('common.cancel') : combo}
-                </button>
-
-                {custom && (
+      {GROUPS.map(g => (
+        <section key={g.id} className="space-y-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-fc-muted px-1 pt-2">{t(g.label)}</h3>
+          {SHORTCUTS.filter(s => s.group === g.id).map(kb => {
+            const combo = bindings[kb.action]
+            const custom = canonical(combo) !== canonical(kb.default)
+            const isCapturing = capturing === kb.action
+            const clash = conflicts[kb.action]
+            return (
+              <div
+                key={kb.action}
+                className={`flex items-center justify-between gap-2 px-4 py-3 rounded-xl transition ${
+                  isCapturing ? 'bg-fc-accent/10 border border-fc-accent' : 'bg-fc-channel border border-transparent hover:border-fc-hover'
+                }`}
+              >
+                <div className="min-w-0">
+                  <span className="text-sm text-white">{t(shortcutLabel(kb.action))}</span>
+                  {clash && (
+                    <p className="flex items-center gap-1 text-xs text-amber-400 mt-0.5">
+                      <AlertTriangle size={11} aria-hidden />
+                      {t('keys.conflictShort', { action: clash.map(a => t(shortcutLabel(a))).join(', ') })}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <button
-                    onClick={() => resetMutation.mutate(kb.action)}
-                    title={t('settings.keys.reset', { combo: kb.default })}
-                    aria-label={t('settings.keys.reset', { combo: kb.default })}
-                    className="p-1.5 text-fc-muted hover:text-white rounded transition"
+                    onClick={() => setCapturing(isCapturing ? null : kb.action)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono transition ${
+                      isCapturing ? 'bg-fc-accent text-white' : 'bg-fc-bg border border-fc-hover text-white hover:border-fc-accent'
+                    }`}
                   >
-                    <RotateCcw size={12} />
+                    {isCapturing ? <X size={10} /> : <Pencil size={10} />}
+                    {isCapturing ? t('common.cancel') : prettyCombo(combo, lang)}
                   </button>
-                )}
+                  {custom && (
+                    <button
+                      onClick={() => resetMutation.mutate(kb.action)}
+                      title={t('settings.keys.reset', { combo: prettyCombo(kb.default, lang) })}
+                      aria-label={t('settings.keys.reset', { combo: prettyCombo(kb.default, lang) })}
+                      className="p-1.5 text-fc-muted hover:text-white rounded transition"
+                    >
+                      <RotateCcw size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </section>
+      ))}
     </div>
   )
 }

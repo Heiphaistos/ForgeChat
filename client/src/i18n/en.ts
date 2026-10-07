@@ -1,12 +1,16 @@
 // Traduction anglaise. Une clé absente ici s'affiche en français (repli).
 import type { Key } from './fr'
 
+import * as messaging from './parts/messaging.ts'
 import { profileEn } from './profileEn.ts'
+import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
+  ...comfortEn,
   ...voiceLotEn,
+  ...messaging.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

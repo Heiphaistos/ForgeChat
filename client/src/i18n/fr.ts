@@ -1,11 +1,15 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
+import * as messaging from './parts/messaging.ts'
 import { profileFr } from './profileFr.ts'
+import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
 
 export const fr = {
   ...profileFr,
+  ...comfortFr,
   ...voiceLotFr,
+  ...messaging.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

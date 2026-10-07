@@ -42,14 +42,16 @@ async fn reset_login_rate_limit(state: &AppState, ip: &str) {
 /// Construit les headers Set-Cookie pour access_token et refresh_token.
 /// Les tokens sont aussi retournés dans le corps JSON pour la compatibilité Tauri.
 fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
+    session_cookie_headers(&auth.access_token, &auth.refresh_token, secure)
+}
+
+/// Cookies HttpOnly de session (accès + rafraîchissement).
+pub(crate) fn session_cookie_headers(access_token: &str, refresh_token: &str, secure: bool) -> HeaderMap {
     let flag = if secure { "; Secure" } else { "" };
-    let access = format!(
-        "access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400",
-        auth.access_token, flag
-    );
+    let access = format!("access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400", access_token, flag);
     let refresh = format!(
         "refresh_token={}; HttpOnly{}; SameSite=Strict; Path=/api/auth; Max-Age={}",
-        auth.refresh_token, flag, 30 * 86400
+        refresh_token, flag, 30 * 86400
     );
     let mut headers = HeaderMap::new();
     if let Ok(v) = HeaderValue::from_str(&access) {
@@ -61,7 +63,7 @@ fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
     headers
 }
 
-fn is_secure(state: &AppState) -> bool {
+pub(crate) fn is_secure(state: &AppState) -> bool {
     state.config.frontend_url.starts_with("https")
 }
 
@@ -322,7 +324,18 @@ pub async fn refresh(
         .or_else(|| body["refresh_token"].as_str().map(|s| s.to_string()))
         .ok_or_else(|| AppError::BadRequest("refresh_token requis".into()))?;
 
-    let token_hash = hash_token(&token);
+    let (_, new_refresh_token, access_token) = rotate_refresh_token(&state, &token).await?;
+    let resp_headers = session_cookie_headers(&access_token, &new_refresh_token, is_secure(&state));
+    Ok((resp_headers, Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+    }))))
+}
+
+/// Rotation RTR d'un jeton de rafraîchissement : l'ancien est consommé, un nouveau et un
+/// jeton d'accès sont émis. Renvoie (compte, nouveau jeton de rafraîchissement, jeton d'accès).
+pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Result<(Uuid, String, String)> {
+    let token_hash = hash_token(token);
     // RTR atomique : DELETE RETURNING garantit qu'un seul thread invalide le token
     let row = sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
         "DELETE FROM refresh_tokens WHERE token_hash=$1 RETURNING user_id, expires_at",
@@ -336,16 +349,12 @@ pub async fn refresh(
         return Err(AppError::Unauthorized);
     }
 
-    // Token supprimé atomiquement ci-dessus — émettre un nouveau
-
     let new_refresh_token = generate_refresh_token();
-    store_refresh_token(&state, row.0, &new_refresh_token).await?;
+    store_refresh_token(state, row.0, &new_refresh_token).await?;
 
     // Garder user_sessions synchronisé avec la rotation RTR (sinon refresh_token_hash
     // devient obsolète dès ce premier refresh, et revoke_session ne retrouve plus
-    // jamais la bonne ligne refresh_tokens à invalider). Met aussi last_seen à jour --
-    // ce champ n'était sinon jamais réécrit après la création de la session, gelé
-    // à l'heure du login au lieu de refléter une vraie activité récente.
+    // jamais la bonne ligne refresh_tokens à invalider). Met aussi last_seen à jour.
     let new_hash = hash_token(&new_refresh_token);
     let sid: Option<Uuid> = sqlx::query_scalar(
         "UPDATE user_sessions SET refresh_token_hash=$1, last_seen=NOW() WHERE refresh_token_hash=$2 AND user_id=$3 RETURNING id"
@@ -359,30 +368,8 @@ pub async fn refresh(
     .flatten();
 
     let access_token = create_token(row.0, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(|e| AppError::Internal(e))?;
-
-    let secure = is_secure(&state);
-    let flag = if secure { "; Secure" } else { "" };
-    let access_cookie = format!(
-        "access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400",
-        access_token, flag
-    );
-    let refresh_cookie = format!(
-        "refresh_token={}; HttpOnly{}; SameSite=Strict; Path=/api/auth; Max-Age={}",
-        new_refresh_token, flag, 30 * 86400
-    );
-    let mut resp_headers = HeaderMap::new();
-    if let Ok(v) = HeaderValue::from_str(&access_cookie) {
-        resp_headers.insert(SET_COOKIE, v);
-    }
-    if let Ok(v) = HeaderValue::from_str(&refresh_cookie) {
-        resp_headers.append(SET_COOKIE, v);
-    }
-
-    Ok((resp_headers, Json(serde_json::json!({
-        "access_token": access_token,
-        "refresh_token": new_refresh_token,
-    }))))
+        .map_err(AppError::Internal)?;
+    Ok((row.0, new_refresh_token, access_token))
 }
 
 pub async fn change_password(
@@ -562,7 +549,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-fn hash_token(token: &str) -> String {
+pub(crate) fn hash_token(token: &str) -> String {
     use base64::Engine;
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();

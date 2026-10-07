@@ -8,6 +8,8 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as voiceLot from './parts/voiceLot'
+import * as messaging from './parts/messaging'
+import * as comfort from './parts/comfort'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -18,6 +20,8 @@ export const en: Partial<Record<Key, string>> = {
   ...stores.en,
   ...e2e.en,
   ...voiceLot.en,
+  ...messaging.en,
+  ...comfort.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

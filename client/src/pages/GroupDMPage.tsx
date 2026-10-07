@@ -25,12 +25,16 @@ import { useT, dateLocale, t as tr } from '../i18n'
 import { openMessage, openText, reopenLocked, sendErrorText, withSeal } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+import DisappearingControl from '../components/chat/DisappearingControl'
+import { AfterReadBadge, EphemeralBadge } from '../components/chat/messageListShared'
+import { rememberConvName, searchLocal } from '../e2e/searchIndex'
 import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import AnimatedImg from '../components/ui/AnimatedImg'
 import UserName from '../components/ui/UserName'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
+import { isQueued } from '../lib/offline'
 
 interface GDMReaction {
   emoji: string
@@ -69,6 +73,9 @@ interface GDMMessage {
   enc?: EncPayload | null
   client_msg_id?: string | null
   purged?: boolean
+  /** Messages éphémères : échéance, ou « après lecture » pas encore lu par tous. */
+  expires_at?: string | null
+  expire_on_read?: boolean
   e2e?: 'ok' | 'locked'
   /** Contenu déchiffré complet (fichiers chiffrés `f`). */
   e2e_body?: { f?: unknown }
@@ -159,6 +166,8 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/dms/groups/${groupId}`).then(r => r.data),
     enabled: !!groupId,
   })
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (group) rememberConvName(group.id, group.name) }, [group?.id, group?.name])
   // Appel de groupe : participants connus au chargement, puis mis à jour par GROUP_CALL_UPDATE.
   const joinGroupCall = useGroupCall(s => s.join)
   const setCallActive = useGroupCall(s => s.setActive)
@@ -224,15 +233,28 @@ export default function GroupDMPage() {
     queryFn: () => api.get(`/dms/groups/${groupId}/messages/search?q=${encodeURIComponent(searchQuery)}`).then(r => r.data),
     enabled: !!groupId && searchQuery.trim().length >= 2 && !encrypted,
   })
+  // Index local des messages déjà déchiffrés sur cet appareil (filtres de:, a:fichier).
+  const { data: indexedResults = [] } = useQuery({
+    queryKey: ['search_local', groupId, searchQuery],
+    queryFn: () => searchLocal(searchQuery, groupId),
+    enabled: !!groupId && encrypted && searchQuery.trim().length >= 2,
+    staleTime: 5_000,
+  })
   const searchResults = useMemo(() => {
     if (!encrypted) return serverResults
     const q = searchQuery.trim().toLowerCase()
     if (q.length < 2) return []
-    return allMessages
+    const loaded = allMessages
       .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
       .map(m => ({ ...m, author_username: m.sender_username, author_avatar: m.sender_avatar }))
       .reverse()
-  }, [encrypted, serverResults, searchQuery, allMessages])
+    const ids = new Set(loaded.map(m => m.id))
+    const fromIndex = indexedResults.filter(m => !ids.has(m.id)).map(m => ({
+      id: m.id, content: m.text, created_at: m.createdAt, edited_at: null, sender_id: m.authorId,
+      sender_username: m.authorName, sender_avatar: null, author_username: m.authorName, author_avatar: null,
+    }))
+    return [...loaded, ...fromIndex].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  }, [encrypted, serverResults, searchQuery, allMessages, indexedResults])
 
   // Initialiser les messages une seule fois par groupId
   useEffect(() => {
@@ -523,6 +545,7 @@ export default function GroupDMPage() {
       }
     },
     onError: (e, vars) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('gdm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)
@@ -606,6 +629,7 @@ export default function GroupDMPage() {
             <p className="text-xs text-fc-muted">{t('explore.members.other', { n: group.members.length })}</p>
           </div>
           <E2EBadge kind="group" id={group.id} />
+          <DisappearingControl kind="group" id={group.id} />
           <button
             onClick={() => void joinGroupCall(group.id, 'voice')}
             className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
@@ -1146,8 +1170,9 @@ export default function GroupDMPage() {
                       </div>
                     </div>
                   )}
-                  <span className="text-[10px] text-fc-muted mt-0.5 mx-1">
+                  <span className="text-[10px] text-fc-muted mt-0.5 mx-1 inline-flex items-center gap-1">
                     {formatShortDate(msg.created_at)}
+                    {msg.expires_at ? <EphemeralBadge expiresAt={msg.expires_at} /> : msg.expire_on_read ? <AfterReadBadge /> : null}
                   </span>
                 </div>
               </div>

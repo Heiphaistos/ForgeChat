@@ -1,6 +1,6 @@
 {
   "name": "forgechat-mobile",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^15.0.2",

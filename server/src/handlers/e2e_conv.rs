@@ -192,7 +192,7 @@ pub async fn members(db: &PgPool, conv: Conv) -> Result<Vec<Uuid>> {
 
 /// Membres de la conversation, si `user` en fait partie. Salon : membres du
 /// serveur qui le voient (VIEW_CHANNEL, surcharges comprises), bots exclus.
-async fn require_member(db: &PgPool, conv: Conv, user: Uuid) -> Result<Vec<Uuid>> {
+pub(crate) async fn require_member(db: &PgPool, conv: Conv, user: Uuid) -> Result<Vec<Uuid>> {
     if let Conv::Channel(id) = conv {
         // Contrôle d'accès seul (bon marché) avant la liste complète.
         if crate::state::channel_audience_among(db, id, &[user]).await.is_empty() {

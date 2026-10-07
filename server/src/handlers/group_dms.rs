@@ -217,7 +217,7 @@ pub async fn get_group_messages(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
-                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -233,7 +233,7 @@ pub async fn get_group_messages(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
-                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -253,7 +253,7 @@ pub async fn get_group_messages(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
-                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -270,7 +270,7 @@ pub async fn get_group_messages(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
-                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -353,6 +353,8 @@ pub async fn get_group_messages(
             "enc": r.get::<Option<serde_json::Value>, _>("enc"),
             "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "purged": r.get::<bool, _>("purged"),
+            "expires_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at"),
+            "expire_on_read": r.get::<bool, _>("expire_on_read"),
             "reactions": react_map.get(&id).cloned().unwrap_or_default(),
             "attachments": att_map.get(&id).cloned().unwrap_or_default(),
         })
@@ -426,11 +428,17 @@ pub async fn send_group_message(
         Some(rid)
     } else { None };
 
+    // Messages éphémères : réglage de la conversation, imposé par le serveur.
+    let (expires_at, expire_on_read) = crate::handlers::disappearing::expiry(
+        crate::handlers::disappearing::setting(&state.db, conv).await?,
+        Utc::now(),
+    );
     let msg = sqlx::query(
-        "INSERT INTO group_dm_messages (dm_id, sender_id, content, reply_to, enc, client_msg_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at"
+        "INSERT INTO group_dm_messages (dm_id, sender_id, content, reply_to, enc, client_msg_id, expires_at, expire_on_read)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at"
     )
     .bind(group_id).bind(claims.sub).bind(&content).bind(reply_to).bind(&enc_json).bind(body.client_msg_id)
+    .bind(expires_at).bind(expire_on_read)
     .fetch_one(&state.db).await?;
 
     // Infos du message cite pour l affichage immediat cote clients
@@ -462,6 +470,8 @@ pub async fn send_group_message(
         "reply_to_sender_id": reply_info.as_ref().map(|r| r.get::<Uuid, _>("sender_id")),
         "enc": enc_json,
         "client_msg_id": body.client_msg_id,
+        "expires_at": expires_at,
+        "expire_on_read": expire_on_read,
         "attachments": serde_json::json!([]),
     });
 
@@ -493,7 +503,7 @@ pub async fn send_group_message(
         &format!("{sender} : {text}"),
         format!("Nouveau message de {sender}"),
         crate::mobile_push::Target::Group(group_id),
-    );
+    ).with_message(msg.get::<Uuid, _>("id"));
     crate::notify::push_direct(&state, others, None, serde_json::json!({
         "title": sender,
         "body": text,

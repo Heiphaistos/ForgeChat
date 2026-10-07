@@ -280,3 +280,27 @@ Tous les fichiers joints à une conversation chiffrée (salons, fils, réponses 
 - Un message transféré ne transporte pas ses fichiers (comme avant) ; les messages programmés n'ont pas de fichiers.
 - Messages vocaux d'un groupe sur le web : le composer les envoie à la route des MP (défaut antérieur, non corrigé ici).
 - Un client modifié peut toujours envoyer un blob « .enc » qui n'est pas chiffré (comme il pourrait mettre du clair dans `enc`) : le serveur ne peut pas le vérifier.
+
+## 14. Lot « Messages et discussion » (2026-10-07)
+
+### Brouillons synchronisés
+- Clé des brouillons = HKDF-SHA256(ECDH(ma clé privée de compte, ma propre clé publique), sel vide, `forgechat draft v1|<user_id>`) : seul le détenteur de la clé de compte la recalcule. Blob `{v:1, iv, ct}` = AES-256-GCM de `{t: texte}`, AAD `draft v1|<user_id>|<id de la conversation>` (un blob déplacé vers une autre conversation ou un autre compte ne s'ouvre pas). Vecteur commun `draft` (web `scripts/e2e.test.mjs`, mobile `__tests__/e2e-crypto.test.ts`).
+- Serveur (migration 088, table `message_drafts`) : `GET /drafts`, `PUT /drafts/:conv_id` (blob validé, 120 écritures par minute, 200 brouillons au plus), `DELETE /drafts/:conv_id` ; événement `DRAFT_UPDATE {conv_id}` (sans contenu) vers mes autres sessions.
+- Applis : envoi différé (1,5 s) à chaque frappe, rechargement au démarrage, au retour sur l'appli et sur `DRAFT_UPDATE` ; vidés de la mémoire à la déconnexion. Web : les anciens brouillons locaux sont envoyés une fois au lieu d'être écrasés.
+
+### Messages éphémères par conversation
+- Réglage `disappear_seconds` (NULL = désactivé, 0 = après lecture, 3600, 86400, 604800) sur `dm_channels`, `group_dm_channels`, `channels`. MP et groupes : tout membre (`GET/PUT /disappearing/:kind/:id`, événement `DISAPPEARING_UPDATE`). Salons : droit de modifier les salons (`PUT /servers/:id/channels/:id/messaging`, avec `auto_threads`, événement `CHANNEL_UPDATE`), sans « après lecture ».
+- Le serveur pose l'échéance à l'envoi (`expires_at`, ou `expire_on_read`), sans lire le message. « Après lecture » : quand tous les destinataires ont un accusé de lecture postérieur au message, échéance dans 5 minutes. Purge toutes les 60 s : ligne et fichiers joints supprimés, `DM_MESSAGE_DELETE` / `GROUP_DM_MESSAGE_DELETE` / `MESSAGE_DELETE` diffusés ; les applis retirent aussi le message de leur index local.
+
+### Recherche dans les messages chiffrés
+- Index local alimenté au déchiffrement (messages des conversations, pas des fils ni forums) : web IndexedDB `forgechat-search` (50 000 messages), mobile fichier JSON dans le dossier privé de l'appli (10 000). Recherche plein texte (tous les mots, sans accents ni casse) avec `de:`/`from:`, `dans:`/`in:`, `a:fichier`/`has:file`. Le texte ne quitte jamais l'appareil ; l'index est effacé à la déconnexion et quand un autre compte se connecte.
+
+### Messages programmés, sondages, notifications
+- « À envoyer » : `GET /scheduled` (tous mes messages programmés, chiffrés), `PATCH /scheduled/:id {send_at?, enc?, client_msg_id?}` (texte rechiffré sur l'appareil), `POST /scheduled/:id/send` (envoi immédiat ; un message n'est réservé qu'une fois, jamais envoyé en double).
+- Sondages : vote anonyme (l'événement `POLL_VOTE` ne porte plus l'auteur, `GET …/voters` refusé), date limite, choix multiples ; question et options restent chiffrées, les votes restent des métadonnées (par option).
+- Android : notifications de message avec « Répondre » (RemoteInput) et deux réactions. La réponse est chiffrée comme un message normal (clé de compte exigée) ; si la clé n'est pas prête, si l'envoi échoue ou si la réponse n'arrive qu'au redémarrage de l'appli, rien n'est envoyé : le texte devient le brouillon et la conversation est proposée. Push serveur : `categoryId: "message"` et `message_id` dans les données (identifiants seulement).
+
+### Limites
+- Messages éphémères : les fils et forums d'un salon ne sont pas concernés ; « après lecture » compte « Tout marquer comme lu » comme une lecture ; un appareil hors ligne garde une copie déchiffrée jusqu'à sa prochaine synchronisation (inhérent).
+- Index local en clair dans le stockage privé de l'appli (navigateur, dossier de l'appli), comme le cache des messages ; mes propres messages envoyés y entrent à leur retour par le WebSocket ou au prochain chargement.
+- Réponse rapide Android appli tuée (push Google) : la réponse ne part qu'à la prochaine ouverture, en brouillon ; avec le mode « Notifications sans Google » (appli active en arrière-plan), elle part tout de suite.

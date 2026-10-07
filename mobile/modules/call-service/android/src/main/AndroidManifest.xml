@@ -20,5 +20,24 @@
       android:name="com.forgechat.callservice.KeepAliveService"
       android:exported="false"
       android:foregroundServiceType="remoteMessaging" />
+    <!-- Widgets de l'écran d'accueil (ForgeWidgets.kt, src/services/widgets.ts). -->
+    <receiver
+      android:name="com.forgechat.callservice.MessagesWidget"
+      android:exported="false"
+      android:label="@string/forge_widget_messages_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/forge_widget_messages" />
+    </receiver>
+    <receiver
+      android:name="com.forgechat.callservice.VoiceWidget"
+      android:exported="false"
+      android:label="@string/forge_widget_voice_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/forge_widget_voice" />
+    </receiver>
   </application>
 </manifest>

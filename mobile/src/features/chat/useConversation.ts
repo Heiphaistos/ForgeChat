@@ -190,6 +190,9 @@ export function useConversation(ref: ConversationRef) {
         })
       } catch (e) {
         prepared?.cleanup()
+        // Hors ligne : le message chiffré est en file (lib/offline) ; la bulle reste « en attente »
+        // et sera remplacée par le vrai message au retour du réseau.
+        if (e instanceof ApiError && e.code === 'queued') return
         // Le composer récupère le texte et les fichiers (sendErrors.restoreAfterSendError) :
         // on retire la bulle pour ne pas les afficher en double.
         removeMessage(stableRef.kind, id, tempId)

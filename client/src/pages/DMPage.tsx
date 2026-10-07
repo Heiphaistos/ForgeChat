@@ -22,8 +22,11 @@ import { useT, t as tr, type Key } from '../i18n'
 import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+import DisappearingControl from '../components/chat/DisappearingControl'
+import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import { isQueued } from '../lib/offline'
 
 /** Message de MP tel que renvoyé par le serveur. */
 type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
@@ -127,6 +130,9 @@ export default function DMPage() {
   const partnerAvatar = dmInfo?.avatar ?? null
   const partnerId = dmInfo?.other_user_id ?? ''
   const status = partnerId ? getStatus(partnerId) : 'offline'
+
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (dmId && dmInfo?.username) rememberConvName(dmId, dmInfo.username) }, [dmId, dmInfo?.username])
 
   useEffect(() => {
     if (partnerName === 'Utilisateur') return
@@ -397,6 +403,7 @@ export default function DMPage() {
       }
     },
     onError: (e, vars) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('dm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)
@@ -437,6 +444,7 @@ export default function DMPage() {
 
         <div className="ml-auto flex items-center gap-1">
           <E2EBadge kind="dm" id={dmId} />
+          <DisappearingControl kind="dm" id={dmId} />
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }

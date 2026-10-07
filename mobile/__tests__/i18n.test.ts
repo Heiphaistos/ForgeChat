@@ -7,6 +7,7 @@ import * as settings from '@/i18n/parts/settings'
 import * as social from '@/i18n/parts/social'
 import * as stores from '@/i18n/parts/stores'
 import * as e2e from '@/i18n/parts/e2e'
+import * as messaging from '@/i18n/parts/messaging'
 import { pickLang, translate } from '@/i18n/translate'
 
 describe('translate', () => {
@@ -31,7 +32,7 @@ describe('translate', () => {
 
   it('lots : chaque clé porte le préfixe de son lot (le français ne doit pas être écrasé)', () => {
     // Un préfixe par lot, absent du dictionnaire commun : deux lots ne peuvent pas déclarer la même clé.
-    const parts = { settings, server, serverSettings, social, panel: panels, store: stores, e2e }
+    const parts = { settings, server, serverSettings, social, panel: panels, store: stores, e2e, messaging }
     for (const [prefix, p] of Object.entries(parts)) {
       for (const k of Object.keys(p.fr)) expect(k.startsWith(`${prefix}.`)).toBe(true)
     }

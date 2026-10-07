@@ -69,6 +69,11 @@ const fileMessage = {
 }
 fileMessage.enc = await c.encryptMessage(d(fileMessage.key), conv, 2, ids.a, ids.msg, fileMessage.body, d(fileMessage.iv))
 
+// Brouillon (§14) : clé dérivée de la clé de compte de A, lié à A et à la conversation.
+const draft = { userId: ids.a, priv: A.priv, pub: A.pub, convId: chan, iv: e(seq(12, 250)), text: 'Brouillon pas fini… 📝' }
+draft.key = e(await c.draftKey(aPriv, d(A.pub), ids.a))
+draft.blob = await c.sealDraft(d(draft.key), ids.a, chan, draft.text, d(draft.iv))
+
 const vectors = {
   note: 'Vecteurs communs web/mobile (client/scripts/e2e-vectors.gen.mjs). Itérations PBKDF2 réduites pour les tests uniquement (production : 600000).',
   ecdh: {
@@ -100,6 +105,8 @@ const vectors = {
   fileSmall,
   fileLarge,
   fileMessage,
+  // Brouillon synchronisé, chiffré par la clé de compte.
+  draft,
   recoveryNormalize: [
     ['7k3qz-m9xw2-pb4td-0vh1r', '7K3QZM9XW2PB4TD0VH1R'],
     [' 7K3QZ M9XW2 PB4TD OVHIR ', '7K3QZM9XW2PB4TD0VH1R'],

@@ -17,6 +17,8 @@ import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
 import { bindKeepAlive, syncKeepAlive, useKeepAlive } from '@/services/keepAlive'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
 import { bindRealtime } from '@/services/realtimeBindings'
+import { bindMessaging } from '@/services/messagingBindings'
+import { listenMessageActions } from '@/services/notificationActions'
 import { bindVoiceRooms } from '@/stores/voiceRooms'
 import { useAuth } from '@/stores/auth'
 import { replayablePath } from '@/lib/deepLinks'
@@ -25,6 +27,8 @@ import '@/stores/groupCall' // sonnerie des appels de groupe
 import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
 import '@/stores/voiceExtras' // salle d'attente, appuyer pour parler, effets locaux
 import { useLock } from '@/stores/lock'
+import { bindOutbox } from '@/services/outbox'
+import { bindWidgets } from '@/services/widgets'
 import { useSettings } from '@/stores/settings'
 import { colors, isLight } from '@/theme'
 import { clearFileCache } from '@/e2e/files'
@@ -75,7 +79,7 @@ export default function RootLayout() {
   }, [status])
 
   useEffect(() => {
-    const offs = [bindRealtime(), bindVoiceRooms(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive()]
+    const offs = [bindRealtime(), bindVoiceRooms(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive(), bindOutbox(), bindWidgets(), bindMessaging()]
     return () => offs.forEach((off) => off())
   }, [])
 
@@ -89,6 +93,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (status === 'signedIn') return listenNotificationTaps(keepAlive)
   }, [status, keepAlive])
+  // Réponse rapide et réactions depuis une notification (texte toujours chiffré).
+  useEffect(() => {
+    if (status === 'signedIn') return listenMessageActions()
+  }, [status])
 
   // Lien profond reçu app fermée : voir lib/deepLinks. Rejoué une seule fois, après connexion.
   const pathname = usePathname()

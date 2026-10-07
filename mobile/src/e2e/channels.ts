@@ -134,7 +134,7 @@ export function sealPost(channelId: string, title: string, content: string, cmid
 }
 
 // ─── Sondages : {t: question, o: [options]}, portée pollScope ───────────────
-export interface PollInput { question: string; options: string[]; multiple_choice: boolean; ends_at?: string }
+export interface PollInput { question: string; options: string[]; multiple_choice: boolean; ends_at?: string; anonymous?: boolean }
 
 /** Corps chiffré d'un sondage : textes vides, seul leur nombre compte (ordre = position). */
 export function encryptedPollBody(body: PollInput, sealed: { enc: c.EncPayload; client_msg_id: string }) {
