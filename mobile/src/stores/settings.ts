@@ -19,9 +19,9 @@ interface SettingsState {
   keepConnected: boolean | null
   /** Confirmer avant d'ouvrir un lien externe. */
   confirmLinks: boolean
-  /** Vérifier au démarrage (une fois par jour) s'il existe une nouvelle version sur le serveur ForgeChat. */
+  /** Vérifier à l'ouverture (au plus toutes les 3 h) s'il existe une nouvelle version sur le serveur ForgeChat. */
   updateCheck: boolean
-  /** Date (ms) de la dernière vérification automatique. */
+  /** Date (ms) de la dernière vérification automatique réussie. */
   updateLastCheckAt: number
   /** Version que l'utilisateur a choisi d'ignorer. */
   updateSkippedVersion: string | null

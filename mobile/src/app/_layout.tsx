@@ -12,6 +12,7 @@ import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, GroupRingOverl
 import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
+import { UpdateBanner } from '@/features/updates/UpdateBanner'
 import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
 import { bindKeepAlive, syncKeepAlive, useKeepAlive } from '@/services/keepAlive'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
@@ -116,6 +117,7 @@ export default function RootLayout() {
                 <Stack.Screen name="friend-invite/[code]" options={{ presentation: 'modal' }} />
               </Stack>
               <ConnectionBanner />
+              <UpdateBanner />
               <ActiveCallBar />
               <ScreenShareBanner />
               <LockOverlay />

@@ -52,7 +52,7 @@ export const fr = {
   'settings.security.confirmLinksSub': "Affiche le vrai domaine avant d'ouvrir un lien (anti-hameçonnage).",
   'settings.security.updates': 'Mises à jour',
   'settings.security.updatesFooter':
-    "Une fois par jour au démarrage, l'app demande au serveur ForgeChat le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi.",
+    "À l'ouverture de l'app (au plus toutes les 3 heures), elle demande au serveur ForgeChat le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi.",
   'settings.security.offerUpdates': 'Proposer les nouvelles versions',
   'settings.security.checkUpdate': 'Rechercher une mise à jour',
   'settings.security.account': 'Compte',
@@ -284,7 +284,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'settings.security.confirmLinksSub': 'Shows the real domain before opening a link (anti-phishing).',
   'settings.security.updates': 'Updates',
   'settings.security.updatesFooter':
-    'Once a day at startup, the app asks the ForgeChat server for the latest version number. Nothing else is sent; nothing is installed without you.',
+    'When the app is opened (at most every 3 hours), it asks the ForgeChat server for the latest version number. Nothing else is sent; nothing is installed without you.',
   'settings.security.offerUpdates': 'Offer new versions',
   'settings.security.checkUpdate': 'Check for updates',
   'settings.security.account': 'Account',

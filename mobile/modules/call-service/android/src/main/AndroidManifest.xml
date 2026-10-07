@@ -6,6 +6,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
   <!-- Mode « Notifications sans Google » : connexion gardée en arrière-plan (KeepAliveService). -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+  <!-- Mise à jour depuis le serveur ForgeChat (UpdateInstaller) : ouvrir l'installeur Android. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <application>
     <service
       android:name="com.forgechat.callservice.CallForegroundService"
@@ -15,5 +17,12 @@
       android:name="com.forgechat.callservice.KeepAliveService"
       android:exported="false"
       android:foregroundServiceType="remoteMessaging" />
+    <provider
+      android:name="com.forgechat.callservice.UpdateFileProvider"
+      android:authorities="${applicationId}.forgechat.updates"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/forgechat_update_paths" />
+    </provider>
   </application>
 </manifest>

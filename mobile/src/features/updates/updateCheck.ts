@@ -2,20 +2,25 @@
  * Vérification des mises à jour, publiées par le serveur ForgeChat lui-même (`/desktop/mobile.json`).
  *
  * Vie privée : une seule requête GET anonyme vers le serveur déjà utilisé par l'app (aucun
- * identifiant, aucun cookie) au plus une fois par jour, et seulement si l'utilisateur ne l'a pas
- * désactivée. L'app propose de télécharger l'APK depuis ce même serveur ; Android demande ensuite
- * confirmation et refuse tout APK qui n'est pas signé avec la même clé que l'app installée.
+ * identifiant, aucun cookie) à l'ouverture de l'app, au plus toutes les 3 heures, et seulement si
+ * l'utilisateur ne l'a pas désactivée. L'app télécharge l'APK depuis ce même serveur, en vérifie
+ * l'empreinte SHA-256 (installer.ts), puis Android demande confirmation et refuse tout APK qui n'est
+ * pas signé avec la même clé que l'app installée.
  */
 
-/** Intervalle minimal entre deux vérifications automatiques. */
-export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
+/**
+ * Intervalle minimal entre deux vérifications automatiques. Court : le service de premier plan
+ * (« Notifications sans Google ») garde le processus vivant des jours entiers, l'app ne redémarre
+ * presque jamais à froid ; la vérification se fait donc aussi à chaque retour au premier plan.
+ */
+export const CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000
 const TIMEOUT_MS = 10_000
 
 export interface AvailableUpdate {
   version: string
   /** APK sur le serveur ForgeChat (même origine que le manifeste, dossier /desktop/). */
   url: string
-  /** Empreinte SHA-256 annoncée, affichée à l'utilisateur. */
+  /** Empreinte SHA-256 annoncée (hexadécimal minuscule), comparée à celle du fichier téléchargé. */
   sha256: string
 }
 
@@ -93,4 +98,9 @@ export async function fetchAvailableUpdate(
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** L'APK téléchargé est-il bien celui annoncé ? (empreintes hexadécimales de 64 caractères, casse ignorée) */
+export function shaMatches(expected: string, actual: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(expected) && expected.toLowerCase() === actual.toLowerCase()
 }

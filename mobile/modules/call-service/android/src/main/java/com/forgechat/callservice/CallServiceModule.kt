@@ -4,6 +4,7 @@ import android.content.Intent
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import javax.crypto.Mac
@@ -12,7 +13,8 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
  * celui du mode « Notifications sans Google » (src/services/keepAlive.ts),
- * et redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement).
+ * redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement)
+ * et installe les mises à jour publiées par le serveur (UpdateInstaller, src/features/updates).
  */
 class CallServiceModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -85,6 +87,51 @@ class CallServiceModule : Module() {
         block++
       }
       Base64.encodeToString(out, Base64.NO_WRAP)
+    }
+
+    // ── Mise à jour de l'APK (UpdateInstaller, src/features/updates/installer.ts) ──
+    Events("onUpdateProgress")
+
+    // Téléchargement sur un fil dédié : la file des AsyncFunction est partagée par tous les modules Expo.
+    AsyncFunction("downloadUpdate") { url: String, expectedSha: String, promise: Promise ->
+      val ctx = appContext.reactContext
+      if (ctx == null) {
+        promise.reject("ERR_UPDATE", "contexte indisponible", null)
+      } else {
+        Thread {
+          try {
+            val sha = UpdateInstaller.download(ctx, url, expectedSha) { received, total ->
+              sendEvent("onUpdateProgress", mapOf("received" to received.toDouble(), "total" to total.toDouble()))
+            }
+            promise.resolve(sha)
+          } catch (e: Exception) {
+            Log.w("ForgeUpdate", "téléchargement impossible", e)
+            promise.reject("ERR_UPDATE", e.message ?: "téléchargement impossible", e)
+          }
+        }.start()
+      }
+    }
+
+    Function("canInstallUpdate") {
+      val ctx = appContext.reactContext ?: return@Function false
+      UpdateInstaller.canInstall(ctx)
+    }
+
+    Function("openInstallSettings") {
+      val ctx = appContext.currentActivity ?: appContext.reactContext ?: return@Function null
+      UpdateInstaller.openInstallSettings(ctx)
+      null
+    }
+
+    Function("installUpdate") {
+      val ctx = appContext.currentActivity ?: appContext.reactContext ?: return@Function false
+      UpdateInstaller.install(ctx)
+    }
+
+    Function("discardUpdate") {
+      val ctx = appContext.reactContext ?: return@Function null
+      UpdateInstaller.discard(ctx)
+      null
     }
 
     // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS
