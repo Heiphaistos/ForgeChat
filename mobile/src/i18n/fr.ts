@@ -459,6 +459,29 @@ export const fr = {
   'call.group': 'Appel de groupe',
   'call.you': 'Toi',
   'call.leave': 'Quitter l’appel',
+
+  // --- Surcouches globales : démarrage, verrou, appels entrants, barres actives ---
+  'overlay.secureConnection': 'Connexion sécurisée…',
+  'overlay.unreachable': 'Serveur injoignable',
+  'overlay.checkConnection': 'Vérifie ta connexion internet puis réessaie.',
+  'overlay.locked': 'ForgeChat est verrouillé',
+  'overlay.unlock': 'Déverrouiller',
+  'overlay.reconnecting': 'Reconnexion…',
+  'overlay.incomingVideo': 'Appel vidéo entrant…',
+  'overlay.incomingVoice': 'Appel vocal entrant…',
+  'overlay.decline': "Refuser l'appel",
+  'overlay.accept': "Accepter l'appel",
+  'overlay.hangUpFirst': 'Raccroche avant de rejoindre l’appel de groupe.',
+  'overlay.groupVideo': 'Appel vidéo de groupe…',
+  'overlay.groupVoice': 'Appel vocal de groupe…',
+  'overlay.ignoreGroup': "Ignorer l'appel de groupe",
+  'overlay.joinGroup': "Rejoindre l'appel de groupe",
+  'overlay.sharing': 'Partage d’écran en cours',
+  'overlay.stop': 'Arrêter',
+  'overlay.calling': 'Appel…',
+  'overlay.groupCall': 'Appel de groupe',
+  'overlay.groupCallNamed': 'Appel de groupe : {name}',
+  'overlay.voice': 'Vocal : {name}',
 }
 
 export type Key = keyof typeof fr
