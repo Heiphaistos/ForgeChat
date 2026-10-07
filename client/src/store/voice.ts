@@ -314,7 +314,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     if (why === 'duplicate' || why === 'removed' || why === 'evicted') {
       // Le serveur nous a déjà sortis (ou un autre appareil a repris le salon) :
       // un VOICE_LEAVE ici sortirait l'autre appareil, et un VOICE_JOIN le chasserait.
-      teardown(why === 'evicted')
+      teardown(why === 'evicted', why === 'duplicate')
       toast(why === 'duplicate' ? 'Salon vocal repris sur un autre appareil.'
         : why === 'evicted' ? 'Salon vocal quitté pour l\'appel privé.'
         : 'Vous avez été déconnecté du salon vocal.')
@@ -337,7 +337,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
   }
 
   /** Sortie locale. `announce` = prévenir le serveur (VOICE_LEAVE). */
-  const teardown = (announce: boolean) => {
+  const teardown = (announce: boolean, stillThereElsewhere = false) => {
     const { channelId, joined, screenSharing } = get()
     if (!joined) return
     useVoiceWaiting.setState({ waitingIn: null })
@@ -378,6 +378,15 @@ export const useVoice = create<VoiceStore>((set, get) => {
     _offOpen?.()
     _offOpen = null
 
+    // On restait affiché sous le salon dans sa propre barre latérale après l'avoir
+    // quitté (VOICE_USER_LEFT n'était pas renvoyé à l'intéressé). Sauf si un autre de
+    // nos appareils a repris le salon : on y est toujours.
+    const myId = useAuth.getState().user?.id
+    if (channelId && !stillThereElsewhere) {
+      set(s => ({
+        roomParticipants: { ...s.roomParticipants, [channelId]: (s.roomParticipants[channelId] ?? []).filter(p => p.userId !== myId) },
+      }))
+    }
     set({
       joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
       localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
