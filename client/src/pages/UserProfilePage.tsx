@@ -6,6 +6,7 @@ import api, { mediaUrl } from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from '../components/ui/ProfileDecor'
+import { useT, t as tr, intlLocale } from '../i18n'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,15 +49,15 @@ function statusColor(status: string): string {
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'online': return 'En ligne'
-    case 'idle': return 'Absent'
-    case 'dnd': return 'Ne pas déranger'
-    default: return 'Hors ligne'
+    case 'online': return tr('presence.online')
+    case 'idle': return tr('presence.idle')
+    case 'dnd': return tr('presence.dnd')
+    default: return tr('presence.offline')
   }
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', {
+  return new Date(iso).toLocaleDateString(intlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -68,6 +69,7 @@ function formatDate(iso: string): string {
 const BIO_MAX = 190
 
 function BioSection({ bio }: { bio: string }) {
+  const t = useT()
   const [expanded, setExpanded] = useState(false)
   const truncated = bio.length > BIO_MAX && !expanded
   const displayed = truncated ? bio.slice(0, BIO_MAX) + '…' : bio
@@ -81,9 +83,9 @@ function BioSection({ bio }: { bio: string }) {
           className="mt-1 text-xs text-fc-accent hover:underline flex items-center gap-0.5"
         >
           {expanded ? (
-            <>Réduire <ChevronUp size={12} aria-hidden /></>
+            <>{t('profile.collapse')} <ChevronUp size={12} aria-hidden /></>
           ) : (
-            <>Lire la suite <ChevronDown size={12} aria-hidden /></>
+            <>{t('profile.readMore')} <ChevronDown size={12} aria-hidden /></>
           )}
         </button>
       )}
@@ -94,8 +96,9 @@ function BioSection({ bio }: { bio: string }) {
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function ProfileSkeleton() {
+  const t = useT()
   return (
-    <div role="status" aria-label="Chargement du profil" className="animate-pulse">
+    <div role="status" aria-label={t('profile.loading')} className="animate-pulse">
       <div className="h-48 bg-fc-hover/50 rounded-t-xl" aria-hidden />
       <div className="px-6 pb-6 bg-fc-channel rounded-b-xl" aria-hidden>
         <div className="flex items-end gap-4 -mt-12 mb-6">
@@ -117,6 +120,7 @@ function ProfileSkeleton() {
 // ─── Serveurs en commun ───────────────────────────────────────────────────────
 
 function MutualServersSection({ userId }: { userId: string }) {
+  const t = useT()
   const { data: mutual = [], isLoading } = useQuery<MutualServer[]>({
     queryKey: ['mutual-servers', userId],
     queryFn: () => api.get(`/users/${userId}/mutual-servers`).then((r) => r.data),
@@ -124,7 +128,7 @@ function MutualServersSection({ userId }: { userId: string }) {
 
   if (isLoading) {
     return (
-      <div role="status" aria-label="Chargement des serveurs en commun" className="space-y-2">
+      <div role="status" aria-label={t('profile.mutualLoading')} className="space-y-2">
         {[1, 2, 3].map((i) => (
           <div key={i} aria-hidden className="h-10 bg-fc-hover/30 rounded-lg animate-pulse" />
         ))}
@@ -134,7 +138,7 @@ function MutualServersSection({ userId }: { userId: string }) {
 
   if (mutual.length === 0) {
     return (
-      <p className="text-fc-muted text-sm">Aucun serveur en commun.</p>
+      <p className="text-fc-muted text-sm">{t('profile.noMutual')}</p>
     )
   }
 
@@ -173,6 +177,7 @@ function MutualServersSection({ userId }: { userId: string }) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function UserProfilePage() {
+  const t = useT()
   const { userId } = useParams<{ userId: string }>()
   const nav = useNavigate()
   const { user: me } = useAuth()
@@ -202,7 +207,7 @@ export default function UserProfilePage() {
       // Le commentaire précédent affirmait qu'une erreur serait "visible dans
       // le toast de la nav" -- nav() ne fait jamais ça, l'échec était donc
       // totalement silencieux (clic sans aucun effet visible).
-      toast.error("Impossible d'ouvrir la conversation")
+      toast.error(t('profile.dmError'))
     }
   }
 
@@ -219,13 +224,13 @@ export default function UserProfilePage() {
       <div className="flex-1 bg-fc-chat flex items-center justify-center">
         <div className="text-center text-fc-muted">
           <Users size={48} aria-hidden className="mx-auto mb-4 opacity-30" />
-          <p>Profil introuvable.</p>
+          <p>{t('profile.notFound')}</p>
           <button
             onClick={() => nav(-1)}
-            aria-label="Retour à la page précédente"
+            aria-label={t('profile.back')}
             className="mt-4 text-fc-accent hover:underline text-sm"
           >
-            Retour
+            {t('common.back')}
           </button>
         </div>
       </div>
@@ -240,11 +245,11 @@ export default function UserProfilePage() {
         {/* Bouton retour */}
         <button
           onClick={() => nav(-1)}
-          aria-label="Retour à la page précédente"
+          aria-label={t('profile.back')}
           className="flex items-center gap-1.5 text-fc-muted hover:text-white text-sm mb-4 transition"
         >
           <ArrowLeft size={16} aria-hidden />
-          <span aria-hidden>Retour</span>
+          <span aria-hidden>{t('common.back')}</span>
         </button>
 
         {/* Carte profil */}
@@ -296,11 +301,11 @@ export default function UserProfilePage() {
                 {!isSelf && (
                   <button
                     onClick={handleOpenDm}
-                    aria-label={`Envoyer un message à ${user.username}`}
+                    aria-label={t('profile.message', { name: user.username })}
                     className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition"
                   >
                     <MessageCircle size={15} aria-hidden />
-                    Message
+                    {t('profile.messageButton')}
                   </button>
                 )}
               </div>
@@ -330,7 +335,7 @@ export default function UserProfilePage() {
             {user.bio && (
               <section className="mb-4">
                 <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-                  À propos
+                  {t('profile.about')}
                 </h2>
                 <BioSection bio={user.bio} />
               </section>
@@ -339,7 +344,7 @@ export default function UserProfilePage() {
             {/* Membre depuis */}
             <section className="mb-4">
               <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
-                Membre depuis
+                {t('settings.stats.memberSince')}
               </h2>
               <p className="text-sm text-white/80">{formatDate(user.created_at)}</p>
             </section>
@@ -351,7 +356,7 @@ export default function UserProfilePage() {
           <div className="bg-fc-channel rounded-xl p-5">
             <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <Users size={13} aria-hidden />
-              Serveurs en commun
+              {t('profile.mutual')}
             </h2>
             <MutualServersSection userId={userId} />
           </div>

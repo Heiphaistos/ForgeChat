@@ -14,6 +14,7 @@ import { usePresence } from '../store/presence'
 import { useFormatDate } from '../hooks/useFormatDate'
 import ImportContactsModal from '../components/modals/ImportContactsModal'
 import { useMobile } from '../contexts/MobileContext'
+import { useT, t as tr, type Key } from '../i18n'
 
 type FriendTab = 'online' | 'all' | 'pending' | 'blocked' | 'calls'
 type PendingSubTab = 'received' | 'sent'
@@ -67,11 +68,11 @@ const STATUS_COLOR: Record<string, string> = {
   offline:   'bg-fc-muted',
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  online:  'En ligne',
-  idle:    'Absent',
-  dnd:     'Ne pas déranger',
-  offline: 'Hors ligne',
+const STATUS_LABEL: Record<string, Key> = {
+  online:  'presence.online',
+  idle:    'presence.idle',
+  dnd:     'presence.dnd',
+  offline: 'presence.offline',
 }
 
 function AvatarWithStatus({
@@ -104,22 +105,23 @@ function SkeletonCard() {
 }
 
 export default function FriendsPage() {
-  usePageTitle('Amis')
+  const t = useT()
+  usePageTitle(t('friends.title'))
   const { openSidebar } = useMobile()
   const { formatShort } = useFormatDate()
   const [tab, setTab] = useState<FriendTab>('all')
   const [pendingSubTab, setPendingSubTab] = useState<PendingSubTab>('received')
 
-  const TAB_TITLES: Record<FriendTab, string> = {
-    online: 'Amis en ligne',
-    all: 'Tous les amis',
-    pending: 'Demandes d\'amis',
-    blocked: 'Bloqués',
-    calls: 'Appels récents',
+  const TAB_TITLES: Record<FriendTab, Key> = {
+    online: 'friends.tabTitle.online',
+    all: 'friends.allFriends',
+    pending: 'friends.requests',
+    blocked: 'friends.blocked',
+    calls: 'friends.recentCalls',
   }
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
-    document.title = `${prefix}${TAB_TITLES[tab]} | ForgeChat`
+    document.title = `${prefix}${tr(TAB_TITLES[tab])} | ForgeChat`
     return () => {
       const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
       document.title = `${p}ForgeChat`
@@ -198,7 +200,7 @@ export default function FriendsPage() {
   const createInvite = useMutation({
     mutationFn: () => api.post('/friends/invite').then(r => r.data),
     onSuccess: (data: { url: string }) => setInviteUrl(data.url),
-    onError: () => toast.error('Erreur lors de la création du lien'),
+    onError: () => toast.error(t('friends.linkError')),
   })
 
   const sendRequest = useMutation({
@@ -207,24 +209,24 @@ export default function FriendsPage() {
       qc.invalidateQueries({ queryKey: ['friends'] })
       qc.invalidateQueries({ queryKey: ['friend_suggestions'] })
       setAddTag('')
-      toast.success('Demande envoyée !')
+      toast.success(t('friends.requestSent'))
     },
     onError: (e: unknown) => {
       const err = e as { response?: { data?: { error?: string } } }
-      toast.error(err.response?.data?.error ?? 'Utilisateur introuvable')
+      toast.error(err.response?.data?.error ?? t('friends.userNotFound'))
     },
   })
 
   const accept = useMutation({
     mutationFn: (id: string) => api.post(`/friends/${id}/accept`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends'] }),
-    onError: () => toast.error('Erreur lors de l\'acceptation'),
+    onError: () => toast.error(t('friends.acceptError')),
   })
 
   const decline = useMutation({
     mutationFn: (id: string) => api.post(`/friends/${id}/decline`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends'] }),
-    onError: () => toast.error('Erreur lors du refus'),
+    onError: () => toast.error(t('friends.declineError')),
   })
 
   // Annuler une demande qu'on a SOI-MÊME envoyée -- endpoint distinct de
@@ -235,18 +237,18 @@ export default function FriendsPage() {
     mutationFn: (id: string) => api.delete(`/friends/${id}/cancel`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
-      toast.success('Demande annulée')
+      toast.success(t('friends.requestCancelled'))
     },
-    onError: () => toast.error('Erreur lors de l\'annulation'),
+    onError: () => toast.error(t('friends.cancelError')),
   })
 
   const remove = useMutation({
     mutationFn: (friendId: string) => api.delete(`/friends/${friendId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
-      toast.success('Ami supprimé')
+      toast.success(t('friends.removed'))
     },
-    onError: () => toast.error('Erreur lors de la suppression'),
+    onError: () => toast.error(t('saved.removeError')),
   })
 
   const blockUser = useMutation({
@@ -254,15 +256,15 @@ export default function FriendsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['friends'] })
       qc.invalidateQueries({ queryKey: ['friends_blocked'] })
-      toast.success('Utilisateur bloqué')
+      toast.success(t('friends.blockedToast'))
     },
-    onError: () => toast.error('Erreur lors du blocage'),
+    onError: () => toast.error(t('friends.blockError')),
   })
 
   const unblockUser = useMutation({
     mutationFn: (userId: string) => api.delete(`/friends/block/${userId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends_blocked'] }),
-    onError: () => toast.error('Erreur lors du déblocage'),
+    onError: () => toast.error(t('friends.unblockError')),
   })
 
   const openDm = async (userId: string) => {
@@ -270,7 +272,7 @@ export default function FriendsPage() {
       const { data } = await api.post(`/dms/${userId}`)
       nav(`/dms/${data.dm_id}`)
     } catch {
-      toast.error('Impossible d\'ouvrir le DM')
+      toast.error(t('friends.dmError'))
     }
   }
 
@@ -284,19 +286,19 @@ export default function FriendsPage() {
   const pendingCount = pendingReceived.length
 
   // ── Tab button ─────────────────────────────────────────────────────────────
-  const TabBtn = ({ t, label, count }: { t: FriendTab; label: string; count?: number }) => (
+  const TabBtn = ({ id, label, count }: { id: FriendTab; label: string; count?: number }) => (
     <button
       role="tab"
-      aria-selected={tab === t}
-      onClick={() => setTab(t)}
+      aria-selected={tab === id}
+      onClick={() => setTab(id)}
       className={`px-3 py-1.5 rounded text-sm font-medium transition
-        ${tab === t
+        ${tab === id
           ? 'bg-fc-hover text-white'
           : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
     >
       {label}
       {count !== undefined && count > 0 && (
-        <span aria-label={`${count} en attente`} className="ml-1.5 bg-fc-red text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
+        <span aria-label={t('friends.pendingCount', { n: count })} className="ml-1.5 bg-fc-red text-white text-xs rounded-full px-1.5 py-0.5 leading-none">
           <span aria-hidden>{count}</span>
         </span>
       )}
@@ -324,7 +326,7 @@ export default function FriendsPage() {
             </span>
           </div>
           <div className="text-xs text-fc-muted truncate mt-0.5">
-            {f.custom_status ?? STATUS_LABEL[live] ?? 'Hors ligne'}
+            {f.custom_status ?? t(STATUS_LABEL[live] ?? 'presence.offline')}
           </div>
         </div>
 
@@ -332,7 +334,8 @@ export default function FriendsPage() {
         <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition">
           <button
             onClick={e => { e.stopPropagation(); openDm(f.friend_id) }}
-            title="Envoyer un message"
+            title={t('friends.message')}
+            aria-label={t('friends.message')}
             className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
           >
             <MessageCircle size={16} />
@@ -341,7 +344,8 @@ export default function FriendsPage() {
           <div className="relative">
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(isOpen ? null : f.id) }}
-              title="Plus d'options"
+              title={t('friends.more')}
+              aria-label={t('friends.more')}
               className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
             >
               <MoreHorizontal size={16} />
@@ -354,19 +358,19 @@ export default function FriendsPage() {
                   onClick={() => { nav(`/users/${f.friend_id}`); setMenuOpen(null) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition"
                 >
-                  <User size={14} /> Profil
+                  <User size={14} /> {t('friends.profile')}
                 </button>
                 <button
                   onClick={() => { remove.mutate(f.friend_id); setMenuOpen(null) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-red hover:bg-fc-hover transition"
                 >
-                  <UserX size={14} /> Supprimer
+                  <UserX size={14} /> {t('common.delete')}
                 </button>
                 <button
                   onClick={() => { blockUser.mutate(f.friend_id); setMenuOpen(null) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-red hover:bg-fc-hover transition"
                 >
-                  <Shield size={14} /> Bloquer
+                  <Shield size={14} /> {t('friends.block')}
                 </button>
               </div>
             )}
@@ -385,37 +389,38 @@ export default function FriendsPage() {
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour"
+          aria-label={t('common.back')}
         >
           <ChevronLeft size={20} />
         </button>
-        <span className="font-semibold text-white flex-shrink-0">Amis</span>
+        <span className="font-semibold text-white flex-shrink-0">{t('friends.title')}</span>
         {/* Tabs scrollables horizontalement */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden no-scrollbar">
-          <div role="tablist" aria-label="Filtrer les amis" className="flex items-center gap-1 min-w-max px-1">
-            <TabBtn t="online" label="En ligne" count={online.length} />
-            <TabBtn t="all" label="Tous" />
-            <TabBtn t="pending" label="En attente" count={pendingCount} />
-            <TabBtn t="blocked" label="Bloqués" />
-            <TabBtn t="calls" label="Appels" />
+          <div role="tablist" aria-label={t('friends.filter')} className="flex items-center gap-1 min-w-max px-1">
+            <TabBtn id="online" label={t('presence.online')} count={online.length} />
+            <TabBtn id="all" label={t('friends.tab.all')} />
+            <TabBtn id="pending" label={t('friends.tab.pending')} count={pendingCount} />
+            <TabBtn id="blocked" label={t('friends.blocked')} />
+            <TabBtn id="calls" label={t('friends.tab.calls')} />
           </div>
         </div>
         {/* Actions — icône sur mobile, texte sur desktop */}
         <button
           onClick={() => setTab('pending')}
           className="flex-shrink-0 p-1.5 md:px-3 md:py-1.5 rounded text-sm font-medium bg-fc-accent hover:bg-indigo-500 text-white transition flex items-center gap-1"
-          title="Ajouter un ami"
+          title={t('friends.add')}
+          aria-label={t('friends.add')}
         >
           <UserPlus size={16} />
-          <span className="hidden md:inline">Ajouter</span>
+          <span className="hidden md:inline">{t('chset.add')}</span>
         </button>
         <button
           onClick={() => setShowImport(true)}
           className="flex-shrink-0 hidden md:flex px-3 py-1.5 rounded text-sm font-medium bg-fc-hover hover:bg-fc-input text-fc-text hover:text-white transition items-center gap-1.5"
-          title="Importer des contacts depuis un CSV"
+          title={t('friends.importTitle')}
         >
           <Upload size={14} />
-          Importer CSV
+          {t('friends.importCsv')}
         </button>
       </div>
 
@@ -426,16 +431,17 @@ export default function FriendsPage() {
           <div className="max-w-2xl mb-6 p-4 bg-fc-channel rounded-xl border border-fc-hover">
             <h3 className="font-semibold text-white mb-1 flex items-center gap-2">
               <UserPlus size={16} className="text-fc-accent" />
-              Ajouter un ami
+              {t('friends.add')}
             </h3>
             <p className="text-fc-muted text-xs mb-3">
-              Entre le tag complet : <span className="text-fc-text font-mono">username#0000</span>
+              {t('friends.enterTag')} <span className="text-fc-text font-mono">username#0000</span>
             </p>
             <div className="flex gap-2">
               <input
                 value={addTag}
                 onChange={e => setAddTag(e.target.value)}
                 placeholder="username#0000"
+                aria-label={t('friends.add')}
                 enterKeyHint="send" autoCapitalize="none" autoCorrect="off"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono"
                 onKeyDown={e => e.key === 'Enter' && addTag.includes('#') && sendRequest.mutate(addTag)}
@@ -445,7 +451,7 @@ export default function FriendsPage() {
                 disabled={!addTag.includes('#') || sendRequest.isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-40"
               >
-                {sendRequest.isPending ? '…' : 'Envoyer'}
+                {sendRequest.isPending ? '…' : t('friends.send')}
               </button>
             </div>
 
@@ -453,11 +459,11 @@ export default function FriendsPage() {
             <div className="mt-4 pt-4 border-t border-fc-hover">
               <p className="text-xs text-fc-muted mb-2 flex items-center gap-1.5">
                 <Link size={12} className="text-fc-accent" />
-                Ou invite via un lien (valable 7 jours)
+                {t('friends.inviteLink')}
               </p>
               {inviteUrl ? (
                 <div className="flex gap-2">
-                  <input readOnly value={inviteUrl}
+                  <input readOnly value={inviteUrl} aria-label={t('invite.link')}
                     className="flex-1 px-2 py-1.5 bg-fc-input rounded text-white text-xs outline-none font-mono" />
                   <button
                     onClick={copyInviteUrl}
@@ -465,7 +471,7 @@ export default function FriendsPage() {
                       ${copied ? 'bg-green-600 text-white' : 'bg-fc-accent hover:bg-indigo-500 text-white'}`}
                   >
                     <Copy size={12} />
-                    {copied ? 'Copié !' : 'Copier'}
+                    {copied ? t('feeds.copied') : t('feeds.copy')}
                   </button>
                 </div>
               ) : (
@@ -474,7 +480,7 @@ export default function FriendsPage() {
                   disabled={createInvite.isPending}
                   className="px-3 py-1.5 bg-fc-hover hover:bg-fc-input text-fc-text rounded text-xs transition disabled:opacity-50"
                 >
-                  {createInvite.isPending ? 'Génération…' : 'Générer un lien'}
+                  {createInvite.isPending ? t('friends.generating') : t('friends.generateLink')}
                 </button>
               )}
             </div>
@@ -484,7 +490,7 @@ export default function FriendsPage() {
               <div className="mt-4 pt-4 border-t border-fc-hover">
                 <p className="text-xs text-fc-muted mb-2 flex items-center gap-1.5">
                   <UserPlus size={12} className="text-fc-accent" />
-                  Suggestions — des personnes que tu connais peut-être
+                  {t('friends.suggestions')}
                 </p>
                 <div className="space-y-1">
                   {suggestions.slice(0, 6).map(s => (
@@ -500,8 +506,8 @@ export default function FriendsPage() {
                         </div>
                         <div className="text-xs text-fc-muted truncate">
                           {[
-                            s.mutual_friends > 0 && `${s.mutual_friends} ami${s.mutual_friends > 1 ? 's' : ''} en commun`,
-                            s.mutual_servers > 0 && `${s.mutual_servers} serveur${s.mutual_servers > 1 ? 's' : ''} en commun`,
+                            s.mutual_friends > 0 && t(s.mutual_friends > 1 ? 'friends.mutualFriends.other' : 'friends.mutualFriends.one', { n: s.mutual_friends }),
+                            s.mutual_servers > 0 && t(s.mutual_servers > 1 ? 'friends.mutualServers.other' : 'friends.mutualServers.one', { n: s.mutual_servers }),
                           ].filter(Boolean).join(' · ')}
                         </div>
                       </div>
@@ -510,7 +516,7 @@ export default function FriendsPage() {
                         disabled={sendRequest.isPending}
                         className="flex-shrink-0 px-2.5 py-1 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition disabled:opacity-40 opacity-100 md:opacity-0 md:group-hover:opacity-100"
                       >
-                        Ajouter
+                        {t('chset.add')}
                       </button>
                     </div>
                   ))}
@@ -529,15 +535,15 @@ export default function FriendsPage() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Rechercher un ami..."
-                aria-label="Rechercher un ami"
+                placeholder={t('friends.searchPh')}
+                aria-label={t('friends.search')}
                 inputMode="search" autoComplete="off"
                 className="w-full pl-8 pr-3 py-1.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent placeholder:text-fc-muted"
               />
             </div>
 
             <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-              {tab === 'online' ? 'En ligne' : 'Tous les amis'} — {filteredAccepted.length}
+              {tab === 'online' ? t('presence.online') : t('friends.allFriends')} — {filteredAccepted.length}
             </div>
 
             {isLoading ? (
@@ -547,8 +553,8 @@ export default function FriendsPage() {
             ) : filteredAccepted.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-fc-muted gap-3">
                 {tab === 'online'
-                  ? <><WifiOff size={36} className="opacity-40" /><p className="text-sm">Aucun ami en ligne</p></>
-                  : <><Wifi size={36} className="opacity-40" /><p className="text-sm">Aucun ami pour l'instant</p></>
+                  ? <><WifiOff size={36} className="opacity-40" /><p className="text-sm">{t('friends.noneOnline')}</p></>
+                  : <><Wifi size={36} className="opacity-40" /><p className="text-sm">{t('friends.none')}</p></>
                 }
               </div>
             ) : (
@@ -563,14 +569,14 @@ export default function FriendsPage() {
         {tab === 'pending' && (
           <div>
             {/* Sous-tabs */}
-            <div role="group" aria-label="Demandes d'amis" className="flex gap-1 mb-4">
+            <div role="group" aria-label={t('friends.requests')} className="flex gap-1 mb-4">
               <button
                 onClick={() => setPendingSubTab('received')}
                 aria-pressed={pendingSubTab === 'received'}
                 className={`px-3 py-1 rounded text-xs font-medium transition
                   ${pendingSubTab === 'received' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
               >
-                Reçues {pendingReceived.length > 0 && `(${pendingReceived.length})`}
+                {t('friends.received')} {pendingReceived.length > 0 && `(${pendingReceived.length})`}
               </button>
               <button
                 onClick={() => setPendingSubTab('sent')}
@@ -578,7 +584,7 @@ export default function FriendsPage() {
                 className={`px-3 py-1 rounded text-xs font-medium transition
                   ${pendingSubTab === 'sent' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
               >
-                Envoyées {pendingSent.length > 0 && `(${pendingSent.length})`}
+                {t('friends.sent')} {pendingSent.length > 0 && `(${pendingSent.length})`}
               </button>
             </div>
 
@@ -586,7 +592,7 @@ export default function FriendsPage() {
               <div className="space-y-2">{[1, 2].map(i => <SkeletonCard key={i} />)}</div>
             ) : pendingSubTab === 'received' ? (
               pendingReceived.length === 0
-                ? <p className="text-fc-muted text-sm py-8 text-center">Aucune demande reçue</p>
+                ? <p className="text-fc-muted text-sm py-8 text-center">{t('friends.noneReceived')}</p>
                 : (
                   <div className="space-y-2">
                     {pendingReceived.map(f => (
@@ -597,18 +603,18 @@ export default function FriendsPage() {
                             <span className="text-fc-muted text-xs ml-0.5">#{f.discriminator}</span>
                           </div>
                           <div className="text-xs text-fc-muted flex items-center gap-1">
-                            <Clock size={11} /> Demande reçue
+                            <Clock size={11} /> {t('friends.requestReceived')}
                           </div>
                         </div>
                         <button onClick={() => accept.mutate(f.id)}
-                          aria-label={`Accepter la demande de ${f.username}`}
-                          title="Accepter"
+                          aria-label={t('friends.acceptName', { name: f.username })}
+                          title={t('friends.accept')}
                           className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-green/20 hover:bg-fc-green/30 text-fc-green rounded-full transition">
                           <Check size={16} aria-hidden />
                         </button>
                         <button onClick={() => decline.mutate(f.id)}
-                          aria-label={`Refuser la demande de ${f.username}`}
-                          title="Refuser"
+                          aria-label={t('friends.declineName', { name: f.username })}
+                          title={t('friends.decline')}
                           className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
                           <X size={16} aria-hidden />
                         </button>
@@ -618,7 +624,7 @@ export default function FriendsPage() {
                 )
             ) : (
               pendingSent.length === 0
-                ? <p className="text-fc-muted text-sm py-8 text-center">Aucune demande envoyée</p>
+                ? <p className="text-fc-muted text-sm py-8 text-center">{t('friends.noneSent')}</p>
                 : (
                   <div className="space-y-2">
                     {pendingSent.map(f => (
@@ -629,12 +635,12 @@ export default function FriendsPage() {
                             <span className="text-fc-muted text-xs ml-0.5">#{f.discriminator}</span>
                           </div>
                           <div className="text-xs text-fc-yellow flex items-center gap-1">
-                            <Clock size={11} /> En attente d'acceptation
+                            <Clock size={11} /> {t('friends.awaiting')}
                           </div>
                         </div>
                         <button onClick={() => cancelRequest.mutate(f.id)}
-                          aria-label={`Annuler la demande envoyée à ${f.username}`}
-                          title="Annuler"
+                          aria-label={t('friends.cancelName', { name: f.username })}
+                          title={t('common.cancel')}
                           className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center bg-fc-red/20 hover:bg-fc-red/30 text-fc-red rounded-full transition">
                           <X size={16} aria-hidden />
                         </button>
@@ -650,12 +656,12 @@ export default function FriendsPage() {
         {tab === 'blocked' && (
           <div>
             <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-              Bloqués — {blocked.length}
+              {t('friends.blocked')} — {blocked.length}
             </div>
             {blocked.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-fc-muted gap-3">
                 <MinusCircle size={36} className="opacity-40" />
-                <p className="text-sm">Aucun utilisateur bloqué</p>
+                <p className="text-sm">{t('friends.noneBlocked')}</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -675,7 +681,7 @@ export default function FriendsPage() {
                       onClick={() => unblockUser.mutate(b.id)}
                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 px-3 py-1 text-xs bg-fc-input hover:bg-fc-hover text-fc-text rounded transition"
                     >
-                      Débloquer
+                      {t('friends.unblock')}
                     </button>
                   </div>
                 ))}
@@ -687,7 +693,7 @@ export default function FriendsPage() {
         {tab === 'calls' && (
           <div>
             <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-              Appels récents — {calls.length}
+              {t('friends.recentCalls')} — {calls.length}
             </div>
             {callsLoading ? (
               <div className="flex justify-center py-16">
@@ -696,25 +702,25 @@ export default function FriendsPage() {
             ) : calls.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-fc-muted gap-3">
                 <Phone size={36} className="opacity-40" />
-                <p className="text-sm">Aucun appel pour le moment</p>
-                <p className="text-xs opacity-70">Lance un appel vocal ou vidéo depuis une conversation privée</p>
+                <p className="text-sm">{t('friends.noCalls')}</p>
+                <p className="text-xs opacity-70">{t('friends.noCallsHint')}</p>
               </div>
             ) : (
               <div className="space-y-1">
                 {calls.map(c => {
                   const missed = c.status === 'missed' || c.status === 'declined'
                   const statusLabel = c.status === 'ended'
-                    ? (c.duration_s != null ? `${Math.floor(c.duration_s / 60)}:${String(c.duration_s % 60).padStart(2, '0')}` : 'Terminé')
-                    : c.status === 'missed' ? 'Manqué'
-                    : c.status === 'declined' ? 'Refusé'
-                    : 'En cours'
+                    ? (c.duration_s != null ? `${Math.floor(c.duration_s / 60)}:${String(c.duration_s % 60).padStart(2, '0')}` : t('friends.call.ended'))
+                    : c.status === 'missed' ? t('friends.call.missed')
+                    : c.status === 'declined' ? t('friends.call.declined')
+                    : t('friends.call.ongoing')
                   const DirIcon = missed ? PhoneMissed : c.direction === 'outgoing' ? PhoneOutgoing : PhoneIncoming
                   return (
                     <button
                       key={c.id}
                       onClick={() => c.dm_id && nav(`/dms/${c.dm_id}`)}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition w-full text-left"
-                      title={c.dm_id ? 'Ouvrir la conversation' : undefined}
+                      title={c.dm_id ? t('friends.openDm') : undefined}
                     >
                       <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0">
                         {c.other_user.avatar
@@ -725,11 +731,11 @@ export default function FriendsPage() {
                         <div className="font-medium text-white text-sm truncate">{c.other_user.username}</div>
                         <div className={`flex items-center gap-1.5 text-xs ${missed ? 'text-fc-red' : 'text-fc-muted'}`}>
                           <DirIcon size={12} aria-hidden />
-                          {c.direction === 'outgoing' ? 'Sortant' : 'Entrant'} · {statusLabel}
+                          {c.direction === 'outgoing' ? t('friends.call.outgoing') : t('friends.call.incoming')} · {statusLabel}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 text-fc-muted">
-                        {c.call_type === 'video' ? <Video size={15} aria-label="Appel vidéo" /> : <Phone size={15} aria-label="Appel vocal" />}
+                        {c.call_type === 'video' ? <Video size={15} aria-label={t('friends.call.video')} /> : <Phone size={15} aria-label={t('friends.call.voice')} />}
                         <span className="text-xs">{formatShort(c.started_at)}</span>
                       </div>
                     </button>
