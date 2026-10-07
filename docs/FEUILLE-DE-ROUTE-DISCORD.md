@@ -40,3 +40,14 @@ Les fonctions payantes de Discord (Nitro, boosts) sont gratuites ici.
 | 25 | Clips (30 dernières secondes) | L |
 | 26 | Activités / jeux en vocal | L |
 | 27 | Splash d'invitation, icônes d'app | S |
+
+## État au 2026-10-07 matin (serveur 3.271.0, web 3.615.0, mobile 1.2.0 publié, 1.3.0 en préparation)
+Fait et vérifié en prod (tests dans forgechat-loop/tests) :
+- Limites levées : envois 500 Mo, emojis/stickers/sons de tous ses serveurs, partage d'écran 4K / 20 Mb/s, caméra mobile 720p, boosts réparés.
+- #1, #3, #4, #9, #10, #17 mobile : forums, fils, sondages, transfert, signets, rappels, historique, administration serveur complète, scène, soundboard, 2FA, recherche, 28 thèmes (partagés avec le web).
+- #2, #5, #6, #11, #12, #13 : voir ci-dessus.
+- #8 flou d'arrière-plan (web/bureau, calcul local MediaPipe).
+- #14 profil par serveur, #15 icônes de rôles et dégradés, #16 dossiers de serveurs synchronisés (et affichés sur mobile), #19 annonces suivies, #20 onboarding, #21 super réactions, #22 salons médias, #24 confirmation d'âge NSFW (web).
+- En plus : salon AFK appliqué, signalement des MP (file admin du site), renommer un fil, Scène sécurisée côté serveur.
+
+Reste : #7 traduction de l'interface, #18 activité « joue à » automatique, #23 effets/décorations de profil, #25 clips, #26 activités en vocal, #27 splash d'invitation ; MP chiffrés sur mobile (décision : clés par appareil côté serveur) ; confirmation d'âge NSFW sur mobile ; dégradé de rôle sur mobile (dépendance native).
