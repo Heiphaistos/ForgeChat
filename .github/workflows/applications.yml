@@ -118,6 +118,7 @@ jobs:
           name: android
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
+          retention-days: 1
 
   ios:
     needs: version
@@ -174,6 +175,7 @@ jobs:
           name: ios
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
+          retention-days: 1
 
   windows:
     needs: version
@@ -196,6 +198,7 @@ jobs:
           name: windows
           path: dist-desktop/*.exe
           if-no-files-found: error
+          retention-days: 1
 
   linux:
     needs: version
@@ -228,6 +231,7 @@ jobs:
             dist-desktop/*.rpm
             dist-desktop/*.AppImage
           if-no-files-found: error
+          retention-days: 1
 
   macos:
     needs: version
@@ -256,6 +260,7 @@ jobs:
           name: macos
           path: ${{ runner.temp }}/out/*
           if-no-files-found: error
+          retention-days: 1
 
   release:
     needs: [version, android, ios, windows, linux, macos]
