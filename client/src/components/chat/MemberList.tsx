@@ -9,6 +9,7 @@ import { usePresence } from '../../store/presence'
 import { useContextMenu } from '../ui/ContextMenu'
 import UserPopup from '../UserPopup'
 import { useMemberModeration } from './MemberModeration'
+import { useRemoteSupportItem } from './RemoteSupport'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
@@ -123,6 +124,7 @@ export default function MemberList({ serverId, onClose }: Props) {
   // Expulser / Bannir / Timeout / Notes / vocal selon les permissions réelles
   // et la hiérarchie (avant : « Expulser » réservé au seul propriétaire).
   const moderation = useMemberModeration(serverId)
+  const remoteSupportItem = useRemoteSupportItem()
   const [popup, setPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
 
   const { online, offline } = useMemo(() => {
@@ -155,6 +157,7 @@ export default function MemberList({ serverId, onClose }: Props) {
         .then(r => nav(`/dms/${r.data.dm_id}`))
         .catch(() => toast.error(tr('msg.openDmFailed')))
     }},
+    ...[remoteSupportItem(m.user_id)].filter(i => i !== null),
     { label: tr('members.mention'), onClick: () => {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
       if (el) {

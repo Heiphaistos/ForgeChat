@@ -19,6 +19,7 @@ import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { callColors, colors, font, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
+import { promptSupport } from '@/features/chat/SupportCard'
 
 /**
  * Appel privé. En vidéo, la vidéo du correspondant occupe tout l'écran (zoom, remplir / ajuster),
@@ -123,6 +124,7 @@ export default function CallScreen() {
         </>
       ) : null}
       <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
+      {s.dmId ? <CallButton icon="help-buoy-outline" label={t('rs.button')} onPress={() => promptSupport(s.dmId!)} /> : null}
       <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
     </>
   )

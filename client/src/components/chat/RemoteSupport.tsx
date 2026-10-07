@@ -3,8 +3,13 @@
 import { useEffect, useState } from 'react'
 import { LifeBuoy } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import api from '../../api/client'
 import { useChat } from '../../store/chat'
-import { useT } from '../../i18n'
+import { useAuth } from '../../store/auth'
+import { useT, t as tr } from '../../i18n'
+import type { ContextMenuItem } from '../ui/ContextMenu'
 import {
   GHD_SITE, connectLink, expired, formatCode, formatId, invite, isDeviceId, newCode, parseSupport, shareLink, webViewerLink,
   type SupportPayload,
@@ -73,19 +78,47 @@ function IdForm({ onSubmit, onCancel }: { onSubmit: (id: string) => void; onCanc
   )
 }
 
-/** Bouton d'en-tête du MP : « Aider » ou « Demander de l'aide ». */
-export function RemoteSupportButton({ dmId, autoOpen = false }: { dmId: string; autoOpen?: boolean }) {
+/**
+ * « Support à distance » avec quelqu'un depuis n'importe où (menus d'un membre, appel,
+ * barre vocale) : ouvre (ou crée) le MP et y déplie le menu ci-dessous (`?support=1`).
+ * `null` pour soi-même.
+ */
+export function useRemoteSupportItem() {
+  const nav = useNavigate()
+  const me = useAuth(s => s.user?.id)
+  return (userId: string, label = tr('rs.button')): ContextMenuItem | null => userId === me ? null : {
+    label, icon: <LifeBuoy size={14} />,
+    onClick: () => {
+      api.post(`/dms/${userId}`)
+        .then(r => nav(`/dms/${r.data.dm_id}?support=1`))
+        .catch(() => toast.error(tr('msg.openDmFailed')))
+    },
+  }
+}
+
+/** Bouton du MP (en-tête, ou barre d'appel avec `round`) : « Aider » ou « Demander de l'aide ». */
+export function RemoteSupportButton({ dmId, autoOpen = false, round = false }: { dmId: string; autoOpen?: boolean; round?: boolean }) {
   const t = useT()
-  // Ouvert d'office depuis le menu d'un ami (« Support à distance »).
-  const [open, setOpen] = useState<null | 'menu' | 'id'>(autoOpen ? 'menu' : null)
+  const [open, setOpen] = useState<null | 'menu' | 'id'>(null)
+  // Ouvert d'office quand on arrive par « Support à distance » (menu d'un membre, d'un ami…) ;
+  // le paramètre est consommé pour qu'une nouvelle demande vers ce même MP le rouvre.
+  const [params, setParams] = useSearchParams()
+  const asked = autoOpen && params.get('support') === '1'
+  useEffect(() => {
+    if (!asked) return
+    setOpen('menu')
+    setParams(p => { p.delete('support'); return p }, { replace: true })
+  }, [asked, setParams])
   return (
     <div className="relative">
       <button onClick={() => setOpen(o => (o ? null : 'menu'))} title={t('rs.button')} aria-label={t('rs.button')} aria-expanded={!!open}
-        className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${open ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}>
-        <LifeBuoy size={18} />
+        className={round
+          ? `p-3 rounded-full transition ${open ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`
+          : `min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${open ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}>
+        <LifeBuoy size={round ? 20 : 18} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-72 max-w-[calc(100vw-24px)] rounded-lg border border-fc-hover bg-fc-sidebar p-2 shadow-xl">
+        <div className={`absolute z-50 w-72 max-w-[calc(100vw-24px)] rounded-lg border border-fc-hover bg-fc-sidebar p-2 shadow-xl ${round ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'right-0 top-full mt-1'}`}>
           {open === 'menu' ? (
             <div className="flex flex-col">
               <button className="rounded px-2 py-2 text-left text-sm text-fc-text hover:bg-fc-hover"

@@ -30,6 +30,7 @@ import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 import { VoiceLotBanners } from '@/features/voice/VoiceLotBanners'
+import { openDmWith } from '@/features/friends/openDm'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
 const VOLUMES: { label: Key; value: number }[] = [
@@ -167,12 +168,16 @@ export default function VoiceScreen() {
           : undefined
 
   const volumeActions: SheetAction[] = volumeOf
-    ? VOLUMES.map((o) => ({
-        label: t(o.label),
-        icon: o.value === 0 ? 'volume-mute' : 'volume-high',
-        selected: (v.volumes[volumeOf.userId] ?? 1) === o.value,
-        onPress: () => v.setPeerVolume(volumeOf.userId, o.value),
-      }))
+    ? [
+        ...VOLUMES.map((o): SheetAction => ({
+          label: t(o.label),
+          icon: o.value === 0 ? 'volume-mute' : 'volume-high',
+          selected: (v.volumes[volumeOf.userId] ?? 1) === o.value,
+          onPress: () => v.setPeerVolume(volumeOf.userId, o.value),
+        })),
+        // Support à distance avec ce participant : son MP, menu déplié (on reste dans le salon).
+        { label: t('rs.button'), icon: 'help-buoy-outline', onPress: () => void openDmWith(volumeOf.userId, volumeOf.username, true) },
+      ]
     : []
   const moreActions: SheetAction[] = [
     { label: t(v.handRaised ? 'voice.lowerHand' : 'voice.raiseHand'), icon: 'hand-left-outline', onPress: v.toggleHand },

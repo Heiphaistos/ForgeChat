@@ -335,9 +335,10 @@ pub(crate) async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Opti
             "user_id": user_id,
             "channel_id": channel_id,
         });
-        // N10 — ciblé sur les membres du serveur qui voient ce canal, plus
-        // l'instance entière.
-        state.broadcast_to_channel_members_except(channel_id, Some(user_id), event.to_string()).await;
+        // N10 — ciblé sur les membres du serveur qui voient ce canal. L'intéressé
+        // le reçoit aussi : ses autres onglets/appareils le gardaient affiché
+        // sous le salon après sa sortie.
+        state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
         // Si canal temporaire et dernier participant → supprimer automatiquement
         if remaining.is_empty() {

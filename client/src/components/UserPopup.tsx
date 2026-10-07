@@ -13,6 +13,7 @@ import AnimatedImg from './ui/AnimatedImg'
 import UserName from './ui/UserName'
 import ProfileLinks from './ui/ProfileLinks'
 import { renderMarkdown } from '../utils/markdown'
+import { useRemoteSupportItem } from './chat/RemoteSupport'
 
 const ACTIVITY_ICONS: Record<string, string> = {
   playing: '🎮',
@@ -91,6 +92,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
   const bio = member?.server_bio ?? user?.bio
   const theme = profileThemeBackground(user?.profile_color_primary, user?.profile_color_accent)
 
+  const remoteSupport = useRemoteSupportItem()(userId)
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
     onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
@@ -261,6 +263,15 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
                 <MessageCircle size={14} />
                 Envoyer un message
               </button>
+              {remoteSupport && (
+                <button
+                  onClick={() => { remoteSupport.onClick(); onClose() }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover hover:bg-fc-input text-fc-muted hover:text-white rounded-lg text-sm font-medium transition"
+                >
+                  {remoteSupport.icon}
+                  {remoteSupport.label}
+                </button>
+              )}
               {profile?.relationship === 'none' && (
                 <button
                   onClick={() => sendFriend.mutate()}

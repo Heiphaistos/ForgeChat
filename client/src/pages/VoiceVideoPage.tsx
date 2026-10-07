@@ -35,6 +35,7 @@ import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
 import { useContextMenu } from '../components/ui/ContextMenu'
 import { useMemberModeration } from '../components/chat/MemberModeration'
+import { useRemoteSupportItem } from '../components/chat/RemoteSupport'
 import { t as tr, useT, type Key } from '../i18n'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 
@@ -183,8 +184,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   // Modération vocale (P2-2) : clic droit sur la tuile d'un participant.
   const tileMenu = useContextMenu()
   const moderation = useMemberModeration(serverId)
+  const remoteSupportItem = useRemoteSupportItem()
   const openTileMenu = (e: React.MouseEvent, userId: string) => {
-    const items = moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))
+    const rs = remoteSupportItem(userId)
+    const items = [...(rs ? [rs] : []), ...moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))]
     if (items.length === 0) return
     e.preventDefault()
     tileMenu.open(e, items)

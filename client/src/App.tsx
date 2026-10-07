@@ -480,7 +480,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offJoin = on('VOICE_USER_JOINED', () => { if (!user.focus_mode) playJoin() })
-    const offLeave = on('VOICE_USER_LEFT', () => { if (!user.focus_mode) playLeave() })
+    const offLeave = on('VOICE_USER_LEFT', (d: any) => { if (!user.focus_mode && d.user_id !== user.id) playLeave() })
     // Les mentions et réponses sont notifiées par MENTION_CREATE (règle serveur).
     // Ici : seulement les salons au niveau « Tous les messages », hors sourdine.
     const offMsg = on('MESSAGE_CREATE', async (d: any) => {

@@ -7,7 +7,7 @@ import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
-import { sendSupport } from '@/features/chat/SupportCard'
+import { promptSupport } from '@/features/chat/SupportCard'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
 import { rememberConvName } from '@/e2e/searchIndex'
@@ -28,29 +28,26 @@ const STATUS_LABEL: Record<string, Key> = { online: 'status.online', away: 'stat
 
 export default function DmScreen() {
   const t = useT()
-  const { valid, ids, text } = useRouteParams(['dmId'] as const, ['name', 'userId'])
+  const { valid, ids, text } = useRouteParams(['dmId'] as const, ['name', 'userId', 'support'])
   const convs = useQuery({ queryKey: qk.conversations, queryFn: dmsApi.list, enabled: valid })
   const summary = convs.data?.find((c) => c.id === ids.dmId && !c.is_group)
   const otherId = summary && !summary.is_group ? summary.other_user_id : isUuid(text.userId) ? text.userId : undefined
   const name = summary && !summary.is_group ? summary.username : (text.name ?? t('conv.dmFallback'))
   // Nom de la conversation pour le filtre dans: de la recherche locale.
   useEffect(() => { if (ids.dmId) rememberConvName(ids.dmId, name) }, [ids.dmId, name])
+  // Arrivée par « Support à distance » (profil, appel, salon vocal) : menu déplié une fois.
+  useEffect(() => {
+    if (!ids.dmId || text.support !== '1') return
+    router.setParams({ support: undefined })
+    promptSupport(ids.dmId)
+  }, [ids.dmId, text.support])
   const status = usePresenceOf(otherId, summary && !summary.is_group ? summary.status : undefined)
   const activity = useActivityOf(otherId)
   const startCall = useCall((s) => s.start)
 
   if (!valid) return <ErrorState message={t('conv.invalidDm')} />
 
-  // Support à distance : Android ne fait qu'aider (visionneuse web), il ne partage pas son écran.
-  const support = () =>
-    Alert.alert(t('rs.button'), undefined, [
-      {
-        text: t('rs.help'),
-        onPress: () => void sendSupport(ids.dmId, { v: 1, k: 'offer' }, t('rs.text.offer')).catch((e) => Alert.alert(t('rs.sendError'), errorMessage(e))),
-      },
-      { text: t('rs.ask'), onPress: () => Alert.alert(t('rs.button'), t('rs.androidHost')) },
-      { text: t('common.cancel'), style: 'cancel' },
-    ])
+  const support = () => promptSupport(ids.dmId)
 
   const call = async (type: CallType) => {
     if (!otherId) return
