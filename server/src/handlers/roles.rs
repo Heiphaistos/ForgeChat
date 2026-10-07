@@ -6,7 +6,7 @@ use crate::{
     handlers::audit::log_event,
     handlers::servers::require_permission,
     middleware::auth::Claims,
-    models::role::{CreateRoleRequest, Permissions, Role, UpdateRoleRequest},
+    models::role::{is_valid_color, normalize_role_emoji, role_icon_ext, CreateRoleRequest, Permissions, Role, UpdateRoleRequest, ROLE_ICON_PREFIX},
     state::AppState,
 };
 
@@ -74,6 +74,9 @@ pub async fn create_role(
     let name = body.name.trim().chars().take(100).collect::<String>();
     if name.is_empty() { return Err(AppError::BadRequest("Nom de rôle requis".into())); }
 
+    if body.color.is_some_and(|c| !is_valid_color(c)) {
+        return Err(AppError::BadRequest("Couleur invalide".into()));
+    }
     let perms = body.permissions.unwrap_or(0) & Permissions::ALL;
 
     // Élévation de privilège : MANAGE_ROLES seul permettait de créer un rôle avec
@@ -147,6 +150,22 @@ pub async fn update_role(
         }
     }
 
+    if body.color.is_some_and(|c| !is_valid_color(c))
+        || body.secondary_color.is_some_and(|c| c >= 0 && !is_valid_color(c)) {
+        return Err(AppError::BadRequest("Couleur invalide".into()));
+    }
+    // Icône : "" = retrait ; sinon emoji (une image passe par POST .../icon, qui
+    // garantit qu'un fichier n'appartient qu'à un seul rôle avant de le supprimer).
+    let icon: Option<String> = match body.icon.as_deref() {
+        None => None,
+        Some(raw) if raw.trim().is_empty() => Some(String::new()),
+        Some(raw) => Some(normalize_role_emoji(raw).ok_or_else(|| AppError::BadRequest("Icône de rôle invalide".into()))?),
+    };
+    let old_icon: Option<String> = if icon.is_some() {
+        sqlx::query_scalar("SELECT icon FROM roles WHERE id=$1 AND server_id=$2")
+            .bind(role_id).bind(server_id).fetch_optional(&state.db).await?.flatten()
+    } else { None };
+
     let perms = body.permissions.map(|p| p & Permissions::ALL);
 
     // Même garde anti-élévation que create_role, mais relative aux bits DÉJÀ présents sur
@@ -175,7 +194,9 @@ pub async fn update_role(
             permissions = COALESCE($4, permissions),
             mentionable = COALESCE($5, mentionable),
             hoisted = COALESCE($6, hoisted),
-            position = COALESCE($7, position)
+            position = COALESCE($7, position),
+            secondary_color = CASE WHEN $9::int IS NULL THEN secondary_color WHEN $9 < 0 THEN NULL ELSE $9 END,
+            icon = CASE WHEN $10::text IS NULL THEN icon ELSE NULLIF($10, '') END
          WHERE id=$1 AND server_id=$8 RETURNING *"
     )
     .bind(role_id)
@@ -186,8 +207,11 @@ pub async fn update_role(
     .bind(body.hoisted)
     .bind(body.position)
     .bind(server_id)
+    .bind(body.secondary_color)
+    .bind(&icon)
     .fetch_one(&state.db)
     .await?;
+    remove_old_icon(&state, old_icon, role.icon.as_deref());
 
     log_event(
         &state, server_id, "ROLE_UPDATE",
@@ -195,11 +219,64 @@ pub async fn update_role(
         Some(role.id), Some(role.name.as_str()), None,
     ).await;
 
-    state.broadcast_to_server_members(server_id, serde_json::json!({
+    state.broadcast_to_server_members(server_id, role_update_event(server_id, &role)).await;
+
+    Ok(Json(role))
+}
+
+fn role_update_event(server_id: Uuid, role: &Role) -> String {
+    serde_json::json!({
         "type": "ROLE_UPDATE",
         "server_id": server_id,
-        "role": { "id": role.id, "name": role.name, "color": role.color, "permissions": role.permissions, "hoisted": role.hoisted, "mentionable": role.mentionable, "position": role.position }
-    }).to_string()).await;
+        "role": { "id": role.id, "name": role.name, "color": role.color, "permissions": role.permissions, "hoisted": role.hoisted, "mentionable": role.mentionable, "position": role.position, "secondary_color": role.secondary_color, "icon": role.icon }
+    }).to_string()
+}
+
+/// Supprime du disque l'ancienne image d'icône si elle a été remplacée.
+fn remove_old_icon(state: &AppState, old: Option<String>, new: Option<&str>) {
+    if let Some(old) = old.filter(|o| o.starts_with(ROLE_ICON_PREFIX) && Some(o.as_str()) != new) {
+        crate::handlers::uploads::remove_upload_files(state, vec![old]);
+    }
+}
+
+/// POST /servers/:server_id/roles/:role_id/icon — image d'icône du rôle
+/// (png/jpg/gif/webp, 256 Ko max), même garde que la modification d'un rôle.
+pub async fn upload_role_icon(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, role_id)): Path<(Uuid, Uuid)>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<Role>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
+
+    let old_icon: Option<String> = sqlx::query_scalar::<_, Option<String>>("SELECT icon FROM roles WHERE id=$1 AND server_id=$2")
+        .bind(role_id).bind(server_id).fetch_optional(&state.db).await?
+        .ok_or_else(|| AppError::NotFound("Rôle introuvable".into()))?;
+
+    let field = multipart.next_field().await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?
+        .ok_or_else(|| AppError::BadRequest("Aucun fichier reçu".into()))?;
+    let ext = role_icon_ext(field.file_name().unwrap_or(""))
+        .ok_or_else(|| AppError::BadRequest("Icône : image png, jpg, gif ou webp uniquement".into()))?;
+
+    let upload_dir = std::path::PathBuf::from(&state.config.upload_dir);
+    tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
+    let url = format!("{ROLE_ICON_PREFIX}{}.{ext}", Uuid::new_v4());
+    let filename = url.trim_start_matches("/uploads/");
+    crate::handlers::uploads::save_field(field, &upload_dir.join(filename), 256 * 1024).await?;
+
+    let role = sqlx::query_as::<_, Role>("UPDATE roles SET icon=$3 WHERE id=$1 AND server_id=$2 RETURNING *")
+        .bind(role_id).bind(server_id).bind(&url)
+        .fetch_one(&state.db).await?;
+    remove_old_icon(&state, old_icon, role.icon.as_deref());
+
+    log_event(
+        &state, server_id, "ROLE_UPDATE",
+        Some(claims.sub), None,
+        Some(role.id), Some(role.name.as_str()), None,
+    ).await;
+    state.broadcast_to_server_members(server_id, role_update_event(server_id, &role)).await;
 
     Ok(Json(role))
 }
@@ -212,11 +289,15 @@ pub async fn delete_role(
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
     crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
 
-    sqlx::query("DELETE FROM roles WHERE id=$1 AND server_id=$2 AND is_everyone=false")
+    let old_icon: Option<String> = sqlx::query_scalar(
+        "DELETE FROM roles WHERE id=$1 AND server_id=$2 AND is_everyone=false RETURNING icon"
+    )
         .bind(role_id)
         .bind(server_id)
-        .execute(&state.db)
-        .await?;
+        .fetch_optional(&state.db)
+        .await?
+        .flatten();
+    remove_old_icon(&state, old_icon, None);
 
     log_event(
         &state, server_id, "ROLE_DELETE",

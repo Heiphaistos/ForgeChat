@@ -606,6 +606,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/roles/:role_id/members", get(handlers::roles::get_role_members))
         .route("/servers/:server_id/members/:user_id/roles/:role_id", put(handlers::roles::assign_role))
         .route("/servers/:server_id/members/:user_id/roles/:role_id", delete(handlers::roles::remove_role))
+        // Icônes de rôles (image téléversée ; l'emoji et le dégradé passent par le PATCH du rôle).
+        // Salons médias : routes du forum (posts.media_url), aucune route dédiée.
+        .route("/servers/:server_id/roles/:role_id/icon", post(handlers::roles::upload_role_icon))
         // Invites
         .route("/servers/:server_id/invites", get(handlers::invites::get_invites))
         .route("/servers/:server_id/invites", post(handlers::invites::create_invite))
