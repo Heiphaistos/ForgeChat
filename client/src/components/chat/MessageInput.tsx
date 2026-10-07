@@ -24,6 +24,7 @@ import { useTypeToFocus } from '../../hooks/useTypeToFocus'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 import PickerShell, { PickerFallback } from '../ui/PickerShell'
+import { t as tr, useT, type Key } from '../../i18n'
 
 // ─── Emoji shortcodes ────────────────────────────────────────────────────────
 
@@ -61,12 +62,13 @@ const EMOJI_MAP: Record<string, string> = {
 
 const MAX_CHARS = 4000
 
-const MSG_TTL_OPTIONS = [
-  { label: 'Aucune expiration', value: null },
-  { label: '5 minutes', value: 300 },
-  { label: '1 heure', value: 3600 },
-  { label: '24 heures', value: 86400 },
-  { label: '7 jours', value: 604800 },
+// Libellés = clés de traduction
+const MSG_TTL_OPTIONS: { label: Key; value: number | null }[] = [
+  { label: 'input.ttl.none', value: null },
+  { label: 'input.ttl.5min', value: 300 },
+  { label: 'input.ttl.1h', value: 3600 },
+  { label: 'input.ttl.24h', value: 86400 },
+  { label: 'input.ttl.7d', value: 604800 },
 ]
 
 interface SlashCommand {
@@ -173,12 +175,12 @@ interface ChannelItem {
   type: string
 }
 
-const TTL_OPTIONS = [
-  { label: 'Ne pas expirer', value: null },
-  { label: '1 heure', value: 1 },
-  { label: '24 heures', value: 24 },
-  { label: '7 jours', value: 168 },
-  { label: '30 jours', value: 720 },
+const TTL_OPTIONS: { label: Key; value: number | null }[] = [
+  { label: 'input.ttl.never', value: null },
+  { label: 'input.ttl.1h', value: 1 },
+  { label: 'input.ttl.24h', value: 24 },
+  { label: 'input.ttl.7d', value: 168 },
+  { label: 'input.ttl.30d', value: 720 },
 ]
 
 function isVideo(file: File) { return file.type.startsWith('video/') }
@@ -191,6 +193,7 @@ function FileIcon({ file }: { file: File }) {
 }
 
 export default function MessageInput({ channelId, serverId, placeholder, onSend, onEdit, replyTo, onCancelReply, sending }: Props) {
+  const t = useT()
   const { drafts, setDraft, clearDraft } = useDraft()
   const me = useAuth(s => s.user)
   const { formatShortDate } = useFormatDate()
@@ -342,21 +345,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     mutationFn: ({ content, send_at }: { content: string; send_at: string }) =>
       api.post(`/servers/${serverId}/channels/${channelId}/scheduled`, { content, send_at }),
     onSuccess: () => {
-      toast.success('Message programmé')
+      toast.success(tr('input.scheduled'))
       setScheduledAt('')
       setContent('')
       queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
   })
 
   const deleteScheduled = useMutation({
     mutationFn: (id: string) => api.delete(`/scheduled/${id}`),
     onSuccess: () => {
-      toast.success('Message annulé')
+      toast.success(tr('input.scheduleCancelled'))
       queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
     },
-    onError: () => toast.error('Impossible d\'annuler'),
+    onError: () => toast.error(tr('input.cancelFailed')),
   })
 
   // Le backend (create_poll/get_poll/vote_poll/close_poll + PollDisplay côté
@@ -371,13 +374,13 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         multiple_choice: pollMultiple,
       }),
     onSuccess: () => {
-      toast.success('Sondage créé')
+      toast.success(tr('input.pollCreated'))
       setShowPollCreator(false)
       setPollQuestion('')
       setPollOptions(['', ''])
       setPollMultiple(false)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -390,7 +393,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     const MAX_SIZE = 500 * 1024 * 1024 // = server/src/config.rs (gratuit ; Discord Nitro : 500 Mo)
     const oversized = newFiles.filter(f => f.size > MAX_SIZE)
     if (oversized.length > 0) {
-      toast.error(`${oversized.map(f => f.name).join(', ')} dépasse${oversized.length > 1 ? 'nt' : ''} la limite de 500 Mo`)
+      toast.error(tr(oversized.length > 1 ? 'input.tooBig.other' : 'input.tooBig.one', { names: oversized.map(f => f.name).join(', ') }))
     }
     const valid = newFiles.filter(f => f.size <= MAX_SIZE)
     if (valid.length === 0) return
@@ -399,7 +402,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     const before = valid.reduce((a, f) => a + f.size, 0)
     const after = processed.reduce((a, f) => a + f.size, 0)
     if (before - after > 500_000) {
-      toast.success(`Photo optimisée : ${formatBytes(before)} → ${formatBytes(after)}`, { duration: 3000 })
+      toast.success(tr('input.photoOptimized', { before: formatBytes(before), after: formatBytes(after) }), { duration: 3000 })
     }
     const wrapped: FileWithTtl[] = processed.map(f => ({
       file: f,
@@ -758,7 +761,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
     // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
     if (trimmed.length > MAX_CHARS) {
-      toast.error(`Message trop long : ${trimmed.length}/${MAX_CHARS} caractères`)
+      toast.error(tr('input.tooLong', { n: trimmed.length, max: MAX_CHARS }))
       return
     }
 
@@ -843,7 +846,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       await api.post(uploadUrl, formData)
       setShowVoiceRecorder(false)
     } catch {
-      toast.error("Erreur lors de l'envoi du message vocal")
+      toast.error(tr('input.voiceFailed'))
       setShowVoiceRecorder(false)
     }
   }, [channelId, serverId])
@@ -879,8 +882,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         >
           <div className="border-4 border-dashed border-fc-accent rounded-2xl px-10 py-8 bg-fc-bg/90 text-center pointer-events-none">
             <Paperclip size={36} className="mx-auto mb-3 text-fc-accent" aria-hidden />
-            <p className="text-white font-semibold">Déposez vos fichiers ici</p>
-            <p className="text-fc-muted text-sm mt-1">Ils seront ajoutés en pièces jointes</p>
+            <p className="text-white font-semibold">{t('input.dropTitle')}</p>
+            <p className="text-fc-muted text-sm mt-1">{t('input.dropHint')}</p>
           </div>
         </div>
       )}
@@ -889,9 +892,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       {editingMsgId && (
         <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-fc-input/60 rounded-t-lg border-b border-fc-hover text-xs">
           <Edit3 size={12} className="text-yellow-400 flex-shrink-0" />
-          <span className="text-yellow-400 font-medium">Édition du message</span>
-          <span className="text-fc-muted">· Echap pour annuler</span>
-          <button onClick={() => { setEditingMsgId(null); setContent('') }} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler l'édition" aria-label="Annuler l'édition du message">
+          <span className="text-yellow-400 font-medium">{t('input.editing')}</span>
+          <span className="text-fc-muted">{t('input.escToCancel')}</span>
+          <button onClick={() => { setEditingMsgId(null); setContent('') }} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title={t('input.cancelEditTitle')} aria-label={t('input.cancelEdit')}>
             <X size={12} />
           </button>
         </div>
@@ -901,12 +904,12 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       {replyTo && (
         <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-fc-input/60 rounded-t-lg border-b border-fc-hover text-xs">
           <CornerUpLeft size={12} className="text-fc-accent flex-shrink-0" />
-          <span className="text-fc-muted">Réponse à</span>
+          <span className="text-fc-muted">{t('input.replyingTo')}</span>
           <span className="font-semibold text-white">{replyTo.author_username}</span>
           {replyTo.content && (
             <span className="text-fc-muted truncate max-w-xs">{replyTo.content.slice(0, 80)}</span>
           )}
-          <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title="Annuler" aria-label="Annuler la réponse">
+          <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title={t('input.cancel')} aria-label={t('input.cancelReply')}>
             <X size={12} />
           </button>
         </div>
@@ -1058,10 +1061,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   value={fw.ttlHours ?? ''}
                   onChange={e => updateTtl(i, e.target.value ? Number(e.target.value) : null)}
                   className="text-xs bg-fc-bg border border-fc-hover rounded px-1 py-0.5 text-fc-muted w-20"
-                  title="Durée de vie"
+                  title={t('input.lifetime')}
                 >
                   {TTL_OPTIONS.map(o => (
-                    <option key={String(o.value)} value={o.value ?? ''}>{o.label}</option>
+                    <option key={String(o.value)} value={o.value ?? ''}>{t(o.label)}</option>
                   ))}
                 </select>
               )}
@@ -1096,15 +1099,15 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         {/* Barre Rich Text — toujours sur desktop ; sur mobile dès qu'on tape
             (seul moyen de formater au tactile, masquée composer vide pour l'espace) */}
         <div className={`${content.trim() ? 'flex' : 'hidden'} md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover overflow-x-auto`}>
-          <button onClick={() => applyFormat('**')} title="Gras (Ctrl+B)" aria-label="Gras" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
-          <button onClick={() => applyFormat('*')} title="Italique (Ctrl+I)" aria-label="Italique" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
-          <button onClick={() => applyFormat('~~')} title="Barré" aria-label="Barré" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
+          <button onClick={() => applyFormat('**')} title={t('input.boldTitle')} aria-label={t('input.bold')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Bold size={13} /></button>
+          <button onClick={() => applyFormat('*')} title={t('input.italicTitle')} aria-label={t('input.italic')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Italic size={13} /></button>
+          <button onClick={() => applyFormat('~~')} title={t('input.strike')} aria-label={t('input.strike')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Strikethrough size={13} /></button>
           <div className="w-px h-4 bg-fc-hover mx-0.5" />
-          <button onClick={() => applyFormat('`')} title="Code inline" aria-label="Code inline" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
-          <button onClick={() => applyFormat('```\n', '\n```')} title="Bloc de code" aria-label="Bloc de code" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
-          <button onClick={() => applyFormat('> ', '')} title="Citation" aria-label="Citation" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
+          <button onClick={() => applyFormat('`')} title={t('input.inlineCode')} aria-label={t('input.inlineCode')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Code size={13} /></button>
+          <button onClick={() => applyFormat('```\n', '\n```')} title={t('input.codeBlock')} aria-label={t('input.codeBlock')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Terminal size={13} /></button>
+          <button onClick={() => applyFormat('> ', '')} title={t('input.quote')} aria-label={t('input.quote')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Quote size={13} /></button>
           <div className="w-px h-4 bg-fc-hover mx-0.5" />
-          <button onClick={insertLink} title="Lien (Ctrl+K)" aria-label="Insérer un lien" className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
+          <button onClick={insertLink} title={t('input.linkTitle')} aria-label={t('input.insertLink')} className="p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"><Link size={13} /></button>
         </div>
 
         {/* Popup URL inline */}
@@ -1125,7 +1128,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
               className="flex-1 bg-transparent text-white text-xs outline-none placeholder-fc-muted min-w-0"
             />
             <button onClick={confirmInsertLink} className="px-2 py-0.5 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition font-medium">OK</button>
-            <button onClick={() => setShowLinkPopup(false)} aria-label="Fermer" className="p-1 min-w-[24px] min-h-[24px] flex items-center justify-center text-fc-muted hover:text-white transition rounded">✕</button>
+            <button onClick={() => setShowLinkPopup(false)} aria-label={t('common.close')} className="p-1 min-w-[24px] min-h-[24px] flex items-center justify-center text-fc-muted hover:text-white transition rounded">✕</button>
           </div>
         )}
 
@@ -1137,8 +1140,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         <button
           onClick={() => fileInputRef.current?.click()}
           className="p-2.5 md:p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-fc-muted hover:text-white rounded transition flex-shrink-0 flex items-center justify-center"
-          title="Joindre un fichier"
-          aria-label="Joindre un fichier"
+          title={t('input.attach')}
+          aria-label={t('input.attach')}
         >
           <Plus size={20} />
         </button>
@@ -1156,8 +1159,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder ?? 'Envoyer un message...'}
-          aria-label={placeholder ?? 'Envoyer un message'}
+          placeholder={placeholder ?? t('input.placeholder')}
+          aria-label={placeholder ?? t('input.label')}
           rows={1}
           className="flex-1 min-w-0 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
@@ -1268,8 +1271,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             <button
               onClick={() => { const next = !showQuickReplies; closeAllPickers(); setShowQuickReplies(next) }}
               className={`p-2.5 md:p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center rounded transition ${showQuickReplies ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title="Réponses rapides"
-              aria-label="Réponses rapides"
+              title={t('input.quickReplies')}
+              aria-label={t('input.quickReplies')}
               aria-expanded={showQuickReplies}
               aria-pressed={showQuickReplies}
             >
@@ -1297,8 +1300,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             <button
               onClick={() => { const next = !showScheduled; closeAllPickers(); setShowScheduled(next) }}
               className={`p-1.5 rounded transition ${showScheduled ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title="Programmer un message"
-              aria-label="Programmer un message"
+              title={t('input.schedule')}
+              aria-label={t('input.schedule')}
               aria-expanded={showScheduled}
               aria-pressed={showScheduled}
             >
@@ -1387,8 +1390,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             <button
               onClick={() => { const next = !showPollCreator; closeAllPickers(); setShowPollCreator(next) }}
               className={`p-1.5 rounded transition ${showPollCreator ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title="Créer un sondage"
-              aria-label="Créer un sondage"
+              title={t('input.createPoll')}
+              aria-label={t('input.createPoll')}
               aria-expanded={showPollCreator}
               aria-pressed={showPollCreator}
             >
@@ -1481,8 +1484,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             <button
               onClick={() => { setShowTtlPicker(v => !v) }}
               className={`p-1.5 rounded transition ${msgTtl ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title={msgTtl ? `Message éphémère : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
-              aria-label={msgTtl ? `Message éphémère actif : ${MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label}` : 'Message éphémère'}
+              title={msgTtl ? t('input.ephemeralIs', { ttl: t(MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label ?? 'input.ttl.none') }) : t('input.ephemeral')}
+              aria-label={msgTtl ? t('input.ephemeralActive', { ttl: t(MSG_TTL_OPTIONS.find(o => o.value === msgTtl)?.label ?? 'input.ttl.none') }) : t('input.ephemeral')}
               aria-pressed={!!msgTtl}
               aria-expanded={showTtlPicker}
             >
@@ -1494,7 +1497,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 desktopClassName="absolute bottom-full right-0 mb-2 w-48 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
               >
                 <div className="px-3 py-2 border-b border-fc-hover text-xs font-semibold text-fc-muted uppercase">
-                  Expiration du message
+                  {t('input.expiration')}
                 </div>
                 {MSG_TTL_OPTIONS.map(opt => (
                   <button
@@ -1504,7 +1507,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                       msgTtl === opt.value ? 'text-fc-accent' : 'text-fc-text'
                     }`}
                   >
-                    {opt.label}
+                    {t(opt.label)}
                     {msgTtl === opt.value && ' ✓'}
                   </button>
                 ))}
@@ -1524,8 +1527,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             <button
               onClick={() => setShowVoiceRecorder(true)}
               className="p-2.5 md:p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition"
-              title="Message vocal"
-              aria-label="Enregistrer un message vocal"
+              title={t('input.voiceTitle')}
+              aria-label={t('input.voice')}
             >
               <Mic size={18} />
             </button>
@@ -1535,8 +1538,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             onClick={submit}
             disabled={(!content.trim() && files.length === 0) || content.length > MAX_CHARS || !!sending}
             className="p-2.5 md:p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition disabled:opacity-30"
-            title="Envoyer"
-            aria-label="Envoyer le message"
+            title={t('input.sendTitle')}
+            aria-label={t('input.send')}
           >
             <Send size={20} />
           </button>

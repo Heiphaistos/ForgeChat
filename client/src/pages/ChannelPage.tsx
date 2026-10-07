@@ -30,6 +30,7 @@ import FollowChannelModal from '../components/modals/FollowChannelModal'
 import OnboardingModal from '../components/modals/OnboardingModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
+import { useT } from '../i18n'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
 
 function channelIcon(type: string, size = 18) {
@@ -53,6 +54,7 @@ interface Props {
 
 export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props) {
   const params = useParams<{ serverId?: string; channelId?: string }>()
+  const t = useT()
   const serverId = params.serverId
   const channelId = forcedChannelId ?? params.channelId
   // Salons 18+ : confirmation d'âge une fois par salon et par appareil (avant tout retour anticipé).
@@ -222,7 +224,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       on('CHANNEL_PURGE', (d: any) => {
         if (d.channel_id === channelId) {
           clearChannel(channelId)
-          toast.success(`${d.deleted ?? ''} messages supprimés`)
+          toast.success(t('channel.purged', { n: d.deleted ?? '' }))
         }
       }),
     ]
@@ -260,9 +262,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       if (e?.response?.status === 429) {
         const delay = e?.response?.data?.retry_after ?? currentChannel?.slowmode_delay ?? 30
         startSlowmodeCooldown(delay)
-        toast.error(`Mode lent — attendez ${delay}s avant d'envoyer`)
+        toast.error(t('channel.slowmodeWait', { s: delay }))
       } else {
-        const msg = e?.response?.data?.error || e?.response?.data?.message || "Échec de l'envoi"
+        const msg = e?.response?.data?.error || e?.response?.data?.message || t('channel.sendFailed')
         toast.error(msg)
       }
     },
@@ -271,14 +273,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const deleteMsg = useMutation({
     mutationFn: (msgId: string) =>
       api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}`),
-    onSuccess: () => toast.success('Message supprimé'),
-    onError: () => toast.error('Suppression impossible'),
+    onSuccess: () => toast.success(t('channel.deleted')),
+    onError: () => toast.error(t('channel.deleteFailed')),
   })
 
   const editMsg = useMutation({
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
       api.patch(`/servers/${serverId}/channels/${channelId}/messages/${msgId}`, { content }),
-    onError: () => toast.error('Modification impossible'),
+    onError: () => toast.error(t('channel.editFailed')),
   })
 
   const loadMore = useCallback(async (): Promise<boolean> => {
@@ -488,8 +490,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
               onClick={openSidebar}
-              aria-label="Ouvrir la liste des canaux"
-              title="Canaux"
+              aria-label={t('channel.openChannels')}
+              title={t('channel.channels')}
             >
               <ChevronLeft size={20} />
             </button>
@@ -502,10 +504,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           <span className="text-fc-muted flex-shrink-0">{channelIcon(currentChannel?.type ?? 'text')}</span>
           <span className="font-semibold text-white truncate min-w-0 max-w-[140px] sm:max-w-[240px] md:max-w-none" title={currentChannel?.name}>{currentChannel?.name ?? '...'}</span>
           {currentChannel?.type === 'announcement' && (
-            <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">Annonces</span>
+            <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">{t('channel.announcements')}</span>
           )}
           {(currentChannel?.slowmode_delay ?? 0) > 0 && (
-            <span className="flex items-center gap-1 text-xs bg-fc-hover text-fc-muted px-2 py-0.5 rounded-full" title={`Mode lent: ${currentChannel.slowmode_delay}s`}>
+            <span className="flex items-center gap-1 text-xs bg-fc-hover text-fc-muted px-2 py-0.5 rounded-full" title={t('channels.slowmode', { s: currentChannel.slowmode_delay })}>
               <Timer size={11} />
               {currentChannel.slowmode_delay >= 3600
                 ? `${currentChannel.slowmode_delay / 3600}h`
@@ -525,9 +527,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               <button
                 onClick={() => setShowFollow(true)}
                 className="px-2 py-1 text-xs font-medium rounded border border-fc-hover text-fc-muted hover:text-white hover:bg-fc-hover transition"
-                title="Recevoir ces annonces dans un salon de votre serveur"
+                title={t('channel.followTitle')}
               >
-                Suivre
+                {t('channel.follow')}
               </button>
             )}
             {currentChannel && (
@@ -541,8 +543,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               onClick={() => { setShowThreadSidebar(s => !s); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }}
               className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showThreadSidebar ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-              title="Fils de discussion"
-              aria-label="Fils de discussion"
+              title={t('channel.threads')}
+              aria-label={t('channel.threads')}
               aria-pressed={showThreadSidebar}
             >
               <MessagesSquare size={18} />
@@ -550,8 +552,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               onClick={() => { setShowSearch(!showSearch); setShowPinned(false); setActiveThreadId(null) }}
               className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-              title="Rechercher (Ctrl+F)"
-              aria-label="Rechercher dans le canal (Ctrl+F)"
+              title={t('channel.searchTitle')}
+              aria-label={t('channel.searchLabel')}
               aria-pressed={showSearch}
             >
               <Search size={18} />
@@ -559,8 +561,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               onClick={() => { setShowPinned(!showPinned); setShowSearch(false); setActiveThreadId(null) }}
               className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showPinned ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-              title="Messages épinglés"
-              aria-label="Messages épinglés"
+              title={t('channel.pinned')}
+              aria-label={t('channel.pinned')}
               aria-pressed={showPinned}
             >
               <Pin size={18} />
@@ -570,8 +572,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 ref={bellRef}
                 onClick={() => setShowNotifModal(v => !v)}
                 className={`flex min-w-[36px] min-h-[36px] items-center justify-center p-1.5 rounded hover:bg-fc-hover transition ${showNotifModal ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-                title="Notifications"
-                aria-label="Paramètres de notifications"
+                title={t('channel.notifications')}
+                aria-label={t('channel.notifSettings')}
                 aria-pressed={showNotifModal}
               >
                 <Bell size={18} />
@@ -588,8 +590,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <button
               onClick={() => setShowMembers(!showMembers)}
               className={`flex p-1.5 min-w-[36px] min-h-[36px] items-center justify-center rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted hover:text-white'}`}
-              title="Liste des membres"
-              aria-label="Liste des membres"
+              title={t('channel.members')}
+              aria-label={t('channel.members')}
               aria-pressed={showMembers}
             >
               <Users size={18} />
@@ -600,8 +602,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
               <button
                 onClick={() => setSplitChannelId(channelId ?? null)}
                 className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-                title="Ouvrir en split (Ctrl+Shift+S pour fermer)"
-                aria-label="Ouvrir en vue partagée"
+                title={t('channel.splitOpenTitle')}
+                aria-label={t('channel.splitOpen')}
               >
                 <Columns2 size={18} />
               </button>
@@ -616,8 +618,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                       nav(`/servers/${serverId}/channels/${channelId}`)
                     }}
                     className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-                    title="Échanger avec le panneau principal"
-                    aria-label="Échanger les panneaux"
+                    title={t('channel.splitSwapTitle')}
+                    aria-label={t('channel.splitSwap')}
                   >
                     <ArrowLeftRight size={18} />
                   </button>
@@ -625,8 +627,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 <button
                   onClick={onClose}
                   className="hidden md:flex p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-                  title="Fermer le split (Ctrl+Shift+S)"
-                  aria-label="Fermer la vue partagée"
+                  title={t('channel.splitCloseTitle')}
+                  aria-label={t('channel.splitClose')}
                 >
                   <X size={18} />
                 </button>
@@ -638,7 +640,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         {/* Onglets Messages / Tâches */}
         <div
           role="tablist"
-          aria-label="Vue du canal"
+          aria-label={t('channel.viewLabel')}
           className="flex border-b border-fc-hover px-4 flex-shrink-0"
           onKeyDown={e => {
             const tabs = ['Messages', 'Tâches'] as const
@@ -662,7 +664,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                   : 'text-fc-muted hover:text-white'
               }`}
             >
-              {tab}
+              {tab === 'Messages' ? t('channel.tabMessages') : t('channel.tabTasks')}
             </button>
           ))}
         </div>
@@ -679,12 +681,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           <div id="tabpanel-Messages" role="tabpanel" aria-labelledby="tab-Messages" className="contents">
             {highlightMessageId && (
               <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
-                <span className="text-xs text-fc-accent">Affichage du contexte autour d'un message.</span>
+                <span className="text-xs text-fc-accent">{t('channel.contextView')}</span>
                 <button
                   onClick={() => nav(`/servers/${serverId}/channels/${channelId}`)}
                   className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
                 >
-                  Voir les derniers messages →
+                  {t('channel.latest')}
                 </button>
               </div>
             )}
@@ -704,13 +706,13 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 (pinned
                   ? api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`)
                   : api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`))
-                  .then(() => toast.success(pinned ? 'Message désépinglé' : 'Message épinglé'))
-                  .catch(() => toast.error(pinned ? 'Désépinglage impossible' : 'Épinglage impossible'))
+                  .then(() => toast.success(pinned ? t('channel.unpinned') : t('channel.pinnedOk')))
+                  .catch(() => toast.error(pinned ? t('channel.unpinFailed') : t('channel.pinFailed')))
               }
               onPublishMessage={isAnnouncement && canManageMessages ? (msgId) =>
                 api.post(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/crosspost`)
-                  .then(r => toast.success(`Annonce publiée vers ${r.data?.delivered ?? 0} salon(s) abonné(s)`))
-                  .catch((e: any) => toast.error(e?.response?.data?.error ?? 'Publication impossible'))
+                  .then(r => toast.success(t('channel.published', { n: r.data?.delivered ?? 0 })))
+                  .catch((e: any) => toast.error(e?.response?.data?.error ?? t('channel.publishFailed')))
                 : undefined}
               onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}
@@ -734,10 +736,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                   </span>
                   <span>
                     {typingUsers.length === 1
-                      ? `${typingUsers[0]} est en train d'écrire…`
+                      ? t('channel.typingOne', { name: typingUsers[0] })
                       : typingUsers.length <= 3
-                      ? `${typingUsers.join(', ')} écrivent…`
-                      : 'Plusieurs personnes écrivent…'}
+                      ? t('channel.typingFew', { names: typingUsers.join(', ') })
+                      : t('channel.typingMany')}
                   </span>
                 </span>
               )}
@@ -747,7 +749,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             {slowmodeCooldown > 0 && (
               <div className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/10 border-t border-yellow-500/20 text-yellow-400 text-xs">
                 <Timer size={12} />
-                <span>Mode lent — attendez encore <strong>{slowmodeCooldown}s</strong> avant d'envoyer</span>
+                <span>{t('channel.slowmodeBefore')} <strong>{slowmodeCooldown}s</strong> {t('channel.slowmodeAfter')}</span>
               </div>
             )}
 
@@ -755,7 +757,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             {timeoutUntil && (
               <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-t border-red-500/20 text-red-400 text-xs">
                 <Timer size={12} />
-                <span>Vous êtes en sourdine jusqu'à <strong>{timeoutUntil.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                <span>{t('channel.timedOutUntil')} <strong>{timeoutUntil.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
               </div>
             )}
 
@@ -763,7 +765,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         {isAnnouncement && !canPost && (
           <div className="flex items-center gap-2 px-4 py-3 bg-fc-channel/60 border-t border-fc-hover text-fc-muted text-sm">
             <Megaphone size={16} className="text-yellow-400 flex-shrink-0" />
-            <span>Seuls les modérateurs peuvent publier dans ce canal d'annonces.</span>
+            <span>{t('channel.announceOnly')}</span>
           </div>
         )}
         {/* Salon sans SEND_MESSAGES (overrides compris, calculé par le serveur ;
@@ -771,13 +773,13 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         {(!isAnnouncement || canPost) && !(currentChannel?.can_send ?? canSendBase) && (
           <div className="mx-4 mb-4 mt-1 flex items-center gap-2 px-4 py-3 rounded-lg bg-fc-input/50 text-fc-muted text-sm cursor-not-allowed select-none" aria-disabled="true">
             <Lock size={15} className="flex-shrink-0" />
-            <span>Vous n'avez pas la permission d'envoyer des messages dans ce salon.</span>
+            <span>{t('channel.noSendPermission')}</span>
           </div>
         )}
         {(!isAnnouncement || canPost) && (currentChannel?.can_send ?? canSendBase) && <MessageInput
           channelId={channelId}
           serverId={serverId}
-          placeholder={timeoutUntil ? 'Vous êtes en sourdine' : slowmodeCooldown > 0 ? `Attendez ${slowmodeCooldown}s (mode lent)...` : `Message dans #${currentChannel?.name ?? '...'}`}
+          placeholder={timeoutUntil ? t('channel.timedOut') : slowmodeCooldown > 0 ? t('channel.waitSlowmode', { s: slowmodeCooldown }) : t('channel.messageIn', { name: currentChannel?.name ?? '...' })}
           onSend={handleSend}
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
           replyTo={replyTo}
