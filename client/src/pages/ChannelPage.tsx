@@ -38,6 +38,7 @@ import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import DisappearingControl from '../components/chat/DisappearingControl'
+import { ThreadCountsContext } from '../components/chat/threadCounts'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -384,6 +385,27 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
       canManageChannels: hasAdmin || !!(myPerms & MANAGE_CHANNELS_BIT),
     }
   }, [serverData, meId])
+
+  // Fils automatiques (comme Slack) : répondre ouvre le fil du message ; nombre de réponses sous chaque message.
+  const autoThreads = !!(serverData?.channels ?? []).find((c: any) => c.id === channelId)?.auto_threads
+  const { data: autoThreadCounts } = useQuery({
+    queryKey: ['threads', channelId, 'counts'],
+    queryFn: () => api.get<{ parent_message_id: string | null; message_count: number }[]>(
+      `/servers/${serverId}/channels/${channelId}/threads`, { params: { limit: 100 } },
+    ).then(r => new Map(r.data.flatMap(th => th.parent_message_id ? [[th.parent_message_id, th.message_count] as const] : []))),
+    enabled: autoThreads && !!serverId && !!channelId,
+    staleTime: 15_000,
+  })
+  useEffect(() => {
+    if (!autoThreads) return
+    return on('THREAD_CREATE', (d: any) => {
+      if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['threads', channelId, 'counts'] })
+    })
+  }, [autoThreads, channelId, on, qc])
+  const autoThreadTitle = (msgId: string) => {
+    const m = useChat.getState().messagesByChannel[channelId ?? '']?.find(x => x.id === msgId)
+    return (m?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || t('autothread.reply')
+  }
 
   // Titre de page contextuel : "#canal — Serveur | ForgeChat"
   const _titleCh: string | undefined = (serverData?.channels ?? []).find((c: any) => c.id === channelId)?.name
@@ -737,6 +759,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 </button>
               </div>
             )}
+            <ThreadCountsContext.Provider value={autoThreads ? autoThreadCounts ?? null : null}>
             <MessageList
               key={channelId}
               channelId={channelId}
@@ -761,11 +784,14 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                   .then(r => toast.success(t('channel.published', { n: r.data?.delivered ?? 0 })))
                   .catch((e: any) => toast.error(e?.response?.data?.error ?? t('channel.publishFailed')))
                 : undefined}
-              onReply={(msg) => setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
+              onReply={(msg) => autoThreads
+                ? (setActiveThreadId(msg.id), setShowPinned(false), setShowSearch(false))
+                : setReplyTo({ id: msg.id, author_username: msg.author_username, content: msg.content ?? null })}
               onLoadMore={loadMore}
               initialHighlightId={highlightMessageId}
               canManageMessages={canManageMessages}
             />
+            </ThreadCountsContext.Provider>
 
             {/* Indicateur de frappe — canal serveur */}
             <div
@@ -844,6 +870,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           serverId={serverId}
           channelId={channelId}
           parentMessageId={activeThreadId}
+          autoTitle={autoThreads ? autoThreadTitle(activeThreadId) : undefined}
           onClose={() => setActiveThreadId(null)}
         />
       )}

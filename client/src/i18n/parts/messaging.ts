@@ -42,6 +42,8 @@ export const fr = {
   'autothread.hint': 'Chaque message ouvre son fil : on y répond dans le fil (comme Slack).',
   'autothread.reply': 'Répondre dans le fil',
   'autothread.badge': 'Fils automatiques',
+  'autothread.replies.one': '1 réponse',
+  'autothread.replies.other': '{n} réponses',
   // Recherche locale (index sur l'appareil)
   'lsearch.title': 'Sur cet appareil',
   'lsearch.hint': 'Les messages chiffrés sont cherchés dans l’index de cet appareil (messages déjà déchiffrés). Le texte n’est jamais envoyé au serveur.',
@@ -91,6 +93,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'autothread.hint': 'Every message opens its own thread: replies go into the thread (like Slack).',
   'autothread.reply': 'Reply in thread',
   'autothread.badge': 'Automatic threads',
+  'autothread.replies.one': '1 reply',
+  'autothread.replies.other': '{n} replies',
   'lsearch.title': 'On this device',
   'lsearch.hint': 'Encrypted messages are searched in this device’s index (messages already decrypted). The text is never sent to the server.',
   'lsearch.filters': 'Filters: from:name · in:conversation · has:file',

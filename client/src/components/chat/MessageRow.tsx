@@ -1,6 +1,6 @@
 import { mediaUrl } from '../../api/client'
 import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, useContext } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
 import { format } from 'date-fns'
 import { renderMarkdown } from '../../utils/markdown'
@@ -13,6 +13,7 @@ import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, AfterReadBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { useT } from '../../i18n'
+import { ThreadCountsContext } from './threadCounts'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
@@ -106,6 +107,8 @@ function MessageRow({
   onReport, onDeleteRequest,
 }: MessageRowProps) {
   const t = useT()
+  const threadCounts = useContext(ThreadCountsContext)
+  const threadReplies = threadCounts?.get(msg.id) ?? 0
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -475,6 +478,15 @@ function MessageRow({
                     )}
                   </div>
                 </div>
+              )}
+
+              {/* Salon à fils automatiques : réponses du fil de ce message */}
+              {threadReplies > 0 && onOpenThread && (
+                <button type="button" onClick={() => onOpenThread(msg.id)}
+                  className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-fc-accent hover:underline">
+                  <MessagesSquare size={12} aria-hidden />
+                  {threadReplies === 1 ? t('autothread.replies.one') : t('autothread.replies.other', { n: threadReplies })}
+                </button>
               )}
             </>
           )}
