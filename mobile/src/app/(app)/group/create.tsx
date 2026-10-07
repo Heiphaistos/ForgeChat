@@ -8,12 +8,14 @@ import { friendsApi } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { Button, EmptyState, ErrorState, Loading, T, TextField } from '@/components/ui'
 import { GROUP_MAX_OTHERS, GROUP_NAME_MAX, groupCreateError, groupCreateIds, normalizeGroupName } from '@/features/groups/rules'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { getMyId } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function CreateGroupScreen() {
+  const t = useT()
   const friends = useQuery({ queryKey: qk.friends('all'), queryFn: () => friendsApi.list('all') })
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
@@ -56,13 +58,13 @@ export default function CreateGroupScreen() {
       keyExtractor={(f) => f.friend_id}
       ListHeaderComponent={
         <View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
-          <TextField label="Nom du groupe (facultatif)" value={name} onChangeText={setName} maxLength={GROUP_NAME_MAX} placeholder="Groupe" />
+          <TextField label={t('social.group.nameOptional')} value={name} onChangeText={setName} maxLength={GROUP_NAME_MAX} placeholder={t('conv.groupFallback')} />
           <T variant="muted">
-            Amis ({selected.length}/{GROUP_MAX_OTHERS}) : au moins 2
+            {t('social.group.friendsCount', { n: selected.length, max: GROUP_MAX_OTHERS })}
           </T>
         </View>
       }
-      ListEmptyComponent={<EmptyState icon="people-outline" title="Aucun ami" subtitle="Ajoute des amis pour créer un groupe." />}
+      ListEmptyComponent={<EmptyState icon="people-outline" title={t('social.group.noFriends')} subtitle={t('social.group.noFriendsHint')} />}
       renderItem={({ item: f }) => {
         const on = selected.includes(f.friend_id)
         return (
@@ -84,7 +86,7 @@ export default function CreateGroupScreen() {
       ListFooterComponent={
         <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
           {error ? <Text style={{ color: colors.danger }}>{error}</Text> : null}
-          <Button title="Créer le groupe" onPress={submit} loading={loading} disabled={list.length === 0} />
+          <Button title={t('social.group.create')} onPress={submit} loading={loading} disabled={list.length === 0} />
         </View>
       }
     />

@@ -8,6 +8,7 @@ import { forumApi } from '@/api/forum'
 import { Button, ErrorState, IconButton, TextField } from '@/components/ui'
 import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, normalizeTag, toggleTag } from '@/features/forum/forum'
 import { TagChips } from '@/features/forum/TagChips'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
@@ -17,6 +18,7 @@ import { colors, font, spacing } from '@/theme'
 
 /** Nouvelle publication (comme CreatePostModal) : titre, texte facultatif, 5 tags au plus. Salon média : image ou vidéo obligatoire. */
 export default function NewPostScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['media'])
   const media = text.media === '1'
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
@@ -28,7 +30,7 @@ export default function NewPostScreen() {
   const [busy, setBusy] = useState(false)
   // Tags officiels : s'il y en a, le serveur n'accepte qu'eux → simple choix parmi la liste.
   const official = useQuery({ queryKey: qk.forumTags(ids.channelId ?? ''), queryFn: () => forumApi.tags(ids.channelId), enabled: valid })
-  if (!valid) return <ErrorState message="Lien de salon invalide." />
+  if (!valid) return <ErrorState message={t('conv.invalidChannel')} />
   const officialTags = official.data ?? []
 
   const body = media && !mediaUrl ? null : createPostBody(title, content, tags, mediaUrl)
@@ -38,12 +40,12 @@ export default function NewPostScreen() {
     const a = res.canceled ? undefined : res.assets[0]
     if (!a) return
     const ext = mediaExtension(a.mimeType)
-    if (!ext) return Alert.alert('Format refusé', 'Images JPEG, PNG, GIF, WEBP ou vidéos MP4, MOV, WEBM.')
+    if (!ext) return Alert.alert(t('social.newPost.badFormat'), t('social.newPost.formats'))
     setUploading(true)
     try {
       setMediaUrl(await forumApi.uploadMedia(ids.serverId, ids.channelId, { uri: a.uri, name: `media.${ext}`, type: a.mimeType ?? '' }))
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('composer.sendFailed'), errorMessage(e))
     } finally {
       setUploading(false)
     }
@@ -57,7 +59,7 @@ export default function NewPostScreen() {
         void queryClient.invalidateQueries({ queryKey: qk.forum(ids.channelId) })
         router.back()
       })
-      .catch((e) => Alert.alert('Publication impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('chat.publishFailed'), errorMessage(e)))
       .finally(() => setBusy(false))
   }
   const addTag = () => {
@@ -70,17 +72,17 @@ export default function NewPostScreen() {
       {media ? (
         <>
           {mediaUrl && !isVideoMedia(mediaUrl) ? (
-            <Image source={{ uri: resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel="Média choisi" />
+            <Image source={{ uri: resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
           ) : mediaUrl ? (
-            <Text style={styles.label}>Vidéo prête à publier</Text>
+            <Text style={styles.label}>{t('social.newPost.videoReady')}</Text>
           ) : null}
-          <Button title={mediaUrl ? 'Changer le média' : 'Choisir une image ou une vidéo'} variant="secondary" icon="images-outline" loading={uploading} onPress={() => void pickMedia()} />
+          <Button title={mediaUrl ? t('social.newPost.changeMedia') : t('social.newPost.pickMedia')} variant="secondary" icon="images-outline" loading={uploading} onPress={() => void pickMedia()} />
         </>
       ) : null}
-      <TextField label={media ? 'Légende' : 'Titre'} accessibilityLabel={media ? 'Légende du média' : 'Titre de la publication'} value={title} onChangeText={setTitle} maxLength={200} />
+      <TextField label={media ? t('social.newPost.caption') : t('social.newPost.title')} accessibilityLabel={media ? t('social.newPost.captionLabel') : t('social.newPost.titleLabel')} value={title} onChangeText={setTitle} maxLength={200} />
       <TextField
-        label="Message (facultatif)"
-        accessibilityLabel="Message de la publication, facultatif"
+        label={t('social.newPost.message')}
+        accessibilityLabel={t('social.newPost.messageLabel')}
         value={content}
         onChangeText={setContent}
         multiline
@@ -88,7 +90,7 @@ export default function NewPostScreen() {
         style={{ minHeight: 120, textAlignVertical: 'top' }}
       />
       <Text style={styles.label}>
-        Tags ({tags.length}/{MAX_TAGS})
+        {t('social.newPost.tags', { n: tags.length, max: MAX_TAGS })}
       </Text>
       {officialTags.length ? (
         <TagChips tags={officialTags} selected={tags} onToggle={(t) => setTags((cur) => toggleTag(cur, t))} />
@@ -97,8 +99,8 @@ export default function NewPostScreen() {
           <View style={styles.tagRow}>
             <View style={{ flex: 1 }}>
               <TextField
-                accessibilityLabel="Nouveau tag"
-                placeholder="Ajouter un tag"
+                accessibilityLabel={t('social.newPost.newTag')}
+                placeholder={t('social.newPost.addTagPlaceholder')}
                 value={tagInput}
                 onChangeText={setTagInput}
                 onSubmitEditing={addTag}
@@ -106,12 +108,12 @@ export default function NewPostScreen() {
                 maxLength={30}
               />
             </View>
-            <IconButton icon="add" label="Ajouter le tag" onPress={addTag} disabled={!tagInput.trim() || tags.length >= MAX_TAGS} />
+            <IconButton icon="add" label={t('social.newPost.addTag')} onPress={addTag} disabled={!tagInput.trim() || tags.length >= MAX_TAGS} />
           </View>
           <TagChips tags={tags} selected={tags} onToggle={(t) => setTags((cur) => toggleTag(cur, t))} />
         </>
       )}
-      <Button title="Publier" icon="send" loading={busy} disabled={!body} onPress={submit} />
+      <Button title={t('social.newPost.publish')} icon="send" loading={busy} disabled={!body} onPress={submit} />
     </ScrollView>
   )
 }

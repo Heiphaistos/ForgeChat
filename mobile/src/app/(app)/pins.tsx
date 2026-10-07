@@ -8,18 +8,20 @@ import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { conversationId } from '@/features/chat/adapters'
 import { conversationRefFromParams, useScrollTarget, type PinnedItem } from '@/features/chat/pins'
 import { formatShort } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function PinsScreen() {
+  const t = useT()
   const raw = useLocalSearchParams<Record<string, string>>()
   const ref = conversationRefFromParams(raw)
   const id = ref ? conversationId(ref) : ''
   const myName = useAuth((s) => s.user?.username ?? '')
   const pins = useQuery({ queryKey: qk.pins(id), queryFn: () => messagesApi.pins(ref!), enabled: !!ref })
-  if (!ref) return <ErrorState message="Conversation invalide." />
+  if (!ref) return <ErrorState message={t('social.pins.invalid')} />
 
   const open = (p: PinnedItem) => {
     useScrollTarget.getState().request(id, p.messageId)
@@ -27,16 +29,16 @@ export default function PinsScreen() {
   }
 
   const unpin = (p: PinnedItem) =>
-    Alert.alert('Désépingler ce message ?', p.content?.slice(0, 120) ?? undefined, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('social.pins.unpinConfirm'), p.content?.slice(0, 120) ?? undefined, [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Désépingler',
+        text: t('chat.unpin'),
         style: 'destructive',
         onPress: () =>
           messagesApi
             .pin(ref, p.messageId, false)
             .then(() => queryClient.invalidateQueries({ queryKey: qk.pins(id) }))
-            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       },
     ])
 
@@ -50,12 +52,12 @@ export default function PinsScreen() {
       data={pins.data ?? []}
       keyExtractor={(p) => p.messageId}
       refreshControl={<RefreshControl refreshing={pins.isRefetching} onRefresh={() => void pins.refetch()} tintColor={colors.textMuted} />}
-      ListEmptyComponent={<EmptyState icon="pin-outline" title="Aucun message épinglé" />}
+      ListEmptyComponent={<EmptyState icon="pin-outline" title={t('social.pins.empty')} />}
       renderItem={({ item: p }) => (
         <Pressable
           onPress={() => open(p)}
           accessibilityRole="button"
-          accessibilityHint="Aller au message"
+          accessibilityHint={t('social.pins.goTo')}
           style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.bgHover }]}
         >
           <View style={styles.head}>
@@ -64,9 +66,9 @@ export default function PinsScreen() {
               {p.authorName}
             </Text>
             <Text style={styles.date}>{formatShort(p.createdAt)}</Text>
-            <IconButton icon="close" size={18} label="Désépingler" onPress={() => unpin(p)} />
+            <IconButton icon="close" size={18} label={t('chat.unpin')} onPress={() => unpin(p)} />
           </View>
-          {p.content ? <MessageText content={p.content} myName={myName} /> : <Text style={styles.empty}>Pièce jointe</Text>}
+          {p.content ? <MessageText content={p.content} myName={myName} /> : <Text style={styles.empty}>{t('msg.attachment')}</Text>}
         </Pressable>
       )}
     />

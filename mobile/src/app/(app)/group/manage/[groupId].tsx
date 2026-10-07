@@ -7,6 +7,7 @@ import { friendsApi } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, IconButton, Loading, Row, Section, TextField } from '@/components/ui'
 import { GROUP_MAX_MEMBERS, GROUP_NAME_MAX, addableFriends, canAddMember, canRemoveMember, normalizeGroupName } from '@/features/groups/rules'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -14,6 +15,7 @@ import { getMyId } from '@/stores/auth'
 import { colors, spacing } from '@/theme'
 
 export default function ManageGroupScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['groupId'] as const)
   const groupId = ids.groupId ?? ''
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: valid })
@@ -29,10 +31,10 @@ export default function ManageGroupScreen() {
   const act = useMutation({
     mutationFn: (fn: () => Promise<unknown>) => fn(),
     onSuccess: refresh,
-    onError: (e) => Alert.alert('Action impossible', errorMessage(e)),
+    onError: (e) => Alert.alert(t('common.actionFailed'), errorMessage(e)),
   })
 
-  if (!valid) return <ErrorState message="Lien de groupe invalide." />
+  if (!valid) return <ErrorState message={t('conv.invalidGroup')} />
   if (group.isLoading) return <Loading />
   if (group.error || !group.data) return <ErrorState message={errorMessage(group.error)} onRetry={() => void group.refetch()} />
   const g = group.data
@@ -42,7 +44,7 @@ export default function ManageGroupScreen() {
   const rename = () => {
     const n = normalizeGroupName(name)
     if (!n) {
-      setNameError('Le nom ne peut pas être vide.')
+      setNameError(t('social.group.nameEmpty'))
       return
     }
     setNameError(null)
@@ -50,22 +52,22 @@ export default function ManageGroupScreen() {
   }
 
   const remove = (userId: string, username: string) =>
-    Alert.alert('Retirer du groupe ?', username, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Retirer', style: 'destructive', onPress: () => act.mutate(() => dmsApi.removeGroupMember(groupId, userId)) },
+    Alert.alert(t('social.group.removeConfirm'), username, [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('social.group.remove'), style: 'destructive', onPress: () => act.mutate(() => dmsApi.removeGroupMember(groupId, userId)) },
     ])
 
   const transfer = (userId: string, username: string) =>
-    Alert.alert('Transférer la propriété ?', `${username} deviendra propriétaire du groupe. Tu resteras membre.`, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Transférer', style: 'destructive', onPress: () => act.mutate(() => dmsApi.transferGroupOwner(groupId, userId)) },
+    Alert.alert(t('social.group.transferConfirm'), t('social.group.transferBody', { name: username }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('chat.forward'), style: 'destructive', onPress: () => act.mutate(() => dmsApi.transferGroupOwner(groupId, userId)) },
     ])
 
   const leave = () =>
-    Alert.alert('Quitter le groupe ?', g.name, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('social.group.leaveConfirm'), g.name, [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Quitter',
+        text: t('menu.leave'),
         style: 'destructive',
         onPress: () =>
           dmsApi
@@ -75,7 +77,7 @@ export default function ManageGroupScreen() {
               queryClient.removeQueries({ queryKey: qk.group(groupId) })
               router.dismissAll()
             })
-            .catch((e) => Alert.alert('Erreur', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.error'), errorMessage(e))),
       },
     ])
 
@@ -85,24 +87,24 @@ export default function ManageGroupScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ paddingVertical: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-        <TextField label="Nom du groupe" value={name} onChangeText={setDraft} maxLength={GROUP_NAME_MAX} error={nameError} />
-        <Button title="Renommer" variant="secondary" onPress={rename} disabled={act.isPending || normalizeGroupName(name) === g.name} />
+        <TextField label={t('social.group.name')} value={name} onChangeText={setDraft} maxLength={GROUP_NAME_MAX} error={nameError} />
+        <Button title={t('social.thread.renameButton')} variant="secondary" onPress={rename} disabled={act.isPending || normalizeGroupName(name) === g.name} />
       </View>
 
-      <Section title={`Membres (${g.members.length}/${GROUP_MAX_MEMBERS})`}>
+      <Section title={t('social.group.members', { n: g.members.length, max: GROUP_MAX_MEMBERS })}>
         {g.members.map((m) => (
           <Row
             key={m.id}
-            title={m.id === myId ? `${m.username} (toi)` : m.username}
-            subtitle={m.id === g.owner_id ? 'Propriétaire' : null}
+            title={m.id === myId ? t('voice.you', { name: m.username }) : m.username}
+            subtitle={m.id === g.owner_id ? t('social.group.owner') : null}
             right={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 <Avatar uri={m.avatar} name={m.username} size={28} userId={m.id} />
                 {g.owner_id === myId && m.id !== myId ? (
-                  <IconButton icon="ribbon-outline" label={`Transférer la propriété à ${m.username}`} onPress={() => transfer(m.id, m.username)} />
+                  <IconButton icon="ribbon-outline" label={t('social.group.transferTo', { name: m.username })} onPress={() => transfer(m.id, m.username)} />
                 ) : null}
                 {canRemoveMember(g, myId, m.id) ? (
-                  <IconButton icon="person-remove-outline" label={`Retirer ${m.username}`} color={colors.danger} onPress={() => remove(m.id, m.username)} />
+                  <IconButton icon="person-remove-outline" label={t('composer.remove', { name: m.username })} color={colors.danger} onPress={() => remove(m.id, m.username)} />
                 ) : null}
               </View>
             }
@@ -110,8 +112,8 @@ export default function ManageGroupScreen() {
         ))}
       </Section>
 
-      <Section title="Ajouter des amis" footer={full ? `Le groupe est complet (${GROUP_MAX_MEMBERS} membres).` : undefined}>
-        {!full && candidates.length === 0 ? <Row title="Aucun ami à ajouter" /> : null}
+      <Section title={t('social.group.addFriends')} footer={full ? t('social.group.full', { max: GROUP_MAX_MEMBERS }) : undefined}>
+        {!full && candidates.length === 0 ? <Row title={t('social.group.noneToAdd')} /> : null}
         {full
           ? null
           : candidates.map((f) => (
@@ -121,7 +123,7 @@ export default function ManageGroupScreen() {
                 right={
                   <IconButton
                     icon="person-add-outline"
-                    label={`Ajouter ${f.username}`}
+                    label={t('social.addFriend.addName', { name: f.username })}
                     color={colors.success}
                     disabled={act.isPending}
                     onPress={() => act.mutate(() => dmsApi.addGroupMember(groupId, f.friend_id))}
@@ -132,7 +134,7 @@ export default function ManageGroupScreen() {
       </Section>
 
       <Section>
-        <Row icon="exit-outline" title="Quitter le groupe" danger onPress={leave} />
+        <Row icon="exit-outline" title={t('social.group.leave')} danger onPress={leave} />
       </Section>
     </ScrollView>
   )

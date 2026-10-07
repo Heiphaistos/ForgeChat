@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { authApi } from '@/api/auth'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { extractResetToken } from '@/features/account/rules'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { passwordStrength } from '@/lib/validation'
 import { useAuth } from '@/stores/auth'
@@ -16,6 +17,7 @@ import { colors, spacing } from '@/theme'
  * ou depuis « Mot de passe oublié » : on peut alors coller le lien reçu.
  */
 export default function ResetPasswordScreen() {
+  const t = useT()
   const params = useLocalSearchParams<{ token?: string }>()
   const fromLink = extractResetToken(typeof params.token === 'string' ? params.token : null)
   const [pasted, setPasted] = useState('')
@@ -26,19 +28,19 @@ export default function ResetPasswordScreen() {
   const token = fromLink ?? extractResetToken(pasted)
 
   const submit = async () => {
-    if (!token) return setError('Colle le lien reçu par e-mail.')
-    if (pw.length < 8 || pw.length > 128) return setError('Le mot de passe doit faire 8 à 128 caractères.')
-    if (passwordStrength(pw).score < 2) return setError('Mot de passe trop faible.')
-    if (pw !== confirm) return setError('Les mots de passe ne correspondent pas.')
+    if (!token) return setError(t('social.reset.pasteLink'))
+    if (pw.length < 8 || pw.length > 128) return setError(t('social.reset.length'))
+    if (passwordStrength(pw).score < 2) return setError(t('social.reset.weak'))
+    if (pw !== confirm) return setError(t('social.reset.mismatch'))
     setLoading(true)
     setError(null)
     try {
       await authApi.resetPassword(token, pw)
       // Le serveur a révoqué toutes les sessions, y compris celle-ci le cas échéant.
       if (useAuth.getState().status === 'signedIn') {
-        await useAuth.getState().signOutLocally('Mot de passe réinitialisé. Reconnecte-toi avec ton nouveau mot de passe.')
+        await useAuth.getState().signOutLocally(t('social.reset.signedOut'))
       } else {
-        Alert.alert('Mot de passe modifié', 'Tu peux te connecter avec ton nouveau mot de passe.')
+        Alert.alert(t('social.reset.done'), t('social.reset.doneBody'))
       }
       router.replace('/login')
     } catch (e) {
@@ -53,15 +55,15 @@ export default function ResetPasswordScreen() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <T variant="title" style={{ textAlign: 'center' }}>
-            Nouveau mot de passe
+            {t('social.reset.newPassword')}
           </T>
           <T variant="muted" style={{ textAlign: 'center' }}>
-            Tous tes appareils seront déconnectés après le changement.
+            {t('social.reset.intro')}
           </T>
           <View style={{ gap: spacing.lg }}>
             {fromLink ? null : (
               <TextField
-                label="Lien reçu par e-mail"
+                label={t('social.reset.link')}
                 placeholder="https://…/reset-password#token=…"
                 value={pasted}
                 onChangeText={setPasted}
@@ -69,10 +71,10 @@ export default function ResetPasswordScreen() {
                 autoCorrect={false}
               />
             )}
-            <PasswordField label="Nouveau mot de passe" value={pw} onChangeText={setPw} autoComplete="new-password" textContentType="newPassword" maxLength={128} />
-            <PasswordField label="Confirmer" value={confirm} onChangeText={setConfirm} autoComplete="new-password" textContentType="newPassword" error={error} />
-            <Button title="Changer le mot de passe" onPress={submit} loading={loading} disabled={!token} />
-            <Button title="Annuler" variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+            <PasswordField label={t('social.reset.newPassword')} value={pw} onChangeText={setPw} autoComplete="new-password" textContentType="newPassword" maxLength={128} />
+            <PasswordField label={t('common.confirm')} value={confirm} onChangeText={setConfirm} autoComplete="new-password" textContentType="newPassword" error={error} />
+            <Button title={t('social.reset.submit')} onPress={submit} loading={loading} disabled={!token} />
+            <Button title={t('common.cancel')} variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

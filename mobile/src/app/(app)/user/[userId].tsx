@@ -13,6 +13,7 @@ import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
 import { shownProfile } from '@/features/servers/memberProfile'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -20,6 +21,7 @@ import { useAuth } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function UserScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['userId'] as const, ['serverId'])
   // Ouverte depuis un serveur : profil propre à ce serveur (surnom, avatar, bannière, bio).
   const serverId = isUuid(text.serverId) ? text.serverId : ''
@@ -29,9 +31,9 @@ export default function UserScreen() {
   const accepted = useQuery({ queryKey: qk.friends('all'), queryFn: () => friendsApi.list('all') })
   const pending = useQuery({ queryKey: qk.friends('pending'), queryFn: () => friendsApi.list('pending') })
   const blocked = useQuery({ queryKey: qk.friends('blocked'), queryFn: () => friendsApi.list('blocked') })
-  if (!valid) return <ErrorState message="Profil invalide." />
+  if (!valid) return <ErrorState message={t('social.user.invalid')} />
   if (q.isLoading) return <Loading />
-  if (q.error || !q.data) return <ErrorState message={errorMessage(q.error, 'Profil introuvable')} onRetry={() => void q.refetch()} />
+  if (q.error || !q.data) return <ErrorState message={errorMessage(q.error, t('social.user.notFound'))} onRetry={() => void q.refetch()} />
   const u = q.data
   const shown = shownProfile(u, members.data?.find((m) => m.user_id === u.id))
   const isMe = u.id === me?.id
@@ -45,7 +47,7 @@ export default function UserScreen() {
         void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
         Alert.alert(ok)
       })
-      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
@@ -64,7 +66,7 @@ export default function UserScreen() {
       </ProfileThemeCard>
 
       {shown.bio ? (
-        <Section title="À propos">
+        <Section title={t('social.user.about')}>
           <View style={{ padding: spacing.lg }}>
             <MessageText content={shown.bio} />
           </View>
@@ -74,8 +76,8 @@ export default function UserScreen() {
       {!isMe ? <MutualServers userId={u.id} /> : null}
       {!isMe && relation.kind === 'friend' ? (
         <SavedText
-          title="Surnom d’ami"
-          footer="Visible de toi seul, à la place de son pseudo."
+          title={t('social.user.nickname')}
+          footer={t('social.user.nicknameFooter')}
           queryKey={['friend-nickname', u.id]}
           load={() => friendsApi.nickname(u.id).then((r) => r.nickname)}
           save={(v) => friendsApi.setNickname(u.id, v).then(() => void queryClient.invalidateQueries({ queryKey: qk.friendsAll }))}
@@ -84,8 +86,8 @@ export default function UserScreen() {
       ) : null}
       {!isMe ? (
         <SavedText
-          title="Note"
-          footer="Note privée : visible de toi seul."
+          title={t('social.user.note')}
+          footer={t('social.user.noteFooter')}
           queryKey={['user-note', u.id]}
           load={() => usersApi.note(u.id).then((r) => r.content)}
           save={(v) => usersApi.setNote(u.id, v)}
@@ -96,59 +98,60 @@ export default function UserScreen() {
 
       {!isMe ? (
         <View style={{ gap: spacing.md }}>
-          <Button title="Envoyer un message" icon="chatbubble" onPress={() => void openDmWith(u.id, u.username)} />
+          <Button title={t('social.user.sendMessage')} icon="chatbubble" onPress={() => void openDmWith(u.id, u.username)} />
           {relation.kind === 'none' ? (
             <Button
-              title="Ajouter en ami"
+              title={t('social.user.addFriend')}
               icon="person-add"
               variant="secondary"
-              onPress={() => run(() => friendsApi.addByName(`${u.username}#${u.discriminator}`), 'Demande d’ami envoyée')}
+              onPress={() => run(() => friendsApi.addByName(`${u.username}#${u.discriminator}`), t('social.user.requestSent'))}
             />
           ) : relation.kind === 'received' ? (
             <Button
-              title="Accepter la demande d’ami"
+              title={t('social.user.acceptRequest')}
               icon="person-add"
               variant="secondary"
-              onPress={() => run(() => friendsApi.accept(relation.friendshipId), 'Demande acceptée')}
+              onPress={() => run(() => friendsApi.accept(relation.friendshipId), t('social.user.requestAccepted'))}
             />
           ) : relation.kind === 'sent' ? (
-            <Text style={styles.relation}>Demande d’ami envoyée</Text>
+            <Text style={styles.relation}>{t('social.user.requestSent')}</Text>
           ) : relation.kind === 'friend' ? (
-            <Text style={styles.relation}>Vous êtes amis</Text>
+            <Text style={styles.relation}>{t('social.user.friends')}</Text>
           ) : null}
           {relation.kind === 'blocked' ? (
             <Button
-              title="Débloquer"
+              title={t('friends.unblock')}
               icon="ban"
               variant="ghost"
-              onPress={() => run(() => friendsApi.unblock(u.id), 'Utilisateur débloqué')}
+              onPress={() => run(() => friendsApi.unblock(u.id), t('social.user.unblocked'))}
             />
           ) : (
             <Button
-              title="Bloquer"
+              title={t('friends.block')}
               icon="ban"
               variant="ghost"
               onPress={() =>
-                Alert.alert('Bloquer cet utilisateur ?', `${u.username} ne pourra plus t'écrire ni t'appeler.`, [
-                  { text: 'Annuler', style: 'cancel' },
-                  { text: 'Bloquer', style: 'destructive', onPress: () => run(() => friendsApi.block(u.id), 'Utilisateur bloqué') },
+                Alert.alert(t('friends.blockConfirm'), t('friends.blockBody', { name: u.username }), [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('friends.block'), style: 'destructive', onPress: () => run(() => friendsApi.block(u.id), t('social.user.blocked')) },
                 ])
               }
             />
           )}
         </View>
       ) : (
-        <Button title="Modifier mon profil" onPress={() => router.push('/settings/profile')} />
+        <Button title={t('social.user.editProfile')} onPress={() => router.push('/settings/profile')} />
       )}
     </ScrollView>
   )
 }
 
 function MutualServers({ userId }: { userId: string }) {
+  const t = useT()
   const q = useQuery({ queryKey: ['mutual-servers', userId], queryFn: () => usersApi.mutualServers(userId) })
   if (!q.data?.length) return null
   return (
-    <Section title={`Serveurs en commun (${q.data.length})`}>
+    <Section title={t('social.user.mutualServers', { n: q.data.length })}>
       {q.data.map((s) => (
         <Row
           key={s.id}
@@ -179,6 +182,7 @@ function SavedText({
   maxLength: number
   multiline?: boolean
 }) {
+  const t = useT()
   const q = useQuery({ queryKey, queryFn: load })
   /** null tant que rien n'est tapé : on affiche la valeur du serveur. */
   const [draft, setDraft] = useState<string | null>(null)
@@ -192,7 +196,7 @@ function SavedText({
       queryClient.setQueryData(queryKey, value.trim())
       setDraft(null)
     } catch (e) {
-      Alert.alert('Enregistrement impossible', errorMessage(e))
+      Alert.alert(t('social.user.saveFailed'), errorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -208,7 +212,7 @@ function SavedText({
           multiline={multiline}
           style={multiline ? { minHeight: 80, textAlignVertical: 'top' } : undefined}
         />
-        {value.trim() !== q.data ? <Button title="Enregistrer" variant="secondary" onPress={() => void submit()} loading={busy} /> : null}
+        {value.trim() !== q.data ? <Button title={t('composer.save')} variant="secondary" onPress={() => void submit()} loading={busy} /> : null}
       </View>
     </Section>
   )

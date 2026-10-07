@@ -7,33 +7,35 @@ import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { formatCallDuration } from '@/features/account/rules'
 import { formatRelative } from '@/lib/format'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { colors, font, spacing } from '@/theme'
 
-function describe(c: CallEntry): { label: string; missed: boolean } {
+function describe(c: CallEntry, t: (key: Key) => string): { label: string; missed: boolean } {
   const missed = c.status === 'missed' || c.status === 'declined'
-  const kind = c.call_type === 'video' ? 'Appel vidéo' : 'Appel'
-  const dir = c.direction === 'outgoing' ? 'sortant' : missed ? 'manqué' : 'entrant'
+  const dir = c.direction === 'outgoing' ? 'Out' : missed ? 'Missed' : 'In'
+  const label = t(`social.calls.${c.call_type === 'video' ? 'video' : 'voice'}${dir}`)
   const dur = formatCallDuration(c.duration_s)
-  return { label: `${kind} ${dir}${dur ? ` · ${dur}` : ''}`, missed: missed && c.direction === 'incoming' }
+  return { label: `${label}${dur ? ` · ${dur}` : ''}`, missed: missed && c.direction === 'incoming' }
 }
 
 /** Historique des 50 derniers appels privés (friends::get_call_history). */
 export default function CallHistoryScreen() {
+  const t = useT()
   const q = useQuery({ queryKey: ['call-history'], queryFn: friendsApi.calls })
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
   return (
     <>
-      <Stack.Screen options={{ title: 'Historique des appels' }} />
+      <Stack.Screen options={{ title: t('friends.callHistory') }} />
       <FlatList
         style={{ backgroundColor: colors.bg }}
         data={q.data ?? []}
         keyExtractor={(c) => c.id}
         refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
-        ListEmptyComponent={<EmptyState icon="call-outline" title="Aucun appel pour le moment" />}
+        ListEmptyComponent={<EmptyState icon="call-outline" title={t('social.calls.empty')} />}
         renderItem={({ item }) => {
-          const d = describe(item)
+          const d = describe(item, t)
           const open = () => (item.dm_id ? router.push(`/dm/${item.dm_id}`) : router.push(`/user/${item.other_user.id}`))
           return (
             <Pressable

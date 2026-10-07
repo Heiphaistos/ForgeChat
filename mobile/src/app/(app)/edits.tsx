@@ -4,6 +4,7 @@ import { messagesApi } from '@/api/messages'
 import { MessageText } from '@/components/MessageText'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { formatShort } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { useAuth } from '@/stores/auth'
@@ -11,10 +12,11 @@ import { colors, font, radius, spacing } from '@/theme'
 
 /** Versions précédentes d'un message modifié (comme EditHistoryModal), de la plus récente à la plus ancienne. */
 export default function EditsScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['messageId'] as const)
   const myName = useAuth((s) => s.user?.username ?? '')
   const edits = useQuery({ queryKey: ['edits', ids.messageId], queryFn: () => messagesApi.edits(ids.messageId), enabled: valid })
-  if (!valid) return <ErrorState message="Message invalide." />
+  if (!valid) return <ErrorState message={t('social.message.invalid')} />
   if (edits.isLoading) return <Loading />
   if (edits.error) return <ErrorState message={errorMessage(edits.error)} onRetry={() => void edits.refetch()} />
   return (
@@ -23,11 +25,11 @@ export default function EditsScreen() {
       contentContainerStyle={{ padding: spacing.md, gap: spacing.sm, flexGrow: 1 }}
       data={edits.data ?? []}
       keyExtractor={(e, i) => `${e.editedAt}-${i}`}
-      ListEmptyComponent={<EmptyState icon="time-outline" title="Aucune version précédente" />}
+      ListEmptyComponent={<EmptyState icon="time-outline" title={t('social.edits.empty')} />}
       renderItem={({ item }) => (
         <View style={styles.card}>
-          <Text style={styles.date}>Avant la modification du {formatShort(item.editedAt)}</Text>
-          {item.content ? <MessageText content={item.content} myName={myName} /> : <Text style={styles.empty}>Sans texte</Text>}
+          <Text style={styles.date}>{t('social.edits.before', { date: formatShort(item.editedAt) })}</Text>
+          {item.content ? <MessageText content={item.content} myName={myName} /> : <Text style={styles.empty}>{t('social.edits.noText')}</Text>}
         </View>
       )}
     />

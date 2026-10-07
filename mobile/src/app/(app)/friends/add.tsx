@@ -5,20 +5,20 @@ import { Alert, ScrollView, Share, View } from 'react-native'
 import { friendsApi, type FriendSuggestion } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { Button, IconButton, Row, Section, T, TextField } from '@/components/ui'
+import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
 
-const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? 's' : ''}`
-
 function suggestionReason(s: FriendSuggestion): string {
   const parts = []
-  if (s.mutual_friends) parts.push(`${plural(s.mutual_friends, 'ami')} en commun`)
-  if (s.mutual_servers) parts.push(`${plural(s.mutual_servers, 'serveur')} en commun`)
+  if (s.mutual_friends) parts.push(tr(s.mutual_friends > 1 ? 'social.addFriend.mutualFriendsMany' : 'social.addFriend.mutualFriends', { n: s.mutual_friends }))
+  if (s.mutual_servers) parts.push(tr(s.mutual_servers > 1 ? 'social.addFriend.mutualServersMany' : 'social.addFriend.mutualServers', { n: s.mutual_servers }))
   return parts.join(' · ')
 }
 
 export default function AddFriendScreen() {
+  const t = useT()
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -29,7 +29,7 @@ export default function AddFriendScreen() {
   const submit = async () => {
     const n = name.trim()
     if (!/^[\p{L}\p{N}_-]{2,32}(#\d{4})?$/u.test(n)) {
-      setError('Format attendu : pseudo ou pseudo#1234')
+      setError(t('social.addFriend.badFormat'))
       return
     }
     setLoading(true)
@@ -37,7 +37,7 @@ export default function AddFriendScreen() {
     try {
       await friendsApi.addByName(n, message)
       void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
-      Alert.alert('Demande envoyée', `Ta demande a été envoyée à ${n}.`)
+      Alert.alert(t('friends.sent'), t('social.addFriend.sentTo', { name: n }))
       router.back()
     } catch (e) {
       setError(errorMessage(e))
@@ -50,9 +50,9 @@ export default function AddFriendScreen() {
     setInviting(true)
     try {
       const { url } = await friendsApi.createInvite()
-      await Share.share({ message: `Ajoute-moi en ami sur ForgeChat : ${url}` })
+      await Share.share({ message: t('social.addFriend.shareMessage', { url }) })
     } catch (e) {
-      Alert.alert('Lien indisponible', errorMessage(e))
+      Alert.alert(t('social.addFriend.linkUnavailable'), errorMessage(e))
     } finally {
       setInviting(false)
     }
@@ -63,27 +63,27 @@ export default function AddFriendScreen() {
       await friendsApi.addByName(`${s.username}#${s.discriminator}`)
       void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
       void suggestions.refetch()
-      Alert.alert('Demande envoyée', `Ta demande a été envoyée à ${s.username}.`)
+      Alert.alert(t('friends.sent'), t('social.addFriend.sentTo', { name: s.username }))
     } catch (e) {
-      Alert.alert('Demande impossible', errorMessage(e))
+      Alert.alert(t('social.addFriend.failed'), errorMessage(e))
     }
   }
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <T variant="muted">Tu peux ajouter un ami avec son pseudo ForgeChat (et son tag si besoin).</T>
-      <TextField label="Pseudo" placeholder="pseudo#1234" value={name} onChangeText={setName} autoCapitalize="none" autoCorrect={false} error={error} />
-      <TextField label="Message (optionnel)" value={message} onChangeText={setMessage} maxLength={200} />
-      <Button title="Envoyer la demande" onPress={submit} loading={loading} />
+      <T variant="muted">{t('social.addFriend.intro')}</T>
+      <TextField label={t('social.addFriend.username')} placeholder={t('social.addFriend.usernamePlaceholder')} value={name} onChangeText={setName} autoCapitalize="none" autoCorrect={false} error={error} />
+      <TextField label={t('social.addFriend.message')} value={message} onChangeText={setMessage} maxLength={200} />
+      <Button title={t('social.addFriend.send')} onPress={submit} loading={loading} />
 
-      <Section title="Lien d’invitation" footer="Toute personne qui ouvre le lien peut t’ajouter en ami. Valable 7 jours.">
+      <Section title={t('social.addFriend.inviteLink')} footer={t('social.addFriend.inviteFooter')}>
         <View style={{ padding: spacing.md }}>
-          <Button title="Partager un lien d’invitation" variant="secondary" icon="share-outline" onPress={() => void shareInvite()} loading={inviting} />
+          <Button title={t('social.addFriend.shareLink')} variant="secondary" icon="share-outline" onPress={() => void shareInvite()} loading={inviting} />
         </View>
       </Section>
 
       {suggestions.data?.length ? (
-        <Section title="Suggestions">
+        <Section title={t('composer.suggestions')}>
           {suggestions.data.map((s) => (
             <Row
               key={s.id}
@@ -93,7 +93,7 @@ export default function AddFriendScreen() {
               right={
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                   <Avatar uri={s.avatar} name={s.username} size={28} />
-                  <IconButton icon="person-add-outline" label={`Ajouter ${s.username}`} color={colors.success} onPress={() => void addSuggested(s)} />
+                  <IconButton icon="person-add-outline" label={t('social.addFriend.addName', { name: s.username })} color={colors.success} onPress={() => void addSuggested(s)} />
                 </View>
               }
             />

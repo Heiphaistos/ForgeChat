@@ -5,6 +5,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 import { friendInviteApi } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { INVITE_CODE_RE } from '@/lib/validation'
@@ -12,15 +13,16 @@ import { useAuth } from '@/stores/auth'
 import { colors, font, spacing } from '@/theme'
 
 export default function FriendInviteLanding() {
+  const t = useT()
   const { code: raw } = useLocalSearchParams<{ code: string }>()
   const code = typeof raw === 'string' && INVITE_CODE_RE.test(raw) ? raw : null
   const signedIn = useAuth((s) => s.status === 'signedIn')
   const [busy, setBusy] = useState(false)
   const info = useQuery({ queryKey: ['friend-invite', code], queryFn: () => friendInviteApi.get(code!), enabled: !!code, retry: false })
 
-  if (!code) return <ErrorState message="Lien invalide." />
+  if (!code) return <ErrorState message={t('social.invite.invalidLink')} />
   if (info.isLoading) return <Loading />
-  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, 'Invitation expirée ou introuvable.')} />
+  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, t('social.invite.expired'))} />
   const u = info.data.user
 
   const accept = async () => {
@@ -30,7 +32,7 @@ export default function FriendInviteLanding() {
       void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
       router.replace('/friends')
     } catch (e) {
-      Alert.alert('Impossible d’accepter', errorMessage(e))
+      Alert.alert(t('social.invite.acceptFailed'), errorMessage(e))
     } finally {
       setBusy(false)
     }
@@ -40,13 +42,13 @@ export default function FriendInviteLanding() {
     <View style={styles.container}>
       <Avatar uri={u.avatar} name={u.username} size={96} />
       <Text style={styles.name}>{u.username}</Text>
-      <Text style={styles.sub}>t’invite à devenir ami sur ForgeChat</Text>
+      <Text style={styles.sub}>{t('social.invite.friendInvite')}</Text>
       {signedIn ? (
-        <Button title="Accepter" onPress={accept} loading={busy} style={{ alignSelf: 'stretch', marginTop: spacing.xl }} />
+        <Button title={t('friends.accept')} onPress={accept} loading={busy} style={{ alignSelf: 'stretch', marginTop: spacing.xl }} />
       ) : (
-        <Button title="Se connecter" onPress={() => router.replace('/login')} style={{ alignSelf: 'stretch', marginTop: spacing.xl }} />
+        <Button title={t('auth.login')} onPress={() => router.replace('/login')} style={{ alignSelf: 'stretch', marginTop: spacing.xl }} />
       )}
-      <Button title="Fermer" variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+      <Button title={t('common.close')} variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
     </View>
   )
 }

@@ -9,12 +9,14 @@ import { conversationId } from '@/features/chat/adapters'
 import { savedConversation, type SavedItem } from '@/features/chat/messageExtras'
 import { useScrollTarget } from '@/features/chat/pins'
 import { formatShort } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function SavedScreen() {
+  const t = useT()
   const myName = useAuth((s) => s.user?.username ?? '')
   const saved = useQuery({ queryKey: qk.saved, queryFn: messagesApi.saved })
 
@@ -32,7 +34,7 @@ export default function SavedScreen() {
     messagesApi
       .unsave(s.messageId)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.saved }))
-      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 
   if (saved.isLoading) return <Loading />
   if (saved.error) return <ErrorState message={errorMessage(saved.error)} onRetry={() => void saved.refetch()} />
@@ -44,16 +46,16 @@ export default function SavedScreen() {
       data={saved.data ?? []}
       keyExtractor={(s) => s.messageId}
       refreshControl={<RefreshControl refreshing={saved.isRefetching} onRefresh={() => void saved.refetch()} tintColor={colors.textMuted} />}
-      ListEmptyComponent={<EmptyState icon="bookmark-outline" title="Aucun message enregistré" subtitle="Appui long sur un message, puis « Enregistrer »." />}
+      ListEmptyComponent={<EmptyState icon="bookmark-outline" title={t('social.saved.empty')} subtitle={t('social.saved.emptyHint')} />}
       renderItem={({ item: s }) => (
         <Pressable
           onPress={() => open(s)}
           accessibilityRole="button"
-          accessibilityHint="Ouvrir le message d'origine"
+          accessibilityHint={t('social.saved.openOriginal')}
           style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.bgHover }]}
         >
           <Text style={styles.where} numberOfLines={1}>
-            {s.serverId ? `${s.serverName ?? 'Serveur'} · #${s.channelName ?? 'salon'}` : 'Message privé'}
+            {s.serverId ? `${s.serverName ?? t('social.saved.server')} · #${s.channelName ?? t('conv.channelFallback')}` : t('conv.dmFallback')}
           </Text>
           <View style={styles.head}>
             <Avatar uri={s.authorAvatar} name={s.authorName} size={24} />
@@ -61,12 +63,12 @@ export default function SavedScreen() {
               {s.authorName}
             </Text>
             {s.createdAt ? <Text style={styles.date}>{formatShort(s.createdAt)}</Text> : null}
-            <IconButton icon="close" size={18} label="Retirer des enregistrés" onPress={() => void remove(s)} />
+            <IconButton icon="close" size={18} label={t('chat.unsave')} onPress={() => void remove(s)} />
           </View>
           {s.content ? (
             <MessageText content={s.content} myName={myName} />
           ) : (
-            <Text style={styles.empty}>{s.attachments.length ? 'Pièce jointe' : 'Message sans texte'}</Text>
+            <Text style={styles.empty}>{s.attachments.length ? t('msg.attachment') : t('social.saved.noText')}</Text>
           )}
         </Pressable>
       )}

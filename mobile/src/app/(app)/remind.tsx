@@ -4,55 +4,60 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { messagesApi } from '@/api/messages'
 import { Button, ErrorState, Row, Section, TextField } from '@/components/ui'
 import { formatReminderInput, parseReminderInput, reminderPresets } from '@/features/chat/messageExtras'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, font, spacing } from '@/theme'
 
+// Même ordre que reminderPresets().
+const PRESET_KEYS: Key[] = ['social.remind.in20m', 'social.remind.in1h', 'social.remind.in3h', 'social.remind.tomorrow9']
+
 /** « Me le rappeler » (comme ReminderModal) : le serveur renvoie un événement REMINDER à l'échéance. */
 export default function RemindScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['messageId'] as const)
   const [custom, setCustom] = useState(() => formatReminderInput(new Date(Date.now() + 60 * 60_000)))
   const [busy, setBusy] = useState(false)
-  if (!valid) return <ErrorState message="Message invalide." />
+  if (!valid) return <ErrorState message={t('social.message.invalid')} />
 
   const schedule = (date: Date) => {
     setBusy(true)
     messagesApi
       .remind(ids.messageId, date)
       .then(() => {
-        Alert.alert('Rappel programmé', `Le ${formatReminderInput(date)}`)
+        Alert.alert(t('social.remind.done'), t('social.remind.on', { date: formatReminderInput(date) }))
         router.back()
       })
-      .catch((e) => Alert.alert('Rappel impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('social.remind.failed'), errorMessage(e)))
       .finally(() => setBusy(false))
   }
 
   const scheduleCustom = () => {
     const date = parseReminderInput(custom, new Date())
     if (date) schedule(date)
-    else Alert.alert('Date invalide', 'Format JJ/MM/AAAA HH:MM, dans le futur.')
+    else Alert.alert(t('social.remind.badDate'), t('social.remind.badDateBody'))
   }
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <Section title="Me le rappeler">
-        {reminderPresets(new Date()).map((p) => (
-          <Row key={p.label} icon="alarm-outline" title={p.label} subtitle={formatReminderInput(p.date)} onPress={() => !busy && schedule(p.date)} />
+      <Section title={t('screen.remind')}>
+        {reminderPresets(new Date()).map((p, i) => (
+          <Row key={p.label} icon="alarm-outline" title={PRESET_KEYS[i] ? t(PRESET_KEYS[i]) : p.label} subtitle={formatReminderInput(p.date)} onPress={() => !busy && schedule(p.date)} />
         ))}
       </Section>
       <View style={{ gap: spacing.sm }}>
         <TextField
-          label="Date et heure"
+          label={t('social.remind.dateTime')}
           value={custom}
           onChangeText={setCustom}
-          placeholder="JJ/MM/AAAA HH:MM"
-          accessibilityLabel="Date et heure du rappel, format jour mois année heure minutes"
+          placeholder={t('social.remind.format')}
+          accessibilityLabel={t('social.remind.dateTimeLabel')}
           keyboardType="numbers-and-punctuation"
           autoCorrect={false}
           onSubmitEditing={scheduleCustom}
         />
-        <Text style={styles.hint}>Heure de ton téléphone. Le rappel s’affiche quand l’application est ouverte.</Text>
-        <Button title="Programmer" icon="alarm-outline" loading={busy} onPress={scheduleCustom} />
+        <Text style={styles.hint}>{t('social.remind.hint')}</Text>
+        <Button title={t('social.remind.schedule')} icon="alarm-outline" loading={busy} onPress={scheduleCustom} />
       </View>
     </ScrollView>
   )

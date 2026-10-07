@@ -14,6 +14,7 @@ import { QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
+import { useT } from '@/i18n'
 import { useAuth } from '@/stores/auth'
 import type { ChatMessage } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
@@ -62,6 +63,7 @@ export function ReplyThreadView({
   disabledReason?: string | null
   placeholder: string
 }) {
+  const t = useT()
   const me = useAuth((s) => s.user)
   const [draft, setDraft] = useState('')
   const [files, setFiles] = useState<LocalAttachment[]>([])
@@ -87,7 +89,7 @@ export function ReplyThreadView({
         setEditing(null)
         setFiles((prev) => prev.filter((f) => !sent.includes(f)))
       })
-      .catch((e) => Alert.alert(editing ? 'Modification impossible' : 'Envoi impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(editing ? t('social.reply.editFailed') : t('composer.sendFailed'), errorMessage(e)))
       .finally(() => setSending(false))
   }
 
@@ -98,32 +100,32 @@ export function ReplyThreadView({
     for (const a of res.assets) {
       const f = { uri: a.uri, name: sanitizeFilename(a.name), type: a.mimeType ?? 'application/octet-stream', size: a.size ?? null }
       const err = validateAttachment(f)
-      if (err) Alert.alert('Fichier refusé', `${f.name} : ${err}`)
+      if (err) Alert.alert(t('composer.fileRejected'), t('social.reply.fileError', { name: f.name, error: err }))
       else accepted.push(f)
     }
     setFiles((prev) => [...prev, ...accepted].slice(0, MAX_FILES))
   }
 
   const confirmDelete = (m: ChatMessage) =>
-    Alert.alert('Supprimer le message ?', 'Cette action est définitive.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => void onDelete?.(m).catch((e) => Alert.alert('Suppression impossible', errorMessage(e))) },
+    Alert.alert(t('chat.deleteConfirm'), t('chat.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => void onDelete?.(m).catch((e) => Alert.alert(t('chat.deleteFailed'), errorMessage(e))) },
     ])
 
   const actionsFor = (m: ChatMessage): SheetAction[] => {
     const mine = !!me && m.authorId === me.id
     const list: SheetAction[] = []
-    if (m.content) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
+    if (m.content) list.push({ label: t('chat.copyText'), icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
     if (mine && onEdit && hasEditableText(m) && !disabledReason)
       list.push({
-        label: 'Modifier',
+        label: t('chat.edit'),
         icon: 'create-outline',
         onPress: () => {
           setEditing(m)
           setDraft(m.content ?? '')
         },
       })
-    if (onDelete && (mine || canModerate)) list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
+    if (onDelete && (mine || canModerate)) list.push({ label: t('common.delete'), icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
     return list
   }
 
@@ -172,7 +174,7 @@ export function ReplyThreadView({
             {editing ? (
               <View style={styles.contextBar}>
                 <Ionicons name="create-outline" size={16} color={colors.textMuted} />
-                <Text style={styles.contextText}>Modification du message</Text>
+                <Text style={styles.contextText}>{t('composer.editing')}</Text>
                 <Pressable
                   onPress={() => {
                     setEditing(null)
@@ -180,7 +182,7 @@ export function ReplyThreadView({
                   }}
                   hitSlop={10}
                   accessibilityRole="button"
-                  accessibilityLabel="Annuler la modification"
+                  accessibilityLabel={t('social.reply.cancelEdit')}
                 >
                   <Ionicons name="close-circle" size={20} color={colors.textMuted} />
                 </Pressable>
@@ -194,7 +196,7 @@ export function ReplyThreadView({
                     <Text style={styles.fileName} numberOfLines={1}>
                       {f.name}
                     </Text>
-                    <Pressable onPress={() => setFiles((prev) => prev.filter((_, j) => j !== i))} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Retirer ${f.name}`}>
+                    <Pressable onPress={() => setFiles((prev) => prev.filter((_, j) => j !== i))} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('composer.remove', { name: f.name })}>
                       <Ionicons name="close" size={14} color={colors.textMuted} />
                     </Pressable>
                   </View>
@@ -203,7 +205,7 @@ export function ReplyThreadView({
             ) : null}
             <View style={styles.row}>
               {editing ? null : (
-                <Pressable style={styles.attach} onPress={() => void pickFiles()} accessibilityRole="button" accessibilityLabel="Joindre un fichier" hitSlop={6}>
+                <Pressable style={styles.attach} onPress={() => void pickFiles()} accessibilityRole="button" accessibilityLabel={t('composer.attach')} hitSlop={6}>
                   <Ionicons name="add" size={24} color={colors.textSecondary} />
                 </Pressable>
               )}
@@ -215,7 +217,7 @@ export function ReplyThreadView({
                 placeholderTextColor={colors.textFaint}
                 multiline
                 maxLength={LIMITS.messageMaxChars}
-                accessibilityLabel={editing ? 'Message modifié' : 'Réponse'}
+                accessibilityLabel={editing ? t('social.reply.edited') : t('social.reply.reply')}
                 textAlignVertical="center"
               />
               <Pressable
@@ -223,7 +225,7 @@ export function ReplyThreadView({
                 onPress={submit}
                 disabled={!canSubmit}
                 accessibilityRole="button"
-                accessibilityLabel={editing ? 'Enregistrer' : 'Envoyer'}
+                accessibilityLabel={editing ? t('composer.save') : t('composer.send')}
                 accessibilityState={{ disabled: !canSubmit, busy: sending }}
               >
                 {sending ? <ActivityIndicator color="#fff" /> : <Ionicons name={editing ? 'checkmark' : 'send'} size={18} color="#fff" />}
@@ -247,7 +249,7 @@ export function ReplyThreadView({
                   if (m) onReact(m, e)
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Réagir ${e}`}
+                accessibilityLabel={t('chat.reactWith', { emoji: e })}
               >
                 <Text style={{ fontSize: 24 }}>{e}</Text>
               </Pressable>

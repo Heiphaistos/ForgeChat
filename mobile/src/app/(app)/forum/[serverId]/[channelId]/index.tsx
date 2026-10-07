@@ -13,12 +13,14 @@ import { TagChips } from '@/features/forum/TagChips'
 import { formatRelative } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
+import { useT } from '@/i18n'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 
 /** Salon forum : publications (épinglées d'abord, ordre du salon), comme ForumPage. Salon média (media=1) : grille de vignettes. */
 export default function ForumScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['name', 'media'])
   const q = useInfiniteQuery({
     queryKey: qk.forum(ids.channelId ?? ''),
@@ -28,8 +30,8 @@ export default function ForumScreen() {
     enabled: valid,
   })
   const posts = useMemo(() => q.data?.pages.flat() ?? [], [q.data])
-  if (!valid) return <ErrorState message="Lien de salon invalide." />
-  const name = text.name || 'forum'
+  if (!valid) return <ErrorState message={t('conv.invalidChannel')} />
+  const name = text.name || t('social.forum.fallback')
   const media = text.media === '1'
 
   const open = (p: ForumPost) =>
@@ -43,7 +45,7 @@ export default function ForumScreen() {
           headerRight: () => (
             <IconButton
               icon="add"
-              label="Nouvelle publication"
+              label={t('screen.newPost')}
               onPress={() => router.push({ pathname: '/forum/[serverId]/[channelId]/new', params: { serverId: ids.serverId, channelId: ids.channelId, media: media ? '1' : '0' } })}
             />
           ),
@@ -66,13 +68,13 @@ export default function ForumScreen() {
           onEndReached={() => q.hasNextPage && !q.isFetchingNextPage && void q.fetchNextPage()}
           onEndReachedThreshold={0.4}
           ListFooterComponent={q.isFetchingNextPage ? <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg }} /> : null}
-          ListEmptyComponent={<EmptyState icon="albums-outline" title="Aucune publication" subtitle="Touche + pour lancer la discussion." />}
+          ListEmptyComponent={<EmptyState icon="albums-outline" title={t('social.forum.empty')} subtitle={t('social.forum.emptyHint')} />}
           renderItem={({ item: p }) => media ? (
             <Pressable
               onPress={() => open(p)}
               style={styles.tile}
               accessibilityRole="button"
-              accessibilityLabel={`${p.title}, par ${p.creatorName}, ${p.replyCount} réponse${p.replyCount > 1 ? 's' : ''}`}
+              accessibilityLabel={t(p.replyCount > 1 ? 'social.forum.postLabelMany' : 'social.forum.postLabel', { title: p.title, name: p.creatorName, n: p.replyCount })}
             >
               {p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
                 <Image source={{ uri: resolveMediaUrl(p.mediaUrl) ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -88,7 +90,7 @@ export default function ForumScreen() {
               onPress={() => open(p)}
               style={({ pressed }) => [styles.card, pressed && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
-              accessibilityLabel={`${p.pinned ? 'Épinglée, ' : ''}${p.title}, par ${p.creatorName}, ${p.replyCount} réponse${p.replyCount > 1 ? 's' : ''}`}
+              accessibilityLabel={(p.pinned ? t('social.forum.pinnedPrefix') : '') + t(p.replyCount > 1 ? 'social.forum.postLabelMany' : 'social.forum.postLabel', { title: p.title, name: p.creatorName, n: p.replyCount })}
             >
               <View style={styles.head}>
                 {p.pinned ? <Ionicons name="pin" size={14} color={colors.warning} /> : null}

@@ -19,6 +19,7 @@ import { isVideoMedia } from '@/features/forum/forum'
 import { VideoAttachment } from '@/features/chat/MediaPlayers'
 import { resolveMediaUrl } from '@/lib/links'
 import { formatShort } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -27,6 +28,7 @@ import { colors, font, spacing } from '@/theme'
 
 /** Publication de forum et ses réponses (comme PostView). */
 export default function PostScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId', 'postId'] as const, ['title'])
   const myName = useAuth((s) => s.user?.username ?? '')
   const meId = useAuth((s) => s.user?.id)
@@ -43,36 +45,36 @@ export default function PostScreen() {
     enabled: valid,
   })
   const replies = useMemo(() => (q.data?.pages ?? []).flatMap((p) => [...p.replies].reverse()), [q.data])
-  if (!valid) return <ErrorState message="Publication invalide." />
+  if (!valid) return <ErrorState message={t('social.post.invalid')} />
   const post = q.data?.pages[0]?.post
   const refresh = () => queryClient.invalidateQueries({ queryKey: key })
   const refreshList = () => queryClient.invalidateQueries({ queryKey: qk.forum(ids.channelId) })
-  const fail = (e: unknown) => Alert.alert('Action impossible', errorMessage(e))
+  const fail = (e: unknown) => Alert.alert(t('common.actionFailed'), errorMessage(e))
   const patchPost = (patch: { content?: string; pinned?: boolean; locked?: boolean }) =>
     forumApi.updatePost(ids.serverId, ids.channelId, ids.postId, patch).then(() => Promise.all([refresh(), refreshList()]))
 
   // update_post / delete_post : texte = créateur ; épingler, verrouiller = MANAGE_MESSAGES ; supprimer = les deux.
   const mine = !!post?.creatorId && post.creatorId === meId
   const menuActions: SheetAction[] = []
-  if (post && mine) menuActions.push({ label: 'Modifier le texte', icon: 'create-outline', onPress: () => setEditText(post.content ?? '') })
+  if (post && mine) menuActions.push({ label: t('social.post.editText'), icon: 'create-outline', onPress: () => setEditText(post.content ?? '') })
   if (post && canModerate) {
-    menuActions.push({ label: post.pinned ? 'Désépingler' : 'Épingler', icon: 'pin-outline', onPress: () => void patchPost({ pinned: !post.pinned }).catch(fail) })
+    menuActions.push({ label: post.pinned ? t('chat.unpin') : t('chat.pin'), icon: 'pin-outline', onPress: () => void patchPost({ pinned: !post.pinned }).catch(fail) })
     menuActions.push({
-      label: post.locked ? 'Déverrouiller' : 'Verrouiller',
+      label: post.locked ? t('social.post.unlock') : t('social.post.lock'),
       icon: post.locked ? 'lock-open-outline' : 'lock-closed-outline',
       onPress: () => void patchPost({ locked: !post.locked }).catch(fail),
     })
   }
   if (post && (mine || canModerate))
     menuActions.push({
-      label: 'Supprimer la publication',
+      label: t('social.post.delete'),
       icon: 'trash-outline',
       danger: true,
       onPress: () =>
-        Alert.alert('Supprimer la publication ?', 'Elle disparaît avec toutes ses réponses.', [
-          { text: 'Annuler', style: 'cancel' },
+        Alert.alert(t('social.post.deleteConfirm'), t('social.post.deleteBody'), [
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Supprimer',
+            text: t('common.delete'),
             style: 'destructive',
             onPress: () =>
               forumApi
@@ -99,26 +101,26 @@ export default function PostScreen() {
     <>
       <Stack.Screen
         options={{
-          title: post?.title ?? text.title ?? 'Publication',
-          headerRight: menuActions.length ? () => <IconButton icon="ellipsis-vertical" label="Gérer la publication" onPress={() => setMenu(true)} /> : undefined,
+          title: post?.title ?? text.title ?? t('screen.post'),
+          headerRight: menuActions.length ? () => <IconButton icon="ellipsis-vertical" label={t('social.post.manage')} onPress={() => setMenu(true)} /> : undefined,
         }}
       />
       <Sheet visible={menu} onClose={() => setMenu(false)} title={post?.title} actions={menuActions} />
-      <FormSheet visible={editText !== null} onClose={() => setEditText(null)} title="Modifier la publication">
+      <FormSheet visible={editText !== null} onClose={() => setEditText(null)} title={t('social.post.editTitle')}>
         <TextField
-          label="Texte"
+          label={t('social.post.text')}
           value={editText ?? ''}
           onChangeText={setEditText}
           multiline
           maxLength={LIMITS.messageMaxChars}
           style={{ minHeight: 120, textAlignVertical: 'top' }}
         />
-        <Button title="Enregistrer" icon="checkmark" loading={saving} onPress={saveText} />
+        <Button title={t('composer.save')} icon="checkmark" loading={saving} onPress={saveText} />
       </FormSheet>
       <ReplyThreadView
         messages={replies}
         isLoading={q.isLoading}
-        error={q.error ?? (q.isSuccess && !post ? new Error('Publication introuvable') : null)}
+        error={q.error ?? (q.isSuccess && !post ? new Error(t('social.post.notFound')) : null)}
         onRetry={() => void q.refetch()}
         hasOlder={!!q.hasNextPage}
         loadingOlder={q.isFetchingNextPage}
@@ -127,13 +129,13 @@ export default function PostScreen() {
           void forumApi
             .react(ids.serverId, ids.channelId, ids.postId, m.id, emoji)
             .then(refresh)
-            .catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
+            .catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
         }
-        onSend={(t, files) =>
+        onSend={(body, files) =>
           sendWithAttachments(
-            t,
+            body,
             files,
-            (has) => forumApi.reply(ids.serverId, ids.channelId, ids.postId, t, has),
+            (has) => forumApi.reply(ids.serverId, ids.channelId, ids.postId, body, has),
             (id, f) => forumApi.uploadReply(ids.serverId, ids.channelId, ids.postId, id, f),
             (id) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, id),
           ).finally(() => {
@@ -141,11 +143,11 @@ export default function PostScreen() {
             void refreshList()
           })
         }
-        onEdit={(m, t) => forumApi.editReply(ids.serverId, ids.channelId, ids.postId, m.id, t).then(refresh)}
+        onEdit={(m, body) => forumApi.editReply(ids.serverId, ids.channelId, ids.postId, m.id, body).then(refresh)}
         onDelete={(m) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, m.id).then(() => Promise.all([refresh(), refreshList()]))}
         canModerate={canModerate}
-        disabledReason={post?.locked ? 'Cette publication est verrouillée.' : null}
-        placeholder="Répondre à la publication"
+        disabledReason={post?.locked ? t('social.post.locked') : null}
+        placeholder={t('social.post.replyPlaceholder')}
         header={
           post ? (
             <View style={styles.post}>
@@ -162,7 +164,7 @@ export default function PostScreen() {
               </View>
               {post.content ? <MessageText content={post.content} myName={myName} /> : null}
               <Text style={styles.meta}>
-                {post.replyCount} réponse{post.replyCount > 1 ? 's' : ''}
+                {t(post.replyCount > 1 ? 'social.post.repliesMany' : 'social.post.replies', { n: post.replyCount })}
               </Text>
             </View>
           ) : undefined
@@ -174,12 +176,13 @@ export default function PostScreen() {
 
 /** Média d'une publication de salon média, en grand (vidéo : plein écran natif du lecteur). */
 function PostMedia({ url }: { url: string }) {
+  const t = useT()
   const src = resolveMediaUrl(url)
   if (!src) return null
   return isVideoMedia(url) ? (
-    <VideoAttachment src={src} label="Vidéo de la publication" />
+    <VideoAttachment src={src} label={t('social.post.video')} />
   ) : (
-    <Image source={{ uri: src }} style={styles.media} contentFit="contain" accessibilityLabel="Image de la publication" />
+    <Image source={{ uri: src }} style={styles.media} contentFit="contain" accessibilityLabel={t('social.post.image')} />
   )
 }
 

@@ -10,6 +10,7 @@ import { conversationId } from '@/features/chat/adapters'
 import { conversationRefFromParams, useScrollTarget } from '@/features/chat/pins'
 import { SEARCH_DEBOUNCE_MS, searchQuery, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
 import { formatShort } from '@/lib/format'
+import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
@@ -27,7 +28,7 @@ function openMessage(m: SearchMessage, scoped: boolean) {
 }
 
 function where(m: SearchMessage): string {
-  return m.conversation.kind === 'channel' ? `#${m.channelName}` : m.conversation.kind === 'dm' ? `MP avec ${m.channelName}` : m.channelName
+  return m.conversation.kind === 'channel' ? `#${m.channelName}` : m.conversation.kind === 'dm' ? tr('social.search.dmWith', { name: m.channelName }) : m.channelName
 }
 
 function openItem(item: Item, scoped: boolean) {
@@ -47,11 +48,12 @@ export default function SearchScreen() {
   // Avec kind + identifiants (comme l'écran des épinglés) : recherche limitée à cette conversation.
   const scope = conversationRefFromParams(useLocalSearchParams<Record<string, string>>())
   const scopeId = scope ? conversationId(scope) : ''
+  const t = useT()
   const [input, setInput] = useState('')
   const [debounced, setDebounced] = useState<string | null>(null)
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(searchQuery(input)), SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setDebounced(searchQuery(input)), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
   }, [input])
 
   const results = useQuery({
@@ -65,21 +67,21 @@ export default function SearchScreen() {
   const data = debounced ? results.data : undefined
   const sections = data
     ? [
-        { title: 'Messages', data: data.messages.map((v): Item => ({ kind: 'message', v })) },
-        { title: 'Salons', data: data.channels.map((v): Item => ({ kind: 'channel', v })) },
-        { title: 'Personnes', data: data.users.map((v): Item => ({ kind: 'user', v })) },
+        { title: t('social.search.messages'), data: data.messages.map((v): Item => ({ kind: 'message', v })) },
+        { title: t('social.search.channels'), data: data.channels.map((v): Item => ({ kind: 'channel', v })) },
+        { title: t('social.search.people'), data: data.users.map((v): Item => ({ kind: 'user', v })) },
       ].filter((s) => s.data.length)
     : []
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {scope ? <Stack.Screen options={{ title: 'Rechercher ici' }} /> : null}
+      {scope ? <Stack.Screen options={{ title: t('social.search.here') }} /> : null}
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder={scope ? 'Messages de cette conversation' : 'Messages, salons, personnes'}
+          placeholder={scope ? t('social.search.placeholderHere') : t('social.search.placeholder')}
           placeholderTextColor={colors.textFaint}
           selectionColor={colors.primary}
           autoFocus
@@ -87,7 +89,7 @@ export default function SearchScreen() {
           autoCorrect={false}
           returnKeyType="search"
           maxLength={100}
-          accessibilityLabel="Rechercher"
+          accessibilityLabel={t('screen.search')}
           style={styles.input}
         />
         {results.isFetching ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
@@ -95,13 +97,13 @@ export default function SearchScreen() {
       {!debounced ? (
         <EmptyState
           icon="search-outline"
-          title="Rechercher"
-          subtitle={`Au moins 2 caractères. Filtres : de:pseudo, a:image, a:lien, a:fichier, avant:AAAA-MM-JJ, après:AAAA-MM-JJ${scope ? '' : ', dans:salon'}.`}
+          title={t('screen.search')}
+          subtitle={scope ? t('social.search.hintHere') : t('social.search.hint')}
         />
       ) : results.error ? (
         <ErrorState message={errorMessage(results.error)} onRetry={() => void results.refetch()} />
       ) : data && !sections.length ? (
-        <EmptyState icon="search-outline" title="Aucun résultat" />
+        <EmptyState icon="search-outline" title={t('dms.noResults')} />
       ) : (
         <SectionList
           sections={sections}
@@ -115,7 +117,7 @@ export default function SearchScreen() {
               style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
               accessibilityLabel={
-                item.kind === 'channel' ? `${item.v.type === 'voice' ? 'Salon vocal' : 'Salon'} ${item.v.name}, ${item.v.serverName}` : undefined
+                item.kind === 'channel' ? t(item.v.type === 'voice' ? 'social.search.voiceChannel' : 'social.search.channel', { name: item.v.name, server: item.v.serverName }) : undefined
               }
             >
               {item.kind === 'message' ? (
@@ -127,7 +129,7 @@ export default function SearchScreen() {
                       {scope ? '' : ` · ${where(item.v)}`} · {formatShort(item.v.createdAt)}
                     </Text>
                     <Text style={styles.body} numberOfLines={3}>
-                      {item.v.content ?? 'Pièce jointe'}
+                      {item.v.content ?? t('msg.attachment')}
                     </Text>
                   </View>
                 </>

@@ -11,6 +11,7 @@ import { createThreadBody, olderCursor, sendWithAttachments, type ThreadSummary 
 import { PERM } from '@/features/servers/perms'
 import { useServerPerms } from '@/features/servers/menus'
 import { useAuth } from '@/stores/auth'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -21,6 +22,7 @@ import { colors, font, radius, spacing } from '@/theme'
  * précis (`threadId`) ; sans fil existant pour ce message, formulaire de création.
  */
 export default function ThreadScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['parent', 'threadId', 'preview'])
   const parent = isUuid(text.parent) ? text.parent.toLowerCase() : null
   const directId = isUuid(text.threadId) ? text.threadId.toLowerCase() : null
@@ -29,7 +31,7 @@ export default function ThreadScreen() {
     queryFn: () => threadsApi.list(ids.serverId, ids.channelId, directId ? { thread_id: directId } : { parent_message_id: parent ?? undefined }),
     enabled: valid && !!(directId || parent),
   })
-  if (!valid || !(directId || parent)) return <ErrorState message="Fil invalide." />
+  if (!valid || !(directId || parent)) return <ErrorState message={t('social.thread.invalid')} />
   if (lookup.isLoading) return <Loading />
   if (lookup.error) return <ErrorState message={errorMessage(lookup.error)} onRetry={() => void lookup.refetch()} />
   const thread = lookup.data?.[0]
@@ -41,6 +43,7 @@ export default function ThreadScreen() {
 }
 
 function ThreadConversation({ serverId, channelId, thread }: { serverId: string; channelId: string; thread: ThreadSummary }) {
+  const t = useT()
   const key = qk.threadMessages(thread.id)
   const q = useInfiniteQuery({
     queryKey: key,
@@ -68,19 +71,19 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
     threadsApi
       .update(serverId, channelId, thread.id, body)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.threads(channelId) }))
-      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
   const menuActions: SheetAction[] = []
   if (canModerate || thread.creatorId === meId) {
-    menuActions.push({ label: 'Renommer le fil', icon: 'create-outline', onPress: () => setRenameText(thread.title) })
+    menuActions.push({ label: t('social.thread.rename'), icon: 'create-outline', onPress: () => setRenameText(thread.title) })
     menuActions.push({
-      label: thread.archived ? 'Désarchiver le fil' : 'Archiver le fil',
+      label: thread.archived ? t('social.thread.unarchive') : t('social.thread.archive'),
       icon: 'archive-outline',
       onPress: () => void update({ archived: !thread.archived }),
     })
   }
   if (canModerate)
     menuActions.push({
-      label: thread.locked ? 'Déverrouiller le fil' : 'Verrouiller le fil',
+      label: thread.locked ? t('social.thread.unlock') : t('social.thread.lock'),
       icon: thread.locked ? 'lock-open-outline' : 'lock-closed-outline',
       onPress: () => void update({ archived: thread.archived, locked: !thread.locked }),
     })
@@ -90,23 +93,23 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
       <Stack.Screen
         options={{
           title: thread.title,
-          headerRight: menuActions.length ? () => <IconButton icon="ellipsis-vertical" label="Gérer le fil" onPress={() => setMenu(true)} /> : undefined,
+          headerRight: menuActions.length ? () => <IconButton icon="ellipsis-vertical" label={t('social.thread.manage')} onPress={() => setMenu(true)} /> : undefined,
         }}
       />
       <Sheet visible={menu} onClose={() => setMenu(false)} title={thread.title} actions={menuActions} />
       <Modal visible={renameText !== null} transparent animationType="fade" onRequestClose={() => setRenameText(null)}>
         <View style={styles.renameBackdrop}>
           <View style={styles.renameBox}>
-            <TextField label="Titre du fil" value={renameText ?? ''} onChangeText={setRenameText} maxLength={100} autoFocus />
+            <TextField label={t('social.thread.titleLabel')} value={renameText ?? ''} onChangeText={setRenameText} maxLength={100} autoFocus />
             <View style={styles.renameRow}>
-              <Button title="Annuler" variant="secondary" onPress={() => setRenameText(null)} />
+              <Button title={t('common.cancel')} variant="secondary" onPress={() => setRenameText(null)} />
               <Button
-                title="Renommer"
+                title={t('social.thread.renameButton')}
                 disabled={!renameText?.trim()}
                 onPress={() => {
-                  const t = renameText?.trim()
+                  const title = renameText?.trim()
                   setRenameText(null)
-                  if (t) void update({ title: t })
+                  if (title) void update({ title })
                 }}
               />
             </View>
@@ -125,26 +128,26 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
           void threadsApi
             .react(serverId, channelId, thread.id, m.id, emoji)
             .then(refresh)
-            .catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
+            .catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
         }
-        onSend={(t, files) =>
+        onSend={(body, files) =>
           sendWithAttachments(
-            t,
+            body,
             files,
-            (has) => threadsApi.send(serverId, channelId, thread.id, t, has),
+            (has) => threadsApi.send(serverId, channelId, thread.id, body, has),
             (id, f) => threadsApi.upload(serverId, channelId, thread.id, id, f),
             (id) => threadsApi.remove(serverId, channelId, thread.id, id),
           ).finally(refresh)
         }
-        onEdit={(m, t) => threadsApi.edit(serverId, channelId, thread.id, m.id, t).then(refresh)}
+        onEdit={(m, body) => threadsApi.edit(serverId, channelId, thread.id, m.id, body).then(refresh)}
         onDelete={(m) => threadsApi.remove(serverId, channelId, thread.id, m.id).then(refresh)}
         canModerate={canModerate}
-        disabledReason={thread.locked ? 'Ce fil est verrouillé.' : thread.archived ? 'Ce fil est archivé.' : null}
-        placeholder={`Répondre dans ${thread.title}`}
+        disabledReason={thread.locked ? t('social.thread.locked') : thread.archived ? t('social.thread.archived') : null}
+        placeholder={t('social.thread.replyIn', { title: thread.title })}
         header={
           <View style={{ padding: spacing.lg }}>
             <Text style={styles.title}>{thread.title}</Text>
-            <Text style={styles.muted}>Début du fil</Text>
+            <Text style={styles.muted}>{t('social.thread.start')}</Text>
           </View>
         }
       />
@@ -153,6 +156,7 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
 }
 
 function CreateThread({ serverId, channelId, parent, preview }: { serverId: string; channelId: string; parent: string | null; preview?: string }) {
+  const t = useT()
   const [title, setTitle] = useState('')
   const [first, setFirst] = useState('')
   const [busy, setBusy] = useState(false)
@@ -163,23 +167,23 @@ function CreateThread({ serverId, channelId, parent, preview }: { serverId: stri
     threadsApi
       .create(serverId, channelId, body)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.threads(channelId) }))
-      .catch((e) => Alert.alert('Création impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('social.thread.createFailed'), errorMessage(e)))
       .finally(() => setBusy(false))
   }
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Nouveau fil' }} />
+      <Stack.Screen options={{ title: t('social.thread.new') }} />
       {preview ? (
         <View style={styles.preview}>
-          <Text style={styles.muted}>À partir du message</Text>
+          <Text style={styles.muted}>{t('social.thread.fromMessage')}</Text>
           <Text style={{ color: colors.textSecondary }} numberOfLines={3}>
             {preview}
           </Text>
         </View>
       ) : null}
-      <TextField label="Titre (facultatif)" accessibilityLabel="Titre du fil, facultatif" value={title} onChangeText={setTitle} maxLength={100} placeholder="Par défaut : début du premier message" />
-      <TextField label="Premier message" accessibilityLabel="Premier message du fil" value={first} onChangeText={setFirst} multiline maxLength={LIMITS.messageMaxChars} style={{ minHeight: 100, textAlignVertical: 'top' }} />
-      <Button title="Créer le fil" icon="chatbubbles-outline" loading={busy} disabled={!first.trim()} onPress={create} />
+      <TextField label={t('social.thread.optionalTitle')} accessibilityLabel={t('social.thread.optionalTitleLabel')} value={title} onChangeText={setTitle} maxLength={100} placeholder={t('social.thread.titlePlaceholder')} />
+      <TextField label={t('social.thread.first')} accessibilityLabel={t('social.thread.firstLabel')} value={first} onChangeText={setFirst} multiline maxLength={LIMITS.messageMaxChars} style={{ minHeight: 100, textAlignVertical: 'top' }} />
+      <Button title={t('social.thread.create')} icon="chatbubbles-outline" loading={busy} disabled={!first.trim()} onPress={create} />
     </ScrollView>
   )
 }

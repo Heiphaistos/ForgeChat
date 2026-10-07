@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { messagesApi } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { EmptyState, ErrorState, Loading, TextField } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -13,6 +14,7 @@ import { colors, font, spacing } from '@/theme'
 
 /** Choix du salon de destination d'un transfert (comme ForwardModal : salons textuels de mes serveurs). */
 export default function ForwardScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['messageId'] as const)
   const [search, setSearch] = useState('')
   const [sending, setSending] = useState(false)
@@ -29,24 +31,24 @@ export default function ForwardScreen() {
     )
   }, [servers.data, channels, search])
 
-  if (!valid) return <ErrorState message="Message invalide." />
+  if (!valid) return <ErrorState message={t('social.message.invalid')} />
   if (servers.isLoading) return <Loading />
   if (servers.error) return <ErrorState message={errorMessage(servers.error)} onRetry={() => void servers.refetch()} />
 
-  const forward = (t: { id: string; name: string }) =>
-    Alert.alert('Transférer le message ?', `Vers #${t.name}`, [
-      { text: 'Annuler', style: 'cancel' },
+  const forward = (target: { id: string; name: string }) =>
+    Alert.alert(t('social.forward.confirm'), t('social.forward.to', { name: target.name }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Transférer',
+        text: t('chat.forward'),
         onPress: () => {
           setSending(true)
           messagesApi
-            .forward(ids.messageId, t.id)
+            .forward(ids.messageId, target.id)
             .then(() => {
-              Alert.alert('Message transféré')
+              Alert.alert(t('social.forward.done'))
               router.back()
             })
-            .catch((e) => Alert.alert('Transfert impossible', errorMessage(e)))
+            .catch((e) => Alert.alert(t('social.forward.failed'), errorMessage(e)))
             .finally(() => setSending(false))
         },
       },
@@ -55,20 +57,20 @@ export default function ForwardScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ padding: spacing.md }}>
-        <TextField placeholder="Rechercher un salon ou un serveur" value={search} onChangeText={setSearch} accessibilityLabel="Rechercher un salon" autoCorrect={false} />
+        <TextField placeholder={t('social.forward.placeholder')} value={search} onChangeText={setSearch} accessibilityLabel={t('social.forward.searchLabel')} autoCorrect={false} />
       </View>
       <FlatList
         data={targets}
-        keyExtractor={(t) => t.id}
+        keyExtractor={(c) => c.id}
         keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={channels.some((c) => c.isLoading) ? <Loading /> : <EmptyState icon="search" title="Aucun salon" />}
+        ListEmptyComponent={channels.some((c) => c.isLoading) ? <Loading /> : <EmptyState icon="search" title={t('channels.none')} />}
         renderItem={({ item }) => (
           <Pressable
             disabled={sending}
             onPress={() => forward(item)}
             style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
             accessibilityRole="button"
-            accessibilityLabel={`Transférer vers ${item.name}, serveur ${item.serverName}`}
+            accessibilityLabel={t('social.forward.itemLabel', { name: item.name, server: item.serverName })}
           >
             <Ionicons name="chatbox-outline" size={18} color={colors.textMuted} />
             <View style={{ flex: 1 }}>
