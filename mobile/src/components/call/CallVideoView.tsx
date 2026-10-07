@@ -54,6 +54,11 @@ export function CallVideoView({
   const [ratio, setRatio] = useState<[number, number] | null>(null)
   const auto = useAutoHide(!!source)
   useImmersive(immersive)
+  // Entrée en plein écran : la vidéo seule, les commandes reviennent au toucher.
+  const hide = auto.hide
+  useEffect(() => {
+    if (immersive) hide()
+  }, [immersive, hide])
 
   // Retour Android : quitte le plein écran avant de quitter l'écran.
   useEffect(() => {

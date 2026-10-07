@@ -106,6 +106,15 @@ describe('masquage automatique des commandes', () => {
     expect(changes).toEqual([false, true, false])
   })
 
+  it('hide() masque tout de suite, sauf sans vidéo', () => {
+    const h = createAutoHide(1000, () => undefined)
+    h.hide()
+    expect(h.visible).toBe(true)
+    h.setEnabled(true)
+    h.hide()
+    expect(h.visible).toBe(false)
+  })
+
   it('désactivé (vidéo coupée) : réaffiche et ne masque plus ; dispose arrête le minuteur', () => {
     const h = createAutoHide(1000, () => undefined)
     h.setEnabled(true)
