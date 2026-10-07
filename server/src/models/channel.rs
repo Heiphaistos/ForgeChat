@@ -92,6 +92,9 @@ pub struct Category {
     pub position: i32,
     #[sqlx(default)]
     pub created_by: Option<Uuid>,
+    /// Réservée aux administrateurs (088) : masquée aux autres, ses salons naissent privés.
+    #[sqlx(default)]
+    pub staff_only: bool,
 }
 
 #[derive(Debug, Deserialize)]

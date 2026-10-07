@@ -34,6 +34,10 @@ pub struct Server {
     pub require_2fa_for_moderation: bool,
     pub server_locale: String,
     pub max_video_channel_users: i32,
+    /// Étiquettes de l'annuaire des serveurs publics (088).
+    #[sqlx(default)]
+    #[serde(default)]
+    pub discovery_tags: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +45,8 @@ pub struct CreateServerRequest {
     pub name: String,
     pub description: Option<String>,
     pub is_public: Option<bool>,
+    /// Identifiant d'un modèle intégré (`template_builtin::IDS`).
+    pub template: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +69,7 @@ pub struct UpdateServerRequest {
     pub content_filter: Option<String>,
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub server_category: Option<Option<String>>,
+    pub discovery_tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

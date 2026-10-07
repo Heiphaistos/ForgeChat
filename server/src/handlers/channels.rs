@@ -98,6 +98,11 @@ pub async fn create_channel(
     }
 
     let channel_type = body.r#type.as_deref().unwrap_or("text");
+    let staff_only: bool = match body.category_id {
+        Some(cat) => sqlx::query_scalar("SELECT staff_only FROM categories WHERE id=$1")
+            .bind(cat).fetch_one(&state.db).await?,
+        None => false,
+    };
     let channel = sqlx::query_as::<_, Channel>(
         "INSERT INTO channels (server_id, category_id, name, type, topic, is_nsfw, slowmode_delay, user_limit, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *"
@@ -113,6 +118,14 @@ pub async fn create_channel(
     .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
+    // Catégorie réservée au staff : le salon naît invisible pour @everyone.
+    if staff_only {
+        sqlx::query(
+            "INSERT INTO channel_permissions (channel_id, target_id, target_type, allow, deny)
+             SELECT $1, id, 'role', 0, $2 FROM roles WHERE server_id=$3 AND is_everyone
+             ON CONFLICT (channel_id, target_id) DO NOTHING"
+        ).bind(channel.id).bind(Permissions::VIEW_CHANNEL).bind(server_id).execute(&state.db).await?;
+    }
 
     let event = serde_json::json!({ "type": "CHANNEL_CREATE", "server_id": server_id, "channel": &channel });
     state.broadcast_to_channel_members(channel.id, event.to_string()).await;
@@ -349,10 +362,12 @@ pub async fn get_categories(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Vec<Category>>> {
     require_member(&state, claims.sub, server_id).await?;
+    let admin = require_permission(&state, claims.sub, server_id, Permissions::ADMINISTRATOR).await.is_ok();
     let cats = sqlx::query_as::<_, Category>(
-        "SELECT * FROM categories WHERE server_id=$1 ORDER BY position"
+        "SELECT * FROM categories WHERE server_id=$1 AND ($2 OR NOT staff_only) ORDER BY position"
     )
     .bind(server_id)
+    .bind(admin)
     .fetch_all(&state.db)
     .await?;
     Ok(Json(cats))
@@ -905,7 +920,7 @@ pub async fn delete_channel_tag(
 /// Surcharges de salon modifiées : seuls ceux qui voyaient le salon avant OU le
 /// voient après sont prévenus (les premiers doivent le retirer de leur liste).
 /// Avant : tout le serveur recevait l'id des salons privés.
-async fn notify_permission_change(state: &AppState, channel_id: Uuid, server_id: Uuid, mut users: Vec<Uuid>) {
+pub(crate) async fn notify_permission_change(state: &AppState, channel_id: Uuid, server_id: Uuid, mut users: Vec<Uuid>) {
     for u in state.channel_audience(channel_id).await {
         if !users.contains(&u) { users.push(u); }
     }

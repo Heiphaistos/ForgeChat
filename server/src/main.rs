@@ -122,6 +122,18 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Communauté (toutes les 60 secondes) : événements récurrents et rappels,
+    // XP vocal et présence vocale du jour.
+    let community_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            handlers::event_tools::tick(&community_state).await;
+            handlers::levels::voice_tick(&community_state).await;
+        }
+    });
+
     // Tâche de levée des bans temporaires expirés (toutes les 60 secondes)
     let unban_state = state.clone();
     tokio::spawn(async move {
@@ -779,13 +791,26 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/gifs/search", get(handlers::gifs::search))
         .route("/gifs/trending", get(handlers::gifs::trending))
         // Audit log
-        .route("/servers/:server_id/audit", get(handlers::audit::get_audit_log))
+        .route("/servers/:server_id/audit", get(handlers::audit_search::get_audit_log))
+        .route("/servers/:server_id/audit/facets", get(handlers::audit_search::get_audit_facets))
+        .route("/servers/:server_id/automod/advanced", get(handlers::automod::get_advanced).put(handlers::automod::put_advanced).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/lockdown", put(handlers::automod::put_lockdown).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/stats/history", get(handlers::stats::history))
+        .route("/servers/:server_id/levels", get(handlers::levels::get_settings).put(handlers::levels::put_settings).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/levels/leaderboard", get(handlers::levels::leaderboard))
+        .route("/servers/:server_id/levels/members/:user_id", get(handlers::levels::member_card))
+        .route("/servers/:server_id/starboard", get(handlers::community::get_starboard).put(handlers::community::put_starboard).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/welcome", get(handlers::community::get_welcome).put(handlers::community::put_welcome).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/tickets/settings", get(handlers::tickets::get_settings).put(handlers::tickets::put_settings).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/events.ics", get(handlers::event_tools::server_ics))
+        .route("/servers/:server_id/events/:event_id/ics", get(handlers::event_tools::event_ics))
         // AutoMod
         .route("/servers/:server_id/automod", get(handlers::audit::get_automod))
         .route("/servers/:server_id/automod", put(handlers::audit::set_automod))
         .route("/servers/:server_id/automod/rules", get(handlers::audit::get_automod_rules))
         // Server discovery
-        .route("/explore", get(handlers::audit::discover_servers))
+        .route("/explore", get(handlers::directory::discover_servers))
+        .route("/explore/:server_id", get(handlers::directory::server_profile))
         // Super réactions (074) et profil par serveur (075)
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/super-reactions/:emoji",
             put(handlers::super_reactions::add_super_reaction).delete(handlers::super_reactions::remove_super_reaction))
