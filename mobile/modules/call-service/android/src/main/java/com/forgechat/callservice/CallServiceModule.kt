@@ -14,7 +14,8 @@ import javax.crypto.spec.SecretKeySpec
  * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
  * celui du mode « Notifications sans Google » (src/services/keepAlive.ts),
  * redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement)
- * et installe les mises à jour publiées par le serveur (UpdateInstaller, src/features/updates).
+ * installe les mises à jour publiées par le serveur (UpdateInstaller, src/features/updates)
+ * et pilote la fenêtre des appels vidéo : plein écran immersif, image dans l'image (CallWindow).
  */
 class CallServiceModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -90,7 +91,7 @@ class CallServiceModule : Module() {
     }
 
     // ── Mise à jour de l'APK (UpdateInstaller, src/features/updates/installer.ts) ──
-    Events("onUpdateProgress")
+    Events("onUpdateProgress", "onPipChange")
 
     // Téléchargement sur un fil dédié : la file des AsyncFunction est partagée par tous les modules Expo.
     AsyncFunction("downloadUpdate") { url: String, expectedSha: String, promise: Promise ->
@@ -164,6 +165,29 @@ class CallServiceModule : Module() {
         out.delete()
         throw e
       }
+    }
+
+    // ── Fenêtre des appels vidéo (CallWindow.kt, src/services/callWindow.ts) ──
+    Function("setImmersive") { on: Boolean ->
+      val activity = appContext.currentActivity ?: return@Function null
+      CallWindow.setImmersive(activity, on)
+      null
+    }
+
+    Function("pipSupported") {
+      CallWindow.pipSupported(appContext.currentActivity)
+    }
+
+    Function("setPip") { enabled: Boolean, width: Int, height: Int ->
+      val activity = appContext.currentActivity ?: return@Function null
+      CallWindow.setPip(activity, enabled, width, height) { sendEvent("onPipChange", mapOf("active" to it)) }
+      null
+    }
+
+    Function("enterPip") { width: Int, height: Int ->
+      val activity = appContext.currentActivity ?: return@Function null
+      CallWindow.enterPip(activity, width, height) { sendEvent("onPipChange", mapOf("active" to it)) }
+      null
     }
 
     // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS

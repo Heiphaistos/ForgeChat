@@ -41,6 +41,22 @@ describe('modules/call-service', () => {
     expect(body).toMatch(/exit\(0\)\s*null/)
   })
 
+  it('pilote la fenêtre des appels vidéo : plein écran immersif et image dans l’image', () => {
+    const dir = join(root, 'android', 'src', 'main', 'java', 'com', 'forgechat', 'callservice')
+    const kt = readFileSync(join(dir, 'CallServiceModule.kt'), 'utf8')
+    for (const f of ['setImmersive', 'setPip', 'enterPip']) {
+      const body = kt.slice(kt.indexOf(`Function("${f}")`))
+      expect(body.slice(0, body.indexOf('\n    }'))).toMatch(/\n {6}null$/)
+    }
+    expect(kt).toContain('Events("onUpdateProgress", "onPipChange")')
+    const win = readFileSync(join(dir, 'CallWindow.kt'), 'utf8')
+    // Tout sur le fil UI ; entrée automatique Android 12+ ; ratio borné (sinon Android lève une exception).
+    expect(win.match(/runOnUiThread/g)?.length).toBe(3)
+    expect(win).toContain('setAutoEnterEnabled(enabled)')
+    expect(win).toContain('coerceIn(0.42, 2.38)')
+    expect(win).toContain('SCREEN_ORIENTATION_FULL_SENSOR')
+  })
+
   it('est un module Expo Android lié automatiquement', () => {
     const config = JSON.parse(readFileSync(join(root, 'expo-module.config.json'), 'utf8'))
     expect(config.android.modules).toEqual(['com.forgechat.callservice.CallServiceModule'])
