@@ -17,6 +17,9 @@ pub enum AppError {
     BadRequest(String),
     #[error("{0}")]
     Conflict(String),
+    /// 413 : fichier trop gros ou quota de stockage du compte atteint.
+    #[error("{0}")]
+    PayloadTooLarge(String),
     #[error("Trop de tentatives — réessayez dans 15 minutes")]
     TooManyRequests,
     /// 429 avec un motif lisible (ex. quota quotidien de super réactions).
@@ -41,6 +44,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
+            AppError::PayloadTooLarge(m) => (StatusCode::PAYLOAD_TOO_LARGE, m.clone()),
             AppError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
             AppError::TooManyRequestsMsg(m) => (StatusCode::TOO_MANY_REQUESTS, m.clone()),
             AppError::SlowMode(secs) => {

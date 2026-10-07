@@ -711,6 +711,7 @@ pub async fn upload_group_dm_attachment(
 
     let mut uploaded: Vec<serde_json::Value> = Vec::new();
     let mut ttl_hours: Option<i64> = None;
+    let mut budget = crate::handlers::uploads::UploadBudget::open(&state, claims.sub).await?;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
         let field_name = field.name().unwrap_or("").to_string();
@@ -737,17 +738,17 @@ pub async fn upload_group_dm_attachment(
 
         let file_id = Uuid::new_v4();
         let filename = format!("{}.{}", file_id, ext);
-        let size = crate::handlers::uploads::save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await? as i64;
+        let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
 
         let url = format!("/uploads/{}", filename);
         let expires_at = ttl_hours.map(|h| Utc::now() + chrono::Duration::hours(h));
 
         let att = sqlx::query(
-            "INSERT INTO attachments (group_dm_message_id, filename, content_type, size, url, expires_at)
-             VALUES ($1,$2,$3,$4,$5,$6)
+            "INSERT INTO attachments (group_dm_message_id, filename, content_type, size, url, expires_at, uploader_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)
              RETURNING id, url, filename, content_type, size, expires_at"
         )
-        .bind(message_id).bind(&safe_name).bind(&content_type).bind(size).bind(&url).bind(expires_at)
+        .bind(message_id).bind(&safe_name).bind(&content_type).bind(size).bind(&url).bind(expires_at).bind(claims.sub)
         .fetch_one(&state.db).await?;
 
         use sqlx::Row;

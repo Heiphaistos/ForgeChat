@@ -43,7 +43,16 @@ pub fn image_ext(content_type: &str) -> Result<&'static str> {
 /// Écrit un fichier reçu morceau par morceau sur le disque, sans jamais le charger entier en
 /// mémoire (jusqu'à 500 Mo par fichier). Au-delà de `max` octets, le fichier partiel est supprimé
 /// et l'envoi refusé. Rend la taille écrite.
-pub async fn save_field(mut field: axum::extract::multipart::Field<'_>, path: &std::path::Path, max: u64) -> Result<u64> {
+pub async fn save_field(field: axum::extract::multipart::Field<'_>, path: &std::path::Path, max: u64) -> Result<u64> {
+    write_field(field, path, max, || format!("Fichier trop volumineux (max {} Mo)", max / 1_048_576)).await
+}
+
+async fn write_field(
+    mut field: axum::extract::multipart::Field<'_>,
+    path: &std::path::Path,
+    max: u64,
+    too_big: impl FnOnce() -> String,
+) -> Result<u64> {
     use tokio::io::AsyncWriteExt;
     let mut file = tokio::fs::File::create(path).await.map_err(|e| AppError::Internal(e.into()))?;
     let mut total: u64 = 0;
@@ -61,7 +70,7 @@ pub async fn save_field(mut field: axum::extract::multipart::Field<'_>, path: &s
         if total > max {
             drop(file);
             let _ = tokio::fs::remove_file(path).await;
-            return Err(AppError::BadRequest(format!("Fichier trop volumineux (max {} Mo)", max / 1_048_576)));
+            return Err(AppError::PayloadTooLarge(too_big()));
         }
         if let Err(e) = file.write_all(&chunk).await {
             drop(file);
@@ -71,6 +80,69 @@ pub async fn save_field(mut field: axum::extract::multipart::Field<'_>, path: &s
     }
     file.flush().await.map_err(|e| AppError::Internal(e.into()))?;
     Ok(total)
+}
+
+fn fmt_bytes(n: u64) -> String {
+    if n >= 1 << 30 { format!("{:.1} Go", n as f64 / (1u64 << 30) as f64) } else { format!("{} Mo", n >> 20) }
+}
+
+/// Droit d'envoi d'un compte pour une requête : débit (429) puis quota de stockage (413).
+/// `save` écrit chaque fichier en bornant sa taille au reste du quota.
+pub struct UploadBudget {
+    remaining: u64,
+}
+
+impl UploadBudget {
+    pub async fn open(state: &AppState, user_id: Uuid) -> Result<Self> {
+        {
+            use redis::AsyncCommands;
+            let key = format!("upload_rl:{user_id}");
+            let mut redis = state.redis.lock().await;
+            let count: i64 = redis.incr(&key, 1).await
+                .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
+            if count == 1 { let _: () = redis.expire(&key, 60).await.unwrap_or(()); }
+            if count > state.config.upload_rate_per_minute {
+                return Err(AppError::TooManyRequestsMsg(
+                    "Trop d'envois de fichiers : réessayez dans une minute".into(),
+                ));
+            }
+        }
+        // ponytail: usage lu une fois par requête, deux envois simultanés peuvent dépasser
+        // le quota d'un fichier ; verrou par compte si ça devient un problème.
+        let used: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(size), 0)::BIGINT FROM attachments WHERE uploader_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await?;
+        let quota = state.config.upload_quota_bytes;
+        let remaining = quota.saturating_sub(used.max(0) as u64);
+        if remaining == 0 {
+            return Err(AppError::PayloadTooLarge(format!(
+                "Quota de stockage atteint ({}) : supprimez d'anciens fichiers pour en envoyer d'autres",
+                fmt_bytes(quota)
+            )));
+        }
+        Ok(Self { remaining })
+    }
+
+    pub async fn save(&mut self, state: &AppState, field: axum::extract::multipart::Field<'_>, path: &std::path::Path) -> Result<i64> {
+        let per_file = state.config.max_upload_size;
+        let (max, remaining) = (per_file.min(self.remaining), self.remaining);
+        let size = write_field(field, path, max, || {
+            if max < per_file {
+                format!(
+                    "Quota de stockage dépassé : il vous reste {} sur {}",
+                    fmt_bytes(remaining),
+                    fmt_bytes(state.config.upload_quota_bytes)
+                )
+            } else {
+                format!("Fichier trop volumineux (max {} Mo)", per_file / 1_048_576)
+            }
+        }).await?;
+        self.remaining -= size;
+        Ok(size as i64)
+    }
 }
 
 /// Propriétaire d'une pièce jointe : une colonne de `attachments` par source.
@@ -128,7 +200,9 @@ pub async fn store_attachments(
     multipart: &mut Multipart,
     privileged: bool,
     owner: AttachmentOwner,
+    user_id: Uuid,
 ) -> Result<Vec<serde_json::Value>> {
+    let mut budget = UploadBudget::open(state, user_id).await?;
     let upload_dir = PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await
         .map_err(|e| AppError::Internal(e.into()))?;
@@ -179,15 +253,15 @@ pub async fn store_attachments(
             .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let size = save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await? as i64;
+        let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
 
         let url = format!("/uploads/{}", filename);
         // Pièce jointe éphémère : 1 h à 30 jours (même raison que les messages éphémères).
         let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 30)));
 
         let attachment = sqlx::query(&format!(
-            "INSERT INTO attachments ({}, filename, content_type, size, url, expires_at)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            "INSERT INTO attachments ({}, filename, content_type, size, url, expires_at, uploader_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING id, url, filename, content_type, size, expires_at",
             owner.column()
         ))
@@ -197,6 +271,7 @@ pub async fn store_attachments(
         .bind(size)
         .bind(&url)
         .bind(expires_at)
+        .bind(user_id)
         .fetch_one(&state.db)
         .await?;
 
@@ -284,7 +359,7 @@ pub async fn upload_file(
     }
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::Message(message_id)).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::Message(message_id), claims.sub).await?;
 
     // Broadcast MESSAGE_ATTACHMENT_ADDED pour mise à jour temps réel
     if !uploaded.is_empty() {
@@ -319,7 +394,7 @@ pub async fn upload_thread_attachment(
     if !owned { return Err(AppError::Forbidden); }
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ThreadMessage(msg_id)).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ThreadMessage(msg_id), claims.sub).await?;
 
     if !uploaded.is_empty() {
         state.broadcast_to_channel_members(channel_id, serde_json::json!({
@@ -352,7 +427,7 @@ pub async fn upload_forum_reply_attachment(
     if !owned { return Err(AppError::Forbidden); }
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ForumReply(reply_id)).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ForumReply(reply_id), claims.sub).await?;
 
     if !uploaded.is_empty() {
         state.broadcast_to_channel_members(channel_id, serde_json::json!({
@@ -381,6 +456,7 @@ pub async fn forum_upload(
     tokio::fs::create_dir_all(&upload_dir).await
         .map_err(|e| AppError::Internal(e.into()))?;
 
+    let mut budget = UploadBudget::open(&state, claims.sub).await?;
     if let Some(field) = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
 
@@ -398,9 +474,22 @@ pub async fn forum_upload(
         }
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        save_field(field, &upload_dir.join(&filename), state.config.max_upload_size).await?;
+        let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+        let url = format!("/uploads/{}", filename);
+        // Ligne sans message propriétaire, seulement pour compter le fichier dans le quota
+        // (l'URL est collée dans le contenu du post).
+        sqlx::query(
+            "INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(filename.as_str())
+        .bind(mime_guess::from_ext(&ext).first_raw().unwrap_or("application/octet-stream"))
+        .bind(size)
+        .bind(&url)
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
 
-        return Ok(Json(serde_json::json!({ "url": format!("/uploads/{}", filename) })));
+        return Ok(Json(serde_json::json!({ "url": url })));
     }
 
     Err(AppError::BadRequest("Aucun fichier reçu".into()))

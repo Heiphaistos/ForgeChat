@@ -9,6 +9,10 @@ pub struct Config {
     pub port: u16,
     pub upload_dir: String,
     pub max_upload_size: u64,
+    /// Stockage total de pièces jointes par compte, en octets (UPLOAD_QUOTA_BYTES, 5 Gio par défaut).
+    pub upload_quota_bytes: u64,
+    /// Requêtes d'envoi de fichiers par compte et par minute (UPLOAD_RATE_PER_MINUTE, 20 par défaut).
+    pub upload_rate_per_minute: i64,
     pub frontend_url: String,
     // SMTP (optionnel — si absent, les emails sont loggés en console)
     pub smtp_host: Option<String>,
@@ -48,6 +52,14 @@ impl Config {
             max_upload_size: env::var("MAX_UPLOAD_SIZE")
                 .unwrap_or_else(|_| "524288000".into()) // 500 Mo par fichier (gratuit)
                 .parse()?,
+            upload_quota_bytes: env::var("UPLOAD_QUOTA_BYTES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5 * 1024 * 1024 * 1024),
+            upload_rate_per_minute: env::var("UPLOAD_RATE_PER_MINUTE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(20),
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".into()),
             smtp_host: env::var("SMTP_HOST").ok(),
