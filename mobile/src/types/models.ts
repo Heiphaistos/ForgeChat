@@ -114,6 +114,8 @@ export interface ServerDetail {
   my_role_ids: string[]
   /** Mon adhésion : barrière de vérification et onboarding (questions d'accueil). */
   member?: { verified_at: string | null; has_onboarding?: boolean; onboarding_pending?: boolean } | null
+  /** Serveur verrouillé (modération ou anti-raid) : seul le staff écrit. */
+  lockdown?: boolean
 }
 
 export interface Ban {
@@ -182,6 +184,8 @@ export interface ServerMessage {
   /** Posés par e2e/conversations.openRaw ; `e2e_body.p` = aperçu de lien de l'expéditeur. */
   e2e?: 'ok' | 'locked'
   e2e_body?: { t: string; p?: unknown }
+  /** Message système (bienvenue : numéro de membre ; starboard : référence au message). */
+  system_meta?: Record<string, unknown> | null
 }
 
 /** Message privé 1:1 (handlers/friends.rs::get_dm_messages). */
@@ -258,6 +262,8 @@ export interface ChatMessage {
   unencrypted?: boolean
   /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */
   preview?: LinkPreviewData | null
+  /** Message système du lot communauté : carte de bienvenue ou référence du starboard. */
+  system?: { kind: 'welcome' | 'starboard'; meta: Record<string, unknown> }
 }
 
 export type ConversationRef =

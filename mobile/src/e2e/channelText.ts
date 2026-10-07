@@ -39,9 +39,25 @@ export interface AutoModRules {
   max_links: number
   anti_spam: boolean
   anti_caps: boolean
+  /** Domaines dangereux (liste locale du serveur + liste intégrée), vide si l'option est coupée. */
+  dangerous_domains?: string[]
 }
 
-export type AutoModBlock = 'word' | 'mentions' | 'links' | 'caps' | 'spam'
+export type AutoModBlock = 'word' | 'mentions' | 'links' | 'caps' | 'spam' | 'dangerous_link'
+
+/** Hôtes des liens d'un texte (http(s):// ou www.), en minuscules. */
+export function linkHosts(text: string): string[] {
+  const hosts: string[] = []
+  for (const m of text.matchAll(/(?:https?:\/\/|\bwww\.)(?:[^\s/?#@]*@)?([^\s/?#<>"'@:]+)/gi)) {
+    const host = (m[1] ?? '').toLowerCase().replace(/\.+$/, '')
+    if (host) hosts.push(host.startsWith('www.') ? host.slice(4) : host)
+  }
+  return hosts
+}
+
+/** Un lien du texte pointe vers un domaine de la liste (ou l'un de ses sous-domaines). */
+export const hasDangerousLink = (text: string, domains: readonly string[]) =>
+  linkHosts(text).some(h => domains.some(d => d && (h === d || h.endsWith(`.${d}`))))
 
 const isAlnum = (ch: string | undefined) => !!ch && /[\p{L}\p{N}]/u.test(ch)
 
@@ -64,6 +80,7 @@ export function automodBlock(rules: AutoModRules | null | undefined, text: strin
   if (!rules?.enabled) return null
   const lower = text.toLowerCase()
   if (rules.blocked_words.some(w => w && containsWord(lower, w.toLowerCase()))) return 'word'
+  if (rules.dangerous_domains?.length && hasDangerousLink(text, rules.dangerous_domains)) return 'dangerous_link'
   if (rules.max_mentions > 0 && (text.match(/@/g)?.length ?? 0) > rules.max_mentions) return 'mentions'
   if (rules.max_links > 0 && (lower.match(/https?:\/\//g)?.length ?? 0) > rules.max_links) return 'links'
   if (rules.anti_spam && recent.filter(r => r.text === text && now - r.at < 8000).length >= 2) return 'spam'

@@ -4,6 +4,7 @@ import { memo, useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
+import { SystemCard } from '@/features/community/SystemCard'
 import { useT } from '@/i18n'
 import { formatDay, formatTime, unreadLabel } from '@/lib/format'
 import { mentionsUser, previewUrl } from '@/lib/markdown'
@@ -265,7 +266,8 @@ export const MessageItem = memo(function MessageItem({
 
           {m.forwardedFrom ? <Text style={styles.forward}>{t('msg.forwardedFrom', { from: m.forwardedFrom })}</Text> : null}
 
-          {m.content && !(isVoiceMessageText(m.content) && displayAttachments(m.attachments, m.files).some(isVoiceAttachment)) ? (
+          {m.system && serverId ? <SystemCard m={m} serverId={serverId} /> : null}
+          {m.content && !m.system && !(isVoiceMessageText(m.content) && displayAttachments(m.attachments, m.files).some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
               {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview m={m} myName={myName} />}
             </View>

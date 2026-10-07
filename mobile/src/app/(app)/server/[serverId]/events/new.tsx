@@ -13,6 +13,8 @@ import { queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
 
 const DURATIONS = [0, 30, 60, 120, 240]
+const RECURRENCES = ['none', 'daily', 'weekly', 'monthly'] as const
+const REMINDERS = [0, 5, 15, 30, 60, 1440]
 
 /** Créer un événement (tout membre non exclu ; début dans le futur). */
 export default function NewEventScreen() {
@@ -27,6 +29,8 @@ export default function NewEventScreen() {
   const [duration, setDuration] = useState(60)
   const [channelId, setChannelId] = useState<string | null>(null)
   const [max, setMax] = useState('')
+  const [recurrence, setRecurrence] = useState<string>('none')
+  const [reminder, setReminder] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!valid) return <ErrorState message={t('server.invalid')} />
@@ -49,6 +53,8 @@ export default function NewEventScreen() {
         end_time: duration ? new Date(start.getTime() + duration * 60_000).toISOString() : undefined,
         channel_id: channelId ?? undefined,
         max_attendees: maxN,
+        recurrence,
+        reminder_minutes: reminder || undefined,
       })
       await queryClient.invalidateQueries({ queryKey: ['events', sid] })
       router.back()
@@ -83,6 +89,11 @@ export default function NewEventScreen() {
           options={[{ value: null, label: t('server.eventNew.noChannel') }, ...channels.map((c) => ({ value: c.id as string | null, label: c.name }))]}
           onChange={setChannelId}
         />
+        <ChoiceRow icon="repeat-outline" title={t('community.events.repeat')} value={recurrence}
+          options={RECURRENCES.map((r) => ({ value: r as string, label: t(`community.events.r.${r}`) }))} onChange={setRecurrence} />
+        <ChoiceRow icon="alarm-outline" title={t('community.events.reminder')} value={reminder}
+          options={REMINDERS.map((m) => ({ value: m, label: m === 0 ? t('community.events.noReminder') : m >= 60 ? t('community.events.hoursBefore', { n: m / 60 }) : t('community.events.minutesBefore', { n: m }) }))}
+          onChange={setReminder} />
       </Section>
       <TextField label={t('server.eventNew.max')} value={max} onChangeText={setMax} keyboardType="number-pad" maxLength={5} placeholder={t('server.eventNew.maxPlaceholder')} />
       {error ? <T variant="error">{error}</T> : null}

@@ -24,6 +24,7 @@ const ENTRIES: Record<Exclude<SettingsSection, 'danger'>, { title: Key; icon: Ic
   audit: { title: 'serverSettings.title.audit', icon: 'document-text-outline', path: 'settings/audit' },
   automod: { title: 'serverSettings.title.automod', icon: 'shield-checkmark-outline', path: 'settings/automod' },
   stats: { title: 'serverSettings.title.stats', icon: 'stats-chart-outline', path: 'settings/stats' },
+  community: { title: 'community.settings.title', icon: 'trophy-outline', path: 'settings/community' },
   onboarding: { title: 'screen.onboardingSettings', icon: 'sparkles-outline', path: 'settings/onboarding' },
 }
 

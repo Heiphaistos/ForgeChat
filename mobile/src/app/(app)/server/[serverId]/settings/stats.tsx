@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
 import { RefreshControl, ScrollView, View } from 'react-native'
+import { communityApi } from '@/api/community'
 import { moderationApi } from '@/api/moderation'
 import { ErrorState, Loading, Row, Section, T } from '@/components/ui'
 import { useT } from '@/i18n'
@@ -14,6 +15,7 @@ export default function StatsScreen() {
   const sid = ids.serverId ?? ''
   const t = useT()
   const q = useQuery({ queryKey: ['server-stats', sid], queryFn: () => moderationApi.stats(sid), enabled: valid })
+  const history = useQuery({ queryKey: ['server-stats-history', sid], queryFn: () => communityApi.stats(sid, 30), enabled: valid })
   if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (q.isLoading) return <Loading />
   if (!q.data) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
@@ -45,6 +47,13 @@ export default function StatsScreen() {
           <Row title={t('serverSettings.stats.noMessagesWeek')} />
         )}
       </Section>
+      {history.data ? (
+        <>
+          <Bars title={t('community.stats.members')} values={history.data.series.map((d) => d.members)} />
+          <Bars title={t('community.stats.messages')} values={history.data.series.map((d) => d.messages)} />
+          <Bars title={t('community.stats.voice')} values={history.data.series.map((d) => d.voice_minutes)} footer={t('community.stats.privacy')} />
+        </>
+      ) : null}
       <Section title={t('serverSettings.stats.perHour')} footer={hours[peak] ? t('serverSettings.stats.peak', { h: peak }) : undefined}>
         <View
           style={{ flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 2, padding: spacing.md }}
@@ -57,5 +66,20 @@ export default function StatsScreen() {
         </View>
       </Section>
     </ScrollView>
+  )
+}
+
+/** 30 jours en barres (des comptes, jamais de contenu). */
+function Bars({ title, values, footer }: { title: string; values: number[]; footer?: string }) {
+  const max = Math.max(1, ...values)
+  const last = values[values.length - 1] ?? 0
+  return (
+    <Section title={`${title} · ${last}`} footer={footer}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 80, gap: 1, padding: spacing.md }} accessible accessibilityLabel={`${title} : ${values.join(', ')}`}>
+        {values.map((n, i) => (
+          <View key={i} style={{ flex: 1, height: `${Math.max(2, (n / max) * 100)}%`, backgroundColor: n ? colors.primary : colors.bgHover, borderRadius: 1 }} />
+        ))}
+      </View>
+    </Section>
   )
 }

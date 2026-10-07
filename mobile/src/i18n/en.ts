@@ -7,6 +7,7 @@ import * as social from './parts/social'
 import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
+import * as community from './parts/community'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -16,6 +17,7 @@ export const en: Partial<Record<Key, string>> = {
   ...panels.en,
   ...stores.en,
   ...e2e.en,
+  ...community.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

@@ -1,38 +1,30 @@
-import builtin from '@/features/servers/builtinServerTemplates.json'
 import {
-  builtinTemplates,
   parseRemoteTemplates,
   parseTemplateData,
-  planBuiltinCreation,
   serverNameError,
   templatePreview,
   utf8Length,
 } from '@/features/servers/templates'
 
-describe('modèles de serveur intégrés (repris du web)', () => {
-  it('mêmes modèles que le web, dans le même ordre', () => {
-    expect(builtin.source).toMatch(/ServerSidebar\.tsx \(BUILTIN_TEMPLATES\)/)
-    expect(builtinTemplates.map((t) => t.name)).toEqual(['Gaming', 'Communauté', 'Étude', 'Team'])
-    expect(builtinTemplates.every((t) => t.source === 'builtin' && t.data.channels.length > 0)).toBe(true)
+describe('modèles intégrés (tenus par le serveur, GET /templates → builtin)', () => {
+  const raw = {
+    builtin: [
+      { id: 'gaming', template_data: { categories: [{ id: 'c0', name: 'Infos', position: 0 }], channels: [{ name: 'annonces', type: 'announcement', category_id: 'c0' }], roles: [] } },
+      { id: 'jotunheim', template_data: { categories: [{ id: 'c0', name: '・・・INFORMATION・・・', position: 0 }, { id: 'c4', name: '・・・ADMINISTRATEUR・・・', position: 4, staff_only: true }], channels: [], roles: [] } },
+      { id: 'inconnu', template_data: {} },
+    ],
+  }
+
+  it('noms traduits, modèle inconnu ignoré', () => {
+    const r = parseRemoteTemplates(raw)
+    expect(r.builtin.map((t) => [t.id, t.name, t.source])).toEqual([['gaming', 'Gaming', 'builtin'], ['jotunheim', 'Jötunheim', 'builtin']])
   })
 
-  it('aperçu : salons sans catégorie d’abord, puis chaque catégorie dans l’ordre', () => {
-    const community = builtinTemplates.find((t) => t.name === 'Communauté')!
-    const p = templatePreview(community.data)
-    expect(p.sections.map((s) => s.title)).toEqual([null, 'Info', 'Discussion'])
-    expect(p.sections[0]!.channels.map((c) => c.name)).toEqual(['Salon principal'])
-    expect(p.sections[1]!.channels.map((c) => c.name)).toEqual(['accueil', 'règles'])
-    expect(p.channelCount).toBe(5)
-  })
-
-  it('plan de création : catégories puis salons, remplacement du « général » par défaut', () => {
-    const gaming = builtinTemplates.find((t) => t.name === 'Gaming')!
-    const plan = planBuiltinCreation(gaming.data)
-    expect(plan.categories.map((c) => c.name)).toEqual(['Texte', 'Vocal'])
-    expect(plan.channels[0]).toEqual({ name: 'général', type: 'text', categoryKey: '__cat1__' })
-    expect(plan.channels.find((c) => c.name === 'AFK')).toEqual({ name: 'AFK', type: 'voice', categoryKey: '__cat2__' })
-    expect(plan.replaceDefaultGeneral).toBe(true)
-    expect(planBuiltinCreation({ categories: [], channels: [{ name: 'Lobby', type: 'voice' }], roles: [] }).replaceDefaultGeneral).toBe(false)
+  it('Jötunheim : des catégories, aucun salon', () => {
+    const jot = parseRemoteTemplates(raw).builtin[1]!
+    const p = templatePreview(jot.data)
+    expect(p.channelCount).toBe(0)
+    expect(p.sections.map((s) => s.title)).toEqual(['・・・INFORMATION・・・', '・・・ADMINISTRATEUR・・・'])
   })
 })
 
@@ -47,7 +39,7 @@ describe('modèles partagés (GET /templates)', () => {
   })
 
   it('ignore les données invalides au lieu de planter', () => {
-    expect(parseRemoteTemplates(null)).toEqual({ public: [], mine: [] })
+    expect(parseRemoteTemplates(null)).toEqual({ builtin: [], public: [], mine: [] })
     expect(parseRemoteTemplates({ public: [{ name: 'sans id' }, 42, null] }).public).toEqual([])
     const d = parseTemplateData({ channels: [{ name: '' }, { type: 'voice' }, { name: 'ok' }], roles: 'x', categories: [{}] })
     expect(d).toEqual({ categories: [], channels: [{ id: undefined, name: 'ok', type: 'text', position: undefined, category_id: null }], roles: [] })

@@ -33,32 +33,32 @@ const detail = (myRoles: string[], roles: Role[] = []): ServerDetail => ({
 describe('permissions affichées', () => {
   it('simple membre : pas de paramètres, peut quitter, jamais supprimer', () => {
     const p = serverPerms(detail([]), ME)
-    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'nickname', 'boost', 'copyId', 'leave'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'community', 'nickname', 'boost', 'copyId', 'leave'])
     expect(settingsSections(p)).toEqual([])
   })
 
   it('propriétaire : tout, supprimer au lieu de quitter', () => {
     const p = serverPerms(detail([]), OWNER)
-    expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'events', 'createChannel', 'createCategory', 'settings', 'nickname', 'boost', 'copyId', 'delete'])
-    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'onboarding', 'danger'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'events', 'community', 'createChannel', 'createCategory', 'settings', 'nickname', 'boost', 'copyId', 'delete'])
+    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'community', 'onboarding', 'danger'])
   })
 
   it('questions d’accueil : chaque membre peut revoir ses réponses', () => {
     const p = serverPerms({ ...detail([]), member: { verified_at: null, has_onboarding: true } }, ME)
-    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'nickname', 'onboarding', 'boost', 'copyId', 'leave'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'community', 'nickname', 'onboarding', 'boost', 'copyId', 'leave'])
   })
 
   it('administrateur (bit 31) : tout sauf vue d’ensemble et zone de danger (réservées au propriétaire)', () => {
     const p = serverPerms(detail(['admin'], [role('admin', PERM.ADMINISTRATOR, 1)]), ME)
     expect(p.isAdmin).toBe(true)
-    expect(settingsSections(p)).toEqual(['channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats'])
+    expect(settingsSections(p)).toEqual(['channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'community'])
     expect(serverMenuKeys(p)).toContain('leave')
     expect(serverMenuKeys(p)).not.toContain('delete')
   })
 
   it('droits isolés : créer des salons sans gérer le serveur', () => {
     const p = serverPerms(detail(['c'], [role('c', PERM.CREATE_CHANNELS, 1)]), ME)
-    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'createChannel', 'createCategory', 'nickname', 'boost', 'copyId', 'leave'])
+    expect(serverMenuKeys(p)).toEqual(['read', 'notifications', 'events', 'community', 'createChannel', 'createCategory', 'nickname', 'boost', 'copyId', 'leave'])
     const bans = serverPerms(detail(['b'], [role('b', PERM.BAN_TEMP, 1)]), ME)
     expect(settingsSections(bans)).toEqual(['members', 'reports', 'bans'])
     const voice = serverPerms(detail(['v'], [role('v', PERM.MOVE_MEMBERS, 1)]), ME)
