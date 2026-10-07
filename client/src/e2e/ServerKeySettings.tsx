@@ -11,6 +11,7 @@ import { useWs } from '../store/ws'
 import { useAccountKey } from './accountKey'
 import { RecoveryCodeModal } from './E2EGate'
 import { createServerKey, getServerKey, recoverServer, regenerateServerRecovery, type RecoveredChannel } from './serverKey'
+import { saveDecrypted } from './files'
 
 const btnCls = 'px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50'
 const ghostCls = 'px-3 py-2 bg-fc-hover hover:bg-fc-hover/70 text-white rounded text-sm transition disabled:opacity-50'
@@ -47,7 +48,9 @@ function saveFile(name: string, text: string, type: string) {
 function exportText(channels: RecoveredChannel[]) {
   return channels.map(ch => [
     `# ${ch.name}`,
-    ...ch.messages.map(m => `[${m.created_at}] ${m.author} : ${m.text ?? tr('e2e.serverKey.unreadable')}`),
+    ...ch.messages.map(m => `[${m.created_at}] ${m.author} : ${m.text ?? tr('e2e.serverKey.unreadable')}`
+      + (m.files ?? []).map(f => `
+  📎 ${f.name} (${f.size} o)`).join('')),
   ].join('\n')).join('\n\n') + '\n'
 }
 
@@ -156,6 +159,14 @@ export default function ServerKeySettings({ serverId, serverName, isOwner }: { s
                   onClick={() => saveFile('forgechat-serveur.txt', exportText(recovered), 'text/plain')}>
                   <Download size={14} className="inline mr-1" aria-hidden />{t('e2e.serverKey.exportText')}
                 </button>
+                {recovered.some(ch => ch.messages.some(m => m.files?.length)) && (
+                  <button type="button" className={ghostCls} disabled={busy} onClick={() => run(async () => {
+                    // Fichiers téléchargés puis déchiffrés ici, un par un, enregistrés sous leur vrai nom.
+                    for (const ch of recovered) for (const m of ch.messages) for (const f of m.files ?? []) await saveDecrypted(f.url, f.entry)
+                  })}>
+                    <Download size={14} className="inline mr-1" aria-hidden />{t('e2e.serverKey.exportFiles')}
+                  </button>
+                )}
               </div>
             )}
           </div>

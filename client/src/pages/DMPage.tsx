@@ -22,6 +22,7 @@ import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawM
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
+import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 
 /** Message de MP tel que renvoyé par le serveur. */
 type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
@@ -354,13 +355,13 @@ export default function DMPage() {
 
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
-    mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: import('../components/chat/MessageInput').FileWithTtl[] }) =>
+    mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: PreparedFiles }) =>
       withSeal('dm', dmId!, content ?? '', body => api.post(`/dms/${dmId}/messages`, {
         ...body,
         content: body.content ?? '',
         reply_to: replyTo,
-        has_attachments: !!files?.length,
-      })),
+        has_attachments: !!files?.count,
+      }), null, { extra: filesExtra(files) }),
     onSuccess: async (res, vars) => {
       const msg = res.data
       if (msg && me && dmId) {
@@ -386,15 +387,8 @@ export default function DMPage() {
           pinned: false,
           edited_at: null,
         })
-        if (vars.files && vars.files.length > 0 && msg.id) {
-          const fd = new FormData()
-          let totalBytes = 0
-          for (const fw of vars.files) {
-            fd.append('files', fw.file)
-            totalBytes += fw.file.size
-            if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
-          }
-          await postWithUploadProgress(`/dms/${dmId}/messages/${msg.id}/attachments`, fd, totalBytes).catch(() => null)
+        if (vars.files?.count && msg.id) {
+          await postWithUploadProgress(`/dms/${dmId}/messages/${msg.id}/attachments`, vars.files.form, vars.files.bytes).catch(() => null)
         }
       }
     },
@@ -644,7 +638,10 @@ export default function DMPage() {
       <DMConversation
         dmId={dmId}
         partnerName={partnerName}
-        onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
+        onSend={(content, replyTo, files) => void prepareFiles('dm', dmId!, files ?? []).then(
+          prepared => sendDm.mutate({ content: content || null, replyTo, files: prepared }),
+          e => toast.error(sendErrorText(e, t('dm.sendError'))),
+        )}
         onLoadMore={loadMoreDM}
         initialHighlightId={highlightMessageId}
         loadError={dmMessagesError}

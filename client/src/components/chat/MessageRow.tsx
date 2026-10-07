@@ -14,6 +14,8 @@ import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge } 
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { useT } from '../../i18n'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
+import { displayAttachments } from '../../e2e/files'
+import E2EAttachment from '../../e2e/E2EAttachment'
 
 export interface MessageRowProps {
   msg: any
@@ -302,9 +304,21 @@ function MessageRow({
               })()}
 
               {/* Pièces jointes */}
-              {msg.attachments?.map((att: any) => (
+              {displayAttachments(msg.attachments, msg.e2e_body).map((att: any) => (
                 <div key={att.id} className="mt-1.5">
-                  {isImage(att.content_type) ? (
+                  {att.e2e || att.e2eLocked ? (
+                    // Fichier chiffré de bout en bout : déchiffré sur l'appareil (§12).
+                    shouldBlurMedia && /^(image|video)\//.test(att.content_type) ? (
+                      <button
+                        onClick={() => setMediaRevealed(true)}
+                        className="flex items-center justify-center w-full max-w-full sm:max-w-sm h-40 rounded shadow bg-black/60 text-white text-xs font-medium text-center px-2"
+                      >
+                        Contenu potentiellement explicite — cliquer pour afficher
+                      </button>
+                    ) : (
+                      <E2EAttachment att={att} onOpen={src => onOpenLightbox([src], 0)} />
+                    )
+                  ) : isImage(att.content_type) ? (
                     <div className="relative inline-block group/img max-w-full">
                       <img
                         src={mediaUrl(att.url)}

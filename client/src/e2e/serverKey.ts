@@ -110,8 +110,15 @@ interface RecoveryChannel { channel_id: string; name: string; type: string; epoc
 interface RawChannelMessage {
   id: string; content: string | null; enc?: c.EncPayload | null; client_msg_id?: string | null
   author_id: string; author_username: string; created_at: string
+  attachments?: { url: string; filename: string; content_type: string; size: number }[]
 }
-export interface RecoveredMessage { id: string; author: string; created_at: string; text: string | null; encrypted: boolean }
+/** Fichier chiffré d'un message récupéré : adresse du blob et sa clé (`entry`), pour le déchiffrer ici. */
+export interface RecoveredFile { url: string; name: string; type: string; size: number; entry: c.FileEntry }
+export interface RecoveredMessage {
+  id: string; author: string; created_at: string; text: string | null; encrypted: boolean
+  /** Fichiers chiffrés du message (leurs clés viennent du contenu déchiffré, §12). */
+  files?: RecoveredFile[]
+}
 export interface RecoveredChannel { channel_id: string; name: string; messages: RecoveredMessage[] }
 
 /**
@@ -144,11 +151,18 @@ export async function recoverServer(
       })
       for (const m of [...page].reverse()) {
         let text = m.content
+        let files: RecoveredFile[] | undefined
         if (m.enc && m.client_msg_id) {
           const key = keys.get(m.enc.epoch)
-          text = key ? await c.decryptMessage(key, conv, m.enc, m.author_id, m.client_msg_id).then(b => b.t).catch(() => null) : null
+          const body = key ? await c.decryptMessage(key, conv, m.enc, m.author_id, m.client_msg_id).catch(() => null) : null
+          text = body?.t ?? null
+          const entries = new Map(c.fileEntries(body).map(e => [c.blobName(e.id), e]))
+          files = (m.attachments ?? []).flatMap(a => {
+            const e = entries.get(a.filename)
+            return e ? [{ url: a.url, name: e.n, type: e.m, size: e.s, entry: e }] : []
+          })
         }
-        messages.push({ id: m.id, author: m.author_username, created_at: m.created_at, text, encrypted: !!m.enc })
+        messages.push({ id: m.id, author: m.author_username, created_at: m.created_at, text, encrypted: !!m.enc, ...(files?.length ? { files } : {}) })
       }
       if (page.length < 100) break
       before = page[0].id

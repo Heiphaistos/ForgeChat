@@ -36,6 +36,7 @@ import { completeChannelKeys, openBody, openMessage, openMessages, reopenLocked 
 import { channelSendError, editMessage, postMessage, useChannelEncrypted } from '../e2e/channels'
 import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt } from '../e2e/ServerKeySettings'
+import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -283,9 +284,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const sendMsg = useMutation({
     // Chiffré dès que j'ai une clé (AutoMod et aperçu de lien faits ici) ; mentions en métadonnées.
-    mutationFn: ({ content, reply_to, expires_at_seconds, has_attachments }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null; has_attachments?: boolean }) =>
+    mutationFn: ({ content, reply_to, expires_at_seconds, files }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null; files?: PreparedFiles }) =>
       postMessage(serverId!, channelId!, content ?? '', body =>
-        api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, expires_at_seconds, has_attachments })),
+        api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, expires_at_seconds, has_attachments: !!files?.count }),
+      filesExtra(files)),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
         const delay = e?.response?.data?.retry_after ?? currentChannel?.slowmode_delay ?? 30
@@ -397,17 +399,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
     try {
-      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, has_attachments: !!(files && files.length > 0) })
+      // Fichiers chiffrés sur l'appareil avant l'envoi : leurs clés vont dans le message chiffré.
+      const prepared = await prepareFiles('channel', channelId!, files ?? [])
+      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, files: prepared })
       const msgId = res.data?.id
-      if (files && files.length > 0 && msgId) {
-        const fd = new FormData()
-        let totalBytes = 0
-        for (const fw of files) {
-          fd.append('files', fw.file)
-          totalBytes += fw.file.size
-          if (fw.ttlHours != null) fd.append('ttl_hours', String(fw.ttlHours))
-        }
-        await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, fd, totalBytes)
+      if (prepared.count && msgId) {
+        await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, prepared.form, prepared.bytes)
       }
     } catch {
       // erreur déjà notifiée par sendMsg — restaurer le texte comme brouillon

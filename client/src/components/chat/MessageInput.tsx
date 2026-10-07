@@ -21,6 +21,7 @@ const GifPicker = lazy(() => import('./GifPicker'))
 const StickerPicker = lazy(() => import('./StickerPicker'))
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { useTypeToFocus } from '../../hooks/useTypeToFocus'
+import { filesExtra, prepareFiles, uploadPrepared } from '../../e2e/files'
 import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 import PickerShell, { PickerFallback } from '../ui/PickerShell'
@@ -830,16 +831,17 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       // En DM (serverId="") : POST /dms/:id/messages + /dms/:id/messages/:id/attachments
       // -- même contrat (id renvoyé, endpoint d'attachment équivalent) que côté serveur,
       // ce chemin retournait juste tôt avant sans jamais appeler l'API en DM.
-      const res = serverId
-        ? await postMessage(serverId, channelId, content, body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body))
-        : await withSeal('dm', channelId, content, body => api.post(`/dms/${channelId}/messages`, body))
-      const formData = new FormData()
       const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm'
-      formData.append('file', blob, `voice-${Date.now()}.${ext}`)
+      const file = new globalThis.File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type || `audio/${ext}` })
+      // Conversation chiffrée : le son est chiffré ici, sa clé va dans le message chiffré (§12).
+      const prepared = await prepareFiles(serverId ? 'channel' : 'dm', channelId, [{ file }])
+      const res = serverId
+        ? await postMessage(serverId, channelId, content, body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body), filesExtra(prepared))
+        : await withSeal('dm', channelId, content, body => api.post(`/dms/${channelId}/messages`, body), null, { extra: filesExtra(prepared) })
       const uploadUrl = serverId
         ? `/servers/${serverId}/channels/${channelId}/messages/${res.data.id}/attachments`
         : `/dms/${channelId}/messages/${res.data.id}/attachments`
-      await api.post(uploadUrl, formData)
+      await uploadPrepared(uploadUrl, prepared)
       setShowVoiceRecorder(false)
     } catch (e) {
       toast.error(channelSendError(e, tr('input.voiceFailed')))

@@ -102,8 +102,8 @@ export async function sendChannel<T>(channelId: string, text: string, post: (bod
 
 /** Message de salon : mentions déclarées en métadonnées, toujours (même en clair). */
 export const postMessage = <T>(serverId: string, channelId: string, text: string,
-  post: (body: ChannelBody & ReturnType<typeof mentionMeta>) => Promise<T>) =>
-  sendChannel(channelId, text, body => post({ ...body, ...mentionMeta(text) }), { serverId, preview: true, command: true })
+  post: (body: ChannelBody & ReturnType<typeof mentionMeta>) => Promise<T>, extra?: Record<string, unknown>) =>
+  sendChannel(channelId, text, body => post({ ...body, ...mentionMeta(text) }), { serverId, preview: true, command: true, extra })
 
 /** Édition d'un message de salon : même id client (lié à l'AAD), ou un nouveau pour un ancien message en clair. */
 export const editMessage = <T>(serverId: string, channelId: string, text: string, clientMsgId: string | null | undefined,

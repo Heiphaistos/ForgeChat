@@ -427,11 +427,12 @@ export const MAX_THUMB_B64 = 8 * 1024
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Liste `f` d'un contenu déchiffré, validée (entrées invalides ignorées). */
-export function fileEntries(body: { f?: unknown } | null | undefined): FileEntry[] {
-  if (!Array.isArray(body?.f)) return []
+export function fileEntries(body: unknown): FileEntry[] {
+  const list = (body as { f?: unknown } | null | undefined)?.f
+  if (!Array.isArray(list)) return []
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined)
   const out: FileEntry[] = []
-  for (const raw of body.f.slice(0, MAX_FILES)) {
+  for (const raw of list.slice(0, MAX_FILES)) {
     const e = raw as Record<string, unknown> | null
     if (!e || typeof e.id !== 'string' || !UUID_RE.test(e.id) || typeof e.k !== 'string' || typeof e.n !== 'string' || typeof e.m !== 'string') continue
     if (typeof e.s !== 'number' || !Number.isSafeInteger(e.s) || e.s < 0) continue

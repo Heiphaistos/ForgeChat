@@ -4,7 +4,8 @@
 import { useState } from 'react'
 import { FileText, X } from 'lucide-react'
 import { mediaUrl } from '../../api/client'
-import { postWithUploadProgress } from '../../utils/uploadProgress'
+import { displayAttachments } from '../../e2e/files'
+import E2EAttachment from '../../e2e/E2EAttachment'
 
 export interface SimpleAttachment {
   id: string
@@ -61,15 +62,6 @@ export function usePendingFiles() {
   return { files, pick, onPaste, onDrop, onDragOver, remove, clear }
 }
 
-/** Envoie les fichiers vers `url` (multipart `files`). Les erreurs sont notifiées par l'utilitaire. */
-export async function uploadPendingFiles(url: string, files: File[]) {
-  if (files.length === 0) return
-  const fd = new FormData()
-  let total = 0
-  for (const f of files) { fd.append('files', f); total += f.size }
-  await postWithUploadProgress(url, fd, total)
-}
-
 export function PendingFiles({ files, onRemove }: { files: File[]; onRemove: (idx: number) => void }) {
   if (files.length === 0) return null
   return (
@@ -90,11 +82,13 @@ export function PendingFiles({ files, onRemove }: { files: File[]; onRemove: (id
   )
 }
 
-export function AttachmentList({ attachments }: { attachments?: SimpleAttachment[] }) {
+/** `body` : contenu déchiffré du message (fichiers chiffrés `f`, §12). */
+export function AttachmentList({ attachments, body }: { attachments?: SimpleAttachment[]; body?: { f?: unknown } | null }) {
   if (!attachments?.length) return null
   return (
     <div className="flex flex-col gap-1.5 mt-1.5">
-      {attachments.map(att => {
+      {displayAttachments(attachments, body).map(att => {
+        if (att.e2e || att.e2eLocked) return <E2EAttachment key={att.id} att={att} mediaClass="max-w-full max-h-60 rounded" />
         const src = mediaUrl(att.url)
         if (att.content_type.startsWith('image/')) {
           return (
