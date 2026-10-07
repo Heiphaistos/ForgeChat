@@ -93,11 +93,12 @@ function Btn({ icon, label, onPress, active, danger }: { icon: IconName; label: 
   )
 }
 
+// Écran d'appel toujours sombre (comme Discord) : boutons blancs lisibles quel que soit le thème.
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDeep },
-  title: { color: colors.text, fontSize: font.xl, fontWeight: '800', textAlign: 'center', paddingHorizontal: spacing.lg },
-  status: { color: colors.textMuted, fontSize: font.sm, textAlign: 'center', marginTop: 4 },
-  tile: { flex: 1, aspectRatio: 1, backgroundColor: colors.bgAlt, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
+  container: { flex: 1, backgroundColor: '#111214' },
+  title: { color: '#f2f3f5', fontSize: font.xl, fontWeight: '800', textAlign: 'center', paddingHorizontal: spacing.lg },
+  status: { color: '#949ba4', fontSize: font.sm, textAlign: 'center', marginTop: 4 },
+  tile: { flex: 1, aspectRatio: 1, backgroundColor: '#2b2d31', borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
   label: { position: 'absolute', left: 8, bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   labelText: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },
   controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.md, paddingHorizontal: spacing.sm },

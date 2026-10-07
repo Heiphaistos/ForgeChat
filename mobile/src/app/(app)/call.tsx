@@ -128,12 +128,13 @@ export default function CallScreen() {
   )
 }
 
+// Écran d'appel toujours sombre (comme Discord) : texte et boutons blancs lisibles quel que soit le thème.
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDeep },
+  container: { flex: 1, backgroundColor: '#111214' },
   center: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   top: { alignItems: 'center', gap: 4 },
   name: { color: '#fff', fontSize: font.xxl, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 6 },
-  status: { color: colors.textSecondary, fontSize: font.md, textShadowColor: '#000', textShadowRadius: 6 },
+  status: { color: '#dbdee1', fontSize: font.md, textShadowColor: '#000', textShadowRadius: 6 },
   warning: { color: colors.warning, fontSize: font.sm, textAlign: 'center', paddingHorizontal: spacing.lg, textShadowColor: '#000', textShadowRadius: 6 },
   pip: { position: 'absolute', right: spacing.lg, width: 110, height: 160, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
   // Jusqu'à 6 boutons (appel vidéo) : passage à la ligne sur les écrans étroits.
