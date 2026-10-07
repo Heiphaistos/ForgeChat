@@ -285,6 +285,13 @@ export const useCall = create<CallState>((set, get) => {
       void r.disconnect().catch(() => undefined)
       return
     }
+    // Correspondant déjà dans la salle : connecté tout de suite, sans attendre la publication du
+    // micro et de la caméra (une caméra lente laissait « Connexion… » affiché, vidéo reçue).
+    const present = get().partnerId
+    if (present && r.remoteParticipants.has(present)) {
+      markConnected()
+      refreshRemote()
+    }
     try {
       await r.localParticipant.setMicrophoneEnabled(!get().micMuted)
     } catch (err) {
