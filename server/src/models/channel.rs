@@ -46,6 +46,9 @@ pub struct Channel {
     /// salons du propriétaire. NULL si le compte a été supprimé.
     #[sqlx(default)]
     pub created_by: Option<Uuid>,
+    /// Salle d'attente vocale (migration 090, handlers/voice_waiting.rs).
+    #[sqlx(default)]
+    pub waiting_room: bool,
 }
 
 #[derive(Debug, Deserialize)]

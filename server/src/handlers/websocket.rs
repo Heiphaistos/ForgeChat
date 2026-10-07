@@ -238,6 +238,9 @@ async fn handle_socket(
     // si c'est la session qui détenait le vocal (un 2e onglet fermé n'éjecte
     // plus l'onglet en appel).
     cleanup_voice(&state, user_id, Some(session_id)).await;
+    if is_last {
+        crate::handlers::voice_waiting::forget(&state, user_id).await;
+    }
 
     // P1-3 — hors ligne si c'était la dernière session, sinon l'absence
     // agrégée peut changer (une session active vient de partir).
@@ -809,7 +812,7 @@ async fn handle_ws_message(
 
             // Vérification user_limit, voice_password et is_auto_create
             let channel_row = sqlx::query(
-                "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id, type::text AS ch_type FROM channels WHERE id=$1"
+                "SELECT user_limit, voice_password_hash, is_auto_create, auto_create_name, server_id, type::text AS ch_type, waiting_room FROM channels WHERE id=$1"
             )
             .bind(channel_id)
             .fetch_optional(&state.db)
@@ -855,6 +858,14 @@ async fn handle_ws_message(
                         state.broadcast_to_user(user_id, err.to_string()).await;
                         return;
                     }
+                }
+
+                // Salle d'attente : un modérateur (MOVE_MEMBERS) fait entrer les arrivants.
+                let waiting_room: bool = row.try_get("waiting_room").unwrap_or(false);
+                if waiting_room && !moved && !is_auto_create
+                    && crate::handlers::voice_waiting::must_wait(state, user_id, channel_id, perms, cached_username).await
+                {
+                    return;
                 }
 
                 // Canal auto-create : créer un canal temporaire pour cet utilisateur
@@ -975,6 +986,7 @@ async fn handle_ws_message(
                         "video": vs.as_ref().map(|v| v.video).unwrap_or(false),
                         "screen": vs.as_ref().map(|v| v.screen).unwrap_or(false),
                         "recording": vs.as_ref().map(|v| v.recording).unwrap_or(false),
+                        "no_record": vs.as_ref().map(|v| v.no_record).unwrap_or(false),
                         "hand_raised": hand_raised_ids.contains(peer_id),
                         "server_muted": row.get::<bool, _>("voice_muted"),
                         "server_deafened": row.get::<bool, _>("voice_deafened"),
@@ -1025,6 +1037,8 @@ async fn handle_ws_message(
             }).to_string()).await;
             // « Regarder ensemble » déjà en cours : l'arrivant rejoint au bon moment.
             crate::handlers::watch::send_current(state, user_id, effective_channel_id).await;
+            // Salle d'attente : qui attend déjà (le nouveau venu est peut-être modérateur).
+            crate::handlers::voice_waiting::send_current(state, user_id, effective_channel_id).await;
 
             // Récupérer les infos du rejoignant
             if let Ok(Some(row)) = sqlx::query(
@@ -1054,6 +1068,7 @@ async fn handle_ws_message(
         }
 
         Some("VOICE_LEAVE") => {
+            crate::handlers::voice_waiting::forget(state, user_id).await;
             cleanup_voice(state, user_id, Some(session_id)).await;
         }
 
@@ -1072,6 +1087,8 @@ async fn handle_ws_message(
             let video = msg["video"].as_bool().unwrap_or(false);
             let screen = msg["screen"].as_bool().unwrap_or(false);
             let recording = msg["recording"].as_bool().unwrap_or(false);
+            // Refus d'être enregistré : les applis qui enregistrent retirent sa voix du mixage.
+            let no_record = msg["no_record"].as_bool().unwrap_or(false);
 
             // Vérifier que l'utilisateur est dans ce canal vocal.
             // IMPORTANT : lire user_voice (peuplé par voice_join), PAS voice_states —
@@ -1135,7 +1152,7 @@ async fn handle_ws_message(
             };
 
             state.voice_states.write().await.insert(user_id, VoiceStateData {
-                channel_id, muted, deafened, video, screen, recording,
+                channel_id, muted, deafened, video, screen, recording, no_record,
             });
             state.persist_voice_to_redis().await;
 
@@ -1148,6 +1165,7 @@ async fn handle_ws_message(
                 "video": video,
                 "screen": screen,
                 "recording": recording,
+                "no_record": no_record,
                 "priority_speaker": priority_speaker,
             });
             // N10 — ciblé sur les membres du serveur qui voient ce canal
@@ -1719,13 +1737,17 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : non membre du serveur");
                         return;
                     }
-                    // Le son peut venir de N'IMPORTE LEQUEL de ses serveurs (gratuit, Nitro chez Discord) :
+                    // Le son peut venir de N'IMPORTE LEQUEL de ses serveurs (gratuit, Nitro chez Discord)
+                    // ou de ses sons perso (user_sounds, jouables seulement par leur propriétaire) :
                     // on joint son adresse, que les autres membres n'ont pas forcément en cache.
                     let Ok(sid) = sound_id_val.parse::<Uuid>() else { return };
                     let file_url: Option<String> = sqlx::query_scalar(
                         "SELECT sb.file_url FROM soundboard sb
                          JOIN server_members sm ON sm.server_id = sb.server_id AND sm.user_id = $2
-                         WHERE sb.id = $1"
+                         WHERE sb.id = $1
+                         UNION ALL
+                         SELECT us.file_url FROM user_sounds us WHERE us.id = $1 AND us.user_id = $2
+                         LIMIT 1"
                     ).bind(sid).bind(user_id).fetch_optional(&state.db).await.unwrap_or(None);
                     let Some(file_url) = file_url else {
                         tracing::warn!(user_id = %user_id, "SOUNDBOARD_PLAY rejeté : son inconnu ou d'un serveur dont il n'est pas membre");
@@ -1741,6 +1763,10 @@ async fn handle_ws_message(
                     state.broadcast_to_channel_members(cid, event.to_string()).await;
                 }
             }
+        }
+
+        Some("VOICE_ADMIT") | Some("VOICE_DENY") => {
+            crate::handlers::voice_waiting::handle_decision(state, user_id, &msg).await;
         }
 
         Some("WATCH_ADD") | Some("WATCH_STATE") | Some("WATCH_NEXT") | Some("WATCH_STOP") | Some("WATCH_SYNC") => {

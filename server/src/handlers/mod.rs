@@ -24,6 +24,7 @@ pub mod watch;
 pub mod presence;
 pub mod reminders;
 pub mod voice_moderation;
+pub mod voice_waiting;
 pub mod friends;
 pub mod group_dms;
 pub mod group_calls;

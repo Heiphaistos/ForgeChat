@@ -589,6 +589,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/backup", get(handlers::channel_backup::backup_channel))
         .route("/servers/:server_id/channels/:channel_id", patch(handlers::channels::update_channel))
         .route("/servers/:server_id/channels/:channel_id", delete(handlers::channels::delete_channel))
+        .route("/servers/:server_id/channels/:channel_id/waiting-room", put(handlers::voice_waiting::set_waiting_room))
         .route("/servers/:server_id/channels/:channel_id/archive", patch(handlers::channels::archive_channel))
         .route("/servers/:server_id/channels/:channel_id/pins", get(handlers::channels::get_pinned))
         .route("/servers/:server_id/channels/reorder", patch(handlers::channels::reorder_channels))
@@ -858,6 +859,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:id/soundboard", post(handlers::soundboard::upload_sound))
         .route("/servers/:server_id/soundboard/:sound_id", delete(handlers::soundboard::delete_sound))
         .route("/users/me/soundboard", get(handlers::soundboard::my_sounds))
+        .route("/users/me/sounds", get(handlers::soundboard::list_personal).post(handlers::soundboard::upload_personal))
+        .route("/users/me/sounds/:sound_id", delete(handlers::soundboard::delete_personal))
         // Events
         .route("/servers/:id/events", get(handlers::events::list_events))
         .route("/servers/:id/events", post(handlers::events::create_event))
