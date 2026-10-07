@@ -22,6 +22,7 @@ import { useT, t as tr, type Key } from '../i18n'
 import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+import DisappearingControl from '../components/chat/DisappearingControl'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 
@@ -437,6 +438,7 @@ export default function DMPage() {
 
         <div className="ml-auto flex items-center gap-1">
           <E2EBadge kind="dm" id={dmId} />
+          <DisappearingControl kind="dm" id={dmId} />
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }

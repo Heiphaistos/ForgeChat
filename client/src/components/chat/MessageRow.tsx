@@ -10,7 +10,7 @@ import LinkPreview from './LinkPreview'
 import { parseStickerMessage } from './StickerPicker'
 import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
-import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge } from './messageListShared'
+import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, AfterReadBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { useT } from '../../i18n'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
@@ -208,6 +208,7 @@ function MessageRow({
                 <time dateTime={msg.created_at} className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</time>
               )}
               {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
+              {!msg.expires_at && msg.expire_on_read && <AfterReadBadge />}
               {msg.unencrypted === true && <UnencryptedBadge />}
             </div>
           )}
@@ -287,6 +288,7 @@ function MessageRow({
                         <EphemeralBadge expiresAt={msg.expires_at} />
                       </span>
                     )}
+                    {!msg.expires_at && msg.expire_on_read && <span className="ml-2"><AfterReadBadge /></span>}
                     {translation && (
                       <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
                         <span className="text-xs text-fc-accent font-medium mr-1.5">{t('msg.translation')}</span>

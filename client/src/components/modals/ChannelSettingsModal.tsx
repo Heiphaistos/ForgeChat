@@ -8,6 +8,7 @@ import { useAuth } from '../../store/auth'
 import { useServerPerms } from '../../hooks/useServerPerms'
 import { deleteWithBackup } from '../../lib/deleteWithBackup'
 import ChannelFollowsSection from './ChannelFollowsSection'
+import ChannelMessagingSection from './ChannelMessagingSection'
 import { useT, type Key } from '../../i18n'
 
 // Libellés : clés slowmode.<secondes>.
@@ -53,6 +54,8 @@ interface Channel {
   default_sort?: string
   require_tag?: boolean
   position?: number
+  disappear_seconds?: number | null
+  auto_threads?: boolean
 }
 
 interface Props {
@@ -442,6 +445,11 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                     {SLOWMODE_OPTIONS.map(v => <option key={v} value={v}>{t(`slowmode.${v}`)}</option>)}
                   </select>
                 </div>
+              )}
+
+              {(channel.type === 'text' || channel.type === 'announcement') && canEditChannels && (
+                <ChannelMessagingSection serverId={serverId} channelId={channel.id}
+                  disappearSeconds={channel.disappear_seconds} autoThreads={channel.auto_threads} />
               )}
 
               {channel.type === 'forum' && (

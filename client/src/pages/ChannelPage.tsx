@@ -37,6 +37,7 @@ import { channelSendError, editMessage, postMessage, useChannelEncrypted } from 
 import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import DisappearingControl from '../components/chat/DisappearingControl'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -556,6 +557,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             </>
           )}
           <div className="ml-auto flex items-center gap-1">
+            {currentChannel && serverId && (
+              <DisappearingControl kind="channel" id={currentChannel.id} serverId={serverId}
+                value={currentChannel.disappear_seconds ?? null} canEdit={canManageChannels} />
+            )}
             {isAnnouncement && (
               <button
                 onClick={() => setShowFollow(true)}
