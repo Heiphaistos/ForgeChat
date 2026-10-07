@@ -1,6 +1,7 @@
 import { openRaw } from '@/e2e/conversations'
 import { http, path } from '@/lib/http'
-import type { MentionItem, UnreadItem, User } from '@/types/models'
+import type { NameInfo, NameStyle } from '@/lib/nameStyle'
+import type { MentionItem, ProfileLink, UnreadItem, User } from '@/types/models'
 
 export interface UpdateProfile {
   username?: string
@@ -14,6 +15,22 @@ export interface UpdateProfile {
   profile_color_primary?: number
   profile_color_accent?: number
   profile_effect?: string
+  /** "" = retirer. */
+  display_name?: string
+  /** {} = style par défaut. */
+  name_style?: NameStyle | Record<string, never>
+  profile_tag?: string
+  /** [] = aucun lien. */
+  profile_links?: ProfileLink[]
+  /** Minutes (STATUS_CLEAR_AFTER) ; pris en compte seulement avec `custom_status`. */
+  custom_status_clear_after?: number
+}
+
+/** Durées d'effacement du statut perso acceptées par le serveur (minutes ; 0 = jamais). */
+export const STATUS_CLEAR_AFTER = [0, 30, 60, 240, 1440, 4320, 10080] as const
+
+export interface UserStyle extends NameInfo {
+  id: string
 }
 
 export interface LoginEntry {
@@ -44,6 +61,8 @@ export const usersApi = {
   profile: (id: string) => http.get<User & Record<string, unknown>>(path`/users/${id}/profile`),
   updateMe: (patch: UpdateProfile) => http.patch<User>('/users/me', patch),
   setStatus: (status: 'online' | 'idle' | 'dnd' | 'invisible') => http.patch('/user/status', { status }),
+  /** Styles de pseudo de 100 utilisateurs au plus (cache stores/nameStyles). */
+  styles: (ids: string[]) => http.get<UserStyle[]>(`/users/styles?ids=${ids.map(encodeURIComponent).join(',')}`),
   uploadAvatar: (file: { uri: string; name: string; type: string }) => {
     const fd = new FormData()
     // React Native accepte { uri, name, type } comme Blob-like.

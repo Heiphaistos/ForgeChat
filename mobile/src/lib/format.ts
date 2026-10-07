@@ -67,3 +67,8 @@ export function formatDuration(ms: number): string {
 export function unreadLabel(count: number): string {
   return t(count > 1 ? 'common.unreadMany' : 'common.unread', { n: count })
 }
+
+/** Échéance à venir : « 14:30 » aujourd'hui, sinon « 12 oct. 14:30 ». */
+export function formatUntil(iso: string): string {
+  return isSameDay(iso, new Date().toISOString()) ? formatTime(iso) : `${formatShort(iso)} ${formatTime(iso)}`
+}

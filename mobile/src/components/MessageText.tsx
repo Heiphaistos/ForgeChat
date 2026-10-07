@@ -7,6 +7,7 @@ import { messagesApi } from '@/api/messages'
 import { safeEmojiUrl, useCustomEmojis } from '@/features/chat/customEmojis'
 import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features/chat/tokens'
 import { t, useLang, useT } from '@/i18n'
+import { cachedDisplayName } from './UserName'
 import { openExternalUrl } from '@/lib/links'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
@@ -135,7 +136,7 @@ function renderInline(nodes: InlineNode[], myName: string | undefined, emojis: R
         const isMe = n.everyone || (!!myName && !!name && name.toLowerCase() === myName.toLowerCase())
         return (
           <Text key={key} style={[styles.mention, isMe && styles.mentionMe]}>
-            @{name ?? t('panel.text.member')}
+            @{(isId && cachedDisplayName(n.v)) || (name ?? t('panel.text.member'))}
           </Text>
         )
       }

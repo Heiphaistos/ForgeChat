@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { AccessibilityInfo } from 'react-native'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { secureStateStorage } from '@/lib/secureStorage'
@@ -25,6 +27,8 @@ interface SettingsState {
   updateLastCheckAt: number
   /** Version que l'utilisateur a choisi d'ignorer. */
   updateSkippedVersion: string | null
+  /** Animer les avatars et bannières GIF/WebP (toujours forcé à non si « réduire les animations »). */
+  animateAvatars: boolean
   hydrated: boolean
   set: (patch: Partial<Omit<SettingsState, 'set' | 'hydrated'>>) => void
 }
@@ -42,6 +46,7 @@ export const useSettings = create<SettingsState>()(
       updateCheck: true,
       updateLastCheckAt: 0,
       updateSkippedVersion: null,
+      animateAvatars: true,
       hydrated: false,
       set: (patch) => set(patch),
     }),
@@ -55,3 +60,21 @@ export const useSettings = create<SettingsState>()(
     },
   ),
 )
+
+/** « Réduire les animations » du système, suivi une seule fois pour toute l'app. */
+const reduceMotion = create<{ on: boolean }>(() => ({ on: false }))
+let watching = false
+function watchReduceMotion() {
+  if (watching) return
+  watching = true
+  void AccessibilityInfo.isReduceMotionEnabled().then((on) => reduceMotion.setState({ on }), () => undefined)
+  AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => reduceMotion.setState({ on }))
+}
+
+/** Avatars / bannières animés : réglage local, coupé si le système réduit les animations. */
+export function useAnimateAvatars(): boolean {
+  useEffect(watchReduceMotion, [])
+  const enabled = useSettings((s) => s.animateAvatars)
+  const reduce = reduceMotion((s) => s.on)
+  return enabled && !reduce
+}

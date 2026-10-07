@@ -77,3 +77,27 @@ export function needsVerification(detail: unknown): boolean {
   const d = detail as { server?: { verification_enabled?: boolean }; member?: { verified_at?: string | null } | null }
   return !!d.server?.verification_enabled && !!d.member && d.member.verified_at == null
 }
+
+/** Liens du profil (models/profile_style.rs) : 5 au plus, libellé ≤ 32, adresse https:// ≤ 256 sans identifiants. */
+export const PROFILE_LINKS_MAX = 5
+export function profileLinkError(link: { label: string; url: string }): string | null {
+  const label = link.label.trim()
+  if (!label || label.length > 32) return t('settings.links.labelError')
+  const url = link.url.trim()
+  let u: URL | null = null
+  try {
+    u = new URL(url)
+  } catch {
+    u = null
+  }
+  if (!u || url.length > 256 || u.protocol !== 'https:' || !u.hostname || u.username || u.password) return t('settings.links.urlError')
+  return null
+}
+
+/** Type d'une image animée choisie (GIF / WebP) d'après le type MIME ou l'extension ; null sinon. */
+export function animatedImageType(mime?: string | null, fileName?: string | null): 'image/gif' | 'image/webp' | null {
+  const m = (mime ?? '').toLowerCase()
+  if (m === 'image/gif' || m === 'image/webp') return m
+  const ext = (fileName ?? '').toLowerCase().match(/\.(gif|webp)$/)?.[1]
+  return ext ? (`image/${ext}` as 'image/gif' | 'image/webp') : null
+}

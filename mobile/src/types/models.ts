@@ -1,4 +1,5 @@
 import type { LinkPreviewData } from '@/features/chat/messageExtras'
+import type { NameStyle } from '@/lib/nameStyle'
 
 /**
  * Modèles de données, alignés sur les réponses JSON du serveur Rust
@@ -30,6 +31,17 @@ export interface User {
   profile_color_primary?: number | null
   profile_color_accent?: number | null
   profile_effect?: string | null
+  /** Pseudo personnalisé (migration 088) : voir lib/nameStyle. */
+  display_name?: string | null
+  name_style?: NameStyle | null
+  profile_tag?: string | null
+  profile_links?: ProfileLink[] | null
+  custom_status_expires_at?: string | null
+}
+
+export interface ProfileLink {
+  label: string
+  url: string
 }
 
 export interface AuthResponse {
@@ -50,6 +62,8 @@ export interface Server {
   system_channel_id: string | null
   rules_channel_id: string | null
   boost_level?: number
+  /** La couleur des rôles remplace la couleur perso du pseudo (défaut true). */
+  role_color_overrides_name?: boolean
 }
 
 export type ChannelType =

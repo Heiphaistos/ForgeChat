@@ -79,6 +79,8 @@ export const fr = {
   'serverSettings.overview.currentBanner': 'Bannière actuelle',
   'serverSettings.overview.changeBanner': 'Changer la bannière',
   'serverSettings.overview.addBanner': 'Ajouter une bannière',
+  'serverSettings.overview.roleColorOverrides': 'La couleur des rôles remplace la couleur perso du pseudo',
+  'serverSettings.overview.roleColorOverridesSub': "Désactivé : le style choisi par chaque membre passe devant la couleur de son rôle.",
   'serverSettings.overview.name': 'Nom du serveur',
   'serverSettings.overview.description': 'Description',
   // --- Salons et catégories ---
@@ -467,6 +469,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'serverSettings.overview.currentBanner': 'Current banner',
   'serverSettings.overview.changeBanner': 'Change banner',
   'serverSettings.overview.addBanner': 'Add a banner',
+  'serverSettings.overview.roleColorOverrides': 'Role colors replace members’ custom name colors',
+  'serverSettings.overview.roleColorOverridesSub': 'Off: each member’s chosen style takes precedence over their role color.',
   'serverSettings.overview.name': 'Server name',
   'serverSettings.overview.description': 'Description',
   // --- Salons et catégories ---
