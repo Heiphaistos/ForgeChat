@@ -227,6 +227,20 @@
       "ct": "c3EuzvKzCG3U7NnxyWKZtFm9LdJ8NQOgv9CdOkCSM9NLPt9DZDJi9-kmBEctzT0qtJh3Dz6H2kIiXo8tRqsai6zsEXfs1jn-3q98QsD9iPaRoUhvXdjyW5IDPBWKh-mDnD_nAUBpitqnvzzgMubd4L7adjeYBbGIRLXTYstUdgrToq3oaMR37Rt94dzhkKLSThSyVG_Z2ZjAW8f71g56H9JSvG-t"
     }
   },
+  "draft": {
+    "userId": "11111111-1111-4111-8111-111111111111",
+    "priv": "L24splOxTaDPUjoID3CwNoGNy24phnKElhs2cqVYqFY",
+    "pub": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE",
+    "convId": "44444444-4444-4444-8444-444444444444",
+    "iv": "-vv8_f7_AAECAwQF",
+    "text": "Brouillon pas fini… 📝",
+    "key": "FboZ2KMqsq146v-4mecGAnQmRcslZ1M8webLE6rfRFI",
+    "blob": {
+      "v": 1,
+      "iv": "-vv8_f7_AAECAwQF",
+      "ct": "59K8rpkQBjsjADy60d-HqtWqyx5KCop2IETCVhJuMG_gTBNo7kfxbU401Z4XwFdMktg"
+    }
+  },
   "recoveryNormalize": [
     [
       "7k3qz-m9xw2-pb4td-0vh1r",
