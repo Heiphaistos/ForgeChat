@@ -104,6 +104,11 @@ export function bindRealtime(): () => void {
     if (msg.authorId !== getMyId()) useUnread.getState().increment(channelId, str(e.server_id))
     useTyping.getState().remove(channelId, msg.authorId)
   })
+  // Mention de moi dans un salon (résolue par le serveur) : pastille rouge dans la liste des salons.
+  on('MENTION_CREATE', (e) => {
+    const channelId = isObj(e.mention) ? str(e.mention.channel_id) : null
+    if (channelId && isObj(e.mention) && str(e.mention.server_id)) useUnread.getState().addMention(channelId)
+  })
   on('MESSAGE_UPDATE', async (e) => {
     const cid = str(e.channel_id)
     const mid = str(e.message_id)

@@ -349,6 +349,8 @@ export interface UnreadItem {
   channel_id: string
   server_id: string | null
   count: number
+  /** Dont mentions de moi (salons ; en DM le serveur compte chaque message). */
+  mention_count?: number
 }
 
 export interface MentionItem {

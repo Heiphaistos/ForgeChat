@@ -11,15 +11,17 @@ import { Badge, ErrorState, IconButton, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
 import { qk, queryClient } from '@/lib/queryClient'
+import { useAuth } from '@/stores/auth'
+import { useUi } from '@/stores/ui'
 import { useUnread } from '@/stores/unread'
 import { useVoice } from '@/stores/voice'
+import { useVoiceRooms, type VoiceRoomMember } from '@/stores/voiceRooms'
 import type { Category, Channel, Server } from '@/types/models'
 import { channelSections } from './channels'
 import { CategoryMenu, ChannelMenu, ServerMenu, setChannelHidden, useServerPerms } from './menus'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
 import { t as tr, useT } from '@/i18n'
-import { unreadLabel } from '@/lib/format'
 
 const VOICE_TYPES = new Set(['voice', 'video', 'stage'])
 
@@ -57,19 +59,51 @@ export function openChannel(server: Server, ch: Channel) {
   }
 }
 
-export function ChannelList({ server }: { server: Server }) {
+/**
+ * Salons du serveur, comme la barre latérale du web (ChannelSidebar) : catégories repliables, non-lus
+ * (point) et mentions (pastille rouge), participants des salons vocaux. Les salons que je ne peux pas
+ * voir ne sont jamais renvoyés par le serveur. `onOpen` : ouverture d'un salon (accueil : panneau glissant).
+ */
+export function ChannelList({
+  server,
+  activeChannelId = null,
+  onOpen = (ch) => openChannel(server, ch),
+}: {
+  server: Server
+  activeChannelId?: string | null
+  onOpen?: (ch: Channel) => void
+}) {
   const t = useT()
   const channels = useQuery({ queryKey: qk.channels(server.id), queryFn: () => serversApi.channels(server.id) })
   const categories = useQuery({ queryKey: qk.categories(server.id), queryFn: () => serversApi.categories(server.id) })
   const counts = useUnread((s) => s.counts)
+  const mentions = useUnread((s) => s.mentions)
   const voiceChannel = useVoice((s) => s.channelId)
+  const rooms = useVoiceRooms((s) => s.rooms)
+  const me = useAuth((s) => s.user)
+  const collapsed = useUi((s) => s.collapsed)
+  const toggleCategory = useUi((s) => s.toggleCategory)
   const perms = useServerPerms(server.id)
   const [menu, setMenu] = useState(false)
   const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
   const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
   const [hiddenMenu, setHiddenMenu] = useState(false)
 
-  const sections = useMemo(() => channelSections(channels.data ?? [], categories.data ?? []), [channels.data, categories.data])
+  // Catégorie repliée : n'y restent que le salon ouvert, les non-lus et mon salon vocal (comme Discord).
+  const sections = useMemo(
+    () =>
+      channelSections(channels.data ?? [], categories.data ?? []).map((sec) =>
+        sec.category && collapsed[sec.category.id]
+          ? { ...sec, data: sec.data.filter((c) => c.id === activeChannelId || c.id === voiceChannel || (counts[c.id] ?? 0) > 0) }
+          : sec,
+      ),
+    [channels.data, categories.data, collapsed, activeChannelId, voiceChannel, counts],
+  )
+  // Moi en tête si je suis dans le salon (le serveur ne m'envoie pas mes propres arrivées).
+  const participants = (channelId: string): VoiceRoomMember[] => {
+    const others = (rooms[channelId] ?? []).filter((p) => p.userId !== me?.id)
+    return voiceChannel === channelId && me ? [{ userId: me.id, username: me.username, avatar: me.avatar, muted: false }, ...others] : others
+  }
   // Masqués pour moi seul (POST /channels/:id/hide) : réaffichables d'ici.
   const hidden = (channels.data ?? []).filter((c) => c.hidden && !c.archived)
 
@@ -118,14 +152,20 @@ export function ChannelList({ server }: { server: Server }) {
         }
         renderSectionHeader={({ section }) => {
           const cat = section.category
+          const folded = !!(cat && collapsed[cat.id])
           return cat ? (
             <Pressable
+              onPress={() => toggleCategory(cat.id)}
               onLongPress={() => setCategoryMenu(cat)}
-              accessibilityRole="header"
+              accessibilityRole="button"
+              accessibilityLabel={folded ? `${cat.name}, ${t('channels.collapsed')}` : cat.name}
+              accessibilityState={{ expanded: !folded }}
               accessibilityHint={t('channels.categoryHint')}
               accessibilityActions={[{ name: 'longpress', label: t('channels.categoryOptions') }]}
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
+              style={styles.categoryRow}
             >
+              <Ionicons name={folded ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
               <Text style={styles.category}>{cat.name.toUpperCase()}</Text>
             </Pressable>
           ) : (
@@ -133,26 +173,47 @@ export function ChannelList({ server }: { server: Server }) {
           )
         }}
         renderItem={({ item }) => {
-          const unread = counts[item.id] ?? 0
-          const inVoice = voiceChannel === item.id
+          const isVoice = VOICE_TYPES.has(item.type)
+          const unread = isVoice ? 0 : (counts[item.id] ?? 0)
+          const mention = isVoice ? 0 : (mentions[item.id] ?? 0)
+          const highlighted = voiceChannel === item.id || activeChannelId === item.id
+          const people = isVoice ? participants(item.id) : []
+          const status = mention
+            ? t(mention > 1 ? 'channels.mentionsMany' : 'channels.mentionsOne', { n: mention })
+            : unread
+              ? t('channels.unreadMessages')
+              : ''
           return (
-            <Pressable
-              onPress={() => openChannel(server, item)}
-              onLongPress={() => setChannelMenu(item)}
-              style={({ pressed }) => [styles.channel, (pressed || inVoice) && { backgroundColor: colors.bgHover }]}
-              accessibilityRole="button"
-              accessibilityLabel={`${t('channels.channel', { name: item.name })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
-              accessibilityHint={t('channels.channelHint')}
-              accessibilityActions={[{ name: 'longpress', label: t('channels.channelOptions') }]}
-              onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setChannelMenu(item)}
-            >
-              <Ionicons name={channelIcon(item.type)} size={18} color={unread ? colors.text : colors.textMuted} />
-              <Text style={[styles.channelName, unread ? { color: colors.text, fontWeight: '700' } : null]} numberOfLines={1}>
-                {item.name}
-              </Text>
-              {item.has_voice_password ? <Ionicons name="lock-closed" size={12} color={colors.textFaint} /> : null}
-              <Badge count={unread} />
-            </Pressable>
+            <>
+              <Pressable
+                onPress={() => onOpen(item)}
+                onLongPress={() => setChannelMenu(item)}
+                style={({ pressed }) => [styles.channel, (pressed || highlighted) && { backgroundColor: colors.bgHover }]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: highlighted }}
+                accessibilityLabel={`${t('channels.channel', { name: item.name })}${status ? `, ${status}` : ''}`}
+                accessibilityHint={t('channels.channelHint')}
+                accessibilityActions={[{ name: 'longpress', label: t('channels.channelOptions') }]}
+                onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setChannelMenu(item)}
+              >
+                <Ionicons name={channelIcon(item.type)} size={18} color={unread || highlighted ? colors.text : colors.textMuted} />
+                <Text style={[styles.channelName, unread || highlighted ? { color: colors.text } : null, unread ? { fontWeight: '700' } : null]} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                {item.has_voice_password ? <Ionicons name="lock-closed" size={12} color={colors.textFaint} /> : null}
+                {/* Discord : pastille rouge chiffrée pour les mentions, point pour le simple non-lu. */}
+                {mention ? <Badge count={mention} /> : unread ? <View style={styles.dot} /> : null}
+              </Pressable>
+              {people.map((p) => (
+                <View key={p.userId} style={styles.participant} accessible accessibilityLabel={p.muted ? `${p.username}, ${t('channels.micOff')}` : p.username}>
+                  <Avatar uri={p.avatar} name={p.username} size={20} />
+                  <Text style={styles.participantName} numberOfLines={1}>
+                    {p.username}
+                  </Text>
+                  {p.muted ? <Ionicons name="mic-off" size={12} color={colors.textFaint} /> : null}
+                </View>
+              ))}
+            </>
           )
         }}
         ListFooterComponent={
@@ -165,7 +226,7 @@ export function ChannelList({ server }: { server: Server }) {
             </Pressable>
           ) : null
         }
-        ListEmptyComponent={<Text style={[styles.category, { textAlign: 'center' }]}>{t('channels.none')}</Text>}
+        ListEmptyComponent={<Text style={styles.empty}>{t('channels.none')}</Text>}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
       <ServerMenu server={server} visible={menu} onClose={() => setMenu(false)} />
@@ -192,7 +253,12 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   serverName: { flex: 1, color: colors.text, fontSize: font.lg, fontWeight: '800' },
-  category: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700', paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  categoryRow: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: spacing.sm, paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  category: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700' },
+  empty: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textAlign: 'center', paddingTop: spacing.lg },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
+  participant: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: 44, marginRight: spacing.sm, paddingVertical: 3 },
+  participantName: { flex: 1, color: colors.textMuted, fontSize: font.sm },
   channel: {
     flexDirection: 'row',
     alignItems: 'center',

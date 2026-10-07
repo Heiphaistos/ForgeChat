@@ -17,6 +17,7 @@ import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
 import { bindKeepAlive, syncKeepAlive, useKeepAlive } from '@/services/keepAlive'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
 import { bindRealtime } from '@/services/realtimeBindings'
+import { bindVoiceRooms } from '@/stores/voiceRooms'
 import { useAuth } from '@/stores/auth'
 import { replayablePath } from '@/lib/deepLinks'
 import '@/stores/call' // enregistre les handlers d'appel entrant dès le démarrage
@@ -70,7 +71,7 @@ export default function RootLayout() {
   }, [status])
 
   useEffect(() => {
-    const offs = [bindRealtime(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive()]
+    const offs = [bindRealtime(), bindVoiceRooms(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive()]
     return () => offs.forEach((off) => off())
   }, [])
 
