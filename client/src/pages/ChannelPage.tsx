@@ -27,6 +27,7 @@ import ThreadSidebar from '../components/chat/ThreadSidebar'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
 import FollowChannelModal from '../components/modals/FollowChannelModal'
+import OnboardingModal from '../components/modals/OnboardingModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
@@ -397,6 +398,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         }}
       />
     )
+  }
+
+  // Onboarding : questions d'accueil, après la barrière de vérification.
+  if (serverData?.member?.onboarding_pending) {
+    return <OnboardingModal serverId={serverId} serverName={server?.name ?? ''} />
   }
 
   const channels: any[] = serverData?.channels ?? []

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
@@ -18,6 +18,7 @@ import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
 import StatsTab from './StatsTab'
+import OnboardingTab from './OnboardingTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
 
@@ -56,7 +57,7 @@ interface Props {
   isAdmin?: boolean
 }
 
-type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events'
+type Tab = 'general' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -315,6 +316,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
         { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
         ...(isAdmin ? [{ id: 'webhooks' as Tab, label: 'Webhooks', icon: Link }] : []),
         { id: 'feeds'    as Tab, label: 'Flux RSS',  icon: Rss },
+        ...(estProprietaire ? [{ id: 'onboarding' as Tab, label: 'Accueil', icon: Sparkles }] : []),
       ],
     },
     {
@@ -824,6 +826,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
 
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
             {tab === 'stats'   && <StatsTab serverId={server.id} />}
+            {tab === 'onboarding' && <OnboardingTab serverId={server.id} channels={channels} />}
             {tab === 'roles'   && <RolesTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
             {tab === 'bans'    && <BansTab serverId={server.id} />}
