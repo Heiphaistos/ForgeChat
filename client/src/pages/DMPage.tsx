@@ -458,7 +458,7 @@ export default function DMPage() {
         <div className="ml-auto flex items-center gap-1">
           <E2EBadge kind="dm" id={dmId} />
           <DisappearingControl kind="dm" id={dmId} />
-          <RemoteSupportButton dmId={dmId} autoOpen={searchParams.get('support') === '1'} />
+          <RemoteSupportButton dmId={dmId} autoOpen />
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }
@@ -592,6 +592,7 @@ export default function DMPage() {
             >
               {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
+            {dmId && <RemoteSupportButton dmId={dmId} round />}
             <button
               onClick={hangup}
               className="p-3 bg-fc-red rounded-full text-white hover:bg-red-600 transition"

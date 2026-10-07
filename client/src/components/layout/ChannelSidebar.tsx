@@ -34,6 +34,7 @@ import { useServerPerms } from '../../hooks/useServerPerms'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
 import { useMemberModeration } from '../chat/MemberModeration'
+import { useRemoteSupportItem } from '../chat/RemoteSupport'
 import { t as tr, useT } from '../../i18n'
 import { openMessages, type RawMsg } from '../../e2e/conversations'
 import AnimatedImg from '../ui/AnimatedImg'
@@ -310,6 +311,7 @@ export default function ChannelSidebar() {
   // Modération vocale (P2-2) : menu contextuel sur un participant et
   // glisser-déposer vers un autre salon vocal (MOVE_MEMBERS).
   const moderation = useMemberModeration(serverId)
+  const remoteSupportItem = useRemoteSupportItem()
   const [voiceDropTarget, setVoiceDropTarget] = useState<string | null>(null)
   const isVoiceMemberDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(VOICE_MEMBER_MIME)
   const dropVoiceMember = (e: React.DragEvent, channelId: string) => {
@@ -1097,7 +1099,8 @@ export default function ChannelSidebar() {
                   e.dataTransfer.effectAllowed = 'move'
                 } : undefined}
                 onContextMenu={e => {
-                  const items = moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))
+                  const rs = remoteSupportItem(p.userId)
+                  const items = [...(rs ? [rs] : []), ...moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))]
                   if (items.length === 0) return
                   e.preventDefault()
                   e.stopPropagation()

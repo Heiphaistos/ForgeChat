@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Mic, MicOff, Headphones, VolumeX, Video, VideoOff, Monitor, MonitorOff, PhoneOff, Volume2 } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Video, VideoOff, Monitor, MonitorOff, PhoneOff, Volume2, LifeBuoy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useVoice } from '../../store/voice'
 import { useVoiceActivity } from '../../hooks/useVoiceActivity'
 import { useWakeLock } from '../../hooks/useWakeLock'
 import { useT } from '../../i18n'
+import { useContextMenu } from '../ui/ContextMenu'
+import { useRemoteSupportItem } from '../chat/RemoteSupport'
 
 export default function VoiceBar() {
   const nav = useNavigate()
@@ -14,6 +16,17 @@ export default function VoiceBar() {
     muted, deafened, videoEnabled, screenSharing, localStream,
     toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare, leave,
   } = useVoice()
+
+  // Support à distance avec un participant du salon (menu de ses membres).
+  const roomParticipants = useVoice(s => s.roomParticipants)
+  const remoteSupportItem = useRemoteSupportItem()
+  const supportMenu = useContextMenu()
+  const openSupportMenu = (e: React.MouseEvent) => {
+    const items = (channelId ? roomParticipants[channelId] ?? [] : [])
+      .map(p => remoteSupportItem(p.userId, t('rs.with', { name: p.username })))
+      .filter(i => i !== null)
+    supportMenu.open(e, items.length ? items : [{ label: t('rs.nobody'), onClick: () => {}, disabled: true }])
+  }
 
   const speaking = useVoiceActivity(joined ? localStream : null, !muted)
   // Garder l'écran allumé pendant l'appel (mobile) — libéré au leave
@@ -99,7 +112,12 @@ export default function VoiceBar() {
           accent={screenSharing}
           title={screenSharing ? t('voice.stopShare') : t('voice.shareScreen')}
         />
+        <button onClick={openSupportMenu} title={t('rs.button')} aria-label={t('rs.button')} aria-haspopup="menu"
+          className="flex-1 flex items-center justify-center p-2.5 md:p-1.5 min-h-[44px] md:min-h-0 rounded transition text-fc-muted hover:bg-fc-hover hover:text-white">
+          <LifeBuoy size={14} />
+        </button>
       </div>
+      {supportMenu.node}
     </div>
   )
 }

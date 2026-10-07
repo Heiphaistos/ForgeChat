@@ -1,6 +1,8 @@
 // Clés du support à distance (GhostHandDesk) : fr = référence, en = traduction.
 export const remoteSupportFr = {
   'rs.button': 'Support à distance',
+  'rs.with': 'Support à distance : {name}',
+  'rs.nobody': "Personne d'autre dans le salon",
   'rs.help': 'Aider (je prends la main)',
   'rs.ask': "Demander de l'aide (je partage mon écran)",
   'rs.myId': 'Identifiant GhostHandDesk de cet ordinateur',
@@ -35,6 +37,8 @@ export const remoteSupportFr = {
 
 export const remoteSupportEn: Partial<Record<keyof typeof remoteSupportFr, string>> = {
   'rs.button': 'Remote support',
+  'rs.with': 'Remote support: {name}',
+  'rs.nobody': 'Nobody else in the channel',
   'rs.help': 'Help (I take control)',
   'rs.ask': 'Ask for help (I share my screen)',
   'rs.myId': "This computer's GhostHandDesk ID",
