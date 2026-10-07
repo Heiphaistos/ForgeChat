@@ -555,6 +555,8 @@ pub async fn get_dm_messages(
             "enc": r.get::<Option<serde_json::Value>, _>("enc"),
             "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "purged": r.get::<bool, _>("purged"),
+            "expires_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at"),
+            "expire_on_read": r.get::<bool, _>("expire_on_read"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("username"),
@@ -793,9 +795,14 @@ pub async fn send_dm(
     let content = content_raw.clone();
 
     let content_opt: Option<&str> = if content.is_empty() { None } else { Some(content.as_str()) };
+    // Messages éphémères : réglage de la conversation, imposé par le serveur.
+    let (expires_at, expire_on_read) = crate::handlers::disappearing::expiry(
+        crate::handlers::disappearing::setting(&state.db, conv).await?,
+        chrono::Utc::now(),
+    );
     let msg = sqlx::query(
-        "INSERT INTO dm_messages (dm_channel_id, sender_id, content, reply_to_id, enc, client_msg_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        "INSERT INTO dm_messages (dm_channel_id, sender_id, content, reply_to_id, enc, client_msg_id, expires_at, expire_on_read)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"
     )
     .bind(dm_id)
     .bind(claims.sub)
@@ -803,6 +810,8 @@ pub async fn send_dm(
     .bind(reply_to)
     .bind(&enc_json)
     .bind(client_msg_id)
+    .bind(expires_at)
+    .bind(expire_on_read)
     .fetch_one(&state.db)
     .await?;
     crate::handlers::badges::count_message(&state, claims.sub);
@@ -878,6 +887,8 @@ pub async fn send_dm(
             "reply_to_id": reply_to,
             "reply_to": reply_ctx,
             "created_at": created_at,
+            "expires_at": expires_at,
+            "expire_on_read": expire_on_read,
         }
     });
     let event_str = event.to_string();
@@ -898,7 +909,7 @@ pub async fn send_dm(
         &text,
         "Nouveau message privé",
         crate::mobile_push::Target::Dm(dm_id),
-    );
+    ).with_message(msg_id);
     crate::notify::push_direct(&state, vec![other_id], Some(dm_id), serde_json::json!({
         "title": sender_username,
         "body": text,
@@ -914,6 +925,8 @@ pub async fn send_dm(
         "reply_to_id": reply_to,
         "reply_to": reply_ctx,
         "created_at": created_at,
+        "expires_at": expires_at,
+        "expire_on_read": expire_on_read,
         "attachments": [],
         "reactions": [],
     })))

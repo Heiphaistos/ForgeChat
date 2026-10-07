@@ -645,8 +645,17 @@ pub async fn set_keybinding(
     State(state): State<AppState>,
     Json(body): Json<Keybinding>,
 ) -> Result<Json<serde_json::Value>> {
-    if body.action.trim().is_empty() || body.key_combo.trim().is_empty() {
-        return Err(AppError::BadRequest("action et key_combo requis".into()));
+    if !valid_keybinding_action(&body.action) || body.key_combo.trim().is_empty() || body.key_combo.chars().count() > 40 {
+        return Err(AppError::BadRequest("action ou key_combo invalide".into()));
+    }
+    // Plafond par compte : la liste des actions de l'appli est courte.
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM user_keybindings WHERE user_id = $1 AND action <> $2")
+        .bind(claims.sub)
+        .bind(&body.action)
+        .fetch_one(&state.db)
+        .await?;
+    if count >= 64 {
+        return Err(AppError::BadRequest("trop de raccourcis".into()));
     }
     sqlx::query(
         "INSERT INTO user_keybindings (user_id, action, key_combo)
@@ -658,6 +667,23 @@ pub async fn set_keybinding(
     .bind(&body.key_combo)
     .execute(&state.db)
     .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Identifiant d'action : minuscules, chiffres et `_`, 1 à 40 caractères.
+fn valid_keybinding_action(a: &str) -> bool {
+    !a.is_empty() && a.len() <= 40 && a.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+/// Remet tous les raccourcis par défaut.
+pub async fn reset_all_keybindings(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("DELETE FROM user_keybindings WHERE user_id = $1")
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -852,5 +878,20 @@ mod theme_tests {
         assert!(!valid_theme_studio(&serde_json::json!("texte")));
         let big = "x".repeat(MAX_THEME_STUDIO_BYTES);
         assert!(!valid_theme_studio(&serde_json::json!({ "customs": big })));
+    }
+}
+
+#[cfg(test)]
+mod keybinding_tests {
+    use super::valid_keybinding_action;
+
+    #[test]
+    fn keybinding_action_names() {
+        assert!(valid_keybinding_action("toggle_mute"));
+        assert!(valid_keybinding_action("search"));
+        assert!(!valid_keybinding_action(""));
+        assert!(!valid_keybinding_action("Toggle"));
+        assert!(!valid_keybinding_action("a b"));
+        assert!(!valid_keybinding_action(&"a".repeat(41)));
     }
 }

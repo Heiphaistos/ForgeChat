@@ -2,8 +2,10 @@
    Stratégie volontairement conservatrice :
    - cache-first UNIQUEMENT sur les assets Vite hashés (/assets/*) et les
      icônes — immutables par construction, aucun risque de version périmée
-   - tout le reste (index.html, /api, /ws, /uploads, manifest) passe au
-     réseau sans jamais être mis en cache : l'app se met à jour normalement */
+   - la page (index.html) passe au réseau d'abord ; sa dernière copie ne sert
+     que hors ligne
+   - tout le reste (/api, /ws, /uploads, manifest) passe au réseau sans jamais
+     être mis en cache : l'app se met à jour normalement */
 
 const CACHE = 'fc-assets-v1'
 
@@ -27,6 +29,21 @@ self.addEventListener('fetch', (e) => {
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/icons/') ||
     url.pathname === '/icon.svg'
+
+  // Mode hors ligne : la page de l'appli (index.html) passe toujours au réseau d'abord ;
+  // une copie sert seulement quand le réseau manque (conversations enregistrées, lib/offline).
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          const clone = res.clone()
+          caches.open(CACHE).then(c => c.put('/__shell', clone))
+        }
+        return res
+      }).catch(() => caches.match('/__shell').then(hit => hit ?? Response.error()))
+    )
+    return
+  }
 
   if (!isImmutableAsset) return // réseau direct, pas d'interception
 

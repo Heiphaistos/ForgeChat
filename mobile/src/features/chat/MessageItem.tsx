@@ -291,7 +291,9 @@ export const MessageItem = memo(function MessageItem({
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>{t('msg.uploading')}</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>{t('msg.edited')}</Text> : null}
-          {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : null}
+          {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : m.expireOnRead ? (
+            <Text style={[styles.meta, { color: colors.danger }]}>{t('messaging.disappear.afterReadBadge')}</Text>
+          ) : null}
           {m.pinned ? <Text style={styles.meta}>{t('msg.pinned')}</Text> : null}
 
           {m.failed ? (

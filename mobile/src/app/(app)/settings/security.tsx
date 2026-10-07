@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import * as LocalAuthentication from 'expo-local-authentication'
 import { useEffect, useState } from 'react'
-import { Alert, ScrollView } from 'react-native'
+import { Alert, Platform, ScrollView } from 'react-native'
 import { Row, Section, SwitchRow } from '@/components/ui'
 import { UPDATES_MANIFEST_URL } from '@/config/env'
 import { t as tr, useT, type Key } from '@/i18n'
@@ -69,6 +69,15 @@ export default function SecuritySettings() {
           value={s.privacyScreen}
           onValueChange={(v) => s.set({ privacyScreen: v })}
         />
+        {Platform.OS === 'android' ? (
+          <SwitchRow
+            icon="apps-outline"
+            title={t('widget.showContent')}
+            subtitle={t('widget.showContentSub')}
+            value={s.widgetShowContent}
+            onValueChange={(v) => s.set({ widgetShowContent: v })}
+          />
+        ) : null}
         <SwitchRow
           icon="link-outline"
           title={t('settings.security.confirmLinks')}

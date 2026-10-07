@@ -9,6 +9,8 @@ export interface PushRegistration {
   device_name?: string
   /** Secret de cette installation : un jeton déjà lié ne change de compte que depuis le même appareil. */
   device_id?: string
+  /** Autres comptes de l'appli : ils gardent leurs notifications sur ce téléphone. */
+  other_accounts?: string[]
 }
 
 export const pushApi = {

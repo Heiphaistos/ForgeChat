@@ -164,11 +164,11 @@ export async function rewrapForNewPassword(userId: string, oldPw: string, newPw:
   }
 }
 
-/** Déconnexion : plus aucune clé sur ce navigateur. */
-export async function clearAccountKey() {
+/** Déconnexion : plus de clé pour ce compte sur ce navigateur (les autres comptes gardent la leur). */
+export async function clearAccountKey(userId?: string) {
   typedPassword = null
   useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null })
-  await idb<unknown>('readwrite', s => s.clear()).catch(() => {})
+  await idb<unknown>('readwrite', s => (userId ? s.delete(userId) : s.clear())).catch(() => {})
 }
 
 /** Code de sécurité entre ma clé et celle d'un autre utilisateur ; null si l'un n'en a pas. */

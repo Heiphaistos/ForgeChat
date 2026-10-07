@@ -2,6 +2,7 @@ import type { ZodType } from 'zod'
 import { APP_VERSION, apiBase } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from './logger'
+import { cacheKey, enqueue, isQueueable, recall, remember } from './offline'
 import { tokens } from './tokens'
 import { xhrFetch } from './xhrFetch'
 
@@ -190,9 +191,32 @@ export interface RequestOptions<T> {
   schema?: ZodType<T>
   /** Corps multipart (uploads). */
   formData?: FormData
+  /** Jamais mis en file hors ligne (envoi de la file elle-même). */
+  noQueue?: boolean
 }
 
-async function send<T>(method: string, p: string, opts: RequestOptions<T>, retried = false): Promise<T> {
+/**
+ * Requête avec repli hors ligne (lib/offline) : une lecture gardée est resservie sans réseau,
+ * un message chiffré écrit sans réseau est mis en file (erreur `queued`).
+ */
+async function send<T>(method: string, p: string, opts: RequestOptions<T>): Promise<T> {
+  const key = cacheKey(method, p, opts.query)
+  try {
+    const res = await sendOnline<T>(method, p, opts)
+    if (key) remember(key, res)
+    return res
+  } catch (e) {
+    if (!(e instanceof ApiError) || !e.isNetwork) throw e
+    const hit = key ? recall<T>(key) : undefined
+    if (hit !== undefined) return hit
+    if (!opts.noQueue && isQueueable(method, p, opts.body) && enqueue(p, opts.body as Record<string, unknown>)) {
+      throw new ApiError(0, t('offline.queued'), 'queued')
+    }
+    throw e
+  }
+}
+
+async function sendOnline<T>(method: string, p: string, opts: RequestOptions<T>, retried = false): Promise<T> {
   const auth = opts.auth ?? true
   const headers: Record<string, string> = { Accept: 'application/json', 'X-Client': CLIENT_HEADER }
   if (auth) headers.Authorization = `Bearer ${await ensureAccessToken()}`
@@ -215,7 +239,7 @@ async function send<T>(method: string, p: string, opts: RequestOptions<T>, retri
     // Token révoqué côté serveur (blocklist, changement de mot de passe…) : un refresh, puis un seul retry.
     tokens.setAccessToken(null)
     await refreshAccessToken()
-    return send(method, p, opts, true)
+    return sendOnline(method, p, opts, true)
   }
   if (!res.ok) throw await parseError(res)
   if (res.status === 204) return undefined as T

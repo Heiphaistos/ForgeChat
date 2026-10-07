@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod accounts;
 pub mod gifs;
 pub mod password_reset;
 pub mod users;
@@ -44,6 +45,8 @@ pub mod search;
 pub mod audit;
 pub mod feeds;
 pub mod scheduled;
+pub mod disappearing;
+pub mod drafts;
 pub mod voice;
 pub mod templates;
 pub mod user_settings;

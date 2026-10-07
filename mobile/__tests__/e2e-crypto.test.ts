@@ -152,3 +152,11 @@ test('note privée scellée pour soi : mêmes octets que le web', async () => {
   expect(await c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.target)).toBe(x.text)
   await expect(c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.owner)).rejects.toThrow()
 })
+
+test('brouillon chiffré par la clé de compte', async () => {
+  const x = V.draft
+  expect(e(await c.draftKey(d(x.priv), d(x.pub), x.userId))).toBe(x.key)
+  expect(await c.sealDraft(d(x.key), x.userId, x.convId, x.text, d(x.iv))).toEqual(x.blob)
+  expect(await c.openDraft(d(x.key), x.userId, x.convId, x.blob)).toBe(x.text)
+  await expect(c.openDraft(d(x.key), x.userId, x.userId, x.blob)).rejects.toThrow()
+})

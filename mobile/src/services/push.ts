@@ -6,10 +6,12 @@ import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
 import { Alert, Platform } from 'react-native'
 import { pushApi } from '@/api/push'
+import { registerMessageCategory } from '@/services/notificationActions'
 import { PUSH_AVAILABLE } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
-import { registerPreSignOutHook, registerSignOutHook } from '@/stores/auth'
+import { registerPreSignOutHook, registerSignOutHook, useAuth } from '@/stores/auth'
+import { listAccounts } from '@/lib/accounts'
 import { useSettings } from '@/stores/settings'
 import { useUnread } from '@/stores/unread'
 
@@ -36,6 +38,8 @@ export function configureNotifications() {
 
 /** Gestionnaire et canaux Android, communs au push et aux notifications locales du mode sans Google. */
 export function setupNotificationChannels() {
+  // Boutons « Répondre » et réactions des notifications de message.
+  void registerMessageCategory()
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       // Ne pas afficher de bannière pour la conversation déjà ouverte.
@@ -95,6 +99,15 @@ export async function showNotice(title: string, body: string, kind = 'notice'): 
 /** Route vers l'écran correspondant à une notification touchée. */
 export function routeFromNotification(data: Record<string, unknown> | undefined) {
   if (!data) return
+  // Notification d'un autre compte de l'appli : on passe d'abord sur ce compte.
+  const { uid, ...rest } = data
+  if (isId(uid) && uid !== useAuth.getState().user?.id) {
+    void listAccounts().then((list) => {
+      if (!list.some((a) => a.id === uid)) routeFromNotification(rest)
+      else void useAuth.getState().switchAccount(uid).then((ok) => ok && routeFromNotification(rest))
+    })
+    return
+  }
   const kind = data.kind
   if (kind === 'dm' && isId(data.dm_id)) router.push(`/dm/${data.dm_id}`)
   else if (kind === 'group' && isId(data.group_id)) router.push(`/group/${data.group_id}`)
@@ -110,13 +123,15 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
 export function listenNotificationTaps(local = false): () => void {
   if (!PUSH_AVAILABLE && !local) return () => undefined
   const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+    // Boutons « Répondre » / réactions : services/notificationActions (pas de navigation).
+    if (resp.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return
     routeFromNotification(resp.notification.request.content.data as Record<string, unknown>)
   })
   // Cas « app tuée » : la notification qui a lancé l'app.
   // Léger délai : laisser la navigation « connectée » se monter avant de router.
   const timer = setTimeout(() => {
     const last = Notifications.getLastNotificationResponse()
-    if (last) {
+    if (last && last.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
       routeFromNotification(last.notification.request.content.data as Record<string, unknown>)
       Notifications.clearLastNotificationResponse()
     }
@@ -175,6 +190,7 @@ export async function syncPushRegistration(): Promise<void> {
       show_preview: pushPreview,
       device_name: Device.modelName ?? undefined,
       device_id: await getDeviceId(),
+      other_accounts: (await listAccounts()).map((a) => a.id),
     })
     await SecureStore.setItemAsync(TOKEN_KEY, token)
   } catch (e) {

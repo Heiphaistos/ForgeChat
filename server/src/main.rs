@@ -144,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             purge_expired_messages(&ephemeral_state).await;
+            handlers::disappearing::purge_private(&ephemeral_state).await;
         }
     });
 
@@ -210,6 +211,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        // Plusieurs comptes dans le même navigateur : jetons des autres comptes en cookies HttpOnly.
+        .route("/api/auth/accounts", get(handlers::accounts::list))
+        .route("/api/auth/accounts/stash", post(handlers::accounts::stash).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/switch", post(handlers::accounts::switch).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/forget", post(handlers::accounts::forget).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/reset-password", post(handlers::password_reset::reset_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
@@ -692,6 +698,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id", get(handlers::polls::get_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/vote", post(handlers::polls::vote_poll))
         .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/close", post(handlers::polls::close_poll))
+        .route("/servers/:server_id/channels/:channel_id/polls/:poll_id/voters", get(handlers::polls::poll_voters))
         // Webhooks
         .route("/servers/:server_id/webhooks", get(handlers::webhooks::list_webhooks))
         .route("/servers/:server_id/webhooks", post(handlers::webhooks::create_webhook))
@@ -747,7 +754,15 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Messages programmés
         .route("/servers/:server_id/channels/:channel_id/scheduled", post(handlers::scheduled::create_scheduled))
         .route("/servers/:server_id/channels/:channel_id/scheduled", get(handlers::scheduled::list_scheduled))
-        .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled))
+        .route("/scheduled/:scheduled_id", delete(handlers::scheduled::delete_scheduled).patch(handlers::scheduled::update_scheduled))
+        .route("/scheduled", get(handlers::scheduled::list_all_scheduled))
+        .route("/scheduled/:scheduled_id/send", post(handlers::scheduled::send_scheduled_now))
+        // Messages éphémères (MP, groupes) et réglages de discussion des salons
+        .route("/disappearing/:kind/:id", get(handlers::disappearing::get_setting).put(handlers::disappearing::set_setting))
+        .route("/servers/:server_id/channels/:channel_id/messaging", put(handlers::disappearing::set_channel_messaging))
+        // Brouillons chiffrés synchronisés
+        .route("/drafts", get(handlers::drafts::list_drafts))
+        .route("/drafts/:conv_id", put(handlers::drafts::put_draft).delete(handlers::drafts::delete_draft))
         // ICE config pour WebRTC (STUN + TURN)
         .route("/voice/ice-config", get(handlers::voice::get_ice_config))
         // Bootstrap REST de l'état vocal (N11) + télémétrie WebRTC (F9)
@@ -778,6 +793,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/theme-studio", get(handlers::user_settings::get_theme_studio).put(handlers::user_settings::put_theme_studio).layer(DefaultBodyLimit::max(handlers::user_settings::MAX_THEME_STUDIO_BYTES + 4096)))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
+        .route("/user/keybindings", delete(handlers::user_settings::reset_all_keybindings))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))
         // Email preferences
         .route("/user/email-prefs", get(handlers::user_settings::get_email_prefs))

@@ -27,12 +27,12 @@ const group = { type: 'GROUP_DM_MESSAGE', group_id: GROUP, message: { id: 'm2', 
 const mention = (notify: boolean) => ({
   type: 'MENTION_CREATE',
   notify,
-  mention: { server_id: SERVER, server_name: 'Forge', channel_id: CHANNEL, channel_name: 'general', author_id: BOB, author_username: 'bob', content: `<@${ME}> regarde` },
+  mention: { message_id: 'm3', server_id: SERVER, server_name: 'Forge', channel_id: CHANNEL, channel_name: 'general', author_id: BOB, author_username: 'bob', content: `<@${ME}> regarde` },
 })
 
 describe('noticeFor', () => {
   it('message privé : sans aperçu par défaut, ouvre la conversation', () => {
-    expect(noticeFor(dm(), ctx())).toEqual({ id: `msg:${DM}`, title: 'bob', body: 'Nouveau message privé', data: { kind: 'dm', dm_id: DM } })
+    expect(noticeFor(dm(), ctx())).toEqual({ id: `msg:${DM}`, title: 'bob', body: 'Nouveau message privé', data: { kind: 'dm', dm_id: DM, message_id: 'm1' } })
     expect(noticeFor(dm(), ctx({ preview: true }))?.body).toBe('le code est 1234')
     expect(noticeFor(dm(BOB, null), ctx({ preview: true }))?.body).toBe('Pièce jointe')
   })
@@ -47,7 +47,7 @@ describe('noticeFor', () => {
   })
 
   it('groupe : nom du groupe en titre, regroupé par conversation', () => {
-    expect(noticeFor(group, ctx())).toEqual({ id: `msg:${GROUP}`, title: 'Les potes', body: 'Nouveau message de bob', data: { kind: 'group', group_id: GROUP } })
+    expect(noticeFor(group, ctx())).toEqual({ id: `msg:${GROUP}`, title: 'Les potes', body: 'Nouveau message de bob', data: { kind: 'group', group_id: GROUP, message_id: 'm2' } })
     expect(noticeFor(group, ctx({ preview: true, groupName: () => null }))).toMatchObject({ title: 'Groupe', body: 'bob : salut' })
     expect(noticeFor(group, ctx({ isMuted: () => true }))).toBeNull()
   })
@@ -57,7 +57,7 @@ describe('noticeFor', () => {
       id: `msg:${CHANNEL}`,
       title: 'Forge · #general',
       body: "bob t'a mentionné",
-      data: { kind: 'channel', server_id: SERVER, channel_id: CHANNEL },
+      data: { kind: 'channel', server_id: SERVER, channel_id: CHANNEL, message_id: 'm3' },
     })
     expect(noticeFor(mention(true), ctx({ preview: true }))?.body).toBe('bob : @… regarde')
     expect(noticeFor(mention(false), ctx())).toBeNull()

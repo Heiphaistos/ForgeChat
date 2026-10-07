@@ -6,6 +6,7 @@ import { t } from '@/i18n'
 import { ApiError, http, path } from '@/lib/http'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
+import { indexMessage } from './searchIndex'
 
 export type ConvKind = 'dm' | 'group' | 'channel'
 
@@ -306,6 +307,16 @@ export async function openRaw(kind: ConvKind, id: string, m: Raw, scope?: string
     out = body === null
       ? { ...out, content: lockedText(), e2e: 'locked' }
       : { ...out, content: body.t, e2e: 'ok', e2e_body: body }
+    // Index local de recherche (messages de la conversation elle-même, pas des fils ni forums).
+    const at = s(m.created_at)
+    if (body && !scope && at && s(m.id)) {
+      indexMessage({
+        id: s(m.id)!, kind, convId: id, authorId: author,
+        authorName: s(m.sender_username) ?? s(m.author_username) ?? s(m.username) ?? '',
+        text: body.t, createdAt: at, expiresAt: s(m.expires_at),
+        hasFile: Array.isArray(body.f) && body.f.length > 0,
+      })
+    }
   }
   const r = m.reply_to
   if (kind === 'dm' && r && typeof r === 'object' && isEnc((r as Raw).enc)) {

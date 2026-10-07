@@ -62,6 +62,8 @@ interface Message {
   reactions: ReactionCount[]
   poll_id?: string | null
   expires_at?: string | null
+  /** Message éphémère « après lecture » (MP, groupe) : échéance posée quand tous l'ont lu. */
+  expire_on_read?: boolean
   // Chiffrement de bout en bout (salons) : `content` est le texte déchiffré ici.
   enc?: EncPayload | null
   client_msg_id?: string | null

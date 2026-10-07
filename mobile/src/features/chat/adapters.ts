@@ -56,6 +56,8 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
     pinned: false,
+    expiresAt: m.expires_at ?? null,
+    ...(m.expire_on_read ? { expireOnRead: true } : {}),
     ...e2eFields(m),
   }
 }
@@ -84,6 +86,8 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
     pinned: false,
+    expiresAt: m.expires_at ?? null,
+    ...(m.expire_on_read ? { expireOnRead: true } : {}),
     ...e2eFields(m),
   }
 }

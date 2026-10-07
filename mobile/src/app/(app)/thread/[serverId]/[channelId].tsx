@@ -9,6 +9,7 @@ import { Button, ErrorState, IconButton, Loading, TextField } from '@/components
 import { LIMITS } from '@/config/env'
 import { ReplyThreadView } from '@/features/chat/ReplyThreadView'
 import { createThreadBody, olderCursor, sendWithAttachments, type ThreadSummary } from '@/features/chat/threads'
+import { autoThreadTitle } from '@/features/chat/messaging'
 import { PERM } from '@/features/servers/perms'
 import { useServerPerms } from '@/features/servers/menus'
 import { useAuth } from '@/stores/auth'
@@ -25,7 +26,7 @@ import { withPreparedUploads } from '@/e2e/files'
  */
 export default function ThreadScreen() {
   const t = useT()
-  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['parent', 'threadId', 'preview'])
+  const { valid, ids, text } = useRouteParams(['serverId', 'channelId'] as const, ['parent', 'threadId', 'preview', 'auto'])
   const parent = isUuid(text.parent) ? text.parent.toLowerCase() : null
   const directId = isUuid(text.threadId) ? text.threadId.toLowerCase() : null
   const lookup = useQuery({
@@ -40,7 +41,7 @@ export default function ThreadScreen() {
   return thread ? (
     <ThreadConversation serverId={ids.serverId} channelId={ids.channelId} thread={thread} />
   ) : (
-    <CreateThread serverId={ids.serverId} channelId={ids.channelId} parent={parent} preview={text.preview} />
+    <CreateThread serverId={ids.serverId} channelId={ids.channelId} parent={parent} preview={text.preview} auto={text.auto === '1'} />
   )
 }
 
@@ -161,9 +162,10 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
   )
 }
 
-function CreateThread({ serverId, channelId, parent, preview }: { serverId: string; channelId: string; parent: string | null; preview?: string }) {
+function CreateThread({ serverId, channelId, parent, preview, auto }: { serverId: string; channelId: string; parent: string | null; preview?: string; auto?: boolean }) {
   const t = useT()
-  const [title, setTitle] = useState('')
+  // Fils automatiques : pas de titre à saisir, celui du fil est le début du message d'origine.
+  const [title, setTitle] = useState(auto ? autoThreadTitle(preview, t('messaging.autothread.reply')) : '')
   const [first, setFirst] = useState('')
   const [busy, setBusy] = useState(false)
   const create = () => {
@@ -187,7 +189,7 @@ function CreateThread({ serverId, channelId, parent, preview }: { serverId: stri
           </Text>
         </View>
       ) : null}
-      <TextField label={t('social.thread.optionalTitle')} accessibilityLabel={t('social.thread.optionalTitleLabel')} value={title} onChangeText={setTitle} maxLength={100} placeholder={t('social.thread.titlePlaceholder')} />
+      {auto ? null : <TextField label={t('social.thread.optionalTitle')} accessibilityLabel={t('social.thread.optionalTitleLabel')} value={title} onChangeText={setTitle} maxLength={100} placeholder={t('social.thread.titlePlaceholder')} />}
       <TextField label={t('social.thread.first')} accessibilityLabel={t('social.thread.firstLabel')} value={first} onChangeText={setFirst} multiline maxLength={LIMITS.messageMaxChars} style={{ minHeight: 100, textAlignVertical: 'top' }} />
       <Button title={t('social.thread.create')} icon="chatbubbles-outline" loading={busy} disabled={!first.trim()} onPress={create} />
     </ScrollView>

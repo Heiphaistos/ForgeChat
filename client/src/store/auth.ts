@@ -1,14 +1,18 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
-import { useChat } from './chat'
+import { clearLocalSession } from '../lib/localSession'
+import { useChat, useDraft } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
 import { useWs } from './ws'
 import { useChannelNotif, EMPTY_NOTIF_STATE } from './channelNotif'
 import { disableWebPush } from '../utils/webPush'
+import { listAccounts } from '../lib/accounts'
+import { forgetOfflineData } from '../lib/offline'
 import { queryClient } from '../main'
 import { clearAccountKey, rememberPassword } from '../e2e/accountKey'
+import { clearSearchIndex } from '../e2e/searchIndex'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -76,10 +80,15 @@ export const useAuth = create<AuthState>()(
       const body = isTauri ? { refresh_token: localStorage.getItem('refresh_token') } : {}
       // Avant la déconnexion (route authentifiée) : ce navigateur ne doit plus
       // recevoir les notifications push de ce compte.
-      await disableWebPush()
+      await disableWebPush((await listAccounts()).length > 0)
       await api.post('/auth/logout', body).catch(() => {})
-      if (isTauri) localStorage.clear()
-      await clearAccountKey()
+      if (isTauri) clearLocalSession()
+      const uid = useAuth.getState().user?.id
+      await clearAccountKey(uid)
+      if (uid) await forgetOfflineData(uid)
+      // Aucun texte déchiffré ne reste sur l'appareil : index de recherche et brouillons (resynchronisés à la connexion).
+      await clearSearchIndex()
+      useDraft.setState({ drafts: {} })
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
@@ -100,7 +109,7 @@ export const useAuth = create<AuthState>()(
         const { data } = await api.get('/users/me')
         set(s => { s.user = data; s.loading = false })
       } catch {
-        if (isTauri) localStorage.clear()
+        if (isTauri) clearLocalSession()
         set(s => { s.loading = false })
       }
     },

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import api from '../../api/client'
+import { matches, parseCombo } from '../../lib/shortcuts'
+import { useShortcutBindings } from '../../hooks/useShortcuts'
 import { useVoice } from '../../store/voice'
 import { useClipsSetting } from '../../lib/clipBuffer'
 
@@ -20,43 +20,9 @@ import { useClipsSetting } from '../../lib/clipBuffer'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-const DEFAULTS: Record<string, string> = {
-  toggle_mute: 'Ctrl+M',
-  toggle_deafen: 'Ctrl+D',
-  // Un modificateur seul ne peut pas être enregistré comme raccourci global
-  // (limite de l'API OS) : le défaut est un vrai combo.
-  push_to_talk: 'Ctrl+Shift+Space',
-  toggle_screen_share: 'Ctrl+Alt+S',
-  toggle_camera: 'Ctrl+Shift+C',
-  clip_stream: 'Alt+C',
-}
-
-function normalize(binding: string): { ctrl: boolean; alt: boolean; shift: boolean; meta: boolean; key: string } {
-  const parts = binding.split('+').map(p => p.trim()).filter(Boolean)
-  const mods = { ctrl: false, alt: false, shift: false, meta: false }
-  let key = ''
-  for (const p of parts) {
-    const low = p.toLowerCase()
-    if (low === 'ctrl' || low === 'control') mods.ctrl = true
-    else if (low === 'alt') mods.alt = true
-    else if (low === 'shift') mods.shift = true
-    else if (low === 'meta' || low === 'cmd' || low === 'super') mods.meta = true
-    else key = p
-  }
-  return { ...mods, key: key.toLowerCase() }
-}
-
-function matches(e: KeyboardEvent, binding: string): boolean {
-  const b = normalize(binding)
-  if (e.ctrlKey !== b.ctrl || e.altKey !== b.alt || e.shiftKey !== b.shift || e.metaKey !== b.meta) return false
-  if (!b.key) return false
-  const k = e.key.toLowerCase()
-  return k === b.key || (b.key === 'space' && k === ' ')
-}
-
 /** Convertit un raccourci ForgeChat en accélérateur global Tauri (KeyboardEvent.code). */
 function toAccelerator(binding: string): string {
-  const b = normalize(binding)
+  const b = parseCombo(binding)
   const parts: string[] = []
   if (b.ctrl) parts.push('Control')
   if (b.alt) parts.push('Alt')
@@ -81,16 +47,9 @@ export default function VoiceHotkeys() {
   const screenSharing = useVoice(s => s.screenSharing)
   const pttHeld = useRef(false)
 
-  // Même requête que les Réglages : une liste { action, key_combo }. Lue comme un
-  // objet, aucun raccourci personnalisé n'était jamais appliqué.
-  const { data: custom = [] } = useQuery<{ action: string; key_combo: string }[]>({
-    queryKey: ['keybindings'],
-    queryFn: () => api.get('/user/keybindings').then(r => r.data),
-    staleTime: 300_000,
-  })
-
-  const binding = (action: string) =>
-    (Array.isArray(custom) ? custom.find(k => k.action === action)?.key_combo : undefined) || DEFAULTS[action]
+  // Raccourcis effectifs (défauts + Réglages), mêmes données que le reste de l'appli.
+  const custom = useShortcutBindings()
+  const binding = (action: string) => custom[action] ?? ''
 
   // ── Raccourcis fenêtre ──────────────────────────────────────────────────
   useEffect(() => {
@@ -121,7 +80,7 @@ export default function VoiceHotkeys() {
 
     const onUp = (e: KeyboardEvent) => {
       if (!pttMode || !pttHeld.current) return
-      const b = normalize(binding('push_to_talk'))
+      const b = parseCombo(binding('push_to_talk'))
       const k = e.key.toLowerCase()
       const released = k === b.key || (b.key === 'space' && k === ' ')
         || (b.ctrl && k === 'control') || (b.alt && k === 'alt') || (b.shift && k === 'shift') || (b.meta && k === 'meta')

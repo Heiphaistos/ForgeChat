@@ -1,5 +1,9 @@
 import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
+import { SHORTCUTS, prettyCombo } from '../lib/shortcuts'
+import { shortcutLabel, useShortcutBindings } from '../hooks/useShortcuts'
+import { useLang, useT, type Key } from '../i18n'
 
 interface Props {
   onClose: () => void
@@ -15,17 +19,8 @@ interface ShortcutGroup {
   shortcuts: ShortcutItem[]
 }
 
+// Raccourcis fixes (saisie) ; les raccourcis réglables viennent des Réglages.
 const GROUPS: ShortcutGroup[] = [
-  {
-    title: 'Navigation',
-    shortcuts: [
-      { keys: ['Ctrl', 'K'], description: 'Palette de commandes' },
-      { keys: ['Ctrl', 'Shift', 'K'], description: 'Quick Switcher (canaux, DMs)' },
-      { keys: ['Ctrl', '/'], description: 'Raccourcis clavier' },
-      { keys: ['Ctrl', ','], description: 'Paramètres' },
-      { keys: ['Escape'], description: 'Fermer / Annuler' },
-    ],
-  },
   {
     title: 'Messages',
     shortcuts: [
@@ -38,29 +33,6 @@ const GROUPS: ShortcutGroup[] = [
     ],
   },
   {
-    title: 'Canaux',
-    shortcuts: [
-      { keys: ['Alt', '↑'], description: 'Canal non-lu précédent' },
-      { keys: ['Alt', '↓'], description: 'Canal non-lu suivant' },
-      { keys: ['Ctrl', 'Alt', '↑'], description: 'Serveur précédent' },
-      { keys: ['Ctrl', 'Alt', '↓'], description: 'Serveur suivant' },
-      { keys: ['Ctrl', 'Shift', 'A'], description: 'Marquer tout comme lu' },
-      { keys: ['Ctrl', 'Shift', 'S'], description: 'Vue en split' },
-      { keys: ['Ctrl', 'F'], description: 'Rechercher dans le canal' },
-    ],
-  },
-  {
-    title: 'Vocal',
-    shortcuts: [
-      { keys: ['P'], description: 'Push-to-Talk (maintenir)' },
-      { keys: ['Espace'], description: 'Push-to-Talk (maintenir)' },
-      { keys: ['V'], description: 'Toggle caméra' },
-      { keys: ['S'], description: 'Screen share / Go Live' },
-      { keys: ['Ctrl', 'Shift', 'M'], description: 'Couper / Réactiver le micro' },
-      { keys: ['Ctrl', 'Shift', 'D'], description: 'Couper / Réactiver le son' },
-    ],
-  },
-  {
     title: 'Formatage messages',
     shortcuts: [
       { keys: ['Ctrl', 'B'], description: 'Gras (**texte**)' },
@@ -68,12 +40,6 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['Ctrl', 'U'], description: 'Souligné (__texte__)' },
       { keys: ['Ctrl', 'Shift', 'X'], description: 'Barré (~~texte~~)' },
       { keys: ['Ctrl', 'K'], description: 'Insérer un lien (dans le composer)' },
-    ],
-  },
-  {
-    title: 'Interface',
-    shortcuts: [
-      { keys: ['?'], description: 'Raccourcis clavier (ce modal)' },
     ],
   },
 ]
@@ -87,6 +53,17 @@ function KeyBadge({ label }: { label: string }) {
 }
 
 export default function KeyboardShortcutsModal({ onClose }: Props) {
+  const t = useT()
+  const lang = useLang(s => s.lang)
+  const nav = useNavigate()
+  const bindings = useShortcutBindings()
+  const custom: ShortcutGroup[] = (['nav', 'chat', 'voice'] as const).map(g => ({
+    title: t(`keys.group.${g}` as Key),
+    shortcuts: SHORTCUTS.filter(s => s.group === g).map(s => ({
+      keys: prettyCombo(bindings[s.action], lang).split(' + '),
+      description: t(shortcutLabel(s.action)),
+    })),
+  }))
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -120,7 +97,7 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
 
         {/* Contenu */}
         <div className="overflow-y-auto overscroll-contain max-h-[70vh] p-5 grid gap-5">
-          {GROUPS.map(group => (
+          {[...custom, ...GROUPS].map(group => (
             <div key={group.title}>
               <p className="text-[11px] font-semibold text-fc-muted uppercase tracking-widest mb-2">
                 {group.title}
@@ -146,7 +123,9 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
-          <span className="text-xs text-fc-muted">Appuyez sur <KeyBadge label="?" /> pour ouvrir ce panel</span>
+          <button onClick={() => { onClose(); nav('/settings?section=keybindings') }} className="text-xs text-fc-accent hover:underline">
+            {t('keys.helpEdit')}
+          </button>
           <button
             onClick={onClose}
             className="px-3 py-1.5 rounded bg-fc-accent hover:bg-fc-accent/80 text-white text-sm font-medium transition"

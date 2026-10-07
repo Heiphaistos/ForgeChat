@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { messagingApi } from '@/api/messaging'
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { pollsApi } from '@/api/polls'
 import { useT } from '@/i18n'
@@ -13,6 +15,12 @@ import { isPollClosed, nextVote, pollPercent } from './polls'
 export function PollCard({ serverId, channelId, pollId, myId }: { serverId: string; channelId: string; pollId: string; myId: string }) {
   const t = useT()
   const q = useQuery({ queryKey: qk.poll(pollId), queryFn: () => pollsApi.get(serverId, channelId, pollId), retry: false })
+  const [showVoters, setShowVoters] = useState(false)
+  const voters = useQuery({
+    queryKey: [...qk.poll(pollId), 'voters', q.data?.totalVotes],
+    queryFn: () => messagingApi.pollVoters(serverId, channelId, pollId),
+    enabled: showVoters && !!q.data && !q.data.anonymous,
+  })
   const refresh = () => queryClient.invalidateQueries({ queryKey: qk.poll(pollId) })
   const vote = useMutation({
     mutationFn: (optionIds: string[]) => pollsApi.vote(serverId, channelId, pollId, optionIds),
@@ -47,13 +55,14 @@ export function PollCard({ serverId, channelId, pollId, myId }: { serverId: stri
       <Text style={styles.meta} accessibilityLiveRegion="polite">
         {votes(poll.totalVotes)}
         {poll.multipleChoice ? t('panel.poll.multipleSuffix') : ''}
+        {poll.anonymous ? t('messaging.poll.anonymousSuffix') : ''}
         {closed ? t('panel.poll.closedSuffix') : poll.endsAt ? t('panel.poll.endsSuffix', { date: formatShort(poll.endsAt) }) : ''}
       </Text>
       {poll.options.map((o) => {
         const percent = pollPercent(o.votes, poll.totalVotes)
         return (
+          <View key={o.id} style={{ gap: 2 }}>
           <Pressable
-            key={o.id}
             disabled={closed || vote.isPending}
             onPress={() => vote.mutate(nextVote(poll, o.id))}
             style={({ pressed }) => [styles.option, o.voted && styles.optionMine, pressed && { opacity: 0.7 }]}
@@ -66,8 +75,17 @@ export function PollCard({ serverId, channelId, pollId, myId }: { serverId: stri
             <Text style={[styles.optionText, o.voted && { color: colors.text, fontWeight: '700' }]}>{o.text}</Text>
             {showResults ? <Text style={styles.percent}>{percent} %</Text> : null}
           </Pressable>
+          {showVoters && voters.data ? (
+            <Text style={styles.meta}>{(voters.data[o.id] ?? []).join(', ') || t('messaging.poll.noVoters')}</Text>
+          ) : null}
+          </View>
         )
       })}
+      {!poll.anonymous && showResults && poll.totalVotes > 0 ? (
+        <Pressable onPress={() => setShowVoters((v) => !v)} accessibilityRole="button" hitSlop={6}>
+          <Text style={[styles.meta, { color: colors.primary }]}>{t(showVoters ? 'messaging.poll.hideVoters' : 'messaging.poll.showVoters')}</Text>
+        </Pressable>
+      ) : null}
       {hasVoted && !closed ? (
         <Text style={styles.meta}>{t(poll.multipleChoice ? 'panel.poll.hintMultiple' : 'panel.poll.hintSingle')}</Text>
       ) : null}

@@ -1,4 +1,5 @@
 import { isUuid } from '@/lib/params'
+import type { IndexedMsg } from './localQuery'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 
 /** Bornes de handlers/search.rs (min 2 caractères) ; au-delà de 100, inutile d'interroger le serveur. */
@@ -112,4 +113,25 @@ export function withLocalResults(server: SearchMessage[], cached: readonly ChatM
       id: m.id, content: m.content, createdAt: m.createdAt, authorName: m.authorName, authorAvatar: m.authorAvatar, channelName, conversation: scope,
     }))
   return [...server, ...local].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+/** Message de l'index local (déchiffré sur l'appareil) au format des résultats ; null si sa conversation est inconnue. */
+export function fromIndexed(m: IndexedMsg): SearchMessage | null {
+  const conversation: ConversationRef | null =
+    m.kind === 'dm' ? { kind: 'dm', dmId: m.convId }
+      : m.kind === 'group' ? { kind: 'group', groupId: m.convId }
+        : m.serverId ? { kind: 'channel', serverId: m.serverId, channelId: m.convId } : null
+  if (!conversation) return null
+  return { id: m.id, content: m.text, createdAt: m.createdAt, authorName: m.authorName, authorAvatar: null, channelName: m.convName ?? '', conversation }
+}
+
+/**
+ * Résultats du serveur complétés par l'index local : texte déchiffré des messages chiffrés
+ * trouvés par métadonnées, et messages que seul l'index connaît. Du plus récent au plus ancien.
+ */
+export function mergeIndexed(server: SearchMessage[], indexed: SearchMessage[]): SearchMessage[] {
+  const byId = new Map(indexed.map((m) => [m.id, m]))
+  const merged = server.map((m) => (m.content == null && byId.has(m.id) ? { ...m, content: byId.get(m.id)!.content } : m))
+  const known = new Set(merged.map((m) => m.id))
+  return [...merged, ...indexed.filter((m) => !known.has(m.id))].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }

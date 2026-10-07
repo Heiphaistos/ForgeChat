@@ -9,6 +9,8 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as lotSocial from './parts/lotSocial'
+import * as messaging from './parts/messaging'
+import * as comfort from './parts/comfort'
 
 export const fr = {
   ...settings.fr,
@@ -19,6 +21,8 @@ export const fr = {
   ...stores.fr,
   ...e2e.fr,
   ...lotSocial.fr,
+  ...messaging.fr,
+  ...comfort.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

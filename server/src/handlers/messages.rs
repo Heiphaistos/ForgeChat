@@ -328,7 +328,10 @@ pub async fn send_message(
 
     // Messages éphémères : 10 s à 7 jours. Une valeur énorme faisait paniquer le
     // calcul de date, une valeur négative supprimait le message à l'envoi.
-    let expires_at = body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s.clamp(10, 7 * 86_400)));
+    // Le réglage du salon (messages éphémères) l'emporte sur la durée choisie à l'envoi.
+    let channel_ttl = crate::handlers::disappearing::setting(&state.db, crate::handlers::e2e_conv::Conv::Channel(channel_id)).await?;
+    let expires_at = crate::handlers::disappearing::expiry(channel_ttl, Utc::now()).0
+        .or_else(|| body.expires_at_seconds.map(|s| Utc::now() + chrono::Duration::seconds(s.clamp(10, 7 * 86_400))));
 
     let msg = sqlx::query(
         "INSERT INTO messages (channel_id, user_id, content, reply_to, mention_everyone, expires_at, enc, client_msg_id)

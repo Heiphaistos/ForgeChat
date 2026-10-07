@@ -39,6 +39,9 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 
 const obj = (v: unknown): Record<string, unknown> | null =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
 
+/** Message notifié (réponse rapide, réaction depuis la notification). */
+const msgId = (v: unknown): { message_id?: string } => (str(v) ? { message_id: str(v)! } : {})
+
 /** Texte d'aperçu : jetons de mention lisibles, caractères de contrôle retirés, tronqué. */
 function clip(content: unknown): string {
   const raw = typeof content === 'string' && content.trim() ? content : t('store.notify.attachment')
@@ -61,14 +64,14 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
         id: `msg:${id}`,
         title: sender,
         body: c.preview ? clip(m.content) : t('store.notify.newDm'),
-        data: { kind: 'dm', dm_id: id },
+        data: { kind: 'dm', dm_id: id, ...msgId(m.id) },
       }
     }
     return {
       id: `msg:${id}`,
       title: c.groupName(id) ?? t('store.notify.group'),
       body: c.preview ? t('store.notify.preview', { name: sender, text: clip(m.content) }) : t('store.notify.newGroupMessage', { name: sender }),
-      data: { kind: 'group', group_id: id },
+      data: { kind: 'group', group_id: id, ...msgId(m.id) },
     }
   }
   if (e.type === 'MENTION_CREATE') {
@@ -82,7 +85,7 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
       id: `msg:${channelId}`,
       title: `${str(m.server_name) ?? t('store.notify.server')} · #${str(m.channel_name) ?? t('store.voice.channel')}`,
       body: c.preview ? t('store.notify.preview', { name: author, text: clip(m.content) }) : t('store.notify.mentioned', { name: author }),
-      data: { kind: 'channel', server_id: serverId, channel_id: channelId },
+      data: { kind: 'channel', server_id: serverId, channel_id: channelId, ...msgId(m.message_id) },
     }
   }
   return null
