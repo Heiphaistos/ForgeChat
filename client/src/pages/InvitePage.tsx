@@ -51,7 +51,11 @@ export default function InvitePage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-fc-bg px-4">
+    <div
+      className="flex items-center justify-center min-h-screen bg-fc-bg px-4 bg-cover bg-center"
+      // Fond d'invitation : la bannière du serveur, assombrie pour garder la carte lisible.
+      style={serverInfo.server.banner ? { backgroundImage: `linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.55)), url(${mediaUrl(serverInfo.server.banner)})` } : undefined}
+    >
       <div
         role="main"
         aria-labelledby="invite-server-name"
@@ -68,6 +72,9 @@ export default function InvitePage() {
         <p className="text-fc-muted text-sm mb-1">Tu as été invité(e) à rejoindre</p>
         <h1 id="invite-server-name" className="text-2xl font-bold text-white mb-1">{serverInfo.server.name}</h1>
         <p className="text-fc-muted text-sm mb-6">{serverInfo.server.member_count} membre(s)</p>
+        {serverInfo.server.description && (
+          <p className="text-sm text-fc-text/90 -mt-4 mb-6 line-clamp-3">{serverInfo.server.description}</p>
+        )}
 
         {user ? (
           <button

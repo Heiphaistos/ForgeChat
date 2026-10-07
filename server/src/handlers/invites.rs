@@ -101,7 +101,7 @@ pub async fn get_invite_info(
     use sqlx::Row;
     // Adresse personnalisée (/invite/<adresse>) : aperçu du serveur, comme une invitation.
     let Some(invite) = invite else {
-        let s = sqlx::query("SELECT id, name, icon, member_count FROM servers WHERE vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)")
+        let s = sqlx::query("SELECT id, name, icon, banner, description, member_count FROM servers WHERE vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)")
             .bind(&code)
             .fetch_optional(&state.db)
             .await?
@@ -112,6 +112,8 @@ pub async fn get_invite_info(
                 "id": s.get::<Uuid, _>("id"),
                 "name": s.get::<String, _>("name"),
                 "icon": s.get::<Option<String>, _>("icon"),
+                "banner": s.get::<Option<String>, _>("banner"),
+                "description": s.get::<Option<String>, _>("description"),
                 "member_count": s.get::<i32, _>("member_count"),
             }
         })));
@@ -129,7 +131,7 @@ pub async fn get_invite_info(
     }
 
     let server = sqlx::query(
-        "SELECT id, name, icon, member_count FROM servers WHERE id=$1"
+        "SELECT id, name, icon, banner, description, member_count FROM servers WHERE id=$1"
     )
     .bind(invite.server_id)
     .fetch_one(&state.db)
@@ -141,6 +143,8 @@ pub async fn get_invite_info(
             "id": server.get::<Uuid, _>("id"),
             "name": server.get::<String, _>("name"),
             "icon": server.get::<Option<String>, _>("icon"),
+            "banner": server.get::<Option<String>, _>("banner"),
+            "description": server.get::<Option<String>, _>("description"),
             "member_count": server.get::<i32, _>("member_count"),
         }
     })))
