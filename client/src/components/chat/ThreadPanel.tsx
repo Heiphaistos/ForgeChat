@@ -264,9 +264,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     `/servers/${serverId}/channels/${channelId}/threads/${tid}/messages/${msgId}/attachments`
 
   const createThread = useMutation({
-    // Salon chiffré : titre ET premier message chiffrés avec la portée du nouveau fil.
+    // Salon chiffré : titre ET premier message chiffrés (portée du nouveau fil), fichiers aussi (clés dans le message, §12).
     mutationFn: async () => {
-      // Fichiers du premier message chiffrés avant l'envoi (clés dans le message chiffré, §12).
       const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
       const res = await createThreadE2E(serverId, channelId, newTitle.trim(), input.trim(), parentMessageId,
         body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body), filesExtra(prepared))
@@ -292,12 +291,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   const sendMessage = useMutation({
     mutationFn: async () => {
       const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
-      const res = await sendScoped(serverId, channelId, scope(), input.trim(),
-        body => api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
-          ...body,
-          reply_to: replyTo?.id,
-          has_attachments: prepared.count > 0,
-        }), undefined, filesExtra(prepared))
+      const res = await sendScoped(serverId, channelId, scope(), input.trim(), body => api.post(
+        `/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, { ...body, reply_to: replyTo?.id, has_attachments: prepared.count > 0 },
+      ), undefined, filesExtra(prepared))
       return Object.assign(res, { prepared })
     },
     onSuccess: async (res) => {
