@@ -4,6 +4,7 @@ import {
   Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
+import { Link as RouterLink } from 'react-router-dom'
 import { maybeCompressImage, formatBytes } from '../../utils/compressImage'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
@@ -1311,11 +1312,14 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 onClose={() => setShowScheduled(false)}
                 desktopClassName="absolute bottom-full right-0 mb-2 w-80 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 overflow-hidden"
               >
-                <div className="px-4 py-3 border-b border-fc-hover">
+                <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
                     <CalendarClock size={14} className="text-fc-accent" />
                     {t('sched.title')}
                   </div>
+                  <RouterLink to="/scheduled" onClick={() => setShowScheduled(false)} className="text-xs text-fc-accent hover:underline">
+                    {t('sched.seeAll')}
+                  </RouterLink>
                 </div>
 
                 <div className="p-4 space-y-3">

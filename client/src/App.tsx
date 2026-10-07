@@ -69,6 +69,7 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
 const QuickSwitcher = lazy(() => import('./components/QuickSwitcher'))
 const CommandPalette = lazy(() => import('./components/CommandPalette'))
 const SavedPage = lazy(() => import('./pages/SavedPage'))
+const ScheduledPage = lazy(() => import('./pages/ScheduledPage'))
 const ExplorePage = lazy(() => import('./pages/ExplorePage'))
 const ServerDiscoveryPage = lazy(() => import('./pages/ServerDiscoveryPage'))
 const ActivityFeedPage = lazy(() => import('./pages/ActivityFeedPage'))
@@ -1147,6 +1148,7 @@ function AppInner() {
             <Route path="friends" element={<FriendsPage />} />
             <Route path="users/:userId" element={<UserProfilePage />} />
             <Route path="saved" element={<SavedPage />} />
+            <Route path="scheduled" element={<ScheduledPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="discovery" element={<ServerDiscoveryPage />} />
             <Route path="activity" element={<ActivityFeedPage />} />

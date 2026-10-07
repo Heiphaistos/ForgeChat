@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Search, Hash, User, Settings, MessageCircle, Plus,
-  Compass, Clock, ChevronRight, X, Users, Bookmark, CheckCheck, Columns2, Keyboard,
+  Compass, Clock, ChevronRight, X, Users, Bookmark, CheckCheck, Columns2, Keyboard, CalendarClock,
 } from 'lucide-react'
+import { t as tr } from '../i18n'
 import api from '../api/client'
 import { useUnread } from '../store/unread'
 import { stripMarkdown } from '../utils/mdShortcuts'
@@ -154,6 +155,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
     { id: 'action-dm', category: 'Actions', label: 'Nouveau message direct', icon: <MessageCircle size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
     { id: 'action-friends', category: 'Actions', label: 'Amis', icon: <Users size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
     { id: 'action-saved', category: 'Actions', label: 'Messages sauvegardés', icon: <Bookmark size={14} className="text-fc-muted" />, action: () => navigate('/saved') },
+    { id: 'action-scheduled', category: 'Actions', label: tr('sched.page'), icon: <CalendarClock size={14} className="text-fc-muted" />, action: () => navigate('/scheduled') },
     { id: 'action-explore', category: 'Actions', label: 'Découvrir des serveurs', icon: <Compass size={14} className="text-fc-muted" />, action: () => navigate('/discovery') },
     { id: 'action-create', category: 'Actions', label: 'Créer un serveur', icon: <Plus size={14} className="text-fc-muted" />, action: () => { window.dispatchEvent(new CustomEvent('forgechat:create-server')); onClose() } },
     {
