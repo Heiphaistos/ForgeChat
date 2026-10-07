@@ -27,6 +27,8 @@ export interface ConvMember { user_id: string; username: string; public: string 
 interface ConvState {
   keys: Map<number, Uint8Array>; current: number | null; rotate: boolean; encrypt: boolean
   missing: string[]; serverKey: ServerKeyInfo | null; serverMissing: number[]; at: number
+  /** Clé de compte avec laquelle les enveloppes ont été ouvertes (null : aucune, tout est à rouvrir). */
+  priv: Uint8Array | null
 }
 
 /** Enveloppes par requête (borne du serveur) : un grand salon se distribue par lots. */
@@ -71,20 +73,35 @@ async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
   return {
     keys, current: data.current_epoch, rotate: data.rotate_needed, encrypt: data.encrypt ?? data.all_keyed,
     missing: data.missing ?? [], serverKey: data.server_key ?? null, serverMissing: data.server_missing ?? [], at: Date.now(),
+    priv,
   }
 }
+
+/** Clé de compte devenue prête (déverrouillage au démarrage) ou remplacée : tout est à rouvrir. */
+export const becameReady = (s: { status: string; priv: Uint8Array | null }, prev: { status: string; priv: Uint8Array | null }) =>
+  s.status === 'ready' && (prev.status !== 'ready' || s.priv !== prev.priv)
+
+/**
+ * État en cache encore utilisable : ouvert avec la clé de compte actuelle (un état chargé
+ * avant son déverrouillage n'a aucune clé d'époque), et assez récent si on force.
+ */
+export const cacheUsable = (hit: { priv: Uint8Array | null; at: number } | undefined, priv: Uint8Array | null, force: boolean, now: number) =>
+  !!hit && hit.priv === priv && (!force || now - hit.at < 1000)
 
 /** État de la conversation ; `force` recharge (au plus une fois par seconde). */
 async function load(kind: ConvKind, id: string, force = false): Promise<ConvState> {
   const name = c.convName(kind, id)
+  const priv = useAccountKey.getState().priv
   const hit = cache.get(name)
-  if (hit && (!force || Date.now() - hit.at < 1000)) return hit
+  if (hit && cacheUsable(hit, priv, force, Date.now())) return hit
   let p = loading.get(name)
   if (!p) {
     p = fetchState(kind, id).finally(() => loading.delete(name))
     loading.set(name, p)
   }
   const st = await p
+  // Chargement lancé avant que la clé soit prête : on recommence avec elle.
+  if (st.priv !== useAccountKey.getState().priv) return load(kind, id, force)
   cache.set(name, st)
   // MP et groupes : un membre a créé sa clé depuis, on lui donne les époques (salons : completeChannelKeys).
   if (kind !== 'channel' && st.missing.length && st.keys.size) void completeKeys(kind, id)

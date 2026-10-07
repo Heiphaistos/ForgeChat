@@ -1,5 +1,6 @@
 import { usersApi } from '@/api/users'
-import { answerKeyRequest, forgetConv, openRaw, openText } from '@/e2e/conversations'
+import { answerKeyRequest, becameReady, forgetConv, openRaw, openText } from '@/e2e/conversations'
+import { useAccountKey } from '@/e2e/accountKey'
 import type { EncPayload } from '@/e2e/crypto'
 import {
   appendMessage,
@@ -227,16 +228,18 @@ export function bindRealtime(): () => void {
     const kind = e.conv_kind === 'dm' || e.conv_kind === 'group' || e.conv_kind === 'channel' ? e.conv_kind : null
     const id = str(e.conv_id)
     if (!kind || !id) return
-    // Clés reçues : on relit la conversation, les messages en attente s'ouvrent.
+    // Clés reçues : on relit tout ce qui déchiffre (messages, épinglés, fils, forums, sondages,
+    // programmés, enregistrés, mentions…), les contenus en attente s'ouvrent.
+    // ponytail: invalide toutes les requêtes (événement rare) plutôt que de lister chaque clé chiffrée.
     forgetConv(kind, id)
-    void queryClient.invalidateQueries({ queryKey: ['messages', kind, id] })
-    void queryClient.invalidateQueries({ queryKey: qk.pins(id) })
-    if (kind === 'channel') {
-      // Fils, forums, sondages et programmés du salon utilisent la même clé.
-      for (const key of [qk.threads(id), qk.forum(id), ['thread-messages'], ['forum-post'], ['poll'], ['scheduled', id], qk.saved, qk.mentions])
-        void queryClient.invalidateQueries({ queryKey: key })
-    }
+    void queryClient.invalidateQueries()
   })
+  // Clé de compte prête après l'ouverture d'un écran (déverrouillage au démarrage) : même relecture.
+  offs.push(useAccountKey.subscribe((s, prev) => {
+    if (!becameReady(s, prev)) return
+    forgetConv()
+    void queryClient.invalidateQueries()
+  }))
   // Clé de récupération du serveur créée ou changée : les prochaines époques doivent l'inclure.
   on('SERVER_KEY', () => forgetConv())
 
