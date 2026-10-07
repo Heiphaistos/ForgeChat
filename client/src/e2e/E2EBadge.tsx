@@ -2,27 +2,33 @@
 // sécurité des membres et alerte « la clé de X a changé ».
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Lock, LockOpen, ShieldAlert, X } from 'lucide-react'
+import { Lock, ShieldAlert, X } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { useT } from '../i18n'
+import { useAccountKey } from './accountKey'
 import { acceptKeys, getMembers, keyChanges, type ConvKind } from './conversations'
 import { SafetyCode } from './E2ESettings'
 
-/** Vrai quand tous les membres ont une clé : la conversation est chiffrée. */
+/**
+ * Membres et clés publiques ; `encrypted` : ma clé est prête, donc les messages
+ * chargés sont déchiffrés ici (chiffrement obligatoire, recherche locale).
+ */
 export function useConvEncrypted(kind: ConvKind, id: string | undefined) {
+  const ready = useAccountKey(s => s.status === 'ready')
   const { data } = useQuery({
     queryKey: ['e2e_members', kind, id],
     queryFn: () => getMembers(kind, id!),
     enabled: !!id,
     staleTime: 60_000,
   })
-  return { members: data ?? [], encrypted: !!data?.length && data.every(m => !!m.public) }
+  return { members: data ?? [], encrypted: ready }
 }
 
+/** Cadenas toujours fermé (chiffrement obligatoire) ; membres sans clé signalés : ils liront après l'avoir créée. */
 export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
   const t = useT()
   const me = useAuth(s => s.user?.id)
-  const { members, encrypted } = useConvEncrypted(kind, id)
+  const { members } = useConvEncrypted(kind, id)
   const [open, setOpen] = useState(false)
   const [dismissed, setDismissed] = useState(0)
   const changed = useMemo(() => keyChanges(members), [members, dismissed])
@@ -36,14 +42,12 @@ export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        title={encrypted ? t('e2e.conv.encrypted') : t('e2e.conv.notYet', { names: missing.join(', ') })}
-        aria-label={encrypted ? t('e2e.conv.encrypted') : t('e2e.conv.notYetShort')}
+        title={missing.length ? t('e2e.conv.notYet', { names: missing.join(', ') }) : t('e2e.conv.encrypted')}
+        aria-label={missing.length ? t('e2e.conv.notYetShort') : t('e2e.conv.encrypted')}
         aria-expanded={open}
-        className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${
-          encrypted ? 'text-green-400 hover:bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'
-        }`}
+        className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition text-green-400 hover:bg-green-900/30"
       >
-        {encrypted ? <Lock size={18} /> : <LockOpen size={18} />}
+        <Lock size={18} />
       </button>
       {changed.length > 0 && (
         <div role="alert" className="fixed top-14 right-4 z-40 max-w-sm bg-fc-channel border border-fc-yellow/50 rounded-lg p-3 shadow-xl flex gap-2">
@@ -61,16 +65,15 @@ export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
             className="bg-fc-bg rounded-xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-white font-semibold flex items-center gap-2">
-                {encrypted ? <Lock size={16} className="text-green-400" aria-hidden /> : <LockOpen size={16} aria-hidden />}
+                <Lock size={16} className="text-green-400" aria-hidden />
                 {t('e2e.conv.title')}
               </h2>
               <button type="button" onClick={() => setOpen(false)} aria-label={t('common.close')} className="p-1 text-fc-muted hover:text-white">
                 <X size={16} />
               </button>
             </div>
-            <p className="text-xs text-fc-muted">
-              {encrypted ? t('e2e.conv.desc') : t('e2e.conv.notYet', { names: missing.join(', ') })}
-            </p>
+            <p className="text-xs text-fc-muted">{t('e2e.conv.desc')}</p>
+            {missing.length > 0 && <p className="text-xs text-fc-yellow mt-2">{t('e2e.conv.notYet', { names: missing.join(', ') })}</p>}
             {others.filter(m => m.public).map(m => (
               <div key={m.user_id}>
                 <p className="text-sm text-white mt-4">{m.username}</p>

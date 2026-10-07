@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { useT, t as tr } from '../i18n'
 import { useWs } from '../store/ws'
 import { useAccountKey } from './accountKey'
+import { reencryptServer, useReencryptProgress } from './conversations'
 import { RecoveryCodeModal } from './E2EGate'
 import { createServerKey, getServerKey, recoverServer, regenerateServerRecovery, type RecoveredChannel } from './serverKey'
 
@@ -163,6 +164,24 @@ export default function ServerKeySettings({ serverId, serverName, isOwner }: { s
       )}
 
       {shownCode && <ServerCodeModal code={shownCode} serverName={serverName} onDone={() => setShownCode(null)} />}
+    </div>
+  )
+}
+
+/**
+ * Propriétaire : rechiffre en arrière-plan l'ancien contenu en clair de tout le
+ * serveur (jamais purgé), avec un avancement discret.
+ */
+export function ServerReencrypt({ serverId }: { serverId: string }) {
+  const t = useT()
+  const ready = useAccountKey(s => s.status) === 'ready'
+  const done = useReencryptProgress(s => (s.serverId === serverId ? s.done : 0))
+  useEffect(() => { if (ready) void reencryptServer(serverId) }, [ready, serverId])
+  if (!done) return null
+  return (
+    <div role="status" className="fixed bottom-3 right-3 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-fc-channel/90 border border-fc-hover text-xs text-fc-muted shadow pointer-events-none">
+      <Loader2 size={12} className="animate-spin" aria-hidden />
+      {t('e2e.reencrypt.progress', { n: done })}
     </div>
   )
 }
