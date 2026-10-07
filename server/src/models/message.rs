@@ -34,6 +34,8 @@ pub struct MessageWithAuthor {
     pub author_username: String,
     pub author_discriminator: String,
     pub author_avatar: Option<String>,
+    /// Décoration d'avatar de l'auteur (jamais pour un webhook).
+    pub author_avatar_decoration: Option<String>,
     pub author_is_bot: bool,
     pub author_verified: bool,
     pub attachments: Vec<Attachment>,

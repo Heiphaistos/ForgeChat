@@ -23,6 +23,11 @@ export interface User {
   totp_enabled?: boolean
   pronouns?: string | null
   created_at?: string
+  /** Personnalisation du profil (migration 081). */
+  avatar_decoration?: string | null
+  profile_color_primary?: number | null
+  profile_color_accent?: number | null
+  profile_effect?: string | null
 }
 
 export interface AuthResponse {
@@ -162,6 +167,7 @@ export interface ServerMessage {
   author_username: string
   author_discriminator: string
   author_avatar: string | null
+  author_avatar_decoration?: string | null
   author_is_bot: boolean
   author_verified?: boolean
   attachments: Attachment[]
@@ -210,6 +216,7 @@ export interface ChatMessage {
   authorId: string
   authorName: string
   authorAvatar: string | null
+  authorDecoration?: string | null
   authorIsBot: boolean
   reply: { id: string | null; authorName: string | null; content: string | null } | null
   forwardedFrom: string | null
@@ -292,6 +299,7 @@ export interface Member {
   username: string
   discriminator?: string
   avatar: string | null
+  avatar_decoration?: string | null
   status?: UserStatus
   nickname?: string | null
   /** Profil propre à ce serveur ; `avatar` y est déjà substitué par le serveur. */

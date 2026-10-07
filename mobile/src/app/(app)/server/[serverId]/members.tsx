@@ -62,7 +62,7 @@ export default function MembersScreen() {
             accessibilityRole="button"
             accessibilityLabel={`${item.nickname || item.username}${item.is_owner ? ', propriétaire' : ''}`}
           >
-            <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} />
+            <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                 <Text style={[styles.name, { flexShrink: 1 }, decorOf(item.user_id)?.color ? { color: decorOf(item.user_id)?.color ?? undefined } : null]} numberOfLines={1}>

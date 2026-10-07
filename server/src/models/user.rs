@@ -32,6 +32,14 @@ pub struct User {
     #[sqlx(default)]
     #[serde(skip_serializing, default)]
     pub preferred_status: String,
+    #[sqlx(default)]
+    pub avatar_decoration: Option<String>,
+    #[sqlx(default)]
+    pub profile_color_primary: Option<i32>,
+    #[sqlx(default)]
+    pub profile_color_accent: Option<i32>,
+    #[sqlx(default)]
+    pub profile_effect: Option<String>,
 }
 
 impl User {
@@ -67,6 +75,10 @@ pub struct UserPublic {
     pub birthday: Option<chrono::NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub pronouns: Option<String>,
+    pub avatar_decoration: Option<String>,
+    pub profile_color_primary: Option<i32>,
+    pub profile_color_accent: Option<i32>,
+    pub profile_effect: Option<String>,
 }
 
 impl From<User> for UserPublic {
@@ -90,6 +102,10 @@ impl From<User> for UserPublic {
             birthday: u.birthday,
             created_at: u.created_at,
             pronouns: u.pronouns,
+            avatar_decoration: u.avatar_decoration,
+            profile_color_primary: u.profile_color_primary,
+            profile_color_accent: u.profile_color_accent,
+            profile_effect: u.profile_effect,
         }
     }
 }
@@ -127,6 +143,69 @@ pub struct UpdateProfileRequest {
     pub activity_detail: Option<String>,
     pub birthday: Option<serde_json::Value>,
     pub pronouns: Option<String>,
+    /// "" = retirer la décoration.
+    pub avatar_decoration: Option<String>,
+    /// 0xRRGGBB ; -1 = revenir au thème par défaut.
+    pub profile_color_primary: Option<i32>,
+    pub profile_color_accent: Option<i32>,
+    /// "" = aucun effet.
+    pub profile_effect: Option<String>,
+}
+
+/// Catalogue des décorations d'avatar (mêmes identifiants côté web et mobile).
+pub const AVATAR_DECORATIONS: &[&str] = &[
+    "gold", "silver", "neon", "rainbow", "fire", "ice", "emerald",
+    "sakura", "void", "sunset", "ocean", "dashed", "double", "glow",
+];
+
+/// Effets animés de la fiche profil.
+pub const PROFILE_EFFECTS: &[&str] = &["sparkles", "snow", "hearts", "stars", "bubbles"];
+
+impl UpdateProfileRequest {
+    /// Liste blanche stricte de la personnalisation du profil.
+    pub fn validate_cosmetics(&self) -> std::result::Result<(), &'static str> {
+        let in_list = |v: &Option<String>, list: &[&str]| {
+            v.as_deref().is_none_or(|s| s.is_empty() || list.contains(&s))
+        };
+        if !in_list(&self.avatar_decoration, AVATAR_DECORATIONS) {
+            return Err("Décoration d'avatar inconnue");
+        }
+        if !in_list(&self.profile_effect, PROFILE_EFFECTS) {
+            return Err("Effet de profil inconnu");
+        }
+        let color_ok = |c: Option<i32>| c.is_none_or(|c| (-1..=0xFF_FFFF).contains(&c));
+        if !color_ok(self.profile_color_primary) || !color_ok(self.profile_color_accent) {
+            return Err("Couleur de profil invalide (0xRRGGBB)");
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(json: serde_json::Value) -> UpdateProfileRequest {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn cosmetics_whitelist() {
+        assert!(req(serde_json::json!({})).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "avatar_decoration": "rainbow", "profile_effect": "snow" })).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "avatar_decoration": "", "profile_effect": "" })).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "avatar_decoration": "<script>" })).validate_cosmetics().is_err());
+        assert!(req(serde_json::json!({ "avatar_decoration": "Gold" })).validate_cosmetics().is_err());
+        assert!(req(serde_json::json!({ "profile_effect": "confetti" })).validate_cosmetics().is_err());
+    }
+
+    #[test]
+    fn cosmetics_colors() {
+        assert!(req(serde_json::json!({ "profile_color_primary": 0, "profile_color_accent": 0xFFFFFF })).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "profile_color_primary": -1 })).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "profile_color_primary": 0x1000000 })).validate_cosmetics().is_err());
+        assert!(req(serde_json::json!({ "profile_color_accent": -2 })).validate_cosmetics().is_err());
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]

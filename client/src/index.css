@@ -917,3 +917,46 @@ a:focus-visible,
 [data-theme="retro"] .fc-markdown pre,
 [data-theme="retro"] .fc-markdown code { background: #352a1e !important; border-color: #3c2e22 !important; }
 [data-theme="retro"] ::-webkit-scrollbar-thumb { background: #3c2e22 !important; border-radius: 99px !important; }
+
+/* DÉCORATION D'AVATAR (anneau autour de l'avatar, cf. ProfileDecor.tsx) */
+.fc-deco {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+/* Anneau en dégradé : le masque ne garde que la bordure (padding) du disque. */
+.fc-deco-ring {
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+@keyframes fc-deco-spin { to { transform: rotate(360deg); } }
+@keyframes fc-deco-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(1.06); }
+}
+.fc-deco-spin  { animation: fc-deco-spin 6s linear infinite; }
+.fc-deco-pulse { animation: fc-deco-pulse 2.4s ease-in-out infinite; }
+
+/* EFFET DE PROFIL : particules jouées une fois à l'ouverture de la fiche */
+@keyframes fc-fx-fall {
+  0%   { opacity: 0; transform: translateY(-10%) rotate(0); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(420px) rotate(180deg); }
+}
+@keyframes fc-fx-rise {
+  0%   { opacity: 0; transform: translateY(0) scale(0.6); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-420px) scale(1.2); }
+}
+@keyframes fc-fx-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.4); }
+  50%      { opacity: 1; transform: scale(1.2); }
+}
+.fc-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+.fc-fx > span { position: absolute; line-height: 1; animation-fill-mode: both; animation-timing-function: ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .fc-deco-spin, .fc-deco-pulse { animation: none; }
+  .fc-fx { display: none; }
+}
+[data-reduce-motion="true"] .fc-fx { display: none; }

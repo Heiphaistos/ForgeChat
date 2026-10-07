@@ -139,7 +139,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
     use sqlx::Row;
 
     let pending = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.is_bot, c.server_id
+        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.avatar_decoration, u.is_bot, c.server_id
          FROM scheduled_messages sm
          JOIN users u ON u.id = sm.user_id
          JOIN channels c ON c.id = sm.channel_id
@@ -233,6 +233,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                     author_username: row.get("username"),
                     author_discriminator: row.get("discriminator"),
                     author_avatar: row.get("avatar"),
+                    author_avatar_decoration: row.get("avatar_decoration"),
                     author_is_bot: row.try_get("is_bot").unwrap_or(false),
                     author_verified: row.try_get("is_verified").unwrap_or(false),
                     attachments: vec![],

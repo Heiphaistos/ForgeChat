@@ -875,8 +875,9 @@ function AppInner() {
     const offUserUpdate = on('USER_UPDATE', (d: any) => {
       const u = d.user
       if (!u?.id) return
-      updateUserInMessages(u.id, u.username, u.avatar ?? null)
+      updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null)
       qcHook.invalidateQueries({ queryKey: ['members'] })
+      qcHook.invalidateQueries({ queryKey: ['user', u.id] })
     })
     const offBoost = on('SERVER_BOOST', (d: any) => {
       toast.success(`${d.username ?? 'Un membre'} a boosté le serveur !`, { duration: 5000, icon: '🚀' })
