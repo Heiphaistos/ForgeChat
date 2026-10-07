@@ -4,12 +4,13 @@ import { Alert, View } from 'react-native'
 import { moderationApi } from '@/api/moderation'
 import { Sheet } from '@/components/Sheet'
 import { Button, IconButton, Row, Section, SwitchRow, TextField } from '@/components/ui'
+import { t as tr, useT } from '@/i18n'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import type { Channel } from '@/types/models'
 import { colors, spacing } from '@/theme'
 
-const fail = (e: unknown) => Alert.alert('Action impossible', errorMessage(e))
+const fail = (e: unknown) => Alert.alert(tr('common.actionFailed'), errorMessage(e))
 
 /**
  * Modération vocale d'un membre (PATCH /servers/:id/members/:u/voice) : muet et sourdine imposés,
@@ -26,6 +27,7 @@ export function VoiceModeration({
   channels: Channel[]
   can: { mute: boolean; deafen: boolean; move: boolean }
 }) {
+  const t = useT()
   const state = useQuery({ queryKey: ['voice-state'], queryFn: moderationApi.voiceState, refetchInterval: 15_000 })
   const [moveOpen, setMoveOpen] = useState(false)
   const room = state.data?.channels.find((c) => c.server_id === serverId && c.participants.some((p) => p.user_id === userId))
@@ -39,17 +41,20 @@ export function VoiceModeration({
   const targets = channels.filter((c) => (c.type === 'voice' || c.type === 'video') && c.id !== room?.channel_id)
 
   return (
-    <Section title="Vocal" footer={room ? `En vocal dans ${where ?? 'un salon'}.` : 'Pas en vocal sur ce serveur : le muet et la sourdine imposés s’appliqueront à sa prochaine connexion.'}>
-      {can.mute ? <SwitchRow icon="mic-off-outline" title="Couper le micro" value={!!me?.server_muted} onValueChange={(v) => run({ mute: v })} /> : null}
-      {can.deafen ? <SwitchRow icon="volume-mute-outline" title="Couper le son" value={!!me?.server_deafened} onValueChange={(v) => run({ deafen: v })} /> : null}
+    <Section
+      title={t('server.member.voice')}
+      footer={room ? t('server.member.inVoice', { channel: where ?? t('server.member.aChannel') }) : t('server.member.notInVoice')}
+    >
+      {can.mute ? <SwitchRow icon="mic-off-outline" title={t('server.member.mute')} value={!!me?.server_muted} onValueChange={(v) => run({ mute: v })} /> : null}
+      {can.deafen ? <SwitchRow icon="volume-mute-outline" title={t('server.member.deafen')} value={!!me?.server_deafened} onValueChange={(v) => run({ deafen: v })} /> : null}
       {can.move && room ? (
         <>
-          <Row icon="swap-horizontal-outline" title="Déplacer vers un autre salon" chevron onPress={() => setMoveOpen(true)} />
-          <Row icon="call-outline" title="Déconnecter du vocal" danger onPress={() => run({ disconnect: true })} />
+          <Row icon="swap-horizontal-outline" title={t('server.member.move')} chevron onPress={() => setMoveOpen(true)} />
+          <Row icon="call-outline" title={t('server.member.disconnect')} danger onPress={() => run({ disconnect: true })} />
           <Sheet
             visible={moveOpen}
             onClose={() => setMoveOpen(false)}
-            title="Déplacer vers"
+            title={t('server.member.moveTo')}
             actions={targets.map((c) => ({ label: c.name, icon: 'volume-medium-outline', onPress: () => run({ channel_id: c.id }) }))}
           />
         </>
@@ -60,6 +65,7 @@ export function VoiceModeration({
 
 /** Notes de modération privées (MANAGE_MESSAGES). */
 export function ModNotes({ serverId, userId }: { serverId: string; userId: string }) {
+  const t = useT()
   const notes = useQuery({ queryKey: ['mod-notes', serverId, userId], queryFn: () => moderationApi.notes(serverId, userId) })
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -76,7 +82,7 @@ export function ModNotes({ serverId, userId }: { serverId: string; userId: strin
       .finally(() => setBusy(false))
   }
   return (
-    <Section title="Notes de modération" footer="Visibles uniquement par les modérateurs.">
+    <Section title={t('server.member.notes')} footer={t('server.member.notesFooter')}>
       {(notes.data ?? []).map((n) => (
         <Row
           key={n.id}
@@ -85,7 +91,7 @@ export function ModNotes({ serverId, userId }: { serverId: string; userId: strin
           right={
             <IconButton
               icon="trash-outline"
-              label="Supprimer la note"
+              label={t('server.member.deleteNote')}
               color={colors.danger}
               onPress={() =>
                 void moderationApi
@@ -98,8 +104,8 @@ export function ModNotes({ serverId, userId }: { serverId: string; userId: strin
         />
       ))}
       <View style={{ padding: spacing.sm, gap: spacing.sm }}>
-        <TextField value={text} onChangeText={setText} placeholder="Ajouter une note" accessibilityLabel="Nouvelle note de modération" multiline maxLength={2000} />
-        <Button title="Ajouter la note" variant="secondary" onPress={add} loading={busy} disabled={!text.trim()} />
+        <TextField value={text} onChangeText={setText} placeholder={t('server.member.notePlaceholder')} accessibilityLabel={t('server.member.newNote')} multiline maxLength={2000} />
+        <Button title={t('server.member.addNote')} variant="secondary" onPress={add} loading={busy} disabled={!text.trim()} />
       </View>
     </Section>
   )
@@ -107,20 +113,21 @@ export function ModNotes({ serverId, userId }: { serverId: string; userId: strin
 
 /** Tags de clan d'un membre (MANAGE_ROLES). */
 export function MemberTags({ serverId, userId }: { serverId: string; userId: string }) {
+  const t = useT()
   const tags = useQuery({ queryKey: ['clan-tags', serverId], queryFn: () => moderationApi.tags(serverId) })
   const members = useQuery({ queryKey: ['members-detailed', serverId], queryFn: () => moderationApi.membersDetailed(serverId) })
   if (!tags.data?.length) return null
-  const mine = new Set(members.data?.find((m) => m.user_id === userId)?.tags.map((t) => t.id))
+  const mine = new Set(members.data?.find((m) => m.user_id === userId)?.tags.map((tag) => tag.id))
   return (
-    <Section title="Tags de clan">
-      {tags.data.map((t) => (
+    <Section title={t('server.member.tags')}>
+      {tags.data.map((tag) => (
         <SwitchRow
-          key={t.id}
-          title={t.name}
-          value={mine.has(t.id)}
+          key={tag.id}
+          title={tag.name}
+          value={mine.has(tag.id)}
           disabled={!members.data}
           onValueChange={(on) =>
-            void (on ? moderationApi.assignTag(serverId, userId, t.id) : moderationApi.removeTag(serverId, userId, t.id))
+            void (on ? moderationApi.assignTag(serverId, userId, tag.id) : moderationApi.removeTag(serverId, userId, tag.id))
               .then(() => members.refetch())
               .catch(fail)
           }

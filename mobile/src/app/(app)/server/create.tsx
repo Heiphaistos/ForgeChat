@@ -14,6 +14,7 @@ import {
   templatePreview,
   type ServerTemplate,
 } from '@/features/servers/templates'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useUi } from '@/stores/ui'
@@ -24,6 +25,7 @@ type Step = 'choice' | 'templates' | 'name'
 /** Création de serveur : depuis zéro, depuis un modèle public ou depuis un de mes modèles
  *  (même parcours et mêmes modèles que le client web, voir features/servers/templates.ts). */
 export default function CreateServerScreen() {
+  const t = useT()
   const [step, setStep] = useState<Step>('choice')
   const [template, setTemplate] = useState<ServerTemplate | null>(null)
   const [name, setName] = useState('')
@@ -40,9 +42,9 @@ export default function CreateServerScreen() {
   const publicTemplates = [...builtinTemplates, ...(remote.data?.public ?? [])]
   const mine = remote.data?.mine ?? []
 
-  const pick = (t: ServerTemplate | null) => {
-    setTemplate(t)
-    setName(t?.name ?? '')
+  const pick = (tpl: ServerTemplate | null) => {
+    setTemplate(tpl)
+    setName(tpl?.name ?? '')
     setError(null)
     setStep('name')
   }
@@ -68,7 +70,14 @@ export default function CreateServerScreen() {
     }
   }
 
-  const title = step === 'choice' ? 'Créer un serveur' : step === 'templates' ? 'Choisir un modèle' : template ? `Modèle : ${template.name}` : 'Créer un serveur'
+  const title =
+    step === 'choice'
+      ? t('server.create.title')
+      : step === 'templates'
+        ? t('server.create.pickTemplate')
+        : template
+          ? t('server.create.templateTitle', { name: template.name })
+          : t('server.create.title')
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
@@ -76,26 +85,26 @@ export default function CreateServerScreen() {
 
       {step === 'choice' ? (
         <>
-          <T variant="muted">Commence depuis zéro ou utilise un modèle.</T>
-          <Choice title="Créer depuis zéro" subtitle="Serveur vide avec un salon général" icon="add-circle-outline" onPress={() => pick(null)} />
-          <Choice title="Depuis un modèle" subtitle="Gaming, Communauté, Étude, Team et plus…" icon="albums-outline" onPress={() => setStep('templates')} />
+          <T variant="muted">{t('server.create.intro')}</T>
+          <Choice title={t('server.create.scratch')} subtitle={t('server.create.scratchSub')} icon="add-circle-outline" onPress={() => pick(null)} />
+          <Choice title={t('server.create.fromTemplate')} subtitle={t('server.create.fromTemplateSub')} icon="albums-outline" onPress={() => setStep('templates')} />
         </>
       ) : null}
 
       {step === 'templates' ? (
         <>
-          <BackLink label="Retour" onPress={() => setStep('choice')} />
-          <Section title="Modèles publics">
-            {publicTemplates.map((t) => (
-              <TemplateRow key={`${t.source}:${t.id}`} t={t} onPress={() => pick(t)} />
+          <BackLink label={t('common.back')} onPress={() => setStep('choice')} />
+          <Section title={t('server.create.publicTemplates')}>
+            {publicTemplates.map((tpl) => (
+              <TemplateRow key={`${tpl.source}:${tpl.id}`} tpl={tpl} onPress={() => pick(tpl)} />
             ))}
           </Section>
           {remote.isLoading ? <ActivityIndicator color={colors.primary} /> : null}
-          {remote.isError ? <T variant="muted">Modèles partagés indisponibles pour le moment.</T> : null}
+          {remote.isError ? <T variant="muted">{t('server.create.remoteError')}</T> : null}
           {mine.length ? (
-            <Section title="Mes modèles">
-              {mine.map((t) => (
-                <TemplateRow key={`mine:${t.id}`} t={t} onPress={() => pick(t)} />
+            <Section title={t('server.create.myTemplates')}>
+              {mine.map((tpl) => (
+                <TemplateRow key={`mine:${tpl.id}`} tpl={tpl} onPress={() => pick(tpl)} />
               ))}
             </Section>
           ) : null}
@@ -104,13 +113,13 @@ export default function CreateServerScreen() {
 
       {step === 'name' ? (
         <>
-          <BackLink label={template ? 'Changer de modèle' : 'Retour'} onPress={() => setStep(template ? 'templates' : 'choice')} />
-          {template ? <TemplatePreview t={template} /> : <T variant="muted">Ton serveur, c’est l’endroit où tu retrouves tes amis. Crée-le puis invite-les.</T>}
-          <TextField label="Nom du serveur" value={name} onChangeText={setName} maxLength={100} autoFocus error={error} />
+          <BackLink label={template ? t('server.create.changeTemplate') : t('common.back')} onPress={() => setStep(template ? 'templates' : 'choice')} />
+          {template ? <TemplatePreview tpl={template} /> : <T variant="muted">{t('server.create.blurb')}</T>}
+          <TextField label={t('server.create.name')} value={name} onChangeText={setName} maxLength={100} autoFocus error={error} />
           {template?.source === 'builtin' || !template ? (
-            <TextField label="Description (optionnel)" value={description} onChangeText={setDescription} maxLength={500} multiline />
+            <TextField label={t('server.create.description')} value={description} onChangeText={setDescription} maxLength={500} multiline />
           ) : null}
-          <Button title="Créer le serveur" onPress={submit} loading={loading} />
+          <Button title={t('server.create.submit')} onPress={submit} loading={loading} />
         </>
       ) : null}
     </ScrollView>
@@ -130,33 +139,35 @@ function Choice({ title, subtitle, icon, onPress }: { title: string; subtitle: s
   )
 }
 
-function TemplateRow({ t, onPress }: { t: ServerTemplate; onPress: () => void }) {
-  const n = t.data.channels.length
+function TemplateRow({ tpl, onPress }: { tpl: ServerTemplate; onPress: () => void }) {
+  const t = useT()
+  const n = tpl.data.channels.length
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Modèle ${t.name}, ${n} salons. ${t.description}`}
+      accessibilityLabel={t('server.create.templateLabel', { name: tpl.name, n, description: tpl.description })}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgAlt }]}
     >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.cardTitle}>{t.name}</Text>
+        <Text style={styles.cardTitle}>{tpl.name}</Text>
         <Text style={styles.cardSub} numberOfLines={2}>
-          {t.description}
+          {tpl.description}
         </Text>
-        <Text style={styles.count}>{n} salon{n > 1 ? 's' : ''}</Text>
+        <Text style={styles.count}>{t(n > 1 ? 'server.create.channelsMany' : 'server.create.channelsOne', { n })}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
   )
 }
 
-function TemplatePreview({ t }: { t: ServerTemplate }) {
-  const p = templatePreview(t.data)
+function TemplatePreview({ tpl }: { tpl: ServerTemplate }) {
+  const t = useT()
+  const p = templatePreview(tpl.data)
   return (
-    <View style={styles.preview} accessibilityLabel={`Aperçu : ${p.channelCount} salons, ${p.categoryCount} catégories, ${p.roles.length} rôles`}>
+    <View style={styles.preview} accessibilityLabel={t('server.create.previewLabel', { channels: p.channelCount, categories: p.categoryCount, roles: p.roles.length })}>
       <Text style={styles.cardSub}>
-        {p.channelCount} salon{p.channelCount > 1 ? 's' : ''} seront créés automatiquement.
+        {t(p.channelCount > 1 ? 'server.create.previewMany' : 'server.create.previewOne', { n: p.channelCount })}
       </Text>
       {p.sections.map((s, i) => (
         <View key={i} style={{ gap: 4 }}>
@@ -170,7 +181,7 @@ function TemplatePreview({ t }: { t: ServerTemplate }) {
       ))}
       {p.roles.length ? (
         <View style={{ gap: 4 }}>
-          <Text style={styles.category}>RÔLES</Text>
+          <Text style={styles.category}>{t('server.create.roles')}</Text>
           <View style={styles.chips}>
             {p.roles.map((r, i) => (
               <View key={i} style={styles.chip}>

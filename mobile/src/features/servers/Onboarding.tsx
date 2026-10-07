@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { ScrollView, View } from 'react-native'
 import { onboardingApi, type OnboardingQuestion } from '@/api/onboarding'
 import { Button, ErrorState, Loading, Row, Section, T } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
@@ -28,6 +29,7 @@ export function toggleChoice(selected: string[], q: OnboardingQuestion, optionId
 
 /** Questions d'accueil d'un serveur (même écran que le web, OnboardingModal.tsx). */
 export function OnboardingForm({ serverId, skippable, onDone }: { serverId: string; skippable?: boolean; onDone?: () => void }) {
+  const t = useT()
   const q = useQuery({ queryKey: onboardingKey(serverId), queryFn: () => onboardingApi.get(serverId) })
   const [selected, setSelected] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -56,14 +58,14 @@ export function OnboardingForm({ serverId, skippable, onDone }: { serverId: stri
       <View style={{ alignItems: 'center', gap: spacing.sm }}>
         <Ionicons name="sparkles-outline" size={48} color={colors.primary} />
         <T variant="subtitle" style={{ textAlign: 'center' }}>
-          Bienvenue !
+          {t('server.onboarding.welcome')}
         </T>
         <T variant="muted" style={{ textAlign: 'center' }}>
-          Réponds à quelques questions pour obtenir les rôles et salons qui te concernent.
+          {t('server.onboarding.intro')}
         </T>
       </View>
       {(q.data?.questions ?? []).map((question) => (
-        <Section key={question.id} title={question.title} footer={question.multiple ? 'Plusieurs choix possibles' : 'Un seul choix'}>
+        <Section key={question.id} title={question.title} footer={question.multiple ? t('server.onboarding.multiple') : t('server.onboarding.single')}>
           {question.options.map((o) => (
             <Row
               key={o.id}
@@ -76,8 +78,8 @@ export function OnboardingForm({ serverId, skippable, onDone }: { serverId: stri
         </Section>
       ))}
       {error ? <T variant="error">{error}</T> : null}
-      <Button title="Valider" onPress={() => void save(current)} loading={busy} />
-      {skippable ? <Button title="Passer" variant="secondary" onPress={() => void save([])} disabled={busy} /> : null}
+      <Button title={t('server.onboarding.submit')} onPress={() => void save(current)} loading={busy} />
+      {skippable ? <Button title={t('server.onboarding.skip')} variant="secondary" onPress={() => void save([])} disabled={busy} /> : null}
     </ScrollView>
   )
 }

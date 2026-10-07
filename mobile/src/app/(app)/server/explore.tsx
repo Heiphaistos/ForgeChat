@@ -5,6 +5,7 @@ import { Alert, FlatList, View } from 'react-native'
 import { serversApi, type PublicServer } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Button, EmptyState, ErrorState, Loading, T, TextField } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useUi } from '@/stores/ui'
@@ -12,6 +13,7 @@ import { colors, radius, spacing } from '@/theme'
 
 /** Serveurs publics (GET /explore), rejoints par leur code d'invitation. */
 export default function ExploreScreen() {
+  const t = useT()
   const q = useQuery({ queryKey: ['explore'], queryFn: serversApi.explore })
   const mine = useQuery({ queryKey: qk.servers, queryFn: serversApi.list })
   const [search, setSearch] = useState('')
@@ -35,7 +37,7 @@ export default function ExploreScreen() {
       await queryClient.invalidateQueries({ queryKey: qk.servers })
       open(s.id)
     } catch (e) {
-      Alert.alert('Impossible de rejoindre', errorMessage(e))
+      Alert.alert(t('server.explore.joinFailed'), errorMessage(e))
     } finally {
       setJoining(null)
     }
@@ -43,9 +45,9 @@ export default function ExploreScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Stack.Screen options={{ title: 'Explorer' }} />
+      <Stack.Screen options={{ title: t('server.explore.title') }} />
       <View style={{ padding: spacing.md }}>
-        <TextField value={search} onChangeText={setSearch} placeholder="Rechercher un serveur" accessibilityLabel="Rechercher un serveur" autoCorrect={false} />
+        <TextField value={search} onChangeText={setSearch} placeholder={t('server.explore.search')} accessibilityLabel={t('server.explore.search')} autoCorrect={false} />
       </View>
       {q.isLoading ? (
         <Loading />
@@ -56,7 +58,7 @@ export default function ExploreScreen() {
           data={list}
           keyExtractor={(s) => s.id}
           contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
-          ListEmptyComponent={<EmptyState icon="compass-outline" title="Aucun serveur public" />}
+          ListEmptyComponent={<EmptyState icon="compass-outline" title={t('server.explore.empty')} />}
           renderItem={({ item: s }) => (
             <View style={{ backgroundColor: colors.bgAlt, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
@@ -66,15 +68,15 @@ export default function ExploreScreen() {
                     {s.name}
                   </T>
                   <T variant="muted">
-                    {s.member_count} membre{s.member_count > 1 ? 's' : ''}
+                    {t(s.member_count > 1 ? 'server.explore.membersMany' : 'server.explore.membersOne', { n: s.member_count })}
                   </T>
                 </View>
               </View>
               {s.description ? <T numberOfLines={3}>{s.description}</T> : null}
               {joined.has(s.id) ? (
-                <Button title="Ouvrir" variant="secondary" onPress={() => open(s.id)} />
+                <Button title={t('server.explore.open')} variant="secondary" onPress={() => open(s.id)} />
               ) : (
-                <Button title={s.invite_code ? 'Rejoindre' : 'Sans invitation publique'} disabled={!s.invite_code} loading={joining === s.id} onPress={() => void join(s)} />
+                <Button title={s.invite_code ? t('server.explore.join') : t('server.explore.noInvite')} disabled={!s.invite_code} loading={joining === s.id} onPress={() => void join(s)} />
               )}
             </View>
           )}

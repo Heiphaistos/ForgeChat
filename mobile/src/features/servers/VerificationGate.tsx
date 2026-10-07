@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native'
 import { Button, SwitchRow, T } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
 import { needsVerification } from '@/features/account/rules'
+import { useT } from '@/i18n'
 import { errorMessage, http, path } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
@@ -14,6 +15,7 @@ import { useServerDetail } from './menus'
  * que je ne l'ai pas encore acceptée, afficher ses règles à la place du contenu.
  */
 export function VerificationGate({ serverId, children }: { serverId: string; children: ReactNode }) {
+  const t = useT()
   const detail = useServerDetail(serverId)
   const [accepted, setAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -39,10 +41,10 @@ export function VerificationGate({ serverId, children }: { serverId: string; chi
       <View style={{ alignItems: 'center', gap: spacing.sm }}>
         <Ionicons name="shield-checkmark-outline" size={48} color={colors.primary} />
         <T variant="subtitle" style={{ textAlign: 'center' }}>
-          Vérification requise
+          {t('server.verify.title')}
         </T>
         <T variant="muted" style={{ textAlign: 'center' }}>
-          {server.name} demande d’accepter ses règles avant de participer.
+          {t('server.verify.body', { name: server.name })}
         </T>
       </View>
       {server.verification_rules ? (
@@ -51,10 +53,10 @@ export function VerificationGate({ serverId, children }: { serverId: string; chi
         </View>
       ) : null}
       <View style={{ backgroundColor: colors.bgAlt, borderRadius: 12, overflow: 'hidden' }}>
-        <SwitchRow title="J’ai lu et j’accepte les règles" value={accepted} onValueChange={setAccepted} />
+        <SwitchRow title={t('server.verify.accept')} value={accepted} onValueChange={setAccepted} />
       </View>
       {error ? <T variant="error">{error}</T> : null}
-      <Button title="Accéder au serveur" onPress={() => void verify()} loading={busy} disabled={!accepted} />
+      <Button title={t('server.verify.submit')} onPress={() => void verify()} loading={busy} disabled={!accepted} />
     </ScrollView>
   )
 }

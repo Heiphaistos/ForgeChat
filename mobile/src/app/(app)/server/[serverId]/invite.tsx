@@ -4,15 +4,16 @@ import { ScrollView, Share, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Button, ErrorState, T } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
+import { useT, type Key } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, font, radius, spacing } from '@/theme'
 import { useAppearance } from '@/theme/prefs'
 
-const EXPIRY = [
-  { label: '1 heure', hours: 1 },
-  { label: '1 jour', hours: 24 },
-  { label: '7 jours', hours: 168 },
+const EXPIRY: { label: Key; hours: number }[] = [
+  { label: 'server.invite.hour', hours: 1 },
+  { label: 'server.invite.day', hours: 24 },
+  { label: 'server.invite.week', hours: 168 },
 ]
 
 /**
@@ -20,13 +21,14 @@ const EXPIRY = [
  * et on révoque le précédent de cet écran s'il n'a pas servi.
  */
 export default function InviteScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const streamer = useAppearance((st) => st.streamerMode)
   const [hours, setHours] = useState(24)
-  const [current, setCurrent] = useState<{ code: string; label: string } | null>(null)
+  const [current, setCurrent] = useState<{ code: string; label: Key } | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('server.invalid')} />
 
   const revokeIfUnused = async (code: string) => {
     const list = await serversApi.invites(ids.serverId)
@@ -47,9 +49,9 @@ export default function InviteScreen() {
       if (current) await revokeIfUnused(current.code)
       setCurrent(null)
       const inv = await serversApi.createInvite(ids.serverId, undefined, hours)
-      setCurrent({ code: inv.code, label: EXPIRY.find((e) => e.hours === hours)?.label ?? '' })
+      setCurrent({ code: inv.code, label: EXPIRY.find((e) => e.hours === hours)?.label ?? 'server.invite.day' })
     } catch (e) {
-      setError(errorMessage(e, 'Invitation impossible.'))
+      setError(errorMessage(e, t('server.invite.failed')))
     } finally {
       setLoading(false)
     }
@@ -59,12 +61,12 @@ export default function InviteScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }}>
-      <T variant="muted">Génère un lien d’invitation temporaire. Ne le partage qu’avec des personnes de confiance.</T>
-      <View style={{ flexDirection: 'row', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Durée de validité">
+      <T variant="muted">{t('server.invite.intro')}</T>
+      <View style={{ flexDirection: 'row', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel={t('server.invite.duration')}>
         {EXPIRY.map((e) => (
           <Button
             key={e.hours}
-            title={e.label}
+            title={t(e.label)}
             variant={hours === e.hours ? 'primary' : 'secondary'}
             onPress={() => setHours(e.hours)}
             accessibilityRole="radio"
@@ -73,18 +75,18 @@ export default function InviteScreen() {
           />
         ))}
       </View>
-      <Button title={current ? 'Générer un nouveau lien' : 'Générer le lien'} onPress={generate} loading={loading} />
-      {current ? <T variant="muted">Le nouveau lien remplacera celui-ci s’il n’a pas encore servi.</T> : null}
+      <Button title={current ? t('server.invite.generateNew') : t('server.invite.generate')} onPress={generate} loading={loading} />
+      {current ? <T variant="muted">{t('server.invite.replaceHint')}</T> : null}
       {error ? <T variant="muted">{error}</T> : null}
       {link && current ? (
         <View style={styles.link}>
           <Text style={styles.linkText} selectable>
             {streamer ? `${apiOrigin()}/invite/••••••` : link}
           </Text>
-          <T variant="muted">Valable {current.label}</T>
+          <T variant="muted">{t('server.invite.validFor', { duration: t(current.label) })}</T>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button title="Copier" variant="secondary" icon="copy-outline" style={{ flex: 1 }} onPress={() => void Clipboard.setStringAsync(link)} />
-            <Button title="Partager" icon="share-outline" style={{ flex: 1 }} onPress={() => void Share.share({ message: link })} />
+            <Button title={t('server.invite.copy')} variant="secondary" icon="copy-outline" style={{ flex: 1 }} onPress={() => void Clipboard.setStringAsync(link)} />
+            <Button title={t('server.invite.share')} icon="share-outline" style={{ flex: 1 }} onPress={() => void Share.share({ message: link })} />
           </View>
         </View>
       ) : null}

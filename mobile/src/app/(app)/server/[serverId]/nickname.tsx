@@ -9,6 +9,7 @@ import { Button, ErrorState, Loading, T, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { shownProfile } from '@/features/servers/memberProfile'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
@@ -22,10 +23,11 @@ const BANNER_MAX_BYTES = 10 * 1024 * 1024 // member_profile::image_column
 /** « Mon profil sur ce serveur » : pseudo, avatar, bannière et bio visibles sur ce serveur seulement.
  *  Vide : profil du compte. */
 export default function ServerProfileScreen() {
+  const t = useT()
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const me = useAuth((s) => s.user)
   const members = useQuery({ queryKey: qk.members(ids.serverId ?? ''), queryFn: () => serversApi.members(ids.serverId), enabled: valid })
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('server.invalid')} />
   if (members.isLoading || !me) return <Loading />
   const member = members.data?.find((m) => m.user_id === me.id)
   return <ServerProfileForm serverId={ids.serverId} me={me} member={member} />
@@ -40,6 +42,7 @@ function ServerProfileForm({
   me: { username: string; avatar?: string | null; banner?: string | null; bio?: string | null }
   member?: Member
 }) {
+  const t = useT()
   const [nick, setNick] = useState(member?.nickname ?? '')
   const [bio, setBio] = useState(member?.server_bio ?? '')
   const [loading, setLoading] = useState(false)
@@ -75,7 +78,7 @@ function ServerProfileForm({
     const a = res.assets[0]
     const max = kind === 'avatar' ? LIMITS.avatarMaxBytes : BANNER_MAX_BYTES
     if (a.fileSize && a.fileSize > max) {
-      Alert.alert('Image trop lourde', `Maximum ${max / 1024 / 1024} Mo.`)
+      Alert.alert(t('server.nickname.tooBig'), t('server.nickname.maxSize', { n: max / 1024 / 1024 }))
       return
     }
     setUploading(kind)
@@ -83,7 +86,7 @@ function ServerProfileForm({
       await serversApi.uploadServerProfileImage(serverId, kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
       await refresh()
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('server.nickname.uploadFailed'), errorMessage(e))
     } finally {
       setUploading(null)
     }
@@ -93,31 +96,31 @@ function ServerProfileForm({
     serversApi
       .clearServerProfileImage(serverId, kind)
       .then(refresh)
-      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 
   // Avatar du serveur : le serveur le substitue à `avatar`, il diffère donc de celui du compte.
   const hasServerAvatar = !!member?.avatar && member.avatar !== me.avatar
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <T variant="muted">Visible sur ce serveur uniquement. Vide : ton profil de compte.</T>
+      <T variant="muted">{t('server.nickname.intro')}</T>
       <ProfileBanner uri={shown.banner} name={me.username} />
-      <Pressable onPress={() => void pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel="Changer l’avatar de ce serveur">
+      <Pressable onPress={() => void pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel={t('server.nickname.changeAvatarLabel')}>
         <Avatar uri={shown.avatar} name={me.username} size={96} />
-        <Text style={{ color: colors.link, fontSize: font.sm }}>{uploading === 'avatar' ? 'Envoi…' : 'Changer l’avatar'}</Text>
+        <Text style={{ color: colors.link, fontSize: font.sm }}>{uploading === 'avatar' ? t('server.nickname.uploading') : t('server.nickname.changeAvatar')}</Text>
       </Pressable>
-      {hasServerAvatar ? <Button title="Reprendre l’avatar du compte" variant="ghost" onPress={() => void clear('avatar')} /> : null}
+      {hasServerAvatar ? <Button title={t('server.nickname.resetAvatar')} variant="ghost" onPress={() => void clear('avatar')} /> : null}
       <Button
-        title={uploading === 'banner' ? 'Envoi…' : member?.server_banner ? 'Changer la bannière' : 'Ajouter une bannière'}
+        title={uploading === 'banner' ? t('server.nickname.uploading') : member?.server_banner ? t('server.nickname.changeBanner') : t('server.nickname.addBanner')}
         variant="secondary"
         icon="image-outline"
         disabled={uploading !== null}
         onPress={() => void pick('banner')}
       />
-      {member?.server_banner ? <Button title="Reprendre la bannière du compte" variant="ghost" onPress={() => void clear('banner')} /> : null}
-      <TextField label="Pseudo du serveur" value={nick} onChangeText={setNick} maxLength={32} placeholder={me.username} autoCorrect={false} />
-      <TextField label="Bio du serveur" value={bio} onChangeText={setBio} maxLength={190} multiline placeholder={me.bio || 'Bio propre à ce serveur'} error={error} />
-      <Button title="Enregistrer" onPress={() => void save()} loading={loading} />
+      {member?.server_banner ? <Button title={t('server.nickname.resetBanner')} variant="ghost" onPress={() => void clear('banner')} /> : null}
+      <TextField label={t('server.nickname.nick')} value={nick} onChangeText={setNick} maxLength={32} placeholder={me.username} autoCorrect={false} />
+      <TextField label={t('server.nickname.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline placeholder={me.bio || t('server.nickname.bioPlaceholder')} error={error} />
+      <Button title={t('server.save')} onPress={() => void save()} loading={loading} />
     </ScrollView>
   )
 }

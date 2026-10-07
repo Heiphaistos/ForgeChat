@@ -6,6 +6,7 @@ import { serversApi } from '@/api/servers'
 import { userRoute } from '@/features/servers/memberProfile'
 import { Avatar } from '@/components/Avatar'
 import { ErrorState, Loading } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -14,6 +15,7 @@ import { usePresence } from '@/stores/presence'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function MembersScreen() {
+  const t = useT()
   // `manage=1` : ouvert depuis les paramètres du serveur, toucher un membre ouvre sa gestion.
   const { valid, ids, text } = useRouteParams(['serverId'] as const, ['manage'])
   const manage = text.manage === '1'
@@ -32,16 +34,16 @@ export default function MembersScreen() {
     return [...list].sort((a, b) => Number(online(b.user_id, b.status)) - Number(online(a.user_id, a.status)) || a.username.localeCompare(b.username))
   }, [q.data, statuses, search])
 
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('server.invalid')} />
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {manage ? <Stack.Screen options={{ title: 'Gérer les membres' }} /> : null}
+      {manage ? <Stack.Screen options={{ title: t('server.members.manageTitle') }} /> : null}
       <TextInput
         style={styles.search}
-        placeholder="Rechercher un membre"
+        placeholder={t('server.members.search')}
         placeholderTextColor={colors.textFaint}
         value={search}
         onChangeText={setSearch}
@@ -60,7 +62,7 @@ export default function MembersScreen() {
                 : router.push(userRoute(item.user_id, ids.serverId))
             }
             accessibilityRole="button"
-            accessibilityLabel={`${item.nickname || item.username}${item.is_owner ? ', propriétaire' : ''}`}
+            accessibilityLabel={item.is_owner ? t('server.members.owner', { name: item.nickname || item.username }) : item.nickname || item.username}
           >
             <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} />
             <View style={{ flex: 1 }}>
