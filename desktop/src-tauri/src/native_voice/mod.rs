@@ -24,12 +24,25 @@ use serde_json::Value;
 #[cfg(not(target_os = "linux"))]
 const ABSENT: &str = "vocal natif réservé à l'application Linux";
 
+/// `e2ee` : clé de média de bout en bout (`{ key, index }`) quand la salle l'exige.
 #[tauri::command]
-pub async fn nv_connect(app: tauri::AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool) -> Result<(), String> {
+pub async fn nv_connect(app: tauri::AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool, e2ee: Option<Value>) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    { imp::connect(app, url, token, ice, mic, mic_open).await }
+    {
+        let e2ee = e2ee.filter(|v| !v.is_null()).map(serde_json::from_value::<imp::MediaKey>).transpose().map_err(|e| e.to_string())?;
+        imp::connect(app, url, token, ice, mic, mic_open, e2ee).await
+    }
     #[cfg(not(target_os = "linux"))]
-    { let _ = (app, url, token, ice, mic, mic_open); Err(ABSENT.into()) }
+    { let _ = (app, url, token, ice, mic, mic_open, e2ee); Err(ABSENT.into()) }
+}
+
+/// Nouvelle époque de la conversation pendant l'appel : nouvelle clé de média.
+#[tauri::command]
+pub async fn nv_set_key(key: String, index: i32) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    { imp::set_key(imp::MediaKey { key, index }).await }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = (key, index); Err(ABSENT.into()) }
 }
 
 #[tauri::command]

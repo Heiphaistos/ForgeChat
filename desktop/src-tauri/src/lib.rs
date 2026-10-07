@@ -437,6 +437,7 @@ pub fn run() {
             updater::update_restart,
             native_voice::nv_connect,
             native_voice::nv_disconnect,
+            native_voice::nv_set_key,
             native_voice::nv_set_mic,
             native_voice::nv_set_deafen,
             native_voice::nv_set_peer_audio,

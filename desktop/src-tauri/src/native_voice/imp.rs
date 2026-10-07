@@ -4,6 +4,8 @@ use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
 use futures::StreamExt;
+use livekit::e2ee::key_provider::{KeyProvider, KeyProviderOptions};
+use livekit::e2ee::{E2eeOptions, EncryptionType};
 use livekit::options::TrackPublishOptions;
 use livekit::prelude::*;
 use livekit::webrtc::prelude::{IceServer, RtcConfiguration, RtcVideoSource};
@@ -26,6 +28,33 @@ struct Session {
     video: Arc<VideoServer>,
     events: tauri::async_runtime::JoinHandle<()>,
     app: AppHandle,
+}
+
+/// Clé de média de bout en bout (docs/CHIFFREMENT-E2E.md §5), calculée par le
+/// front : chaîne base64url donnée telle quelle à LiveKit (dérivation PBKDF2 du
+/// SDK, identique au web et au mobile) et index dans l'anneau (époque modulo 16).
+#[derive(serde::Deserialize, Clone)]
+pub struct MediaKey {
+    pub key: String,
+    pub index: i32,
+}
+
+/// Comme le fournisseur de clé du web : clé partagée, jamais de ratchet automatique.
+fn key_options() -> KeyProviderOptions {
+    KeyProviderOptions { ratchet_window_size: 0, ..Default::default() }
+}
+
+/// Le SDK crée les chiffreurs d'émission à l'index 0 : on leur donne l'index de
+/// la clé courante (après chaque publication et à chaque nouvelle époque).
+fn sync_key_index(room: &Room) {
+    let manager = room.e2ee_manager();
+    let Some(provider) = manager.key_provider() else { return };
+    let me = room.local_participant().identity();
+    for ((identity, _), cryptor) in manager.frame_cryptors() {
+        if identity == me {
+            cryptor.set_key_index(provider.get_latest_key_index());
+        }
+    }
 }
 
 #[derive(Default)]
@@ -187,7 +216,7 @@ async fn run_events(app: AppHandle, room: Arc<Room>, server: Arc<VideoServer>, m
     }
 }
 
-pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool) -> Result<(), String> {
+pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool, e2ee: Option<MediaKey>) -> Result<(), String> {
     // Mesuré : sans fournisseur installé, rustls panique dans le thread tokio et
     // la commande ne répond jamais (le front restait sur « Connexion… »).
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -208,6 +237,13 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     options.adaptive_stream = false;
     options.dynacast = true;
     options.rtc_config = rtc;
+    // Salle chiffrée de bout en bout : trames (et paquets de données) chiffrés
+    // avec la clé de média du salon ou de l'appel.
+    if let Some(k) = &e2ee {
+        let provider = KeyProvider::with_shared_key(key_options(), k.key.clone().into_bytes());
+        provider.set_shared_key(k.key.clone().into_bytes(), k.index);
+        options.encryption = Some(E2eeOptions { encryption_type: EncryptionType::Gcm, key_provider: provider });
+    }
     state(&app, "connecting", None, None);
     let (room, rx) = Room::connect(&url, &token, options).await.map_err(|e| {
         state(&app, "failed", None, Some(e.to_string()));
@@ -239,6 +275,8 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
         None
     };
 
+    sync_key_index(&room);
+
     // Pistes déjà publiées avant notre arrivée : l'abonnement automatique les
     // livre en `TrackSubscribed`, traité par la boucle d'événements.
     let events = tauri::async_runtime::spawn(run_events(app.clone(), room.clone(), video.clone(), rx));
@@ -257,6 +295,16 @@ pub async fn disconnect() {
     s.events.abort();
     let _ = s.room.close().await;
     *prefs().lock().unwrap() = AudioPrefs::default();
+}
+
+/// Nouvelle époque pendant l'appel : nouvelle clé, émise aussitôt à son index.
+pub async fn set_key(key: MediaKey) -> Result<(), String> {
+    let guard = session().lock().await;
+    let Some(s) = guard.as_ref() else { return Ok(()) };
+    let Some(provider) = s.room.e2ee_manager().key_provider() else { return Err("appel non chiffré".into()) };
+    provider.set_shared_key(key.key.into_bytes(), key.index);
+    sync_key_index(&s.room);
+    Ok(())
 }
 
 pub async fn set_mic(open: bool) -> Result<(), String> {
@@ -334,6 +382,7 @@ async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
     };
     let (name, kind) = if screen { ("screen", TrackSource::Screenshare) } else { ("camera", TrackSource::Camera) };
     let publication = publish_video(&room, name, source, kind).await?;
+    sync_key_index(&room);
     let mut guard = session().lock().await;
     match guard.as_mut() {
         Some(s) if Arc::ptr_eq(&s.room, &room) => {
