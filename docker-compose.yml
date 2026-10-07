@@ -1,6 +1,14 @@
+# Journaux Docker bornés (10 Mo x 3 par service) : rien ne s'accumule indéfiniment.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:16-alpine
+    logging: *logging
     environment:
       POSTGRES_DB: forgechat
       POSTGRES_USER: forgechat
@@ -16,14 +24,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    logging: *logging
     restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # Aucune persistance : compteurs anti-abus et jetons éphémères ne survivent pas à un redémarrage.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save "" --appendonly no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 5
 
   server:
+    logging: *logging
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -95,6 +106,7 @@ services:
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
     image: livekit/livekit-server:v1.13.7
+    logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.
     user: "65534:65534"
     environment:
@@ -106,7 +118,7 @@ services:
       LIVEKIT_CONFIG: |
         port: 7880
         logging:
-          level: info
+          level: warn
         rtc:
           # Un seul port UDP multiplexé, dans la plage que le pare-feu IONOS
           # laisse passer (49152-65535, mesuré : 7882 est bloqué). coturn est
