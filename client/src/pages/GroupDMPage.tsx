@@ -31,7 +31,10 @@ import { rememberConvName, searchLocal } from '../e2e/searchIndex'
 import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
+import AnimatedImg from '../components/ui/AnimatedImg'
+import UserName from '../components/ui/UserName'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
+import { isQueued } from '../lib/offline'
 
 interface GDMReaction {
   emoji: string
@@ -542,6 +545,7 @@ export default function GroupDMPage() {
       }
     },
     onError: (e, vars) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('gdm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)
@@ -946,14 +950,14 @@ export default function GroupDMPage() {
                   className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
                 >
                   {msg.sender_avatar
-                    ? <img src={mediaUrl(msg.sender_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    ? <AnimatedImg src={msg.sender_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : msg.sender_username.charAt(0).toUpperCase()
                   }
                 </button>
                 </AvatarDecoration>
                 <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isMe && (
-                    <span className="text-xs text-fc-muted mb-0.5 ml-1">{msg.sender_username}</span>
+                    <span className="text-xs text-fc-muted mb-0.5 ml-1"><UserName userId={msg.sender_id} name={msg.sender_username} withTag /></span>
                   )}
                   {editingMsgId === msg.id ? (
                     <div className="flex items-end gap-1 w-full max-w-xs">

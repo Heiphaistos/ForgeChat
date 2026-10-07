@@ -4,6 +4,7 @@ import { memo, useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
+import { UserName } from '@/components/UserName'
 import { useT } from '@/i18n'
 import { formatDay, formatTime, unreadLabel } from '@/lib/format'
 import { mentionsUser, previewUrl } from '@/lib/markdown'
@@ -233,9 +234,15 @@ export const MessageItem = memo(function MessageItem({
         <View style={{ flex: 1, minWidth: 0 }}>
           {grouped ? null : (
             <View style={styles.header}>
-              <Text style={[styles.author, decor?.color ? { color: decor.color } : null]} numberOfLines={1} onPress={() => onPressAuthor(m.authorId)}>
-                {m.authorName}
-              </Text>
+              <UserName
+                userId={m.authorIsBot ? undefined : m.authorId}
+                name={m.authorName}
+                roleColor={decor?.color}
+                serverId={serverId}
+                style={styles.author}
+                showTag
+                onPress={() => onPressAuthor(m.authorId)}
+              />
               <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />
               {m.authorIsBot ? <Text style={styles.bot}>BOT</Text> : null}
               <Text style={styles.time}>{formatTime(m.createdAt)}</Text>

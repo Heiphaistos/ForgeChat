@@ -167,6 +167,15 @@ class CallServiceModule : Module() {
       }
     }
 
+    // ── Widgets de l'écran d'accueil (ForgeWidgets.kt, src/services/widgets.ts) ──
+    Function("updateWidgets") { messagesTitle: String, messagesBody: String, voiceTitle: String, voiceBody: String ->
+      val ctx = appContext.reactContext ?: return@Function null
+      ForgeWidgets.save(ctx, "messages", messagesTitle, messagesBody)
+      ForgeWidgets.save(ctx, "voice", voiceTitle, voiceBody)
+      ForgeWidgets.refreshAll(ctx)
+      null
+    }
+
     // ── Fenêtre des appels vidéo (CallWindow.kt, src/services/callWindow.ts) ──
     Function("setImmersive") { on: Boolean ->
       val activity = appContext.currentActivity ?: return@Function null

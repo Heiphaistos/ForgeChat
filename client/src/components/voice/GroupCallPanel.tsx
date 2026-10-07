@@ -47,6 +47,7 @@ export default function GroupCallPanel({ groupId, members }: { groupId: string; 
   const render = (t: StageTile, o: RenderOpts) => (
     <PeerTile
       peer={{
+        userId: t.userId,
         username: t.username,
         avatar: (t.isLocal ? me?.avatar : byId.get(t.userId)?.avatar) ?? undefined,
         muted: t.isLocal ? micMuted : false,

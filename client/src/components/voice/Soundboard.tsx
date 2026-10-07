@@ -1,10 +1,11 @@
 import { useRef, useState, useCallback } from 'react'
-import { Music2, Plus, Trash2, Volume2, X, Upload } from 'lucide-react'
+import { Music2, Plus, Trash2, Volume2, X, Upload, LogIn } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useWs } from '../../store/ws'
 import { useT } from '../../i18n'
+import { setJoinSound, useJoinSound } from '../../lib/joinSound'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Sound {
@@ -161,6 +162,7 @@ function SoundButton({
   const t = useT()
   const { send } = useWs()
   const [playing, setPlaying] = useState(false)
+  const isJoinSound = useJoinSound()?.id === sound.id
 
   const play = useCallback(() => {
     const audio = new Audio(mediaUrl(sound.file_url))
@@ -188,6 +190,16 @@ function SoundButton({
         {sound.duration != null && (
           <span className="text-[9px] text-fc-muted">{sound.duration.toFixed(1)}s</span>
         )}
+      </button>
+
+      <button
+        onClick={e => { e.stopPropagation(); setJoinSound(isJoinSound ? null : { id: sound.id, name: sound.name, file_url: sound.file_url }) }}
+        className={`absolute top-1 left-1 p-0.5 rounded text-[10px] leading-none transition ${isJoinSound ? 'bg-fc-accent text-white opacity-100' : 'bg-black/50 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}
+        title={isJoinSound ? t('voice.joinSound.unset') : t('voice.joinSound.set')}
+        aria-label={isJoinSound ? t('voice.joinSound.unset') : t('voice.joinSound.set')}
+        aria-pressed={isJoinSound}
+      >
+        <LogIn size={9} />
       </button>
 
       {onDelete && (

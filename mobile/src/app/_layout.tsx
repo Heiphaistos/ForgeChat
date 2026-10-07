@@ -26,6 +26,8 @@ import '@/stores/call' // enregistre les handlers d'appel entrant dès le démar
 import '@/stores/groupCall' // sonnerie des appels de groupe
 import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
 import { useLock } from '@/stores/lock'
+import { bindOutbox } from '@/services/outbox'
+import { bindWidgets } from '@/services/widgets'
 import { useSettings } from '@/stores/settings'
 import { colors, isLight } from '@/theme'
 import { clearFileCache } from '@/e2e/files'
@@ -76,7 +78,7 @@ export default function RootLayout() {
   }, [status])
 
   useEffect(() => {
-    const offs = [bindRealtime(), bindVoiceRooms(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive(), bindMessaging()]
+    const offs = [bindRealtime(), bindVoiceRooms(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive(), bindOutbox(), bindWidgets(), bindMessaging()]
     return () => offs.forEach((off) => off())
   }, [])
 

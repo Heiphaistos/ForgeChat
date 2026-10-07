@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useThemeStore } from '../../theme/themeStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import { ChevronDown, Loader2, SmilePlus, Copy, Link, Share2, CornerUpLeft, MessagesSquare, Forward, Pin, Pencil, Trash2, Flag } from 'lucide-react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
@@ -432,7 +433,7 @@ export default function MessageList({
   }
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
-  const density = useMemo(() => localStorage.getItem('fc_density') ?? 'normal', [])
+  const density = useThemeStore(s => s.density)
   const compact = density === 'compact' || density === 'ultra-compact'
   const ultraCompact = density === 'ultra-compact'
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; msg: any } | null>(null)

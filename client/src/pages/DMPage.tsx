@@ -26,6 +26,7 @@ import DisappearingControl from '../components/chat/DisappearingControl'
 import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import { isQueued } from '../lib/offline'
 
 /** Message de MP tel que renvoyé par le serveur. */
 type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
@@ -402,6 +403,7 @@ export default function DMPage() {
       }
     },
     onError: (e, vars) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('dm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)

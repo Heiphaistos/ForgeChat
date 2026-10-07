@@ -19,6 +19,7 @@ import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { showReminder } from '@/services/push'
 import { getMyId, useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
+import { rememberUserStyle } from '@/stores/nameStyles'
 import { useTyping } from '@/stores/typing'
 import { useUnread } from '@/stores/unread'
 import type {
@@ -27,6 +28,7 @@ import type {
   DmMessage,
   GroupMessage,
   ServerMessage,
+  User,
 } from '@/types/models'
 
 /**
@@ -90,6 +92,12 @@ export function bindRealtime(): () => void {
     const id = str(e.user_id)
     const st = str(e.status)
     if (id && st) usePresence.getState().set(id, st)
+    // Statut perso posé, changé ou expiré (le serveur l'efface à l'échéance).
+    if (id && 'custom_status' in e) {
+      const patch = { custom_status: str(e.custom_status), custom_status_expires_at: str(e.custom_status_expires_at) }
+      if (id === getMyId()) useAuth.getState().setUser(patch)
+      queryClient.setQueryData<User>(qk.user(id), (old) => (old ? { ...old, ...patch } : old))
+    }
   })
 
   // ── Salons de serveur ──────────────────────────────────────────────────────
@@ -367,6 +375,7 @@ export function bindRealtime(): () => void {
   on('USER_UPDATE', (e) => {
     const id = str(e.user_id) ?? (isObj(e.user) ? str(e.user.id) : null)
     if (id && id === getMyId() && isObj(e.user)) useAuth.getState().setUser(e.user as never)
+    rememberUserStyle(e.user)
     if (id) void queryClient.invalidateQueries({ queryKey: qk.user(id) })
   })
 

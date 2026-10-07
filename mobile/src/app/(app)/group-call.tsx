@@ -15,7 +15,7 @@ import { qk } from '@/lib/queryClient'
 import { defaultRatio, useCallPip } from '@/services/callWindow'
 import { useAuth } from '@/stores/auth'
 import { useGroupCall } from '@/stores/groupCall'
-import { font, spacing } from '@/theme'
+import { callColors, font, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
 /**
@@ -128,7 +128,7 @@ export default function GroupCallScreen() {
 
 // Écran d'appel toujours sombre (comme Discord) : boutons blancs lisibles quel que soit le thème.
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111214' },
+  container: { flex: 1, backgroundColor: callColors.bg },
   title: { color: '#f2f3f5', fontSize: font.xl, fontWeight: '800', textAlign: 'center', paddingHorizontal: spacing.lg },
   status: { color: '#949ba4', fontSize: font.sm, textAlign: 'center', marginTop: 4 },
   controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.md, paddingHorizontal: spacing.sm },

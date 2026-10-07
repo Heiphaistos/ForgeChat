@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { useT } from '@/i18n'
 import { resolveMediaUrl } from '@/lib/links'
 import { usePresenceOf } from '@/stores/presence'
+import { useAnimateAvatars } from '@/stores/settings'
 import { statusColor, statusHollow, statusLabel } from '@/lib/status'
 import { colors } from '@/theme'
 import { AvatarDecoration } from './ProfileDecor'
@@ -38,6 +39,7 @@ export function Avatar({
   const live = usePresenceOf(showStatus ? userId : undefined, status)
   const t = useT()
   const src = resolveMediaUrl(uri)
+  const animate = useAnimateAvatars()
   const r = rounded ? size / 2 : size * 0.3
   const dot = Math.max(10, size * 0.3)
   const body = (
@@ -54,6 +56,7 @@ export function Avatar({
           cachePolicy="memory-disk"
           recyclingKey={src}
           transition={120}
+          autoplay={animate}
         />
       ) : (
         <View style={[styles.fallback, { width: size, height: size, borderRadius: r, backgroundColor: colorFor(name) }]}>

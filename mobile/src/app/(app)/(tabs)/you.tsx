@@ -13,6 +13,7 @@ import { useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { colors, font, spacing } from '@/theme'
 import { useAppearance } from '@/theme/prefs'
+import { AccountSwitcher } from '@/features/account/AccountSwitcher'
 
 
 // Panneau « Infos dev » : retiré du bundle du client-apk. EXPO_PUBLIC_APP_ENV est inliné à la
@@ -73,6 +74,8 @@ export default function YouScreen() {
         <Row icon="bookmark-outline" title={t('you.saved')} onPress={() => router.push('/saved')} chevron />
         <Row icon="calendar-outline" title={t('messaging.sched.title')} onPress={() => router.push('/scheduled')} chevron />
       </Section>
+
+      <AccountSwitcher />
 
       <Section title={t('you.settings')}>
         <Row icon="shield-checkmark-outline" title={t('you.security')} onPress={() => router.push('/settings/security')} chevron />

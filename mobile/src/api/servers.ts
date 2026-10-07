@@ -26,6 +26,7 @@ export interface ServerFull extends Server {
 
 /** PATCH /servers/:id (UpdateServerRequest) ; `null` vide un salon système/AFK/règles ou l'adresse personnalisée. */
 export interface ServerPatch {
+  role_color_overrides_name?: boolean
   name?: string
   description?: string
   is_public?: boolean

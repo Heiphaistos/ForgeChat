@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import type { ReactNode } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, font, radius, spacing } from '@/theme'
+import { colors, font, outline, radius, spacing } from '@/theme'
 import { useT } from '@/i18n'
 import type { IconName } from './ui'
 
@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     paddingTop: spacing.sm,
+    ...outline,
   },
   grabber: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.bgHover, marginBottom: spacing.sm },
   title: { color: colors.textMuted, fontSize: font.sm, fontWeight: '700', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

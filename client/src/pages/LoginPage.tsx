@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 import { useT } from '../i18n'
+import { SavedAccountsLogin } from '../components/AccountSwitcher'
 
 // Dans l'application bureau, « / » redirige vers /login : le lien bouclerait sur lui-même.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -52,6 +53,7 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.login.title')}</h1>
         <p className="text-fc-muted text-center mb-6">{t('auth.login.subtitle')}</p>
 
+        <SavedAccountsLogin />
         <form onSubmit={submit} className="space-y-4">
           {!needTotp ? (
             <>

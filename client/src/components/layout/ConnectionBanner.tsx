@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { WifiOff, RefreshCw } from 'lucide-react'
 import { useWs } from '../../store/ws'
 import { useT } from '../../i18n'
+import { useOffline } from '../../lib/offline'
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb)
@@ -20,6 +21,7 @@ export default function ConnectionBanner() {
   const tr = useT()
   const browserOnline = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
   const disconnected = !wsConnected || !browserOnline
+  const { fromCache, pending } = useOffline()
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -44,9 +46,10 @@ export default function ConnectionBanner() {
       ) : (
         <>
           <WifiOff size={13} aria-hidden />
-          {tr('conn.offline')}
+          {fromCache ? tr('offline.banner') : tr('conn.offline')}
         </>
       )}
+      {pending > 0 && <span className="opacity-90">· {tr('offline.pending', { n: pending })}</span>}
     </div>
   )
 }

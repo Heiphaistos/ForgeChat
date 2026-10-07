@@ -1,17 +1,17 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Hash, User, Settings, MessageCircle, Plus,
-  Compass, Clock, ChevronRight, X, Users, Bookmark, CheckCheck, Columns2, Keyboard, CalendarClock,
+  Compass, Clock, ChevronRight, X, Users, Bookmark, Keyboard, Mic, CalendarClock,
 } from 'lucide-react'
-import { t as tr } from '../i18n'
 import api from '../api/client'
-import { useUnread } from '../store/unread'
 import { stripMarkdown } from '../utils/mdShortcuts'
-import toast from 'react-hot-toast'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 import { messageLink } from '../utils/searchLink'
+import { useT, useLang, type Key } from '../i18n'
+import { SHORTCUTS, prettyCombo } from '../lib/shortcuts'
+import { runShortcut, shortcutLabel, useShortcutBindings } from '../hooks/useShortcuts'
 
 
 interface CommandPaletteProps {
@@ -24,6 +24,8 @@ interface PaletteItem {
   category: string
   label: string
   sublabel?: string
+  /** Raccourci clavier affiché à droite. */
+  hint?: string
   icon: React.ReactNode
   action: () => void
 }
@@ -56,6 +58,26 @@ function getRecentChannels(): RecentChannel[] {
   try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') } catch { return [] }
 }
 
+// Réglages ouvrables depuis la palette : [section, libellé].
+const SETTINGS_SECTIONS: [string, Key][] = [
+  ['account', 'settings.section.account'], ['profile', 'settings.section.profile'],
+  ['connected', 'settings.section.connected'], ['appearance', 'settings.section.appearance'],
+  ['text_display', 'settings.section.textDisplay'], ['notifications', 'settings.section.notifications'],
+  ['notifications_email', 'settings.section.emails'], ['keybindings', 'settings.section.keybindings'],
+  ['language', 'settings.section.language'], ['audio', 'settings.section.audio'], ['video', 'settings.section.video'],
+  ['privacy', 'settings.section.privacy'], ['security', 'settings.section.security'], ['sessions', 'settings.section.sessions'],
+  ['login_history', 'settings.section.loginHistory'], ['accessibility', 'settings.section.accessibility'],
+  ['streamer', 'settings.section.streamer'], ['advanced', 'settings.section.advanced'], ['stats', 'settings.section.stats'],
+]
+
+// La palette elle-même, le push-to-talk (touche maintenue) et le clip (page vocale) n'ont pas de sens ici ;
+// le split n'existe que sur grand écran.
+const PALETTE_HIDDEN = new Set(['search', 'push_to_talk', 'clip_stream',
+  ...(typeof window !== 'undefined' && window.innerWidth < 768 ? ['toggle_split'] : [])])
+
+// Recherche insensible aux accents et à la casse.
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
 const STATUS_COLOR: Record<string, string> = {
   online: 'bg-green-500', idle: 'bg-yellow-500', dnd: 'bg-red-500', offline: 'bg-fc-muted',
 }
@@ -66,6 +88,10 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
+  const qc = useQueryClient()
+  const t = useT()
+  const lang = useLang(s => s.lang)
+  const bindings = useShortcutBindings()
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 200)
@@ -100,7 +126,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   if (debouncedQuery.trim().length >= 2) {
     for (const srv of myServers.filter((s: any) => s.name?.toLowerCase().includes(debouncedQuery.toLowerCase())).slice(0, 5)) {
       items.push({
-        id: `srv-${srv.id}`, category: 'Serveurs', label: srv.name,
+        id: `srv-${srv.id}`, category: t('palette.servers'), label: srv.name,
         icon: <Compass size={14} className="text-fc-muted" />,
         action: () => navigate(`/servers/${srv.id}`),
       })
@@ -110,7 +136,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   if (!debouncedQuery) {
     for (const ch of getRecentChannels()) {
       items.push({
-        id: `recent-${ch.id}`, category: 'Canaux récents',
+        id: `recent-${ch.id}`, category: t('palette.recent'),
         label: `#${ch.name}`, sublabel: ch.serverName,
         icon: <Clock size={14} className="text-fc-muted" />,
         action: () => navigate(`/servers/${ch.serverId}/channels/${ch.id}`),
@@ -121,15 +147,15 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   if (debouncedQuery.trim().length >= 2 && searchResults) {
     for (const ch of searchResults.channels ?? []) {
       items.push({
-        id: `ch-${ch.id}`, category: 'Canaux', label: `#${ch.name}`, sublabel: ch.server_name,
+        id: `ch-${ch.id}`, category: t('palette.channels'), label: `#${ch.name}`, sublabel: ch.server_name,
         icon: <Hash size={14} className="text-fc-muted" />,
         action: () => navigate(`/servers/${ch.server_id}/channels/${ch.id}`),
       })
     }
     for (const u of searchResults.users ?? []) {
       items.push({
-        id: `user-${u.id}`, category: 'Membres', label: `@${u.username}`,
-        sublabel: u.status === 'online' ? 'En ligne' : 'Hors ligne',
+        id: `user-${u.id}`, category: t('palette.members'), label: `@${u.username}`,
+        sublabel: t(u.status === 'online' ? 'palette.online' : 'palette.offline'),
         icon: (
           <div className="relative">
             <User size={14} className="text-fc-muted" />
@@ -143,40 +169,60 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       const clean = stripMarkdown(msg.content ?? '')
       const preview = clean.length > 60 ? `${clean.slice(0, 60)}…` : clean
       items.push({
-        id: `msg-${msg.id}`, category: 'Messages', label: preview, sublabel: `par @${msg.author_username}`,
+        id: `msg-${msg.id}`, category: t('palette.messages'), label: preview, sublabel: t('palette.by', { user: msg.author_username }),
         icon: <MessageCircle size={14} className="text-fc-muted" />,
         action: () => navigate(messageLink(msg)),
       })
     }
   }
 
-  const quickActions: PaletteItem[] = [
-    { id: 'action-settings', category: 'Actions', label: 'Paramètres', icon: <Settings size={14} className="text-fc-muted" />, action: () => navigate('/settings') },
-    { id: 'action-dm', category: 'Actions', label: 'Nouveau message direct', icon: <MessageCircle size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
-    { id: 'action-friends', category: 'Actions', label: 'Amis', icon: <Users size={14} className="text-fc-muted" />, action: () => navigate('/friends') },
-    { id: 'action-saved', category: 'Actions', label: 'Messages sauvegardés', icon: <Bookmark size={14} className="text-fc-muted" />, action: () => navigate('/saved') },
-    { id: 'action-scheduled', category: 'Actions', label: tr('sched.page'), icon: <CalendarClock size={14} className="text-fc-muted" />, action: () => navigate('/scheduled') },
-    { id: 'action-explore', category: 'Actions', label: 'Découvrir des serveurs', icon: <Compass size={14} className="text-fc-muted" />, action: () => navigate('/discovery') },
-    { id: 'action-create', category: 'Actions', label: 'Créer un serveur', icon: <Plus size={14} className="text-fc-muted" />, action: () => { window.dispatchEvent(new CustomEvent('forgechat:create-server')); onClose() } },
-    {
-      id: 'action-mark-read', category: 'Actions', label: 'Tout marquer comme lu',
-      icon: <CheckCheck size={14} className="text-fc-muted" />,
-      action: () => { useUnread.getState().markAllRead(); toast.success('Tout est marqué comme lu') },
-    },
-    // Le split est desktop-only (hidden md:flex) : ne pas proposer l'action sur mobile
-    ...(window.innerWidth >= 768 ? [{
-      id: 'action-split', category: 'Actions', label: 'Vue en split (canal courant)',
-      icon: <Columns2 size={14} className="text-fc-muted" />,
-      action: () => window.dispatchEvent(new CustomEvent('forgechat:toggle-split')),
-    }] : []),
-    {
-      id: 'action-shortcuts', category: 'Actions', label: 'Raccourcis clavier',
-      icon: <Keyboard size={14} className="text-fc-muted" />,
-      action: () => window.dispatchEvent(new CustomEvent('forgechat:open-shortcuts')),
-    },
-  ].filter(a => !debouncedQuery || a.label.toLowerCase().includes(debouncedQuery.toLowerCase()))
+  const q = norm(debouncedQuery.trim())
+  const hit = (...texts: string[]) => !q || norm(texts.join(' ')).includes(q)
+  const icon = (I: typeof Settings) => <I size={14} className="text-fc-muted" />
 
-  const allItems = [...items, ...quickActions]
+  // Salons de tous les serveurs déjà chargés (instantané, marche aussi hors ligne).
+  if (q.length >= 2) {
+    const seen = new Set(items.map(i => i.id))
+    for (const [, data] of qc.getQueriesData<{ id?: string; name?: string; channels?: any[] }>({ queryKey: ['server'] })) {
+      for (const ch of data?.channels ?? []) {
+        if (items.length >= 40 || seen.has(`ch-${ch.id}`) || ch.type === 'category' || !hit(ch.name ?? '')) continue
+        seen.add(`ch-${ch.id}`)
+        items.push({
+          id: `ch-${ch.id}`, category: t('palette.channels'), label: `#${ch.name}`, sublabel: data?.name,
+          icon: icon(Hash), action: () => navigate(`/servers/${data?.id}/channels/${ch.id}`),
+        })
+      }
+    }
+  }
+
+  const shortcutActions: PaletteItem[] = SHORTCUTS
+    .filter(s => !PALETTE_HIDDEN.has(s.action))
+    .map(s => ({
+      id: `sc-${s.action}`, category: t('palette.actions'), label: t(shortcutLabel(s.action)),
+      hint: prettyCombo(bindings[s.action], lang), icon: icon(s.group === 'voice' ? Mic : Keyboard),
+      action: () => { onClose(); runShortcut(s.action) },
+    }))
+
+  const quickActions: PaletteItem[] = [
+    { id: 'action-dm', category: t('palette.actions'), label: t('palette.newDm'), icon: icon(MessageCircle), action: () => navigate('/friends') },
+    { id: 'action-friends', category: t('palette.actions'), label: t('palette.friends'), icon: icon(Users), action: () => navigate('/friends') },
+    { id: 'action-saved', category: t('palette.actions'), label: t('palette.saved'), icon: icon(Bookmark), action: () => navigate('/saved') },
+    { id: 'action-scheduled', category: t('palette.actions'), label: t('sched.page'), icon: icon(CalendarClock), action: () => navigate('/scheduled') },
+    { id: 'action-explore', category: t('palette.actions'), label: t('palette.discover'), icon: icon(Compass), action: () => navigate('/discovery') },
+    { id: 'action-create', category: t('palette.actions'), label: t('palette.createServer'), icon: icon(Plus), action: () => { window.dispatchEvent(new CustomEvent('forgechat:create-server')); onClose() } },
+    ...shortcutActions,
+  ].filter(a => hit(a.label))
+
+  const settingsItems: PaletteItem[] = q.length >= 2
+    ? SETTINGS_SECTIONS
+      .filter(([id, label]) => hit(t(label), t(`settings.keywords.${id}` as Key)))
+      .map(([id, label]) => ({
+        id: `set-${id}`, category: t('palette.settings'), label: t(label), icon: icon(Settings),
+        action: () => navigate(`/settings?section=${id}`),
+      }))
+    : []
+
+  const allItems = [...items, ...quickActions, ...settingsItems]
 
   const { activeIndex: selected, setActiveIndex: setSelected, handleKey: navKey } = useKeyboardNav(
     allItems,
@@ -211,7 +257,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Palette de commandes"
+        aria-label={t('palette.title')}
         className="w-full max-w-lg bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
@@ -219,26 +265,26 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
           <Search size={18} className="text-fc-muted flex-shrink-0" aria-hidden />
           <input
             ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-            onKeyDown={handleKey} placeholder="Rechercher ou saisir une commande..."
+            onKeyDown={handleKey} placeholder={t('palette.placeholder')}
             inputMode="search" autoComplete="off"
             enterKeyHint="search" autoCapitalize="none"
             role="combobox"
             aria-expanded={allItems.length > 0}
             aria-controls="cp-listbox"
             aria-activedescendant={activeItemId}
-            aria-label="Rechercher ou saisir une commande"
+            aria-label={t('palette.placeholder')}
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
           {query && (
-            <button onClick={() => setQuery('')} aria-label="Effacer la recherche" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+            <button onClick={() => setQuery('')} aria-label={t('palette.clear')} className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
               <X size={14} />
             </button>
           )}
-          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
+          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>{t('palette.esc')}</kbd>
         </div>
 
-        <div id="cp-listbox" role="listbox" aria-label="Résultats" ref={listRef} className="max-h-96 overflow-y-auto overscroll-contain py-2">
-          {allItems.length === 0 && <div role="status" className="px-4 py-8 text-center text-fc-muted text-sm">Aucun résultat</div>}
+        <div id="cp-listbox" role="listbox" aria-label={t('palette.results')} ref={listRef} className="max-h-96 overflow-y-auto overscroll-contain py-2">
+          {allItems.length === 0 && <div role="status" className="px-4 py-8 text-center text-fc-muted text-sm">{t('palette.empty')}</div>}
           {Object.entries(groups).map(([category, groupItems]) => (
             <div key={category} role="group" aria-label={category}>
               <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-fc-muted" aria-hidden>{category}</div>
@@ -262,7 +308,9 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                       <div className="text-sm font-medium truncate">{item.label}</div>
                       {item.sublabel && <div className="text-xs text-fc-muted truncate">{item.sublabel}</div>}
                     </div>
-                    <ChevronRight size={14} className="text-fc-muted flex-shrink-0 opacity-60" aria-hidden />
+                    {item.hint
+                      ? <kbd className="text-[10px] text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded flex-shrink-0 font-mono">{item.hint}</kbd>
+                      : <ChevronRight size={14} className="text-fc-muted flex-shrink-0 opacity-60" aria-hidden />}
                   </button>
                 )
               })}
@@ -271,9 +319,9 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
         </div>
 
         <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted" aria-hidden>
-          <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> naviguer</span>
-          <span><kbd className="bg-fc-hover px-1 rounded">Entrée</kbd> ouvrir</span>
-          <span><kbd className="bg-fc-hover px-1 rounded">Échap</kbd> fermer</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> {t('palette.navigate')}</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">{t('palette.enter')}</kbd> {t('palette.open')}</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">{t('palette.esc')}</kbd> {t('palette.close')}</span>
         </div>
       </div>
     </div>

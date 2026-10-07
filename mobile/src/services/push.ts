@@ -10,7 +10,8 @@ import { registerMessageCategory } from '@/services/notificationActions'
 import { PUSH_AVAILABLE } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
-import { registerPreSignOutHook, registerSignOutHook } from '@/stores/auth'
+import { registerPreSignOutHook, registerSignOutHook, useAuth } from '@/stores/auth'
+import { listAccounts } from '@/lib/accounts'
 import { useSettings } from '@/stores/settings'
 import { useUnread } from '@/stores/unread'
 
@@ -94,6 +95,15 @@ export async function showReminder(content: string | null): Promise<void> {
 /** Route vers l'écran correspondant à une notification touchée. */
 export function routeFromNotification(data: Record<string, unknown> | undefined) {
   if (!data) return
+  // Notification d'un autre compte de l'appli : on passe d'abord sur ce compte.
+  const { uid, ...rest } = data
+  if (isId(uid) && uid !== useAuth.getState().user?.id) {
+    void listAccounts().then((list) => {
+      if (!list.some((a) => a.id === uid)) routeFromNotification(rest)
+      else void useAuth.getState().switchAccount(uid).then((ok) => ok && routeFromNotification(rest))
+    })
+    return
+  }
   const kind = data.kind
   if (kind === 'dm' && isId(data.dm_id)) router.push(`/dm/${data.dm_id}`)
   else if (kind === 'group' && isId(data.group_id)) router.push(`/group/${data.group_id}`)
@@ -176,6 +186,7 @@ export async function syncPushRegistration(): Promise<void> {
       show_preview: pushPreview,
       device_name: Device.modelName ?? undefined,
       device_id: await getDeviceId(),
+      other_accounts: (await listAccounts()).map((a) => a.id),
     })
     await SecureStore.setItemAsync(TOKEN_KEY, token)
   } catch (e) {

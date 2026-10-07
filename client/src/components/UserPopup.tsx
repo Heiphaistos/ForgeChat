@@ -3,11 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
-import api, { mediaUrl } from '../api/client'
+import api from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import UserPrivateNotes from './UserPrivateNotes'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
 import { dateLocale, t as tr } from '../i18n'
+import AnimatedImg from './ui/AnimatedImg'
+import UserName from './ui/UserName'
+import ProfileLinks from './ui/ProfileLinks'
+import { renderMarkdown } from '../utils/markdown'
 
 const ACTIVITY_ICONS: Record<string, string> = {
   playing: '🎮',
@@ -140,7 +144,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
       {/* Banner */}
       <div className="h-28 relative" aria-hidden>
         {banner
-          ? <img src={mediaUrl(banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+          ? <AnimatedImg src={banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
               style={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
@@ -151,7 +155,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
           <AvatarDecoration id={user?.avatar_decoration} size={84}>
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {avatar
-              ? <img src={mediaUrl(avatar)} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              ? <AnimatedImg src={avatar} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           </AvatarDecoration>
@@ -168,16 +172,26 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
       <div className="pt-14 px-4 pb-4">
         {user ? (
           <>
-            <div className="font-bold text-white text-xl">{member?.nickname ?? user.username}</div>
-            {member?.nickname && <div className="text-xs text-fc-muted">{user.username}</div>}
-            <div className="text-xs text-fc-muted mb-1">#{user.discriminator}</div>
+            <div className="font-bold text-white text-xl break-words">
+              <UserName userId={user.id} name={user.username} nickname={member?.nickname} withTag />
+            </div>
+            <div className="text-xs text-fc-muted mb-1">
+              {(member?.nickname || user.display_name) ? `${user.username}#${user.discriminator}` : `#${user.discriminator}`}
+              {user.pronouns && <span> · {user.pronouns}</span>}
+            </div>
             <div className="text-xs text-fc-muted mb-3">
               {STATUS_LABEL[user.status] ?? 'Hors ligne'}
             </div>
 
-            {user.custom_status && (
+            {(user.custom_status || user.custom_status_emoji) && (
               <div className="text-sm text-fc-text bg-fc-channel rounded-lg px-3 py-2 mb-3 italic">
+                {user.custom_status_emoji && <span className="not-italic mr-1">{user.custom_status_emoji}</span>}
                 {user.custom_status}
+                {user.custom_status_expires_at && (
+                  <div className="text-[11px] text-fc-muted not-italic mt-0.5">
+                    {tr('profile.statusUntil', { time: format(new Date(user.custom_status_expires_at), 'd MMM HH:mm', { locale: dateLocale() }) })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -199,9 +213,11 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
             {bio && (
               <div className="mb-3">
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">À propos</div>
-                <div className="text-sm text-fc-text">{bio}</div>
+                <div className="text-sm text-fc-text break-words">{renderMarkdown(bio)}</div>
               </div>
             )}
+
+            <ProfileLinks links={user.profile_links} />
 
             {profile && profile.relationship !== 'self' && (
               <UserPrivateNotes userId={userId} isFriend={profile.relationship === 'friend'} />

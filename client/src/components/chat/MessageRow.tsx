@@ -12,6 +12,8 @@ import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, AfterReadBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
+import AnimatedImg from '../ui/AnimatedImg'
+import UserName from '../ui/UserName'
 import { useT } from '../../i18n'
 import { ThreadCountsContext } from './threadCounts'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
@@ -175,7 +177,7 @@ function MessageRow({
                 title={t('msg.profileOf', { name: msg.author_username })}
               >
                 {msg.author_avatar
-                  ? <img src={mediaUrl(msg.author_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <AnimatedImg src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author_username.charAt(0).toUpperCase()}
               </button>
               </AvatarDecoration>
@@ -189,10 +191,9 @@ function MessageRow({
             <div className="flex items-baseline gap-2 mb-0.5">
               <button
                 className="font-semibold text-white text-sm hover:underline cursor-pointer"
-                style={roleDecor?.style}
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
               >
-                {msg.author_username}
+                <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} withTag />
               </button>
               <RoleIcon icon={roleDecor?.icon} title={roleDecor?.iconTitle} />
               {msg.author_verified && (

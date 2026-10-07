@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { friendsApi } from '@/api/friends'
 import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
@@ -9,13 +10,17 @@ import { Avatar } from '@/components/Avatar'
 import { SafetyCode } from '@/e2e/E2ESettings'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
+import { StyledName, previewName } from '@/components/UserName'
 import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
 import { shownProfile } from '@/features/servers/memberProfile'
 import { useT } from '@/i18n'
+import { formatUntil } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
+import { openExternalUrl } from '@/lib/links'
+import { displayNameOf } from '@/lib/nameStyle'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
@@ -57,12 +62,45 @@ export default function UserScreen() {
         <ProfileBanner uri={shown.banner} name={u.username} />
         <View style={styles.header}>
           <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} />
-          <Text style={[styles.name, themed && styles.onTheme]}>{shown.name}</Text>
+          <View style={styles.nameRow}>
+            <StyledName
+              text={displayNameOf(u, members.data?.find((m) => m.user_id === u.id)?.nickname)}
+              resolved={previewName(u.name_style ?? null)}
+              style={[styles.name, themed && styles.onTheme]}
+              tag={u.profile_tag}
+              numberOfLines={2}
+            />
+          </View>
           <Text style={[styles.tag, themed && styles.onThemeMuted]}>
             {u.username}#{u.discriminator}
             {u.pronouns ? ` · ${u.pronouns}` : ''}
           </Text>
-          {u.custom_status ? <Text style={[styles.status, themed && styles.onThemeMuted]}>{u.custom_status}</Text> : null}
+          {u.custom_status ? (
+            <Text style={[styles.status, themed && styles.onThemeMuted]}>
+              {u.custom_status}
+              {u.custom_status_expires_at ? ` · ${t('settings.status.until', { when: formatUntil(u.custom_status_expires_at) })}` : ''}
+            </Text>
+          ) : null}
+          {u.profile_links?.length ? (
+            <View style={styles.links}>
+              {u.profile_links
+                .filter((l) => l.url.startsWith('https://'))
+                .map((l, i) => (
+                  <Pressable
+                    key={`${i}-${l.url}`}
+                    onPress={() => void openExternalUrl(l.url)}
+                    style={styles.link}
+                    accessibilityRole="link"
+                    accessibilityHint={l.url}
+                  >
+                    <Ionicons name="link" size={14} color={colors.link} />
+                    <Text style={styles.linkText} numberOfLines={1}>
+                      {l.label}
+                    </Text>
+                  </Pressable>
+                ))}
+            </View>
+          ) : null}
         </View>
       </ProfileThemeCard>
 
@@ -222,7 +260,11 @@ function SavedText({
 
 const styles = StyleSheet.create({
   header: { alignItems: 'center', gap: 4, marginBottom: spacing.xl },
-  name: { color: colors.text, fontSize: font.xxl, fontWeight: '800', marginTop: spacing.md },
+  nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md },
+  name: { color: colors.text, fontSize: font.xxl, fontWeight: '800', textAlign: 'center' },
+  links: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  link: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bgElevated },
+  linkText: { color: colors.link, fontSize: font.sm, fontWeight: '600', flexShrink: 1 },
   tag: { color: colors.textMuted },
   status: { color: colors.textSecondary, marginTop: spacing.sm },
   relation: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },

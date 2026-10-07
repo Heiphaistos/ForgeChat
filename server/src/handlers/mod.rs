@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod accounts;
 pub mod gifs;
 pub mod password_reset;
 pub mod users;
@@ -14,6 +15,8 @@ pub mod channel_backup;
 pub mod messages;
 pub mod super_reactions;
 pub mod member_profile;
+pub mod image_probe;
+pub mod profile_custom;
 pub mod roles;
 pub mod invites;
 pub mod uploads;

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
+import { UserName } from '@/components/UserName'
 import { Sheet } from '@/components/Sheet'
 import { Badge, ErrorState, IconButton, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
@@ -207,9 +208,7 @@ export function ChannelList({
               {people.map((p) => (
                 <View key={p.userId} style={styles.participant} accessible accessibilityLabel={p.muted ? `${p.username}, ${t('channels.micOff')}` : p.username}>
                   <Avatar uri={p.avatar} name={p.username} size={20} />
-                  <Text style={styles.participantName} numberOfLines={1}>
-                    {p.username}
-                  </Text>
+                  <UserName userId={p.userId} name={p.username} style={styles.participantName} />
                   {p.muted ? <Ionicons name="mic-off" size={12} color={colors.textFaint} /> : null}
                 </View>
               ))}

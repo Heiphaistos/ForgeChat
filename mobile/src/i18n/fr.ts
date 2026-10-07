@@ -9,6 +9,7 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as messaging from './parts/messaging'
+import * as comfort from './parts/comfort'
 
 export const fr = {
   ...settings.fr,
@@ -19,6 +20,7 @@ export const fr = {
   ...stores.fr,
   ...e2e.fr,
   ...messaging.fr,
+  ...comfort.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',
@@ -38,11 +40,21 @@ export const fr = {
   'appearance.notSyncedBody': 'Gardé sur cet appareil seulement.\n{error}',
   'appearance.themeSaved': 'Thème enregistré',
   'appearance.reopenForTheme': 'Ferme et rouvre l’app pour appliquer le thème.',
-  'appearance.restartAndroid': 'Redémarre l’app pour appliquer les couleurs et la taille du texte.',
-  'appearance.restartIos': 'Ferme et rouvre l’app pour appliquer les couleurs et la taille du texte.',
+  'appearance.restartAndroid': 'Redémarre l’app pour appliquer les couleurs, la densité et la taille du texte.',
+  'appearance.restartIos': 'Ferme et rouvre l’app pour appliquer les couleurs, la densité et la taille du texte.',
   'appearance.restartNow': 'Redémarrer maintenant',
   'appearance.theme': 'Thème',
-  'appearance.themeFooter': 'Mêmes thèmes que sur le web. Le thème est propre à cet appareil.',
+  'appearance.themeFooter': 'Mêmes thèmes que sur le web et le bureau, synchronisés avec ton compte.',
+  'appearance.themeBase': 'Thème',
+  'appearance.themeGradient': 'Dégradés',
+  'appearance.themeClassic': 'Classiques',
+  'appearance.themeCustom': 'Mes thèmes',
+  'appearance.customFooter': 'Crée, modifie, importe ou exporte tes thèmes dans Réglages → Apparence sur le web ou le bureau : ils apparaissent ici.',
+  'appearance.density': 'Densité',
+  'appearance.densityFooter': 'Espacements de toute l\'application, propres à cet appareil.',
+  'appearance.densityCompact': 'Compacte',
+  'appearance.densityNormal': 'Normale',
+  'appearance.densityComfortable': 'Confortable',
   'appearance.themeLabel': 'Thème {name}',
   'appearance.accent': "Couleur d'accent",
   'appearance.accentLabel': 'Accent {color}',

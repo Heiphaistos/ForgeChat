@@ -8,6 +8,7 @@ import { apiHost, subscribeApiOrigin } from '@/config/env'
 import { useT } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
+import { SavedAccountsLogin } from '@/features/account/AccountSwitcher'
 import { colors, radius, spacing } from '@/theme'
 
 // APK DEV : choix du serveur avant connexion. Retiré du bundle de production (condition constante).
@@ -77,6 +78,7 @@ export default function LoginScreen() {
 
           {DevServerLink ? <DevServerLink host={host} /> : null}
           {notice ? <T style={styles.notice}>{notice}</T> : null}
+          {!needTotp ? <SavedAccountsLogin /> : null}
 
           <View style={{ gap: spacing.lg }}>
             {!needTotp ? (

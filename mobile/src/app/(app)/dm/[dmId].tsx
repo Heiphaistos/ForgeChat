@@ -4,6 +4,7 @@ import { Stack, router } from 'expo-router'
 import { Alert, Text, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
+import { UserName } from '@/components/UserName'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
@@ -62,9 +63,7 @@ export default function DmScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Avatar uri={summary && !summary.is_group ? summary.avatar : null} name={name} size={28} userId={otherId} showStatus={!!otherId} status={status} />
               <View>
-                <Text style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} numberOfLines={1}>
-                  {name}
-                </Text>
+                <UserName userId={otherId} name={name} style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} />
                 {STATUS_LABEL[status] ? <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t(STATUS_LABEL[status])}</Text> : null}
               </View>
             </View>
