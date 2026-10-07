@@ -1,6 +1,7 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
 import * as messaging from './parts/messaging.ts'
+import * as ai from './parts/ai.ts'
 import { profileFr } from './profileFr.ts'
 import { comfortFr } from './comfort.ts'
 
@@ -8,6 +9,7 @@ export const fr = {
   ...profileFr,
   ...comfortFr,
   ...messaging.fr,
+  ...ai.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
@@ -346,7 +348,6 @@ export const fr = {
   'msg.unknown': 'inconnu',
   'msg.editHistory': "Voir l'historique des modifications",
   'msg.edited': '(modifié)',
-  'msg.translation': 'Traduction :',
   'msg.reacted.one': '{n} personne a réagi',
   'msg.reacted.other': '{n} personnes ont réagi',
   'msg.superSuffix': ' (super réaction)',
@@ -373,9 +374,6 @@ export const fr = {
   'msg.publishLabel': 'Publier le message vers les serveurs abonnés',
   'msg.edit': 'Modifier',
   'msg.editLabel': 'Modifier le message',
-  'msg.hideTranslation': 'Masquer la traduction',
-  'msg.translate': 'Traduire en français',
-  'msg.translateLabel': 'Traduire le message en français',
   'msg.remindMe': 'Me rappeler',
   'msg.report': 'Signaler ce message',
   'msg.delete': 'Supprimer',
@@ -389,7 +387,6 @@ export const fr = {
   'msg.superFailed': 'Impossible de poser la super réaction',
   'msg.saved': 'Message sauvegardé',
   'msg.saveFailed': 'Erreur lors de la sauvegarde',
-  'msg.translateUnavailable': 'Traduction indisponible',
   'msg.sendMessage': 'Envoyer un message',
   'msg.openDmFailed': "Impossible d'ouvrir la conversation",
   'msg.mention': 'Mentionner @{name}',
@@ -2234,7 +2231,6 @@ export const fr = {
   'e2e.channel.desc': 'Les messages de ce salon sont chiffrés sur les appareils de ses membres : ni la plateforme ni son administrateur ne peuvent les lire. Le propriétaire du serveur peut les récupérer avec la clé de récupération du serveur.',
   'e2e.channel.noKey': 'Crée ta clé de chiffrement pour lire et écrire dans ce salon.',
   'e2e.search.channelLocal': 'Salon chiffré : recherche dans les messages chargés sur cet appareil (le serveur ne cherche que par auteur, date ou pièce jointe).',
-  'e2e.translate.disabled': 'Traduction indisponible pour un message chiffré.',
   'e2e.crosspost.disabled': 'Publication dans les salons abonnés impossible : message chiffré.',
   'e2e.forward.encrypted': 'Le message sera chiffré à nouveau pour le salon choisi.',
   'e2e.serverKey.title': 'Chiffrement du serveur',

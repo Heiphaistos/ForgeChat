@@ -6,7 +6,8 @@ import { Download, FileText, Lock, Play } from 'lucide-react'
 import { useT } from '../i18n'
 import { formatBytes } from '../utils/compressImage'
 import { safeMime } from './crypto'
-import { AUTO_DECRYPT_MAX, decryptedUrl, saveDecrypted, thumbUrl, type DisplayAttachment } from './files'
+import TranscribeButton from '../components/ai/TranscribeButton'
+import { AUTO_DECRYPT_MAX, decryptedBlob, decryptedUrl, saveDecrypted, thumbUrl, type DisplayAttachment } from './files'
 
 type Kind = 'image' | 'video' | 'audio' | 'file'
 const kindOf = (m: string): Kind => {
@@ -79,7 +80,7 @@ export default function E2EAttachment({ att, onOpen, mediaClass = 'max-w-full sm
     )
   }
   if (kind === 'video' && src) return <video src={src} controls playsInline className={mediaClass} style={{ background: '#111' }} />
-  if (kind === 'audio' && src) return <audio src={src} controls className="max-w-full" />
+  if (kind === 'audio' && src) return <div><audio src={src} controls className="max-w-full" /><TranscribeButton load={() => decryptedBlob(att.url, e)} /></div>
   if (kind === 'video') {
     return (
       <button
