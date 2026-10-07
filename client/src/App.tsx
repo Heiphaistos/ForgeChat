@@ -146,11 +146,15 @@ function AppInner() {
   // Peuple le cache ['user-settings'] dès le montage (pas seulement quand l'utilisateur
   // ouvre Paramètres) -- nécessaire pour que sendNativeNotification puisse lire
   // quiet_hours_* de façon synchrone dès la 1re notification de la session.
-  useQuery({
+  const { data: userSettings } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 60_000,
   })
+  // La langue du compte prime sur celle mémorisée localement (écran de connexion)
+  const setLang = useLang(s => s.setLang)
+  const accountLang: string | undefined = userSettings?.language
+  useEffect(() => { if (accountLang) setLang(accountLang) }, [accountLang, setLang])
   const { incomingCall, setIncomingCall, setPendingAccept } = useCallStore()
   const pendingNotifs = useRef<Array<{ title: string; body: string; path: string }>>([])
   const wasConnected = useRef(false)
@@ -1193,6 +1197,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
+import { useLang } from './i18n'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

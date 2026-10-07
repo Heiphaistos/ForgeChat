@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Field, Select } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, useLang } from '../../i18n'
 
 const LANGS = [
   { value: 'fr', label: '🇫🇷 Français' }, { value: 'en', label: '🇬🇧 English' },
@@ -12,6 +13,8 @@ const LANGS = [
 ]
 
 export default function LanguageSection() {
+  const t = useT()
+  const setLang = useLang(s => s.setLang)
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -19,7 +22,8 @@ export default function LanguageSection() {
   })
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+    // Applique la langue tout de suite (sans recharger), puis confirme dans la nouvelle langue
+    onSuccess: (_r, data) => { setLang(data.language as string); toast.success(t('common.saved')); refetch() },
   })
   const [language, setLanguage] = useState('fr')
 
@@ -27,7 +31,7 @@ export default function LanguageSection() {
 
   return (
     <div className="space-y-4">
-      <Field label="Langue de l'interface">
+      <Field label={t('settings.language.label')} hint={language !== 'fr' && language !== 'en' ? t('settings.language.partial') : undefined}>
         <Select value={language} onChange={setLanguage} className="w-full" options={LANGS} />
       </Field>
       <button
@@ -35,7 +39,7 @@ export default function LanguageSection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
     </div>
   )
