@@ -70,7 +70,7 @@ pub async fn store_image(state: &AppState, dir: &'static str, data: &[u8]) -> Re
 /// (elle suit son propre réglage de visibilité, voir users::update_me).
 async fn broadcast_profile(state: &AppState, user: crate::models::user::User) -> UserPublic {
     let public = UserPublic::from(user.clone());
-    let mut shared = public.clone();
+    let mut shared = public.clone().for_others();
     shared.activity_type = None;
     shared.activity_name = None;
     shared.activity_detail = None;

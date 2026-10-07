@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import BirthdayChannelSetting from '../server/BirthdayChannelSetting'
 import { createPortal } from 'react-dom'
 import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -553,6 +554,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                       ))}
                     </select>
                   </div>
+                  <BirthdayChannelSetting serverId={server.id} channels={channels} />
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.rulesChannel')}</label>
                     <p className="text-xs text-fc-muted mb-2">{t('srv.rulesChannelDesc')}</p>

@@ -12,6 +12,7 @@ import { useMemberModeration } from './MemberModeration'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
+import RichStatus from '../ui/RichStatus'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { t as tr, useT, type Key } from '../../i18n'
 
@@ -91,16 +92,8 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
           {decor?.icon && <span className="ml-1"><RoleIcon icon={decor.icon} title={decor.iconTitle} /></span>}
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
-        {m.activity_type && m.activity_name ? (
-          <div className="text-xs text-fc-muted truncate flex items-center gap-1" aria-label={`${t(m.activity_type === 'playing' ? 'members.playing' : m.activity_type === 'listening' ? 'members.listening' : m.activity_type === 'watching' ? 'members.watching' : 'members.activity')} ${m.activity_name}`}>
-            <span aria-hidden>
-              {m.activity_type === 'playing' ? '🎮' :
-               m.activity_type === 'listening' ? '🎵' :
-               m.activity_type === 'watching' ? '📺' :
-               m.activity_type === 'streaming' ? '📡' : '🏆'}
-            </span>
-            <span className="truncate">{m.activity_name}</span>
-          </div>
+        {(m.activity_type && m.activity_name) || m.in_call ? (
+          <RichStatus activity={m} className="text-xs text-fc-muted" />
         ) : m.custom_status ? (
           <div className="text-xs text-fc-muted truncate">{m.custom_status}</div>
         ) : null}
@@ -137,7 +130,7 @@ export default function MemberList({ serverId, onClose }: Props) {
       const act = presenceActivities[m.user_id]
       return {
         ...m,
-        ...(act ? { activity_type: act.activity_type, activity_name: act.activity_name } : {}),
+        ...(act ? { activity_type: act.activity_type, activity_name: act.activity_name, in_call: act.in_call } : {}),
         liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
       }
     })

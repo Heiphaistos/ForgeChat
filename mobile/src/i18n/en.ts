@@ -8,6 +8,7 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as community from './parts/community'
+import * as lotSocial from './parts/lotSocial'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
 
@@ -20,6 +21,7 @@ export const en: Partial<Record<Key, string>> = {
   ...stores.en,
   ...e2e.en,
   ...community.en,
+  ...lotSocial.en,
   ...messaging.en,
   ...comfort.en,
 

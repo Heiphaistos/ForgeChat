@@ -49,6 +49,9 @@ pub struct UserSettings {
     pub dm_from_all: bool,
     pub show_online: bool,
     pub activity_visibility: String,
+    /// « En appel » : everyone / friends / nobody (lot « Profil et social »).
+    #[sqlx(default)]
+    pub call_visibility: String,
     pub friend_request_from: String,
     pub explicit_content_filter: String,
 }
@@ -89,6 +92,7 @@ impl Default for UserSettings {
             dm_from_all: true,
             show_online: true,
             activity_visibility: "everyone".into(),
+            call_visibility: "friends".into(),
             friend_request_from: "everyone".into(),
             explicit_content_filter: "none".into(),
         }
@@ -137,6 +141,7 @@ pub struct UpdateUserSettings {
     pub dm_from_all: Option<bool>,
     pub show_online: Option<bool>,
     pub activity_visibility: Option<String>,
+    pub call_visibility: Option<String>,
     pub friend_request_from: Option<String>,
     pub explicit_content_filter: Option<String>,
 }
@@ -155,7 +160,8 @@ pub async fn get_user_settings(
          reduce_motion, high_contrast, glassmorphism, show_role_colors,
          show_member_list_default, sidebar_width_px, pronouns,
          show_timestamps, message_display, colorblind_mode,
-         dm_from_all, show_online, activity_visibility, friend_request_from, explicit_content_filter
+         dm_from_all, show_online, activity_visibility, friend_request_from, explicit_content_filter,
+         call_visibility
          FROM user_settings WHERE user_id = $1"
     )
     .bind(claims.sub)
@@ -330,6 +336,23 @@ pub async fn update_user_settings(
     .bind(body.explicit_content_filter.is_some())
     .execute(&state.db)
     .await?;
+
+    if let Some(ref v) = body.call_visibility {
+        if !["everyone", "friends", "nobody"].contains(&v.as_str()) {
+            return Err(AppError::BadRequest("call_visibility invalide".into()));
+        }
+        // La ligne existe : elle vient d'être créée ou mise à jour juste au-dessus.
+        sqlx::query("UPDATE user_settings SET call_visibility=$2 WHERE user_id=$1")
+            .bind(claims.sub)
+            .bind(v)
+            .execute(&state.db)
+            .await?;
+        if let Some(status) = sqlx::query_scalar::<_, String>("SELECT status FROM users WHERE id=$1")
+            .bind(claims.sub).fetch_optional(&state.db).await?
+        {
+            crate::handlers::presence::broadcast_presence(&state, claims.sub, &status).await;
+        }
+    }
 
     get_user_settings(Extension(claims), State(state)).await
 }

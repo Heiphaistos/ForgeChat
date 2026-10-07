@@ -12,12 +12,21 @@ import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
 
-type ChoiceKey = 'activity_visibility' | 'friend_request_from' | 'explicit_content_filter'
+type ChoiceKey = 'activity_visibility' | 'call_visibility' | 'friend_request_from' | 'explicit_content_filter'
 
 const CHOICES: { key: ChoiceKey; title: Key; options: { v: string; label: Key }[] }[] = [
   {
     key: 'activity_visibility',
     title: 'settings.privacy.activity',
+    options: [
+      { v: 'everyone', label: 'settings.privacy.everyone' },
+      { v: 'friends', label: 'settings.privacy.friendsOnly' },
+      { v: 'nobody', label: 'settings.privacy.nobody' },
+    ],
+  },
+  {
+    key: 'call_visibility',
+    title: 'soc.privacy.call',
     options: [
       { v: 'everyone', label: 'settings.privacy.everyone' },
       { v: 'friends', label: 'settings.privacy.friendsOnly' },

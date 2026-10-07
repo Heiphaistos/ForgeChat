@@ -17,7 +17,9 @@ import { isUuid, useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { useCall, type CallType } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
-import { usePresenceOf } from '@/stores/presence'
+import { useActivityOf, usePresenceOf } from '@/stores/presence'
+import { richText } from '@/features/social/rich'
+import { RichStatusText } from '@/features/social/RichStatusText'
 import { useVoice } from '@/stores/voice'
 import { colors, font } from '@/theme'
 
@@ -33,6 +35,7 @@ export default function DmScreen() {
   // Nom de la conversation pour le filtre dans: de la recherche locale.
   useEffect(() => { if (ids.dmId) rememberConvName(ids.dmId, name) }, [ids.dmId, name])
   const status = usePresenceOf(otherId, summary && !summary.is_group ? summary.status : undefined)
+  const activity = useActivityOf(otherId)
   const startCall = useCall((s) => s.start)
 
   if (!valid) return <ErrorState message={t('conv.invalidDm')} />
@@ -64,7 +67,11 @@ export default function DmScreen() {
               <Avatar uri={summary && !summary.is_group ? summary.avatar : null} name={name} size={28} userId={otherId} showStatus={!!otherId} status={status} />
               <View>
                 <UserName userId={otherId} name={name} style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} />
-                {STATUS_LABEL[status] ? <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t(STATUS_LABEL[status])}</Text> : null}
+                {richText(activity, t) ? (
+                  <RichStatusText activity={activity} style={{ fontSize: font.xs, maxWidth: 180 }} />
+                ) : STATUS_LABEL[status] ? (
+                  <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t(STATUS_LABEL[status])}</Text>
+                ) : null}
               </View>
             </View>
           ),

@@ -325,6 +325,12 @@ function AppInner() {
   // Activité « Joue à … » détectée par l'app de bureau.
   useGameActivity(!!user)
 
+  // Rappel d'anniversaire d'un ami (birthdays.rs, une fois par an).
+  useEffect(() => on('BIRTHDAY_TODAY', (d) => {
+    const name = (d as { name?: unknown }).name
+    if (typeof name === 'string') toast(tr('soc.bday.toast', { name }), { duration: 8000 })
+  }), [on])
+
   // Listeners globaux voix (joins/leaves pour la sidebar)
   useEffect(() => {
     if (!user) return
@@ -350,6 +356,7 @@ function AppInner() {
         activity_type: d.activity_type,
         activity_name: d.activity_name,
         activity_detail: d.activity_detail,
+        in_call: d.in_call === true,
       })
       // Mettre à jour le statut personnalisé de l'utilisateur courant
       if (d.user_id === user?.id) {
@@ -369,6 +376,7 @@ function AppInner() {
           activity_type: u.activity_type,
           activity_name: u.activity_name,
           activity_detail: u.activity_detail,
+          in_call: u.in_call === true,
         })
       }
     })

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import BirthdaySettings from './BirthdaySettings'
 import { useMutation } from '@tanstack/react-query'
 import { Camera, Trash2 } from 'lucide-react'
 import { Field } from './shared'
@@ -17,13 +18,12 @@ export default function ProfileSection({ user, updateMe }: Props) {
   const t = useT()
   const [bio, setBio] = useState(user.bio ?? '')
   const [pronouns, setPronouns] = useState(user.pronouns ?? '')
-  const [birthday, setBirthday] = useState<string>(user.birthday ?? '')
   const [bannerPreview, setBannerPreview] = useState<string | null>(user.banner ?? null)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const bannerRef = React.useRef<HTMLInputElement>(null)
 
   const saveBio = useMutation({
-    mutationFn: () => api.patch('/users/me', { bio, pronouns, birthday: birthday || null }),
+    mutationFn: () => api.patch('/users/me', { bio, pronouns }),
     onSuccess: r => { updateMe(r.data); toast.success(t('settings.account.profileUpdated')) },
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
@@ -159,16 +159,6 @@ export default function ProfileSection({ user, updateMe }: Props) {
         />
       </Field>
 
-      <Field label={t('settings.profile.birthday')}>
-        <input
-          type="date"
-          value={birthday}
-          onChange={e => setBirthday(e.target.value)}
-          className="w-full fc-input text-sm streamer-blur"
-          max={new Date().toISOString().split('T')[0]}
-        />
-      </Field>
-
       <button
         onClick={() => saveBio.mutate()}
         disabled={saveBio.isPending}
@@ -176,6 +166,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
       >
         {saveBio.isPending ? t('common.saving') : t('settings.profile.save')}
       </button>
+
+      <BirthdaySettings />
 
       <ProfileIdentity user={user} updateMe={updateMe} />
 

@@ -22,6 +22,7 @@ export default function PrivacySection() {
 
   const [showOnline, setShowOnline] = useState(true)
   const [activityVisibility, setActivityVisibility] = useState('everyone')
+  const [callVisibility, setCallVisibility] = useState('friends')
   const [friendRequestFrom, setFriendRequestFrom] = useState('everyone')
   const [dmFromAll, setDmFromAll] = useState(true)
   const [explicitFilter, setExplicitFilter] = useState('none')
@@ -30,6 +31,7 @@ export default function PrivacySection() {
     if (settings) {
       setShowOnline(settings.show_online ?? true)
       setActivityVisibility(settings.activity_visibility ?? 'everyone')
+      setCallVisibility(settings.call_visibility ?? 'friends')
       setFriendRequestFrom(settings.friend_request_from ?? 'everyone')
       setDmFromAll(settings.dm_from_all ?? true)
       setExplicitFilter(settings.explicit_content_filter ?? 'none')
@@ -66,6 +68,11 @@ export default function PrivacySection() {
           options={[{ value: 'everyone', label: t('settings.privacy.everyone') }, { value: 'friends', label: t('settings.privacy.friendsOnly') }, { value: 'nobody', label: t('settings.privacy.nobody') }]} />
       </Field>
 
+      <Field label={t('soc.privacy.call')}>
+        <Select value={callVisibility} onChange={setCallVisibility} className="w-full"
+          options={[{ value: 'everyone', label: t('settings.privacy.everyone') }, { value: 'friends', label: t('settings.privacy.friendsOnly') }, { value: 'nobody', label: t('settings.privacy.nobody') }]} />
+      </Field>
+
       <Field label={t('settings.privacy.friendRequests')}>
         <Select value={friendRequestFrom} onChange={setFriendRequestFrom} className="w-full"
           options={[{ value: 'everyone', label: t('settings.privacy.everyone') }, { value: 'friends_of_friends', label: t('settings.privacy.friendsOfFriends') }, { value: 'nobody', label: t('settings.privacy.nobody') }]} />
@@ -81,7 +88,7 @@ export default function PrivacySection() {
       </Field>
 
       <button
-        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, explicit_content_filter: explicitFilter })}
+        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, call_visibility: callVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, explicit_content_filter: explicitFilter })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >

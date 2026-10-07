@@ -348,6 +348,12 @@ export interface Friend {
   custom_status?: string | null
   custom_nickname?: string | null
   message?: string | null
+  /** Lot « Profil et social » (amis acceptés seulement). */
+  is_favorite?: boolean
+  birthday?: { month: number; day: number } | null
+  activity_type?: string | null
+  activity_name?: string | null
+  in_call?: boolean
 }
 
 export interface FriendsResponse {

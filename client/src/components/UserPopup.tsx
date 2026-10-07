@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import api from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import UserPrivateNotes from './UserPrivateNotes'
+import UserSocialInfo from './UserSocialInfo'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
 import { dateLocale, t as tr } from '../i18n'
 import AnimatedImg from './ui/AnimatedImg'
@@ -209,6 +210,8 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
                 </div>
               </div>
             )}
+
+            <UserSocialInfo userId={userId} />
 
             {bio && (
               <div className="mb-3">

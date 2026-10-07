@@ -74,22 +74,26 @@ export function setupNotificationChannels() {
  * le WebSocket, donc app ouverte : notification locale si elles sont permises, sinon simple alerte.
  */
 export async function showReminder(content: string | null): Promise<void> {
-  const body = content?.trim().slice(0, 200) || t('store.push.reminderBody')
+  await showNotice(t('store.push.reminderTitle'), content?.trim().slice(0, 200) || t('store.push.reminderBody'), 'reminder')
+}
+
+/** Notification locale (repli : alerte si les notifications sont refusées). */
+export async function showNotice(title: string, body: string, kind = 'notice'): Promise<void> {
   if (PUSH_AVAILABLE) {
     try {
       const { status } = await Notifications.getPermissionsAsync()
       if (status === 'granted') {
         await Notifications.scheduleNotificationAsync({
-          content: { title: t('store.push.reminderTitle'), body, data: { kind: 'reminder' } },
+          content: { title, body, data: { kind } },
           trigger: Platform.OS === 'android' ? { channelId: 'messages' } : null,
         })
         return
       }
     } catch (e) {
-      logger.warn('push', 'rappel', e)
+      logger.warn('push', 'notification locale', e)
     }
   }
-  Alert.alert(t('store.push.reminderTitle'), body)
+  Alert.alert(title, body)
 }
 
 /** Route vers l'écran correspondant à une notification touchée. */

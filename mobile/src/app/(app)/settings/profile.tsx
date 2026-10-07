@@ -1,16 +1,17 @@
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
+import { router } from 'expo-router'
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native'
 import { STATUS_CLEAR_AFTER, usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
-import { Button, SwitchRow, TextField } from '@/components/ui'
+import { Button, Row, SwitchRow, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { ProfileCosmeticsEditor, type Cosmetics } from '@/features/account/ProfileCosmeticsEditor'
 import { NameStyleEditor } from '@/features/account/NameStyleEditor'
 import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/pickAnimated'
 import { ProfileLinksEditor } from '@/features/account/ProfileLinksEditor'
-import { formatBirthday, parseBirthday, profileLinkError, usernameError } from '@/features/account/rules'
+import { profileLinkError, usernameError } from '@/features/account/rules'
 import { formatUntil } from '@/lib/format'
 import type { NameStyle } from '@/lib/nameStyle'
 import { rememberUserStyle } from '@/stores/nameStyles'
@@ -18,7 +19,7 @@ import { useSettings } from '@/stores/settings'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
-import type { ProfileLink, User } from '@/types/models'
+import type { ProfileLink } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 
@@ -36,7 +37,7 @@ const CLEAR_AFTER_LABEL = {
 } as const
 
 export default function ProfileSettings() {
-  const user = useAuth((s) => s.user) as (User & { birthday?: string | null }) | null
+  const user = useAuth((s) => s.user)
   const setUser = useAuth((s) => s.setUser)
   const t = useT()
   const [username, setUsername] = useState(user?.username ?? '')
@@ -52,26 +53,24 @@ export default function ProfileSettings() {
   const animate = useSettings((s) => s.animateAvatars)
   const setSettings = useSettings((s) => s.set)
   const [pronouns, setPronouns] = useState(user?.pronouns ?? '')
-  const [birthday, setBirthday] = useState(formatBirthday(user?.birthday))
   const [cosmetics, setCosmetics] = useState<Cosmetics>({
     decoration: user?.avatar_decoration ?? '',
     primary: user?.profile_color_primary ?? null,
     accent: user?.profile_color_accent ?? null,
     effect: user?.profile_effect ?? '',
   })
-  const [errors, setErrors] = useState<{ username?: string; birthday?: string }>({})
+  const [errors, setErrors] = useState<{ username?: string }>({})
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'avatar' | 'banner' | null>(null)
   if (!user) return null
 
   const save = async () => {
     const nameErr = usernameError(username)
-    const bday = parseBirthday(birthday)
-    const errs = { username: nameErr ?? undefined, birthday: 'error' in bday ? bday.error : undefined }
+    const errs = { username: nameErr ?? undefined }
     setErrors(errs)
     const linkBad = links.some((l) => profileLinkError(l))
     setLinkErrors(linkBad)
-    if (errs.username || errs.birthday || 'error' in bday || linkBad) return
+    if (errs.username || linkBad) return
     // Renvoyer le statut remet son échéance à zéro : seulement s'il change ou si une durée est choisie.
     const sendStatus = customStatus.trim() !== (user.custom_status ?? '') || clearAfter != null
     setSaving(true)
@@ -86,8 +85,6 @@ export default function ProfileSettings() {
         name_style: nameStyle.colors.length || nameStyle.effect || nameStyle.font ? { ...nameStyle, angle: nameStyle.angle ?? 90 } : {},
         profile_links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
         pronouns: pronouns.trim(),
-        // Seulement si modifié : absent = inchangé, null = effacé.
-        birthday: bday.value !== (user.birthday ?? null) ? bday.value : undefined,
         // "" et -1 = retirer.
         avatar_decoration: cosmetics.decoration,
         profile_color_primary: cosmetics.primary ?? -1,
@@ -199,15 +196,7 @@ export default function ProfileSettings() {
         </View>
       </View>
       <TextField label={t('settings.profile.pronouns')} value={pronouns} onChangeText={setPronouns} maxLength={30} />
-      <TextField
-        label={t('settings.profile.birthday')}
-        placeholder={t('settings.profile.birthdayPlaceholder')}
-        value={birthday}
-        onChangeText={setBirthday}
-        keyboardType="numbers-and-punctuation"
-        maxLength={10}
-        error={errors.birthday}
-      />
+      <Row icon="gift-outline" title={t('soc.settings.title')} subtitle={t('soc.settings.sub')} onPress={() => router.push('/settings/social')} chevron />
       <TextField label={t('settings.profile.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline style={{ minHeight: 100 }} />
       <ProfileLinksEditor value={links} onChange={setLinks} showErrors={linkErrors} />
       <ProfileCosmeticsEditor value={cosmetics} onChange={setCosmetics} avatar={user.avatar} name={user.username} />

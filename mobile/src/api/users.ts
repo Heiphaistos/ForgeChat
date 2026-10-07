@@ -8,8 +8,6 @@ export interface UpdateProfile {
   bio?: string
   custom_status?: string
   pronouns?: string
-  /** AAAA-MM-JJ ; null = effacer. */
-  birthday?: string | null
   /** "" = retirer ; -1 = couleur par défaut. */
   avatar_decoration?: string
   profile_color_primary?: number
@@ -24,6 +22,9 @@ export interface UpdateProfile {
   profile_links?: ProfileLink[]
   /** Minutes (STATUS_CLEAR_AFTER) ; pris en compte seulement avec `custom_status`. */
   custom_status_clear_after?: number
+  /** Activité (« listening » saisi à la main) ; "" = retirer. */
+  activity_type?: string
+  activity_name?: string
 }
 
 /** Durées d'effacement du statut perso acceptées par le serveur (minutes ; 0 = jamais). */
@@ -80,9 +81,6 @@ export const usersApi = {
   dataExport: () => http.get<unknown>('/users/me/data-export', { timeoutMs: 60_000 }),
   setFocusMode: (enabled: boolean) => http.patch<{ focus_mode: boolean }>('/user/focus-mode', { enabled }),
   mutualServers: (id: string) => http.get<MutualServer[]>(path`/users/${id}/mutual-servers`),
-  /** Note privée sur un utilisateur (visible de moi seul) ; '' si aucune. */
-  note: (id: string) => http.get<{ content: string }>(path`/notes/${id}`),
-  setNote: (id: string, content: string) => http.put(path`/notes/${id}`, { content }),
   unread: () => http.get<UnreadItem[]>('/unread'),
   markAllRead: () => http.post('/unread/mark-all'),
   /** Mentions non lues ; celles d'un salon chiffré sont déchiffrées sur l'appareil pour l'aperçu. */

@@ -29,6 +29,9 @@ interface User {
   custom_status_emoji?: string | null
   custom_status_expires_at?: string | null
   display_name?: string | null
+  /** Activité (jeu détecté, musique saisie à la main…). */
+  activity_type?: string | null
+  activity_name?: string | null
   email?: string
   focus_mode?: boolean
   verified?: boolean

@@ -440,6 +440,7 @@ pub async fn send_group_message(
     .bind(group_id).bind(claims.sub).bind(&content).bind(reply_to).bind(&enc_json).bind(body.client_msg_id)
     .bind(expires_at).bind(expire_on_read)
     .fetch_one(&state.db).await?;
+    crate::handlers::badges::count_message(&state, claims.sub);
 
     // Infos du message cite pour l affichage immediat cote clients
     let reply_info = if let Some(rid) = reply_to {

@@ -16,7 +16,9 @@ import { fromDmMessage, fromGroupMessage, fromServerMessage } from '@/features/c
 import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
-import { showReminder } from '@/services/push'
+import { showNotice, showReminder } from '@/services/push'
+import { activityFrom } from '@/features/social/rich'
+import { t as tr } from '@/i18n'
 import { getMyId, useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { rememberUserStyle } from '@/stores/nameStyles'
@@ -84,14 +86,14 @@ export function bindRealtime(): () => void {
       e.users.filter(isObj).flatMap((u) => {
         const id = str(u.user_id)
         const st = str(u.status)
-        return id && st ? [{ user_id: id, status: st }] : []
+        return id && st ? [{ user_id: id, status: st, activity: activityFrom(u) }] : []
       }),
     )
   })
   on('PRESENCE_UPDATE', (e) => {
     const id = str(e.user_id)
     const st = str(e.status)
-    if (id && st) usePresence.getState().set(id, st)
+    if (id && st) usePresence.getState().set(id, st, activityFrom(e))
     // Statut perso posé, changé ou expiré (le serveur l'efface à l'échéance).
     if (id && 'custom_status' in e) {
       const patch = { custom_status: str(e.custom_status), custom_status_expires_at: str(e.custom_status_expires_at) }
@@ -381,6 +383,11 @@ export function bindRealtime(): () => void {
 
   // ── Rappels de messages (reminders.rs) ─────────────────────────────────────
   on('REMINDER', (e) => void showReminder(typeof e.content === 'string' ? e.content : null))
+  // Anniversaire d'un ami (birthdays.rs, une fois par an).
+  on('BIRTHDAY_TODAY', (e) => {
+    const name = str(e.name)
+    if (name) void showNotice(tr('soc.bday.title'), tr('soc.bday.toast', { name }))
+  })
 
   // Nettoyage périodique des indicateurs de saisie expirés
   const pruneTimer = setInterval(() => useTyping.getState().prune(), 2000)

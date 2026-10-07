@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
 import { useFormatDate } from '../hooks/useFormatDate'
 import ImportContactsModal from '../components/modals/ImportContactsModal'
+import FriendSections, { FriendMenuExtras, FriendStatusLine } from '../components/friends/FriendSections'
 import { useMobile } from '../contexts/MobileContext'
 import { useT, t as tr, type Key } from '../i18n'
 
@@ -31,6 +32,11 @@ interface FriendRow {
   avatar: string | null
   user_status: string
   custom_status?: string | null
+  is_favorite?: boolean
+  birthday?: { month: number; day: number } | null
+  activity_type?: string | null
+  activity_name?: string | null
+  in_call?: boolean
 }
 
 interface BlockedRow {
@@ -325,9 +331,7 @@ export default function FriendsPage() {
               #{f.discriminator}
             </span>
           </div>
-          <div className="text-xs text-fc-muted truncate mt-0.5">
-            {f.custom_status ?? t(STATUS_LABEL[live] ?? 'presence.offline')}
-          </div>
+          <FriendStatusLine friend={f} fallback={t(STATUS_LABEL[live] ?? 'presence.offline')} />
         </div>
 
         {/* Actions (visibles au hover) */}
@@ -352,7 +356,7 @@ export default function FriendsPage() {
             </button>
 
             {isOpen && (
-              <div className="absolute right-0 top-8 z-20 bg-fc-bg border border-fc-hover rounded-lg shadow-xl py-1 w-40"
+              <div className="absolute right-0 top-8 z-20 bg-fc-bg border border-fc-hover rounded-lg shadow-xl py-1 w-52 max-h-80 overflow-y-auto"
                 onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => { nav(`/users/${f.friend_id}`); setMenuOpen(null) }}
@@ -360,6 +364,7 @@ export default function FriendsPage() {
                 >
                   <User size={14} /> {t('friends.profile')}
                 </button>
+                <FriendMenuExtras friend={f} />
                 <button
                   onClick={() => { remove.mutate(f.friend_id); setMenuOpen(null) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-red hover:bg-fc-hover transition"
@@ -558,9 +563,7 @@ export default function FriendsPage() {
                 }
               </div>
             ) : (
-              <div className="space-y-0.5">
-                {filteredAccepted.map(f => renderFriendCard(f))}
-              </div>
+              <FriendSections friends={filteredAccepted} all={accepted} renderCard={renderFriendCard} />
             )}
           </>
         )}

@@ -170,13 +170,13 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Notifications anniversaire (toutes les 24h)
+    // Anniversaires du jour (toutes les heures, une seule fête par an : birthdays.rs)
     let birthday_state = state.clone();
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(86400));
+        let mut interval = tokio::time::interval(Duration::from_secs(3600));
         loop {
             interval.tick().await;
-            send_birthday_notifications(&birthday_state).await;
+            handlers::birthdays::run(&birthday_state).await;
         }
     });
 
@@ -475,75 +475,6 @@ async fn send_dm_notifications(state: &AppState) {
     }
 }
 
-async fn send_birthday_notifications(state: &AppState) {
-    use sqlx::Row;
-    use uuid::Uuid;
-
-    let birthday_users = sqlx::query(
-        "SELECT u.id, u.username, sm.server_id
-         FROM users u
-         JOIN server_members sm ON sm.user_id = u.id
-         WHERE EXTRACT(MONTH FROM u.birthday) = EXTRACT(MONTH FROM CURRENT_DATE)
-           AND EXTRACT(DAY FROM u.birthday) = EXTRACT(DAY FROM CURRENT_DATE)
-           AND u.birthday IS NOT NULL"
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
-    for row in birthday_users {
-        let username: String = row.get("username");
-        let server_id: Uuid = row.get("server_id");
-
-        let channel = sqlx::query(
-            "SELECT id FROM channels WHERE server_id=$1 AND (name ILIKE '%général%' OR name ILIKE '%general%' OR position=0) ORDER BY position ASC LIMIT 1"
-        )
-        .bind(server_id)
-        .fetch_optional(&state.db)
-        .await
-        .unwrap_or_default();
-
-        if let Some(ch) = channel {
-            let channel_id: Uuid = ch.get("id");
-            let msg_id = Uuid::new_v4();
-            let content = format!("🎂 Joyeux anniversaire **{}** ! 🎉🎈", username);
-
-            let server_row = sqlx::query("SELECT owner_id FROM servers WHERE id=$1")
-                .bind(server_id)
-                .fetch_optional(&state.db)
-                .await
-                .unwrap_or_default();
-
-            if let Some(srv) = server_row {
-                let owner_id: Uuid = srv.get("owner_id");
-                let _ = sqlx::query(
-                    "INSERT INTO messages (id, channel_id, user_id, content, created_at) VALUES ($1,$2,$3,$4,NOW())"
-                )
-                .bind(msg_id)
-                .bind(channel_id)
-                .bind(owner_id)
-                .bind(&content)
-                .execute(&state.db)
-                .await;
-
-                let event = serde_json::json!({
-                    "type": "MESSAGE_CREATE",
-                    "message": {
-                        "id": msg_id.to_string(),
-                        "channel_id": channel_id.to_string(),
-                        "content": content,
-                        "author_username": "ForgeChat",
-                        "author_id": owner_id.to_string(),
-                        "created_at": chrono::Utc::now().to_rfc3339(),
-                    }
-                });
-                state.broadcast_to_channel_members(channel_id, event.to_string()).await;
-                tracing::debug!("Message d'anniversaire envoyé");
-            }
-        }
-    }
-}
-
 /// Pièces jointes : 500 Mo par fichier (gratuit ; Discord Nitro) + marge pour plusieurs pièces et
 /// l'enveloppe multipart. Le multipart est lu au fil de l'eau (`uploads::save_field`).
 const ATTACHMENT_BODY_LIMIT: usize = 1_100 * 1_048_576;
@@ -771,8 +702,6 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/friends/groups/:id/members", post(handlers::friends::add_to_group))
         .route("/friends/groups/:id/members/:user_id", delete(handlers::friends::remove_from_group))
         .route("/friends/:id/cancel", delete(handlers::friends::cancel_friend_request))
-        .route("/friends/:id/note", get(handlers::friends::get_friend_note))
-        .route("/friends/:id/note", put(handlers::friends::set_friend_note))
         .route("/friends/:id/nickname", get(handlers::friends::get_friend_nickname))
         .route("/friends/:id/nickname", put(handlers::friends::set_friend_nickname))
         .route("/friends/:id/notify", put(handlers::friends::set_online_notify))
@@ -928,7 +857,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/push/devices", post(mobile_push::register_device))
         .route("/push/devices/:token", delete(mobile_push::unregister_device))
         .route("/users/:id/mutual-servers", get(handlers::users::get_mutual_servers))
-        .route("/users/:id/achievements", get(handlers::users::get_user_achievements))
+        // Lot « Profil et social » : statut riche, badges, anniversaires, favoris
+        .route("/users/:id/social", get(handlers::social::get_user_social))
+        .route("/users/me/birthday", get(handlers::birthdays::get_my_birthday).put(handlers::birthdays::set_my_birthday))
+        .route("/servers/:server_id/birthday-channel", get(handlers::birthdays::get_server_channel).put(handlers::birthdays::set_server_channel))
+        .route("/friends/:id/favorite", put(handlers::social::set_favorite))
+        .route("/friends/groups/order", put(handlers::social::order_groups))
         // User status + activity feed
         .route("/user/status", patch(handlers::users::update_status))
         .route("/activity-feed", get(handlers::users::get_activity_feed))

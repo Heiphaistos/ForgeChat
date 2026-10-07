@@ -8,6 +8,9 @@ import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
 import { SafetyCode } from '@/e2e/E2ESettings'
+import { useAccountKey } from '@/e2e/accountKey'
+import { NOTE_LOCKED, loadNote, saveNote } from '@/e2e/notes'
+import { UserSocialInfo } from '@/features/social/UserSocialInfo'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
 import { StyledName, previewName } from '@/components/UserName'
@@ -37,6 +40,7 @@ export default function UserScreen() {
   const accepted = useQuery({ queryKey: qk.friends('all'), queryFn: () => friendsApi.list('all') })
   const pending = useQuery({ queryKey: qk.friends('pending'), queryFn: () => friendsApi.list('pending') })
   const blocked = useQuery({ queryKey: qk.friends('blocked'), queryFn: () => friendsApi.list('blocked') })
+  const keyStatus = useAccountKey((s) => s.status)
   if (!valid) return <ErrorState message={t('social.user.invalid')} />
   if (q.isLoading) return <Loading />
   if (q.error || !q.data) return <ErrorState message={errorMessage(q.error, t('social.user.notFound'))} onRetry={() => void q.refetch()} />
@@ -112,6 +116,7 @@ export default function UserScreen() {
         </Section>
       ) : null}
 
+      <UserSocialInfo userId={u.id} activity={u} />
       {!isMe ? <MutualServers userId={u.id} /> : null}
       {!isMe ? <SafetyCode userId={u.id} /> : null}
       {!isMe && relation.kind === 'friend' ? (
@@ -126,13 +131,14 @@ export default function UserScreen() {
       ) : null}
       {!isMe ? (
         <SavedText
-          title={t('social.user.note')}
-          footer={t('social.user.noteFooter')}
-          queryKey={['user-note', u.id]}
-          load={() => usersApi.note(u.id).then((r) => r.content)}
-          save={(v) => usersApi.setNote(u.id, v)}
+          title={`🔒 ${t('soc.note.label')}`}
+          footer={t('soc.note.ph')}
+          queryKey={['user-note', u.id, keyStatus]}
+          load={() => loadNote(u.id)}
+          save={(v) => saveNote(u.id, v)}
           maxLength={2000}
           multiline
+          lockedText={t('soc.note.locked')}
         />
       ) : null}
 
@@ -213,6 +219,7 @@ function SavedText({
   save,
   maxLength,
   multiline,
+  lockedText,
 }: {
   title: string
   footer: string
@@ -221,12 +228,15 @@ function SavedText({
   save: (v: string) => Promise<unknown>
   maxLength: number
   multiline?: boolean
+  /** Affiché si `load` lève NOTE_LOCKED (clé de compte fermée). */
+  lockedText?: string
 }) {
   const t = useT()
-  const q = useQuery({ queryKey, queryFn: load })
+  const q = useQuery({ queryKey, queryFn: load, retry: (n, e) => n < 2 && !(e instanceof Error && e.message === NOTE_LOCKED) })
   /** null tant que rien n'est tapé : on affiche la valeur du serveur. */
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  if (lockedText && q.error instanceof Error && q.error.message === NOTE_LOCKED) return <Section title={title} footer={lockedText}>{null}</Section>
   if (q.data === undefined) return null
   const value = draft ?? q.data
   const submit = async () => {

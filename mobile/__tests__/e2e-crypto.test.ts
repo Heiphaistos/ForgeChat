@@ -146,6 +146,13 @@ test('fichiers : message {t, f} du web relu, entrées validées', async () => {
   expect(c.safeMime('text/html')).toBe('application/octet-stream')
 })
 
+test('note privée scellée pour soi : mêmes octets que le web', async () => {
+  const x = V.privateNote
+  expect(await c.sealNote(d(x.priv), d(x.pub), x.owner, x.target, x.text, d(x.iv))).toEqual(x.sealed)
+  expect(await c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.target)).toBe(x.text)
+  await expect(c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.owner)).rejects.toThrow()
+})
+
 test('brouillon chiffré par la clé de compte', async () => {
   const x = V.draft
   expect(e(await c.draftKey(d(x.priv), d(x.pub), x.userId))).toBe(x.key)

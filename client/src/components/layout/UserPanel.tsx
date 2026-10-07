@@ -8,6 +8,7 @@ import { usePresence } from '../../store/presence'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import MusicStatus from './MusicStatus'
 import AccountSwitcher from '../AccountSwitcher'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -216,6 +217,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+      <MusicStatus />
       <AccountSwitcher />
     </div>
   )

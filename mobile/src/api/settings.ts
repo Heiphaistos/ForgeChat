@@ -9,6 +9,8 @@ export interface ServerSideSettings {
   show_online: boolean
   dm_from_all: boolean
   activity_visibility: Audience
+  /** « En appel » (lot « Profil et social »). */
+  call_visibility: Audience
   friend_request_from: FriendRequestFrom
   explicit_content_filter: ExplicitFilter
   quiet_hours_enabled: boolean

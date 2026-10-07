@@ -77,13 +77,15 @@ pub async fn join(
     };
     let call_type = if msg["call_type"].as_str() == Some("video") { "video" } else { "voice" };
 
-    let started = {
+    let (started, present) = {
         let mut calls = state.group_calls.write().await;
         let call = calls.entry(group_id).or_default();
         let started = call.is_empty();
         call.insert(user_id);
-        started
+        (started, call.iter().copied().collect::<Vec<Uuid>>())
     };
+    crate::handlers::presence::call_changed(state, vec![user_id]);
+    crate::handlers::badges::voice_together(state, present);
     let room = crate::livekit::room_for_group(group_id);
     let token = crate::livekit::join_token(
         lk, &room, &user_id.to_string(), username,
@@ -137,6 +139,7 @@ pub async fn leave(state: &AppState, group_id: Uuid, user_id: Uuid) {
     if !removed {
         return;
     }
+    crate::handlers::presence::call_changed(state, vec![user_id]);
     if let Some(lk) = state.livekit.clone() {
         let http = state.http_client.clone();
         let room = crate::livekit::room_for_group(group_id);

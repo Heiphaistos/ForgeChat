@@ -423,6 +423,8 @@ impl AppState {
         room.insert(user_id);
         drop(rooms);
         self.persist_voice_to_redis().await;
+        crate::handlers::presence::call_changed(self, vec![user_id]);
+        crate::handlers::badges::voice_together(self, existing.iter().copied().chain([user_id]).collect());
         Some(existing)
     }
 
@@ -446,6 +448,7 @@ impl AppState {
         };
         drop(rooms);
         self.persist_voice_to_redis().await;
+        crate::handlers::presence::call_changed(self, vec![user_id]);
         Some((channel_id, remaining, prev_state))
     }
 
