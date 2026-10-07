@@ -1,7 +1,10 @@
 // Traduction anglaise. Une clé absente ici s'affiche en français (repli).
 import type { Key } from './fr'
 
+import { profileEn } from './profileEn.ts'
+
 export const en: Partial<Record<Key, string>> = {
+  ...profileEn,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
@@ -810,10 +813,10 @@ export const en: Partial<Record<Key, string>> = {
   'settings.profile.banner': 'Profile banner',
   'settings.profile.addBanner': 'Click to add a banner',
   'settings.profile.removeBanner': 'Remove banner',
-  'settings.profile.bannerFormats': 'PNG, JPG, GIF or WEBP · max 10 MB',
+  'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP or APNG (animated allowed) · max 10 MB',
   'settings.profile.changeAvatar': 'Change avatar',
-  'settings.profile.avatarHint': 'Click the avatar to change it',
-  'settings.profile.bio': 'Bio',
+  'settings.profile.avatarHint': 'Click the avatar to change it · animated GIF allowed (10 MB)',
+  'settings.profile.bio': 'Bio (markdown supported)',
   'settings.profile.bioCount': '{n}/190 characters',
   'settings.profile.bioPlaceholder': 'Describe yourself in a few words...',
   'settings.profile.pronouns': 'Pronouns',
@@ -1437,7 +1440,7 @@ export const en: Partial<Record<Key, string>> = {
   'myProfile.bannerHint': 'PNG, JPG, GIF or WEBP · max 10 MB',
   'myProfile.resetBanner': 'Use the account banner',
   'myProfile.avatar': 'Avatar',
-  'myProfile.avatarHint': 'PNG, JPG, GIF or WEBP · max 8 MB',
+  'myProfile.avatarHint': 'PNG, JPG, GIF, WEBP or APNG (animated allowed) · max 10 MB',
   'myProfile.changeAvatar': 'Change the avatar for this server',
   'myProfile.resetAvatar': 'Use the account avatar',
   'myProfile.nickname': 'Nickname',

@@ -30,7 +30,7 @@ pub const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp
 /// Extension d'une image d'avatar / de bannière : liste blanche stricte sur le type MIME.
 pub fn image_ext(content_type: &str) -> Result<&'static str> {
     match content_type {
-        "image/png" => Ok("png"),
+        "image/png" | "image/apng" => Ok("png"),
         "image/gif" => Ok("gif"),
         "image/webp" => Ok("webp"),
         "image/jpeg" | "image/jpg" => Ok("jpg"),

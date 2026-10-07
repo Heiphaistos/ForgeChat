@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { RTCView, type MediaStream } from '@livekit/react-native-webrtc'
 import { Avatar } from '@/components/Avatar'
+import { UserName } from '@/components/UserName'
 import type { TileInfo } from '@/features/calls/videoLayout'
 import { useT } from '@/i18n'
 import { colors, font, radius } from '@/theme'
@@ -94,9 +95,13 @@ export function VideoTile({
         {tile.screen ? <Ionicons name="tv-outline" size={12} color="#fff" /> : null}
         {!tile.screen && tile.muted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
         <QualityIcon quality={tile.quality} />
-        <Text style={[styles.name, compact && { fontSize: 10 }]} numberOfLines={1}>
-          {tile.self ? t('voice.you', { name: tile.name }) : tile.name}
-        </Text>
+        {tile.self || tile.screen ? (
+          <Text style={[styles.name, compact && { fontSize: 10 }]} numberOfLines={1}>
+            {tile.self ? t('voice.you', { name: tile.name }) : tile.name}
+          </Text>
+        ) : (
+          <UserName userId={tile.userId} name={tile.name} style={[styles.name, compact && { fontSize: 10 }]} />
+        )}
       </View>
       {onPin && !compact ? (
         <Pressable

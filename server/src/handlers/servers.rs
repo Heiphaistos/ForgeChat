@@ -259,7 +259,8 @@ pub async fn update_server(
             rules_channel_id = CASE WHEN $17 THEN $10 ELSE rules_channel_id END,
             vanity_url = CASE WHEN $18 THEN $11 ELSE vanity_url END,
             content_filter = COALESCE($12, content_filter),
-            server_category = CASE WHEN $13 THEN $14 ELSE server_category END
+            server_category = CASE WHEN $13 THEN $14 ELSE server_category END,
+            role_color_overrides_name = COALESCE($19, role_color_overrides_name)
          WHERE id=$1 RETURNING *"
     )
     .bind(server_id)
@@ -280,6 +281,7 @@ pub async fn update_server(
     .bind(body.afk_channel_id.is_some())
     .bind(body.rules_channel_id.is_some())
     .bind(body.vanity_url.is_some())
+    .bind(body.role_color_overrides_name)
     .fetch_one(&state.db)
     .await?;
 

@@ -34,6 +34,9 @@ pub struct Server {
     pub require_2fa_for_moderation: bool,
     pub server_locale: String,
     pub max_video_channel_users: i32,
+    /// La couleur du rôle remplace la couleur perso du pseudo dans ce serveur (migration 088).
+    #[sqlx(default)]
+    pub role_color_overrides_name: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +66,7 @@ pub struct UpdateServerRequest {
     pub content_filter: Option<String>,
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub server_category: Option<Option<String>>,
+    pub role_color_overrides_name: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

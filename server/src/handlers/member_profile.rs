@@ -21,7 +21,7 @@ pub const BIO_MAX: usize = 190;
 /// Rend aussi la taille maximale acceptée (mêmes plafonds que le profil global).
 pub fn image_column(kind: &str) -> Result<(&'static str, u64)> {
     match kind {
-        "avatar" => Ok(("server_avatar", 8 * 1024 * 1024)),
+        "avatar" => Ok(("server_avatar", 10 * 1024 * 1024)),
         "banner" => Ok(("server_banner", 10 * 1024 * 1024)),
         _ => Err(AppError::NotFound("Introuvable".into())),
     }
@@ -83,23 +83,14 @@ pub async fn upload_profile_image(
     let (column, max) = image_column(&kind)?;
     require_member(&state, claims.sub, server_id).await?;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        if field.name() != Some("file") { continue; }
-        let ext = crate::handlers::uploads::image_ext(field.content_type().unwrap_or("image/jpeg"))?;
-        let filename = format!("member_profiles/{}.{}", Uuid::new_v4(), ext);
-        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
-        }
-        crate::handlers::uploads::save_field(field, &path, max).await?;
-
-        // `column` vient de la liste blanche image_column, jamais de l'utilisateur.
-        sqlx::query(&format!("UPDATE server_members SET {column}=$1 WHERE server_id=$2 AND user_id=$3"))
-            .bind(format!("/uploads/{filename}")).bind(server_id).bind(claims.sub)
-            .execute(&state.db).await?;
-        return publish(&state, server_id, claims.sub).await;
-    }
-    Err(AppError::BadRequest("Champ 'file' manquant".into()))
+    crate::handlers::profile_custom::upload_rate_limit(&state, claims.sub).await?;
+    let data = crate::handlers::profile_custom::read_image_field(&mut multipart, "file", max as usize).await?;
+    let url = crate::handlers::profile_custom::store_image(&state, "member_profiles", &data).await?;
+    // `column` vient de la liste blanche image_column, jamais de l'utilisateur.
+    sqlx::query(&format!("UPDATE server_members SET {column}=$1 WHERE server_id=$2 AND user_id=$3"))
+        .bind(url).bind(server_id).bind(claims.sub)
+        .execute(&state.db).await?;
+    publish(&state, server_id, claims.sub).await
 }
 
 /// DELETE /servers/:server_id/profile/:kind — retour à l'image du compte.

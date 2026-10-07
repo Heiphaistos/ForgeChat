@@ -26,6 +26,8 @@ const STATUS_KEYS = {
 const statusKey = (s: string) => STATUS_KEYS[s as keyof typeof STATUS_KEYS]
 
 const STATUS_ORDER = ['online', 'idle', 'dnd', 'invisible'] as const
+/** Effacer le statut personnalisé après N minutes (même liste que le serveur ; 0 = jamais). */
+const STATUS_CLEAR_AFTER = [0, 30, 60, 240, 1440, 4320, 10080] as const
 
 function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   const tr = useT()
@@ -33,6 +35,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
   const nav = useNavigate()
   const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
   const [customEmoji, setCustomEmoji] = useState(user?.custom_status_emoji ?? '')
+  const [clearAfter, setClearAfter] = useState(0)
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -64,10 +67,12 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
       await api.patch('/user/status', {
         custom_status: text.trim(),
         custom_status_emoji: emoji.trim(),
+        clear_after_minutes: clearAfter,
       })
       updateMe({
         custom_status: text.trim() || null,
         custom_status_emoji: emoji.trim() || null,
+        custom_status_expires_at: clearAfter && (text.trim() || emoji.trim()) ? new Date(Date.now() + clearAfter * 60_000).toISOString() : null,
       })
       toast.success(text.trim() || emoji.trim() ? 'Statut mis à jour' : 'Statut effacé')
       onClose()
@@ -179,6 +184,12 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
             onKeyDown={e => { if (e.key === 'Enter') void saveCustomStatus() }}
           />
         </div>
+        <label className="flex items-center gap-2 text-[11px] text-fc-muted">
+          {tr('status.clearAfter')}
+          <select value={clearAfter} onChange={e => setClearAfter(Number(e.target.value))} className="flex-1 fc-input text-xs py-1">
+            {STATUS_CLEAR_AFTER.map(m => <option key={m} value={m}>{tr(`status.clear.${m}` as 'status.clear.0')}</option>)}
+          </select>
+        </label>
         <div className="flex gap-2">
           <button
             onClick={() => void saveCustomStatus()}

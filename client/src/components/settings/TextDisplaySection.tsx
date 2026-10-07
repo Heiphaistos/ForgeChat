@@ -4,6 +4,7 @@ import { Field, Toggle, Select } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import { getAvatarAnimation, setAvatarAnimation, type AvatarAnimation } from '../ui/AnimatedImg'
 
 export default function TextDisplaySection() {
   const t = useT()
@@ -25,6 +26,7 @@ export default function TextDisplaySection() {
   const [gifAutoplay, setGifAutoplay] = useState('always')
   const [linkPreview, setLinkPreview] = useState(true)
   const [messageGrouping, setMessageGrouping] = useState(5)
+  const [avatarAnim, setAvatarAnim] = useState<AvatarAnimation>(getAvatarAnimation)
 
   useEffect(() => {
     if (settings) {
@@ -70,6 +72,15 @@ export default function TextDisplaySection() {
 
       <Field label={t('settings.text.gif')}>
         <Select value={gifAutoplay} onChange={setGifAutoplay} className="w-full"
+          options={[
+            { value: 'always', label: t('settings.text.always') },
+            { value: 'hover', label: t('settings.text.hover') },
+            { value: 'never', label: t('settings.text.never') },
+          ]} />
+      </Field>
+
+      <Field label={t('settings.text.animateAvatars')} hint={t('settings.text.animateAvatarsHint')}>
+        <Select value={avatarAnim} onChange={v => { setAvatarAnim(v as AvatarAnimation); setAvatarAnimation(v as AvatarAnimation) }} className="w-full"
           options={[
             { value: 'always', label: t('settings.text.always') },
             { value: 'hover', label: t('settings.text.hover') },

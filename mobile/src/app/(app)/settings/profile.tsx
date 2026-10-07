@@ -1,21 +1,39 @@
 import * as ImagePicker from 'expo-image-picker'
 import { useState } from 'react'
-import { Alert, Pressable, ScrollView, Text } from 'react-native'
-import { usersApi } from '@/api/users'
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native'
+import { STATUS_CLEAR_AFTER, usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
-import { Button, TextField } from '@/components/ui'
+import { Button, SwitchRow, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { ProfileCosmeticsEditor, type Cosmetics } from '@/features/account/ProfileCosmeticsEditor'
-import { formatBirthday, parseBirthday, usernameError } from '@/features/account/rules'
+import { NameStyleEditor } from '@/features/account/NameStyleEditor'
+import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/pickAnimated'
+import { ProfileLinksEditor } from '@/features/account/ProfileLinksEditor'
+import { formatBirthday, parseBirthday, profileLinkError, usernameError } from '@/features/account/rules'
+import { formatUntil } from '@/lib/format'
+import type { NameStyle } from '@/lib/nameStyle'
+import { rememberUserStyle } from '@/stores/nameStyles'
+import { useSettings } from '@/stores/settings'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
-import type { User } from '@/types/models'
-import { colors, font, spacing } from '@/theme'
+import type { ProfileLink, User } from '@/types/models'
+import { colors, font, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 
-const BANNER_MAX_BYTES = 10 * 1024 * 1024 // users::upload_banner
+const BANNER_MAX_BYTES = PROFILE_IMAGE_MAX_BYTES // users::upload_banner
+
+/** Libellé de chaque durée d'effacement du statut (minutes). */
+const CLEAR_AFTER_LABEL = {
+  0: 'settings.status.never',
+  30: 'settings.status.m30',
+  60: 'settings.status.h1',
+  240: 'settings.status.h4',
+  1440: 'settings.status.h24',
+  4320: 'settings.status.d3',
+  10080: 'settings.status.d7',
+} as const
 
 export default function ProfileSettings() {
   const user = useAuth((s) => s.user) as (User & { birthday?: string | null }) | null
@@ -24,6 +42,15 @@ export default function ProfileSettings() {
   const [username, setUsername] = useState(user?.username ?? '')
   const [bio, setBio] = useState(user?.bio ?? '')
   const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
+  /** null = garder l'échéance actuelle (le statut n'est alors renvoyé que s'il a changé). */
+  const [clearAfter, setClearAfter] = useState<number | null>(null)
+  const [displayName, setDisplayName] = useState(user?.display_name ?? '')
+  const [tag, setTag] = useState(user?.profile_tag ?? '')
+  const [nameStyle, setNameStyle] = useState<NameStyle>(user?.name_style ?? { colors: [] })
+  const [links, setLinks] = useState<ProfileLink[]>(user?.profile_links ?? [])
+  const [linkErrors, setLinkErrors] = useState(false)
+  const animate = useSettings((s) => s.animateAvatars)
+  const setSettings = useSettings((s) => s.set)
   const [pronouns, setPronouns] = useState(user?.pronouns ?? '')
   const [birthday, setBirthday] = useState(formatBirthday(user?.birthday))
   const [cosmetics, setCosmetics] = useState<Cosmetics>({
@@ -42,13 +69,22 @@ export default function ProfileSettings() {
     const bday = parseBirthday(birthday)
     const errs = { username: nameErr ?? undefined, birthday: 'error' in bday ? bday.error : undefined }
     setErrors(errs)
-    if (errs.username || errs.birthday || 'error' in bday) return
+    const linkBad = links.some((l) => profileLinkError(l))
+    setLinkErrors(linkBad)
+    if (errs.username || errs.birthday || 'error' in bday || linkBad) return
+    // Renvoyer le statut remet son échéance à zéro : seulement s'il change ou si une durée est choisie.
+    const sendStatus = customStatus.trim() !== (user.custom_status ?? '') || clearAfter != null
     setSaving(true)
     try {
       const updated = await usersApi.updateMe({
         username: username.trim() !== user.username ? username.trim() : undefined,
         bio: bio.trim(),
-        custom_status: customStatus.trim(),
+        custom_status: sendStatus ? customStatus.trim() : undefined,
+        custom_status_clear_after: sendStatus ? (clearAfter ?? 0) : undefined,
+        display_name: displayName.trim(),
+        profile_tag: tag.trim(),
+        name_style: nameStyle.colors.length || nameStyle.effect || nameStyle.font ? { ...nameStyle, angle: nameStyle.angle ?? 90 } : {},
+        profile_links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
         pronouns: pronouns.trim(),
         // Seulement si modifié : absent = inchangé, null = effacé.
         birthday: bday.value !== (user.birthday ?? null) ? bday.value : undefined,
@@ -59,12 +95,31 @@ export default function ProfileSettings() {
         profile_effect: cosmetics.effect,
       })
       setUser(updated)
+      rememberUserStyle(updated)
+      setClearAfter(null)
       Alert.alert(t('settings.profile.updated'))
     } catch (e) {
       Alert.alert(t('settings.profile.saveFailed'), errorMessage(e))
     } finally {
       setSaving(false)
     }
+  }
+
+  const upload = async (kind: 'avatar' | 'banner', file: { uri: string; name: string; type: string }) => {
+    setUploading(kind)
+    try {
+      if (kind === 'avatar') setUser(await usersApi.uploadAvatar(file))
+      else setUser({ banner: (await usersApi.uploadBanner(file)).banner })
+    } catch (e) {
+      Alert.alert(t('settings.profile.uploadFailed'), errorMessage(e))
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  const pickAnimated = async (kind: 'avatar' | 'banner') => {
+    const file = await pickAnimatedImage()
+    if (file) await upload(kind, file)
   }
 
   const pick = async (kind: 'avatar' | 'banner') => {
@@ -82,16 +137,7 @@ export default function ProfileSettings() {
       Alert.alert(t('settings.profile.tooLarge'), t('settings.profile.maxSize', { n: max / 1024 / 1024 }))
       return
     }
-    setUploading(kind)
-    try {
-      const file = { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' }
-      if (kind === 'avatar') setUser(await usersApi.uploadAvatar(file))
-      else setUser({ banner: (await usersApi.uploadBanner(file)).banner })
-    } catch (e) {
-      Alert.alert(t('settings.profile.uploadFailed'), errorMessage(e))
-    } finally {
-      setUploading(null)
-    }
+    await upload(kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
   }
 
   return (
@@ -108,6 +154,18 @@ export default function ProfileSettings() {
         disabled={uploading !== null}
         onPress={() => void pick('banner')}
       />
+      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        <Button title={t('settings.animated.avatar')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('avatar')} style={{ flex: 1 }} />
+        <Button title={t('settings.animated.banner')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('banner')} style={{ flex: 1 }} />
+      </View>
+      <SwitchRow
+        icon="play-circle-outline"
+        title={t('settings.animated.toggle')}
+        subtitle={t('settings.animated.toggleSub')}
+        value={animate}
+        onValueChange={(v) => setSettings({ animateAvatars: v })}
+      />
+      <TextField label={t('settings.profile.displayName')} placeholder={user.username} value={displayName} onChangeText={setDisplayName} maxLength={32} />
       <TextField
         label={t('settings.profile.username', { tag: user.discriminator })}
         value={username}
@@ -117,7 +175,29 @@ export default function ProfileSettings() {
         maxLength={32}
         error={errors.username}
       />
+      <TextField label={t('settings.profile.tag')} placeholder={t('settings.profile.tagPlaceholder')} value={tag} onChangeText={setTag} maxLength={16} autoCorrect={false} />
+      <NameStyleEditor value={nameStyle} onChange={setNameStyle} name={displayName.trim() || user.username} tag={tag.trim()} />
       <TextField label={t('settings.profile.customStatus')} value={customStatus} onChangeText={setCustomStatus} maxLength={128} />
+      <View style={{ gap: spacing.sm }}>
+        <Text style={{ color: colors.textMuted, fontSize: font.sm, fontWeight: '600' }}>
+          {user.custom_status_expires_at && clearAfter == null
+            ? t('settings.status.clearsAt', { when: formatUntil(user.custom_status_expires_at) })
+            : t('settings.status.clearAfter')}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+          {STATUS_CLEAR_AFTER.map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => setClearAfter(m)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: clearAfter === m }}
+              style={{ paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: clearAfter === m ? colors.primary : colors.bgElevated }}
+            >
+              <Text style={{ color: clearAfter === m ? '#fff' : colors.textSecondary, fontSize: font.sm }}>{t(CLEAR_AFTER_LABEL[m])}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
       <TextField label={t('settings.profile.pronouns')} value={pronouns} onChangeText={setPronouns} maxLength={30} />
       <TextField
         label={t('settings.profile.birthday')}
@@ -129,6 +209,7 @@ export default function ProfileSettings() {
         error={errors.birthday}
       />
       <TextField label={t('settings.profile.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline style={{ minHeight: 100 }} />
+      <ProfileLinksEditor value={links} onChange={setLinks} showErrors={linkErrors} />
       <ProfileCosmeticsEditor value={cosmetics} onChange={setCosmetics} avatar={user.avatar} name={user.username} />
       <Button title={t('settings.profile.save')} onPress={save} loading={saving} />
     </ScrollView>

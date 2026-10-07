@@ -20,6 +20,7 @@ import { maybeBlur } from '../utils/backgroundBlur'
 import type { ConnectionQuality } from 'livekit-client'
 import { initVoiceModeration } from './voiceModeration'
 import { e2eeClaim } from '../e2e/media'
+import { playJoinSound } from '../lib/joinSound'
 
 export { getRoom } from './voiceSfu'
 export type { MediaStatus }
@@ -644,6 +645,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
             if (!_awaitingPeers) return
             set({ channelId: d.channel_id })
           }
+          // Réponse à notre propre arrivée (pas une resynchronisation) : son d'arrivée.
+          if (_awaitingPeers && !get().listenOnly) playJoinSound(d.channel_id)
           _awaitingPeers = false
           // La liste du serveur ne contient que les AUTRES : sans s'y ajouter soi-même,
           // on n'apparaissait pas sous le salon dans sa propre barre latérale.

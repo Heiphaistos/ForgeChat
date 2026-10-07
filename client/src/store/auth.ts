@@ -23,6 +23,8 @@ interface User {
   status: string
   custom_status: string | null
   custom_status_emoji?: string | null
+  custom_status_expires_at?: string | null
+  display_name?: string | null
   email?: string
   focus_mode?: boolean
   verified?: boolean

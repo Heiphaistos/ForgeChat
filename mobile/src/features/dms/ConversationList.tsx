@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
+import { UserName } from '@/components/UserName'
 import { Sheet } from '@/components/Sheet'
 import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { formatShort, unreadLabel } from '@/lib/format'
@@ -117,9 +118,13 @@ export function ConversationList() {
                 )}
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.top}>
-                    <Text style={[styles.name, unread ? { fontWeight: '800' } : null]} numberOfLines={1}>
-                      {name}
-                    </Text>
+                    {item.is_group ? (
+                      <Text style={[styles.name, unread ? { fontWeight: '800' } : null]} numberOfLines={1}>
+                        {name}
+                      </Text>
+                    ) : (
+                      <UserName userId={item.other_user_id} name={name} style={[styles.name, unread ? { fontWeight: '800' } : null]} />
+                    )}
                     <Text style={styles.time}>{formatShort(item.last_message_at)}</Text>
                   </View>
                   <View style={styles.top}>

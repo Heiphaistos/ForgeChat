@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Alert, Pressable, ScrollView, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
-import { Button, ErrorState, Loading, T, TextField } from '@/components/ui'
+import { Button, ErrorState, Loading, SwitchRow, T, TextField } from '@/components/ui'
 import { useServerDetail } from '@/features/servers/menus'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -39,7 +39,19 @@ function OverviewForm({ server }: { server: Server }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'icon' | 'banner' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [roleOverrides, setRoleOverrides] = useState(server.role_color_overrides_name !== false)
   const t = useT()
+
+  const toggleRoleOverrides = async (v: boolean) => {
+    setRoleOverrides(v)
+    try {
+      await serversApi.update(server.id, { role_color_overrides_name: v })
+      await refresh(server.id)
+    } catch (e) {
+      setRoleOverrides(!v)
+      Alert.alert(t('common.actionFailed'), errorMessage(e))
+    }
+  }
 
   const save = async () => {
     const n = name.trim()
@@ -101,6 +113,13 @@ function OverviewForm({ server }: { server: Server }) {
       <Button title={t(banner ? 'serverSettings.overview.changeBanner' : 'serverSettings.overview.addBanner')} variant="secondary" icon="images-outline" onPress={() => void pick('banner')} loading={uploading === 'banner'} />
       <TextField label={t('serverSettings.overview.name')} value={name} onChangeText={setName} maxLength={100} />
       <TextField label={t('serverSettings.overview.description')} value={description} onChangeText={setDescription} multiline maxLength={1000} style={{ minHeight: 90, textAlignVertical: 'top' }} />
+      <SwitchRow
+        icon="color-palette-outline"
+        title={t('serverSettings.overview.roleColorOverrides')}
+        subtitle={t('serverSettings.overview.roleColorOverridesSub')}
+        value={roleOverrides}
+        onValueChange={(v) => void toggleRoleOverrides(v)}
+      />
       {error ? <T variant="error">{error}</T> : null}
       <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
     </ScrollView>
