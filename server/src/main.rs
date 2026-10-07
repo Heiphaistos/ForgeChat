@@ -10,6 +10,7 @@ mod notify;
 mod push;
 mod mobile_push;
 mod net_guard;
+mod privacy;
 
 use axum::{
     middleware as axum_middleware,

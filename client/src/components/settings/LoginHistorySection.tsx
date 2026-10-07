@@ -7,24 +7,18 @@ import { useT, dateLocale, t as tr } from '../../i18n'
 interface Session {
   id: string
   device_info?: string
-  ip_address?: string
   last_seen: string
   created_at: string
 }
 
 function getDeviceIcon(deviceInfo?: string) {
   if (!deviceInfo) return <Globe size={16} />
-  const d = deviceInfo.toLowerCase()
-  if (d.includes('mobile') || d.includes('android') || d.includes('iphone')) return <Smartphone size={16} />
-  return <Monitor size={16} />
+  return /Android|iOS/.test(deviceInfo) ? <Smartphone size={16} /> : <Monitor size={16} />
 }
 
+// Étiquette posée par le serveur (« Firefox · Linux »…), ni IP ni user-agent brut.
 function parseDevice(deviceInfo?: string) {
-  if (!deviceInfo) return tr('settings.sessions.unknownDevice')
-  if (deviceInfo.includes('Tauri')) return tr('settings.sessions.app')
-  const match = deviceInfo.match(/\(([^)]+)\)/)
-  if (match) return match[1].split(';')[0].trim()
-  return deviceInfo.slice(0, 50)
+  return deviceInfo || tr('settings.sessions.unknownDevice')
 }
 
 export default function LoginHistorySection() {
@@ -56,9 +50,6 @@ export default function LoginHistorySection() {
             <div className="text-white text-sm font-medium">
               {parseDevice(s.device_info)}
             </div>
-            {s.ip_address && (
-              <div className="text-xs text-fc-muted mt-0.5">{s.ip_address}</div>
-            )}
             <div className="text-xs text-fc-muted mt-0.5">
               {t('settings.sessions.lastActive', { when: formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale }) })}
             </div>

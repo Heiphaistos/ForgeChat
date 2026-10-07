@@ -16,21 +16,13 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     middleware::auth::{hash_token, revoke_all_tokens},
+    privacy::{client_key, pseudonym},
     state::AppState,
 };
 
 const TOKEN_TTL_SECS: u64 = 30 * 60;
 /// Compte fantôme « Utilisateur supprimé » (migration 063) : jamais réinitialisable.
 const DELETED_USER: &str = "00000000-0000-0000-0000-00000000dead";
-
-pub(crate) fn client_ip(headers: &HeaderMap, addr: &SocketAddr) -> String {
-    headers
-        .get("x-real-ip")
-        .or_else(|| headers.get("x-forwarded-for"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-        .unwrap_or_else(|| addr.ip().to_string())
-}
 
 /// Incrémente un compteur Redis ; `true` si la limite est dépassée.
 pub(crate) async fn over_limit(state: &AppState, key: &str, max: i64, window_secs: i64) -> bool {
@@ -61,14 +53,14 @@ pub async fn forgot_password(
     if email.is_empty() || email.len() > 254 || !email.contains('@') {
         return Err(AppError::BadRequest("Email invalide".into()));
     }
-    let ip = client_ip(&headers, &addr);
+    let ip = client_key(&headers, &addr);
     if over_limit(&state, &format!("pwreset_ip:{ip}"), 5, 900).await {
         return Err(AppError::TooManyRequests);
     }
     let ok = Json(serde_json::json!({ "ok": true }));
     // Par e-mail : 3 demandes / heure. Au-delà on répond pareil sans rien envoyer,
     // pour ne pas révéler l'existence du compte ni permettre d'inonder une boîte.
-    if over_limit(&state, &format!("pwreset_mail:{email}"), 3, 3600).await {
+    if over_limit(&state, &format!("pwreset_mail:{}", pseudonym(&email)), 3, 3600).await {
         return Ok(ok);
     }
 
@@ -122,7 +114,7 @@ pub async fn forgot_password(
     let config = state.config.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::email::send_email(&config, &email, "Réinitialisation du mot de passe — ForgeChat", html).await {
-            tracing::warn!("envoi e-mail de réinitialisation échoué : {e}");
+            tracing::warn!("envoi e-mail de réinitialisation échoué : {}", crate::privacy::redact_emails(&e.to_string()));
         }
     });
     Ok(ok)
@@ -135,7 +127,7 @@ pub async fn reset_password(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    let ip = client_ip(&headers, &addr);
+    let ip = client_key(&headers, &addr);
     if over_limit(&state, &format!("pwreset_try:{ip}"), 10, 900).await {
         return Err(AppError::TooManyRequests);
     }

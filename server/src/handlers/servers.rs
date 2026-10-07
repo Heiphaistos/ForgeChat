@@ -962,7 +962,7 @@ pub async fn get_server_stats(
     let online_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM server_members sm
          JOIN users u ON u.id=sm.user_id
-         WHERE sm.server_id=$1 AND u.last_seen > NOW() - INTERVAL '5 minutes'"
+         WHERE sm.server_id=$1 AND u.status NOT IN ('offline', 'invisible')"
     ).bind(server_id).fetch_one(&state.db).await.unwrap_or(0);
 
     let message_count_today: i64 = sqlx::query_scalar(

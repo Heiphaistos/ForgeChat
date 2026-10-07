@@ -709,7 +709,6 @@ export const fr = {
   'settings.keys.reset': 'Remettre par défaut ({combo})',
   // --- Paramètres : Sessions et connexions ---
   'settings.sessions.unknownDevice': 'Appareil inconnu',
-  'settings.sessions.app': 'Application ForgeChat',
   'settings.sessions.lastActive': 'Dernière activité {when}',
   'settings.sessions.created': 'Créée {when}',
   'settings.history.intro': '20 dernières connexions à votre compte',
@@ -835,8 +834,6 @@ export const fr = {
   // --- Paramètres : Sessions ---
   'settings.sessions.active.one': 'Session active',
   'settings.sessions.active.other': 'Sessions actives',
-  'settings.sessions.ips.one': 'IP distincte',
-  'settings.sessions.ips.other': 'IP distinctes',
   'settings.sessions.others.one': 'Autre',
   'settings.sessions.others.other': 'Autres',
   'settings.sessions.current': 'Session actuelle',

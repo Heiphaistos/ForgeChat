@@ -710,7 +710,6 @@ export const en: Partial<Record<Key, string>> = {
   'settings.keys.reset': 'Reset to default ({combo})',
   // --- Paramètres : Sessions et connexions ---
   'settings.sessions.unknownDevice': 'Unknown device',
-  'settings.sessions.app': 'ForgeChat app',
   'settings.sessions.lastActive': 'Last active {when}',
   'settings.sessions.created': 'Created {when}',
   'settings.history.intro': 'Last 20 sign-ins to your account',
@@ -836,8 +835,6 @@ export const en: Partial<Record<Key, string>> = {
   // --- Paramètres : Sessions ---
   'settings.sessions.active.one': 'Active session',
   'settings.sessions.active.other': 'Active sessions',
-  'settings.sessions.ips.one': 'Distinct IP',
-  'settings.sessions.ips.other': 'Distinct IPs',
   'settings.sessions.others.one': 'Other',
   'settings.sessions.others.other': 'Others',
   'settings.sessions.current': 'Current session',
