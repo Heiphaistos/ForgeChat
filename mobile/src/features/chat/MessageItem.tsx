@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  reactionMine: { borderColor: colors.primary, backgroundColor: 'rgba(88,101,242,0.2)' },
+  reactionMine: { borderColor: colors.primary, backgroundColor: colors.primary + '33' },
   reactionCount: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
   stickerEmoji: { fontSize: 64, lineHeight: 76 },
   stickerImage: { width: 120, height: 120 },

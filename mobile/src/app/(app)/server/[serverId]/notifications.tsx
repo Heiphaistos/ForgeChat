@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { serversApi, type NotifLevel, type NotifOverride } from '@/api/servers'
 import { Button, ErrorState, Loading, Row, Section, SwitchRow } from '@/components/ui'
+import { formatTime } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { colors, spacing } from '@/theme'
@@ -28,7 +29,7 @@ const MUTES: { value: Mute; label: string }[] = [
 ]
 
 const untilLabel = (iso: string | null) =>
-  iso ? `Coupé jusqu'à ${new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : "Coupé jusqu'à réactivation"
+  iso ? `Coupé jusqu'à ${formatTime(iso)}` : "Coupé jusqu'à réactivation"
 
 /** Réglages de notification d'un serveur, ou d'un de ses salons si `channelId` est fourni (comme Discord). */
 export default function NotificationsScreen() {

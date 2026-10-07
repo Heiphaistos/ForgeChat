@@ -1,10 +1,13 @@
 /** Formatage dates / tailles (fr-FR). */
+import { appearance, type AppearancePrefs } from '@/theme/prefs'
 
 const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
 
-export function formatTime(iso: string): string {
+/** « 14:05 », ou « 02:05 PM » en 12 h (format du web, réglage time_format). */
+export function formatTime(iso: string, fmt: AppearancePrefs['timeFormat'] = appearance.timeFormat): string {
   const d = new Date(iso)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const h = d.getHours()
+  return fmt === '12h' ? `${pad(h % 12 || 12)}:${pad(d.getMinutes())} ${h < 12 ? 'AM' : 'PM'}` : `${pad(h)}:${pad(d.getMinutes())}`
 }
 
 export function isSameDay(a: string, b: string): boolean {

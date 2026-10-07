@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useAppearanceSync } from '@/features/appearance/sync'
 import { colors } from '@/theme'
 
 export const unstable_settings = { initialRouteName: '(tabs)' }
@@ -12,6 +13,8 @@ export default function AppLayout() {
   // Affichage bord à bord : sans marge, la fin des listes passerait sous la barre de navigation
   // Android (3 boutons ou gestes).
   const { bottom } = useSafeAreaInsets()
+  // Accent, format de l'heure et mode streamer choisis sur le web.
+  useAppearanceSync()
   return (
     <Stack
       screenOptions={{
@@ -65,6 +68,7 @@ export default function AppLayout() {
       <Stack.Screen name="settings/security" options={{ title: 'Sécurité' }} />
       <Stack.Screen name="settings/sessions" options={{ title: 'Appareils connectés' }} />
       <Stack.Screen name="settings/notifications" options={{ title: 'Notifications' }} />
+      <Stack.Screen name="settings/appearance" options={{ title: 'Apparence' }} />
       <Stack.Screen name="settings/password" options={{ title: 'Mot de passe', presentation: 'modal' }} />
       <Stack.Screen name="settings/delete-account" options={{ title: 'Supprimer le compte', presentation: 'modal' }} />
     </Stack>

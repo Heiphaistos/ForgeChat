@@ -11,6 +11,7 @@ import { normalizeStatus, SELECTABLE_STATUSES, statusLabel, toServerStatus } fro
 import { useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
 import { colors, font, spacing } from '@/theme'
+import { useAppearance } from '@/theme/prefs'
 
 
 // Panneau « Infos dev » : retiré du bundle du client-apk. EXPO_PUBLIC_APP_ENV est inliné à la
@@ -26,6 +27,7 @@ export default function YouScreen() {
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
   const setUser = useAuth((s) => s.setUser)
+  const streamer = useAppearance((s) => s.streamerMode)
   const [statusOpen, setStatusOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   if (!user) return null
@@ -50,7 +52,7 @@ export default function YouScreen() {
         <Avatar uri={user.avatar} name={user.username} size={80} userId={user.id} status={user.status} showStatus />
         <Text style={styles.name}>{user.username}</Text>
         <Text style={styles.tag}>
-          {user.username}#{user.discriminator}
+          {user.username}#{streamer ? '••••' : user.discriminator}
           {user.pronouns ? ` · ${user.pronouns}` : ''}
         </Text>
         {user.custom_status ? <Text style={styles.custom}>{user.custom_status}</Text> : null}
@@ -74,6 +76,7 @@ export default function YouScreen() {
         <Row icon="lock-closed-outline" title="Confidentialité et données" onPress={() => router.push('/settings/privacy')} chevron />
         <Row icon="phone-portrait-outline" title="Appareils connectés" onPress={() => router.push('/settings/sessions')} chevron />
         <Row icon="notifications-outline" title="Notifications" onPress={() => router.push('/settings/notifications')} chevron />
+        <Row icon="color-palette-outline" title="Apparence" onPress={() => router.push('/settings/appearance')} chevron />
       </Section>
 
       {DevInfoRow ? (

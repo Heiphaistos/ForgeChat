@@ -7,6 +7,7 @@ import { apiOrigin } from '@/config/env'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, font, radius, spacing } from '@/theme'
+import { useAppearance } from '@/theme/prefs'
 
 const EXPIRY = [
   { label: '1 heure', hours: 1 },
@@ -20,6 +21,7 @@ const EXPIRY = [
  */
 export default function InviteScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
+  const streamer = useAppearance((st) => st.streamerMode)
   const [hours, setHours] = useState(24)
   const [current, setCurrent] = useState<{ code: string; label: string } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -77,7 +79,7 @@ export default function InviteScreen() {
       {link && current ? (
         <View style={styles.link}>
           <Text style={styles.linkText} selectable>
-            {link}
+            {streamer ? `${apiOrigin()}/invite/••••••` : link}
           </Text>
           <T variant="muted">Valable {current.label}</T>
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>

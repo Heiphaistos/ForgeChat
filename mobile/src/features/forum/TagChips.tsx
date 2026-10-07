@@ -33,6 +33,6 @@ export function TagChips({ tags, selected, onToggle }: { tags: string[]; selecte
 const styles = StyleSheet.create({
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   tag: { backgroundColor: colors.bgElevated, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3, borderWidth: 1, borderColor: 'transparent' },
-  tagOn: { borderColor: colors.primary, backgroundColor: 'rgba(88,101,242,0.25)' },
+  tagOn: { borderColor: colors.primary, backgroundColor: colors.primary + '40' },
   text: { color: colors.textSecondary, fontSize: font.xs },
 })

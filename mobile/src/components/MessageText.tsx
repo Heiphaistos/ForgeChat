@@ -9,7 +9,7 @@ import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features
 import { openExternalUrl } from '@/lib/links'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
-import { colors, font, radius, spacing } from '@/theme'
+import { colors, font, isLight, radius, spacing } from '@/theme'
 
 function Spoiler({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState(false)
@@ -190,8 +190,8 @@ const styles = StyleSheet.create({
   strike: { textDecorationLine: 'line-through' },
   link: { color: colors.link, textDecorationLine: 'underline' },
   emoji: { width: 20, height: 20 },
-  mention: { color: '#c9cdfb', backgroundColor: 'rgba(88,101,242,0.3)', fontWeight: '600' },
-  mentionMe: { backgroundColor: 'rgba(250,168,26,0.35)', color: '#fff' },
+  mention: { color: isLight ? colors.primaryPressed : '#c9cdfb', backgroundColor: colors.primary + '4d', fontWeight: '600' },
+  mentionMe: { backgroundColor: 'rgba(250,168,26,0.35)', color: colors.text },
   time: { backgroundColor: colors.bgHover, color: colors.text, fontWeight: '600' },
   inlineCode: { fontFamily: mono, backgroundColor: colors.codeBg, color: colors.text, fontSize: font.sm },
   codeBlock: { backgroundColor: colors.codeBg, borderRadius: radius.sm, padding: spacing.sm, borderWidth: 1, borderColor: colors.border },

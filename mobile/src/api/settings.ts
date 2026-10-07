@@ -15,6 +15,10 @@ export interface ServerSideSettings {
   /** « HH:MM:SS » (TIME Postgres) ou null. */
   quiet_hours_start: string | null
   quiet_hours_end: string | null
+  /** Apparence partagée avec le web (le thème lui-même n'est pas stocké par le serveur). */
+  accent_color: string | null
+  time_format: string
+  streamer_mode: boolean
 }
 
 export const settingsKey = ['user-settings'] as const
