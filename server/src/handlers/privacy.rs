@@ -42,7 +42,7 @@ pub async fn export_user_data(
              ORDER BY m.created_at DESC"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
-            "SELECT dm.content, dm.created_at,
+            "SELECT dm.content, dm.enc IS NOT NULL AS encrypted, dm.created_at,
                     u.username as other_username
              FROM dm_messages dm
              JOIN dm_channels dc ON dc.id = dm.dm_channel_id
@@ -51,7 +51,7 @@ pub async fn export_user_data(
              ORDER BY dm.created_at DESC"
         ).bind(uid).fetch_all(&state.db),
         sqlx::query(
-            "SELECT gm.content, gm.created_at, gc.name as group_name
+            "SELECT gm.content, gm.enc IS NOT NULL AS encrypted, gm.created_at, gc.name as group_name
              FROM group_dm_messages gm
              JOIN group_dm_channels gc ON gc.id = gm.dm_id
              WHERE gm.sender_id = $1
@@ -99,11 +99,14 @@ pub async fn export_user_data(
         "dm_messages": dm_messages.iter().map(|m| serde_json::json!({
             "content": m.get::<Option<String>, _>("content"),
             "with": m.get::<String, _>("other_username"),
+            // Chiffré de bout en bout : le serveur n'en a pas le texte.
+            "encrypted": m.get::<bool, _>("encrypted"),
             "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         })).collect::<Vec<_>>(),
         "group_dm_messages": group_dm_messages.iter().map(|m| serde_json::json!({
             "content": m.get::<Option<String>, _>("content"),
             "group": m.get::<String, _>("group_name"),
+            "encrypted": m.get::<bool, _>("encrypted"),
             "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         })).collect::<Vec<_>>(),
         "servers": servers.iter().map(|s| s.get::<String, _>("name")).collect::<Vec<String>>(),

@@ -91,5 +91,7 @@ pub struct GetMessagesQuery {
 #[derive(Debug, Deserialize)]
 pub struct ForwardMessageRequest {
     pub channel_id: Uuid,
+    /// Message privé chiffré : texte déchiffré par l'appli (le salon cible n'est pas chiffré).
+    pub content: Option<String>,
 }
 

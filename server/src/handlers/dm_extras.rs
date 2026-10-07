@@ -45,7 +45,7 @@ pub async fn get_dm_pins(
     assert_dm_member(&state.db, dm_id, claims.sub).await?;
     let pins = sqlx::query(
         "SELECT dp.id, dp.message_id, dp.pinned_at, dp.pinned_by,
-                dm.content, dm.sender_id, dm.created_at as msg_created_at,
+                dm.content, dm.enc, dm.client_msg_id, dm.sender_id, dm.created_at as msg_created_at,
                 u.username as sender_name, u.avatar as sender_avatar,
                 pu.username as pinner_name
          FROM dm_pins dp
@@ -63,6 +63,8 @@ pub async fn get_dm_pins(
         "pinned_by": r.get::<String, _>("pinner_name"),
         "message": {
             "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_name": r.get::<String, _>("sender_name"),
             "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),

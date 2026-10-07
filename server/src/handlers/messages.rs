@@ -867,7 +867,7 @@ pub async fn forward_message(
         (row.try_get("content").ok().flatten(), row.get("author_username"))
     } else {
         let dm_row = sqlx::query(
-            "SELECT dm.content, u.username as author_username
+            "SELECT dm.content, dm.enc IS NOT NULL AS encrypted, u.username as author_username
              FROM dm_messages dm
              JOIN dm_channels dc ON dc.id = dm.dm_channel_id
              JOIN users u ON u.id = dm.sender_id
@@ -878,7 +878,17 @@ pub async fn forward_message(
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(|| AppError::NotFound("Message source introuvable".into()))?;
-        (dm_row.try_get("content").ok().flatten(), dm_row.get("author_username"))
+        let content: Option<String> = if dm_row.get::<bool, _>("encrypted") {
+            // Le serveur ne peut pas lire un MP chiffré : l'appli transmet le texte déchiffré.
+            let text = body.content.as_deref().map(str::trim).unwrap_or_default();
+            if text.is_empty() || text.chars().count() > 4000 {
+                return Err(AppError::BadRequest("Contenu du message chiffré requis".into()));
+            }
+            Some(text.to_string())
+        } else {
+            dm_row.try_get("content").ok().flatten()
+        };
+        (content, dm_row.get("author_username"))
     };
 
     // Vérifier que le canal de destination appartient bien à un serveur dont l'user est membre

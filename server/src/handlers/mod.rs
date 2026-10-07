@@ -3,6 +3,7 @@ pub mod gifs;
 pub mod password_reset;
 pub mod users;
 pub mod user_keys;
+pub mod e2e_conv;
 pub mod servers;
 pub mod channels;
 pub mod channel_access;

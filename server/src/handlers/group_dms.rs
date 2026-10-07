@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::e2e_conv,
     middleware::auth::Claims,
     state::AppState,
 };
@@ -215,7 +216,9 @@ pub async fn get_group_messages(
         let mut before_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
-                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
+                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
@@ -229,7 +232,9 @@ pub async fn get_group_messages(
         let after_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
-                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
+                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
@@ -247,7 +252,9 @@ pub async fn get_group_messages(
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
-                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
+                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
@@ -262,7 +269,9 @@ pub async fn get_group_messages(
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
                     u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
-                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
+                    m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
+                    m.enc, m.client_msg_id, m.purged, rm.enc as reply_to_enc,
+                    rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
              LEFT JOIN group_dm_messages rm ON rm.id = m.reply_to
@@ -338,6 +347,12 @@ pub async fn get_group_messages(
             "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
             "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
             "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
+            "reply_to_enc": r.get::<Option<serde_json::Value>, _>("reply_to_enc"),
+            "reply_to_client_msg_id": r.get::<Option<Uuid>, _>("reply_to_client_msg_id"),
+            "reply_to_sender_id": r.get::<Option<Uuid>, _>("reply_to_sender_id"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+            "purged": r.get::<bool, _>("purged"),
             "reactions": react_map.get(&id).cloned().unwrap_or_default(),
             "attachments": att_map.get(&id).cloned().unwrap_or_default(),
         })
@@ -353,6 +368,9 @@ pub struct SendGroupDmInput {
     pub content: Option<String>,
     pub has_attachments: Option<bool>,
     pub reply_to: Option<Uuid>,
+    /// Contenu chiffré {v, epoch, iv, ct} (remplace `content`).
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn send_group_message(
@@ -382,7 +400,14 @@ pub async fn send_group_message(
     let content = body.content.as_deref()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    if content.is_none() && !has_attachments {
+    let conv = e2e_conv::Conv::Group(group_id);
+    let members = e2e_conv::members(&state.db, conv).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, &members, content.is_some(), body.enc.as_ref()).await?;
+    if enc.is_some() && body.client_msg_id.is_none() {
+        return Err(AppError::BadRequest("client_msg_id requis".into()));
+    }
+    let enc_json = enc.as_ref().map(e2e_conv::Enc::to_json);
+    if content.is_none() && !has_attachments && enc.is_none() {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if let Some(ref c) = content {
@@ -402,15 +427,17 @@ pub async fn send_group_message(
     } else { None };
 
     let msg = sqlx::query(
-        "INSERT INTO group_dm_messages (dm_id, sender_id, content, reply_to) VALUES ($1, $2, $3, $4) RETURNING id, created_at"
+        "INSERT INTO group_dm_messages (dm_id, sender_id, content, reply_to, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at"
     )
-    .bind(group_id).bind(claims.sub).bind(&content).bind(reply_to)
+    .bind(group_id).bind(claims.sub).bind(&content).bind(reply_to).bind(&enc_json).bind(body.client_msg_id)
     .fetch_one(&state.db).await?;
 
     // Infos du message cite pour l affichage immediat cote clients
     let reply_info = if let Some(rid) = reply_to {
         sqlx::query(
-            "SELECT u.username, m.content FROM group_dm_messages m JOIN users u ON u.id = m.sender_id WHERE m.id=$1"
+            "SELECT u.username, m.content, m.enc, m.client_msg_id, m.sender_id
+             FROM group_dm_messages m JOIN users u ON u.id = m.sender_id WHERE m.id=$1"
         )
         .bind(rid).fetch_optional(&state.db).await?
     } else { None };
@@ -430,10 +457,15 @@ pub async fn send_group_message(
         "reply_to": reply_to,
         "reply_to_username": reply_info.as_ref().map(|r| r.get::<String, _>("username")),
         "reply_to_content": reply_info.as_ref().and_then(|r| r.get::<Option<String>, _>("content")),
+        "reply_to_enc": reply_info.as_ref().and_then(|r| r.get::<Option<serde_json::Value>, _>("enc")),
+        "reply_to_client_msg_id": reply_info.as_ref().and_then(|r| r.get::<Option<Uuid>, _>("client_msg_id")),
+        "reply_to_sender_id": reply_info.as_ref().map(|r| r.get::<Uuid, _>("sender_id")),
+        "enc": enc_json,
+        "client_msg_id": body.client_msg_id,
         "attachments": serde_json::json!([]),
     });
 
-    let pending_att = has_attachments && content.is_none();
+    let pending_att = has_attachments && content.is_none() && enc.is_none();
     let event = serde_json::json!({
         "type": "GROUP_DM_MESSAGE",
         "group_id": group_id,
@@ -443,17 +475,17 @@ pub async fn send_group_message(
     let event_str = event.to_string();
 
     // Notifier tous les membres
-    let members: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
-    )
-    .bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
-
     for uid in &members {
         state.broadcast_to_user(*uid, event_str.clone()).await;
     }
     let others: Vec<Uuid> = members.into_iter().filter(|u| *u != claims.sub).collect();
     let sender: String = user.get("username");
-    let text: String = content.as_deref().map(|c| c.chars().take(200).collect::<String>()).unwrap_or_else(|| "Pièce jointe".into());
+    // Message chiffré : le serveur ne connaît pas le texte (aperçu déchiffré sur l'appareil).
+    let text: String = if enc.is_some() {
+        "Message chiffré".into()
+    } else {
+        content.as_deref().map(|c| c.chars().take(200).collect::<String>()).unwrap_or_else(|| "Pièce jointe".into())
+    };
     let group_name: Option<String> = sqlx::query_scalar("SELECT name FROM group_dm_channels WHERE id=$1")
         .bind(group_id).fetch_optional(&state.db).await.ok().flatten();
     let mobile = crate::mobile_push::Notice::new(
@@ -523,7 +555,11 @@ pub async fn delete_group_message(
 
 #[derive(serde::Deserialize)]
 pub struct EditGroupMessageBody {
+    #[serde(default)]
     pub content: String,
+    /// Édition chiffrée : nouveau contenu chiffré (même `client_msg_id`).
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn edit_group_message(
@@ -542,41 +578,50 @@ pub async fn edit_group_message(
     if !is_member { return Err(AppError::Forbidden); }
 
     let content = body.content.trim().to_string();
-    if content.is_empty() || content.chars().count() > 4000 {
+    if content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+    let conv = e2e_conv::Conv::Group(group_id);
+    let all_members = e2e_conv::members(&state.db, conv).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, &all_members, !content.is_empty(), body.enc.as_ref()).await?;
+    if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
 
-    let rows = sqlx::query(
-        "UPDATE group_dm_messages SET content=$1, edited_at=NOW()
-         WHERE id=$2 AND sender_id=$3 AND dm_id=$4"
-    )
-    .bind(&content)
-    .bind(msg_id)
-    .bind(claims.sub)
-    .bind(group_id)
-    .execute(&state.db)
-    .await?;
+    let rows = if let Some(enc) = &enc {
+        sqlx::query(
+            "UPDATE group_dm_messages SET enc=$1, content=NULL, client_msg_id=COALESCE(client_msg_id, $5), edited_at=NOW()
+             WHERE id=$2 AND sender_id=$3 AND dm_id=$4 AND (client_msg_id IS NOT NULL OR $5::uuid IS NOT NULL)"
+        )
+        .bind(enc.to_json()).bind(msg_id).bind(claims.sub).bind(group_id).bind(body.client_msg_id)
+        .execute(&state.db)
+        .await?
+    } else {
+        sqlx::query(
+            "UPDATE group_dm_messages SET content=$1, edited_at=NOW()
+             WHERE id=$2 AND sender_id=$3 AND dm_id=$4 AND enc IS NULL"
+        )
+        .bind(&content)
+        .bind(msg_id)
+        .bind(claims.sub)
+        .bind(group_id)
+        .execute(&state.db)
+        .await?
+    };
 
     if rows.rows_affected() == 0 {
         return Err(AppError::Forbidden);
     }
 
-    let members: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
-    )
-    .bind(group_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
     let event = serde_json::json!({
         "type": "GROUP_DM_MESSAGE_EDIT",
         "group_id": group_id,
         "message_id": msg_id,
-        "content": content,
+        "content": if enc.is_some() { serde_json::Value::Null } else { serde_json::Value::String(content) },
+        "enc": enc.as_ref().map(e2e_conv::Enc::to_json),
     }).to_string();
 
-    for uid in members {
+    for uid in all_members {
         state.broadcast_to_user(uid, event.clone()).await;
     }
 
@@ -801,6 +846,8 @@ pub async fn leave_group_dm(
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
         .bind(group_id).bind(claims.sub).execute(&state.db).await?;
     crate::handlers::group_calls::leave(&state, group_id, claims.sub).await;
+    // Chiffrement : celui qui part connaît la clé actuelle, la suivante sera neuve.
+    e2e_conv::member_left(&state.db, group_id, claims.sub).await;
 
     // Notifier les membres restants
     let remaining: Vec<Uuid> = sqlx::query_scalar(
@@ -811,6 +858,7 @@ pub async fn leave_group_dm(
         // Plus personne — supprimer le groupe
         sqlx::query("DELETE FROM group_dm_channels WHERE id=$1")
             .bind(group_id).execute(&state.db).await.ok();
+        e2e_conv::forget_conversation(&state.db, e2e_conv::Conv::Group(group_id)).await;
     } else {
         // owner_id n'était jamais réassigné quand le owner quittait -- remove_group_dm_member
         // (seule action owner-only du fichier) devenait PERMANENTEMENT inutilisable pour ce
@@ -893,9 +941,11 @@ pub async fn add_group_dm_member(
             "avatar": new_user.get::<Option<String>, _>("avatar"),
         },
     }).to_string();
-    for uid in all_members {
-        state.broadcast_to_user(uid, event.clone()).await;
+    for uid in &all_members {
+        state.broadcast_to_user(*uid, event.clone()).await;
     }
+    // Le nouveau membre attend les clés des époques existantes (historique visible).
+    e2e_conv::key_request(&state, e2e_conv::Conv::Group(group_id), body.user_id, &all_members).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -916,6 +966,8 @@ pub async fn remove_group_dm_member(
         .bind(group_id).bind(target_id).execute(&state.db).await?;
     // L'exclu perd aussi l'accès à l'appel de groupe en cours.
     crate::handlers::group_calls::leave(&state, group_id, target_id).await;
+    // ... et aux messages chiffrés après son départ (rotation au prochain envoi).
+    e2e_conv::member_left(&state.db, group_id, target_id).await;
 
     let remaining: Vec<Uuid> = sqlx::query_scalar(
         "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
@@ -1070,7 +1122,7 @@ pub async fn list_group_dm_pins(
     if !is_member { return Err(AppError::Forbidden); }
 
     let rows = sqlx::query(
-        "SELECT m.id, m.content, m.created_at, m.sender_id, u.username as sender_username
+        "SELECT m.id, m.content, m.enc, m.client_msg_id, m.created_at, m.sender_id, u.username as sender_username
          FROM group_dm_pins p
          JOIN group_dm_messages m ON m.id = p.message_id
          JOIN users u ON u.id = m.sender_id
@@ -1081,6 +1133,8 @@ pub async fn list_group_dm_pins(
     let result = rows.iter().map(|r| serde_json::json!({
         "id": r.get::<Uuid, _>("id"),
         "content": r.get::<Option<String>, _>("content"),
+        "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+        "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "sender_id": r.get::<Uuid, _>("sender_id"),
         "sender_username": r.get::<String, _>("sender_username"),

@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::e2e_conv,
     middleware::auth::Claims,
     state::AppState,
 };
@@ -227,14 +228,15 @@ pub async fn get_dms(
         sqlx::query(
             "WITH last_msg AS (
                SELECT DISTINCT ON (dm_channel_id)
-                 dm_channel_id, created_at AS last_message_at, LEFT(content, 80) AS last_message_content
+                 dm_channel_id, created_at AS last_message_at, LEFT(content, 80) AS last_message_content,
+                 (enc IS NOT NULL) AS last_message_encrypted
                FROM dm_messages
                ORDER BY dm_channel_id, created_at DESC
              )
              SELECT dc.id,
                CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
                u.username, u.discriminator, u.avatar, u.status,
-               lm.last_message_at, lm.last_message_content,
+               lm.last_message_at, lm.last_message_content, COALESCE(lm.last_message_encrypted, FALSE) AS last_message_encrypted,
                COALESCE(dus.muted, FALSE) AS is_muted,
                COALESCE(dus.archived, FALSE) AS is_archived
              FROM dm_channels dc
@@ -251,6 +253,7 @@ pub async fn get_dms(
                SELECT DISTINCT ON (m.dm_id)
                  m.dm_id, m.created_at AS last_message_at,
                  LEFT(m.content, 80) AS last_message_content,
+                 (m.enc IS NOT NULL) AS last_message_encrypted,
                  u.username AS last_message_author
                FROM group_dm_messages m
                LEFT JOIN users u ON u.id = m.sender_id
@@ -260,6 +263,7 @@ pub async fn get_dms(
                SELECT dm_id, COUNT(*) AS cnt FROM group_dm_members GROUP BY dm_id
              )
              SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at, lgm.last_message_content, lgm.last_message_author,
+                    COALESCE(lgm.last_message_encrypted, FALSE) AS last_message_encrypted,
                     COALESCE(dus.muted, FALSE) AS is_muted,
                     COALESCE(dus.archived, FALSE) AS is_archived
              FROM group_dm_channels g
@@ -282,6 +286,7 @@ pub async fn get_dms(
         "status": r.get::<String, _>("status"),
         "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
         "last_message_content": r.get::<Option<String>, _>("last_message_content"),
+        "last_message_encrypted": r.get::<bool, _>("last_message_encrypted"),
         "is_muted": r.get::<bool, _>("is_muted"),
         "is_archived": r.get::<bool, _>("is_archived"),
         "is_group": false,
@@ -295,6 +300,7 @@ pub async fn get_dms(
             "last_message_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_message_at"),
             "last_message_content": r.get::<Option<String>, _>("last_message_content"),
             "last_message_author": r.get::<Option<String>, _>("last_message_author"),
+            "last_message_encrypted": r.get::<bool, _>("last_message_encrypted"),
             "is_muted": r.get::<bool, _>("is_muted"),
             "is_archived": r.get::<bool, _>("is_archived"),
             "is_group": true,
@@ -420,7 +426,7 @@ pub async fn get_dm_messages(
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
-            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) >= ($2, $4)
              ORDER BY dm.created_at ASC, dm.id ASC LIMIT $3"
@@ -433,7 +439,7 @@ pub async fn get_dm_messages(
         before_rows
     } else if let Some(before_id) = before {
         sqlx::query(
-            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
                AND (dm.created_at, dm.id) < (SELECT created_at, id FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
@@ -446,7 +452,7 @@ pub async fn get_dm_messages(
         .await?
     } else {
         sqlx::query(
-            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
              ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2"
@@ -492,7 +498,7 @@ pub async fn get_dm_messages(
         vec![]
     } else {
         sqlx::query(
-            "SELECT dm.id, dm.content, dm.sender_id, u.username as sender_username
+            "SELECT dm.id, dm.content, dm.enc, dm.client_msg_id, dm.sender_id, u.username as sender_username
              FROM dm_messages dm JOIN users u ON u.id = dm.sender_id
              WHERE dm.id = ANY($1) AND dm.dm_channel_id = $2"
         )
@@ -533,6 +539,8 @@ pub async fn get_dm_messages(
         reply_ctx_map.insert(id, serde_json::json!({
             "id": id,
             "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("sender_username"),
         }));
@@ -544,6 +552,9 @@ pub async fn get_dm_messages(
         serde_json::json!({
             "id": id,
             "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+            "purged": r.get::<bool, _>("purged"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("username"),
@@ -763,7 +774,18 @@ pub async fn send_dm(
     }
     let has_attachments = body["has_attachments"].as_bool().unwrap_or(false);
 
-    if content_raw.is_empty() && !has_attachments {
+    // Chiffrement de bout en bout : `enc` remplace `content` ; le clair est refusé
+    // dès que les deux participants ont une clé de compte.
+    let conv = e2e_conv::Conv::Dm(dm_id);
+    let members = e2e_conv::members(&state.db, conv).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, &members, !content_raw.is_empty(), body.get("enc")).await?;
+    let client_msg_id = e2e_conv::parse_client_msg_id(&body["client_msg_id"]);
+    if enc.is_some() && client_msg_id.is_none() {
+        return Err(AppError::BadRequest("client_msg_id requis".into()));
+    }
+    let enc_json = enc.as_ref().map(e2e_conv::Enc::to_json);
+
+    if content_raw.is_empty() && !has_attachments && enc.is_none() {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
     if content_raw.chars().count() > 4000 {
@@ -774,12 +796,15 @@ pub async fn send_dm(
 
     let content_opt: Option<&str> = if content.is_empty() { None } else { Some(content.as_str()) };
     let msg = sqlx::query(
-        "INSERT INTO dm_messages (dm_channel_id, sender_id, content, reply_to_id) VALUES ($1, $2, $3, $4) RETURNING *"
+        "INSERT INTO dm_messages (dm_channel_id, sender_id, content, reply_to_id, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(dm_id)
     .bind(claims.sub)
     .bind(content_opt)
     .bind(reply_to)
+    .bind(&enc_json)
+    .bind(client_msg_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -817,7 +842,7 @@ pub async fn send_dm(
     // Récupérer le contexte du message auquel on répond si applicable
     let reply_ctx = if let Some(rid) = reply_to {
         sqlx::query(
-            "SELECT dm.id, dm.content, dm.sender_id, u.username as sender_username
+            "SELECT dm.id, dm.content, dm.enc, dm.client_msg_id, dm.sender_id, u.username as sender_username
              FROM dm_messages dm JOIN users u ON u.id = dm.sender_id WHERE dm.id=$1"
         )
         .bind(rid)
@@ -828,6 +853,8 @@ pub async fn send_dm(
         .map(|r| serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
             "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("sender_username"),
         }))
@@ -835,7 +862,7 @@ pub async fn send_dm(
         None
     };
 
-    let pending_att = has_attachments && content.is_empty();
+    let pending_att = has_attachments && content.is_empty() && enc.is_none();
     let event = serde_json::json!({
         "type": "DM_MESSAGE",
         "dm_id": dm_id,
@@ -843,6 +870,8 @@ pub async fn send_dm(
         "message": {
             "id": msg_id,
             "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content.clone()) },
+            "enc": enc_json,
+            "client_msg_id": client_msg_id,
             "sender_id": claims.sub,
             "sender_username": sender_username,
             "sender_avatar": sender_avatar,
@@ -857,7 +886,14 @@ pub async fn send_dm(
     // Sync multi-onglets/appareils : notifier aussi le sender lui-même
     state.broadcast_to_user(claims.sub, event_str).await;
     // Destinataire sans aucune session ouverte : Web Push.
-    let text: String = if content.is_empty() { "Pièce jointe".to_string() } else { content.chars().take(200).collect() };
+    // Message chiffré : le serveur ne connaît pas le texte (aperçu déchiffré sur l'appareil).
+    let text: String = if enc.is_some() {
+        "Message chiffré".to_string()
+    } else if content.is_empty() {
+        "Pièce jointe".to_string()
+    } else {
+        content.chars().take(200).collect()
+    };
     let mobile = crate::mobile_push::Notice::new(
         sender_username.clone(),
         &text,
@@ -874,6 +910,8 @@ pub async fn send_dm(
     Ok(Json(serde_json::json!({
         "id": msg_id,
         "content": if content.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(content) },
+        "enc": enc_json,
+        "client_msg_id": client_msg_id,
         "reply_to_id": reply_to,
         "reply_to": reply_ctx,
         "created_at": created_at,
@@ -974,157 +1012,6 @@ pub async fn upload_dm_attachment(
     }
 
     Ok(Json(uploaded))
-}
-
-// ─── E2E Encrypted DM Messages ───────────────────────────────────────────────
-
-pub async fn get_e2e_messages(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(dm_id): Path<Uuid>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<Vec<serde_json::Value>>> {
-    let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
-    )
-    .bind(dm_id)
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-
-    if !ok { return Err(AppError::Forbidden); }
-
-    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
-
-    let messages = sqlx::query(
-        "SELECT m.id, m.sender_id, m.ciphertext, m.created_at, u.username, u.avatar, u.avatar_decoration
-         FROM dm_e2e_messages m JOIN users u ON u.id = m.sender_id
-         WHERE m.dm_channel_id = $1
-         ORDER BY m.created_at DESC LIMIT $2"
-    )
-    .bind(dm_id)
-    .bind(limit)
-    .fetch_all(&state.db)
-    .await?;
-
-    use sqlx::Row;
-    let mut result: Vec<serde_json::Value> = messages.iter().map(|r| serde_json::json!({
-        "id": r.get::<Uuid, _>("id"),
-        "sender_id": r.get::<Uuid, _>("sender_id"),
-        "sender_username": r.get::<String, _>("username"),
-        "sender_avatar": r.get::<Option<String>, _>("avatar"),
-        "sender_avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
-        "ciphertext": r.get::<String, _>("ciphertext"),
-        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "encrypted": true,
-    })).collect();
-
-    result.reverse();
-    Ok(Json(result))
-}
-
-pub async fn send_e2e_message(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(dm_id): Path<Uuid>,
-    Json(body): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>> {
-    let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))"
-    )
-    .bind(dm_id)
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-
-    if !ok { return Err(AppError::Forbidden); }
-
-    // Vérifier que le destinataire n'a pas bloqué l'expéditeur
-    {
-        use sqlx::Row;
-        let other_id: Option<Uuid> = sqlx::query(
-            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other
-             FROM dm_channels WHERE id=$1"
-        )
-        .bind(dm_id).bind(claims.sub)
-        .fetch_optional(&state.db).await?
-        .map(|r| r.get("other"));
-        if let Some(oid) = other_id {
-            let blocked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-            ).bind(oid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
-            if blocked { return Err(AppError::Forbidden); }
-        }
-    }
-
-    let ciphertext = body["ciphertext"]
-        .as_str()
-        .filter(|c| !c.trim().is_empty())
-        .ok_or_else(|| AppError::BadRequest("ciphertext vide".into()))?;
-
-    if ciphertext.len() > 64 * 1024 {
-        return Err(AppError::BadRequest("Message trop volumineux (max 64KB ciphertext)".into()));
-    }
-
-    let msg = sqlx::query(
-        "INSERT INTO dm_e2e_messages (dm_channel_id, sender_id, ciphertext) VALUES ($1, $2, $3) RETURNING id, created_at"
-    )
-    .bind(dm_id)
-    .bind(claims.sub)
-    .bind(ciphertext)
-    .fetch_one(&state.db)
-    .await?;
-
-    use sqlx::Row;
-    let msg_id: Uuid = msg.get("id");
-    let created_at = msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
-
-    // Récupérer les infos de l'expéditeur pour le broadcast
-    let sender = sqlx::query("SELECT username, avatar, avatar_decoration FROM users WHERE id = $1")
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-    let sender_username: String = sender.get("username");
-    let sender_avatar: Option<String> = sender.get("avatar");
-    let sender_decoration: Option<String> = sender.get("avatar_decoration");
-
-    // Notifier l'autre utilisateur
-    let other = sqlx::query(
-        "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END as other
-         FROM dm_channels WHERE id=$1"
-    )
-    .bind(dm_id)
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-
-    let other_id: Uuid = other.get("other");
-    let event = serde_json::json!({
-        "type": "DM_E2E_MESSAGE",
-        "dm_id": dm_id,
-        "message": {
-            "id": msg_id,
-            "sender_id": claims.sub,
-            "sender_username": sender_username,
-            "sender_avatar": sender_avatar,
-            "sender_avatar_decoration": sender_decoration,
-            "ciphertext": ciphertext,
-            "created_at": created_at,
-            "encrypted": true,
-        }
-    });
-    state.broadcast_to_user(other_id, event.to_string()).await;
-
-    Ok(Json(serde_json::json!({
-        "id": msg_id,
-        "sender_id": claims.sub,
-        "sender_username": sender_username,
-        "sender_avatar": sender_avatar,
-        "sender_avatar_decoration": sender_decoration,
-        "ciphertext": ciphertext,
-        "created_at": created_at,
-        "encrypted": true,
-    })))
 }
 
 // ─── Friends Ultra ─────────────────────────────────────────────────────────────
@@ -1915,7 +1802,11 @@ pub async fn invite_bulk(
 
 #[derive(serde::Deserialize)]
 pub struct EditDmBody {
+    #[serde(default)]
     pub content: String,
+    /// Édition chiffrée : nouveau contenu chiffré (même `client_msg_id`).
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn edit_dm_message(
@@ -1932,25 +1823,41 @@ pub async fn edit_dm_message(
     if !ok { return Err(crate::error::AppError::Forbidden); }
 
     let content = body.content.trim().to_string();
-    if content.is_empty() {
-        return Err(crate::error::AppError::BadRequest("Contenu vide".into()));
-    }
     if content.chars().count() > 4000 {
         return Err(crate::error::AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
+    let conv = e2e_conv::Conv::Dm(dm_id);
+    let members = e2e_conv::members(&state.db, conv).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, &members, !content.is_empty(), body.enc.as_ref()).await?;
+    if content.is_empty() && enc.is_none() {
+        return Err(crate::error::AppError::BadRequest("Contenu vide".into()));
+    }
 
-    // Sauvegarder ancienne version dans l'historique puis éditer
-    sqlx::query(
-        "INSERT INTO message_edits (message_id, content)
-         SELECT $1, content FROM dm_messages WHERE id=$1 AND sender_id=$2 AND content IS NOT NULL"
-    )
-    .bind(msg_id).bind(claims.sub).execute(&state.db).await?;
-
-    let rows = sqlx::query(
-        "UPDATE dm_messages SET content=$2, edited_at=NOW() WHERE id=$1 AND sender_id=$3 RETURNING dm_channel_id"
-    )
-    .bind(msg_id).bind(&content).bind(claims.sub)
-    .execute(&state.db).await?;
+    let rows = if let Some(enc) = &enc {
+        // Un message ancien rechiffré par l'édition perd aussi son historique en clair.
+        let rows = sqlx::query(
+            "UPDATE dm_messages SET enc=$2, content=NULL, client_msg_id=COALESCE(client_msg_id, $4), edited_at=NOW()
+             WHERE id=$1 AND sender_id=$3 AND dm_channel_id=$5 AND (client_msg_id IS NOT NULL OR $4::uuid IS NOT NULL)"
+        )
+        .bind(msg_id).bind(enc.to_json()).bind(claims.sub).bind(body.client_msg_id).bind(dm_id)
+        .execute(&state.db).await?;
+        if rows.rows_affected() > 0 {
+            sqlx::query("DELETE FROM message_edits WHERE message_id=$1").bind(msg_id).execute(&state.db).await?;
+        }
+        rows
+    } else {
+        // Sauvegarder ancienne version dans l'historique puis éditer
+        sqlx::query(
+            "INSERT INTO message_edits (message_id, content)
+             SELECT $1, content FROM dm_messages WHERE id=$1 AND sender_id=$2 AND content IS NOT NULL"
+        )
+        .bind(msg_id).bind(claims.sub).execute(&state.db).await?;
+        sqlx::query(
+            "UPDATE dm_messages SET content=$2, edited_at=NOW() WHERE id=$1 AND sender_id=$3 AND enc IS NULL"
+        )
+        .bind(msg_id).bind(&content).bind(claims.sub)
+        .execute(&state.db).await?
+    };
 
     if rows.rows_affected() == 0 {
         return Err(crate::error::AppError::Forbidden);
@@ -1961,7 +1868,8 @@ pub async fn edit_dm_message(
         "type": "DM_MESSAGE_UPDATE",
         "dm_id": dm_id,
         "message_id": msg_id,
-        "content": content,
+        "content": if enc.is_some() { serde_json::Value::Null } else { serde_json::Value::String(content) },
+        "enc": enc.as_ref().map(e2e_conv::Enc::to_json),
         "edited_at": Utc::now(),
     });
     // Récupérer l'autre participant

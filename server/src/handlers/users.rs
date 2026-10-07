@@ -552,34 +552,6 @@ pub async fn get_login_history(
     Ok(Json(result))
 }
 
-// ─── E2E Encryption — Public Key Management ──────────────────────────────────
-
-#[derive(serde::Deserialize)]
-pub struct SetPubKeyRequest {
-    pub pub_key: String,
-}
-
-pub async fn set_pubkey(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Json(body): Json<SetPubKeyRequest>,
-) -> Result<Json<serde_json::Value>> {
-    if body.pub_key.len() > 4096 {
-        return Err(AppError::BadRequest("Clé publique trop longue".into()));
-    }
-
-    sqlx::query(
-        "INSERT INTO user_pubkeys (user_id, pub_key) VALUES ($1, $2)
-         ON CONFLICT (user_id) DO UPDATE SET pub_key = EXCLUDED.pub_key, updated_at = NOW()"
-    )
-    .bind(claims.sub)
-    .bind(&body.pub_key)
-    .execute(&state.db)
-    .await?;
-
-    Ok(Json(serde_json::json!({ "ok": true })))
-}
-
 /// GET /users/:id/profile — profil public + statut relation (optionnel auth via header)
 pub async fn get_user_profile(
     State(state): State<AppState>,
@@ -759,25 +731,6 @@ pub async fn get_user_profile_public(
         .map(Extension);
 
     get_user_profile(State(state), claims, Path(user_id)).await
-}
-
-pub async fn get_pubkey(
-    State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>> {
-    let row = sqlx::query("SELECT pub_key FROM user_pubkeys WHERE user_id = $1")
-        .bind(user_id)
-        .fetch_optional(&state.db)
-        .await?;
-
-    match row {
-        Some(r) => {
-            use sqlx::Row;
-            Ok(Json(serde_json::json!({ "pub_key": r.get::<String, _>("pub_key") })))
-        }
-        None => Err(AppError::NotFound("Clé publique introuvable (E2E non activé pour cet utilisateur)".into())),
-    }
 }
 
 // ─── Status rapide ────────────────────────────────────────────────────────────

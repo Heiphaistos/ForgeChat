@@ -86,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
             cleanup_expired_attachments(&cleanup_state, &cleanup_upload_dir).await;
             handlers::diagnostics::purge_old(&cleanup_state).await;
             purge_retention(&cleanup_state).await;
+            handlers::e2e_conv::purge_legacy(&cleanup_state.db).await;
         }
     });
 
@@ -658,17 +659,20 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/:dm_id/messages/:msg_id/reactions/:emoji", put(handlers::friends::toggle_dm_reaction))
         .route("/dms/:dm_id/messages/search", get(handlers::friends::search_dm_messages))
         // E2E encrypted DMs
-        .route("/dms/:dm_id/e2e", get(handlers::friends::get_e2e_messages))
-        .route("/dms/:dm_id/e2e", post(handlers::friends::send_e2e_message))
         // E2E Public Key Management
-        .route("/users/me/pubkey", post(handlers::users::set_pubkey))
-        .route("/users/:id/pubkey", get(handlers::users::get_pubkey))
         // Clé de compte E2E (docs/CHIFFREMENT-E2E.md §3)
         .route("/users/me/keys", get(handlers::user_keys::get_my_keys).put(handlers::user_keys::create_my_keys).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/wrapped", put(handlers::user_keys::rewrap_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/backup", put(handlers::user_keys::put_my_backup).delete(handlers::user_keys::delete_my_backup).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/reset", post(handlers::user_keys::reset_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/:id/keys/public", get(handlers::user_keys::get_public_key))
+        // Clés de conversation des MP et groupes chiffrés (docs/CHIFFREMENT-E2E.md §4.1)
+        .route("/e2e/conversations/:kind/:id/keys", get(handlers::e2e_conv::get_my_envelopes).post(handlers::e2e_conv::post_envelopes).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/e2e/conversations/:kind/:id/keys/request", post(handlers::e2e_conv::request_keys))
+        .route("/e2e/conversations/:kind/:id/members", get(handlers::e2e_conv::get_members))
+        .route("/e2e/legacy", get(handlers::e2e_conv::my_legacy_messages))
+        .route("/dms/:dm_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_dm_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/dms/groups/:group_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_group_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         // Unread
         .route("/unread", get(handlers::reads::get_unread_counts))
         .route("/unread/mark-all", post(handlers::reads::mark_all_read))

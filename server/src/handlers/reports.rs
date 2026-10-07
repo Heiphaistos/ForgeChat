@@ -18,6 +18,8 @@ const VALID_REASONS: &[&str] = &["spam", "harassment", "nsfw", "other"];
 pub struct CreateReportInput {
     pub reason: String,
     pub comment: Option<String>,
+    /// Message privé chiffré : texte déchiffré par le signaleur (le serveur ne peut pas le lire).
+    pub content: Option<String>,
 }
 
 pub async fn create_report(
@@ -190,7 +192,7 @@ async fn report_dm_message(
 ) -> Result<Json<serde_json::Value>> {
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT dm.sender_id, dm.content FROM dm_messages dm
+        "SELECT dm.sender_id, dm.content, dm.enc IS NOT NULL AS encrypted FROM dm_messages dm
          JOIN dm_channels dc ON dc.id = dm.dm_channel_id
          WHERE dm.id = $1 AND (dc.user1_id = $2 OR dc.user2_id = $2)",
     )
@@ -219,7 +221,12 @@ async fn report_dm_message(
         .map(str::trim)
         .filter(|s| !s.is_empty() && s.len() <= 500)
         .map(str::to_string);
-    let content: Option<String> = row.get("content");
+    // Message chiffré : seule copie lisible = celle que le signaleur choisit d'envoyer.
+    let content: Option<String> = if row.get::<bool, _>("encrypted") {
+        body.content.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+    } else {
+        row.get("content")
+    };
     sqlx::query(
         "INSERT INTO dm_reports (message_id, reporter_id, author_id, reason, comment, content)
          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (reporter_id, message_id) DO NOTHING",
