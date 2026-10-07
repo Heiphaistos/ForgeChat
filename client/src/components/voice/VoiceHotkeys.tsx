@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { useVoice } from '../../store/voice'
+import { useClipsSetting } from '../../lib/clipBuffer'
 
 /**
  * Raccourcis vocaux, montés au niveau racine.
@@ -27,6 +28,7 @@ const DEFAULTS: Record<string, string> = {
   push_to_talk: 'Ctrl+Shift+Space',
   toggle_screen_share: 'Ctrl+Alt+S',
   toggle_camera: 'Ctrl+Shift+C',
+  clip_stream: 'Alt+C',
 }
 
 function normalize(binding: string): { ctrl: boolean; alt: boolean; shift: boolean; meta: boolean; key: string } {
@@ -105,6 +107,10 @@ export default function VoiceHotkeys() {
       if (matches(e, binding('toggle_mute'))) { e.preventDefault(); useVoice.getState().toggleMute(); return }
       if (matches(e, binding('toggle_deafen'))) { e.preventDefault(); useVoice.getState().toggleDeafen(); return }
       if (matches(e, binding('toggle_camera'))) { e.preventDefault(); void useVoice.getState().toggleVideo(); return }
+      // Clip : géré par la page du salon vocal, qui détient les tampons.
+      if (useClipsSetting.getState().enabled && matches(e, binding('clip_stream'))) {
+        e.preventDefault(); window.dispatchEvent(new Event('fc:clip')); return
+      }
       if (matches(e, binding('toggle_screen_share'))) {
         e.preventDefault()
         const st = useVoice.getState()

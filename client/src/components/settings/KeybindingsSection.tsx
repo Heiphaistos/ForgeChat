@@ -23,6 +23,7 @@ const DEFAULT_KEYBINDINGS: { action: string; label: string; default: string }[] 
   { action: 'open_settings', label: 'Ouvrir les paramètres', default: 'Ctrl+,' },
   { action: 'hand_raise', label: 'Lever/baisser la main', default: 'Ctrl+Space' },
   { action: 'toggle_camera', label: 'Activer/désactiver la caméra', default: 'Ctrl+Shift+C' },
+  { action: 'clip_stream', label: 'Clip du stream (si les Clips sont activés)', default: 'Alt+C' },
 ]
 
 function formatKey(e: KeyboardEvent): string {
