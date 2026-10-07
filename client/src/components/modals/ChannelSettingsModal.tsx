@@ -75,7 +75,7 @@ interface Props {
 }
 
 const isVoice = (t: string) => ['voice', 'video', 'stage'].includes(t)
-const isText = (t: string) => ['text', 'announcement', 'forum'].includes(t)
+const isText = (t: string) => ['text', 'announcement', 'forum', 'media'].includes(t)
 
 type TabId = 'general' | 'permissions' | 'advanced'
 

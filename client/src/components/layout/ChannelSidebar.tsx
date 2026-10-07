@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
-  Video, Megaphone, MessagesSquare, Radio, ChevronRight,
+  Video, Megaphone, MessagesSquare, Images, Radio, ChevronRight,
   Mic, MicOff, VolumeX, Monitor, Clock, Lock, PlusCircle, Timer,
   Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil,
 } from 'lucide-react'
@@ -181,6 +181,7 @@ function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
     case 'video': return <Video size={size} className="flex-shrink-0" />
     case 'announcement': return <Megaphone size={size} className="flex-shrink-0" />
     case 'forum': return <MessagesSquare size={size} className="flex-shrink-0" />
+    case 'media': return <Images size={size} className="flex-shrink-0" />
     case 'stage': return <Radio size={size} className="flex-shrink-0" />
     default: return <Hash size={size} className="flex-shrink-0" />
   }
@@ -526,7 +527,7 @@ export default function ChannelSidebar() {
       (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
     )
     if (categories.length === 0 && channels.length > 0) {
-      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum'].includes(c.type))
+      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum', 'media'].includes(c.type))
       const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
       if (textChannels.length > 0) groups.push({ key: 'texte', label: 'Texte', channels: textChannels })
       if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
@@ -946,7 +947,7 @@ export default function ChannelSidebar() {
           onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
           onAuxClick={e => {
             // Clic molette → ouvrir le canal texte dans le panneau split (desktop)
-            if (e.button === 1 && !isVoiceCh && ch.type !== 'forum') {
+            if (e.button === 1 && !isVoiceCh && ch.type !== 'forum' && ch.type !== 'media') {
               e.preventDefault()
               setSplitChannelId(ch.id)
             }

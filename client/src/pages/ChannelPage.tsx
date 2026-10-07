@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useContext, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight, Lock } from 'lucide-react'
+import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSquare, Images, Radio, Loader2, Timer, Columns2, X, ChevronLeft, ArrowLeftRight, Lock } from 'lucide-react'
 import { SplitContext } from '../contexts/SplitContext'
 import NsfwGate, { useNsfwOk } from '../components/chat/NsfwGate'
 import { useMobile } from '../contexts/MobileContext'
@@ -37,6 +37,7 @@ function channelIcon(type: string, size = 18) {
     case 'video': return <Video size={size} className={cls} />
     case 'announcement': return <Megaphone size={size} className={cls} />
     case 'forum': return <MessagesSquare size={size} className={cls} />
+    case 'media': return <Images size={size} className={cls} />
     case 'stage': return <Radio size={size} className={cls} />
     default: return <Hash size={size} className={cls} />
   }
@@ -304,7 +305,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (!channelId && !isSplit && serverId && serverData) {
       const chans: any[] = serverData?.channels ?? []
       const navigable = (c: any) => !c.archived && !c.hidden &&
-        (c.type === 'text' || c.type === 'announcement' || c.type === 'forum')
+        (c.type === 'text' || c.type === 'announcement' || c.type === 'forum' || c.type === 'media')
       const lastId = localStorage.getItem(`fc_last_channel:${serverId}`)
       const last = lastId ? chans.find((c: any) => c.id === lastId && navigable(c)) : undefined
       const target = last ?? chans.find((c: any) => c.type === 'text' || c.type === 'announcement')
@@ -461,8 +462,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }
 
   // Forum
-  if (currentChannel?.type === 'forum') {
-    return <ForumPage channel={currentChannel} serverId={serverId} channelId={channelId} canManageMessages={canManageMessages} />
+  // Salon média : un forum affiché en grille, publication = média obligatoire
+  if (currentChannel?.type === 'forum' || currentChannel?.type === 'media') {
+    return <ForumPage media={currentChannel.type === 'media'} channel={currentChannel} serverId={serverId} channelId={channelId} canManageMessages={canManageMessages} />
   }
 
   // Canal texte / annonces

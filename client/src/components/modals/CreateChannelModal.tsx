@@ -1,16 +1,17 @@
 import { useState, useId } from 'react'
-import { Hash, Volume2, X, Video, Megaphone, MessagesSquare, Radio, ChevronDown, Settings } from 'lucide-react'
+import { Hash, Volume2, X, Video, Megaphone, MessagesSquare, Images, Radio, ChevronDown, Settings } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
-type ChannelType = 'text' | 'voice' | 'video' | 'announcement' | 'forum' | 'stage'
+type ChannelType = 'text' | 'voice' | 'video' | 'announcement' | 'forum' | 'media' | 'stage'
 
 const CHANNEL_TYPES: { value: ChannelType; icon: any; label: string; desc: string; color: string }[] = [
   { value: 'text',         icon: Hash,           label: 'Texte',       desc: 'Messages, images, GIFs, embeds...',           color: 'text-fc-muted' },
   { value: 'announcement', icon: Megaphone,       label: 'Annonces',    desc: 'Partagez des nouvelles importantes.',          color: 'text-yellow-400' },
   { value: 'forum',        icon: MessagesSquare,  label: 'Forum',       desc: 'Posts organisés avec tags et réponses.',       color: 'text-green-400' },
+  { value: 'media',        icon: Images,          label: 'Médias',      desc: 'Images et vidéos en grille, avec légende et réponses.', color: 'text-green-400' },
   { value: 'voice',        icon: Volume2,         label: 'Vocal',       desc: 'Chat vocal avec des membres.',                 color: 'text-blue-400' },
   { value: 'video',        icon: Video,           label: 'Vidéo',       desc: 'Appels vidéo et partage d\'écran.',            color: 'text-purple-400' },
   { value: 'stage',        icon: Radio,           label: 'Scène',       desc: 'Vocal pour événements (fonctionne comme un vocal standard).', color: 'text-pink-400' },
@@ -73,7 +74,7 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
 
   const selectedType = CHANNEL_TYPES.find(t => t.value === type)!
   const isVoiceType = ['voice', 'video', 'stage'].includes(type)
-  const isTextType = ['text', 'announcement', 'forum'].includes(type)
+  const isTextType = ['text', 'announcement', 'forum', 'media'].includes(type)
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-3 md:px-0" onClick={onClose}>

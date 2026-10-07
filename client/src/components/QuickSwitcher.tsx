@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Radio, MessageCircle, ChevronRight, Users } from 'lucide-react'
+import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Images, Radio, MessageCircle, ChevronRight, Users } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 import { messageLink } from '../utils/searchLink'
@@ -41,6 +41,7 @@ function ChannelIcon({ type }: { type: string }) {
     case 'video': return <Video size={14} className="text-purple-400" />
     case 'announcement': return <Megaphone size={14} className="text-yellow-400" />
     case 'forum': return <MessagesSquare size={14} className="text-green-400" />
+    case 'media': return <Images size={14} className="text-green-400" />
     case 'stage': return <Radio size={14} className="text-red-400" />
     default: return <Hash size={14} className="text-fc-muted" />
   }
