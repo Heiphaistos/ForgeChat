@@ -24,6 +24,7 @@ window.addEventListener('load', () => {
 pub mod updater;
 mod compat;
 mod diagnostic;
+mod presence;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -430,6 +431,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             register_ptt_shortcut,
             unregister_ptt_shortcut,
+            presence::current_game,
             updater::update_check,
             updater::update_install,
             updater::update_restart,

@@ -35,6 +35,7 @@ import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import { startAfkWatch } from './store/afk'
+import { useGameActivity } from './hooks/useGameActivity'
 
 // Lazy loading pour les pages non-critiques au premier affichage
 const AccueilPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AccueilPage })))
@@ -336,6 +337,9 @@ function AppInner() {
       }).catch(() => {})
     })
   }, [user?.id])
+
+  // Activité « Joue à … » détectée par l'app de bureau.
+  useGameActivity(!!user)
 
   // Listeners globaux voix (joins/leaves pour la sidebar)
   useEffect(() => {

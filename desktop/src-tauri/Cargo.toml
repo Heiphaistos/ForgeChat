@@ -31,6 +31,8 @@ serde_json = "1"
 # l'artefact, puis verification de son empreinte AVANT installation.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "charset", "http2"] }
 sha2 = "0.10"
+# Activite « joue a » : liste des processus (chemin de l'executable) seulement.
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

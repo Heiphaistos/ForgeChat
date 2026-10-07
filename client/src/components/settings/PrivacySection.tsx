@@ -2,9 +2,11 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { Toggle, Select, Field } from './shared'
 import api from '../../api/client'
+import { AUTO_ACTIVITY_KEY } from '../../hooks/useGameActivity'
 import toast from 'react-hot-toast'
 
 export default function PrivacySection() {
+  const [autoActivity, setAutoActivity] = useState(() => { try { return localStorage.getItem(AUTO_ACTIVITY_KEY) !== 'false' } catch { return true } })
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -46,6 +48,16 @@ export default function PrivacySection() {
           <Toggle value={item.value} onChange={item.onChange} />
         </div>
       ))}
+
+      {'__TAURI_INTERNALS__' in window && (
+        <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
+          <div>
+            <div className="text-sm font-medium text-white">Afficher le jeu auquel je joue</div>
+            <div className="text-xs text-fc-muted">L'app de bureau repère le jeu lancé (Steam, Epic, Riot…) et l'affiche sur ton profil. Détection sur ton ordinateur uniquement.</div>
+          </div>
+          <Toggle value={autoActivity} onChange={v => { setAutoActivity(v); try { localStorage.setItem(AUTO_ACTIVITY_KEY, String(v)) } catch { /* réglage non mémorisé */ } }} />
+        </div>
+      )}
 
       <Field label="Qui peut voir votre activité">
         <Select value={activityVisibility} onChange={setActivityVisibility} className="w-full"
