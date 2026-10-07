@@ -13,6 +13,7 @@ import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
 import { useUpdateCheck } from '@/features/updates/useUpdateCheck'
+import { bindKeepAlive, syncKeepAlive, useKeepAlive } from '@/services/keepAlive'
 import { configureNotifications, listenNotificationTaps, syncPushRegistration } from '@/services/push'
 import { bindRealtime } from '@/services/realtimeBindings'
 import { useAuth } from '@/stores/auth'
@@ -52,6 +53,8 @@ export default function RootLayout() {
   useUpdateCheck()
   const pushEnabled = useSettings((s) => s.pushEnabled)
   const pushPreview = useSettings((s) => s.pushPreview)
+  const keepConnected = useSettings((s) => s.keepConnected)
+  const keepAlive = useKeepAlive((s) => s.active)
 
   // Démarrage : attendre les préférences (verrouillage) avant de restaurer la session.
   useEffect(() => {
@@ -66,18 +69,20 @@ export default function RootLayout() {
   }, [status])
 
   useEffect(() => {
-    const offs = [bindRealtime(), bindLifecycle(), bindPrivacyScreen()]
+    const offs = [bindRealtime(), bindLifecycle(), bindPrivacyScreen(), bindKeepAlive()]
     return () => offs.forEach((off) => off())
   }, [])
 
-  // Push : (ré)enregistrement une fois connecté et à chaque changement de préférence.
+  // Push : (ré)enregistrement une fois connecté et à chaque changement de préférence. Puis le mode
+  // « Notifications sans Google », actif par défaut sans jeton push (arrêté hors session).
   useEffect(() => {
-    if (status === 'signedIn') void syncPushRegistration()
-  }, [status, pushEnabled, pushPreview])
+    if (status === 'signedIn') void syncPushRegistration().catch(() => undefined).then(syncKeepAlive)
+    else void syncKeepAlive()
+  }, [status, pushEnabled, pushPreview, keepConnected])
 
   useEffect(() => {
-    if (status === 'signedIn') return listenNotificationTaps()
-  }, [status])
+    if (status === 'signedIn') return listenNotificationTaps(keepAlive)
+  }, [status, keepAlive])
 
   // Lien profond reçu app fermée : voir lib/deepLinks. Rejoué une seule fois, après connexion.
   const pathname = usePathname()

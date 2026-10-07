@@ -25,8 +25,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v)
 
 export function configureNotifications() {
-  // Build sans push : ni gestionnaire ni canaux Android (ils apparaîtraient pour rien dans les réglages).
-  if (!PUSH_AVAILABLE) return
+  // Build sans push : ni gestionnaire ni canaux Android (ils apparaîtraient pour rien dans les réglages),
+  // sauf si le mode « Notifications sans Google » s'active (services/keepAlive).
+  if (PUSH_AVAILABLE) setupNotificationChannels()
+}
+
+/** Gestionnaire et canaux Android, communs au push et aux notifications locales du mode sans Google. */
+export function setupNotificationChannels() {
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       // Ne pas afficher de bannière pour la conversation déjà ouverte.
@@ -93,8 +98,9 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
   // que « Appel manqué » (avec dm_id, routé ci-dessus comme un message privé). Rien à ouvrir.
 }
 
-export function listenNotificationTaps(): () => void {
-  if (!PUSH_AVAILABLE) return () => undefined
+/** `local` : notifications locales du mode sans Google (services/keepAlive), même sans push. */
+export function listenNotificationTaps(local = false): () => void {
+  if (!PUSH_AVAILABLE && !local) return () => undefined
   const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
     routeFromNotification(resp.notification.request.content.data as Record<string, unknown>)
   })
@@ -120,6 +126,9 @@ async function getStoredToken() {
     return null
   }
 }
+
+/** Jeton push enregistré pour cet appareil (sinon : mode sans Google par défaut, services/keepAlive). */
+export const hasPushToken = async () => !!(await getStoredToken())
 
 /** Enregistre (ou met à jour) le token push de cet appareil auprès du serveur. */
 export async function syncPushRegistration(): Promise<void> {
