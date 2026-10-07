@@ -895,7 +895,6 @@ export const fr = {
   'settings.profile.pronouns': 'Pronoms',
   'settings.profile.pronounsHint': 'Ex : il/lui, elle/elle, iel/iel',
   'settings.profile.pronounsPlaceholder': 'il/lui',
-  'settings.profile.birthday': 'Date de naissance (optionnel)',
   'settings.profile.save': 'Sauvegarder le profil',
   // --- Paramètres : Sécurité ---
   'settings.security.setupError': "Impossible d'initialiser le 2FA",

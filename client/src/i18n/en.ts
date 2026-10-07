@@ -896,7 +896,6 @@ export const en: Partial<Record<Key, string>> = {
   'settings.profile.pronouns': 'Pronouns',
   'settings.profile.pronounsHint': 'E.g. he/him, she/her, they/them',
   'settings.profile.pronounsPlaceholder': 'he/him',
-  'settings.profile.birthday': 'Date of birth (optional)',
   'settings.profile.save': 'Save profile',
   // --- Paramètres : Sécurité ---
   'settings.security.setupError': 'Could not set up 2FA',

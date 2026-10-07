@@ -6,6 +6,7 @@ import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading, SwitchRow, T, TextField } from '@/components/ui'
 import { useServerDetail } from '@/features/servers/menus'
+import { BirthdayChannelPicker } from '@/features/social/BirthdayChannelPicker'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
@@ -120,6 +121,7 @@ function OverviewForm({ server }: { server: Server }) {
         value={roleOverrides}
         onValueChange={(v) => void toggleRoleOverrides(v)}
       />
+      <BirthdayChannelPicker serverId={server.id} />
       {error ? <T variant="error">{error}</T> : null}
       <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
     </ScrollView>

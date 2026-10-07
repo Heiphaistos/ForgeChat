@@ -23,30 +23,6 @@ export function usernameError(name: string): string | null {
   return null
 }
 
-/**
- * Anniversaire saisi en « JJ/MM/AAAA » (ou « AAAA-MM-JJ ») → « AAAA-MM-JJ » attendu par le serveur.
- * Vide → null (effacer). Date impossible, future ou avant 1900 → erreur.
- */
-export function parseBirthday(input: string, now = new Date()): { value: string | null } | { error: string } {
-  const s = input.trim()
-  if (!s) return { value: null }
-  const fr = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  const [y, m, d] = fr ? [+fr[3]!, +fr[2]!, +fr[1]!] : iso ? [+iso[1]!, +iso[2]!, +iso[3]!] : [0, 0, 0]
-  const date = new Date(Date.UTC(y, m - 1, d))
-  if (!y || date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) {
-    return { error: t('settings.rules.birthdayInvalid') }
-  }
-  if (y < 1900 || date.getTime() > now.getTime()) return { error: t('settings.rules.birthdayRange') }
-  return { value: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` }
-}
-
-/** « AAAA-MM-JJ » → « JJ/MM/AAAA » pour l'affichage ; '' si absent. */
-export function formatBirthday(iso: string | null | undefined): string {
-  const m = (iso ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/)
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
-}
-
 /** Heure « HH:MM » valide (heures calmes). */
 export const isHHMM = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s.trim())
 

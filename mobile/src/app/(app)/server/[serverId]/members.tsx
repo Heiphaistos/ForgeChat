@@ -13,6 +13,7 @@ import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { RoleIcon, useRoleDecor } from '@/features/servers/roleDecor'
 import { usePresence } from '@/stores/presence'
+import { RichStatusText } from '@/features/social/RichStatusText'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function MembersScreen() {
@@ -22,6 +23,7 @@ export default function MembersScreen() {
   const manage = text.manage === '1'
   const q = useQuery({ queryKey: qk.members(ids.serverId ?? ''), queryFn: () => serversApi.members(ids.serverId), enabled: valid })
   const statuses = usePresence((s) => s.statuses)
+  const activities = usePresence((s) => s.activities)
   const decorOf = useRoleDecor(ids.serverId ?? '')
   const [search, setSearch] = useState('')
 
@@ -81,6 +83,7 @@ export default function MembersScreen() {
                 <RoleIcon icon={decorOf(item.user_id)?.icon} title={decorOf(item.user_id)?.iconTitle} />
               </View>
               {item.nickname ? <Text style={styles.sub}>{item.username}</Text> : null}
+              <RichStatusText activity={activities[item.user_id]} style={styles.sub} />
             </View>
           </Pressable>
         )}

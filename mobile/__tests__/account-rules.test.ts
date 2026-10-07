@@ -1,11 +1,9 @@
 import {
   extractResetToken,
-  formatBirthday,
   formatCallDuration,
   formatSecret,
   isHHMM,
   needsVerification,
-  parseBirthday,
   toHHMM,
   usernameError,
 } from '@/features/account/rules'
@@ -34,24 +32,6 @@ describe('usernameError', () => {
     expect(usernameError('x'.repeat(33))).not.toBeNull()
     expect(usernameError('avec espace')).not.toBeNull()
     expect(usernameError('<script>')).not.toBeNull()
-  })
-})
-
-describe('parseBirthday / formatBirthday', () => {
-  const now = new Date('2026-10-07T12:00:00Z')
-  it('convertit JJ/MM/AAAA et AAAA-MM-JJ vers le format serveur', () => {
-    expect(parseBirthday('7/3/1990', now)).toEqual({ value: '1990-03-07' })
-    expect(parseBirthday('1990-03-07', now)).toEqual({ value: '1990-03-07' })
-    expect(parseBirthday('  ', now)).toEqual({ value: null })
-  })
-  it('refuse les dates impossibles, futures ou trop anciennes', () => {
-    for (const bad of ['31/02/2000', '00/01/2000', '1/13/2000', '01/01/2030', '01/01/1850', 'hier', '2000-2-3']) {
-      expect(parseBirthday(bad, now)).toHaveProperty('error')
-    }
-  })
-  it('affiche la date du serveur en JJ/MM/AAAA', () => {
-    expect(formatBirthday('1990-03-07')).toBe('07/03/1990')
-    expect(formatBirthday(null)).toBe('')
   })
 })
 

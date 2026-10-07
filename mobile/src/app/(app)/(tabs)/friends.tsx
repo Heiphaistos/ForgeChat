@@ -1,8 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { router, useNavigation } from 'expo-router'
 import { useLayoutEffect, useState } from 'react'
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { friendsApi, type FriendFilter } from '@/api/friends'
+import { socialApi, socialKeys } from '@/api/social'
+import { RichStatusText } from '@/features/social/RichStatusText'
+import { richText } from '@/features/social/rich'
+import { upcomingBirthdays } from '@/features/social/birthday'
+import { friendSections } from '@/features/social/friendSections'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { openDmWith } from '@/features/friends/openDm'
@@ -25,6 +30,8 @@ export default function FriendsScreen() {
   const navigation = useNavigation()
   const [filter, setFilter] = useState<FriendFilter>('online')
   const statuses = usePresence((s) => s.statuses)
+  const activities = usePresence((s) => s.activities)
+  const groups = useQuery({ queryKey: socialKeys.groups, queryFn: socialApi.groups })
   const q = useQuery({ queryKey: qk.friends(filter === 'online' ? 'all' : filter), queryFn: () => friendsApi.list(filter === 'online' ? 'all' : filter) })
 
   useLayoutEffect(() => {
@@ -58,6 +65,11 @@ export default function FriendsScreen() {
     })
   }
 
+  const organized = filter === 'online' || filter === 'all'
+  const sections = organized
+    ? friendSections(data, groups.data ?? [], { favorites: t('soc.fav.section'), others: t('soc.groups.others') })
+    : data.length ? [{ key: 'list', title: null, data }] : []
+
   const renderActions = (f: Friend) => {
     if (f.direction === 'received')
       return (
@@ -79,6 +91,8 @@ export default function FriendsScreen() {
           onPress={() =>
             Alert.alert(f.username, undefined, [
               { text: t('friends.viewProfile'), onPress: () => router.push(`/user/${f.friend_id}`) },
+              { text: t(f.is_favorite ? 'soc.fav.unpin' : 'soc.fav.pin'), onPress: () => act.mutate(() => socialApi.setFavorite(f.friend_id, !f.is_favorite)) },
+              { text: t('soc.groups.manage'), onPress: () => router.push({ pathname: '/friends/groups', params: { userId: f.friend_id, name: f.custom_nickname || f.username } }) },
               { text: t('friends.remove'), style: 'destructive', onPress: () => confirm(t('friends.removeConfirm'), f.username, () => friendsApi.remove(f.friend_id)) },
               {
                 text: t('friends.block'),
@@ -113,36 +127,67 @@ export default function FriendsScreen() {
       ) : q.error ? (
         <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : (
-        <FlatList
-          data={data}
+        <SectionList
+          sections={sections}
           keyExtractor={(f) => f.id}
+          stickySectionHeadersEnabled={false}
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
+          ListHeaderComponent={organized ? <FriendsHeader friends={q.data?.friends ?? []} /> : null}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
               title={t(filter === 'pending' ? 'friends.noPending' : filter === 'blocked' ? 'friends.noBlocked' : 'friends.empty')}
             />
           }
+          renderSectionHeader={({ section }) => (section.title ? <Text style={styles.section}>{section.title} — {section.data.length}</Text> : null)}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => router.push(`/user/${item.friend_id}`)} accessibilityRole="button">
               <Avatar uri={item.avatar} name={item.username} userId={item.friend_id} status={item.user_status} showStatus={item.direction === 'accepted'} size={42} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>
+                  {upcomingBirthdays([item], 0).length ? '🎂 ' : ''}
                   {item.custom_nickname || item.username}
                 </Text>
-                <Text style={styles.sub} numberOfLines={1}>
-                  {item.direction === 'received'
-                    ? t('friends.received')
-                    : item.direction === 'sent'
-                      ? t('friends.sent')
-                      : item.custom_status || `${item.username}#${item.discriminator}`}
-                </Text>
+                {item.direction === 'accepted' && richText(activities[item.friend_id] ?? item, t) ? (
+                  <RichStatusText activity={activities[item.friend_id] ?? item} />
+                ) : (
+                  <Text style={styles.sub} numberOfLines={1}>
+                    {item.direction === 'received'
+                      ? t('friends.received')
+                      : item.direction === 'sent'
+                        ? t('friends.sent')
+                        : item.custom_status || `${item.username}#${item.discriminator}`}
+                  </Text>
+                )}
               </View>
               {renderActions(item)}
             </Pressable>
           )}
         />
       )}
+    </View>
+  )
+}
+
+/** Anniversaires des 7 prochains jours et accès aux groupes. */
+function FriendsHeader({ friends }: { friends: Friend[] }) {
+  const t = useT()
+  const soon = upcomingBirthdays(friends.filter((f) => f.direction === 'accepted'), 7)
+  return (
+    <View style={{ paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.sm }}>
+      <Pressable onPress={() => router.push('/friends/groups')} accessibilityRole="button" style={styles.groupsBtn}>
+        <Text style={styles.filterText}>👥 {t('soc.groups.title')}</Text>
+      </Pressable>
+      {soon.length ? (
+        <View style={styles.bdays}>
+          <Text style={styles.sub}>🎂 {t('soc.bday.upcoming')}</Text>
+          {soon.map(({ friend, days }) => (
+            <Text key={friend.friend_id} style={styles.name} numberOfLines={1}>
+              {friend.custom_nickname || friend.username} — {days === 0 ? t('soc.bday.today') : `${friend.birthday!.day}/${friend.birthday!.month}`}
+            </Text>
+          ))}
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -155,4 +200,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   name: { color: colors.text, fontSize: font.md, fontWeight: '600' },
   sub: { color: colors.textMuted, fontSize: font.sm },
+  section: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 4 },
+  groupsBtn: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bgAlt },
+  bdays: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgAlt, gap: 2 },
 })
