@@ -22,7 +22,8 @@ import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { useT, dateLocale, t as tr } from '../i18n'
-import { openMessage, openText, reopenLocked, sendErrorText, withSeal } from '../e2e/conversations'
+import { mergeUnlocked } from '../e2e/keysRetry'
+import { keysFor, onKeysChanged, openMessage, openText, reopenLocked, sendErrorText, withSeal } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import DisappearingControl from '../components/chat/DisappearingControl'
@@ -77,6 +78,7 @@ interface GDMMessage {
   expires_at?: string | null
   expire_on_read?: boolean
   e2e?: 'ok' | 'locked'
+  e2e_reply?: 'locked'
   /** Contenu déchiffré complet (fichiers chiffrés `f`). */
   e2e_body?: { f?: unknown }
   reactions?: GDMReaction[]
@@ -88,7 +90,7 @@ async function openGdm(groupId: string, m: GDMMessage): Promise<GDMMessage> {
   const o = await openMessage('group', groupId, m)
   if (m.reply_to_enc && m.reply_to_sender_id) {
     const text = await openText('group', groupId, m.reply_to_enc, m.reply_to_sender_id, m.reply_to_client_msg_id)
-    return { ...o, reply_to_content: text ?? tr('e2e.msg.locked') }
+    return { ...o, reply_to_content: text ?? tr('e2e.msg.locked'), e2e_reply: text === null ? 'locked' : undefined }
   }
   return o
 }
@@ -308,7 +310,12 @@ export default function GroupDMPage() {
   }, [highlightMsgId])
 
   useEffect(() => {
-    if (!initialMessages || initialized.current) return
+    if (!initialMessages) return
+    if (initialized.current) {
+      // Rechargé après l'arrivée des clés : la version lisible remplace l'attente.
+      setAllMessages(prev => mergeUnlocked(prev, initialMessages))
+      return
+    }
     initialized.current = true
     setAllMessages(initialMessages)
     setHasMore(initialMessages.length >= 50)
@@ -342,12 +349,11 @@ export default function GroupDMPage() {
           : m
       ))
     })
-    // Clés reçues : les messages en attente s'ouvrent.
-    const offKeys = on('E2E_KEYS', async (d: any) => {
-      if (d.conv_id !== groupId) return
+    // Clés reçues ou clé de compte prête : les messages en attente s'ouvrent (épinglés : E2EGate relit les requêtes).
+    const offKeys = onKeysChanged(async (k, i) => {
+      if (!keysFor('group', groupId, k, i)) return
       const opened = await reopenLocked('group', groupId!, allMessagesRef.current)
       if (opened.size) setAllMessages(prev => prev.map(m => (opened.get(m.id) as GDMMessage | undefined) ?? m))
-      queryClient.invalidateQueries({ queryKey: ['group-dm-pins', groupId] })
     })
     const offReact = on('GROUP_DM_REACTION_TOGGLE', (d: any) => {
       if (d.group_id !== groupId) return

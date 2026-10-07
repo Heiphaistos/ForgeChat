@@ -221,11 +221,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       if (d.post_id !== post.id) return
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
     })
-    // Clés du salon reçues : publication et réponses en attente s'ouvrent.
-    const offKeys = on('E2E_KEYS', (d: any) => {
-      if (d.conv_kind === 'channel' && d.conv_id === channelId) qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
-    })
-    return () => { offEdit(); offDelete(); offReact(); offAtt(); offKeys() }
+    return () => { offEdit(); offDelete(); offReact(); offAtt() }
   }, [post.id, channelId, on, qc])
 
   /** Portée de la publication (AAD) pour ses réponses. */

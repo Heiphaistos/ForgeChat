@@ -171,12 +171,6 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     })
-    // Clés du salon reçues : titre et messages en attente s'ouvrent.
-    const offKeys = on('E2E_KEYS', (d: any) => {
-      if (d.conv_kind !== 'channel' || d.conv_id !== channelId) return
-      qc.invalidateQueries({ queryKey: ['threads', channelId] })
-      qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
-    })
     const offDelete = on('THREAD_MESSAGE_DELETE', (d: any) => {
       if (d.thread_id === threadId) {
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
@@ -198,7 +192,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offMsg(); offAtt(); offUpdate(); offEdit(); offKeys(); offDelete(); offReact(); offTyping() }
+    return () => { offMsg(); offAtt(); offUpdate(); offEdit(); offDelete(); offReact(); offTyping() }
   }, [threadId, channelId, on, qc])
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)

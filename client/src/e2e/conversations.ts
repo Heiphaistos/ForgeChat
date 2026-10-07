@@ -7,7 +7,10 @@ import { t } from '../i18n'
 import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
+import { becameReady, cacheUsable, emitKeysChanged, isLocked } from './keysRetry'
 import { indexMessage } from './searchIndex'
+
+export { keysFor, onKeysChanged } from './keysRetry'
 
 export type ConvKind = 'dm' | 'group' | 'channel'
 
@@ -29,6 +32,8 @@ export interface ConvMember { user_id: string; username: string; public: string 
 interface ConvState {
   keys: Map<number, Uint8Array>; current: number | null; rotate: boolean; encrypt: boolean
   missing: string[]; serverKey: ServerKeyInfo | null; serverMissing: number[]; at: number
+  /** Clé de compte avec laquelle les enveloppes ont été ouvertes (null : aucune, tout est à rouvrir). */
+  priv: CryptoKey | null
 }
 
 /** Enveloppes par requête (borne du serveur) : un grand salon se distribue par lots. */
@@ -51,6 +56,18 @@ export function forgetConv(kind?: ConvKind, id?: string) {
   else cache.clear()
 }
 
+/**
+ * Nouvelles clés (clé de compte prête, E2E_KEYS) : l'état mis en cache sans elles est
+ * oublié, puis tout ce qui déchiffre se rouvre (`onKeysChanged`).
+ */
+export function keysChanged(kind?: ConvKind, id?: string) {
+  forgetConv(kind, id)
+  emitKeysChanged(kind, id)
+}
+
+// Clé de compte prête (déverrouillage au démarrage) ou remplacée.
+useAccountKey.subscribe((s, prev) => { if (becameReady(s, prev)) keysChanged() })
+
 async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
   const { data } = await api.get<KeysResponse>(`${base(kind, id)}/keys`)
   const keys = new Map<number, Uint8Array>()
@@ -68,20 +85,25 @@ async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
   return {
     keys, current: data.current_epoch, rotate: data.rotate_needed, encrypt: data.encrypt ?? data.all_keyed,
     missing: data.missing ?? [], serverKey: data.server_key ?? null, serverMissing: data.server_missing ?? [], at: Date.now(),
+    priv,
   }
 }
 
 /** État de la conversation ; `force` recharge (au plus une fois par seconde). */
 async function load(kind: ConvKind, id: string, force = false): Promise<ConvState> {
   const name = c.convName(kind, id)
+  const priv = useAccountKey.getState().priv
   const hit = cache.get(name)
-  if (hit && (!force || Date.now() - hit.at < 1000)) return hit
+  // Un état ouvert sans la clé de compte actuelle (chargé avant son déverrouillage) ne sert jamais.
+  if (hit && cacheUsable(hit, priv, force, Date.now())) return hit
   let p = loading.get(name)
   if (!p) {
     p = fetchState(kind, id).finally(() => loading.delete(name))
     loading.set(name, p)
   }
   const st = await p
+  // Chargement lancé avant que la clé soit prête : on recommence avec elle.
+  if (st.priv !== useAccountKey.getState().priv) return load(kind, id, force)
   cache.set(name, st)
   // MP et groupes : un membre a créé sa clé depuis, on lui donne les époques (salons : completeChannelKeys).
   if (kind !== 'channel' && st.missing.length && st.keys.size) void completeKeys(kind, id)
@@ -301,7 +323,7 @@ export interface RawMsg {
 }
 export type E2EState = 'ok' | 'locked'
 /** `e2e_body` : contenu déchiffré complet (aperçu de lien `p`, etc.). */
-export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody }
+export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody; e2e_reply?: 'locked' }
 
 const authorOf = (m: RawMsg) => m.sender_id ?? m.author_id ?? m.user_id ?? ''
 
@@ -333,7 +355,7 @@ export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, 
   const replyAuthor = m.reply_to_author_id ?? m.reply_to_sender_id
   if (m.reply_to_enc && replyAuthor) {
     const text = await openText(kind, id, m.reply_to_enc, replyAuthor, m.reply_to_client_msg_id, scope)
-    out = { ...out, reply_to_content: text ?? lockedText() }
+    out = { ...out, reply_to_content: text ?? lockedText(), ...(text === null ? { e2e_reply: 'locked' as const } : {}) }
   }
   return out
 }
@@ -341,14 +363,17 @@ export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, 
 export const openMessages = <T extends RawMsg>(kind: ConvKind, id: string, list: T[], scope?: string) =>
   Promise.all(list.map(m => openMessage(kind, id, m, scope)))
 
-/** Messages verrouillés qui s'ouvrent maintenant (après E2E_KEYS). */
+/**
+ * Messages verrouillés qui s'ouvrent maintenant (clé de compte prête, E2E_KEYS) ; chaque
+ * entrée rendue est le message complet (texte, `e2e_body` des fichiers, aperçu de réponse).
+ */
 export async function reopenLocked(kind: ConvKind, id: string, list: readonly unknown[], scope?: string): Promise<Map<string, Opened<RawMsg>>> {
-  forgetConv(kind, id)
   const out = new Map<string, Opened<RawMsg>>()
   for (const m of list as Opened<RawMsg>[]) {
-    if (m.e2e !== 'locked') continue
-    const o = await openMessage(kind, id, m, scope)
-    if (o.e2e === 'ok') out.set(m.id, o)
+    if (!isLocked(m)) continue
+    // Sans `reply_to_enc` (aperçu déjà aplati), l'aperçu reste en attente jusqu'au rechargement.
+    const o = await openMessage(kind, id, m.reply_to_enc ? { ...m, e2e_reply: undefined } : m, scope)
+    if (!isLocked(o) || (m.e2e === 'locked' && o.e2e === 'ok')) out.set(m.id, o)
   }
   return out
 }

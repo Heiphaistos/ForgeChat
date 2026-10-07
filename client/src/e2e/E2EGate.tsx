@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { Copy, Download, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useT } from '../i18n'
@@ -12,7 +13,7 @@ import {
   createAccountKey, hasTypedPassword, initAccountKey, resetAccountKey,
   unlockWithPassword, unlockWithRecovery, useAccountKey,
 } from './accountKey'
-import { answerKeyRequest, forgetConv, reencryptLegacy } from './conversations'
+import { answerKeyRequest, forgetConv, keysChanged, onKeysChanged, reencryptLegacy } from './conversations'
 import { startDraftSync } from './drafts'
 import { startSearchIndex } from './searchIndex'
 
@@ -174,7 +175,9 @@ export default function E2EGate() {
     if (status !== 'ready') return
     void reencryptLegacy()
     const offReq = on('KEY_REQUEST', (d: any) => { void answerKeyRequest(d) })
-    const offKeys = on('E2E_KEYS', (d: any) => forgetConv(d.conv_kind, d.conv_id))
+    const offKeys = on('E2E_KEYS', (d: any) => {
+      if ((d.conv_kind === 'dm' || d.conv_kind === 'group' || d.conv_kind === 'channel') && typeof d.conv_id === 'string') keysChanged(d.conv_kind, d.conv_id)
+    })
     // Clé de récupération d'un serveur créée ou changée : les prochaines époques doivent l'inclure.
     const offServerKey = on('SERVER_KEY', () => forgetConv())
     // Brouillons chiffrés, synchronisés entre appareils.
@@ -185,6 +188,11 @@ export default function E2EGate() {
     return () => { offReq(); offKeys(); offServerKey(); offDrafts(); offIndex() }
   }, [status, on])
   useEffect(() => { if (!userId) forgetConv() }, [userId])
+  // Clés arrivées (clé de compte prête, E2E_KEYS) : tout ce qui a été lu « en attente » est relu
+  // et rouvert (messages, épinglés, sondages, fils, forums, notes, recherche locale…).
+  // ponytail: invalide toutes les requêtes (événement rare) plutôt que de lister chaque clé de requête chiffrée.
+  const qc = useQueryClient()
+  useEffect(() => onKeysChanged(() => { void qc.invalidateQueries() }), [qc])
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />

@@ -20,7 +20,7 @@ import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
 import { useT, t as tr, type Key } from '../i18n'
-import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
+import { keysFor, onKeysChanged, openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import DisappearingControl from '../components/chat/DisappearingControl'
@@ -40,7 +40,7 @@ async function openDm(dmId: string, m: RawDm) {
   const r = m.reply_to
   if (r?.enc) {
     const text = await openText('dm', dmId, r.enc, r.sender_id, r.client_msg_id)
-    return { ...o, reply_to: { ...r, content: text ?? tr('e2e.msg.locked') } }
+    return { ...o, reply_to: { ...r, content: text ?? tr('e2e.msg.locked') }, ...(text === null ? { e2e_reply: 'locked' as const } : {}) }
   }
   return o
 }
@@ -343,12 +343,13 @@ export default function DMPage() {
         })
       }
     })
-    // Clés reçues : les messages en attente s'ouvrent.
-    const offKeys = on('E2E_KEYS', async (d: any) => {
-      if (d.conv_id !== dmId) return
+    // Clés reçues ou clé de compte prête : les messages en attente s'ouvrent (épinglés : E2EGate relit les requêtes).
+    const offKeys = onKeysChanged(async (k, i) => {
+      if (!keysFor('dm', dmId, k, i)) return
       const opened = await reopenLocked('dm', dmId, useChat.getState().messagesByChannel[dmId] ?? [])
-      opened.forEach((o, id) => updateMessage(dmId, id, { content: o.content, e2e: 'ok' } as never))
-      qc.invalidateQueries({ queryKey: ['dm_pins', dmId] })
+      opened.forEach((o, id) => updateMessage(dmId, id, {
+        content: o.content, e2e: o.e2e, e2e_body: o.e2e_body, e2e_reply: o.e2e_reply, reply_to_content: o.reply_to_content,
+      } as never))
     })
     return () => { off(); offKeys() }
   }, [dmId])

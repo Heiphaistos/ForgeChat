@@ -303,11 +303,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
         if (d.post_id) qc.invalidateQueries({ queryKey: ['forum-post', d.post_id] })
       }
     })
-    // Clés du salon reçues : publications en attente s'ouvrent.
-    const offKeys = on('E2E_KEYS', (d: any) => {
-      if (d.conv_kind === 'channel' && d.conv_id === channelId) qc.invalidateQueries({ queryKey: ['forum', channelId] })
-    })
-    return () => { offCreate(); offUpdate(); offDelete(); offReply(); offKeys() }
+    return () => { offCreate(); offUpdate(); offDelete(); offReply() }
   }, [channelId, on, qc, selectedPost?.id])
   // Salon chiffré : clés distribuées aux membres arrivés depuis, et à la clé du serveur.
   useEffect(() => { void completeChannelKeys(channelId) }, [channelId])

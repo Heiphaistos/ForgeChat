@@ -32,7 +32,7 @@ import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 import { useT, intlLocale } from '../i18n'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
-import { completeChannelKeys, openBody, openMessage, openMessages, reopenLocked } from '../e2e/conversations'
+import { completeChannelKeys, keysFor, onKeysChanged, openBody, openMessage, openMessages, reopenLocked } from '../e2e/conversations'
 import { channelSendError, editMessage, postMessage, useChannelEncrypted } from '../e2e/channels'
 import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
@@ -201,13 +201,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           })
         }
       }),
-      // Clés du salon reçues : les messages en attente s'ouvrent.
-      on('E2E_KEYS', async (d: any) => {
-        if (d.conv_kind !== 'channel' || d.conv_id !== channelId) return
+      // Clés du salon reçues ou clé de compte prête : les messages en attente s'ouvrent
+      // (épinglés, sondages : E2EGate relit les requêtes).
+      onKeysChanged(async (k, i) => {
+        if (!keysFor('channel', channelId, k, i)) return
         const opened = await reopenLocked('channel', channelId, useChat.getState().messagesByChannel[channelId] ?? [])
         opened.forEach((m, id) => updateMessage(channelId, id, m as Partial<ChatMessage>))
-        qc.invalidateQueries({ queryKey: ['pinned', channelId] })
-        qc.invalidateQueries({ queryKey: ['poll'] })
       }),
       on('MESSAGE_DELETE', (d: any) => {
         if (d.channel_id === channelId) deleteMessage(channelId, d.message_id)

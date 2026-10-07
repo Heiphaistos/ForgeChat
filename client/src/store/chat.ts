@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { EncPayload, MsgBody } from '../e2e/crypto'
 import type { E2EState } from '../e2e/conversations'
+import { mergeUnlocked } from '../e2e/keysRetry'
 
 // ─── Draft Store (localStorage) ───────────────────────────────────────────────
 
@@ -73,6 +74,8 @@ interface Message {
   e2e?: E2EState
   /** Contenu déchiffré complet (aperçu de lien `p`…). */
   e2e_body?: MsgBody
+  /** Aperçu de la réponse citée encore illisible. */
+  e2e_reply?: 'locked'
 }
 export type ChatMessage = Message
 
@@ -108,8 +111,10 @@ export const useChat = create<ChatState>()(
     addMessages: (channelId, messages, prepend = false) => set(s => {
       const existing = s.messagesByChannel[channelId] ?? []
       const ids = new Set(existing.map(m => m.id))
+      // Rechargé après l'arrivée des clés : la version lisible remplace l'attente.
+      const kept = mergeUnlocked(existing, messages)
       const newMsgs = messages.filter(m => !ids.has(m.id))
-      const merged = prepend ? [...newMsgs, ...existing] : [...existing, ...newMsgs]
+      const merged = prepend ? [...newMsgs, ...kept] : [...kept, ...newMsgs]
       s.messagesByChannel[channelId] = merged.length > 500 ? (prepend ? merged.slice(0, 500) : merged.slice(merged.length - 500)) : merged
     }),
 
