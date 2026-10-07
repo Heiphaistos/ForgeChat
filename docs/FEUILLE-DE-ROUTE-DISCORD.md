@@ -51,3 +51,9 @@ Fait et vérifié en prod (tests dans forgechat-loop/tests) :
 - En plus : salon AFK appliqué, signalement des MP (file admin du site), renommer un fil, Scène sécurisée côté serveur.
 
 Reste : #7 traduction de l'interface, #18 activité « joue à » automatique, #23 effets/décorations de profil, #25 clips, #26 activités en vocal, #27 splash d'invitation ; MP chiffrés sur mobile (décision : clés par appareil côté serveur) ; confirmation d'âge NSFW sur mobile ; dégradé de rôle sur mobile (dépendance native).
+
+## Mise à jour du 2026-10-07, 6 h (serveur 3.276.0, web 3.622.0, mobile 1.4.0, bureau 3.36.0)
+Ajouté et vérifié en prod depuis : #18 activité « Joue à » détectée par l'app de bureau, #23 décorations d'avatar, thèmes et effets de profil (web, mobile, aussi en MP), #25 clips des 30 dernières secondes (web/bureau, option), #26 « Regarder ensemble » (YouTube synchronisé dans un salon vocal), #27 page d'invitation avec la bannière du serveur, notifications Android sans Google (connexion gardée ouverte, testée : MP et appel entrant en arrière-plan).
+Revue de sécurité du code de la nuit : aucune faille critique ou haute ; correctifs appliqués (limites de taille des requêtes, publication d'annonces atomique, @everyone neutralisé dans les copies, type des icônes de rôle).
+
+Reste : #7 traduction de l'interface ; MP chiffrés sur mobile (décision : clés par appareil) ; push Google (projet Firebase gratuit à créer par Momo) ; « Regarder ensemble » sur le site web : CSP de /etc/nginx/sites-enabled/forgechat à compléter (frame-src youtube-nocookie/youtube, script-src youtube/ytimg) — l'app de bureau fonctionne déjà ; décorations dans les groupes privés ; dégradé de rôle sur mobile.
