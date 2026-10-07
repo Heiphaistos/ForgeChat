@@ -384,6 +384,7 @@ function AppInner() {
         const patch: Record<string, unknown> = {}
         if (d.custom_status !== undefined) patch.custom_status = d.custom_status
         if (d.custom_status_emoji !== undefined) patch.custom_status_emoji = d.custom_status_emoji
+        if (d.custom_status_expires_at !== undefined) patch.custom_status_expires_at = d.custom_status_expires_at
         if (Object.keys(patch).length > 0) updateMe(patch)
       }
     })
@@ -894,6 +895,7 @@ function AppInner() {
       const u = d.user
       if (!u?.id) return
       updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null)
+      useNameStyles.getState().set(u.id, u)
       qcHook.invalidateQueries({ queryKey: ['members'] })
       qcHook.invalidateQueries({ queryKey: ['user', u.id] })
     })
@@ -1213,6 +1215,7 @@ import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { t as tr, useLang, intlLocale } from './i18n'
+import { useNameStyles } from './store/nameStyles'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

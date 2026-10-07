@@ -960,3 +960,12 @@ a:focus-visible,
   .fc-fx { display: none; }
 }
 [data-reduce-motion="true"] .fc-fx { display: none; }
+
+/* PSEUDO STYLÉ : reflet qui glisse sur la couleur (lib/nameStyle.ts, effet « shimmer ») */
+@keyframes fc-name-shimmer {
+  from { background-position: 0 0, 125% 0; }
+  to   { background-position: 0 0, -25% 0; }
+}
+.fc-name-shimmer { animation: fc-name-shimmer 3.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .fc-name-shimmer { animation: none; } }
+[data-reduce-motion="true"] .fc-name-shimmer { animation: none; }

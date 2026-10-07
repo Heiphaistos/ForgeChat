@@ -1,6 +1,9 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
+import { profileFr } from './profileFr.ts'
+
 export const fr = {
+  ...profileFr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
@@ -809,10 +812,10 @@ export const fr = {
   'settings.profile.banner': 'Bannière de profil',
   'settings.profile.addBanner': 'Cliquer pour ajouter une bannière',
   'settings.profile.removeBanner': 'Retirer la bannière',
-  'settings.profile.bannerFormats': 'PNG, JPG, GIF ou WEBP · max 10 MB',
+  'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP ou APNG (animés acceptés) · max 10 Mo',
   'settings.profile.changeAvatar': "Changer l'avatar",
-  'settings.profile.avatarHint': "Cliquez sur l'avatar pour le changer",
-  'settings.profile.bio': 'Bio',
+  'settings.profile.avatarHint': "Cliquez sur l'avatar pour le changer · GIF animé accepté (10 Mo)",
+  'settings.profile.bio': 'Bio (markdown accepté)',
   'settings.profile.bioCount': '{n}/190 caractères',
   'settings.profile.bioPlaceholder': 'Décrivez-vous en quelques mots...',
   'settings.profile.pronouns': 'Pronoms',
@@ -1436,7 +1439,7 @@ export const fr = {
   'myProfile.bannerHint': 'PNG, JPG, GIF ou WEBP · max 10 Mo',
   'myProfile.resetBanner': 'Revenir à la bannière du compte',
   'myProfile.avatar': 'Avatar',
-  'myProfile.avatarHint': 'PNG, JPG, GIF ou WEBP · max 8 Mo',
+  'myProfile.avatarHint': 'PNG, JPG, GIF, WEBP ou APNG (animés acceptés) · max 10 Mo',
   'myProfile.changeAvatar': "Changer l'avatar de ce serveur",
   'myProfile.resetAvatar': "Revenir à l'avatar du compte",
   'myProfile.nickname': 'Surnom',

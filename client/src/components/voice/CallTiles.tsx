@@ -1,9 +1,10 @@
 // Tuiles d'appel : caméra (ou avatar) d'un participant, et écran partagé.
 // Elles remplissent leur conteneur ; la taille est décidée par CallStage.
-import { mediaUrl } from '../../api/client'
 import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff, Film } from 'lucide-react'
 import NativeVideo from './NativeVideo'
 import { useT } from '../../i18n'
+import AnimatedImg from '../ui/AnimatedImg'
+import UserName from '../ui/UserName'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
 export function PeerTile({
@@ -11,7 +12,7 @@ export function PeerTile({
   handRaised = false, blurEnabled = false, onExpand, onVolume, onPopOut, connectionLost = false, compact = false,
   videoUrl = null, onContextMenu,
 }: {
-  peer: { username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
+  peer: { userId?: string; username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
   handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void; onVolume?: () => void
   onPopOut?: () => void; connectionLost?: boolean
@@ -57,7 +58,7 @@ export function PeerTile({
       ) : (
         <div className="flex flex-col items-center gap-2">
           {peer.avatar
-            ? <img src={mediaUrl(peer.avatar)} alt="" loading="lazy" decoding="async" className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} rounded-full object-cover border-2 border-fc-accent/50`} />
+            ? <AnimatedImg src={peer.avatar} alt="" loading="lazy" decoding="async" className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} rounded-full object-cover border-2 border-fc-accent/50`} />
             : <div className={`${compact ? 'w-8 h-8 text-sm' : 'w-16 h-16 text-2xl'} rounded-full bg-fc-accent flex items-center justify-center font-bold text-white`}>
                 {peer.username.charAt(0).toUpperCase()}
               </div>}
@@ -68,7 +69,7 @@ export function PeerTile({
         <div className="flex items-center gap-1">
           {peer.muted ? <MicOff size={11} className="text-fc-red" /> : null}
           {peer.screenSharing ? <Monitor size={11} className="text-fc-green" /> : null}
-          <span className={`${compact ? 'text-[10px] max-w-[80px]' : 'text-xs max-w-[160px]'} text-white truncate`}>{isLocal ? t('voice.tile.youSuffix', { name: peer.username }) : peer.username}</span>
+          <span className={`${compact ? 'text-[10px] max-w-[80px]' : 'text-xs max-w-[160px]'} text-white truncate`}>{isLocal ? t('voice.tile.youSuffix', { name: peer.username }) : <UserName userId={peer.userId} name={peer.username} />}</span>
         </div>
         <div className="flex items-center gap-1">
           {onVolume && (
