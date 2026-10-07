@@ -84,6 +84,97 @@
       "ct": "Y3CxjRd7pr-rOZgGkpKdGQcWpGA4doPzhS3DuOOg4bJp42sLZxfVdr5-ME8id-v3nhbkb-ZkLe8"
     }
   },
+  "threadMessage": {
+    "scope": "channel:44444444-4444-4444-8444-444444444444/thread:55555555-5555-4555-8555-555555555555",
+    "epoch": 3,
+    "author": "11111111-1111-4111-8111-111111111111",
+    "clientMsgId": "33333333-3333-4333-8333-333333333333",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "vr_AwcLDxMXGx8jJ",
+    "body": {
+      "t": "Dans le fil 🧵"
+    },
+    "enc": {
+      "v": 1,
+      "epoch": 3,
+      "iv": "vr_AwcLDxMXGx8jJ",
+      "ct": "V-nCKhSHsGi9YGfhlhqq68_V9c05wKSx6uRZXOBX5ZcD8_iA6HexBw"
+    }
+  },
+  "forumPost": {
+    "scope": "channel:44444444-4444-4444-8444-444444444444/post:55555555-5555-4555-8555-555555555555",
+    "epoch": 3,
+    "author": "11111111-1111-4111-8111-111111111111",
+    "clientMsgId": "33333333-3333-4333-8333-333333333333",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "yMnKy8zNzs_Q0dLT",
+    "body": {
+      "t": "Contenu de la publication",
+      "title": "Titre chiffré"
+    },
+    "enc": {
+      "v": 1,
+      "epoch": 3,
+      "iv": "yMnKy8zNzs_Q0dLT",
+      "ct": "A3h0izPDF5fLHhyKpN8ytBHb-tYSMDy6xjA7fPazI1o475w4khEta2GsawCVGj9ICcq_ReM0Gxy2AVE0IYL_ghcqVFU3ewd7eWQ"
+    }
+  },
+  "poll": {
+    "scope": "channel:44444444-4444-4444-8444-444444444444/poll:55555555-5555-4555-8555-555555555555",
+    "epoch": 3,
+    "author": "11111111-1111-4111-8111-111111111111",
+    "clientMsgId": "33333333-3333-4333-8333-333333333333",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "0tPU1dbX2Nna29zd",
+    "body": {
+      "t": "Pizza ou raclette ?",
+      "o": [
+        "Pizza",
+        "Raclette 🧀"
+      ]
+    },
+    "enc": {
+      "v": 1,
+      "epoch": 3,
+      "iv": "0tPU1dbX2Nna29zd",
+      "ct": "Q21WlM2xRm4bI9vqcDFOO0yESGxWYrYIsA6YbxG-RtE_veoVKi719LPX32pQwyBOok1zGsDzSH-PTk_qk_vRkkmKlJfU41zcVQ"
+    }
+  },
+  "serverKey": {
+    "serverId": "66666666-6666-4666-8666-666666666666",
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "ownerPriv": "L24splOxTaDPUjoID3CwNoGNy24phnKElhs2cqVYqFY",
+    "ownerPub": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE",
+    "serverPriv": "zslAYtkIncvKCfnl26J9l9DDHjTo46o2b0ZM7HmGPrw",
+    "serverPub": "BCJDA2NGTYMJQ2WFCNGtsH7czk4ADlFGKe2SFGvecziTTeGblF3OakkgcKxfWVBsE3ajb2Rn8yiuVp3HJCuSP4s",
+    "iv": "3N3e3-Dh4uPk5ebn",
+    "ownerWrapped": {
+      "v": 1,
+      "iv": "3N3e3-Dh4uPk5ebn",
+      "ct": "PBAzrNVk-QqKr5rybdR8OE7V7fMHtf3lv01DQka8d2s2FbfPqCsKCNUiv2s7WAnL"
+    },
+    "recoveryCode": "7K3QZ-M9XW2-PB4TD-0VH1R",
+    "recovery": {
+      "v": 1,
+      "salt": "MjM0NTY3ODk6Ozw9Pj9AQQ",
+      "iv": "RkdISUpLTE1OT1BR",
+      "ct": "rh21VVKmhgb6HZWJjdZkzUwE6ujtvNyEJRfElcCoNz1F7uxpYqRiatJr_VrKIuWl"
+    },
+    "iterations": 1000
+  },
+  "serverEpoch": {
+    "conv": "channel:44444444-4444-4444-8444-444444444444",
+    "epoch": 3,
+    "sender": "11111111-1111-4111-8111-111111111111",
+    "member": "server:66666666-6666-4666-8666-666666666666",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "5ufo6err7O3u7_Dx",
+    "wrapped": {
+      "v": 1,
+      "iv": "5ufo6err7O3u7_Dx",
+      "ct": "41tK_LZISaj31WZ5IXcWPxhIj30TMfWwsio0aRj0iYhNzAaj8naFGOE-1u6zamIK"
+    }
+  },
   "recoveryNormalize": [
     [
       "7k3qz-m9xw2-pb4td-0vh1r",

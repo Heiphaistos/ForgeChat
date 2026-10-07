@@ -9,6 +9,33 @@ const V = JSON.parse(readFileSync(new URL('../../docs/e2e-vectors.json', import.
 const d = c.b64uDecode
 const e = c.b64uEncode
 
+test('salons : portée du fil, de la publication et du sondage dans l\'AAD', async () => {
+  for (const x of [V.threadMessage, V.forumPost, V.poll]) {
+    assert.deepEqual(await c.encryptMessage(d(x.key), x.scope, x.epoch, x.author, x.clientMsgId, x.body, d(x.iv)), x.enc)
+    assert.deepEqual(await c.decryptMessage(d(x.key), x.scope, x.enc, x.author, x.clientMsgId), x.body)
+  }
+  // Un contenu déplacé dans un autre fil (ou vers le salon) ne s'ouvre pas.
+  const x = V.threadMessage
+  await assert.rejects(c.decryptMessage(d(x.key), x.scope.split('/')[0], x.enc, x.author, x.clientMsgId))
+  assert.equal(V.poll.scope.endsWith('/poll:55555555-5555-4555-8555-555555555555'), true)
+})
+
+test('clé de récupération du serveur', async () => {
+  const x = V.serverKey
+  const owner = await c.importPrivateKey(d(x.ownerPriv), d(x.ownerPub))
+  const server = await c.importPrivateKey(d(x.serverPriv), d(x.serverPub))
+  assert.deepEqual(await c.wrapServerKey(owner, d(x.serverPub), d(x.serverPriv), x.serverId, x.owner, d(x.iv)), x.ownerWrapped)
+  // Transfert : la clé du serveur + la clé publique du propriétaire donnent la même enveloppe.
+  assert.deepEqual(await c.wrapServerKey(server, d(x.ownerPub), d(x.serverPriv), x.serverId, x.owner, d(x.iv)), x.ownerWrapped)
+  assert.equal(e(await c.unwrapServerKey(owner, d(x.serverPub), x.ownerWrapped, x.serverId, x.owner)), x.serverPriv)
+  await assert.rejects(c.unwrapServerKey(owner, d(x.serverPub), x.ownerWrapped, x.serverId, x.serverId))
+  const code = c.normalizeRecoveryCode(x.recoveryCode)
+  assert.equal(e(await c.unwrapKey(x.recovery, code, c.serverRecoveryAad(x.serverId), x.iterations)), x.serverPriv)
+  const s = V.serverEpoch
+  const key = await c.unwrapConvKey(server, d(x.ownerPub), s.wrapped, s.conv, s.epoch, s.member, s.sender)
+  assert.equal(e(key), s.key)
+})
+
 test('base64url aller-retour et rejet strict', () => {
   for (let n = 0; n < 8; n++) {
     const b = Uint8Array.from({ length: n }, (_, i) => i * 37 + 250)

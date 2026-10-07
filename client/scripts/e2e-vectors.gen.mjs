@@ -26,6 +26,27 @@ convKey.wrapped = await c.wrapConvKey(await c.importPrivateKey(d(A.priv), d(A.pu
 const message = { conv, epoch: 2, author: ids.a, clientMsgId: ids.msg, key: convKey.key, iv: e(seq(12, 180)), body: { t: 'Réponse chiffrée 🔐 **gras**' } }
 message.enc = await c.encryptMessage(d(message.key), conv, 2, ids.a, ids.msg, message.body, d(message.iv))
 const wrapOpts = { salt: seq(16, 50), iv: seq(12, 70), iterations: ITER }
+// Salons (§10) : même clé que le salon, portée du fil / de la publication / du sondage dans l'AAD.
+const chan = '44444444-4444-4444-8444-444444444444'
+const sub = '55555555-5555-4555-8555-555555555555'
+const scoped = async (scope, body, from) => {
+  const x = { scope, epoch: 3, author: ids.a, clientMsgId: ids.msg, key: convKey.key, iv: e(seq(12, from)), body }
+  x.enc = await c.encryptMessage(d(x.key), scope, 3, ids.a, ids.msg, body, d(x.iv))
+  return x
+}
+const threadMessage = await scoped(c.threadScope(chan, sub), { t: 'Dans le fil 🧵' }, 190)
+const forumPost = await scoped(c.postScope(chan, sub), { t: 'Contenu de la publication', title: 'Titre chiffré' }, 200)
+const poll = await scoped(c.pollScope(chan, sub), { t: 'Pizza ou raclette ?', o: ['Pizza', 'Raclette 🧀'] }, 210)
+// Clé de récupération du serveur (§11) : B = clé du serveur, A = propriétaire.
+const serverId = '66666666-6666-4666-8666-666666666666'
+const aPriv = await c.importPrivateKey(d(A.priv), d(A.pub))
+const serverKey = { serverId, owner: ids.a, ownerPriv: A.priv, ownerPub: A.pub, serverPriv: B.priv, serverPub: B.pub, iv: e(seq(12, 220)) }
+serverKey.ownerWrapped = await c.wrapServerKey(aPriv, d(B.pub), d(B.priv), serverId, ids.a, d(serverKey.iv))
+serverKey.recoveryCode = recovery
+serverKey.recovery = await c.wrapKey(d(B.priv), c.normalizeRecoveryCode(recovery), c.serverRecoveryAad(serverId), wrapOpts)
+serverKey.iterations = ITER
+const serverEpoch = { conv: c.convName('channel', chan), epoch: 3, sender: ids.a, member: c.serverMember(serverId), key: convKey.key, iv: e(seq(12, 230)) }
+serverEpoch.wrapped = await c.wrapConvKey(aPriv, d(B.pub), d(serverEpoch.key), serverEpoch.conv, 3, serverEpoch.member, ids.a, d(serverEpoch.iv))
 
 const vectors = {
   note: 'Vecteurs communs web/mobile (client/scripts/e2e-vectors.gen.mjs). Itérations PBKDF2 réduites pour les tests uniquement (production : 600000).',
@@ -46,6 +67,13 @@ const vectors = {
   // Clé d'époque enveloppée par A pour B, puis message chiffré avec cette clé.
   convKey,
   message,
+  // Salons : message de fil, publication de forum ({t, title}), sondage ({t, o}).
+  threadMessage,
+  forumPost,
+  poll,
+  // Clé du serveur enveloppée pour le propriétaire et par le code ; époque de salon pour la clé du serveur.
+  serverKey,
+  serverEpoch,
   recoveryNormalize: [
     ['7k3qz-m9xw2-pb4td-0vh1r', '7K3QZM9XW2PB4TD0VH1R'],
     [' 7K3QZ M9XW2 PB4TD OVHIR ', '7K3QZM9XW2PB4TD0VH1R'],
