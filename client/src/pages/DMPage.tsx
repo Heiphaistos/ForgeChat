@@ -43,6 +43,7 @@ interface E2eMsg {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  sender_avatar_decoration?: string | null
   created_at: string
 }
 
@@ -87,6 +88,7 @@ export default function DMPage() {
         author_id: m.sender_id,
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
+        author_avatar_decoration: m.sender_avatar_decoration ?? null,
         author_discriminator: '0000',
         reply_to: m.reply_to_id ?? null,
         reply_to_content: m.reply_to?.content ?? null,
@@ -262,6 +264,7 @@ export default function DMPage() {
         author_id: m.sender_id,
         author_username: m.sender_username,
         author_avatar: m.sender_avatar,
+        author_avatar_decoration: m.sender_avatar_decoration ?? null,
         author_discriminator: '0000',
         reply_to: m.reply_to_id ?? null,
         reply_to_content: m.reply_to?.content ?? null,
@@ -355,6 +358,7 @@ export default function DMPage() {
           author_id: d.message.sender_id,
           author_username: d.message.sender_username ?? 'Utilisateur',
           author_avatar: d.message.sender_avatar ?? null,
+          author_avatar_decoration: d.message.sender_avatar_decoration ?? null,
           author_discriminator: '0000',
           reply_to: d.message.reply_to_id ?? null,
           reply_to_content: d.message.reply_to?.content ?? null,

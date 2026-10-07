@@ -411,7 +411,7 @@ pub async fn get_dm_messages(
         let half = limit / 2;
 
         let mut before_rows = sqlx::query(
-            "SELECT dm.*, u.username, u.avatar FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) < ($2, $4)
              ORDER BY dm.created_at DESC, dm.id DESC LIMIT $3"
@@ -548,6 +548,7 @@ pub async fn get_dm_messages(
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("username"),
             "sender_avatar": r.get::<Option<String>, _>("avatar"),
+            "sender_avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "reply_to_id": reply_to_id,
             "reply_to": reply_to_id.and_then(|rid| reply_ctx_map.get(&rid)).cloned(),
@@ -800,7 +801,7 @@ pub async fn send_dm(
 
     // Récupérer username + avatar du sender pour la payload WS
     let sender_info = sqlx::query(
-        "SELECT username, avatar FROM users WHERE id=$1"
+        "SELECT username, avatar, avatar_decoration FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_optional(&state.db)
@@ -808,6 +809,7 @@ pub async fn send_dm(
     .ok()
     .flatten();
 
+    let sender_decoration: Option<String> = sender_info.as_ref().and_then(|r| r.get("avatar_decoration"));
     let (sender_username, sender_avatar) = sender_info.as_ref().map(|r| {
         (r.get::<String, _>("username"), r.get::<Option<String>, _>("avatar"))
     }).unwrap_or_else(|| (String::new(), None));
@@ -844,6 +846,7 @@ pub async fn send_dm(
             "sender_id": claims.sub,
             "sender_username": sender_username,
             "sender_avatar": sender_avatar,
+            "sender_avatar_decoration": sender_decoration,
             "reply_to_id": reply_to,
             "reply_to": reply_ctx,
             "created_at": created_at,
@@ -993,7 +996,7 @@ pub async fn get_e2e_messages(
     let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
 
     let messages = sqlx::query(
-        "SELECT m.id, m.sender_id, m.ciphertext, m.created_at, u.username, u.avatar
+        "SELECT m.id, m.sender_id, m.ciphertext, m.created_at, u.username, u.avatar, u.avatar_decoration
          FROM dm_e2e_messages m JOIN users u ON u.id = m.sender_id
          WHERE m.dm_channel_id = $1
          ORDER BY m.created_at DESC LIMIT $2"
@@ -1009,6 +1012,7 @@ pub async fn get_e2e_messages(
         "sender_id": r.get::<Uuid, _>("sender_id"),
         "sender_username": r.get::<String, _>("username"),
         "sender_avatar": r.get::<Option<String>, _>("avatar"),
+        "sender_avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
         "ciphertext": r.get::<String, _>("ciphertext"),
         "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "encrypted": true,
@@ -1075,12 +1079,13 @@ pub async fn send_e2e_message(
     let created_at = msg.get::<chrono::DateTime<chrono::Utc>, _>("created_at");
 
     // Récupérer les infos de l'expéditeur pour le broadcast
-    let sender = sqlx::query("SELECT username, avatar FROM users WHERE id = $1")
+    let sender = sqlx::query("SELECT username, avatar, avatar_decoration FROM users WHERE id = $1")
         .bind(claims.sub)
         .fetch_one(&state.db)
         .await?;
     let sender_username: String = sender.get("username");
     let sender_avatar: Option<String> = sender.get("avatar");
+    let sender_decoration: Option<String> = sender.get("avatar_decoration");
 
     // Notifier l'autre utilisateur
     let other = sqlx::query(
@@ -1101,6 +1106,7 @@ pub async fn send_e2e_message(
             "sender_id": claims.sub,
             "sender_username": sender_username,
             "sender_avatar": sender_avatar,
+            "sender_avatar_decoration": sender_decoration,
             "ciphertext": ciphertext,
             "created_at": created_at,
             "encrypted": true,
@@ -1113,6 +1119,7 @@ pub async fn send_e2e_message(
         "sender_id": claims.sub,
         "sender_username": sender_username,
         "sender_avatar": sender_avatar,
+        "sender_avatar_decoration": sender_decoration,
         "ciphertext": ciphertext,
         "created_at": created_at,
         "encrypted": true,

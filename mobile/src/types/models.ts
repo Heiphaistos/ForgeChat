@@ -184,6 +184,7 @@ export interface DmMessage {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  sender_avatar_decoration?: string | null
   edited_at?: string | null
   reply_to_id?: string | null
   reply_to?: { id: string; content: string | null; sender_id: string; sender_username: string } | null
@@ -200,6 +201,7 @@ export interface GroupMessage {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  sender_avatar_decoration?: string | null
   reply_to?: string | null
   reply_to_username?: string | null
   reply_to_content?: string | null

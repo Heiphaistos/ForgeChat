@@ -38,6 +38,7 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     authorId: m.sender_id,
     authorName: m.sender_username,
     authorAvatar: m.sender_avatar,
+    authorDecoration: m.sender_avatar_decoration ?? null,
     authorIsBot: false,
     reply: m.reply_to
       ? { id: m.reply_to.id, authorName: m.reply_to.sender_username, content: m.reply_to.content }
@@ -60,6 +61,7 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     authorId: m.sender_id,
     authorName: m.sender_username,
     authorAvatar: m.sender_avatar,
+    authorDecoration: m.sender_avatar_decoration ?? null,
     authorIsBot: false,
     reply: m.reply_to
       ? { id: m.reply_to, authorName: m.reply_to_username ?? null, content: m.reply_to_content ?? null }
