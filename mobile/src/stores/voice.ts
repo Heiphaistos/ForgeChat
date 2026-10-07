@@ -10,6 +10,7 @@ import { ensureMediaPermissions } from '@/services/media'
 import { playSoundFile } from '@/services/soundboard'
 import { t } from '@/i18n'
 import { getMyId, registerSignOutHook } from './auth'
+import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 
 /**
  * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -96,6 +97,9 @@ interface VoiceState {
   /** Volume de lecture choisi par participant (1 = normal). */
   volumes: Record<string, number>
   mediaStatus: MediaStatus
+  /** Médias du salon chiffrés de bout en bout (§5) ; participants dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
   /** Qualité de notre connexion au SFU (excellent, good, poor, lost). */
   quality: string | null
   error: string | null
@@ -249,7 +253,7 @@ export const useVoice = create<VoiceState>((set, get) => {
   const rejoin = () => {
     const { channelId, joined, joining, listenOnly, stage } = get()
     if (!channelId || !(joined || joining)) return
-    realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(joinPassword ? { password: joinPassword } : {}) })
+    realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...E2EE_CLAIM, ...(joinPassword ? { password: joinPassword } : {}) })
     // Le serveur retire un orateur dont le WebSocket tombe : relire l'état de la scène.
     if (stage) realtime.send({ type: 'STAGE_JOIN', channel_id: stage.channelId })
     clearRejoinTimer()
@@ -263,13 +267,34 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (room && roomName && roomName === access.room && room.state !== 'disconnected') return
     disconnectMedia()
     const gen = joinGeneration
+    // Salon chiffré (clé du salon, conversation `channel`) : jamais de connexion en clair.
+    const channelId = get().channelId
+    let e2ee: MediaE2EE | null = null
+    if (access.e2ee && channelId) {
+      set({ mediaStatus: 'connecting' })
+      try {
+        e2ee = await openMediaE2EE('channel', channelId)
+      } catch (err) {
+        if (gen === joinGeneration) set({ mediaStatus: 'failed', error: t(mediaE2EEError(err)) })
+        return
+      }
+      if (gen !== joinGeneration || room) {
+        e2ee.stop()
+        return
+      }
+    }
+    set({ e2ee: !!e2ee, e2eeOutdated: [] })
     // Pas d'adaptiveStream : il suppose des éléments vidéo observés (VideoTrack) et mettrait en pause
     // les vidéos affichées par RTCView. ponytail: qualité fixée par piste ci-dessous ; passer à
     // VideoTrack + adaptiveStream si le débit en 4G pose encore problème.
-    const r = new Room({ adaptiveStream: false, dynacast: true })
+    const r = new Room({ adaptiveStream: false, dynacast: true, ...(e2ee ? { encryption: e2ee.encryption } : {}) })
     room = r
     roomName = access.room
     set({ mediaStatus: 'connecting' })
+    if (e2ee) {
+      await enableMediaE2EE(r, e2ee)
+      watchOutdated(r, (ids) => set({ e2eeOutdated: ids }))
+    }
     r.on(RoomEvent.TrackSubscribed, (_t, pub, p) => {
       // Caméras en qualité moyenne (tuiles), écrans en pleine qualité (texte lisible).
       if (pub.source === Track.Source.Camera) pub.setVideoQuality?.(VideoQuality.MEDIUM)
@@ -631,6 +656,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     volumes: {},
     mediaStatus: 'idle',
     quality: null,
+    e2ee: false,
+    e2eeOutdated: [],
     error: null,
     notice: null,
     stage: null,
@@ -668,13 +695,15 @@ export const useVoice = create<VoiceState>((set, get) => {
         reactions: {},
         mediaStatus: 'idle',
         quality: null,
+        e2ee: false,
+        e2eeOutdated: [],
       })
       if (!listenOnly && !(await ensureMediaPermissions(false))) {
         if (gen === joinGeneration) set({ joining: false, channelId: null, entryChannelId: null, error: t('store.micDenied') })
         throw new Error(t('store.micDenied'))
       }
       if (gen !== joinGeneration) return // leave() ou autre join() pendant la demande de permission
-      realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(password ? { password } : {}) })
+      realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...E2EE_CLAIM, ...(password ? { password } : {}) })
     },
 
     leave: () => {
@@ -711,6 +740,8 @@ export const useVoice = create<VoiceState>((set, get) => {
         speakLocked: false,
         mediaStatus: 'idle',
         quality: null,
+        e2ee: false,
+        e2eeOutdated: [],
         notice: null,
       })
     },

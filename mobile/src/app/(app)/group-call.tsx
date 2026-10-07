@@ -13,6 +13,7 @@ import { qk } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { useGroupCall } from '@/stores/groupCall'
 import { colors, font, radius, spacing } from '@/theme'
+import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
 /** Appel de groupe en cours : une tuile par participant (caméra ou avatar), contrôles en bas. */
 export default function GroupCallScreen() {
@@ -46,6 +47,7 @@ export default function GroupCallScreen() {
         {s.groupName ?? group.data?.name ?? t('call.group')}
       </Text>
       <Text style={styles.status}>{status}</Text>
+      <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.map((id) => members.get(id)?.username ?? '…')} />
       <FlatList
         data={tiles}
         keyExtractor={(t) => t.id}

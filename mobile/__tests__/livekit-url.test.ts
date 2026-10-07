@@ -48,7 +48,11 @@ describe('formes refusées', () => {
 describe('parseLiveKitAccess', () => {
   it('accès valide', () => {
     const r = parseLiveKitAccess({ url: 'wss://chat.example.org/livekit', token: 'x'.repeat(40), room: 'dm-1' }, beta)
-    expect(r).toEqual({ access: { url: 'wss://chat.example.org/livekit', token: 'x'.repeat(40), room: 'dm-1' } })
+    expect(r).toEqual({ access: { url: 'wss://chat.example.org/livekit', token: 'x'.repeat(40), room: 'dm-1', e2ee: false, convId: null } })
+  })
+  it('salle chiffrée de bout en bout : e2ee et conversation', () => {
+    const r = parseLiveKitAccess({ url: 'wss://chat.example.org/livekit', token: 'x'.repeat(40), e2ee: true, conv_id: 'abc' }, beta)
+    expect(r).toEqual({ access: { url: 'wss://chat.example.org/livekit', token: 'x'.repeat(40), room: null, e2ee: true, convId: 'abc' } })
   })
   it('jeton absent ou URL refusée : erreur claire', () => {
     expect(parseLiveKitAccess(null, beta)).toEqual({ error: 'Serveur audio/vidéo indisponible.' })

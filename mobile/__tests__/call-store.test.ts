@@ -50,6 +50,14 @@ jest.mock('@/services/media', () => ({
 }))
 
 const mockAccess = jest.fn()
+// Chiffrement des médias (module natif) : testé à part (e2e-media.test.ts).
+jest.mock('@/e2e/media', () => ({
+  E2EE_CLAIM: { e2ee: true },
+  openMediaE2EE: jest.fn(),
+  enableMediaE2EE: jest.fn(),
+  watchOutdated: jest.fn(),
+  mediaE2EEError: () => 'e2e.call.failed',
+}))
 jest.mock('@/services/livekit', () => ({
   liveKitAccess: (v: unknown) => mockAccess(v),
   leaveRoom: (r: { disconnect: () => Promise<void> }) => r.disconnect(),
@@ -158,7 +166,7 @@ describe('stores/call (LiveKit)', () => {
 
   it('appelant : DM_CALL_INIT, puis connexion LiveKit avec l’accès joint à DM_CALL_ACCEPTED', async () => {
     await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
-    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice' })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice', e2ee: true })
     expect(mockRooms).toHaveLength(0) // pas de média avant que l'autre décroche
 
     fire('DM_CALL_ACCEPTED', { dm_id: DM_ID, livekit: ACCESS })
@@ -172,7 +180,7 @@ describe('stores/call (LiveKit)', () => {
     fire('SESSION_INIT', { session_id: 'moi' })
     fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
     await useCall.getState().accept()
-    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID, e2ee: true })
 
     fire('DM_CALL_MEDIA', { dm_id: DM_ID, session_id: 'autre-appareil', livekit: ACCESS })
     await flush()
@@ -271,7 +279,7 @@ describe('stores/call (LiveKit)', () => {
     await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'voice')
     fire('SESSION_INIT', { session_id: 'moi' })
     fire('DM_CALL_INCOMING', { from: PARTNER_ID, dm_id: DM_ID, from_username: 'Bob', call_type: 'voice' })
-    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID, e2ee: true })
     expect(mockRealtimeSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DM_CALL_DECLINE' }))
     expect(useCall.getState().incoming).toBeNull()
     expect(useCall.getState().phase).toBe('connecting')
@@ -303,7 +311,7 @@ describe('stores/call (LiveKit)', () => {
     await useCall.getState().accept()
     expect(mockVoice.leave).toHaveBeenCalled()
     expect(mockGroupLeave).toHaveBeenCalled()
-    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_ACCEPT', to: PARTNER_ID, dm_id: DM_ID, e2ee: true })
   })
 
   it('la sonnerie annulée par l’appelant ne coupe pas un nouvel appel entrant plus tard', () => {
@@ -336,7 +344,7 @@ describe('stores/call (LiveKit)', () => {
   it('caméra refusée : appel vidéo transformé en appel vocal au lieu d’être annulé', async () => {
     mockPermissions.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     await useCall.getState().start(DM_ID, PARTNER_ID, 'Bob', 'video')
-    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice' })
+    expect(mockRealtimeSend).toHaveBeenCalledWith({ type: 'DM_CALL_INIT', to: PARTNER_ID, dm_id: DM_ID, call_type: 'voice', e2ee: true })
     expect(useCall.getState().callType).toBe('voice')
     expect(useCall.getState().warning).toMatch(/Caméra/)
   })

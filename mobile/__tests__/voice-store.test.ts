@@ -46,6 +46,14 @@ jest.mock('livekit-client', () => {
 })
 
 const mockAccess = jest.fn()
+// Chiffrement des médias (module natif) : testé à part (e2e-media.test.ts).
+jest.mock('@/e2e/media', () => ({
+  E2EE_CLAIM: { e2ee: true },
+  openMediaE2EE: jest.fn(),
+  enableMediaE2EE: jest.fn(),
+  watchOutdated: jest.fn(),
+  mediaE2EEError: () => 'e2e.call.failed',
+}))
 jest.mock('@/services/livekit', () => ({
   liveKitAccess: (v: unknown) => mockAccess(v),
   leaveRoom: (r: { disconnect: () => Promise<void> }) => r.disconnect(),
@@ -116,7 +124,7 @@ describe('stores/voice (LiveKit)', () => {
 
   it('rejoint le salon : VOICE_JOIN, puis état diffusé à la réception des pairs', async () => {
     await useVoice.getState().join('srv', 'salon', 'Salon')
-    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: false })
+    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: false, e2ee: true })
     expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'VOICE_STATE' }))
     fire('VOICE_EXISTING_PEERS', { channel_id: 'salon', peers, livekit: ACCESS })
     await flush()
@@ -163,7 +171,7 @@ describe('stores/voice (LiveKit)', () => {
     await joinAndEnter()
     mockSend.mockClear()
     mockOpenHandlers.forEach((h) => h())
-    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: false, password: 'secret' })
+    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: false, password: 'secret', e2ee: true })
     fire('VOICE_EXISTING_PEERS', { channel_id: 'salon', peers: [], livekit: ACCESS })
     await flush()
     expect(useVoice.getState().peers).toEqual([]) // Bob parti pendant la coupure
@@ -229,7 +237,7 @@ describe('stores/voice (LiveKit)', () => {
     fire('VOICE_MOVE', { server_id: 'srv', channel_id: 'autre', channel_name: 'Autre' })
     await flush()
     expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_LEAVE', channel_id: 'salon' })
-    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'autre', listen_only: false })
+    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'autre', listen_only: false, e2ee: true })
     expect(useVoice.getState().channelName).toBe('Autre')
   })
 
@@ -252,7 +260,7 @@ describe('stores/voice (LiveKit)', () => {
 
   it('écoute seule : VOICE_JOIN listen_only, micro jamais publié', async () => {
     await useVoice.getState().join('srv', 'salon', 'Salon', undefined, true)
-    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: true })
+    expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'salon', listen_only: true, e2ee: true })
     fire('VOICE_EXISTING_PEERS', { channel_id: 'salon', peers, livekit: ACCESS })
     await flush()
     expect(useVoice.getState().muted).toBe(true)
@@ -303,7 +311,7 @@ describe('stores/voice (LiveKit)', () => {
 
     it('rejoindre : écoute seule + STAGE_JOIN, puis orateurs et mains levées du serveur', async () => {
       await enterStage()
-      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true })
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true, e2ee: true })
       expect(mockSend).toHaveBeenCalledWith({ type: 'STAGE_JOIN', channel_id: 'scene' })
       fire('STAGE_STATE', { channel_id: 'scene', speakers: [{ user_id: 'bob', username: 'Bob', avatar: null }], hand_raises: [{ user_id: 'eve', username: 'Eve' }] })
       const st = useVoice.getState().stage!
@@ -331,13 +339,13 @@ describe('stores/voice (LiveKit)', () => {
       fire('STAGE_SPEAKER_ADD', { channel_id: 'scene', user_id: 'moi', username: 'Moi' })
       await flush()
       expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_LEAVE', channel_id: 'scene' })
-      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: false })
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: false, e2ee: true })
       expect(mockSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'STAGE_LEAVE_SPEAKER' }))
       expect(useVoice.getState()).toMatchObject({ listenOnly: false, stage: { channelId: 'scene', speakers: [{ userId: 'moi' }] } })
       mockSend.mockClear()
       fire('STAGE_SPEAKER_REMOVE', { channel_id: 'scene', user_id: 'moi' })
       await flush()
-      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true })
+      expect(mockSend).toHaveBeenCalledWith({ type: 'VOICE_JOIN', channel_id: 'scene', listen_only: true, e2ee: true })
       expect(useVoice.getState()).toMatchObject({ listenOnly: true, stage: { speakers: [] } })
     })
 

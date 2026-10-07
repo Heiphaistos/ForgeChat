@@ -15,6 +15,7 @@ import { useNow } from '@/lib/useNow'
 import { useCall } from '@/stores/call'
 import { colors, font, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
+import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
 function CallButton({ icon, label, onPress, active, danger }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean }) {
   return (
@@ -98,6 +99,7 @@ export default function CallScreen() {
       <View style={[styles.top, { paddingTop: insets.top + spacing.lg + (s.screenSharing ? 48 : 0) }]} pointerEvents="none">
         <Text style={styles.name}>{s.partnerName ?? s.endedWith?.name}</Text>
         <Text style={styles.status}>{label}</Text>
+        <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.length ? [s.partnerName ?? '…'] : []} />
         {s.warning && s.phase !== 'idle' ? <Text style={styles.warning}>{s.warning}</Text> : null}
       </View>
 

@@ -50,11 +50,15 @@ export function checkLiveKitUrl(raw: unknown, policy: LiveKitUrlPolicy): LiveKit
   return { ok: true, url: `${scheme}://${host}${port === null ? '' : `:${port}`}${m[4] ?? ''}`, host }
 }
 
-/** Accès au SFU joint par le serveur : { url, token, room? }. */
+/** Accès au SFU joint par le serveur : { url, token, room?, e2ee?, conv_id? }. */
 export interface LiveKitAccess {
   url: string
   token: string
   room: string | null
+  /** La salle exige des médias chiffrés de bout en bout (docs/CHIFFREMENT-E2E.md §5). */
+  e2ee: boolean
+  /** Conversation dont la clé chiffre les médias, quand le serveur la précise (appel privé). */
+  convId: string | null
 }
 
 /** Valide l'objet `livekit` d'un événement du serveur ; null (+ raison) s'il est inutilisable. */
@@ -66,5 +70,6 @@ export function parseLiveKitAccess(v: unknown, policy: LiveKitUrlPolicy): { acce
   const url = checkLiveKitUrl(o.url, policy)
   if (!url.ok) return { error: url.reason }
   const room = typeof o.room === 'string' && o.room.length > 0 && o.room.length < 200 ? o.room : null
-  return { access: { url: url.url, token: o.token, room } }
+  const convId = typeof o.conv_id === 'string' && o.conv_id.length < 64 ? o.conv_id : null
+  return { access: { url: url.url, token: o.token, room, e2ee: o.e2ee === true, convId } }
 }

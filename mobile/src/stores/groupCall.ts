@@ -8,6 +8,7 @@ import { callAudio, leaveRoom, liveKitAccess, streamOf, CAMERA_RESOLUTION } from
 import { ensureMediaPermissions, ringtones } from '@/services/media'
 import { t } from '@/i18n'
 import { registerSignOutHook } from './auth'
+import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 
 /**
  * Appels vocaux/vidéo de groupe privé — server/src/handlers/group_calls.rs et le client web
@@ -44,6 +45,9 @@ interface GroupCallState {
   active: Record<string, string[]>
   ring: GroupRing | null
   error: string | null
+  /** Médias chiffrés de bout en bout (§5) ; participants dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
   join: (groupId: string, type: GroupCallType, groupName?: string) => Promise<void>
   leave: () => void
   dismissRing: () => void
@@ -86,7 +90,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     room = null
     if (r) void leaveRoom(r)
     if (get().status !== 'idle') void callAudio.stop()
-    set({ groupId: null, groupName: null, status: 'idle', remotes: {}, localVideo: null, micMuted: false, camOff: false, speaking: [], error })
+    set({ groupId: null, groupName: null, status: 'idle', remotes: {}, localVideo: null, micMuted: false, camOff: false, speaking: [], error, e2ee: false, e2eeOutdated: [] })
   }
 
   const connect = async (raw: unknown) => {
@@ -99,8 +103,29 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     }
     if (room) return
     const gen = generation
-    const r = new Room({ adaptiveStream: false, dynacast: true })
+    // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
+    let e2ee: MediaE2EE | null = null
+    if (res.access.e2ee && groupId) {
+      try {
+        e2ee = await openMediaE2EE('group', groupId)
+      } catch (err) {
+        if (gen !== generation) return
+        realtime.send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
+        cleanup(t(mediaE2EEError(err)))
+        return
+      }
+      if (gen !== generation || room) {
+        e2ee.stop()
+        return
+      }
+    }
+    const r = new Room({ adaptiveStream: false, dynacast: true, ...(e2ee ? { encryption: e2ee.encryption } : {}) })
     room = r
+    set({ e2ee: !!e2ee })
+    if (e2ee) {
+      await enableMediaE2EE(r, e2ee)
+      watchOutdated(r, (ids) => set({ e2eeOutdated: ids }))
+    }
     r.on(RoomEvent.TrackSubscribed, (_t, _pub, p) => refresh(p))
       .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => refresh(p))
       .on(RoomEvent.TrackMuted, (_pub, p) => p !== r.localParticipant && refresh(p as RemoteParticipant))
@@ -209,6 +234,8 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     active: {},
     ring: null,
     error: null,
+    e2ee: false,
+    e2eeOutdated: [],
 
     join: async (groupId, type, groupName) => {
       if (get().groupId === groupId) return
@@ -227,7 +254,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
       }
       if (gen !== generation) return
       set({ camOff: !video })
-      realtime.send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: video ? 'video' : 'voice' })
+      realtime.send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: video ? 'video' : 'voice', ...E2EE_CLAIM })
     },
 
     leave: () => {

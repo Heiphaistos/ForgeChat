@@ -24,6 +24,14 @@ jest.mock('livekit-client', () => {
 })
 
 const mockAccess = { url: 'wss://chat.example.org/livekit', token: 't'.repeat(40), room: 'gdm-x' }
+// Chiffrement des médias (module natif) : testé à part (e2e-media.test.ts).
+jest.mock('@/e2e/media', () => ({
+  E2EE_CLAIM: { e2ee: true },
+  openMediaE2EE: jest.fn(),
+  enableMediaE2EE: jest.fn(),
+  watchOutdated: jest.fn(),
+  mediaE2EEError: () => 'e2e.call.failed',
+}))
 jest.mock('@/services/livekit', () => ({
   liveKitAccess: () => ({ access: mockAccess }),
   leaveRoom: (r: { disconnect: () => Promise<void> }) => r.disconnect(),
@@ -94,7 +102,7 @@ describe('stores/groupCall', () => {
   it('rejoindre : GROUP_CALL_JOIN, puis LiveKit avec l’accès de NOTRE session seulement', async () => {
     fire('SESSION_INIT', { session_id: 'moi' })
     await useGroupCall.getState().join(GROUP, 'voice', 'Amis')
-    expect(mockSend).toHaveBeenCalledWith({ type: 'GROUP_CALL_JOIN', group_id: GROUP, call_type: 'voice' })
+    expect(mockSend).toHaveBeenCalledWith({ type: 'GROUP_CALL_JOIN', group_id: GROUP, call_type: 'voice', e2ee: true })
     fire('GROUP_CALL_MEDIA', { group_id: GROUP, session_id: 'autre', livekit: mockAccess })
     await flush()
     expect(mockRooms).toHaveLength(0)

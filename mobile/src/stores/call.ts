@@ -14,6 +14,7 @@ import { getMyId, registerSignOutHook } from './auth'
 import { t, type Key } from '@/i18n'
 import { useGroupCall } from './groupCall'
 import { useVoice } from './voice'
+import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 
 /**
  * Appels privés 1:1 (audio/vidéo) — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -66,6 +67,9 @@ interface CallState {
   speaker: boolean
   connectedAt: number | null
   endReason: string | null
+  /** Médias chiffrés de bout en bout (§5) ; correspondant dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
   start: (dmId: string, partnerId: string, partnerName: string, type: CallType, partnerAvatar?: string | null) => Promise<void>
   accept: () => Promise<void>
   decline: () => void
@@ -153,6 +157,8 @@ export const useCall = create<CallState>((set, get) => {
       speaker: false,
       connectedAt: null,
       endReason: reason,
+      e2ee: false,
+      e2eeOutdated: [],
     })
   }
 
@@ -194,8 +200,32 @@ export const useCall = create<CallState>((set, get) => {
   const connect = async (access: LiveKitAccess) => {
     if (room) return
     const gen = callGeneration
-    const r = new Room({ adaptiveStream: false, dynacast: true })
+    // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
+    let e2ee: MediaE2EE | null = null
+    if (access.e2ee) {
+      try {
+        const conv = access.convId ?? get().dmId
+        if (!conv) throw new Error('E2E_WAITING')
+        e2ee = await openMediaE2EE('dm', conv)
+      } catch (err) {
+        if (gen !== callGeneration) return
+        const { partnerId, dmId } = get()
+        if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
+        cleanup(t(mediaE2EEError(err)))
+        return
+      }
+      if (gen !== callGeneration || room) {
+        e2ee.stop()
+        return
+      }
+    }
+    const r = new Room({ adaptiveStream: false, dynacast: true, ...(e2ee ? { encryption: e2ee.encryption } : {}) })
     room = r
+    set({ e2ee: !!e2ee })
+    if (e2ee) {
+      await enableMediaE2EE(r, e2ee)
+      watchOutdated(r, (ids) => set({ e2eeOutdated: ids }))
+    }
     const isPartner = (p: RemoteParticipant) => p.identity === get().partnerId
     r.on(RoomEvent.TrackSubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
       .on(RoomEvent.TrackUnsubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
@@ -305,7 +335,7 @@ export const useCall = create<CallState>((set, get) => {
         ringtones.stopRingback()
         set({ phase: 'connecting' })
         awaitingMedia = true
-        realtime.send({ type: 'DM_CALL_ACCEPT', to: from, dm_id: dmId })
+        realtime.send({ type: 'DM_CALL_ACCEPT', to: from, dm_id: dmId, ...E2EE_CLAIM })
         armConnectTimeout()
       }
       return
@@ -406,6 +436,8 @@ export const useCall = create<CallState>((set, get) => {
     speaker: false,
     connectedAt: null,
     endReason: null,
+    e2ee: false,
+    e2eeOutdated: [],
 
     start: async (dmId, partnerId, partnerName, type, partnerAvatar = null) => {
       if (busy || get().phase !== 'idle') return
@@ -422,7 +454,7 @@ export const useCall = create<CallState>((set, get) => {
         if (granted !== type) set({ callType: granted, speaker: false, warning: t('store.call.cameraDenied') })
         ringtones.keepScreenOn(true)
         ringtones.startRingback()
-        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: granted })
+        realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: granted, ...E2EE_CLAIM })
         ringTimeout = setTimeout(() => {
           if (get().phase === 'calling') {
             realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
@@ -469,7 +501,7 @@ export const useCall = create<CallState>((set, get) => {
         if (granted !== inc.callType) set({ callType: granted, speaker: false, warning: t('store.call.cameraDenied') })
         ringtones.keepScreenOn(true)
         awaitingMedia = true
-        realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
+        realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId, ...E2EE_CLAIM })
         armConnectTimeout()
       } catch (e) {
         // gen !== callGeneration ⇒ appel déjà terminé (raccroché distant…) : pas de DECLINE en double.
