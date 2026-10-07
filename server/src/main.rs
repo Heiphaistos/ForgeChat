@@ -428,13 +428,13 @@ async fn send_dm_notifications(state: &AppState) {
 
         match email::send_email(&state.config, &email, "Nouveaux messages directs — ForgeChat", html).await {
             Ok(true) => {
-                tracing::info!("Email DM digest envoyé à {} ({} non-lus)", username, count);
+                tracing::debug!("Email DM digest envoyé ({} non-lus)", count);
             }
             Ok(false) => {
-                tracing::debug!("SMTP non configuré, email ignoré pour {}", username);
+                tracing::debug!("SMTP non configuré, email ignoré");
             }
             Err(e) => {
-                tracing::error!("Erreur envoi email DM à {}: {}", username, e);
+                tracing::error!("Erreur envoi email DM : {}", privacy::redact_emails(&e.to_string()));
                 continue;
             }
         }
@@ -471,7 +471,6 @@ async fn send_birthday_notifications(state: &AppState) {
 
     for row in birthday_users {
         let username: String = row.get("username");
-        let user_id: Uuid = row.get("id");
         let server_id: Uuid = row.get("server_id");
 
         let channel = sqlx::query(
@@ -517,7 +516,7 @@ async fn send_birthday_notifications(state: &AppState) {
                     }
                 });
                 state.broadcast_to_channel_members(channel_id, event.to_string()).await;
-                tracing::info!("Anniversaire envoyé pour {} (user {}) dans server {}", username, user_id, server_id);
+                tracing::debug!("Message d'anniversaire envoyé");
             }
         }
     }

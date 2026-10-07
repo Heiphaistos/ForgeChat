@@ -587,7 +587,6 @@ function report(event: string, extra: Record<string, unknown> = {}) {
     room: _roomName,
     quality: _room?.localParticipant.connectionQuality ?? null,
     participants: _room ? _room.remoteParticipants.size + 1 : 0,
-    ua: navigator.userAgent.slice(0, 160),
     at: Date.now(),
     ...extra,
   }).catch(() => {})

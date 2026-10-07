@@ -78,7 +78,7 @@ async fn handle_socket(
     // `session_id` : l'état vocal est désormais rattaché à la session.
     let session_id = Uuid::new_v4();
 
-    tracing::info!("WS connecté: {} (session {})", user_id, session_id);
+    tracing::debug!("WS connecté: {} (session {})", user_id, session_id);
 
     // Charger le username une fois au connect pour éviter les DB queries dans les TYPING events
     let cached_username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
@@ -273,7 +273,7 @@ async fn handle_socket(
         }
     }
 
-    tracing::info!("WS déconnecté: {}", user_id);
+    tracing::debug!("WS déconnecté: {}", user_id);
 }
 
 /// Sortie du vocal. `session` = la session WS qui part (`None` = VOICE_LEAVE
