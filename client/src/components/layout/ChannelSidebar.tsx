@@ -33,6 +33,7 @@ import { useServerPerms } from '../../hooks/useServerPerms'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
 import { useMemberModeration } from '../chat/MemberModeration'
+import { t as tr, useT } from '../../i18n'
 
 /** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
 const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
@@ -154,6 +155,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
 }
 
 function BoostButton({ serverId }: { serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const boost = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/boost`),
@@ -161,7 +163,7 @@ function BoostButton({ serverId }: { serverId: string }) {
       qc.invalidateQueries({ queryKey: ['server', serverId] })
       qc.invalidateQueries({ queryKey: ['channels', serverId] })
     },
-    onError: () => toast.error('Impossible de booster'),
+    onError: () => toast.error(t('channels.boostFailed')),
   })
   return (
     <button
@@ -171,7 +173,7 @@ function BoostButton({ serverId }: { serverId: string }) {
         text-xs font-semibold text-purple-300 border border-purple-500/30 bg-purple-500/10
         hover:bg-purple-500/20 hover:border-purple-500/60 transition disabled:opacity-50"
     >
-      ⚡ Booster le serveur
+      {t('channels.boost')}
     </button>
   )
 }
@@ -193,19 +195,20 @@ const UNCATEGORIZED_KEY = '__uncategorized__'
 // Horodatage relatif compact style Discord : 5m, 2h, 3j, 2sem, 4mois
 function timeAgoShort(dateStr: string): string {
   const diffMin = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
-  if (diffMin < 1) return 'now'
-  if (diffMin < 60) return `${diffMin}m`
+  if (diffMin < 1) return tr('time.short.now')
+  if (diffMin < 60) return tr('time.short.min', { n: diffMin })
   const h = Math.floor(diffMin / 60)
-  if (h < 24) return `${h}h`
+  if (h < 24) return tr('time.short.hour', { n: h })
   const d = Math.floor(h / 24)
-  if (d < 7) return `${d}j`
-  if (d < 30) return `${Math.floor(d / 7)}sem`
-  return `${Math.floor(d / 30)}mois`
+  if (d < 7) return tr('time.short.day', { n: d })
+  if (d < 30) return tr('time.short.week', { n: Math.floor(d / 7) })
+  return tr('time.short.month', { n: Math.floor(d / 30) })
 }
 
 function TypingDots() {
+  const t = useT()
   return (
-    <span className="flex gap-0.5 items-center flex-shrink-0" role="status" aria-label="Quelqu'un écrit">
+    <span className="flex gap-0.5 items-center flex-shrink-0" role="status" aria-label={t('common.someoneTyping')}>
       {[0, 150, 300].map(d => (
         <span key={d} aria-hidden className="w-1 h-1 bg-fc-accent rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
       ))}
@@ -218,6 +221,7 @@ export default function ChannelSidebar() {
   const nav = useNavigate()
   const { pathname } = useLocation()
   const { closeSidebar } = useMobile()
+  const t = useT()
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -308,7 +312,7 @@ export default function ChannelSidebar() {
     const userId = e.dataTransfer.getData(VOICE_MEMBER_MIME)
     if (!userId || !serverId || (roomParticipants[channelId] ?? []).some(p => p.userId === userId)) return
     api.patch(`/servers/${serverId}/members/${userId}/voice`, { channel_id: channelId })
-      .catch((err: any) => toast.error(err?.response?.data?.error ?? 'Déplacement refusé'))
+      .catch((err: any) => toast.error(err?.response?.data?.error ?? t('channels.moveRefused')))
   }
   const activeStreams = useVoice(s => s.activeStreams)
   const voiceChannelId = useVoice(s => s.channelId)
@@ -331,9 +335,9 @@ export default function ChannelSidebar() {
   useEffect(() => {
     const offErr = wsOn('VOICE_JOIN_ERROR', (d: any) => {
       if (d.reason === 'channel_full') {
-        toast.error(`Canal plein (${d.current}/${d.limit} places)`)
+        toast.error(t('channels.voiceFull', { current: d.current, limit: d.limit }))
       } else if (d.reason === 'wrong_password') {
-        toast.error('Mot de passe incorrect')
+        toast.error(t('channels.wrongPassword'))
       }
     })
     const offRedirect = wsOn('VOICE_REDIRECT', () => {
@@ -341,7 +345,7 @@ export default function ChannelSidebar() {
       // temporaire. L'ancien appel déclenchait un leave() qui vidait le canal,
       // le serveur le supprimait (is_temporary) et le join suivant échouait en
       // silence — les canaux « auto-create » étaient inutilisables.
-      toast.success('Redirigé vers un sous-canal vocal')
+      toast.success(t('channels.redirected'))
     })
     return () => { offErr(); offRedirect() }
   }, [voiceJoin, serverId])
@@ -390,32 +394,32 @@ export default function ChannelSidebar() {
     mutationFn: (channel_ids: string[]) =>
       api.patch(`/servers/${serverId}/channels/reorder`, { channel_ids }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors du déplacement'),
+    onError: () => toast.error(t('channels.reorderFailed')),
   })
 
   const archiveChannel = useMutation({
     mutationFn: (chId: string) => api.patch(`/servers/${serverId}/channels/${chId}/archive`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors de l\'archivage'),
+    onError: () => toast.error(t('channels.archiveFailed')),
   })
 
   const hideChannelMutation = useMutation({
     mutationFn: (id: string) => api.post(`/channels/${id}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors du masquage'),
+    onError: () => toast.error(t('channels.hideFailed')),
   })
 
   const unhideChannelMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/channels/${id}/hide`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors de l\'affichage'),
+    onError: () => toast.error(t('channels.unhideFailed')),
   })
 
   const moveChannel = useMutation({
     mutationFn: ({ channelId, categoryId }: { channelId: string; categoryId: string | null }) =>
       api.patch(`/channels/${channelId}/move`, { category_id: categoryId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server', serverId] }),
-    onError: () => toast.error('Erreur lors du déplacement du canal'),
+    onError: () => toast.error(t('channels.moveFailed')),
   })
 
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
@@ -478,8 +482,8 @@ export default function ChannelSidebar() {
   const [showArchivedDms, setShowArchivedDms] = useState(false)
   const unarchiveDm = (dmId: string) => {
     api.patch(`/dms/${dmId}/settings`, { archived: false })
-      .then(() => { qc.invalidateQueries({ queryKey: ['dms'] }); toast.success('Conversation désarchivée') })
-      .catch(() => toast.error('Erreur'))
+      .then(() => { qc.invalidateQueries({ queryKey: ['dms'] }); toast.success(t('channels.unarchived')) })
+      .catch(() => toast.error(t('common.error')))
   }
 
   // ⚠️ Ces useMemo DOIVENT rester avant le `if (!serverId) return` :
@@ -531,13 +535,13 @@ export default function ChannelSidebar() {
     if (categories.length === 0 && channels.length > 0) {
       const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum', 'media'].includes(c.type))
       const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
-      if (textChannels.length > 0) groups.push({ key: 'texte', label: 'Texte', channels: textChannels })
-      if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: 'Vocal & Vidéo', channels: voiceChannels })
+      if (textChannels.length > 0) groups.push({ key: 'texte', label: t('channels.groupText'), channels: textChannels })
+      if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: t('channels.groupVoice'), channels: voiceChannels })
     } else if (uncategorized.length > 0) {
-      groups.push({ key: UNCATEGORIZED_KEY, label: 'Sans catégorie', channels: uncategorized })
+      groups.push({ key: UNCATEGORIZED_KEY, label: t('channels.uncategorized'), channels: uncategorized })
     }
     return groups
-  }, [channels, categories])
+  }, [channels, categories, t])
 
   if (!serverId) {
 
@@ -546,12 +550,12 @@ export default function ChannelSidebar() {
         {/* En-tête + bouton créer groupe */}
         <div className="flex items-center justify-between px-2 py-2">
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-            Messages directs
+            {t('dms.title')}
           </span>
           <button
             onClick={() => setShowCreateGroup(true)}
-            aria-label="Nouveau groupe"
-            title="Nouveau groupe"
+            aria-label={t('dms.newGroup')}
+            title={t('dms.newGroup')}
             className="text-fc-muted hover:text-white transition p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover"
           >
             <Plus size={15} aria-hidden />
@@ -564,8 +568,8 @@ export default function ChannelSidebar() {
             <input
               value={dmFilter}
               onChange={e => setDmFilter(e.target.value)}
-              placeholder="Filtrer les conversations…"
-              aria-label="Filtrer les conversations"
+              placeholder={t('dms.filter')}
+              aria-label={t('dms.filterLabel')}
               enterKeyHint="search"
               autoCapitalize="none"
               className="w-full pl-2.5 pr-8 py-1.5 bg-fc-input rounded text-sm text-white placeholder:text-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -573,7 +577,7 @@ export default function ChannelSidebar() {
             {dmFilter && (
               <button
                 onClick={() => setDmFilter('')}
-                aria-label="Effacer le filtre"
+                aria-label={t('common.clearFilter')}
                 className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-fc-muted hover:text-white transition"
               >
                 <X size={13} aria-hidden />
@@ -586,30 +590,30 @@ export default function ChannelSidebar() {
         {groupDms.length > 0 && (
           <>
             <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide">
-              Groupes
+              {t('dms.groups')}
             </div>
             {groupDms.map((dm: any) => {
               const unread = unreadCounts[dm.id] ?? 0
               const toggleMuteGroup = () => {
                 api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
                   .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-                  .catch(() => toast.error('Erreur'))
+                  .catch(() => toast.error(t('common.error')))
               }
               const leaveGroup = async () => {
-                if (!await confirm({ message: `Quitter le groupe "${dm.name ?? 'Groupe'}" ?`, danger: true, confirmLabel: 'Quitter' })) return
+                if (!await confirm({ message: t('dms.leaveGroupConfirm', { name: dm.name ?? t('dms.group') }), danger: true, confirmLabel: t('servers.leave') })) return
                 try {
                   await api.post(`/dms/groups/${dm.id}/leave`)
                   qc.invalidateQueries({ queryKey: ['dms'] })
                   nav('/friends')
-                } catch { toast.error('Impossible de quitter le groupe') }
+                } catch { toast.error(t('dms.leaveGroupFailed')) }
               }
               return (
                 <button
                   key={dm.id}
                   onClick={() => { nav(`/dms/groups/${dm.id}`); closeSidebar() }}
                   onContextMenu={e => ctxMenu.open(e, [
-                    { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
-                    { label: 'Quitter le groupe', onClick: leaveGroup },
+                    { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteGroup },
+                    { label: t('dms.leaveGroup'), onClick: leaveGroup },
                   ])}
                   onTouchStart={e => {
                     const { clientX, clientY } = e.touches[0]
@@ -617,8 +621,8 @@ export default function ChannelSidebar() {
                       chLongPressRef.current = null
                       if ('vibrate' in navigator) navigator.vibrate(20)
                       ctxMenu.openAt(clientX, clientY, [
-                        { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteGroup },
-                        { label: 'Quitter le groupe', onClick: leaveGroup },
+                        { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteGroup },
+                        { label: t('dms.leaveGroup'), onClick: leaveGroup },
                       ])
                     }, 500)
                   }}
@@ -636,7 +640,7 @@ export default function ChannelSidebar() {
                   <div className="min-w-0 text-left flex-1">
                     <div className="flex items-baseline justify-between gap-1.5">
                       <span className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
-                        {dm.name ?? dm.username ?? 'Groupe'}
+                        {dm.name ?? dm.username ?? t('dms.group')}
                       </span>
                       {dm.last_message_at && (
                         <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
@@ -644,19 +648,19 @@ export default function ChannelSidebar() {
                     </div>
                     <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
                       {dm.last_message_content != null
-                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${stripMarkdown(dm.last_message_content) || '📎 Pièce jointe'}`
-                        : `${dm.member_count ?? '?'} membres`}
+                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${stripMarkdown(dm.last_message_content) || t('common.attachment')}`
+                        : t('dms.members', { n: dm.member_count ?? '?' })}
                     </div>
                   </div>
                   {pathname !== `/dms/groups/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
                   {!!drafts[dm.id] && pathname !== `/dms/groups/${dm.id}` && (
-                    <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+                    <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label={t('common.draftPending')} />
                   )}
                   {dm.is_muted && !unread && (
                     <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
                   )}
                   {unread > 0 && (
-                    <span role="status" aria-label={`${unread > 99 ? '99+' : unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                    <span role="status" aria-label={t(unread > 1 ? 'common.unread.other' : 'common.unread.one', { n: unread > 99 ? '99+' : unread })} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
                       <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
                     </span>
                   )}
@@ -669,7 +673,7 @@ export default function ChannelSidebar() {
         {/* DMs individuels */}
         {groupDms.length > 0 && individualDms.length > 0 && (
           <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide mt-1">
-            Directs
+            {t('dms.direct')}
           </div>
         )}
         {individualDms.map((dm: any) => {
@@ -679,12 +683,12 @@ export default function ChannelSidebar() {
           const toggleMuteDm = () => {
             api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
               .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-              .catch(() => toast.error('Erreur'))
+              .catch(() => toast.error(t('common.error')))
           }
           const archiveDm = () => {
             api.patch(`/dms/${dm.id}/settings`, { archived: true })
               .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-              .catch(() => toast.error('Erreur'))
+              .catch(() => toast.error(t('common.error')))
           }
           return (
             <button
@@ -698,9 +702,9 @@ export default function ChannelSidebar() {
                 })
               }}
               onContextMenu={e => ctxMenu.open(e, [
-                { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
-                { label: 'Archiver la conversation', onClick: archiveDm },
-                { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
+                { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteDm },
+                { label: t('dms.archive'), onClick: archiveDm },
+                { label: t('dms.viewProfile'), onClick: () => nav(`/users/${dm.other_user_id}`) },
               ])}
               onTouchStart={e => {
                 const { clientX, clientY } = e.touches[0]
@@ -708,9 +712,9 @@ export default function ChannelSidebar() {
                   chLongPressRef.current = null
                   if ('vibrate' in navigator) navigator.vibrate(20)
                   ctxMenu.openAt(clientX, clientY, [
-                    { label: dm.is_muted ? 'Réactiver les notifs' : 'Désactiver les notifs', onClick: toggleMuteDm },
-                    { label: 'Archiver la conversation', onClick: archiveDm },
-                    { label: 'Voir le profil', onClick: () => nav(`/users/${dm.other_user_id}`) },
+                    { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteDm },
+                    { label: t('dms.archive'), onClick: archiveDm },
+                    { label: t('dms.viewProfile'), onClick: () => nav(`/users/${dm.other_user_id}`) },
                   ])
                 }, 500)
               }}
@@ -740,14 +744,14 @@ export default function ChannelSidebar() {
                 </div>
                 {dm.last_message_content != null ? (
                   <div className={`text-xs truncate ${unread > 0 ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
-                    {stripMarkdown(dm.last_message_content) || '📎 Pièce jointe'}
+                    {stripMarkdown(dm.last_message_content) || t('common.attachment')}
                   </div>
                 ) : (
                   <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
-                    {statusKey === 'online' ? 'En ligne'
-                      : statusKey === 'idle' ? 'Absent'
-                      : statusKey === 'dnd' ? 'Ne pas déranger'
-                      : 'Hors ligne'}
+                    {statusKey === 'online' ? t('presence.online')
+                      : statusKey === 'idle' ? t('presence.idle')
+                      : statusKey === 'dnd' ? t('presence.dnd')
+                      : t('presence.offline')}
                   </div>
                 )}
               </div>
@@ -755,7 +759,7 @@ export default function ChannelSidebar() {
               {pathname !== `/dms/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
               {/* Indicateur brouillon en attente */}
               {!!drafts[dm.id] && pathname !== `/dms/${dm.id}` && (
-                <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+                <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label={t('common.draftPending')} />
               )}
               {/* Indicateur mute */}
               {dm.is_muted && !unread && (
@@ -763,7 +767,7 @@ export default function ChannelSidebar() {
               )}
               {/* Badge non-lus */}
               {unread > 0 && (
-                <span role="status" aria-label={`${unread > 99 ? '99+' : unread} message${unread > 1 ? 's' : ''} non lu${unread > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                <span role="status" aria-label={t(unread > 1 ? 'common.unread.other' : 'common.unread.one', { n: unread > 99 ? '99+' : unread })} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
                   <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
                 </span>
               )}
@@ -788,7 +792,7 @@ export default function ChannelSidebar() {
 
         {/* Aucun résultat pour le filtre */}
         {dmFilter.trim() && groupDms.length === 0 && individualDms.length === 0 && (
-          <div className="text-center text-fc-muted text-xs py-4">Aucune conversation trouvée</div>
+          <div className="text-center text-fc-muted text-xs py-4">{t('dms.noMatch')}</div>
         )}
 
         {/* Conversations archivées — repliées par défaut, désarchivage en un clic */}
@@ -800,7 +804,7 @@ export default function ChannelSidebar() {
               aria-expanded={showArchivedDms}
             >
               <ChevronRight size={12} className={`transition-transform ${showArchivedDms ? 'rotate-90' : ''}`} />
-              Archivées ({archivedDms.length})
+              {t('dms.archived', { n: archivedDms.length })}
             </button>
             {showArchivedDms && archivedDms.map((dm: any) => (
               <div key={dm.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover/50 transition group/arch">
@@ -808,12 +812,12 @@ export default function ChannelSidebar() {
                   onClick={() => { nav(dm.is_group ? `/dms/groups/${dm.id}` : `/dms/${dm.id}`); closeSidebar() }}
                   className="flex-1 min-w-0 text-left text-sm text-fc-muted hover:text-white truncate transition"
                 >
-                  {dm.is_group ? (dm.name ?? 'Groupe') : dm.username}
+                  {dm.is_group ? (dm.name ?? t('dms.group')) : dm.username}
                 </button>
                 <button
                   onClick={() => unarchiveDm(dm.id)}
-                  title="Désarchiver"
-                  aria-label={`Désarchiver ${dm.is_group ? (dm.name ?? 'le groupe') : dm.username}`}
+                  title={t('dms.unarchive')}
+                  aria-label={t('dms.unarchiveName', { name: dm.is_group ? (dm.name ?? t('dms.theGroup')) : dm.username })}
                   className="opacity-100 md:opacity-0 md:group-hover/arch:opacity-100 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded transition flex-shrink-0"
                 >
                   <Archive size={13} aria-hidden />
@@ -899,22 +903,22 @@ export default function ChannelSidebar() {
         onContextMenu={e => {
           const channelMuted = isChannelMuted(ch.id)
           ctxMenu.open(e, [
-            { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
-            { label: channelMuted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
+            { label: t('channels.markRead'), onClick: () => markRead(ch.id, serverId) },
+            { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
               const next = !channelMuted
               setChannelMuted(ch.id, next)
               api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
             }},
-            { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+            { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
             { separator: true },
-            { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
+            { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
             ...(canEdit ? [
-              { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
-              { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+              { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+              { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
             ] : []),
             ...(canDeleteChannel(ch.created_by) ? [
               { separator: true as const },
-              { label: 'Supprimer le canal', danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
+              { label: t('channels.delete'), danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
             ] : []),
           ])
         }}
@@ -925,18 +929,18 @@ export default function ChannelSidebar() {
             chLongPressRef.current = null
             if ('vibrate' in navigator) navigator.vibrate(20)
             ctxMenu.openAt(clientX, clientY, [
-              { label: 'Marquer comme lu', onClick: () => markRead(ch.id, serverId) },
-              { label: channelMuted ? 'Activer les notifications' : 'Désactiver les notifications', onClick: () => {
+              { label: t('channels.markRead'), onClick: () => markRead(ch.id, serverId) },
+              { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
                 const next = !channelMuted
                 setChannelMuted(ch.id, next)
                 api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
               }},
-              { label: 'Copier le lien', onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+              { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
               { separator: true },
-              { label: 'Paramètres du canal', onClick: () => setChannelSettings(ch) },
+              { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
               ...(canEdit ? [
-                { label: ch.hidden ? 'Afficher le canal' : 'Masquer le canal', onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
-                { label: ch.archived ? 'Restaurer' : 'Archiver', onClick: () => archiveChannel.mutate(ch.id) },
+                { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+                { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
               ] : []),
             ])
           }, 500)
@@ -987,7 +991,7 @@ export default function ChannelSidebar() {
 
           {/* Indicateur brouillon en attente dans ce canal */}
           {!isVoiceCh && !!drafts[ch.id] && channelId !== ch.id && (
-            <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label="Brouillon en attente" />
+            <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label={t('common.draftPending')} />
           )}
 
           {/* Badge LIVE si stream actif dans ce canal */}
@@ -1000,7 +1004,7 @@ export default function ChannelSidebar() {
 
           {/* Badge slowmode */}
           {slowmodeDelay > 0 && !isVoiceCh && (
-            <span className="flex items-center gap-0.5 text-[10px] text-fc-muted flex-shrink-0" title={`Mode lent: ${slowmodeDelay}s`}>
+            <span className="flex items-center gap-0.5 text-[10px] text-fc-muted flex-shrink-0" title={t('channels.slowmode', { s: slowmodeDelay })}>
               <Clock size={9} />
               {slowmodeDelay >= 3600 ? `${slowmodeDelay / 3600}h`
                 : slowmodeDelay >= 60 ? `${slowmodeDelay / 60}m`
@@ -1010,33 +1014,33 @@ export default function ChannelSidebar() {
 
           {/* User limit sur canaux vocaux */}
           {isVoiceCh && userLimit > 0 && (
-            <span className="text-[10px] text-fc-muted flex-shrink-0" title={`Limite: ${userLimit} utilisateurs`}>
+            <span className="text-[10px] text-fc-muted flex-shrink-0" title={t('channels.userLimit', { n: userLimit })}>
               {participants.length}/{userLimit}
             </span>
           )}
 
           {isMeConnected && (
-            <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Vous êtes connecté ici" />
+            <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title={t('channels.connectedHere')} />
           )}
           {effectiveMuted(ch.id) && (
-            <span title="Notifications désactivées" className="flex-shrink-0">
+            <span title={t('channels.notifDisabled')} className="flex-shrink-0">
               <BellOff size={11} className="text-fc-muted/50" />
             </span>
           )}
           {/* Discord : pastille rouge chiffrée pour les mentions, point blanc pour le simple non-lu */}
           {channelId !== ch.id && !isVoiceCh && ((mentionCounts[ch.id] ?? 0) > 0 ? (
-            <span role="status" aria-label={`${mentionCounts[ch.id]} mention${mentionCounts[ch.id] > 1 ? 's' : ''} non lue${mentionCounts[ch.id] > 1 ? 's' : ''}`} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+            <span role="status" aria-label={t(mentionCounts[ch.id] > 1 ? 'channels.mentions.other' : 'channels.mentions.one', { n: mentionCounts[ch.id] })} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
               <span aria-hidden>{mentionCounts[ch.id] > 99 ? '99+' : mentionCounts[ch.id]}</span>
             </span>
           ) : unreadCounts[ch.id] > 0 && !effectiveMuted(ch.id) && (
-            <span role="status" aria-label="Messages non lus" className="flex-shrink-0 w-2 h-2 bg-white rounded-full" />
+            <span role="status" aria-label={t('common.unreadMessages')} className="flex-shrink-0 w-2 h-2 bg-white rounded-full" />
           ))}
 
           {/* Poignée drag (visible au hover si droit de modifier les salons) */}
           {canEdit && (
             <span
               className="opacity-0 group-hover:opacity-100 p-0.5 text-fc-muted cursor-grab active:cursor-grabbing flex-shrink-0"
-              title="Réordonner"
+              title={t('channels.reorder')}
             >
               <GripVertical size={12} />
             </span>
@@ -1045,8 +1049,8 @@ export default function ChannelSidebar() {
           <button
             onClick={e => { e.stopPropagation(); setChannelSettings(ch) }}
             className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
-            title="Paramètres du canal"
-            aria-label={`Paramètres du canal ${ch.name}`}
+            title={t('channels.settings')}
+            aria-label={t('channels.settingsOf', { name: ch.name })}
           >
             <Settings size={12} />
           </button>
@@ -1054,8 +1058,8 @@ export default function ChannelSidebar() {
             <button
               onClick={e => { e.stopPropagation(); archiveChannel.mutate(ch.id) }}
               className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-yellow-400 transition flex-shrink-0"
-              title="Archiver ce canal"
-              aria-label={`Archiver le canal ${ch.name}`}
+              title={t('channels.archiveThis')}
+              aria-label={t('channels.archiveNamed', { name: ch.name })}
             >
               <Archive size={12} />
             </button>
@@ -1063,8 +1067,8 @@ export default function ChannelSidebar() {
           <button
             onClick={e => { e.stopPropagation(); ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) }}
             className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-fc-hover/70 text-fc-muted hover:text-white transition flex-shrink-0"
-            title={ch.hidden ? "Afficher ce canal" : "Masquer ce canal"}
-            aria-label={ch.hidden ? `Afficher le canal ${ch.name}` : `Masquer le canal ${ch.name}`}
+            title={ch.hidden ? t('channels.showThis') : t('channels.hideThis')}
+            aria-label={ch.hidden ? t('channels.showNamed', { name: ch.name }) : t('channels.hideNamed', { name: ch.name })}
           >
             <EyeOff size={12} />
           </button>
@@ -1097,8 +1101,8 @@ export default function ChannelSidebar() {
                     : p.username.charAt(0).toUpperCase()}
                 </div>
                 <span className="text-[11px] truncate flex-1">{p.username}</span>
-                {p.serverDeafened && <VolumeX size={9} className="text-red-500 flex-shrink-0" aria-label="Sourdine imposée par un modérateur" />}
-                {p.muted && <MicOff size={9} className={`${p.serverMuted ? 'text-red-500' : 'text-red-400'} flex-shrink-0`} aria-label={p.serverMuted ? 'Rendu muet par un modérateur' : 'Micro coupé'} />}
+                {p.serverDeafened && <VolumeX size={9} className="text-red-500 flex-shrink-0" aria-label={t('voice.serverDeafened')} />}
+                {p.muted && <MicOff size={9} className={`${p.serverMuted ? 'text-red-500' : 'text-red-400'} flex-shrink-0`} aria-label={p.serverMuted ? t('voice.serverMuted') : t('voice.micOff')} />}
                 {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
                 {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
               </div>
@@ -1115,10 +1119,10 @@ export default function ChannelSidebar() {
                   closeSidebar()
                 }}
                 className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-red-500/10 w-full text-left transition"
-                title={`Regarder le live de ${s.username}`}
+                title={t('channels.watchLive', { name: s.username })}
               >
                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                <span className="text-[11px] text-red-400 truncate flex-1">{s.username} est en live</span>
+                <span className="text-[11px] text-red-400 truncate flex-1">{t('channels.isLive', { name: s.username })}</span>
               </button>
             ))}
           </div>
@@ -1135,7 +1139,7 @@ export default function ChannelSidebar() {
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="w-full shadow-sm border-b border-fc-bg/50 hover:brightness-110 transition overflow-hidden"
-            aria-label={menuOpen ? 'Fermer le menu serveur' : 'Ouvrir le menu serveur'}
+            aria-label={menuOpen ? t('channels.closeMenu') : t('channels.openMenu')}
             aria-expanded={menuOpen}
           >
             {server?.banner ? (
@@ -1188,7 +1192,7 @@ export default function ChannelSidebar() {
                 onClick={() => { setShowInvite(true); setMenuOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-accent text-fc-text hover:text-white text-sm transition"
               >
-                <UserPlus size={16} /> Inviter des personnes
+                <UserPlus size={16} /> {t('channels.invite')}
               </button>
               {canCreate && (<>
               <div className="border-t border-fc-hover my-1" />
@@ -1196,7 +1200,7 @@ export default function ChannelSidebar() {
                 onClick={() => { setShowCreateChannel(true); setMenuOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
               >
-                <Plus size={16} /> Créer un canal
+                <Plus size={16} /> {t('channels.create')}
               </button>
               </>)}
               <div className="border-t border-fc-hover my-1" />
@@ -1204,14 +1208,14 @@ export default function ChannelSidebar() {
                 onClick={() => { setShowSettings(true); setMenuOpen(false) }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
               >
-                <Settings size={16} /> Paramètres du serveur
+                <Settings size={16} /> {t('servers.settings')}
               </button>
               {data?.member?.has_onboarding && (
                 <button
                   onClick={() => { setShowOnboarding(true); setMenuOpen(false) }}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
                 >
-                  <Sparkles size={16} /> Mes réponses d'accueil
+                  <Sparkles size={16} /> {t('channels.onboarding')}
                 </button>
               )}
               {isOwnerOrAdmin && (
@@ -1221,7 +1225,7 @@ export default function ChannelSidebar() {
                     onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false); closeSidebar() }}
                     className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
                   >
-                    <Shield size={16} /> Panel Admin
+                    <Shield size={16} /> {t('channels.admin')}
                   </button>
                 </>
               )}
@@ -1235,8 +1239,8 @@ export default function ChannelSidebar() {
             <input
               value={chFilter}
               onChange={e => setChFilter(e.target.value)}
-              placeholder="Filtrer les canaux…"
-              aria-label="Filtrer les canaux"
+              placeholder={t('channels.filter')}
+              aria-label={t('channels.filterLabel')}
               enterKeyHint="search"
               autoCapitalize="none"
               className="w-full pl-2.5 pr-8 py-1.5 bg-fc-input rounded text-sm text-white placeholder:text-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -1244,7 +1248,7 @@ export default function ChannelSidebar() {
             {chFilter && (
               <button
                 onClick={() => setChFilter('')}
-                aria-label="Effacer le filtre"
+                aria-label={t('common.clearFilter')}
                 className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-fc-muted hover:text-white transition"
               >
                 <X size={13} aria-hidden />
@@ -1272,10 +1276,10 @@ export default function ChannelSidebar() {
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
-                    ...(canCreate ? [{ label: 'Créer un canal', onClick: () => setShowCreateChannel(true) }] : []),
+                    ...(canCreate ? [{ label: t('channels.create'), onClick: () => setShowCreateChannel(true) }] : []),
                     ...(categories.some((c: any) => c.id === key && canDeleteChannel(c.created_by)) ? [
                       { separator: true as const },
-                      { label: 'Supprimer la catégorie', danger: true, onClick: () => removeWithBackup('category', key, label) },
+                      { label: t('channels.deleteCategory'), danger: true, onClick: () => removeWithBackup('category', key, label) },
                     ] : []),
                   ])}
                   onDragOver={canEdit && draggedChannelId ? e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
@@ -1297,8 +1301,8 @@ export default function ChannelSidebar() {
                   {canCreate && <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
                     className="text-fc-muted opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
-                    title={`Créer un canal dans ${label}`}
-                    aria-label={`Créer un canal dans ${label}`}
+                    title={t('channels.createIn', { name: label })}
+                    aria-label={t('channels.createIn', { name: label })}
                   >
                     <Plus size={14} />
                   </button>}
@@ -1316,14 +1320,14 @@ export default function ChannelSidebar() {
 
           {channels.length === 0 && (
             <div className="text-center text-fc-muted text-xs py-4">
-              Aucun canal — crée-en un !
+              {t('channels.empty')}
             </div>
           )}
 
           {/* Aucun canal ne correspond au filtre */}
           {chFilter.trim() && channels.length > 0 &&
             !channels.some((c: any) => (c.name ?? '').toLowerCase().includes(chFilter.trim().toLowerCase())) && (
-            <div className="text-center text-fc-muted text-xs py-4">Aucun canal trouvé</div>
+            <div className="text-center text-fc-muted text-xs py-4">{t('channels.noMatch')}</div>
           )}
 
           {/* Canaux masqués */}
@@ -1334,7 +1338,7 @@ export default function ChannelSidebar() {
                 className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-fc-muted hover:text-white transition"
               >
                 <EyeOff size={12} />
-                {showHidden ? 'Masquer' : `Masqués (${hiddenChannels.length})`}
+                {showHidden ? t('channels.hideHidden') : t('channels.hiddenCount', { n: hiddenChannels.length })}
               </button>
               {showHidden && hiddenChannels.map((c: any) => renderChannel(c, hiddenChannels, 'opacity-50'))}
             </div>
@@ -1352,7 +1356,7 @@ export default function ChannelSidebar() {
                   className={`text-fc-muted transition-transform ${!collapsed['__archived__'] ? 'rotate-90' : ''}`}
                 />
                 <span className="text-[10px] font-semibold text-fc-muted/60 uppercase tracking-wide">
-                  Archivés ({archivedChannels.length})
+                  {t('channels.archivedCount', { n: archivedChannels.length })}
                 </span>
               </div>
               {!collapsed['__archived__'] && archivedChannels.map((ch: any) => (
@@ -1360,10 +1364,10 @@ export default function ChannelSidebar() {
                   key={ch.id}
                   className="flex items-center gap-1.5 px-2 py-1 rounded text-fc-muted/40 hover:bg-fc-hover/20 group transition"
                   onContextMenu={e => ctxMenu.open(e, [
-                    { label: 'Restaurer le canal', onClick: () => archiveChannel.mutate(ch.id) },
+                    { label: t('channels.restoreChannel'), onClick: () => archiveChannel.mutate(ch.id) },
                     ...(canDeleteChannel(ch.created_by) ? [
                       { separator: true as const },
-                      { label: 'Supprimer définitivement', danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
+                      { label: t('channels.deleteForever'), danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
                     ] : []),
                   ])}
                 >
@@ -1372,8 +1376,8 @@ export default function ChannelSidebar() {
                   <button
                     onClick={() => archiveChannel.mutate(ch.id)}
                     className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded text-fc-muted hover:text-white transition"
-                    title="Restaurer le canal"
-                    aria-label={`Restaurer le canal ${ch.name}`}
+                    title={t('channels.restoreChannel')}
+                    aria-label={t('channels.restoreNamed', { name: ch.name })}
                   >
                     <X size={10} />
                   </button>

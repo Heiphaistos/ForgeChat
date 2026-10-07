@@ -12,6 +12,7 @@ import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
 import { useMobile } from '../../contexts/MobileContext'
+import { useT } from '../../i18n'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ const BUILTIN_TEMPLATES = [
 // ─── ServerSidebar ──────────────────────────────────────────
 
 export default function ServerSidebar() {
+  const t = useT()
   const { serverId } = useParams()
   const nav = useNavigate()
   const { pathname } = useLocation()
@@ -196,9 +198,9 @@ export default function ServerSidebar() {
       qc.invalidateQueries({ queryKey: ['servers'] })
       nav(`/servers/${res.data.id}`)
       setShowCreate(false)
-      toast.success('Serveur créé !')
+      toast.success(t('servers.created'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   // Fermer context menu en cliquant ailleurs
@@ -475,16 +477,16 @@ export default function ServerSidebar() {
         <button
           onClick={() => { nav('/friends'); closeSidebar() }}
           aria-current={isDMs ? 'page' : undefined}
-          aria-label="Messages directs"
+          aria-label={t('servers.dms')}
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isDMs ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title="Messages directs"
+          title={t('servers.dms')}
         >
           <MessageCircle size={20} className="text-fc-text" />
         </button>
         {dmUnread > 0 && (
           <span
             role="status"
-            aria-label={`${dmUnread > 99 ? '99+' : dmUnread} message${dmUnread > 1 ? 's' : ''} direct${dmUnread > 1 ? 's' : ''} non lu${dmUnread > 1 ? 's' : ''}`}
+            aria-label={t(dmUnread > 1 ? 'servers.dmUnread.other' : 'servers.dmUnread.one', { n: dmUnread > 99 ? '99+' : dmUnread })}
             className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
           >
             <span aria-hidden>{dmUnread > 99 ? '99+' : dmUnread}</span>
@@ -498,9 +500,9 @@ export default function ServerSidebar() {
         <button
           onClick={() => { nav('/saved'); closeSidebar() }}
           aria-current={isSaved ? 'page' : undefined}
-          aria-label="Messages sauvegardés"
+          aria-label={t('servers.saved')}
           className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isSaved ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title="Messages sauvegardés"
+          title={t('servers.saved')}
         >
           <Bookmark size={20} className="text-fc-text" />
         </button>
@@ -572,7 +574,7 @@ export default function ServerSidebar() {
                     <button
                       onClick={e => { e.stopPropagation(); removeFromFolder(s.id, folderId) }}
                       className="absolute -top-1 -right-1 w-4 h-4 bg-fc-red rounded-full items-center justify-center hidden group-hover:flex"
-                      title="Retirer du dossier"
+                      title={t('servers.removeFromFolder')}
                     >
                       <X size={8} className="text-white" />
                     </button>
@@ -588,8 +590,8 @@ export default function ServerSidebar() {
       <button
         onClick={() => { window.dispatchEvent(new CustomEvent('forgechat:open-quick-switcher')); closeSidebar() }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
-        title="Recherche rapide (Ctrl+K)"
-        aria-label="Recherche rapide"
+        title={t('servers.quickSearchTitle')}
+        aria-label={t('servers.quickSearch')}
       >
         <SearchIcon size={20} />
       </button>
@@ -598,8 +600,8 @@ export default function ServerSidebar() {
       <button
         onClick={() => { nav('/explore'); closeSidebar() }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
-        title="Explorer les serveurs"
-        aria-label="Explorer les serveurs"
+        title={t('servers.explore')}
+        aria-label={t('servers.explore')}
       >
         <Compass size={20} />
       </button>
@@ -608,8 +610,8 @@ export default function ServerSidebar() {
       <button
         onClick={() => setShowCreate(true)}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-green rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-green hover:text-white"
-        title="Créer un serveur"
-        aria-label="Créer un serveur"
+        title={t('servers.create')}
+        aria-label={t('servers.create')}
       >
         <Plus size={24} />
       </button>
@@ -618,8 +620,8 @@ export default function ServerSidebar() {
       <button
         onClick={() => setShowTemplateModal(true)}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
-        title="Utiliser un template"
-        aria-label="Créer depuis un template"
+        title={t('servers.useTemplate')}
+        aria-label={t('servers.createFromTemplate')}
       >
         <LayoutTemplate size={20} />
       </button>
@@ -644,26 +646,26 @@ export default function ServerSidebar() {
                   try {
                     await api.post(`/servers/${sId}/read`)
                     await useUnread.getState().fetchAll()
-                    toast.success('Serveur marqué comme lu')
+                    toast.success(t('servers.markedRead'))
                   } catch {
-                    toast.error('Impossible de marquer comme lu')
+                    toast.error(t('servers.markReadFailed'))
                   }
                 }}
               >
-                <CheckCheck size={12} /> Marquer comme lu
+                <CheckCheck size={12} /> {t('servers.markRead')}
               </button>
             )}
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-accent hover:bg-fc-accent hover:text-white transition flex items-center gap-2"
               onClick={() => openPanel(contextMenu.serverId, 'invite')}
             >
-              <UserPlus size={12} /> Inviter des gens
+              <UserPlus size={12} /> {t('servers.invite')}
             </button>
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
               onClick={() => openPanel(contextMenu.serverId, 'create-channel')}
             >
-              <Plus size={12} /> Créer un salon
+              <Plus size={12} /> {t('servers.createChannel')}
             </button>
             <div className="my-1 border-t border-fc-hover" />
             <button
@@ -676,13 +678,13 @@ export default function ServerSidebar() {
                 setContextMenu(null)
               }}
             >
-              <Settings size={12} /> Paramètres du serveur
+              <Settings size={12} /> {t('servers.settings')}
             </button>
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
-              onClick={() => { navigator.clipboard.writeText(contextMenu.serverId); toast.success('ID copié'); setContextMenu(null) }}
+              onClick={() => { navigator.clipboard.writeText(contextMenu.serverId); toast.success(t('common.idCopied')); setContextMenu(null) }}
             >
-              <Copy size={12} /> Copier l'ID
+              <Copy size={12} /> {t('servers.copyId')}
             </button>
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
@@ -692,19 +694,19 @@ export default function ServerSidebar() {
                 setContextMenu(null)
               }}
             >
-              {isServerMuted(contextMenu.serverId) ? <BellOff size={12} /> : <Bell size={12} />} Paramètres de notification
+              {isServerMuted(contextMenu.serverId) ? <BellOff size={12} /> : <Bell size={12} />} {t('servers.notifSettings')}
             </button>
 
             {/* Dossiers */}
             <div className="my-1 border-t border-fc-hover" />
             <div className="px-3 py-1 text-xs text-fc-muted font-semibold uppercase tracking-wide">
-              Dossiers
+              {t('servers.folders')}
             </div>
             <button
               className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
               onClick={() => addToNewFolder(contextMenu.serverId)}
             >
-              <Plus size={12} /> Nouveau dossier
+              <Plus size={12} /> {t('servers.newFolder')}
             </button>
             {Object.entries(folders).map(([fid, f]) => (
               <button
@@ -713,7 +715,7 @@ export default function ServerSidebar() {
                 onClick={() => addToExistingFolder(contextMenu.serverId, fid)}
               >
                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: f.color }} />
-                Ajouter dans {f.name}
+                {t('servers.addToFolder', { name: f.name })}
               </button>
             ))}
             {getFolderOfServer(contextMenu.serverId) && (
@@ -725,7 +727,7 @@ export default function ServerSidebar() {
                   setContextMenu(null)
                 }}
               >
-                <X size={12} /> Retirer du dossier
+                <X size={12} /> {t('servers.removeFromFolder')}
               </button>
             )}
 
@@ -736,19 +738,19 @@ export default function ServerSidebar() {
                 <button
                   className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
                   onClick={async () => {
-                    if (await confirm({ message: `Quitter le serveur "${ctxServer?.name}" ?`, danger: true, confirmLabel: 'Quitter' })) {
+                    if (await confirm({ message: t('servers.leaveConfirm', { name: ctxServer?.name ?? '' }), danger: true, confirmLabel: t('servers.leave') })) {
                       try {
                         await api.post(`/servers/${contextMenu.serverId}/leave`)
                         qc.invalidateQueries({ queryKey: ['servers'] })
                         nav('/friends')
                       } catch {
-                        toast.error('Impossible de quitter le serveur')
+                        toast.error(t('servers.leaveFailed'))
                       }
                     }
                     setContextMenu(null)
                   }}
                 >
-                  <LogOut size={12} /> Quitter le serveur
+                  <LogOut size={12} /> {t('servers.leaveServer')}
                 </button>
               </>
             )}
@@ -759,7 +761,7 @@ export default function ServerSidebar() {
                   className="w-full text-left px-3 py-1.5 text-sm text-fc-red hover:bg-fc-red/10 transition flex items-center gap-2"
                   onClick={() => { setDeleteTarget({ id: ctxServer.id, name: ctxServer.name }); setContextMenu(null) }}
                 >
-                  <Trash2 size={12} /> Supprimer le serveur
+                  <Trash2 size={12} /> {t('servers.delete')}
                 </button>
               </>
             )}
