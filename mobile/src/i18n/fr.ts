@@ -10,6 +10,7 @@ import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
+import * as ai from './parts/ai'
 
 export const fr = {
   ...settings.fr,
@@ -21,6 +22,7 @@ export const fr = {
   ...e2e.fr,
   ...messaging.fr,
   ...comfort.fr,
+  ...ai.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',
@@ -396,13 +398,10 @@ export const fr = {
   'chat.save': 'Enregistrer',
   'chat.remind': 'Me le rappeler',
   'chat.editHistory': 'Historique des modifications',
-  'chat.hideTranslation': 'Masquer la traduction',
-  'chat.translate': 'Traduire en français',
   'chat.copyLink': 'Copier le lien',
   'chat.viewProfile': 'Voir le profil',
   'chat.report': 'Signaler',
   'chat.delete': 'Supprimer',
-  'chat.translateFailed': 'Traduction impossible',
   'chat.reactionsUnavailable': 'Réactions indisponibles',
   'chat.superReactTo': 'Super réaction {emoji}',
   'chat.reactWith': 'Réagir {emoji}',

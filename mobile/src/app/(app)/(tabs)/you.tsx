@@ -82,6 +82,7 @@ export default function YouScreen() {
         <Row icon="lock-closed-outline" title={t('you.privacy')} onPress={() => router.push('/settings/privacy')} chevron />
         <Row icon="phone-portrait-outline" title={t('you.sessions')} onPress={() => router.push('/settings/sessions')} chevron />
         <Row icon="notifications-outline" title={t('you.notifications')} onPress={() => router.push('/settings/notifications')} chevron />
+        <Row icon="sparkles-outline" title={t('ai.title')} onPress={() => router.push('/settings/ai')} chevron />
         <Row icon="color-palette-outline" title={t('you.appearance')} onPress={() => router.push('/settings/appearance')} chevron />
       </Section>
 

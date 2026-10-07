@@ -9,6 +9,7 @@ import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
+import * as ai from './parts/ai'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -20,6 +21,7 @@ export const en: Partial<Record<Key, string>> = {
   ...e2e.en,
   ...messaging.en,
   ...comfort.en,
+  ...ai.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
@@ -395,13 +397,10 @@ export const en: Partial<Record<Key, string>> = {
   'chat.save': 'Save',
   'chat.remind': 'Remind me',
   'chat.editHistory': 'Edit history',
-  'chat.hideTranslation': 'Hide translation',
-  'chat.translate': 'Translate to French',
   'chat.copyLink': 'Copy link',
   'chat.viewProfile': 'View profile',
   'chat.report': 'Report',
   'chat.delete': 'Delete',
-  'chat.translateFailed': 'Could not translate',
   'chat.reactionsUnavailable': 'Reactions unavailable',
   'chat.superReactTo': 'Super reaction {emoji}',
   'chat.reactWith': 'React {emoji}',

@@ -75,7 +75,6 @@ export const fr = {
   'store.api.badRefresh': 'Réponse de refresh invalide',
   'store.api.badResponse': 'Réponse serveur inattendue',
   'store.api.badCredentials': 'Email ou mot de passe incorrect.',
-  'store.api.translationUnavailable': 'Traduction indisponible',
   'store.api.pollUnreadable': 'Sondage illisible',
 
   // --- Liens externes (links.ts) ---
@@ -221,7 +220,6 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'store.api.badRefresh': 'Invalid refresh response',
   'store.api.badResponse': 'Unexpected server response',
   'store.api.badCredentials': 'Incorrect email or password.',
-  'store.api.translationUnavailable': 'Translation unavailable',
   'store.api.pollUnreadable': 'Unreadable poll',
 
   'store.links.blocked': 'Link blocked',

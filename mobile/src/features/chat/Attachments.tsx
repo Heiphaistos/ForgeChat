@@ -11,6 +11,7 @@ import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment } from '@/features/composer/formats'
 import { mediaKind } from './media'
 import { AudioAttachment, VideoAttachment } from './MediaPlayers'
+import VoiceTranscript from '@/features/ai/VoiceTranscript'
 import type { FileEntry } from '@/e2e/crypto'
 import { AUTO_DECRYPT_MAX, decryptToCache, displayAttachments, saveToDevice, type DisplayAttachment } from '@/e2e/files'
 
@@ -112,7 +113,14 @@ export function Attachments({ items: raw, files: entries, pending, onLongPress }
 
       {players.map((a) => {
         const src = decrypted.has(a.id) ? a.url : resolveMediaUrl(a.url)!
-        if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice onLongPress={onLongPress} />
+        if (isVoiceAttachment(a)) {
+          return (
+            <View key={a.id}>
+              <AudioAttachment src={src} attachment={a} voice onLongPress={onLongPress} />
+              {decrypted.has(a.id) ? <VoiceTranscript uri={src} mime={a.e2e?.m ?? a.content_type} /> : null}
+            </View>
+          )
+        }
         return mediaKind(a) === 'video' ? (
           <VideoAttachment key={a.id} src={src} label={t('panel.att.video', { name: a.filename })} />
         ) : (
