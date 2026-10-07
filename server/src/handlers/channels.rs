@@ -302,6 +302,8 @@ pub async fn delete_channel(
         .bind(server_id)
         .execute(&state.db)
         .await?;
+    // Salon chiffré : ses enveloppes de clés n'ont plus d'usage.
+    crate::handlers::e2e_conv::forget_conversation(&state.db, crate::handlers::e2e_conv::Conv::Channel(channel_id)).await;
 
     let event = serde_json::json!({ "type": "CHANNEL_DELETE", "server_id": server_id, "channel_id": channel_id });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
@@ -434,6 +436,9 @@ pub async fn get_pinned(
         serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
             "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+            "author_id": r.get::<Uuid, _>("user_id"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "author_username": r.try_get::<Option<String>, _>("webhook_display_name").ok().flatten().unwrap_or_else(|| r.get::<String, _>("username")),
             "author_avatar": r.get::<Option<String>, _>("avatar"),

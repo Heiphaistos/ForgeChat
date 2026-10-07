@@ -10,8 +10,13 @@ use crate::{error::AppError, handlers::servers::{require_member, require_member_
 
 #[derive(Deserialize)]
 pub struct CreatePollBody {
+    #[serde(default)]
     pub question: String,
+    /// Sondage chiffré : textes vides, seul leur nombre compte (l'ordre = `position`).
     pub options: Vec<String>,
+    /// Question et options chiffrées : {t: question, o: [options]}.
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
     pub multiple_choice: Option<bool>,
     pub anonymous: Option<bool>,
     pub ends_at: Option<DateTime<Utc>>,
@@ -38,6 +43,8 @@ pub struct PollResponse {
     pub created_at: DateTime<Utc>,
     pub options: Vec<PollOption>,
     pub total_votes: i64,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn create_poll(
@@ -46,14 +53,20 @@ pub async fn create_poll(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreatePollBody>,
 ) -> Result<Json<PollResponse>, AppError> {
-    if body.question.trim().is_empty() || body.question.len() > 300 {
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
+    if (!has_enc && body.question.trim().is_empty()) || body.question.len() > 300 {
         return Err(AppError::BadRequest("Question invalide".into()));
     }
-    if body.options.len() < 2 || body.options.len() > 10 {
+    if body.options.len() < 2 || body.options.len() > 10 || body.options.iter().any(|o| o.chars().count() > 100) {
         return Err(AppError::BadRequest("Entre 2 et 10 options requises".into()));
     }
 
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    let has_text = !body.question.trim().is_empty() || body.options.iter().any(|o| !o.trim().is_empty());
+    let enc = crate::handlers::e2e_channel::check_content(
+        &state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false,
+    ).await?;
+    let cmid = enc.as_ref().and(body.client_msg_id);
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -62,8 +75,8 @@ pub async fn create_poll(
 
     let poll_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO polls (id, channel_id, server_id, creator_id, question, multiple_choice, anonymous, ends_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"
+        "INSERT INTO polls (id, channel_id, server_id, creator_id, question, multiple_choice, anonymous, ends_at, enc, client_msg_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
     )
     .bind(poll_id)
     .bind(channel_id)
@@ -73,6 +86,8 @@ pub async fn create_poll(
     .bind(body.multiple_choice.unwrap_or(false))
     .bind(body.anonymous.unwrap_or(false))
     .bind(body.ends_at)
+    .bind(&enc)
+    .bind(cmid)
     .execute(&state.db)
     .await?;
 
@@ -106,9 +121,12 @@ pub async fn create_poll(
         created_at: row.get("created_at"),
         options,
         total_votes: 0,
+        enc: enc.clone(),
+        client_msg_id: cmid,
     };
 
-    // Créer un message lié pour que le sondage apparaisse dans le flux
+    // Créer un message lié pour que le sondage apparaisse dans le flux (sans texte s'il est chiffré)
+    let preview = if enc.is_some() { None } else { Some(format!("📊 {}", poll.question)) };
     let msg_id = Uuid::new_v4();
     let msg_ts: chrono::DateTime<Utc> = sqlx::query_scalar(
         "INSERT INTO messages (id, channel_id, user_id, content, type, poll_id)
@@ -118,7 +136,7 @@ pub async fn create_poll(
     .bind(msg_id)
     .bind(channel_id)
     .bind(claims.sub)
-    .bind(format!("📊 {}", poll.question))
+    .bind(&preview)
     .bind(poll_id)
     .fetch_one(&state.db)
     .await?;
@@ -134,7 +152,7 @@ pub async fn create_poll(
     let poll_msg = MessageWithAuthor {
         id: msg_id,
         channel_id,
-        content: Some(format!("📊 {}", poll.question)),
+        content: preview.clone(),
         r#type: "poll".to_string(),
         reply_to: None,
         reply_to_content: None,
@@ -155,6 +173,7 @@ pub async fn create_poll(
         reactions: vec![],
         expires_at: None,
         poll_id: Some(poll_id),
+        e2e: crate::models::message::MsgE2e::plain(preview.is_some()),
     };
 
     // Broadcaster MESSAGE_CREATE pour affichage immédiat dans le flux
@@ -176,7 +195,7 @@ pub async fn get_poll(
     require_member(&state, claims.sub, server_id).await?;
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT id, question, channel_id, creator_id, multiple_choice, anonymous, ends_at, created_at
+        "SELECT id, question, channel_id, creator_id, multiple_choice, anonymous, ends_at, created_at, enc, client_msg_id
          FROM polls WHERE id=$1 AND server_id=$2"
     )
     .bind(poll_id)
@@ -226,6 +245,8 @@ pub async fn get_poll(
         created_at: row.get("created_at"),
         options,
         total_votes,
+        enc: row.get("enc"),
+        client_msg_id: row.get("client_msg_id"),
     }))
 }
 

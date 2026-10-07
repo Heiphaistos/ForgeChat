@@ -118,6 +118,21 @@ pub async fn get_automod(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<AutoModConfig>, AppError> {
     _check_manage(claims.sub, server_id, &state).await?;
+    automod_config(&state, server_id).await
+}
+
+/// GET /servers/:server_id/automod/rules — règles lues par l'appli de chaque
+/// membre, qui les applique AVANT de chiffrer (le serveur ne lit plus le texte).
+pub async fn get_automod_rules(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<AutoModConfig>, AppError> {
+    crate::handlers::servers::require_member(&state, claims.sub, server_id).await?;
+    automod_config(&state, server_id).await
+}
+
+async fn automod_config(state: &AppState, server_id: Uuid) -> Result<Json<AutoModConfig>, AppError> {
     use sqlx::Row;
     let row = sqlx::query(
         "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps
@@ -210,6 +225,18 @@ fn contains_word(haystack: &str, needle: &str) -> bool {
         }
     }
     false
+}
+
+/// Message chiffré : seule la règle « mentions max » reste vérifiable par le
+/// serveur (mentions en métadonnées) ; les autres sont appliquées par l'appli.
+pub async fn check_automod_mentions(state: &AppState, server_id: Uuid, count: usize) -> Option<AppError> {
+    let max: i32 = sqlx::query_scalar("SELECT max_mentions FROM automod_rules WHERE server_id=$1 AND enabled")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()?;
+    (max > 0 && count > max as usize).then(|| AppError::BadRequest(format!("Trop de mentions (max {})", max)))
 }
 
 /// Vérifie un contenu de message contre les règles AutoMod du serveur.

@@ -12,6 +12,7 @@ use crate::{
     state::AppState,
 };
 
+use super::e2e_channel::check_content;
 use super::servers::require_member_and_channel;
 use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
 
@@ -27,6 +28,10 @@ pub struct Thread {
     pub archived: bool,
     pub locked: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Identifiant tiré par l'appli : lie le titre et les messages du fil (AAD).
+    pub client_id: Uuid,
+    /// Titre chiffré ({t}) ; `title` est alors vide.
+    pub title_enc: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -34,17 +39,26 @@ pub struct ThreadMessage {
     pub id: Uuid,
     pub thread_id: Uuid,
     pub user_id: Uuid,
-    pub content: String,
+    pub content: Option<String>,
     pub reply_to: Option<Uuid>,
     pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
+    pub purged: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateThreadReq {
     pub title: Option<String>,
+    #[serde(default)]
     pub first_message: String,
     pub parent_message_id: Option<Uuid>,
+    /// Fil chiffré : titre chiffré (AAD avec `client_id`) et premier message chiffré.
+    pub title_enc: Option<serde_json::Value>,
+    pub client_id: Option<Uuid>,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +69,8 @@ pub struct SendThreadMessageReq {
     /// Le client joint des fichiers juste après : le texte peut alors être vide.
     #[serde(default)]
     pub has_attachments: bool,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 /// Pagination par curseur : `before` = id du dernier élément déjà reçu.
@@ -133,6 +149,8 @@ pub async fn list_threads(
             "archived": r.get::<bool, _>("archived"),
             "locked": r.get::<bool, _>("locked"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+            "client_id": r.get::<Uuid, _>("client_id"),
+            "title_enc": r.get::<Option<serde_json::Value>, _>("title_enc"),
         })
     }).collect();
 
@@ -147,45 +165,64 @@ pub async fn create_thread(
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
-    if body.first_message.trim().is_empty() {
+    let has_text = !body.first_message.trim().is_empty();
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
+    if !has_text && !has_enc {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if body.first_message.chars().count() > 4000 {
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let first_msg = body.first_message.clone();
+    let enc = check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
+    // Fil chiffré : titre chiffré lui aussi (lié au fil par `client_id`), jamais en clair.
+    let title_enc = match (&enc, body.title_enc.as_ref().filter(|v| !v.is_null())) {
+        (Some(_), Some(t)) => check_content(&state.db, channel_id, claims.sub, false, Some(t), body.client_id, false).await?,
+        (None, None) => None,
+        _ => return Err(AppError::BadRequest("Titre et message du fil : chiffrés tous les deux ou aucun".into())),
+    };
 
-    let title = body.title
-        .filter(|t| !t.trim().is_empty())
-        .unwrap_or_else(|| first_msg.chars().take(50).collect::<String>());
+    let title = if title_enc.is_some() {
+        String::new()
+    } else {
+        body.title
+            .filter(|t| !t.trim().is_empty())
+            .unwrap_or_else(|| first_msg.chars().take(50).collect::<String>())
+    };
 
     // Jamais vérifié sur ce chemin de création de message (comme send_thread_message
     // plus bas, et comme bots.rs/webhooks.rs avant leur fix) -- un thread contournait
-    // entièrement le filtre AutoMod du serveur.
-    if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, first_msg.trim()).await {
-        return Err(err);
+    // entièrement le filtre AutoMod du serveur. Chiffré : appliqué par l'appli.
+    if enc.is_none() {
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, first_msg.trim()).await {
+            return Err(err);
+        }
     }
 
     let mut tx = state.db.begin().await?;
 
     let thread = sqlx::query_as::<_, Thread>(
-        "INSERT INTO threads (channel_id, parent_message_id, title, creator_id, last_reply_at)
-         VALUES ($1, $2, $3, $4, NOW()) RETURNING *"
+        "INSERT INTO threads (channel_id, parent_message_id, title, creator_id, last_reply_at, client_id, title_enc)
+         VALUES ($1, $2, $3, $4, NOW(), COALESCE($5, gen_random_uuid()), $6) RETURNING *"
     )
     .bind(channel_id)
     .bind(body.parent_message_id)
     .bind(&title)
     .bind(claims.sub)
+    .bind(body.client_id)
+    .bind(&title_enc)
     .fetch_one(&mut *tx)
     .await?;
 
     // Id renvoyé au client pour qu'il y rattache ses pièces jointes.
     let first_message_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO thread_messages (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING id"
+        "INSERT INTO thread_messages (thread_id, user_id, content, enc, client_msg_id) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
     .bind(thread.id)
     .bind(claims.sub)
-    .bind(first_msg.trim())
+    .bind(Some(first_msg.trim()).filter(|_| enc.is_none()))
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&mut *tx)
     .await?;
 
@@ -261,7 +298,8 @@ pub async fn get_thread_messages(
     // Page la plus récente (ou antérieure au curseur), renvoyée en ordre chronologique.
     let mut rows = sqlx::query(
         "SELECT tm.*, COALESCE(tm.webhook_display_name, u.username) AS username, NULLIF(COALESCE(tm.webhook_avatar_url, u.avatar), '') AS avatar, u.discriminator,
-                rm.content AS reply_to_content, COALESCE(rm.webhook_display_name, ru.username) AS reply_to_username
+                rm.content AS reply_to_content, COALESCE(rm.webhook_display_name, ru.username) AS reply_to_username,
+                rm.enc AS reply_to_enc, rm.client_msg_id AS reply_to_client_msg_id, rm.user_id AS reply_to_author_id
          FROM thread_messages tm
          JOIN users u ON u.id = tm.user_id
          LEFT JOIN thread_messages rm ON rm.id = tm.reply_to AND rm.thread_id = tm.thread_id
@@ -312,10 +350,17 @@ pub async fn get_thread_messages(
             "id": id,
             "thread_id": r.get::<Uuid, _>("thread_id"),
             "user_id": r.get::<Uuid, _>("user_id"),
-            "content": r.get::<String, _>("content"),
+            "content": r.get::<Option<String>, _>("content"),
+            "enc": r.get::<Option<serde_json::Value>, _>("enc"),
+            "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+            "purged": r.get::<bool, _>("purged"),
+            "unencrypted": r.get::<Option<serde_json::Value>, _>("enc").is_none() && r.get::<Option<String>, _>("content").is_some(),
             "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
             "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
             "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
+            "reply_to_enc": r.get::<Option<serde_json::Value>, _>("reply_to_enc"),
+            "reply_to_client_msg_id": r.get::<Option<Uuid>, _>("reply_to_client_msg_id"),
+            "reply_to_author_id": r.get::<Option<Uuid>, _>("reply_to_author_id"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "author": {
@@ -396,12 +441,16 @@ pub async fn send_thread_message(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
 
     let content_trimmed = body.content.trim().to_string();
-    if content_trimmed.is_empty() && !body.has_attachments {
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
+    if content_trimmed.is_empty() && !body.has_attachments && !has_enc {
         return Err(AppError::BadRequest("Message vide".into()));
     }
     if content_trimmed.chars().count() > 4000 {
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
+    let enc = check_content(
+        &state.db, channel_id, claims.sub, !content_trimmed.is_empty(), body.enc.as_ref(), body.client_msg_id, false,
+    ).await?;
 
     // Vérifier le timeout (sourdine)
     let is_timed_out: bool = sqlx::query_scalar(
@@ -431,7 +480,8 @@ pub async fn send_thread_message(
     let reply_ctx = match body.reply_to {
         None => None,
         Some(rid) => Some(sqlx::query(
-            "SELECT tm.content, COALESCE(tm.webhook_display_name, u.username) AS username
+            "SELECT tm.content, COALESCE(tm.webhook_display_name, u.username) AS username,
+                    tm.enc, tm.client_msg_id, tm.user_id
              FROM thread_messages tm JOIN users u ON u.id = tm.user_id
              WHERE tm.id = $1 AND tm.thread_id = $2"
         )
@@ -449,12 +499,16 @@ pub async fn send_thread_message(
     }
 
     let msg = sqlx::query_as::<_, ThreadMessage>(
-        "INSERT INTO thread_messages (thread_id, user_id, content, reply_to) VALUES ($1, $2, $3, $4) RETURNING *"
+        "INSERT INTO thread_messages (thread_id, user_id, content, reply_to, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
     )
     .bind(thread_id)
     .bind(claims.sub)
-    .bind(&content_trimmed)
+    // Pièce jointe seule : texte vide comme avant ; chiffré : aucun texte.
+    .bind(Some(&content_trimmed).filter(|_| enc.is_none()))
     .bind(body.reply_to)
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&state.db)
     .await?;
 
@@ -496,8 +550,12 @@ pub async fn send_thread_message(
 
     let mut msg_json = serde_json::to_value(&msg).map_err(|e| AppError::Internal(e.into()))?;
     msg_json["author_username"] = serde_json::json!(author_username);
-    msg_json["reply_to_content"] = serde_json::json!(reply_ctx.as_ref().map(|r| r.get::<String, _>("content")));
+    msg_json["reply_to_content"] = serde_json::json!(reply_ctx.as_ref().and_then(|r| r.get::<Option<String>, _>("content")));
     msg_json["reply_to_username"] = serde_json::json!(reply_ctx.as_ref().map(|r| r.get::<String, _>("username")));
+    msg_json["reply_to_enc"] = serde_json::json!(reply_ctx.as_ref().and_then(|r| r.get::<Option<serde_json::Value>, _>("enc")));
+    msg_json["reply_to_client_msg_id"] = serde_json::json!(reply_ctx.as_ref().and_then(|r| r.get::<Option<Uuid>, _>("client_msg_id")));
+    msg_json["reply_to_author_id"] = serde_json::json!(reply_ctx.as_ref().map(|r| r.get::<Uuid, _>("user_id")));
+    msg_json["unencrypted"] = serde_json::json!(msg.enc.is_none() && msg.content.as_deref().is_some_and(|c| !c.is_empty()));
 
     // Broadcast en temps réel aux membres qui voient le salon
     let event = serde_json::json!({
@@ -582,7 +640,10 @@ pub async fn archive_thread(
 
 #[derive(Deserialize)]
 pub struct EditThreadMessageBody {
+    #[serde(default)]
     pub content: String,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn edit_thread_message(
@@ -594,20 +655,34 @@ pub async fn edit_thread_message(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let content = body.content.trim().to_string();
-    if content.is_empty() || content.chars().count() > 4000 {
+    if content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT client_msg_id FROM thread_messages WHERE id=$1")
+        .bind(msg_id)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten();
+    let cmid = existing.or(body.client_msg_id);
+    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
+    if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
 
+    // Jamais de clair par-dessus un message chiffré ; une édition chiffrée efface le clair.
     let rows = sqlx::query(
-        "UPDATE thread_messages SET content=$1, edited_at=NOW()
+        "UPDATE thread_messages SET content=$1, enc=$6, client_msg_id=COALESCE($7, client_msg_id), edited_at=NOW()
          WHERE id=$2 AND thread_id=$3 AND user_id=$4
-           AND thread_id IN (SELECT id FROM threads WHERE channel_id=$5)"
+           AND thread_id IN (SELECT id FROM threads WHERE channel_id=$5)
+           AND ($6::jsonb IS NOT NULL OR enc IS NULL)"
     )
-    .bind(&content)
+    .bind(Some(&content).filter(|_| enc.is_none()))
     .bind(msg_id)
     .bind(thread_id)
     .bind(claims.sub)
     .bind(channel_id)
+    .bind(&enc)
+    .bind(enc.as_ref().and(cmid))
     .execute(&state.db)
     .await?;
 
@@ -620,7 +695,9 @@ pub async fn edit_thread_message(
         "thread_id": thread_id,
         "channel_id": channel_id,
         "message_id": msg_id,
-        "content": content,
+        "content": if enc.is_some() { None } else { Some(content) },
+        "enc": enc,
+        "client_msg_id": enc.as_ref().and(cmid),
     }).to_string()).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))

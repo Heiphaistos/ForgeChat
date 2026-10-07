@@ -533,6 +533,8 @@ pub async fn transfer_ownership(
     sqlx::query("UPDATE server_members SET is_owner = (user_id = $1) WHERE server_id=$2 AND user_id IN ($1, $3)")
         .bind(target).bind(server_id).bind(claims.sub)
         .execute(&mut *tx).await?;
+    // Clé de récupération du serveur : ré-enveloppée par l'appli de l'ancien propriétaire pour le nouveau.
+    crate::handlers::e2e_server_key::transfer(&mut tx, server_id, target, body.get("server_key_owner_wrapped")).await?;
     tx.commit().await?;
 
     log_event(&state, server_id, "OWNER_TRANSFER", Some(claims.sub), None,

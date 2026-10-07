@@ -14,7 +14,10 @@ pub struct MentionItem {
     pub author_id: String,
     pub author_username: String,
     pub author_avatar: Option<String>,
-    pub content: String,
+    /// NULL pour un message chiffré : l'appli déchiffre `enc` (clé du salon).
+    pub content: Option<String>,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<String>,
     pub created_at: String,
 }
 
@@ -290,6 +293,8 @@ pub async fn get_user_mentions(
             COALESCE(m.webhook_display_name, u.username) as author_username,
             NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') as author_avatar,
             m.content,
+            m.enc,
+            m.client_msg_id,
             m.created_at
          FROM message_mentions mm
          JOIN messages m ON m.id = mm.message_id
@@ -324,6 +329,8 @@ pub async fn get_user_mentions(
             author_username: r.get("author_username"),
             author_avatar: r.get("author_avatar"),
             content: r.get("content"),
+            enc: r.get("enc"),
+            client_msg_id: r.get::<Option<Uuid>, _>("client_msg_id").map(|u| u.to_string()),
             created_at: created_at.to_rfc3339(),
         }
     }).collect();

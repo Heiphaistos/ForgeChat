@@ -12,6 +12,7 @@ use crate::{
     state::AppState,
 };
 
+use super::e2e_channel::check_content;
 use super::servers::require_member_and_channel;
 use super::threads::CursorQuery;
 use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
@@ -31,6 +32,11 @@ pub struct ForumPost {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Média d'une publication de salon média (`/uploads/<uuid>.<ext>`).
     pub media_url: Option<String>,
+    /// Titre et contenu chiffrés ensemble ({t, title}) ; `title` vide, `content` NULL.
+    pub enc: Option<serde_json::Value>,
+    /// Tiré par l'appli : lie la publication et ses réponses (AAD).
+    pub client_msg_id: Uuid,
+    pub purged: bool,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -38,15 +44,42 @@ pub struct ForumReply {
     pub id: Uuid,
     pub post_id: Uuid,
     pub user_id: Uuid,
-    pub content: String,
+    pub content: Option<String>,
     pub edited_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
+    pub purged: bool,
+}
+
+/// Champs de chiffrement d'une ligne `forum_posts` / `forum_replies` pour la réponse JSON.
+fn e2e_fields(r: &sqlx::postgres::PgRow) -> serde_json::Value {
+    use sqlx::Row;
+    let enc: Option<serde_json::Value> = r.get("enc");
+    let content: Option<String> = r.get("content");
+    serde_json::json!({
+        "unencrypted": enc.is_none() && content.is_some(),
+        "enc": enc,
+        "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+        "purged": r.get::<bool, _>("purged"),
+    })
+}
+
+fn merge(mut a: serde_json::Value, b: serde_json::Value) -> serde_json::Value {
+    if let (Some(a), serde_json::Value::Object(b)) = (a.as_object_mut(), b) {
+        a.extend(b);
+    }
+    a
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePostReq {
+    #[serde(default)]
     pub title: String,
     pub content: Option<String>,
+    /// Publication chiffrée : {t: contenu, title: titre}.
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
     pub tags: Option<Vec<String>>,
     /// URL rendue par POST .../forum-uploads ; obligatoire dans un salon média.
     pub media_url: Option<String>,
@@ -66,6 +99,8 @@ pub struct CreateReplyReq {
     /// Le client joint des fichiers juste après : le texte peut alors être vide.
     #[serde(default)]
     pub has_attachments: bool,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn list_posts(
@@ -109,7 +144,7 @@ pub async fn list_posts(
 
     let result: Vec<serde_json::Value> = rows.iter().map(|r| {
         use sqlx::Row;
-        serde_json::json!({
+        let post = serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
             "channel_id": r.get::<Uuid, _>("channel_id"),
             "title": r.get::<String, _>("title"),
@@ -124,7 +159,8 @@ pub async fn list_posts(
             "last_reply_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_reply_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "media_url": r.get::<Option<String>, _>("media_url"),
-        })
+        });
+        merge(post, e2e_fields(r))
     }).collect();
 
     Ok(Json(result))
@@ -143,8 +179,9 @@ pub async fn create_post(
     ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
     if is_timed_out { return Err(AppError::Forbidden); }
 
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
     let title = body.title.trim().to_string();
-    if title.is_empty() || title.chars().count() > 200 {
+    if (!has_enc && title.is_empty()) || title.chars().count() > 200 {
         return Err(AppError::BadRequest("Titre requis (max 200 chars)".into()));
     }
 
@@ -152,6 +189,8 @@ pub async fn create_post(
     let content_str: Option<String> = content_raw.map(|s| {
         if s.chars().count() > 8000 { s.chars().take(8000).collect() } else { s.to_string() }
     });
+    let has_text = !title.is_empty() || content_str.is_some();
+    let enc = check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
 
     let tags = body.tags.unwrap_or_default();
 
@@ -197,8 +236,8 @@ pub async fn create_post(
     }
 
     let post = sqlx::query_as::<_, ForumPost>(
-        "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags, media_url)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *"
+        "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags, media_url, enc, client_msg_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, gen_random_uuid())) RETURNING *"
     )
     .bind(channel_id)
     .bind(&title)
@@ -206,6 +245,8 @@ pub async fn create_post(
     .bind(claims.sub)
     .bind(&tags)
     .bind(media_url)
+    .bind(&enc)
+    .bind(body.client_msg_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -296,13 +337,14 @@ pub async fn get_post(
         "created_at": post_row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "media_url": post_row.get::<Option<String>, _>("media_url"),
     });
+    let post = merge(post, e2e_fields(&post_row));
 
     let replies: Vec<serde_json::Value> = reply_rows.iter().map(|r| {
-        serde_json::json!({
+        merge(serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
             "post_id": r.get::<Uuid, _>("post_id"),
             "user_id": r.get::<Uuid, _>("user_id"),
-            "content": r.get::<String, _>("content"),
+            "content": r.get::<Option<String>, _>("content"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
             "author": {
@@ -313,7 +355,7 @@ pub async fn get_post(
             },
             "reactions": react_map.get(&r.get::<Uuid, _>("id")).cloned().unwrap_or_default(),
             "attachments": att_map.remove(&r.get::<Uuid, _>("id")).unwrap_or_default(),
-        })
+        }), e2e_fields(r))
     }).collect();
 
     Ok(Json(serde_json::json!({ "post": post, "replies": replies })))
@@ -388,13 +430,15 @@ pub async fn reply_to_post(
     if is_timed_out { return Err(AppError::Forbidden); }
 
     let content_raw = body.content.trim().to_string();
-    if content_raw.is_empty() && !body.has_attachments {
+    let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
+    if content_raw.is_empty() && !body.has_attachments && !has_enc {
         return Err(AppError::BadRequest("Réponse vide".into()));
     }
     if content_raw.chars().count() > 4000 {
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let content = content_raw;
+    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), body.client_msg_id, false).await?;
 
     // Jamais vérifié sur ce chemin -- une réponse de forum contournait entièrement le
     // filtre AutoMod du serveur. Fait avant d'ouvrir la transaction ci-dessous pour ne
@@ -426,11 +470,13 @@ pub async fn reply_to_post(
     }
 
     let reply = sqlx::query_as::<_, ForumReply>(
-        "INSERT INTO forum_replies (post_id, user_id, content) VALUES ($1, $2, $3) RETURNING *"
+        "INSERT INTO forum_replies (post_id, user_id, content, enc, client_msg_id) VALUES ($1, $2, $3, $4, $5) RETURNING *"
     )
     .bind(post_id)
     .bind(claims.sub)
-    .bind(&content)
+    .bind(Some(&content).filter(|_| enc.is_none()))
+    .bind(&enc)
+    .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&mut *tx)
     .await?;
 
@@ -472,6 +518,16 @@ pub async fn update_post(
     let content = body["content"].as_str();
     let pinned = body["pinned"].as_bool();
     let locked = body["locked"].as_bool();
+    // Publication chiffrée : nouveau {t, title} chiffré, même `client_msg_id` (lié à l'AAD).
+    let cmid: Option<Uuid> = sqlx::query_scalar("SELECT client_msg_id FROM forum_posts WHERE id=$1")
+        .bind(post_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let enc = if content.is_some() || body.get("enc").is_some_and(|v| !v.is_null()) {
+        check_content(&state.db, channel_id, claims.sub, content.is_some_and(|c| !c.trim().is_empty()), body.get("enc"), cmid, false).await?
+    } else {
+        None
+    };
 
     // pin/lock réservé aux modérateurs
     if pinned.is_some() || locked.is_some() {
@@ -480,24 +536,31 @@ pub async fn update_post(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
     // content : réservé au créateur indépendamment des autres champs
-    if content.is_some() && creator_id != claims.sub {
+    if (content.is_some() || enc.is_some()) && creator_id != claims.sub {
         return Err(AppError::Forbidden);
     }
 
-    sqlx::query(
+    // Chiffré : le titre et le contenu en clair disparaissent ; jamais de clair sur du chiffré.
+    let done = sqlx::query(
         "UPDATE forum_posts SET
             pinned = COALESCE($2, pinned),
             locked = COALESCE($3, locked),
-            content = COALESCE($4, content)
-         WHERE id = $1 AND channel_id = $5"
+            content = CASE WHEN $6::jsonb IS NOT NULL THEN NULL ELSE COALESCE($4, content) END,
+            title = CASE WHEN $6::jsonb IS NOT NULL THEN '' ELSE title END,
+            enc = COALESCE($6, enc)
+         WHERE id = $1 AND channel_id = $5 AND ($4::text IS NULL OR enc IS NULL)"
     )
     .bind(post_id)
     .bind(pinned)
     .bind(locked)
-    .bind(content)
+    .bind(content.filter(|_| enc.is_none()))
     .bind(channel_id)
+    .bind(&enc)
     .execute(&state.db)
     .await?;
+    if done.rows_affected() == 0 {
+        return Err(AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()));
+    }
 
     let event = serde_json::json!({ "type": "FORUM_POST_UPDATE", "channel_id": channel_id, "post_id": post_id });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
@@ -557,7 +620,10 @@ pub async fn delete_post(
 
 #[derive(Debug, Deserialize)]
 pub struct EditReplyReq {
+    #[serde(default)]
     pub content: String,
+    pub enc: Option<serde_json::Value>,
+    pub client_msg_id: Option<Uuid>,
 }
 
 pub async fn edit_reply(
@@ -569,22 +635,35 @@ pub async fn edit_reply(
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
 
     let content = body.content.trim().to_string();
-    if content.is_empty() || content.chars().count() > 4000 {
+    if content.chars().count() > 4000 {
+        return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
+    }
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT client_msg_id FROM forum_replies WHERE id=$1")
+        .bind(reply_id)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten();
+    let cmid = existing.or(body.client_msg_id);
+    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
+    if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
 
     // Vérifier que la réponse appartient à ce post et à l'utilisateur
     let rows = sqlx::query(
-        "UPDATE forum_replies SET content=$1, edited_at=NOW()
+        "UPDATE forum_replies SET content=$1, enc=$6, client_msg_id=COALESCE($7, client_msg_id), edited_at=NOW()
          WHERE id=$2 AND post_id=$3 AND user_id=$4
            AND post_id IN (SELECT id FROM forum_posts WHERE channel_id=$5)
+           AND ($6::jsonb IS NOT NULL OR enc IS NULL)
          RETURNING id"
     )
-    .bind(&content)
+    .bind(Some(&content).filter(|_| enc.is_none()))
     .bind(reply_id)
     .bind(post_id)
     .bind(claims.sub)
     .bind(channel_id)
+    .bind(&enc)
+    .bind(enc.as_ref().and(cmid))
     .execute(&state.db)
     .await?;
 
@@ -597,7 +676,9 @@ pub async fn edit_reply(
         "channel_id": channel_id,
         "post_id": post_id,
         "reply_id": reply_id,
-        "content": content,
+        "content": if enc.is_some() { None } else { Some(content) },
+        "enc": enc,
+        "client_msg_id": enc.as_ref().and(cmid),
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
