@@ -8,6 +8,7 @@ import { Avatar } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { formatShort, unreadLabel } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useUnread } from '@/stores/unread'
@@ -24,6 +25,7 @@ function open(c: ConversationSummary) {
 
 /** Messages privés (DM + groupes) : partie droite de l'accueil quand « Messages privés » est sélectionné. */
 export function ConversationList() {
+  const t = useT()
   const q = useQuery({ queryKey: qk.conversations, queryFn: dmsApi.list })
   const counts = useUnread((s) => s.counts)
   const [search, setSearch] = useState('')
@@ -38,7 +40,7 @@ export function ConversationList() {
     if (previous) queryClient.setQueryData(qk.conversations, applyConversationSettings(previous, c.id, patch))
     dmsApi.setSettings(c.id, patch).catch((e) => {
       if (previous) queryClient.setQueryData(qk.conversations, previous)
-      Alert.alert('Action impossible', errorMessage(e))
+      Alert.alert(t('common.actionFailed'), errorMessage(e))
     })
   }
 
@@ -46,27 +48,27 @@ export function ConversationList() {
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
       <View style={styles.header}>
         <Text style={styles.title} accessibilityRole="header">
-          Messages privés
+          {t('dms.title')}
         </Text>
-        <IconButton icon="search" label="Rechercher" onPress={() => router.push('/search')} />
-        <IconButton icon="people-outline" label="Nouveau groupe" onPress={() => router.push('/group/create')} />
+        <IconButton icon="search" label={t('dms.search')} onPress={() => router.push('/search')} />
+        <IconButton icon="people-outline" label={t('dms.newGroup')} onPress={() => router.push('/group/create')} />
       </View>
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Rechercher une conversation"
+          placeholder={t('dms.searchPlaceholder')}
           placeholderTextColor={colors.textFaint}
           selectionColor={colors.primary}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          accessibilityLabel="Rechercher une conversation"
+          accessibilityLabel={t('dms.searchPlaceholder')}
           style={styles.searchInput}
         />
         {search ? (
-          <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel="Effacer la recherche" hitSlop={8}>
+          <Pressable onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel={t('dms.clearSearch')} hitSlop={8}>
             <Ionicons name="close-circle" size={16} color={colors.textFaint} />
           </Pressable>
         ) : null}
@@ -83,9 +85,9 @@ export function ConversationList() {
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
           ListEmptyComponent={
             search.trim() ? (
-              <EmptyState icon="search-outline" title="Aucun résultat" />
+              <EmptyState icon="search-outline" title={t('dms.noResults')} />
             ) : (
-              <EmptyState icon="chatbubbles-outline" title="Aucune conversation" subtitle="Ouvre un message privé depuis l'onglet Amis." />
+              <EmptyState icon="chatbubbles-outline" title={t('dms.empty')} subtitle={t('dms.emptyHint')} />
             )
           }
           renderItem={({ item }) => {
@@ -96,15 +98,15 @@ export function ConversationList() {
                 ? `${item.last_message_author} : ${item.last_message_content}`
                 : item.last_message_content
               : item.is_group
-                ? `${item.member_count} membres`
-                : 'Démarre la conversation'
+                ? t('dms.members', { n: item.member_count })
+                : t('dms.start')
             return (
               <Pressable
                 onPress={() => open(item)}
                 onLongPress={() => setSelected(item)}
                 style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
                 accessibilityRole="button"
-                accessibilityLabel={`Conversation avec ${name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
+                accessibilityLabel={`${t('dms.with', { name })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
               >
                 {item.is_group ? (
                   <View style={styles.groupIcon}>
@@ -139,7 +141,7 @@ export function ConversationList() {
                 accessibilityRole="button"
               >
                 <Ionicons name={showArchived ? 'arrow-back' : 'archive-outline'} size={18} color={colors.textMuted} />
-                <Text style={styles.archivedText}>{showArchived ? 'Retour aux conversations' : `Conversations archivées (${archivedCount})`}</Text>
+                <Text style={styles.archivedText}>{showArchived ? t('dms.backToList') : t('dms.archived', { n: archivedCount })}</Text>
               </Pressable>
             ) : null
           }
@@ -154,12 +156,12 @@ export function ConversationList() {
           selected
             ? [
                 {
-                  label: selected.is_muted ? 'Réactiver les notifications' : 'Mettre en sourdine',
+                  label: t(selected.is_muted ? 'dms.unmute' : 'dms.mute'),
                   icon: selected.is_muted ? 'notifications-outline' : 'notifications-off-outline',
                   onPress: () => updateSettings(selected, { muted: !selected.is_muted }),
                 },
                 {
-                  label: selected.is_archived ? 'Désarchiver' : 'Archiver',
+                  label: t(selected.is_archived ? 'dms.unarchive' : 'dms.archive'),
                   icon: 'archive-outline',
                   onPress: () => updateSettings(selected, { archived: !selected.is_archived }),
                 },

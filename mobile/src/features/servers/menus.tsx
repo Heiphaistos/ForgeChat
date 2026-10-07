@@ -8,6 +8,7 @@ import { messagesApi } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { T } from '@/components/ui'
+import { t } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
@@ -31,8 +32,8 @@ export function useServerPerms(serverId: string, enabled = true) {
 
 const copy = (text: string, what: string) =>
   void Clipboard.setStringAsync(text).then(
-    () => Alert.alert(`${what} copié`),
-    () => Alert.alert('Copie impossible'),
+    () => Alert.alert(t('menu.copied', { what })),
+    () => Alert.alert(t('menu.copyFailed')),
   )
 
 function clearServerUnread(serverId: string) {
@@ -44,7 +45,7 @@ const markServerRead = (serverId: string) =>
   serversApi
     .markRead(serverId)
     .then(() => clearServerUnread(serverId))
-    .catch((e) => Alert.alert('Erreur', errorMessage(e)))
+    .catch((e) => Alert.alert(t('common.error'), errorMessage(e)))
 
 async function leaveServer(server: Server) {
   try {
@@ -54,31 +55,31 @@ async function leaveServer(server: Server) {
     clearServerUnread(server.id)
     await queryClient.invalidateQueries({ queryKey: qk.servers })
   } catch (e) {
-    Alert.alert('Impossible de quitter', errorMessage(e))
+    Alert.alert(t('menu.leaveFailed'), errorMessage(e))
   }
 }
 
 function confirmLeave(server: Server) {
-  Alert.alert(`Quitter ${server.name} ?`, 'Tu ne pourras revenir qu’avec une nouvelle invitation.', [
-    { text: 'Annuler', style: 'cancel' },
-    { text: 'Quitter', style: 'destructive', onPress: () => void leaveServer(server) },
+  Alert.alert(t('menu.leaveConfirm', { name: server.name }), t('menu.leaveBody'), [
+    { text: t('common.cancel'), style: 'cancel' },
+    { text: t('menu.leave'), style: 'destructive', onPress: () => void leaveServer(server) },
   ])
 }
 
 /** Boost cosmétique : un par membre et par serveur (le serveur ignore un second boost). */
 function confirmBoost(s: Server) {
-  Alert.alert(`Booster ${s.name} ?`, 'Un boost par membre, gratuit, pour faire monter le niveau du serveur.', [
-    { text: 'Annuler', style: 'cancel' },
+  Alert.alert(t('menu.boostConfirm', { name: s.name }), t('menu.boostBody'), [
+    { text: t('common.cancel'), style: 'cancel' },
     {
-      text: 'Booster',
+      text: t('menu.boost'),
       onPress: () =>
         void serversApi
           .boost(s.id)
           .then((r) => {
-            Alert.alert('Merci !', `${r.boost_count} boost${r.boost_count > 1 ? 's' : ''} · niveau ${r.boost_level}`)
+            Alert.alert(t('menu.thanks'), t(r.boost_count > 1 ? 'menu.boostResultMany' : 'menu.boostResult', { n: r.boost_count, level: r.boost_level }))
             return Promise.all([qk.servers, qk.server(s.id)].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
           })
-          .catch((e) => Alert.alert('Boost impossible', errorMessage(e))),
+          .catch((e) => Alert.alert(t('menu.boostFailed'), errorMessage(e))),
     },
   ])
 }
@@ -86,38 +87,38 @@ function confirmBoost(s: Server) {
 export function setChannelHidden(serverId: string, channelId: string, hidden: boolean) {
   return (hidden ? channelsApi.hide(channelId) : channelsApi.unhide(channelId))
     .then(() => queryClient.invalidateQueries({ queryKey: qk.channels(serverId) }))
-    .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+    .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 }
 
 function serverAction(key: ServerMenuKey, s: Server): SheetAction {
   const go = (p: string) => () => router.push(p as never)
   switch (key) {
     case 'read':
-      return { label: 'Marquer comme lu', icon: 'checkmark-done', onPress: () => void markServerRead(s.id) }
+      return { label: t('menu.markRead'), icon: 'checkmark-done', onPress: () => void markServerRead(s.id) }
     case 'invite':
-      return { label: 'Inviter des gens', icon: 'person-add-outline', onPress: go(`/server/${s.id}/invite`) }
+      return { label: t('menu.invite'), icon: 'person-add-outline', onPress: go(`/server/${s.id}/invite`) }
     case 'notifications':
-      return { label: 'Notifications du serveur', icon: 'notifications-outline', onPress: go(`/server/${s.id}/notifications`) }
+      return { label: t('menu.serverNotifications'), icon: 'notifications-outline', onPress: go(`/server/${s.id}/notifications`) }
     case 'events':
-      return { label: 'Événements', icon: 'calendar-outline', onPress: go(`/server/${s.id}/events`) }
+      return { label: t('menu.events'), icon: 'calendar-outline', onPress: go(`/server/${s.id}/events`) }
     case 'boost':
-      return { label: 'Booster le serveur', icon: 'flash-outline', onPress: () => confirmBoost(s) }
+      return { label: t('menu.boostServer'), icon: 'flash-outline', onPress: () => confirmBoost(s) }
     case 'createChannel':
-      return { label: 'Créer un salon', icon: 'add-circle-outline', onPress: go(`/server/${s.id}/channel-create`) }
+      return { label: t('menu.createChannel'), icon: 'add-circle-outline', onPress: go(`/server/${s.id}/channel-create`) }
     case 'createCategory':
-      return { label: 'Créer une catégorie', icon: 'folder-open-outline', onPress: go(`/server/${s.id}/channel-create?type=category`) }
+      return { label: t('menu.createCategory'), icon: 'folder-open-outline', onPress: go(`/server/${s.id}/channel-create?type=category`) }
     case 'settings':
-      return { label: 'Paramètres du serveur', icon: 'settings-outline', onPress: go(`/server/${s.id}/settings`) }
+      return { label: t('menu.settings'), icon: 'settings-outline', onPress: go(`/server/${s.id}/settings`) }
     case 'nickname':
-      return { label: 'Mon profil sur ce serveur', icon: 'person-circle-outline', onPress: go(`/server/${s.id}/nickname`) }
+      return { label: t('menu.nickname'), icon: 'person-circle-outline', onPress: go(`/server/${s.id}/nickname`) }
     case 'onboarding':
-      return { label: 'Mes réponses d’accueil', icon: 'sparkles-outline', onPress: go(`/server/${s.id}/onboarding`) }
+      return { label: t('menu.onboarding'), icon: 'sparkles-outline', onPress: go(`/server/${s.id}/onboarding`) }
     case 'copyId':
-      return { label: "Copier l'ID du serveur", icon: 'copy-outline', onPress: () => copy(s.id, 'ID') }
+      return { label: t('menu.copyServerId'), icon: 'copy-outline', onPress: () => copy(s.id, 'ID') }
     case 'leave':
-      return { label: 'Quitter le serveur', icon: 'exit-outline', danger: true, onPress: () => confirmLeave(s) }
+      return { label: t('menu.leaveServer'), icon: 'exit-outline', danger: true, onPress: () => confirmLeave(s) }
     case 'delete':
-      return { label: 'Supprimer le serveur', icon: 'trash-outline', danger: true, onPress: go(`/server/${s.id}/delete`) }
+      return { label: t('menu.deleteServer'), icon: 'trash-outline', danger: true, onPress: go(`/server/${s.id}/delete`) }
   }
 }
 
@@ -129,7 +130,7 @@ export function ServerMenu({ server, visible, onClose }: { server: Server; visib
       visible={visible}
       onClose={onClose}
       title={server.name}
-      header={perms.loaded ? null : <T variant="muted" style={{ paddingHorizontal: spacing.lg }}>Chargement des droits…</T>}
+      header={perms.loaded ? null : <T variant="muted" style={{ paddingHorizontal: spacing.lg }}>{t('menu.loadingPerms')}</T>}
       actions={serverMenuKeys(perms).map((k) => serverAction(k, server))}
     />
   )
@@ -137,9 +138,9 @@ export function ServerMenu({ server, visible, onClose }: { server: Server; visib
 
 function confirmDelete(title: string, message: string, run: () => Promise<unknown>, serverId: string) {
   Alert.alert(title, message, [
-    { text: 'Annuler', style: 'cancel' },
+    { text: t('common.cancel'), style: 'cancel' },
     {
-      text: 'Supprimer',
+      text: t('common.delete'),
       style: 'destructive',
       onPress: () =>
         void run()
@@ -148,13 +149,13 @@ function confirmDelete(title: string, message: string, run: () => Promise<unknow
             void queryClient.invalidateQueries({ queryKey: qk.categories(serverId) })
             void queryClient.invalidateQueries({ queryKey: qk.server(serverId) })
           })
-          .catch((e) => Alert.alert('Suppression impossible', errorMessage(e))),
+          .catch((e) => Alert.alert(t('menu.deleteFailed'), errorMessage(e))),
     },
   ])
 }
 
 export function confirmDeleteChannel(serverId: string, ch: Channel, after?: () => void) {
-  confirmDelete(`Supprimer #${ch.name} ?`, 'Le salon et tous ses messages seront supprimés définitivement.', async () => {
+  confirmDelete(t('menu.deleteChannelConfirm', { name: ch.name }), t('menu.deleteChannelBody'), async () => {
     await serversApi.deleteChannel(serverId, ch.id)
     after?.()
   }, serverId)
@@ -167,30 +168,30 @@ export function ChannelMenu({ server, channel, onClose }: { server: Server; chan
   const actions: SheetAction[] = []
   if (ch) {
     actions.push({
-      label: 'Marquer comme lu',
+      label: t('menu.markRead'),
       icon: 'checkmark-done',
       onPress: () =>
         void messagesApi
           .markRead({ kind: 'channel', serverId: server.id, channelId: ch.id })
           ?.then(() => useUnread.getState().clear(ch.id))
-          .catch((e: unknown) => Alert.alert('Erreur', errorMessage(e))),
+          .catch((e: unknown) => Alert.alert(t('common.error'), errorMessage(e))),
     })
     actions.push({
-      label: 'Notifications du salon',
+      label: t('menu.channelNotifications'),
       icon: 'notifications-outline',
       onPress: () => router.push({ pathname: '/server/[serverId]/notifications', params: { serverId: server.id, channelId: ch.id, name: ch.name } }),
     })
     if (perms.canEditChannels)
       actions.push({
-        label: 'Modifier le salon',
+        label: t('menu.editChannel'),
         icon: 'create-outline',
         onPress: () => router.push({ pathname: '/server/[serverId]/settings/channel/[channelId]', params: { serverId: server.id, channelId: ch.id } }),
       })
-    actions.push({ label: 'Masquer le salon', icon: 'eye-off-outline', onPress: () => void setChannelHidden(server.id, ch.id, true) })
-    actions.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => copy(`forgechat://channel/${server.id}/${ch.id}`, 'Lien') })
-    actions.push({ label: "Copier l'ID du salon", icon: 'copy-outline', onPress: () => copy(ch.id, 'ID') })
+    actions.push({ label: t('menu.hideChannel'), icon: 'eye-off-outline', onPress: () => void setChannelHidden(server.id, ch.id, true) })
+    actions.push({ label: t('menu.copyLink'), icon: 'link-outline', onPress: () => copy(`forgechat://channel/${server.id}/${ch.id}`, t('menu.link')) })
+    actions.push({ label: t('menu.copyChannelId'), icon: 'copy-outline', onPress: () => copy(ch.id, 'ID') })
     if (perms.loaded && perms.canDeleteChannel(ch.created_by))
-      actions.push({ label: 'Supprimer le salon', icon: 'trash-outline', danger: true, onPress: () => confirmDeleteChannel(server.id, ch) })
+      actions.push({ label: t('menu.deleteChannel'), icon: 'trash-outline', danger: true, onPress: () => confirmDeleteChannel(server.id, ch) })
   }
   return <Sheet visible={!!ch} onClose={onClose} title={ch ? `# ${ch.name}` : undefined} actions={actions} />
 }
@@ -203,18 +204,18 @@ export function CategoryMenu({ server, category, onClose }: { server: Server; ca
   if (cat) {
     if (perms.canCreateChannels)
       actions.push({
-        label: 'Créer un salon ici',
+        label: t('menu.createHere'),
         icon: 'add-circle-outline',
         onPress: () => router.push({ pathname: '/server/[serverId]/channel-create', params: { serverId: server.id, categoryId: cat.id } }),
       })
-    actions.push({ label: "Copier l'ID de la catégorie", icon: 'copy-outline', onPress: () => copy(cat.id, 'ID') })
+    actions.push({ label: t('menu.copyCategoryId'), icon: 'copy-outline', onPress: () => copy(cat.id, 'ID') })
     if (perms.loaded && perms.canDeleteChannel(cat.created_by))
       actions.push({
-        label: 'Supprimer la catégorie',
+        label: t('menu.deleteCategory'),
         icon: 'trash-outline',
         danger: true,
         onPress: () =>
-          confirmDelete(`Supprimer « ${cat.name} » ?`, 'Ses salons sont conservés et sortent de la catégorie.', () => serversApi.deleteCategory(server.id, cat.id), server.id),
+          confirmDelete(t('menu.deleteCategoryConfirm', { name: cat.name }), t('menu.deleteCategoryBody'), () => serversApi.deleteCategory(server.id, cat.id), server.id),
       })
   }
   return <Sheet visible={!!cat} onClose={onClose} title={cat?.name.toUpperCase()} actions={actions} />

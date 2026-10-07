@@ -18,6 +18,7 @@ import { channelSections } from './channels'
 import { CategoryMenu, ChannelMenu, ServerMenu, setChannelHidden, useServerPerms } from './menus'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
+import { t as tr, useT } from '@/i18n'
 import { unreadLabel } from '@/lib/format'
 
 const VOICE_TYPES = new Set(['voice', 'video', 'stage'])
@@ -52,11 +53,12 @@ export function openChannel(server: Server, ch: Channel) {
       params: { serverId: server.id, channelId: ch.id, name: ch.name, locked: ch.has_voice_password ? '1' : '0', stage: ch.type === 'stage' ? '1' : '0' },
     })
   } else {
-    Alert.alert('Bientôt sur mobile', `Les salons de type « ${ch.type} » sont disponibles sur la version web/desktop.`)
+    Alert.alert(tr('channels.soon'), tr('channels.soonBody', { type: ch.type }))
   }
 }
 
 export function ChannelList({ server }: { server: Server }) {
+  const t = useT()
   const channels = useQuery({ queryKey: qk.channels(server.id), queryFn: () => serversApi.channels(server.id) })
   const categories = useQuery({ queryKey: qk.categories(server.id), queryFn: () => serversApi.categories(server.id) })
   const counts = useUnread((s) => s.counts)
@@ -81,7 +83,7 @@ export function ChannelList({ server }: { server: Server }) {
       <Pressable
         onPress={() => setMenu(true)}
         accessibilityRole="button"
-        accessibilityLabel={`${server.name}, options du serveur`}
+        accessibilityLabel={t('channels.serverOptions', { name: server.name })}
         style={({ pressed }) => [pressed && { opacity: 0.8 }]}
       >
         {banner ? <Image source={{ uri: banner }} style={styles.banner} contentFit="cover" accessible={false} /> : null}
@@ -95,9 +97,9 @@ export function ChannelList({ server }: { server: Server }) {
       </Pressable>
       <View style={styles.toolbar}>
         {perms.canCreateChannels ? (
-          <IconButton icon="add" label="Créer un salon" onPress={() => router.push(`/server/${server.id}/channel-create`)} size={20} />
+          <IconButton icon="add" label={t('channels.create')} onPress={() => router.push(`/server/${server.id}/channel-create`)} size={20} />
         ) : null}
-        <IconButton icon="people-outline" label="Membres" onPress={() => router.push(`/server/${server.id}/members`)} size={20} />
+        <IconButton icon="people-outline" label={t('channels.members')} onPress={() => router.push(`/server/${server.id}/members`)} size={20} />
       </View>
       <SectionList
         sections={sections}
@@ -120,8 +122,8 @@ export function ChannelList({ server }: { server: Server }) {
             <Pressable
               onLongPress={() => setCategoryMenu(cat)}
               accessibilityRole="header"
-              accessibilityHint="Appui long pour les options de la catégorie"
-              accessibilityActions={[{ name: 'longpress', label: 'Options de la catégorie' }]}
+              accessibilityHint={t('channels.categoryHint')}
+              accessibilityActions={[{ name: 'longpress', label: t('channels.categoryOptions') }]}
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
             >
               <Text style={styles.category}>{cat.name.toUpperCase()}</Text>
@@ -139,9 +141,9 @@ export function ChannelList({ server }: { server: Server }) {
               onLongPress={() => setChannelMenu(item)}
               style={({ pressed }) => [styles.channel, (pressed || inVoice) && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
-              accessibilityLabel={`Salon ${item.name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
-              accessibilityHint="Appui long pour les options du salon"
-              accessibilityActions={[{ name: 'longpress', label: 'Options du salon' }]}
+              accessibilityLabel={`${t('channels.channel', { name: item.name })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
+              accessibilityHint={t('channels.channelHint')}
+              accessibilityActions={[{ name: 'longpress', label: t('channels.channelOptions') }]}
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setChannelMenu(item)}
             >
               <Ionicons name={channelIcon(item.type)} size={18} color={unread ? colors.text : colors.textMuted} />
@@ -158,12 +160,12 @@ export function ChannelList({ server }: { server: Server }) {
             <Pressable onPress={() => setHiddenMenu(true)} accessibilityRole="button" style={styles.channel}>
               <Ionicons name="eye-off-outline" size={18} color={colors.textFaint} />
               <Text style={styles.channelName}>
-                {hidden.length} salon{hidden.length > 1 ? 's' : ''} masqué{hidden.length > 1 ? 's' : ''}
+                {t(hidden.length > 1 ? 'channels.hiddenMany' : 'channels.hiddenOne', { n: hidden.length })}
               </Text>
             </Pressable>
           ) : null
         }
-        ListEmptyComponent={<Text style={[styles.category, { textAlign: 'center' }]}>Aucun salon</Text>}
+        ListEmptyComponent={<Text style={[styles.category, { textAlign: 'center' }]}>{t('channels.none')}</Text>}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
       />
       <ServerMenu server={server} visible={menu} onClose={() => setMenu(false)} />
@@ -172,8 +174,8 @@ export function ChannelList({ server }: { server: Server }) {
       <Sheet
         visible={hiddenMenu}
         onClose={() => setHiddenMenu(false)}
-        title="Salons masqués"
-        actions={hidden.map((c) => ({ label: `Réafficher ${c.name}`, icon: 'eye-outline', onPress: () => void setChannelHidden(server.id, c.id, false) }))}
+        title={t('channels.hiddenTitle')}
+        actions={hidden.map((c) => ({ label: t('channels.unhide', { name: c.name }), icon: 'eye-outline', onPress: () => void setChannelHidden(server.id, c.id, false) }))}
       />
     </View>
   )

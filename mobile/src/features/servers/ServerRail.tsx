@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui'
 import { directUnread, serverUnread, useUnread } from '@/stores/unread'
 import type { Server } from '@/types/models'
 import { colors, spacing } from '@/theme'
+import { useT } from '@/i18n'
 import { unreadLabel } from '@/lib/format'
 import { http } from '@/lib/http'
 import { railEntries, type ServerLayout } from './layout'
@@ -28,6 +29,7 @@ export function ServerRail({
   onSelect: (id: string | null) => void
   onRetry?: () => void
 }) {
+  const t = useT()
   const counts = useUnread((s) => s.counts)
   const serverOf = useUnread((s) => s.serverOf)
   const dmActive = selected === null
@@ -58,10 +60,10 @@ export function ServerRail({
         onPress={() => onSelect(s.id)}
         onLongPress={() => setMenu(s)}
         accessibilityRole="button"
-        accessibilityLabel={`Serveur ${s.name}${unread ? `, ${unreadLabel(unread)}` : ''}`}
-        accessibilityHint="Appui long pour les options du serveur"
+        accessibilityLabel={`${t('rail.server', { name: s.name })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
+        accessibilityHint={t('rail.serverHint')}
         accessibilityState={{ selected: active }}
-        accessibilityActions={[{ name: 'longpress', label: 'Options du serveur' }]}
+        accessibilityActions={[{ name: 'longpress', label: t('rail.serverOptions') }]}
         onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setMenu(s)}
         style={styles.item}
       >
@@ -82,7 +84,7 @@ export function ServerRail({
         <Pressable
           onPress={() => onSelect(null)}
           accessibilityRole="button"
-          accessibilityLabel={`Messages privés${dmUnread ? `, ${unreadLabel(dmUnread)}` : ''}`}
+          accessibilityLabel={`${t('rail.dms')}${dmUnread ? `, ${unreadLabel(dmUnread)}` : ''}`}
           accessibilityState={{ selected: dmActive }}
           style={styles.item}
         >
@@ -98,7 +100,7 @@ export function ServerRail({
         </Pressable>
         <View style={styles.separator} />
         {onRetry ? (
-          <Pressable style={styles.add} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Réessayer de charger les serveurs">
+          <Pressable style={styles.add} onPress={onRetry} accessibilityRole="button" accessibilityLabel={t('rail.retry')}>
             <Ionicons name="refresh" size={22} color={colors.danger} />
           </Pressable>
         ) : null}
@@ -111,7 +113,7 @@ export function ServerRail({
               <Pressable
                 onPress={() => toggle(e.id)}
                 accessibilityRole="button"
-                accessibilityLabel={`Dossier ${e.name}, ${e.servers.length} serveurs${unread ? `, ${unreadLabel(unread)}` : ''}`}
+                accessibilityLabel={`${t('rail.folder', { name: e.name, n: e.servers.length })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
                 accessibilityState={{ expanded }}
                 style={styles.item}
               >
@@ -129,13 +131,13 @@ export function ServerRail({
           )
         })}
         {servers.length ? <View style={styles.separator} /> : null}
-        <Pressable style={styles.add} onPress={() => router.push('/server/create')} accessibilityRole="button" accessibilityLabel="Créer un serveur">
+        <Pressable style={styles.add} onPress={() => router.push('/server/create')} accessibilityRole="button" accessibilityLabel={t('rail.create')}>
           <Ionicons name="add" size={26} color={colors.success} />
         </Pressable>
-        <Pressable style={styles.add} onPress={() => router.push('/server/join')} accessibilityRole="button" accessibilityLabel="Rejoindre un serveur">
+        <Pressable style={styles.add} onPress={() => router.push('/server/join')} accessibilityRole="button" accessibilityLabel={t('rail.join')}>
           <Ionicons name="enter-outline" size={22} color={colors.success} />
         </Pressable>
-        <Pressable style={styles.add} onPress={() => router.push('/server/explore')} accessibilityRole="button" accessibilityLabel="Explorer les serveurs publics">
+        <Pressable style={styles.add} onPress={() => router.push('/server/explore')} accessibilityRole="button" accessibilityLabel={t('rail.explore')}>
           <Ionicons name="compass-outline" size={24} color={colors.success} />
         </Pressable>
       </ScrollView>
