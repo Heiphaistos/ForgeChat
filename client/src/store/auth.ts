@@ -8,6 +8,7 @@ import { useWs } from './ws'
 import { useChannelNotif, EMPTY_NOTIF_STATE } from './channelNotif'
 import { disableWebPush } from '../utils/webPush'
 import { queryClient } from '../main'
+import { clearAccountKey, rememberPassword } from '../e2e/accountKey'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -46,6 +47,7 @@ export const useAuth = create<AuthState>()(
       const body: any = { email, password }
       if (totpCode) body.totp_code = totpCode
       const { data } = await api.post('/auth/login', body)
+      rememberPassword(password)
       // Web : tokens dans les cookies httpOnly (automatiques via withCredentials)
       // Tauri : tokens dans localStorage (les cookies cross-origin ne sont pas garantis)
       if (isTauri) {
@@ -57,6 +59,7 @@ export const useAuth = create<AuthState>()(
 
     register: async (username, email, password) => {
       const { data } = await api.post('/auth/register', { username, email, password })
+      rememberPassword(password)
       if (isTauri) {
         localStorage.setItem('access_token', data.access_token)
         localStorage.setItem('refresh_token', data.refresh_token)
@@ -71,6 +74,7 @@ export const useAuth = create<AuthState>()(
       await disableWebPush()
       await api.post('/auth/logout', body).catch(() => {})
       if (isTauri) localStorage.clear()
+      await clearAccountKey()
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })
