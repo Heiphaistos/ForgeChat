@@ -44,7 +44,7 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - AutoMod : règles toujours configurées sur le serveur, **appliquées par l'appli de l'expéditeur** avant chiffrement (contournable par un client modifié : limite assumée).
 - Mentions/notifications : l'appli envoie en clair `mentions: [user_ids]`, `mention_everyone`, `reply_to` (métadonnées) ; le serveur notifie sans lire le texte. Aperçu des notifications : déchiffré sur l'appareil.
 - Aperçus de liens : l'appli de l'expéditeur demande `/og` (le serveur voit l'URL un instant, ne la stocke pas), met l'aperçu dans le contenu chiffré.
-- Traduction : désactivée dans les conversations chiffrées.
+- Traduction : désactivée dans les conversations chiffrées ; depuis le 2026-10-08 faite SUR L'APPAREIL (docs/IA-SUR-APPAREIL.md), route serveur supprimée.
 - Signalement : le signaleur envoie le texte déchiffré du message signalé (seul moyen de modérer), clairement indiqué à l'écran.
 - Sondages, titres de fils/publications de forum, messages programmés, rappels, enregistrés : contenus chiffrés (les votes restent en clair). Messages programmés : chiffrés à la création.
 - Annonces suivies (crosspost) : désactivées pour les salons chiffrés dans un premier temps (la copie exigerait la clé du salon cible).

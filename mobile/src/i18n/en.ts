@@ -13,6 +13,7 @@ import * as voiceLot from './parts/voiceLot'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
 import * as remoteSupport from './parts/remoteSupport'
+import * as ai from './parts/ai'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -28,6 +29,7 @@ export const en: Partial<Record<Key, string>> = {
   ...messaging.en,
   ...comfort.en,
   ...remoteSupport.en,
+  ...ai.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
@@ -403,13 +405,10 @@ export const en: Partial<Record<Key, string>> = {
   'chat.save': 'Save',
   'chat.remind': 'Remind me',
   'chat.editHistory': 'Edit history',
-  'chat.hideTranslation': 'Hide translation',
-  'chat.translate': 'Translate to French',
   'chat.copyLink': 'Copy link',
   'chat.viewProfile': 'View profile',
   'chat.report': 'Report',
   'chat.delete': 'Delete',
-  'chat.translateFailed': 'Could not translate',
   'chat.reactionsUnavailable': 'Reactions unavailable',
   'chat.superReactTo': 'Super reaction {emoji}',
   'chat.reactWith': 'React {emoji}',

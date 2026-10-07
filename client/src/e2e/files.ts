@@ -159,12 +159,24 @@ export const AUTO_DECRYPT_MAX = 20 * 1024 * 1024
 // ponytail: adresses blob: gardées pour la session (pas d'éviction) ; seuls les petits fichiers
 // sont déchiffrés d'office, les gros à la demande. Ajouter une éviction LRU si la mémoire gonfle.
 const decrypted = new Map<string, Promise<string>>()
+const blobs = new Map<string, Promise<Blob>>()
+
+/** Fichier déchiffré (une seule fois par session), pour qui doit lire ses octets (src/ai). */
+export function decryptedBlob(url: string, e: c.FileEntry): Promise<Blob> {
+  let p = blobs.get(e.id)
+  if (!p) {
+    p = fetchDecrypted(url, e)
+    p.catch(() => blobs.delete(e.id))
+    blobs.set(e.id, p)
+  }
+  return p
+}
 
 /** Télécharge et déchiffre en flux ; rend une adresse blob: au type sûr. Lève une erreur si altéré. */
 export function decryptedUrl(url: string, e: c.FileEntry): Promise<string> {
   let p = decrypted.get(e.id)
   if (!p) {
-    p = fetchDecrypted(url, e).then(blob => URL.createObjectURL(blob))
+    p = decryptedBlob(url, e).then(blob => URL.createObjectURL(blob))
     p.catch(() => decrypted.delete(e.id))
     decrypted.set(e.id, p)
   }

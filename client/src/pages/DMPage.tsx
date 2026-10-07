@@ -3,7 +3,9 @@ import NativeVideo from '../components/voice/NativeVideo'
 import FullscreenVideo from '../components/voice/FullscreenVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2 } from 'lucide-react'
+import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions } from 'lucide-react'
+import LiveCaptions from '../components/ai/LiveCaptions'
+import { prepareCaptions, useAiSettings } from '../ai/engine'
 import api, { mediaUrl } from '../api/client'
 import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
@@ -83,6 +85,8 @@ export default function DMPage() {
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const captionsEnabled = useAiSettings(s => s.transcribe)
+  const [captionsOn, setCaptionsOn] = useState(false)
   // Vidéo du correspondant en plein écran (double-clic ou bouton).
   const [videoFullscreen, setVideoFullscreen] = useState(false)
 
@@ -572,7 +576,23 @@ export default function DMPage() {
             </div>
           )}
           <E2ECallBadge encrypted={callE2ee} outdatedNames={e2eeOutdated.length ? [partnerName] : []} />
+          {captionsOn && remoteStream && (
+            <div className="relative w-full h-28">
+              <LiveCaptions sources={[{ id: partnerName, name: partnerName, stream: remoteStream }]} />
+            </div>
+          )}
           <div className="flex items-center gap-3">
+            {captionsEnabled && remoteStream && (
+              <button
+                onClick={async () => { if (captionsOn) setCaptionsOn(false); else if (await prepareCaptions()) setCaptionsOn(true) }}
+                className={`p-3 rounded-full transition ${captionsOn ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
+                title={t('ai.captions')}
+                aria-label={t('ai.captions')}
+                aria-pressed={captionsOn}
+              >
+                <Captions size={20} />
+              </button>
+            )}
             {callType === 'video' && (
               <button
                 onClick={toggleCam}

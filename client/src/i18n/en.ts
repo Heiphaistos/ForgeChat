@@ -3,6 +3,7 @@ import type { Key } from './fr'
 import { communityEn } from './community.ts'
 
 import * as messaging from './parts/messaging.ts'
+import * as ai from './parts/ai.ts'
 import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
@@ -16,6 +17,7 @@ export const en: Partial<Record<Key, string>> = {
   ...voiceLotEn,
   ...messaging.en,
   ...remoteSupportEn,
+  ...ai.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
@@ -354,7 +356,6 @@ export const en: Partial<Record<Key, string>> = {
   'msg.unknown': 'unknown',
   'msg.editHistory': 'View edit history',
   'msg.edited': '(edited)',
-  'msg.translation': 'Translation:',
   'msg.reacted.one': '{n} person reacted',
   'msg.reacted.other': '{n} people reacted',
   'msg.superSuffix': ' (super reaction)',
@@ -381,9 +382,6 @@ export const en: Partial<Record<Key, string>> = {
   'msg.publishLabel': 'Publish the message to following servers',
   'msg.edit': 'Edit',
   'msg.editLabel': 'Edit message',
-  'msg.hideTranslation': 'Hide translation',
-  'msg.translate': 'Translate to French',
-  'msg.translateLabel': 'Translate the message to French',
   'msg.remindMe': 'Remind me',
   'msg.report': 'Report this message',
   'msg.delete': 'Delete',
@@ -397,7 +395,6 @@ export const en: Partial<Record<Key, string>> = {
   'msg.superFailed': 'Could not add the super reaction',
   'msg.saved': 'Message saved',
   'msg.saveFailed': 'Could not save',
-  'msg.translateUnavailable': 'Translation unavailable',
   'msg.sendMessage': 'Send a message',
   'msg.openDmFailed': 'Could not open the conversation',
   'msg.mention': 'Mention @{name}',
@@ -2241,7 +2238,6 @@ export const en: Partial<Record<Key, string>> = {
   'e2e.channel.desc': "Messages in this channel are encrypted on its members' devices: neither the platform nor its administrator can read them. The server owner can recover them with the server recovery key.",
   'e2e.channel.noKey': 'Create your encryption key to read and write in this channel.',
   'e2e.search.channelLocal': 'Encrypted channel: searching messages loaded on this device (the server only searches by author, date or attachment).',
-  'e2e.translate.disabled': 'Translation is unavailable for an encrypted message.',
   'e2e.crosspost.disabled': 'Cannot publish to following channels: the message is encrypted.',
   'e2e.forward.encrypted': 'The message will be encrypted again for the chosen channel.',
   'e2e.serverKey.title': 'Server encryption',

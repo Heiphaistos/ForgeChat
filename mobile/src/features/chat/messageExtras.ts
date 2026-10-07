@@ -150,7 +150,6 @@ export function messageLink(origin: string, ref: ConversationRef, messageId: str
  * Traduire (messages.rs::translate_message) et « qui a réagi » (audit.rs::get_reaction_detail)
  * ne cherchent le message que dans les salons et les DM 1:1 : rien pour les groupes.
  */
-export const supportsTranslate = supportsMessageExtras
 export const supportsReactionDetail = supportsMessageExtras
 
 export interface ReactionUser {

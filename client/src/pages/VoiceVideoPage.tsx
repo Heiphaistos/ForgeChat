@@ -13,7 +13,8 @@ import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import { useLocation } from 'react-router-dom'
 import { useVoiceActivity, usePeersVoiceActivity } from '../hooks/useVoiceActivity'
-import { useCaptions } from '../hooks/useCaptions'
+import LiveCaptions from '../components/ai/LiveCaptions'
+import { prepareCaptions, useAiSettings } from '../ai/engine'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
 import Soundboard from '../components/voice/Soundboard'
@@ -204,7 +205,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
-  const { isActive: captionsOn, isSupported: captionsSupported, captions, toggle: toggleCaptions } = useCaptions()
+  const captionsEnabled = useAiSettings(s => s.transcribe)
   // Map userId → speaking : local via AnalyserNode direct sur localStream, pairs
   // distants via un AnalyserNode par flux distant (usePeersVoiceActivity)
   const speakingMap: Record<string, number> = {
@@ -494,14 +495,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           onFeature={setSpotlightTileKey} render={renderTile} activeSpeakerId={activeSpeakerId} />
 
         {/* Captions overlay */}
-        {showCaptions && captions.length > 0 && (
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3/4 max-w-2xl pointer-events-none">
-            {captions.slice(-2).map((c, i) => (
-              <div key={c.id} className={`bg-black/80 text-white text-sm text-center rounded-lg px-4 py-2 mb-1 ${!c.isFinal ? 'opacity-70' : ''}`}>
-                {c.text}
-              </div>
-            ))}
-          </div>
+        {/* Sous-titres calculés sur l'appareil, son reçu uniquement (src/ai) */}
+        {showCaptions && (
+          <LiveCaptions sources={peers.map(p => ({ id: p.userId, name: p.username, stream: p.stream }))} />
         )}
 
         {showWatch && (
@@ -602,9 +598,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
               label={t('voice.blur')}
             />
-            {captionsSupported && (
+            {captionsEnabled && (
               <CtrlBtn
-                active={captionsOn} onClick={() => { toggleCaptions(); setShowCaptions(v => !v) }}
+                active={showCaptions}
+                onClick={async () => { if (showCaptions) setShowCaptions(false); else if (await prepareCaptions()) setShowCaptions(true) }}
                 activeIcon={<MessageSquare size={16} />} inactiveIcon={<MessageSquare size={16} />}
                 activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
                 label={t('voice.captions')}

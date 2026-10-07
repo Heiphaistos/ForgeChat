@@ -14,6 +14,7 @@ import * as voiceLot from './parts/voiceLot'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
 import * as remoteSupport from './parts/remoteSupport'
+import * as ai from './parts/ai'
 
 export const fr = {
   ...settings.fr,
@@ -29,6 +30,7 @@ export const fr = {
   ...messaging.fr,
   ...comfort.fr,
   ...remoteSupport.fr,
+  ...ai.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',
@@ -404,13 +406,10 @@ export const fr = {
   'chat.save': 'Enregistrer',
   'chat.remind': 'Me le rappeler',
   'chat.editHistory': 'Historique des modifications',
-  'chat.hideTranslation': 'Masquer la traduction',
-  'chat.translate': 'Traduire en français',
   'chat.copyLink': 'Copier le lien',
   'chat.viewProfile': 'Voir le profil',
   'chat.report': 'Signaler',
   'chat.delete': 'Supprimer',
-  'chat.translateFailed': 'Traduction impossible',
   'chat.reactionsUnavailable': 'Réactions indisponibles',
   'chat.superReactTo': 'Super réaction {emoji}',
   'chat.reactWith': 'Réagir {emoji}',

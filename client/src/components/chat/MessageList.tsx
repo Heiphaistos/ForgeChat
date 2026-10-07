@@ -19,8 +19,10 @@ import { stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import { useRoleDecor } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
-import { t as tr, useT, dateLocale } from '../../i18n'
+import { t as tr, useT, dateLocale, useLang } from '../../i18n'
+import { translate as translateOnDevice } from '../../ai/engine'
 import MessageRow from './MessageRow'
+import UnreadSummary from '../ai/UnreadSummary'
 import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
 
 interface Props {
@@ -141,11 +143,14 @@ export default function MessageList({
   // les effets des enfants s'exécutent avant ceux du parent) + ancre du premier non-lu
   const unreadAtOpen = useRef(0)
   const firstUnreadId = useRef<string | null>(null)
+  // Premier non-lu à l'ouverture, en état pour le bandeau de résumé (src/ai).
+  const [unreadFrom, setUnreadFrom] = useState<string | null>(null)
   useEffect(() => {
     channelOpenTime.current = Date.now()
     initialScrollDone.current = false
     unreadAtOpen.current = useUnread.getState().counts[channelId] ?? 0
     firstUnreadId.current = null
+    setUnreadFrom(null)
   }, [channelId])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
@@ -179,6 +184,7 @@ export default function MessageList({
     if (firstUnreadId.current || unreadAtOpen.current <= 0 || messages.length === 0) return
     const idx = Math.max(0, messages.length - unreadAtOpen.current)
     firstUnreadId.current = messages[idx]?.id ?? null
+    setUnreadFrom(firstUnreadId.current)
   }, [messages.length])
 
   // Scroll initial : vers le premier non-lu s'il y en a, sinon position mémorisée
@@ -431,6 +437,8 @@ export default function MessageList({
     const m = messages.find(x => x.id === id) as { content: string | null; e2e?: string } | undefined
     return m && m.e2e !== 'locked' ? m.content : null
   }
+  const readableTextRef = useRef(readableText)
+  readableTextRef.current = readableText
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
   const density = useThemeStore(s => s.density)
@@ -618,12 +626,16 @@ export default function MessageList({
   useEffect(() => { translatingIdRef.current = translatingId }, [translatingId])
   const translateMessage = useCallback(async (messageId: string) => {
     if (translatingIdRef.current === messageId) return
+    const text = readableTextRef.current(messageId)
+    if (!text?.trim()) return
     setTranslatingId(messageId)
     try {
-      const { data } = await api.post(`/messages/${messageId}/translate`, { target_lang: 'fr' })
-      setTranslations(prev => ({ ...prev, [messageId]: data.translated }))
+      // Sur l'appareil uniquement (src/ai) : le texte déchiffré n'est jamais envoyé.
+      const r = await translateOnDevice(text, useLang.getState().lang)
+      if ('text' in r) setTranslations(prev => ({ ...prev, [messageId]: r.text }))
+      else if (r.error !== 'declined') toast(tr(r.error === 'lang' ? 'ai.err.lang' : 'ai.err.same'))
     } catch {
-      toast.error(tr('msg.translateUnavailable'))
+      toast.error(tr('ai.err.failed'))
     } finally {
       setTranslatingId(null)
     }
@@ -925,6 +937,8 @@ export default function MessageList({
 
         <div ref={bottomRef} />
       </div>
+
+      <UnreadSummary messages={messages} fromId={unreadFrom} meId={user?.id} />
 
       {/* Pastille de date flottante pendant le scroll */}
       {floatingDate && (

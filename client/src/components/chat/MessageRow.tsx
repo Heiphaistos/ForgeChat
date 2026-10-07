@@ -21,6 +21,7 @@ import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
 import SystemMessageCard, { isCommunitySystemMessage } from '../community/SystemMessageCard'
 import { RemoteSupportCard } from './RemoteSupport'
+import { useAiSettings } from '../../ai/engine'
 
 export interface MessageRowProps {
   msg: any
@@ -111,6 +112,7 @@ function MessageRow({
   onReport, onDeleteRequest,
 }: MessageRowProps) {
   const t = useT()
+  const aiTranslate = useAiSettings(s => s.translate)
   const threadCounts = useContext(ThreadCountsContext)
   const threadReplies = threadCounts?.get(msg.id) ?? 0
   const isImage = (ct: string) => ct.startsWith('image/')
@@ -298,11 +300,12 @@ function MessageRow({
                     {!msg.expires_at && msg.expire_on_read && <span className="ml-2"><AfterReadBadge /></span>}
                     {translation && (
                       <div className="mt-1.5 px-2 py-1.5 bg-fc-accent/10 border-l-2 border-fc-accent rounded text-sm text-fc-text">
-                        <span className="text-xs text-fc-accent font-medium mr-1.5">{t('msg.translation')}</span>
-                        {translation}
+                        <span className="text-xs text-fc-accent font-medium mr-1.5">{t('ai.translation')}</span>
+                        <span className="whitespace-pre-wrap">{translation}</span>
                         <button
                           onClick={() => onToggleTranslation(msg.id)}
                           className="ml-2 text-fc-muted hover:text-white text-xs"
+                          aria-label={t('ai.hideTranslation')}
                         >
                           ✕
                         </button>
@@ -641,16 +644,18 @@ function MessageRow({
               </button>
             )}
 
-            <button
-              onClick={() => onToggleTranslation(msg.id)}
-              className={`p-1.5 rounded hover:bg-fc-hover transition disabled:opacity-40 disabled:cursor-not-allowed ${translation ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title={msg.enc ? t('e2e.translate.disabled') : translation ? t('msg.hideTranslation') : t('msg.translate')}
-              aria-label={msg.enc ? t('e2e.translate.disabled') : translation ? t('msg.hideTranslation') : t('msg.translateLabel')}
-              aria-pressed={!!translation}
-              disabled={isTranslating || !!msg.enc}
-            >
-              {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
-            </button>
+            {aiTranslate && !!msg.content?.trim() && msg.e2e !== 'locked' && (
+              <button
+                onClick={() => onToggleTranslation(msg.id)}
+                className={`p-1.5 rounded hover:bg-fc-hover transition disabled:opacity-40 disabled:cursor-not-allowed ${translation ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                title={translation ? t('ai.hideTranslation') : isTranslating ? t('ai.translating') : t('ai.translate')}
+                aria-label={translation ? t('ai.hideTranslation') : t('ai.translateLabel')}
+                aria-pressed={!!translation}
+                disabled={isTranslating}
+              >
+                {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
+              </button>
+            )}
 
             <div className="relative">
               <button

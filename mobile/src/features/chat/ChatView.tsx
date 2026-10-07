@@ -33,7 +33,10 @@ import { MessageItem, SUPER_COLOR } from './MessageItem'
 import { userRoute } from '@/features/servers/memberProfile'
 import { messagesKey } from './cache'
 import { useScrollTarget } from './pins'
-import { messageLink, supportsMessageExtras, supportsReactionDetail, supportsTranslate, type ReactionUser } from './messageExtras'
+import { messageLink, supportsMessageExtras, supportsReactionDetail, type ReactionUser } from './messageExtras'
+import { translateOnDevice, useAiSettings } from '@/features/ai/actions'
+import UnreadSummary from '@/features/ai/UnreadSummary'
+import { useUnread } from '@/stores/unread'
 import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 import type { SupportPayload } from '@/lib/remoteSupport'
@@ -90,6 +93,16 @@ export function ChatView({
   const [selected, setSelected] = useState<ChatMessage | null>(null)
   const [paletteFor, setPaletteFor] = useState<ChatMessage | null>(null)
   const [translations, setTranslations] = useState<Record<string, string>>({})
+  const aiTranslate = useAiSettings((s) => s.translate)
+  // Non-lus à l'ouverture, lus AVANT que useConversation ne les remette à zéro (son effet
+  // passe après ce rendu) : base du bandeau de résumé (features/ai).
+  const [unreadAtOpen] = useState(() => useUnread.getState().counts[conv.id] ?? 0)
+  // Messages arrivés après l'ouverture exclus : la liste des non-lus reste stable.
+  const [openedAt] = useState(() => Date.now())
+  const unreadMsgs = useMemo(
+    () => conv.messages.filter((x) => Date.parse(x.createdAt) <= openedAt).slice(0, unreadAtOpen).reverse(),
+    [conv.messages, openedAt, unreadAtOpen],
+  )
   const [reactors, setReactors] = useState<{ emoji: string; users: ReactionUser[] } | null>(null)
   const listRef = useRef<FlatList<ChatMessage>>(null)
   // Distance haut de l'écran → haut de la vue (en-tête compris), mesurée nous-mêmes :
@@ -307,12 +320,12 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
       list.push({ label: t('chat.remind'), icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
       if (m.editedAt) list.push({ label: t('chat.editHistory'), icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
     }
-    // Traduction : le serveur ne lit pas un message chiffré (désactivée, §4.3).
-    if (!m.pending && !m.e2e && supportsTranslate(conversation) && hasEditableText(m)) {
+    // Traduction SUR LE TÉLÉPHONE (features/ai) : le texte déchiffré n'est jamais envoyé.
+    if (aiTranslate && !m.pending && m.e2e !== 'locked' && hasEditableText(m) && m.content) {
       list.push(
         translations[m.id]
-          ? { label: t('chat.hideTranslation'), icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }
-          : { label: t('chat.translate'), icon: 'language-outline', onPress: () => translate(m) },
+          ? { label: t('ai.hideTranslation'), icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }
+          : { label: t('ai.translate'), icon: 'language-outline', onPress: () => translate(m) },
       )
     }
     if (!m.pending) list.push({ label: t('chat.copyLink'), icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
@@ -325,10 +338,9 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
   }
 
   const translate = (m: ChatMessage) =>
-    messagesApi
-      .translate(m.id)
-      .then((text) => setTranslations((prev) => ({ ...prev, [m.id]: text })))
-      .catch((e) => Alert.alert(t('chat.translateFailed'), errorMessage(e)))
+    void translateOnDevice(m.content ?? '').then((text) => {
+      if (text !== null) setTranslations((prev) => ({ ...prev, [m.id]: text }))
+    })
 
   const showReactors = useMemo(
     () =>
@@ -459,6 +471,14 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
             <Button title={t('chat.backToPresent')} variant="ghost" icon="arrow-down" onPress={() => setDetached(false)} />
           </View>
         ) : null}
+        <UnreadSummary
+          unread={unreadMsgs}
+          me={me ? { id: me.id, username: me.username } : null}
+          onJump={(id) => {
+            const index = conv.messages.findIndex((x) => x.id === id)
+            if (index >= 0) listRef.current?.scrollToIndex({ index, viewPosition: 0.5 })
+          }}
+        />
         <View style={{ flex: 1 }}>{body}</View>
         <TypingIndicator conversationId={conv.id} />
         {denied ? null : (

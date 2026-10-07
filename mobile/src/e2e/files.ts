@@ -224,6 +224,30 @@ async function fetchDecrypted(url: string, e: c.FileEntry): Promise<string> {
 }
 
 /**
+ * Fichier déchiffré du cache en base64 (message vocal transcrit SUR L'APPAREIL par le
+ * moteur d'IA local, features/ai). Borné : un message vocal fait quelques centaines de Ko.
+ */
+export function decryptedBase64(localUri: string, max = 8 * 1024 * 1024): string {
+  if (!fs) throw new Error('E2E_FILES_UNAVAILABLE')
+  const h = new fs.FileSystemFile(localUri).open('r')
+  try {
+    const parts: Uint8Array[] = []
+    let n = 0
+    for (let b = h.readBytes(65536); b.length; b = h.readBytes(65536)) {
+      n += b.length
+      if (n > max) throw new Error('E2E_FILE_TOO_BIG')
+      parts.push(b)
+    }
+    const all = new Uint8Array(n)
+    let o = 0
+    for (const p of parts) { all.set(p, o); o += p.length }
+    return b64Std(all)
+  } finally {
+    h.close()
+  }
+}
+
+/**
  * Enregistre un fichier déchiffré dans un dossier choisi par l'utilisateur (sélecteur du
  * système) : une autre appli ne peut pas ouvrir le cache privé de ForgeChat. Rend faux si annulé.
  */
