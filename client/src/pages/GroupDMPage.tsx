@@ -25,6 +25,8 @@ import { useT, dateLocale, t as tr } from '../i18n'
 import { openMessage, openText, reopenLocked, sendErrorText, withSeal } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 
@@ -66,6 +68,8 @@ interface GDMMessage {
   client_msg_id?: string | null
   purged?: boolean
   e2e?: 'ok' | 'locked'
+  /** Contenu déchiffré complet (fichiers chiffrés `f`). */
+  e2e_body?: { f?: unknown }
   reactions?: GDMReaction[]
   attachments?: GDMAttachment[]
 }
@@ -505,18 +509,15 @@ export default function GroupDMPage() {
   }, [loadingMore, hasMore, allMessages, groupId, t])
 
   const sendMsg = useMutation({
-    mutationFn: ({ text, files, replyToId }: { text: string; files: File[]; replyToId?: string }) =>
+    mutationFn: ({ text, files, replyToId }: { text: string; files: PreparedFiles; replyToId?: string }) =>
       withSeal('group', groupId!, text, body => api.post(`/dms/groups/${groupId}/messages`, {
         ...body,
-        has_attachments: files.length > 0,
+        has_attachments: files.count > 0,
         reply_to: replyToId ?? null,
-      })),
+      }), null, { extra: filesExtra(files) }),
     onSuccess: async (res, vars) => {
-      if (vars.files.length > 0 && res.data?.id) {
-        const fd = new FormData()
-        let totalBytes = 0
-        for (const f of vars.files) { fd.append('files', f); totalBytes += f.size }
-        await postWithUploadProgress(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd, totalBytes).catch(() => null)
+      if (vars.files.count > 0 && res.data?.id) {
+        await postWithUploadProgress(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, vars.files.form, vars.files.bytes).catch(() => null)
       }
     },
     onError: (e, vars) => {
@@ -1089,7 +1090,8 @@ export default function GroupDMPage() {
                         })()}
                         {msg.attachments && msg.attachments.length > 0 && (
                           <div className="flex flex-col gap-1 mt-1">
-                            {msg.attachments.map(att => {
+                            {displayAttachments(msg.attachments, msg.e2e_body).map(att => {
+                              if (att.e2e || att.e2eLocked) return <E2EAttachment key={att.id} att={att} mediaClass="max-w-[200px] max-h-[200px] rounded-xl" />
                               const isImg = att.content_type.startsWith('image/')
                               return isImg ? (
                                 <a key={att.id} href={mediaUrl(att.url)} target="_blank" rel="noopener noreferrer">
@@ -1182,8 +1184,13 @@ export default function GroupDMPage() {
           onSend={async (content, replyToId, files) => {
             const text = content?.trim() ?? ''
             if (!text && (!files || files.length === 0)) return
-            sendMsg.mutate({ text, files: files?.map(f => f.file) ?? [], replyToId })
             setReplyTo(null)
+            try {
+              // Fichiers chiffrés avant l'envoi (clés dans le message chiffré).
+              sendMsg.mutate({ text, files: await prepareFiles('group', groupId!, files ?? []), replyToId })
+            } catch (e) {
+              toast.error(sendErrorText(e, t('gdm.sendError')))
+            }
           }}
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
         />

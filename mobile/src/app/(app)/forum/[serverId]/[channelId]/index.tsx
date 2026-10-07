@@ -17,6 +17,7 @@ import { useT } from '@/i18n'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
+import { encryptedMedia, thumbUri } from '@/e2e/files'
 
 /** Salon forum : publications (épinglées d'abord, ordre du salon), comme ForumPage. Salon média (media=1) : grille de vignettes. */
 export default function ForumScreen() {
@@ -76,7 +77,14 @@ export default function ForumScreen() {
               accessibilityRole="button"
               accessibilityLabel={t(p.replyCount > 1 ? 'social.forum.postLabelMany' : 'social.forum.postLabel', { title: p.title, name: p.creatorName, n: p.replyCount })}
             >
-              {p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
+              {p.mediaUrl && encryptedMedia(p.mediaUrl, p.files) ? (
+                // Média chiffré : miniature embarquée dans la publication (déchiffrée), sinon un cadenas.
+                thumbUri(p.files?.find((f) => f.u === p.mediaUrl)) ? (
+                  <Image source={{ uri: thumbUri(p.files?.find((f) => f.u === p.mediaUrl)) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                ) : (
+                  <Ionicons name="lock-closed" size={30} color={colors.text} />
+                )
+              ) : p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
                 <Image source={{ uri: resolveMediaUrl(p.mediaUrl) ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
               ) : (
                 <Ionicons name="play-circle" size={36} color={colors.text} />

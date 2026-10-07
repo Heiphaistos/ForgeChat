@@ -67,11 +67,12 @@ async function linkPreviewExtra(text: string): Promise<Record<string, unknown>> 
 export async function sendChannelText<T>(
   serverId: string, channelId: string, text: string,
   post: (body: SealedBody) => Promise<T>,
-  opts: { scope?: string; clientMsgId?: string | null; preview?: boolean; edit?: boolean } = {},
+  opts: { scope?: string; clientMsgId?: string | null; preview?: boolean; edit?: boolean; extra?: Record<string, unknown> } = {},
 ): Promise<{ result: T; encrypted: boolean; extra: Record<string, unknown> }> {
   const encrypt = !!text && (await mustEncrypt('channel', channelId))
   if (encrypt && !opts.edit) await checkAutomod(serverId, text)
-  const extra = encrypt && opts.preview ? await linkPreviewExtra(text) : {}
+  // `opts.extra` : contenu chiffré additionnel (fichiers `f`, §12), seulement s'il est chiffré.
+  const extra = { ...(encrypt && opts.preview ? await linkPreviewExtra(text) : {}), ...opts.extra }
   let encrypted = false
   const result = await withSeal('channel', channelId, text, (body) => {
     encrypted = !!body.enc
@@ -122,13 +123,14 @@ export async function openPost(channelId: string, p: Raw): Promise<Raw> {
   if (!isEnc(p.enc) || !cmid) return p
   const body = await openBody('channel', channelId, p.enc, s(p.creator_id) ?? '', cmid, c.postScope(channelId, cmid))
   return body
-    ? { ...p, title: typeof body.title === 'string' ? body.title : '', content: body.t || null, e2e: 'ok' }
+    ? { ...p, title: typeof body.title === 'string' ? body.title : '', content: body.t || null, e2e: 'ok', e2e_body: body }
     : { ...p, title: lockedText(), content: null, e2e: 'locked' }
 }
 
 /** Chiffre une publication (création : `cmid` neuf ; modification : celui de la publication) ; null = clair permis. */
-export function sealPost(channelId: string, title: string, content: string, cmid: string) {
-  return sealBody('channel', channelId, { t: content, title }, { scope: c.postScope(channelId, cmid), clientMsgId: cmid })
+export function sealPost(channelId: string, title: string, content: string, cmid: string, files?: c.FileEntry[]) {
+  // `f` : média chiffré de la publication (clé, adresse `u`, §12).
+  return sealBody('channel', channelId, { t: content, title, ...(files?.length ? { f: files } : {}) }, { scope: c.postScope(channelId, cmid), clientMsgId: cmid })
 }
 
 // ─── Sondages : {t: question, o: [options]}, portée pollScope ───────────────

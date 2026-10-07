@@ -10,8 +10,10 @@ import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
 import toast from 'react-hot-toast'
-import { channelPreview } from '../e2e/channels'
-import type { EncPayload } from '../e2e/crypto'
+import { lockedText, openBody } from '../e2e/conversations'
+import type { EncPayload, MsgBody } from '../e2e/crypto'
+import { displayAttachments, type ServerAttachment } from '../e2e/files'
+import E2EAttachment from '../e2e/E2EAttachment'
 
 interface SavedMessage {
   id: string
@@ -30,6 +32,8 @@ interface SavedMessage {
   enc?: EncPayload | null
   client_msg_id?: string | null
   author_id?: string
+  /** Contenu déchiffré (fichiers chiffrés `f`). */
+  e2e_body?: MsgBody | null
 }
 
 interface Attachment {
@@ -171,7 +175,11 @@ export default function SavedPage() {
     // Message de salon chiffré : aucune copie côté serveur, l'original est déchiffré ici.
     queryFn: async () => {
       const list: SavedMessage[] = (await api.get('/saved')).data
-      return Promise.all(list.map(async m => (m.server_id && m.enc ? { ...m, content: await channelPreview(m) } : m)))
+      return Promise.all(list.map(async m => {
+        if (!m.server_id || !m.enc) return m
+        const body = m.author_id ? await openBody('channel', m.channel_id, m.enc, m.author_id, m.client_msg_id) : null
+        return { ...m, content: body?.t ?? lockedText(), e2e_body: body }
+      }))
     },
   })
 
@@ -349,8 +357,10 @@ export default function SavedPage() {
                             {/* Attachments */}
                             {item.attachments && item.attachments.length > 0 && (
                               <div className="flex flex-wrap gap-2 mt-2">
-                                {item.attachments.map((att, i) => (
-                                  <AttachmentPreview key={i} attachment={att} />
+                                {displayAttachments(item.attachments as ServerAttachment[], item.e2e_body).map((att, i) => (
+                                  att.e2e || att.e2eLocked
+                                    ? <E2EAttachment key={i} att={att} mediaClass="max-h-32 max-w-xs rounded-lg" />
+                                    : <AttachmentPreview key={i} attachment={att} />
                                 ))}
                               </div>
                             )}

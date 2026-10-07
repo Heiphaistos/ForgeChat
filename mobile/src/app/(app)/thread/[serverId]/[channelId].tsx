@@ -17,6 +17,7 @@ import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
+import { withPreparedUploads } from '@/e2e/files'
 
 /**
  * Fil de discussion d'un salon (comme ThreadPanel). Ouvert depuis un message (`parent`) ou un fil
@@ -133,12 +134,15 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
             .catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
         }
         onSend={(body, files) =>
-          sendWithAttachments(
-            body,
-            files,
-            (has) => threadsApi.send(serverId, channelId, thread, body, has),
-            (id, f) => threadsApi.upload(serverId, channelId, thread.id, id, f),
-            (id) => threadsApi.remove(serverId, channelId, thread.id, id),
+          // Fichiers chiffrés avant l'envoi (clés dans le message chiffré, §12).
+          withPreparedUploads('channel', channelId, files, (p) =>
+            sendWithAttachments(
+              body,
+              p.uploads,
+              (has) => threadsApi.send(serverId, channelId, thread, body, has, p.entries),
+              (id, f) => threadsApi.upload(serverId, channelId, thread.id, id, f),
+              (id) => threadsApi.remove(serverId, channelId, thread.id, id),
+            ),
           ).finally(refresh)
         }
         onEdit={(m, body) => threadsApi.edit(serverId, channelId, thread, m, body).then(refresh)}

@@ -7,7 +7,8 @@ import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import MediaContent from './MediaContent'
-import { AttachmentList, PendingFiles, usePendingFiles, uploadPendingFiles } from './ThreadAttachments'
+import { AttachmentList, PendingFiles, usePendingFiles } from './ThreadAttachments'
+import { filesExtra, prepareFiles, uploadPrepared } from '../../e2e/files'
 import { setOpenThread } from '../../hooks/useThreadNotifications'
 import EmojiPicker from './EmojiPicker'
 import LinkPreview, { extractFirstUrl } from './LinkPreview'
@@ -264,12 +265,15 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     `/servers/${serverId}/channels/${channelId}/threads/${tid}/messages/${msgId}/attachments`
 
   const createThread = useMutation({
-    // Salon chiffré : titre ET premier message chiffrés avec la portée du nouveau fil.
-    mutationFn: () => createThreadE2E(serverId, channelId, newTitle.trim(), input.trim(), parentMessageId,
-      body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body)),
+    // Salon chiffré : titre ET premier message chiffrés (portée du nouveau fil), fichiers aussi (clés dans le message, §12).
+    mutationFn: async () => {
+      const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
+      const res = await createThreadE2E(serverId, channelId, newTitle.trim(), input.trim(), parentMessageId,
+        body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body), filesExtra(prepared))
+      return Object.assign(res, { prepared })
+    },
     onSuccess: async (res) => {
       const tid = res.data.thread?.id
-      const files = pending.files
       setInput('')
       setNewTitle('')
       setCreating(false)
@@ -277,8 +281,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       if (tid) setThreadId(tid)
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
       toast.success('Thread créé !')
-      if (tid && res.data.first_message_id && files.length > 0) {
-        await uploadPendingFiles(attachUrl(tid, res.data.first_message_id), files).catch(() => {})
+      if (tid && res.data.first_message_id && res.prepared.count > 0) {
+        await uploadPrepared(attachUrl(tid, res.data.first_message_id), res.prepared).catch(() => {})
         qc.invalidateQueries({ queryKey: ['thread-messages', tid] })
       }
     },
@@ -286,21 +290,21 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   })
 
   const sendMessage = useMutation({
-    mutationFn: () => sendScoped(serverId, channelId, scope(), input.trim(),
-      body => api.post(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, {
-        ...body,
-        reply_to: replyTo?.id,
-        has_attachments: pending.files.length > 0,
-      })),
+    mutationFn: async () => {
+      const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
+      const res = await sendScoped(serverId, channelId, scope(), input.trim(), body => api.post(
+        `/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, { ...body, reply_to: replyTo?.id, has_attachments: prepared.count > 0 },
+      ), undefined, filesExtra(prepared))
+      return Object.assign(res, { prepared })
+    },
     onSuccess: async (res) => {
-      const files = pending.files
       const msgId: string | undefined = res.data?.message?.id
       setInput('')
       setReplyTo(null)
       pending.clear()
       qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
-      if (threadId && msgId && files.length > 0) {
-        await uploadPendingFiles(attachUrl(threadId, msgId), files).catch(() => {})
+      if (threadId && msgId && res.prepared.count > 0) {
+        await uploadPrepared(attachUrl(threadId, msgId), res.prepared).catch(() => {})
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     },
@@ -667,7 +671,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                       </div>
                     )}
                     <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
-                    <AttachmentList attachments={msg.attachments} />
+                    <AttachmentList attachments={msg.attachments} body={msg.e2e_body} />
                     {linkPreviewEnabled && msg.content && (() => {
                       // Message chiffré : aperçu calculé par l'expéditeur, jamais demandé au serveur.
                       if (msg.enc) return msg.e2e_body?.p ? <LinkPreview url={extractFirstUrl(msg.content) ?? ''} data={msg.e2e_body.p} /> : null

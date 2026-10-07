@@ -9,17 +9,18 @@ import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
-import MediaContent from '../chat/MediaContent'
+import MediaContent, { EncMedia, isEncUrl } from '../chat/MediaContent'
 import LightboxModal from '../chat/LightboxModal'
 import EmojiPicker from '../chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../chat/LinkPreview'
-import { AttachmentList, PendingFiles, usePendingFiles, uploadPendingFiles, type SimpleAttachment } from '../chat/ThreadAttachments'
+import { AttachmentList, PendingFiles, usePendingFiles, type SimpleAttachment } from '../chat/ThreadAttachments'
 import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { useTypeToFocus } from '../../hooks/useTypeToFocus'
 import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import { useT, dateLocale } from '../../i18n'
-import { postScope, type EncPayload } from '../../e2e/crypto'
+import { fileEntries, postScope, type EncPayload, type FileEntry } from '../../e2e/crypto'
+import { filesExtra, prepareFiles, uploadPrepared } from '../../e2e/files'
 import { channelSendError } from '../../e2e/channels'
 import { openPost, openReplies, sealPost, sendScoped } from '../../e2e/channelScopes'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
@@ -39,6 +40,8 @@ export interface ForumPost {
   client_msg_id?: string | null
   unencrypted?: boolean
   e2e?: 'ok' | 'locked'
+  /** Contenu déchiffré complet (médias chiffrés `f`). */
+  e2e_body?: { f?: unknown }
   creator_username: string
   creator_avatar?: string
   tags: string[]
@@ -54,8 +57,9 @@ export interface ForumPost {
 export const isVideoUrl = (u: string) => /\.(mp4|webm|mov)$/i.test(u)
 
 /** Média d'une publication de salon média, en grand (image : plein écran au clic). */
-function PostMedia({ url }: { url: string }) {
+function PostMedia({ url, files }: { url: string; files: FileEntry[] }) {
   const [open, setOpen] = useState(false)
+  if (isEncUrl(url)) return <EncMedia url={url} files={files} className="w-full max-h-[70vh] object-contain rounded-lg bg-black" />
   if (isVideoUrl(url)) {
     return <video src={mediaUrl(url)} controls playsInline preload="metadata" className="w-full max-h-[70vh] rounded-lg bg-black" />
   }
@@ -77,7 +81,7 @@ export interface ForumReply {
   client_msg_id?: string | null
   unencrypted?: boolean
   e2e?: 'ok' | 'locked'
-  e2e_body?: { p?: unknown }
+  e2e_body?: { p?: unknown; f?: unknown }
   author: { id: string; username: string; avatar?: string; discriminator: string }
   reactions?: { emoji: string; count: number; me: boolean; users?: string[] }[]
   attachments?: SimpleAttachment[]
@@ -131,8 +135,12 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       const url = `/servers/${serverId}/channels/${channelId}/posts/${post.id}`
       const cmid = data?.post?.client_msg_id ?? post.client_msg_id
       if (!cmid) return void await api.patch(url, { content: editPostContent.trim() })
+      // Médias chiffrés encore cités (texte ou couverture) : leurs clés restent dans la publication.
+      const media = data?.post?.media_url ?? post.media_url
+      const kept = fileEntries(data?.post?.e2e_body).filter(e => e.u && (editPostContent.includes(e.u) || e.u === media))
       await sealPost(serverId, channelId, localPost.title, editPostContent.trim(),
-        body => api.patch(url, body.enc ? { enc: body.enc } : { content: body.content ?? '' }), { clientMsgId: cmid })
+        body => api.patch(url, body.enc ? { enc: body.enc } : { content: body.content ?? '' }), { clientMsgId: cmid },
+        kept.length ? { f: kept } : undefined)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
@@ -291,20 +299,24 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   }, [replies.length])
 
   const sendReply = useMutation({
-    mutationFn: () => sendScoped(serverId, channelId, replyScope(), reply.trim(),
-      body => api.post(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies`, {
-        ...body,
-        has_attachments: pending.files.length > 0,
-      })),
+    // Fichiers chiffrés avant l'envoi : leurs clés vont dans la réponse chiffrée (§12).
+    mutationFn: async () => {
+      const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
+      const res = await sendScoped(serverId, channelId, replyScope(), reply.trim(),
+        body => api.post(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies`, {
+          ...body,
+          has_attachments: prepared.count > 0,
+        }), undefined, filesExtra(prepared))
+      return Object.assign(res, { prepared })
+    },
     onSuccess: async (res) => {
-      const files = pending.files
       const replyId: string | undefined = res.data?.reply?.id
       setReply('')
       pending.clear()
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       toast.success(t('post.replyAdded'))
-      if (replyId && files.length > 0) {
-        await uploadPendingFiles(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/attachments`, files).catch(() => {})
+      if (replyId && res.prepared.count > 0) {
+        await uploadPrepared(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/attachments`, res.prepared).catch(() => {})
         qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       }
     },
@@ -404,7 +416,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           }
         }}
       >
-        {(data?.post?.media_url ?? post.media_url) && <PostMedia url={(data?.post?.media_url ?? post.media_url)!} />}
+        {(data?.post?.media_url ?? post.media_url) && <PostMedia url={(data?.post?.media_url ?? post.media_url)!} files={fileEntries(data?.post?.e2e_body ?? post.e2e_body)} />}
 
         {/* Post original */}
         {data?.post?.content && (
@@ -461,7 +473,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               </div>
             ) : (
               <>
-                <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed" />
+                <MediaContent text={data.post.content} files={fileEntries(data.post.e2e_body)} className="text-fc-text text-sm leading-relaxed" />
                 {/* Publication chiffrée : pas d'aperçu demandé au serveur (il verrait l'URL). */}
                 {linkPreviewEnabled && !data.post.enc && (() => {
                   const url = extractFirstUrl(data.post.content)
@@ -611,7 +623,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               ) : (
                 <>
                   <MediaContent text={r.content} />
-                  <AttachmentList attachments={r.attachments} />
+                  <AttachmentList attachments={r.attachments} body={r.e2e_body} />
                   {linkPreviewEnabled && (() => {
                     // Réponse chiffrée : aperçu calculé par l'expéditeur, jamais demandé au serveur.
                     if (r.enc) return r.e2e_body?.p ? <LinkPreview url={extractFirstUrl(r.content) ?? ''} data={r.e2e_body.p} /> : null

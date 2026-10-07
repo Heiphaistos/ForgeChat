@@ -26,6 +26,9 @@ import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { colors, font, spacing } from '@/theme'
+import { withPreparedUploads, encryptedMedia } from '@/e2e/files'
+import { Attachments } from '@/features/chat/Attachments'
+import type { FileEntry } from '@/e2e/crypto'
 
 /** Publication de forum et ses réponses (comme PostView). */
 export default function PostScreen() {
@@ -136,12 +139,15 @@ export default function PostScreen() {
             .catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
         }
         onSend={(body, files) =>
-          sendWithAttachments(
-            body,
-            files,
-            (has) => (post ? forumApi.reply(ids.serverId, ids.channelId, post, body, has) : Promise.resolve(null)),
-            (id, f) => forumApi.uploadReply(ids.serverId, ids.channelId, ids.postId, id, f),
-            (id) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, id),
+          // Fichiers chiffrés avant l'envoi (clés dans la réponse chiffrée, §12).
+          withPreparedUploads('channel', ids.channelId, files, (p) =>
+            sendWithAttachments(
+              body,
+              p.uploads,
+              (has) => (post ? forumApi.reply(ids.serverId, ids.channelId, post, body, has, p.entries) : Promise.resolve(null)),
+              (id, f) => forumApi.uploadReply(ids.serverId, ids.channelId, ids.postId, id, f),
+              (id) => forumApi.deleteReply(ids.serverId, ids.channelId, ids.postId, id),
+            ),
           ).finally(() => {
             void refresh()
             void refreshList()
@@ -155,7 +161,7 @@ export default function PostScreen() {
         header={
           post ? (
             <View style={styles.post}>
-              {post.mediaUrl ? <PostMedia url={post.mediaUrl} /> : null}
+              {post.mediaUrl ? <PostMedia url={post.mediaUrl} files={post.files} /> : null}
               <Text style={styles.title} accessibilityRole="header">
                 {post.title}
               </Text>
@@ -179,10 +185,13 @@ export default function PostScreen() {
 }
 
 /** Média d'une publication de salon média, en grand (vidéo : plein écran natif du lecteur). */
-function PostMedia({ url }: { url: string }) {
+function PostMedia({ url, files }: { url: string; files?: FileEntry[] }) {
   const t = useT()
   const src = resolveMediaUrl(url)
   if (!src) return null
+  // Média chiffré : déchiffré sur l'appareil par la liste des pièces jointes.
+  const att = encryptedMedia(url, files)
+  if (att) return <Attachments items={[att]} files={files} />
   return isVideoMedia(url) ? (
     <VideoAttachment src={src} label={t('social.post.video')} />
   ) : (

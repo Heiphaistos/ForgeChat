@@ -183,6 +183,50 @@
       "ct": "41tK_LZISaj31WZ5IXcWPxhIj30TMfWwsio0aRj0iYhNzAaj8naFGOE-1u6zamIK"
     }
   },
+  "fileSmall": {
+    "fileId": "77777777-7777-4777-8777-777777777777",
+    "key": "KCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4_QEFCQ0RFRkc",
+    "plaintext": "Bonjour fichier chiffré 🔐",
+    "chunk": 65536,
+    "ct": "uqaNpjpRLCqSWkaDlvulZJY92CoC1UXJKA37Ww5vYTWwbNyeVog_hk0UJjGR"
+  },
+  "fileLarge": {
+    "fileId": "77777777-7777-4777-8777-777777777777",
+    "key": "PD0-P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWls",
+    "length": 66536,
+    "pattern": "(i * 7 + 3) & 255",
+    "ctLength": 66568,
+    "ctSha256": "v6NU3oYzd0kceciUU7aflqWahYKVMwRWdFldoDaZkg8",
+    "lastChunk": "rd2HxYRghw8ptWIUgsSKWSsbIFwm2rvGtRsl-8axddSzy1ZE6OlUW_i2tU-De_PoOM2mvnVIkGM6uxBo4zUmO3j1VAA6shMAtq6cjDnno2xQQ8pQMAf6Mh2vEZZuHUhPcaQX5IVamlLUVsp1JgZy2pJlWGX3ICGZaKGqk_ZfrdXdNrr443zETeEixwAbRJfyI5KosIpGIfNOGu4zEmDQ_5HMdcPtPccaWtekISj_m9UWaJs7gP6sqDkCwSqQ11QLaTRd16ePRMzelznprKNG1oxTb49FQ2sINy5tfdkF7s1I_nqJpdotETbJMYJCN3WCLafonIu9CIHQw6dH02iGZMI1PQV01OP2SqRqWgSb8i0usBVS5m2mt4IKCj78VVIf5fP3bz6uKaC26LCX9Xc4twSpKPSgK7rfIHtQFMftQRNoj80LWfL-p7gsy7XgOAQJrOSiBM1nanuKrumnIR6O9iwF5IAC2VVgqoLtdbWMcEGh2ISirVXtzTkxRNDA-Y-9pWM0pcridOH5iSFjQJ4xJQcWnaZKHCCEZV_9Ngc5Oeo39pu1Z_nvrWBmTjpL16k1fSCA0mIIKXG8MlLEL0TdHCoUOaR7ALIiPNL5lAyunrCLCbL_H-SzfVQO9kEkT08yLIv2ZS1F5xev4epvnLhHLRU5vhsTl23l7TYoJ9ONipvA5gbKzWyCz96z87ZRZE7s_o0SJkC-nj25kXbcCIbelblLWL6EiF3d2q93aYW5FuSMxFFuH5FUp_miZt1w2uX4HnkRY4Dg-1raIQyDhuk4iAP9a3afsIUmWZJ__lJVm64PAt3sKOzNlgneCr_3F66Afe_VsNzyQrf2PgippievmwmtaynwCqF4TqnxQeB-ctogcNJOpTeWz97HnBvVnBN_b0t2x0-k_yObGZHA-uN_PfURvpx3lVyweX7QDb0CFNIRAMM1KNGCpzzMoA6HQVC0CYYslbzbCJYkL8gMxz5BmYVSLl3n5SILkT8h08qXeXNdCi8UYnABtajlyfqNC3vJL5Ht7fpg2qtdBNi1Fb4VSYtttMvgY-2dxTodV-iQqxwzH3mq_4V_D_q2qoPfQDMr2Ij0SIS2rJ8VuVo6Km4PjTcfMrxZ_9LzW58ic95UhaGbYkGfeqeA5H1X7Qio45hw25apEb0htcc5xibd-0bwJ0tVcsCbzcPlJvf9tuaJ1gv-gAUqqJPSvpE1bcCE2Cuvo6xjZZ_8HGnQSxYBpVjakaYfJuXeMcBwTb5XCiXSKuPwN19LpGi1tJPEkaPkFxJN6_C9-eBtCBC57V1_EzSKMqQA6c3TDWDU2v_IPapLJqUjBoW_MZpYpJFwxyHrQnWKt9QCszmyhVI",
+    "iv1": "AAAAAAAAAAAAAAAB",
+    "aadLast": "file v1|77777777-7777-4777-8777-777777777777|1|1"
+  },
+  "fileMessage": {
+    "conv": "group:0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21",
+    "epoch": 2,
+    "author": "11111111-1111-4111-8111-111111111111",
+    "clientMsgId": "33333333-3333-4333-8333-333333333333",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "8PHy8_T19vf4-fr7",
+    "body": {
+      "t": "",
+      "f": [
+        {
+          "id": "77777777-7777-4777-8777-777777777777",
+          "k": "KCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4_QEFCQ0RFRkc",
+          "n": "note.txt",
+          "m": "text/plain",
+          "s": 29
+        }
+      ]
+    },
+    "enc": {
+      "v": 1,
+      "epoch": 2,
+      "iv": "8PHy8_T19vf4-fr7",
+      "ct": "c3EuzvKzCG3U7NnxyWKZtFm9LdJ8NQOgv9CdOkCSM9NLPt9DZDJi9-kmBEctzT0qtJh3Dz6H2kIiXo8tRqsai6zsEXfs1jn-3q98QsD9iPaRoUhvXdjyW5IDPBWKh-mDnD_nAUBpitqnvzzgMubd4L7adjeYBbGIRLXTYstUdgrToq3oaMR37Rt94dzhkKLSThSyVG_Z2ZjAW8f71g56H9JSvG-t"
+    }
+  },
   "recoveryNormalize": [
     [
       "7k3qz-m9xw2-pb4td-0vh1r",

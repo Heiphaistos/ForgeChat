@@ -2,7 +2,7 @@
 // clé du salon, contenus liés à leur fil, publication ou sondage par une portée
 // dans l'AAD (crypto.ts : threadScope, postScope, pollScope).
 import { lockedText, openBody, openMessages, sealBody, type RawMsg } from './conversations'
-import { pollScope, postScope, threadScope, type EncPayload } from './crypto'
+import { pollScope, postScope, threadScope, type EncPayload, type MsgBody } from './crypto'
 import { sendChannel } from './channels'
 
 /** Corps d'un envoi dans un fil ou sous une publication (ces routes veulent un texte, jamais null). */
@@ -15,8 +15,9 @@ export interface ScopedBody { content: string; enc?: EncPayload; client_msg_id?:
 export const sendScoped = <T>(
   serverId: string, channelId: string, scope: string, text: string,
   post: (body: ScopedBody) => Promise<T>, edit?: { clientMsgId: string | null | undefined },
+  extra?: Record<string, unknown>,
 ) => sendChannel(channelId, text, body => post({ ...body, content: body.content ?? '' }), {
-  serverId, scope, preview: true,
+  serverId, scope, preview: true, extra,
   ...(edit ? { edit: true, clientMsgId: edit.clientMsgId ?? crypto.randomUUID() } : {}),
 })
 
@@ -45,7 +46,7 @@ export const openThreadMessages = <T extends RawMsg>(channelId: string, th: { cl
 /** Création d'un fil : titre ET premier message chiffrés (portée du fil), ou les deux en clair. */
 export function createThread<T>(
   serverId: string, channelId: string, title: string, text: string, parentMessageId: string | undefined,
-  post: (body: Record<string, unknown>) => Promise<T>,
+  post: (body: Record<string, unknown>) => Promise<T>, extra?: Record<string, unknown>,
 ): Promise<T> {
   const clientId = crypto.randomUUID()
   const scope = threadScope(channelId, clientId)
@@ -58,18 +59,19 @@ export function createThread<T>(
       client_id: clientId, title_enc: sealed.enc, first_message: '', enc: body.enc, client_msg_id: body.client_msg_id,
       parent_message_id: parentMessageId,
     })
-  }, { serverId, scope })
+  }, { serverId, scope, extra })
 }
 
 // ─── Forums et salons médias ────────────────────────────────────────────────
 interface PostLike extends RawMsg { title: string; client_msg_id?: string | null; creator_id: string }
 
 /** Publication chiffrée ({t: contenu, title}) déchiffrée ici (auteur = créateur). */
-export async function openPost<T extends PostLike>(channelId: string, p: T): Promise<T & { e2e?: 'ok' | 'locked' }> {
+export async function openPost<T extends PostLike>(channelId: string, p: T): Promise<T & { e2e?: 'ok' | 'locked'; e2e_body?: MsgBody }> {
   if (!p.enc || !p.client_msg_id) return p
   const body = await openBody('channel', channelId, p.enc, p.creator_id, p.client_msg_id, postScope(channelId, p.client_msg_id))
   if (!body) return { ...p, title: lockedText(), content: lockedText(), e2e: 'locked' }
-  return { ...p, title: typeof body.title === 'string' ? body.title : '', content: body.t, e2e: 'ok' }
+  // `e2e_body.f` : médias chiffrés de la publication (clés, §12).
+  return { ...p, title: typeof body.title === 'string' ? body.title : '', content: body.t, e2e: 'ok', e2e_body: body }
 }
 
 export const openPosts = <T extends PostLike>(channelId: string, list: T[]) =>
@@ -87,12 +89,13 @@ export function sealPost<T>(
   serverId: string, channelId: string, title: string, content: string,
   post: (body: { title: string; content: string | null; enc?: EncPayload; client_msg_id?: string }) => Promise<T>,
   edit?: { clientMsgId: string },
+  files?: Record<string, unknown>,
 ): Promise<T> {
   const cmid = edit?.clientMsgId ?? crypto.randomUUID()
   return sendChannel(channelId, content, body => body.enc
     ? post({ title: '', content: null, enc: body.enc, client_msg_id: body.client_msg_id })
     : post({ title, content: content || null }),
-  { serverId, scope: postScope(channelId, cmid), clientMsgId: cmid, extra: { title }, edit: !!edit })
+  { serverId, scope: postScope(channelId, cmid), clientMsgId: cmid, extra: { ...files, title }, edit: !!edit })
 }
 
 // ─── Sondages ───────────────────────────────────────────────────────────────

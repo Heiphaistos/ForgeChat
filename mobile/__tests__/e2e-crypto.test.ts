@@ -112,3 +112,36 @@ test('clé de média : mêmes octets que le web, index = époque modulo l’anne
   expect(c.mediaKeyIndex(c.MEDIA_KEYRING + 3)).toBe(3)
   expect(await c.mediaKey(d(x.convKey), x.conv, x.epoch + 1)).not.toBe(x.key)
 })
+
+const pattern = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 3) & 255)
+
+test('fichiers : mêmes octets que le web, troncature et réordonnancement refusés', async () => {
+  const s = V.fileSmall
+  expect(s.chunk).toBe(c.FILE_CHUNK)
+  expect(e(await c.encryptFileBytes(d(s.key), s.fileId, c.utf8(s.plaintext)))).toBe(s.ct)
+  const n = c.utf8(s.plaintext).length
+  expect(new TextDecoder().decode(await c.decryptFileBytes(d(s.key), s.fileId, d(s.ct), n))).toBe(s.plaintext)
+  const L = V.fileLarge
+  const ct = await c.encryptFileBytes(d(L.key), L.fileId, pattern(L.length))
+  expect(ct.length).toBe(L.ctLength)
+  expect(e(await c.sha256(ct))).toBe(L.ctSha256)
+  expect(e(ct.subarray(c.FILE_CT_CHUNK))).toBe(L.lastChunk)
+  expect(e(c.fileChunkIv(1))).toBe(L.iv1)
+  expect(c.fileChunkAad(L.fileId, 1, true)).toBe(L.aadLast)
+  expect(await c.decryptFileBytes(d(L.key), L.fileId, ct, L.length)).toEqual(pattern(L.length))
+  await expect(c.decryptFileBytes(d(L.key), L.fileId, ct.subarray(0, c.FILE_CT_CHUNK), c.FILE_CHUNK)).rejects.toThrow()
+  const swapped = new Uint8Array(ct.length)
+  swapped.set(ct.subarray(c.FILE_CT_CHUNK))
+  swapped.set(ct.subarray(0, c.FILE_CT_CHUNK), ct.length - c.FILE_CT_CHUNK)
+  await expect(c.decryptFileBytes(d(L.key), L.fileId, swapped, L.length)).rejects.toThrow()
+  await expect(c.decryptFileBytes(d(L.key), L.fileId, ct, L.length + 1)).rejects.toThrow()
+})
+
+test('fichiers : message {t, f} du web relu, entrées validées', async () => {
+  const x = V.fileMessage
+  expect(await c.encryptMessage(d(x.key), x.conv, x.epoch, x.author, x.clientMsgId, x.body, d(x.iv))).toEqual(x.enc)
+  const body = await c.decryptMessage(d(x.key), x.conv, x.enc, x.author, x.clientMsgId)
+  expect(c.fileEntries(body)).toEqual(x.body.f)
+  expect(c.fileEntries({ f: [{ ...x.body.f[0], id: 'x' }] })).toEqual([])
+  expect(c.safeMime('text/html')).toBe('application/octet-stream')
+})

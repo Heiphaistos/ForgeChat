@@ -1,6 +1,7 @@
 import { useChat } from '../../store/chat'
 import { Download } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { displayAttachments } from '../../e2e/files'
 
 interface ExportConversationButtonProps {
   channelId: string
@@ -49,7 +50,8 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
       }
 
       if (msg.attachments && msg.attachments.length > 0) {
-        for (const att of msg.attachments) {
+        // Fichier chiffré : son vrai nom vient du message déchiffré (le fichier reste sur le serveur, chiffré).
+        for (const att of displayAttachments(msg.attachments, msg.e2e_body)) {
           lines.push(`[${date}] ${author}: [Pièce jointe: ${att.filename ?? att.url}]`)
         }
       }

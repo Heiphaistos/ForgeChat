@@ -252,6 +252,8 @@ export interface ChatMessage {
   clientMsgId?: string | null
   /** Message chiffré : déchiffré sur l'appareil ('ok') ou en attente d'une clé ('locked'). */
   e2e?: 'ok' | 'locked'
+  /** Fichiers chiffrés décrits dans le message déchiffré (clés, noms, types : §12). */
+  files?: import('@/e2e/crypto').FileEntry[]
   /** Salon : message envoyé en clair (badge « non chiffré »). */
   unencrypted?: boolean
   /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */

@@ -18,6 +18,7 @@ import { LinkPreview } from './LinkPreview'
 import { PollCard } from './PollCard'
 import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
+import { displayAttachments } from '@/e2e/files'
 
 interface Props {
   message: ChatMessage
@@ -264,7 +265,7 @@ export const MessageItem = memo(function MessageItem({
 
           {m.forwardedFrom ? <Text style={styles.forward}>{t('msg.forwardedFrom', { from: m.forwardedFrom })}</Text> : null}
 
-          {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
+          {m.content && !(isVoiceMessageText(m.content) && displayAttachments(m.attachments, m.files).some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
               {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview m={m} myName={myName} />}
             </View>
@@ -279,7 +280,7 @@ export const MessageItem = memo(function MessageItem({
 
           {m.pollId && serverId && channelId ? <PollCard serverId={serverId} channelId={channelId} pollId={m.pollId} myId={myId} /> : null}
 
-          <Attachments items={m.attachments} pending={m.pending} onLongPress={() => onLongPress(m)} />
+          <Attachments items={m.attachments} files={m.files} pending={m.pending} onLongPress={() => onLongPress(m)} />
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>{t('msg.uploading')}</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>{t('msg.edited')}</Text> : null}

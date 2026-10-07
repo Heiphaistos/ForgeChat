@@ -26,8 +26,9 @@ use crate::{
     state::AppState,
 };
 
-/// Texte chiffré d'un message, base64url : 4000 caractères (≤ 16 000 o) + JSON + tag.
-const MAX_CT_B64: usize = 24 * 1024;
+/// Contenu chiffré d'un message, base64url : 4000 caractères (≤ 16 000 o) + JSON + tag,
+/// plus jusqu'à 10 fichiers (clé, nom, type, miniature ≤ 8 Kio chacun, §12).
+const MAX_CT_B64: usize = 128 * 1024;
 /// Refus du texte en clair : code puis explication pour les anciennes applis.
 pub const PLAINTEXT_REFUSED: &str =
     "PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire.";

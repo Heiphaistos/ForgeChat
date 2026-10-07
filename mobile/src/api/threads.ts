@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto'
 import { LIMITS } from '@/config/env'
 import { checkAutomod, openThreadTitle, sendChannelText, threadCreateBody } from '@/e2e/channels'
 import { mustEncrypt, openRawList } from '@/e2e/conversations'
-import { threadScope } from '@/e2e/crypto'
+import { threadScope, type FileEntry } from '@/e2e/crypto'
 import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizeThreads, type ThreadSummary } from '@/features/chat/threads'
 import { http, path } from '@/lib/http'
@@ -41,10 +41,10 @@ export const threadsApi = {
     return http.post<{ thread: { id: string } }>(base(serverId, channelId), await threadCreateBody(channelId, title, first, parentMessageId))
   },
   /** Renvoie l'id du message créé (pour y joindre ensuite des fichiers). */
-  async send(serverId: string, channelId: string, thread: ThreadSummary, content: string, hasAttachments = false): Promise<string | null> {
+  async send(serverId: string, channelId: string, thread: ThreadSummary, content: string, hasAttachments = false, files?: FileEntry[]): Promise<string | null> {
     const { result: r } = await sendChannelText(serverId, channelId, content, (body) =>
       http.post<{ message?: { id?: unknown } }>(base(serverId, channelId) + path`/${thread.id}/messages`, { ...body, content: body.content ?? '', has_attachments: hasAttachments }),
-    { scope: scopeOf(channelId, thread) })
+    { scope: scopeOf(channelId, thread), extra: files?.length ? { f: files } : undefined })
     return typeof r?.message?.id === 'string' ? r.message.id : null
   },
   /** Auteur seulement ; même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */

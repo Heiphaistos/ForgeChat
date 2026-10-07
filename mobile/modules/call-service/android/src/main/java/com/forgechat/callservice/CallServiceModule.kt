@@ -134,6 +134,37 @@ class CallServiceModule : Module() {
       null
     }
 
+    // Fichiers chiffrés de bout en bout (src/e2e/files.ts, FileCrypto.java) : chiffrés / déchiffrés
+    // en flux sur le disque, jamais entiers en mémoire, AES-GCM matériel (le JavaScript pur
+    // est ~100 fois plus lent). `src` : file:// ou content:// ; `dest` : file:// du cache.
+    AsyncFunction("encryptFile") { src: String, dest: String, keyB64: String, fileId: String ->
+      val ctx = appContext.reactContext ?: throw IllegalStateException("contexte indisponible")
+      val out = java.io.File(android.net.Uri.parse(dest).path ?: throw IllegalArgumentException("destination invalide"))
+      try {
+        val input = ctx.contentResolver.openInputStream(android.net.Uri.parse(src)) ?: throw java.io.FileNotFoundException(src)
+        input.buffered().use { i -> java.io.FileOutputStream(out).buffered().use { o -> FileCrypto.encrypt(i, o, Base64.decode(keyB64, Base64.NO_WRAP), fileId).toDouble() } }
+      } catch (e: Exception) {
+        out.delete()
+        throw e
+      }
+    }
+
+    AsyncFunction("decryptFile") { src: String, dest: String, keyB64: String, fileId: String, size: Double ->
+      val inFile = java.io.File(android.net.Uri.parse(src).path ?: throw IllegalArgumentException("source invalide"))
+      val out = java.io.File(android.net.Uri.parse(dest).path ?: throw IllegalArgumentException("destination invalide"))
+      try {
+        // BufferedOutputStream.close vide le tampon puis ferme le fichier.
+        java.io.FileInputStream(inFile).buffered().use { i ->
+          java.io.FileOutputStream(out).buffered().use { o -> FileCrypto.decrypt(i, o, Base64.decode(keyB64, Base64.NO_WRAP), fileId, size.toLong()) }
+        }
+        null
+      } catch (e: Exception) {
+        // Jamais de fichier partiel (ou non authentifié) laissé dans le cache.
+        out.delete()
+        throw e
+      }
+    }
+
     // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS
     // repart de zéro et relit le thème. Le service d'appel est arrêté avant, pour ne pas survivre seul.
     Function("restart") {
