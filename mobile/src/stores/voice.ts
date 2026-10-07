@@ -10,7 +10,7 @@ import { ensureMediaPermissions } from '@/services/media'
 import { playSoundFile } from '@/services/soundboard'
 import { t } from '@/i18n'
 import { getMyId, registerSignOutHook } from './auth'
-import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
+import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, retryWhenKeyReady, watchOutdated, type MediaE2EE } from '@/e2e/media'
 
 /**
  * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -140,6 +140,8 @@ let serverMuted = false
 let serverDeafened = false
 /** Incrémenté à chaque leave() : détecte une continuation async de join() périmée. */
 let joinGeneration = 0
+/** Connexion au SFU en attente de la clé du salon. */
+let keyWait: (() => void) | null = null
 /** Mot de passe du salon, rejoué avec VOICE_JOIN après une reconnexion du WebSocket. */
 let joinPassword: string | undefined
 /** Micro coupé avant la sourdine : rétabli quand on la retire. */
@@ -238,6 +240,8 @@ export const useVoice = create<VoiceState>((set, get) => {
   }
 
   const disconnectMedia = () => {
+    keyWait?.()
+    keyWait = null
     const r = room
     room = null
     roomName = null
@@ -275,7 +279,13 @@ export const useVoice = create<VoiceState>((set, get) => {
       try {
         e2ee = await openMediaE2EE('channel', channelId)
       } catch (err) {
-        if (gen === joinGeneration) set({ mediaStatus: 'failed', error: t(mediaE2EEError(err)) })
+        if (gen !== joinGeneration) return
+        set({ mediaStatus: 'failed', error: t(mediaE2EEError(err)) })
+        // Clé ouverte ou enveloppe reçue plus tard : se connecter alors, sans rejoindre à nouveau.
+        keyWait = retryWhenKeyReady(err, 'channel', channelId, () => {
+          keyWait = null
+          if (gen === joinGeneration) void connectMedia(access)
+        })
         return
       }
       if (gen !== joinGeneration || room) {

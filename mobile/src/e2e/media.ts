@@ -10,6 +10,7 @@ import { RNE2EEManager, RNKeyProvider } from '@livekit/react-native'
 import { RoomEvent, type Room } from 'livekit-client'
 import type { Key } from '@/i18n'
 import { realtime } from '@/lib/realtime'
+import { useAccountKey } from './accountKey'
 import { currentKey, forgetConv, type ConvKind } from './conversations'
 import * as c from './crypto'
 
@@ -119,6 +120,27 @@ export function watchOutdated(room: Room, cb: (identities: string[]) => void) {
     .on(RoomEvent.ParticipantAttributesChanged, check)
     .on(RoomEvent.Connected, check)
   check()
+}
+
+/**
+ * Clé de média pas encore disponible (`E2E_LOCKED` : clé de compte pas encore ouverte ;
+ * `E2E_WAITING` : enveloppe de l'époque pas encore reçue) : `retry` dès qu'elle peut
+ * l'être, sinon le salon restait muet pour de bon. Rend l'annulation, ou null si l'erreur
+ * ne se résout pas seule. Même logique que le web (client/src/e2e/media.ts).
+ */
+export function retryWhenKeyReady(e: unknown, kind: MediaKind, id: string, retry: () => void): (() => void) | null {
+  const m = e instanceof Error ? e.message : ''
+  if (m !== 'E2E_LOCKED' && m !== 'E2E_WAITING') return null
+  let done = false
+  const fire = () => {
+    if (done) return
+    stop()
+    retry()
+  }
+  const offKeys = realtime.on('E2E_KEYS', (d) => { if (d.conv_kind === kind && d.conv_id === id) fire() })
+  const offAccount = useAccountKey.subscribe((s, prev) => { if (s.status === 'ready' && prev.status !== 'ready') fire() })
+  const stop = () => { done = true; offKeys(); offAccount() }
+  return stop
 }
 
 /** Message lisible d'un échec de préparation du chiffrement. */
