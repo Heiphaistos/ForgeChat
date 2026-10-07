@@ -14,6 +14,8 @@ export interface Poll {
   question: string
   creatorId: string
   multipleChoice: boolean
+  /** Vote anonyme : personne ne voit qui a voté (le serveur refuse la liste des votants). */
+  anonymous: boolean
   endsAt: string | null
   options: PollOption[]
   totalVotes: number
@@ -36,6 +38,7 @@ export function normalizePoll(raw: unknown): Poll | null {
     question: r.question,
     creatorId: typeof r.creator_id === 'string' ? r.creator_id : '',
     multipleChoice: r.multiple_choice === true,
+    anonymous: r.anonymous === true,
     endsAt: typeof r.ends_at === 'string' ? r.ends_at : null,
     options,
     totalVotes: num(r.total_votes),
@@ -74,7 +77,7 @@ export const POLL_DURATIONS: readonly { label: Key; hours: number | null }[] = [
   { label: 'panel.poll.dur1w', hours: 168 },
 ]
 
-export type PollBody = { question: string; options: string[]; multiple_choice: boolean; ends_at?: string }
+export type PollBody = { question: string; options: string[]; multiple_choice: boolean; ends_at?: string; anonymous?: boolean }
 
 /** Corps validé, ou message d'erreur traduit (mêmes bornes que le serveur). */
 export function pollBody(question: string, options: readonly string[], multiple: boolean, hours: number | null, now = Date.now()): PollBody | string {

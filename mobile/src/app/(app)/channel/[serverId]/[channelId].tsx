@@ -21,7 +21,7 @@ export default function ChannelScreen() {
           ),
         }}
       />
-      <ChannelBody serverId={ids.serverId} channelId={ids.channelId} name={info.name} nsfw={!!info.channel?.is_nsfw} publishable={info.publishable} />
+      <ChannelBody serverId={ids.serverId} channelId={ids.channelId} name={info.name} nsfw={!!info.channel?.is_nsfw} publishable={info.publishable} autoThreads={!!info.channel?.auto_threads} />
     </>
   )
 }

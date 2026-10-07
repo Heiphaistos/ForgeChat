@@ -78,6 +78,10 @@ export interface Channel {
   hidden?: boolean
   /** Créateur : règle de suppression (channel_access::deletion_refusal). */
   created_by?: string | null
+  /** Messages éphémères du salon (secondes, null = désactivés). */
+  disappear_seconds?: number | null
+  /** Fils automatiques : chaque message ouvre son fil. */
+  auto_threads?: boolean
 }
 
 export interface Category {
@@ -201,6 +205,9 @@ export interface DmMessage {
   client_msg_id?: string | null
   /** Posé par e2e/conversations.openRaw. */
   e2e?: 'ok' | 'locked'
+  /** Messages éphémères (réglage de la conversation). */
+  expires_at?: string | null
+  expire_on_read?: boolean
 }
 
 /** Message de groupe privé (handlers/group_dms.rs). */
@@ -221,6 +228,8 @@ export interface GroupMessage {
   client_msg_id?: string | null
   /** Posé par e2e/conversations.openRaw. */
   e2e?: 'ok' | 'locked'
+  expires_at?: string | null
+  expire_on_read?: boolean
 }
 
 /** Représentation unifiée utilisée par l'UI de chat. */
@@ -244,8 +253,10 @@ export interface ChatMessage {
   failed?: boolean
   /** Pièces jointes annoncées mais pas encore reçues */
   awaitingAttachments?: boolean
-  /** Message éphémère (salons uniquement) : disparaît à cette date. */
+  /** Message éphémère : disparaît à cette date. */
   expiresAt?: string | null
+  /** MP ou groupe « après lecture » : disparaît 5 minutes après lecture par tous. */
+  expireOnRead?: boolean
   /** Sondage attaché (salons uniquement). */
   pollId?: string | null
   /** MP/groupe chiffré : id client lié à l'AAD (réutilisé à l'édition). */

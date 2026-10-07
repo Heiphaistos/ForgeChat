@@ -9,7 +9,8 @@ import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState } from '@/components/ui'
 import { conversationId } from '@/features/chat/adapters'
 import { conversationRefFromParams, useScrollTarget } from '@/features/chat/pins'
-import { SEARCH_DEBOUNCE_MS, searchQuery, withLocalResults, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
+import { SEARCH_DEBOUNCE_MS, fromIndexed, mergeIndexed, searchQuery, withLocalResults, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
+import { searchLocal } from '@/e2e/searchIndex'
 import { flattenNewestFirst, messagesKey, type MessagesData } from '@/features/chat/cache'
 import { formatShort } from '@/lib/format'
 import { t as tr, useT } from '@/i18n'
@@ -62,11 +63,14 @@ export default function SearchScreen() {
     queryKey: [...qk.search(debounced ?? ''), scopeId],
     queryFn: async ({ signal }) => {
       const r = await searchApi.global(debounced!, signal, scope)
+      // Index local des messages déchiffrés sur cet appareil (le texte ne part jamais au serveur).
+      const indexed = (await searchLocal(debounced!, scopeId || undefined)).flatMap((m) => fromIndexed(m) ?? [])
       // Salon où je chiffre : le serveur ne cherche que les messages en clair (et par métadonnées).
-      if (!scope || (scope.kind === 'channel' && !(await mustEncrypt('channel', scope.channelId).catch(() => false)))) return { ...r, local: false }
+      if (!scope || (scope.kind === 'channel' && !(await mustEncrypt('channel', scope.channelId).catch(() => false))))
+        return { ...r, local: false, messages: mergeIndexed(r.messages, indexed) }
       // Conversation chiffrée : recherche locale dans les messages déchiffrés sur l'appareil.
       const cached = flattenNewestFirst(queryClient.getQueryData<MessagesData>(messagesKey(scope.kind, scopeId)))
-      return { ...r, local: scope.kind === 'channel', messages: withLocalResults(r.messages, cached, debounced!, scope, t('social.search.here')) }
+      return { ...r, local: scope.kind === 'channel', messages: mergeIndexed(withLocalResults(r.messages, cached, debounced!, scope, t('social.search.here')), indexed) }
     },
     enabled: !!debounced,
     placeholderData: keepPreviousData,
@@ -108,7 +112,7 @@ export default function SearchScreen() {
         <EmptyState
           icon="search-outline"
           title={t('screen.search')}
-          subtitle={scope ? t('social.search.hintHere') : t('social.search.hint')}
+          subtitle={[scope ? t('social.search.hintHere') : t('social.search.hint'), t('messaging.search.hint'), t('messaging.search.filters')].join('\n\n')}
         />
       ) : results.error ? (
         <ErrorState message={errorMessage(results.error)} onRetry={() => void results.refetch()} />

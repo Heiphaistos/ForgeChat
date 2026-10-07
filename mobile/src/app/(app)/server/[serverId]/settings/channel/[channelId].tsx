@@ -9,6 +9,7 @@ import { Sheet } from '@/components/Sheet'
 import { Button, ErrorState, IconButton, Loading, PasswordField, Row, Section, SwitchRow, T, TextField } from '@/components/ui'
 import { ChannelFollows } from '@/features/servers/ChannelFollows'
 import { ChoiceRow } from '@/features/servers/ChoiceRow'
+import { ChannelMessagingSection } from '@/features/servers/ChannelMessagingSection'
 import { confirmDeleteChannel, useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
 import { useT, type Key } from '@/i18n'
@@ -191,6 +192,9 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
           </>
         ) : null}
       </Section>
+      {ty === 'text' || ty === 'announcement' ? (
+        <ChannelMessagingSection serverId={serverId} channelId={channel.id} disappearSeconds={channel.disappear_seconds} autoThreads={channel.auto_threads} />
+      ) : null}
       {isVoice(ty) && autoCreate ? (
         <TextField label={t('serverSettings.channel.autoName')} value={autoName} onChangeText={setAutoName} maxLength={100} placeholder={t('serverSettings.channel.autoNamePlaceholder')} />
       ) : null}

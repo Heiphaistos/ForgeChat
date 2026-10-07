@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
-import { create } from 'zustand'
 import { Image } from 'expo-image'
 import { Avatar } from '@/components/Avatar'
 import { Sheet, type SheetAction } from '@/components/Sheet'
@@ -13,6 +12,7 @@ import { apiOrigin } from '@/config/env'
 import { announcementsApi } from '@/api/announcements'
 import { dmsApi } from '@/api/dms'
 import { forwardText } from '@/e2e/conversations'
+import { useDrafts } from '@/e2e/drafts'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { threadsApi } from '@/api/threads'
@@ -38,11 +38,6 @@ import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 import { useRoleDecor } from '@/features/servers/roleDecor'
 
-/** Brouillons en mémoire uniquement (jamais persistés sur disque). */
-const useDrafts = create<{ drafts: Record<string, string>; set: (id: string, v: string) => void }>((set) => ({
-  drafts: {},
-  set: (id, v) => set((s) => ({ drafts: { ...s.drafts, [id]: v } })),
-}))
 
 const GROUP_WINDOW_MS = 5 * 60_000
 const HIGHLIGHT_MS = 2000
@@ -72,6 +67,7 @@ export function ChatView({
   readOnlyReason,
   header,
   publishable,
+  autoThreads,
 }: {
   conversation: ConversationRef
   placeholder: string
@@ -80,6 +76,8 @@ export function ChatView({
   header?: React.ReactElement
   /** Salon d'annonces et droit de gérer les messages : « Publier » vers les salons abonnés. */
   publishable?: boolean
+  /** Fils automatiques (comme Slack) : répondre ouvre le fil du message, créé à la première réponse. */
+  autoThreads?: boolean
 }) {
   const t = useT()
   const me = useAuth((s) => s.user)
@@ -137,9 +135,9 @@ export function ChatView({
     (m: ChatMessage) =>
       router.push({
         pathname: '/thread/[serverId]/[channelId]',
-        params: { serverId, channelId, parent: m.id, preview: (m.content ?? '').slice(0, 100) },
+        params: { serverId, channelId, parent: m.id, preview: (m.content ?? '').slice(0, 100), ...(autoThreads ? { auto: '1' } : {}) },
       }),
-    [serverId, channelId],
+    [serverId, channelId, autoThreads],
   )
   // Enregistrés : lus seulement quand le menu d'un message est ouvert (libellé Enregistrer / Retirer).
   const extras = supportsMessageExtras(conversation)
@@ -237,7 +235,11 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
       return [{ label: t('chat.deleteDraft'), icon: 'trash-outline', danger: true, onPress: () => conv.discardFailed(m.id) }]
     }
     const list: SheetAction[] = []
-    if (!readOnly) list.push({ label: t('chat.reply'), icon: 'arrow-undo', onPress: () => setReplyTo(m) })
+    if (!readOnly) {
+      list.push(autoThreads && channelId && !m.pending
+        ? { label: t('messaging.autothread.reply'), icon: 'chatbubbles-outline', onPress: () => openThread(m) }
+        : { label: t('chat.reply'), icon: 'arrow-undo', onPress: () => setReplyTo(m) })
+    }
     list.push({ label: t('chat.addReaction'), icon: 'happy-outline', onPress: () => setPaletteFor(m) })
     const gif = tenorGifUrl(m.content)
     if (hasEditableText(m)) list.push({ label: t('chat.copyText'), icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })

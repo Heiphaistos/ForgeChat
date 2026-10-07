@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { hasPushToken, setupNotificationChannels } from '@/services/push'
+import { MESSAGE_CATEGORY } from '@/features/notifications/quickActions'
 import { openRaw } from '@/e2e/conversations'
 import { getMyId, registerSignOutHook, useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
@@ -82,7 +83,8 @@ registerSignOutHook(() => stop())
 function show(n: LocalNotice, channelId: 'messages' | 'calls') {
   Notifications.scheduleNotificationAsync({
     identifier: n.id,
-    content: { title: n.title, body: n.body, data: n.data },
+    // Catégorie « message » : réponse rapide et réactions (services/notificationActions).
+    content: { title: n.title, body: n.body, data: n.data, ...(channelId === 'messages' ? { categoryIdentifier: MESSAGE_CATEGORY } : {}) },
     trigger: { channelId },
   }).catch((e) => logger.warn('keepalive', 'notification', e))
 }

@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store'
 import { router } from 'expo-router'
 import { Alert, Platform } from 'react-native'
 import { pushApi } from '@/api/push'
+import { registerMessageCategory } from '@/services/notificationActions'
 import { PUSH_AVAILABLE } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
@@ -36,6 +37,8 @@ export function configureNotifications() {
 
 /** Gestionnaire et canaux Android, communs au push et aux notifications locales du mode sans Google. */
 export function setupNotificationChannels() {
+  // Boutons « Répondre » et réactions des notifications de message.
+  void registerMessageCategory()
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
       // Ne pas afficher de bannière pour la conversation déjà ouverte.
@@ -106,13 +109,15 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
 export function listenNotificationTaps(local = false): () => void {
   if (!PUSH_AVAILABLE && !local) return () => undefined
   const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
+    // Boutons « Répondre » / réactions : services/notificationActions (pas de navigation).
+    if (resp.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return
     routeFromNotification(resp.notification.request.content.data as Record<string, unknown>)
   })
   // Cas « app tuée » : la notification qui a lancé l'app.
   // Léger délai : laisser la navigation « connectée » se monter avant de router.
   const timer = setTimeout(() => {
     const last = Notifications.getLastNotificationResponse()
-    if (last) {
+    if (last && last.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
       routeFromNotification(last.notification.request.content.data as Record<string, unknown>)
       Notifications.clearLastNotificationResponse()
     }

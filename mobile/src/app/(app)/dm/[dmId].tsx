@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Stack, router } from 'expo-router'
 import { Alert, Text, View } from 'react-native'
@@ -7,6 +8,8 @@ import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
+import { rememberConvName } from '@/e2e/searchIndex'
+import { DisappearingButton } from '@/features/chat/DisappearingButton'
 import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
@@ -26,6 +29,8 @@ export default function DmScreen() {
   const summary = convs.data?.find((c) => c.id === ids.dmId && !c.is_group)
   const otherId = summary && !summary.is_group ? summary.other_user_id : isUuid(text.userId) ? text.userId : undefined
   const name = summary && !summary.is_group ? summary.username : (text.name ?? t('conv.dmFallback'))
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (ids.dmId) rememberConvName(ids.dmId, name) }, [ids.dmId, name])
   const status = usePresenceOf(otherId, summary && !summary.is_group ? summary.status : undefined)
   const startCall = useCall((s) => s.start)
 
@@ -67,6 +72,7 @@ export default function DmScreen() {
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
               <E2EBadge kind="dm" id={ids.dmId} />
+              <DisappearingButton kind="dm" id={ids.dmId} />
               <IconButton
                 icon="pin-outline"
                 label={t('conv.pins')}

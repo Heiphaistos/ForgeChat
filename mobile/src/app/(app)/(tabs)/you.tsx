@@ -71,6 +71,7 @@ export default function YouScreen() {
         />
         <Row icon="person-outline" title={t('you.profile')} onPress={() => router.push('/settings/profile')} chevron />
         <Row icon="bookmark-outline" title={t('you.saved')} onPress={() => router.push('/saved')} chevron />
+        <Row icon="calendar-outline" title={t('messaging.sched.title')} onPress={() => router.push('/scheduled')} chevron />
       </Section>
 
       <Section title={t('you.settings')}>

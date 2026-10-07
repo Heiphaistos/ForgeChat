@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Stack, router } from 'expo-router'
 import { Alert, Text, View } from 'react-native'
@@ -6,6 +7,8 @@ import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
+import { DisappearingButton } from '@/features/chat/DisappearingButton'
+import { rememberConvName } from '@/e2e/searchIndex'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -20,8 +23,10 @@ export default function GroupScreen() {
   const { valid, ids, text } = useRouteParams(['groupId'] as const, ['name'])
   const group = useQuery({ queryKey: qk.group(ids.groupId ?? ''), queryFn: () => dmsApi.group(ids.groupId), enabled: valid })
   const inCall = useGroupCall((s) => s.active[ids.groupId ?? '']?.length ?? 0)
-  if (!valid) return <ErrorState message={t('conv.invalidGroup')} />
   const name = group.data?.name ?? text.name ?? t('conv.groupFallback')
+  // Nom de la conversation pour le filtre dans: de la recherche locale.
+  useEffect(() => { if (valid && ids.groupId) rememberConvName(ids.groupId, name) }, [valid, ids.groupId, name])
+  if (!valid) return <ErrorState message={t('conv.invalidGroup')} />
 
   const call = async (type: GroupCallType) => {
     if (useGroupCall.getState().groupId === ids.groupId) {
@@ -60,6 +65,7 @@ export default function GroupScreen() {
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
               <E2EBadge kind="group" id={ids.groupId} />
+              <DisappearingButton kind="group" id={ids.groupId} />
               <IconButton
                 icon="pin-outline"
                 label={t('conv.pins')}
