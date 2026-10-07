@@ -5,21 +5,23 @@ import { useEffect, useState } from 'react'
 import { Alert, ScrollView } from 'react-native'
 import { Row, Section, SwitchRow } from '@/components/ui'
 import { UPDATES_MANIFEST_URL } from '@/config/env'
+import { t as tr, useT, type Key } from '@/i18n'
 import { checkForUpdateNow } from '@/features/updates/useUpdateCheck'
 import { useAuth } from '@/stores/auth'
 import { biometricAvailability } from '@/stores/lock'
 import { useSettings, type LockDelay } from '@/stores/settings'
 import { colors, spacing } from '@/theme'
 
-const DELAYS: { v: LockDelay; label: string }[] = [
-  { v: 0, label: 'Immédiatement' },
-  { v: 30, label: 'Après 30 s' },
-  { v: 60, label: 'Après 1 min' },
-  { v: 300, label: 'Après 5 min' },
+const DELAYS: { v: LockDelay; label: Key }[] = [
+  { v: 0, label: 'settings.security.lockNow' },
+  { v: 30, label: 'settings.security.lock30s' },
+  { v: 60, label: 'settings.security.lock1m' },
+  { v: 300, label: 'settings.security.lock5m' },
 ]
 
 export default function SecuritySettings() {
   const s = useSettings()
+  const t = useT()
   const user = useAuth((st) => st.user)
   const logout = useAuth((st) => st.logout)
   const [bioOk, setBioOk] = useState<boolean | null>(null)
@@ -31,16 +33,16 @@ export default function SecuritySettings() {
   const toggleLock = async (on: boolean) => {
     if (on) {
       if (!bioOk) {
-        Alert.alert('Indisponible', 'Configure un code, Face ID ou une empreinte sur ton appareil pour activer le verrouillage.')
+        Alert.alert(tr('settings.security.unavailable'), tr('settings.security.unavailableBody'))
         return
       }
       // Confirmer que l'utilisateur peut effectivement se déverrouiller avant d'activer.
-      const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Activer le verrouillage de ForgeChat' })
+      const res = await LocalAuthentication.authenticateAsync({ promptMessage: tr('settings.security.enablePrompt') })
       if (!res.success) return
     } else if ((await biometricAvailability()).usable) {
       // Désactiver affaiblit la protection : même preuve que pour déverrouiller. Si l'appareil
       // n'a plus aucun moyen d'authentification, on laisse désactiver (sinon blocage).
-      const res = await LocalAuthentication.authenticateAsync({ promptMessage: 'Désactiver le verrouillage de ForgeChat' })
+      const res = await LocalAuthentication.authenticateAsync({ promptMessage: tr('settings.security.disablePrompt') })
       if (!res.success) return
     }
     s.set({ appLock: on })
@@ -48,27 +50,27 @@ export default function SecuritySettings() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
-      <Section title="Verrouillage de l'app" footer="Demande Face ID / empreinte / code de l'appareil à l'ouverture de ForgeChat.">
-        <SwitchRow icon="finger-print" title="Verrouiller ForgeChat" value={s.appLock} onValueChange={(v) => void toggleLock(v)} disabled={bioOk === false && !s.appLock} />
+      <Section title={t('settings.security.lockSection')} footer={t('settings.security.lockFooter')}>
+        <SwitchRow icon="finger-print" title={t('settings.security.lockApp')} value={s.appLock} onValueChange={(v) => void toggleLock(v)} disabled={bioOk === false && !s.appLock} />
         {s.appLock
           ? DELAYS.map((d) => (
-              <Row key={d.v} title={d.label} selected={s.lockDelay === d.v} onPress={() => s.set({ lockDelay: d.v })} right={s.lockDelay === d.v ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null} />
+              <Row key={d.v} title={t(d.label)} selected={s.lockDelay === d.v} onPress={() => s.set({ lockDelay: d.v })} right={s.lockDelay === d.v ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null} />
             ))
           : null}
       </Section>
 
-      <Section title="Confidentialité">
+      <Section title={t('settings.security.privacy')}>
         <SwitchRow
           icon="eye-off-outline"
-          title="Masquer dans le sélecteur d'apps"
-          subtitle="Floute l'aperçu (iOS). Sur Android, bloque aussi les captures d'écran."
+          title={t('settings.security.hideSwitcher')}
+          subtitle={t('settings.security.hideSwitcherSub')}
           value={s.privacyScreen}
           onValueChange={(v) => s.set({ privacyScreen: v })}
         />
         <SwitchRow
           icon="link-outline"
-          title="Confirmer les liens externes"
-          subtitle="Affiche le vrai domaine avant d'ouvrir un lien (anti-hameçonnage)."
+          title={t('settings.security.confirmLinks')}
+          subtitle={t('settings.security.confirmLinksSub')}
           value={s.confirmLinks}
           onValueChange={(v) => s.set({ confirmLinks: v })}
         />
@@ -76,42 +78,42 @@ export default function SecuritySettings() {
 
       {UPDATES_MANIFEST_URL ? (
         <Section
-          title="Mises à jour"
-          footer="Une fois par jour au démarrage, l'app demande au serveur ForgeChat le numéro de la dernière version. Rien d'autre n'est envoyé ; rien n'est installé sans toi."
+          title={t('settings.security.updates')}
+          footer={t('settings.security.updatesFooter')}
         >
           <SwitchRow
             icon="cloud-download-outline"
-            title="Proposer les nouvelles versions"
+            title={t('settings.security.offerUpdates')}
             value={s.updateCheck}
             onValueChange={(v) => s.set({ updateCheck: v })}
           />
-          <Row icon="refresh-outline" title="Rechercher une mise à jour" onPress={() => void checkForUpdateNow()} chevron />
+          <Row icon="refresh-outline" title={t('settings.security.checkUpdate')} onPress={() => void checkForUpdateNow()} chevron />
         </Section>
       ) : null}
 
-      <Section title="Compte">
-        <Row icon="key-outline" title="Changer le mot de passe" onPress={() => router.push('/settings/password')} chevron />
+      <Section title={t('settings.security.account')}>
+        <Row icon="key-outline" title={t('settings.security.changePassword')} onPress={() => router.push('/settings/password')} chevron />
         <Row
           icon="shield-checkmark-outline"
-          title="Authentification à deux facteurs"
-          subtitle={user?.totp_enabled ? 'Activée' : 'Désactivée'}
+          title={t('settings.security.twoFactor')}
+          subtitle={t(user?.totp_enabled ? 'settings.security.enabled' : 'settings.security.disabled')}
           onPress={() => router.push('/settings/two-factor')}
           chevron
         />
-        <Row icon="phone-portrait-outline" title="Appareils connectés" onPress={() => router.push('/settings/sessions')} chevron />
-        <Row icon="time-outline" title="Historique de connexion" onPress={() => router.push('/settings/login-history')} chevron />
+        <Row icon="phone-portrait-outline" title={t('settings.security.devices')} onPress={() => router.push('/settings/sessions')} chevron />
+        <Row icon="time-outline" title={t('settings.security.loginHistory')} onPress={() => router.push('/settings/login-history')} chevron />
         <Row
           icon="warning-outline"
-          title="Déconnecter tous les appareils"
+          title={t('settings.security.logoutAll')}
           danger
           onPress={() =>
-            Alert.alert('Déconnecter partout ?', 'Toutes tes sessions (web, desktop, mobile) seront fermées.', [
-              { text: 'Annuler', style: 'cancel' },
-              { text: 'Tout déconnecter', style: 'destructive', onPress: () => void logout('all') },
+            Alert.alert(t('settings.security.logoutAllTitle'), t('settings.security.logoutAllBody'), [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('settings.security.logoutAllConfirm'), style: 'destructive', onPress: () => void logout('all') },
             ])
           }
         />
-        <Row icon="trash-outline" title="Supprimer mon compte" danger onPress={() => router.push('/settings/delete-account')} chevron />
+        <Row icon="trash-outline" title={t('settings.security.deleteAccount')} danger onPress={() => router.push('/settings/delete-account')} chevron />
       </Section>
     </ScrollView>
   )

@@ -5,12 +5,14 @@ import { Alert, Linking, ScrollView, Share, StyleSheet, View } from 'react-nativ
 import { authApi, type TotpSetup } from '@/api/auth'
 import { Button, Section, T, TextField } from '@/components/ui'
 import { formatSecret } from '@/features/account/rules'
+import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 
 /** Double authentification : activation (clé + codes de secours + confirmation) ou désactivation. */
 export default function TwoFactorScreen() {
+  const t = useT()
   const enabled = useAuth((s) => !!s.user?.totp_enabled)
   const setUser = useAuth((s) => s.setUser)
   const [setup, setSetup] = useState<TotpSetup | null>(null)
@@ -36,7 +38,7 @@ export default function TwoFactorScreen() {
     run(async () => {
       await authApi.confirmTotp(code)
       setUser({ totp_enabled: true })
-      Alert.alert('Double authentification activée', 'Garde tes codes de secours en lieu sûr.')
+      Alert.alert(tr('settings.twoFactor.enabledTitle'), tr('settings.twoFactor.enabledBody'))
       router.back()
     })
 
@@ -44,7 +46,7 @@ export default function TwoFactorScreen() {
     run(async () => {
       await authApi.disableTotp(code)
       setUser({ totp_enabled: false })
-      Alert.alert('Double authentification désactivée')
+      Alert.alert(tr('settings.twoFactor.disabledTitle'))
       router.back()
     })
 
@@ -53,13 +55,13 @@ export default function TwoFactorScreen() {
     try {
       await Linking.openURL(setup.qr_url)
     } catch {
-      Alert.alert('Aucune application trouvée', 'Copie la clé et saisis-la dans ton application d’authentification.')
+      Alert.alert(tr('settings.twoFactor.noApp'), tr('settings.twoFactor.noAppBody'))
     }
   }
 
   const codeField = (
     <TextField
-      label="Code à 6 chiffres"
+      label={t('settings.twoFactor.code')}
       value={code}
       onChangeText={setCode}
       keyboardType="number-pad"
@@ -72,49 +74,46 @@ export default function TwoFactorScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Double authentification' }} />
+      <Stack.Screen options={{ title: t('settings.twoFactor.title') }} />
       {enabled ? (
         <>
-          <T>La double authentification est activée. Pour la désactiver, saisis un code de ton application d’authentification.</T>
+          <T>{t('settings.twoFactor.enabledIntro')}</T>
           {codeField}
-          <Button title="Désactiver" variant="danger" onPress={disable} loading={loading} disabled={code.trim().length < 6} />
+          <Button title={t('settings.twoFactor.disable')} variant="danger" onPress={disable} loading={loading} disabled={code.trim().length < 6} />
         </>
       ) : !setup ? (
         <>
-          <T>
-            Protège ton compte : à chaque connexion, un code à 6 chiffres te sera demandé en plus du mot de passe. Il te faut une application
-            d’authentification (Aegis, Google Authenticator, 2FAS…).
-          </T>
+          <T>{t('settings.twoFactor.intro')}</T>
           {error ? <T variant="error">{error}</T> : null}
-          <Button title="Configurer" icon="shield-checkmark-outline" onPress={start} loading={loading} />
+          <Button title={t('settings.twoFactor.configure')} icon="shield-checkmark-outline" onPress={start} loading={loading} />
         </>
       ) : (
         <>
-          <Section title="1. Ajoute ForgeChat à ton application" footer="Sans QR code ici : ouvre le lien ou recopie la clé dans ton application.">
+          <Section title={t('settings.twoFactor.step1')} footer={t('settings.twoFactor.step1Footer')}>
             <View style={{ padding: spacing.lg, gap: spacing.md }}>
               <T style={styles.mono} selectable>
                 {formatSecret(setup.secret)}
               </T>
-              <Button title="Ouvrir l’application d’authentification" icon="open-outline" onPress={() => void openAuthenticator()} />
-              <Button title="Copier la clé" variant="secondary" icon="copy-outline" onPress={() => void Clipboard.setStringAsync(setup.secret)} />
+              <Button title={t('settings.twoFactor.openApp')} icon="open-outline" onPress={() => void openAuthenticator()} />
+              <Button title={t('settings.twoFactor.copyKey')} variant="secondary" icon="copy-outline" onPress={() => void Clipboard.setStringAsync(setup.secret)} />
             </View>
           </Section>
-          <Section title="2. Garde tes codes de secours" footer="Chaque code ne sert qu’une fois. C’est le seul recours si tu perds ton téléphone.">
+          <Section title={t('settings.twoFactor.step2')} footer={t('settings.twoFactor.step2Footer')}>
             <View style={{ padding: spacing.lg, gap: spacing.md }}>
               <T style={styles.mono} selectable>
                 {setup.backup_codes.join('\n')}
               </T>
               <Button
-                title="Partager les codes"
+                title={t('settings.twoFactor.shareCodes')}
                 variant="secondary"
                 icon="share-outline"
-                onPress={() => void Share.share({ message: `Codes de secours ForgeChat :\n${setup.backup_codes.join('\n')}` })}
+                onPress={() => void Share.share({ message: t('settings.twoFactor.shareMessage', { codes: setup.backup_codes.join('\n') }) })}
               />
             </View>
           </Section>
-          <T variant="label">3. Confirme avec un code</T>
+          <T variant="label">{t('settings.twoFactor.step3')}</T>
           {codeField}
-          <Button title="Activer" onPress={confirm} loading={loading} disabled={code.trim().length < 6} />
+          <Button title={t('settings.twoFactor.enable')} onPress={confirm} loading={loading} disabled={code.trim().length < 6} />
         </>
       )}
     </ScrollView>

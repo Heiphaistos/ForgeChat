@@ -8,6 +8,7 @@ import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { ProfileCosmeticsEditor, type Cosmetics } from '@/features/account/ProfileCosmeticsEditor'
 import { formatBirthday, parseBirthday, usernameError } from '@/features/account/rules'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import type { User } from '@/types/models'
@@ -19,6 +20,7 @@ const BANNER_MAX_BYTES = 10 * 1024 * 1024 // users::upload_banner
 export default function ProfileSettings() {
   const user = useAuth((s) => s.user) as (User & { birthday?: string | null }) | null
   const setUser = useAuth((s) => s.setUser)
+  const t = useT()
   const [username, setUsername] = useState(user?.username ?? '')
   const [bio, setBio] = useState(user?.bio ?? '')
   const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
@@ -57,9 +59,9 @@ export default function ProfileSettings() {
         profile_effect: cosmetics.effect,
       })
       setUser(updated)
-      Alert.alert('Profil mis à jour')
+      Alert.alert(t('settings.profile.updated'))
     } catch (e) {
-      Alert.alert('Enregistrement impossible', errorMessage(e))
+      Alert.alert(t('settings.profile.saveFailed'), errorMessage(e))
     } finally {
       setSaving(false)
     }
@@ -77,7 +79,7 @@ export default function ProfileSettings() {
     const a = res.assets[0]
     const max = kind === 'avatar' ? LIMITS.avatarMaxBytes : BANNER_MAX_BYTES
     if (a.fileSize && a.fileSize > max) {
-      Alert.alert('Image trop lourde', `Maximum ${max / 1024 / 1024} Mo.`)
+      Alert.alert(t('settings.profile.tooLarge'), t('settings.profile.maxSize', { n: max / 1024 / 1024 }))
       return
     }
     setUploading(kind)
@@ -86,7 +88,7 @@ export default function ProfileSettings() {
       if (kind === 'avatar') setUser(await usersApi.uploadAvatar(file))
       else setUser({ banner: (await usersApi.uploadBanner(file)).banner })
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('settings.profile.uploadFailed'), errorMessage(e))
     } finally {
       setUploading(null)
     }
@@ -95,19 +97,19 @@ export default function ProfileSettings() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <ProfileBanner uri={user.banner} name={user.username} />
-      <Pressable onPress={() => void pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel="Changer d'avatar">
+      <Pressable onPress={() => void pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeAvatarA11y')}>
         <Avatar uri={user.avatar} name={user.username} size={96} decoration={cosmetics.decoration} />
-        <Text style={{ color: colors.link, fontSize: font.sm }}>{uploading === 'avatar' ? 'Envoi…' : 'Changer l’avatar'}</Text>
+        <Text style={{ color: colors.link, fontSize: font.sm }}>{uploading === 'avatar' ? t('settings.profile.uploading') : t('settings.profile.changeAvatar')}</Text>
       </Pressable>
       <Button
-        title={uploading === 'banner' ? 'Envoi…' : user.banner ? 'Changer la bannière' : 'Ajouter une bannière'}
+        title={uploading === 'banner' ? t('settings.profile.uploading') : user.banner ? t('settings.profile.changeBanner') : t('settings.profile.addBanner')}
         variant="secondary"
         icon="image-outline"
         disabled={uploading !== null}
         onPress={() => void pick('banner')}
       />
       <TextField
-        label={`Pseudo (#${user.discriminator})`}
+        label={t('settings.profile.username', { tag: user.discriminator })}
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
@@ -115,20 +117,20 @@ export default function ProfileSettings() {
         maxLength={32}
         error={errors.username}
       />
-      <TextField label="Statut personnalisé" value={customStatus} onChangeText={setCustomStatus} maxLength={128} />
-      <TextField label="Pronoms" value={pronouns} onChangeText={setPronouns} maxLength={30} />
+      <TextField label={t('settings.profile.customStatus')} value={customStatus} onChangeText={setCustomStatus} maxLength={128} />
+      <TextField label={t('settings.profile.pronouns')} value={pronouns} onChangeText={setPronouns} maxLength={30} />
       <TextField
-        label="Anniversaire"
-        placeholder="JJ/MM/AAAA"
+        label={t('settings.profile.birthday')}
+        placeholder={t('settings.profile.birthdayPlaceholder')}
         value={birthday}
         onChangeText={setBirthday}
         keyboardType="numbers-and-punctuation"
         maxLength={10}
         error={errors.birthday}
       />
-      <TextField label="À propos de moi" value={bio} onChangeText={setBio} maxLength={190} multiline style={{ minHeight: 100 }} />
+      <TextField label={t('settings.profile.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline style={{ minHeight: 100 }} />
       <ProfileCosmeticsEditor value={cosmetics} onChange={setCosmetics} avatar={user.avatar} name={user.username} />
-      <Button title="Enregistrer" onPress={save} loading={saving} />
+      <Button title={t('settings.profile.save')} onPress={save} loading={saving} />
     </ScrollView>
   )
 }

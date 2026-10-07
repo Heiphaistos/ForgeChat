@@ -4,10 +4,12 @@ import { Alert, ScrollView } from 'react-native'
 import { usersApi } from '@/api/users'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { DELETE_CONFIRM_WORD, deleteAccountError, deleteAccountFailure } from '@/features/account/deleteAccount'
+import { t as tr, useT } from '@/i18n'
 import { useAuth } from '@/stores/auth'
 import { colors, spacing } from '@/theme'
 
 export default function DeleteAccountScreen() {
+  const t = useT()
   const [password, setPassword] = useState('')
   const [confirmWord, setConfirmWord] = useState('')
   const [loading, setLoading] = useState(false)
@@ -23,7 +25,7 @@ export default function DeleteAccountScreen() {
       // Compte supprimé côté serveur (sessions et appareils push compris, en cascade) :
       // fin de session locale complète (jetons, cache, token push, notifications).
       router.dismissAll()
-      await useAuth.getState().signOutLocally('Ton compte a été supprimé.')
+      await useAuth.getState().signOutLocally(tr('settings.deleteAccount.deleted'))
     } catch (e) {
       // Seul un mot de passe refusé s'affiche sous le champ ; le reste sous le bouton.
       const f = deleteAccountFailure(e)
@@ -41,30 +43,25 @@ export default function DeleteAccountScreen() {
       setError(invalid)
       return
     }
-    Alert.alert('Supprimer définitivement ton compte ?', 'Cette action est irréversible.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer mon compte', style: 'destructive', onPress: () => void doDelete() },
+    Alert.alert(t('settings.deleteAccount.confirmTitle'), t('settings.deleteAccount.confirmBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.deleteAccount.submit'), style: 'destructive', onPress: () => void doDelete() },
     ])
   }
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <T>
-        La suppression est définitive : ton profil, tes amis, tes réactions et tes sessions seront effacés. Tes messages
-        restent visibles des autres sous « Utilisateur supprimé ».
-      </T>
-      <T variant="muted">
-        Si tu es propriétaire d’un serveur, supprime-le d’abord. Les groupes que tu as créés sont confiés au membre le plus ancien.
-      </T>
+      <T>{t('settings.deleteAccount.intro')}</T>
+      <T variant="muted">{t('settings.deleteAccount.owner')}</T>
       <TextField
-        label={`Recopie « ${DELETE_CONFIRM_WORD} »`}
+        label={t('settings.deleteAccount.retype', { word: DELETE_CONFIRM_WORD })}
         value={confirmWord}
         onChangeText={setConfirmWord}
         autoCapitalize="characters"
         autoCorrect={false}
       />
       <PasswordField
-        label="Mot de passe"
+        label={t('settings.deleteAccount.password')}
         value={password}
         onChangeText={setPassword}
         autoComplete="current-password"
@@ -72,7 +69,7 @@ export default function DeleteAccountScreen() {
         error={error}
       />
       {formError ? <T style={{ color: colors.danger }}>{formError}</T> : null}
-      <Button title="Supprimer mon compte" variant="danger" onPress={submit} loading={loading} />
+      <Button title={t('settings.deleteAccount.submit')} variant="danger" onPress={submit} loading={loading} />
     </ScrollView>
   )
 }

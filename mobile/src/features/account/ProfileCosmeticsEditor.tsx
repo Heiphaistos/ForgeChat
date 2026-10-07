@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
 import { DECORATIONS, PROFILE_EFFECTS, THEME_SWATCHES, hexColor } from '@/features/account/profileDecor'
+import { useT } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 
 export interface Cosmetics {
@@ -24,6 +25,7 @@ export function ProfileCosmeticsEditor({
   avatar: string | null
   name: string
 }) {
+  const t = useT()
   const [replay, setReplay] = useState(0)
   const set = (patch: Partial<Cosmetics>) => onChange({ ...value, ...patch })
 
@@ -43,13 +45,13 @@ export function ProfileCosmeticsEditor({
     <View style={{ gap: spacing.sm }}>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.wrap}>
-        {chip('Défaut', current == null, () => pick(null), 'none')}
+        {chip(t('settings.cosmetics.default'), current == null, () => pick(null), 'none')}
         {THEME_SWATCHES.map((c) => (
           <Pressable
             key={c}
             onPress={() => pick(c)}
             accessibilityRole="button"
-            accessibilityLabel={`Couleur ${hexColor(c)}`}
+            accessibilityLabel={t('settings.cosmetics.colorA11y', { hex: hexColor(c) })}
             accessibilityState={{ selected: current === c }}
             style={[styles.swatch, { backgroundColor: hexColor(c) }, current === c && styles.swatchOn]}
           />
@@ -60,9 +62,9 @@ export function ProfileCosmeticsEditor({
 
   return (
     <View style={{ gap: spacing.lg }}>
-      <Text style={styles.title}>Personnalisation du profil (gratuite)</Text>
+      <Text style={styles.title}>{t('settings.cosmetics.title')}</Text>
 
-      <Pressable onPress={() => setReplay((n) => n + 1)} accessibilityRole="button" accessibilityLabel="Rejouer l'aperçu">
+      <Pressable onPress={() => setReplay((n) => n + 1)} accessibilityRole="button" accessibilityLabel={t('settings.cosmetics.replay')}>
         <ProfileThemeCard primary={value.primary} accent={value.accent} style={styles.preview}>
           <ProfileEffect key={`${value.effect}-${replay}`} id={value.effect} />
           <Avatar uri={avatar} name={name} size={64} decoration={value.decoration} />
@@ -70,14 +72,14 @@ export function ProfileCosmeticsEditor({
         </ProfileThemeCard>
       </Pressable>
 
-      <Text style={styles.label}>Décoration d’avatar</Text>
+      <Text style={styles.label}>{t('settings.cosmetics.decoration')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, padding: spacing.sm }}>
-        {[{ id: '', label: 'Aucune' }, ...DECORATIONS].map((d) => (
+        {[{ id: '', label: t('settings.cosmetics.noDecoration') }, ...DECORATIONS].map((d) => (
           <Pressable
             key={d.id || 'none'}
             onPress={() => set({ decoration: d.id })}
             accessibilityRole="button"
-            accessibilityLabel={`Décoration ${d.label}`}
+            accessibilityLabel={t('settings.cosmetics.decorationA11y', { name: d.label })}
             accessibilityState={{ selected: value.decoration === d.id }}
             style={[styles.deco, value.decoration === d.id && styles.decoOn]}
           >
@@ -89,12 +91,12 @@ export function ProfileCosmeticsEditor({
         ))}
       </ScrollView>
 
-      {swatches('Couleur principale', value.primary, (c) => set({ primary: c }))}
-      {swatches('Couleur d’accent', value.accent, (c) => set({ accent: c }))}
+      {swatches(t('settings.cosmetics.primary'), value.primary, (c) => set({ primary: c }))}
+      {swatches(t('settings.cosmetics.accent'), value.accent, (c) => set({ accent: c }))}
 
-      <Text style={styles.label}>Effet de profil (désactivé si « Réduire les animations »)</Text>
+      <Text style={styles.label}>{t('settings.cosmetics.effect')}</Text>
       <View style={styles.wrap}>
-        {chip('Aucun', !value.effect, () => set({ effect: '' }), 'none')}
+        {chip(t('settings.cosmetics.noEffect'), !value.effect, () => set({ effect: '' }), 'none')}
         {PROFILE_EFFECTS.map((e) => chip(e.label, value.effect === e.id, () => set({ effect: e.id }), e.id))}
       </View>
     </View>
