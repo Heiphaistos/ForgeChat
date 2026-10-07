@@ -209,6 +209,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        // Plusieurs comptes dans le même navigateur : jetons des autres comptes en cookies HttpOnly.
+        .route("/api/auth/accounts", get(handlers::accounts::list))
+        .route("/api/auth/accounts/stash", post(handlers::accounts::stash).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/switch", post(handlers::accounts::switch).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/forget", post(handlers::accounts::forget).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/reset-password", post(handlers::password_reset::reset_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))

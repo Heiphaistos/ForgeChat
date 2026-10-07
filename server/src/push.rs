@@ -97,6 +97,9 @@ pub struct SubscriptionKeys {
 pub struct SubscribeBody {
     pub endpoint: String,
     pub keys: SubscriptionKeys,
+    /// Autres comptes connectés dans ce navigateur (plusieurs comptes) : ils gardent leurs
+    /// notifications. Absent : l'endpoint suit le dernier compte connecté, comme avant.
+    pub other_accounts: Option<Vec<Uuid>>,
 }
 
 pub async fn subscribe(
@@ -120,10 +123,19 @@ pub async fn subscribe(
         return Err(AppError::BadRequest("Clés d'abonnement invalides".into()));
     }
 
-    // Un endpoint identifie un navigateur : il suit le dernier compte connecté dessus.
+    // Un endpoint identifie un navigateur : il sert aux comptes connectés dedans, les autres
+    // comptes qui l'avaient enregistré le perdent.
+    let keep: Vec<Uuid> = body.other_accounts.clone().unwrap_or_default().into_iter()
+        .take(crate::mobile_push::MAX_ACCOUNTS_PER_DEVICE).collect();
+    sqlx::query("DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id <> $2 AND NOT (user_id = ANY($3))")
+        .bind(&body.endpoint)
+        .bind(claims.sub)
+        .bind(&keep)
+        .execute(&state.db)
+        .await?;
     sqlx::query(
         "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id, p256dh = EXCLUDED.p256dh,
+         ON CONFLICT (user_id, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh,
              auth = EXCLUDED.auth, created_at = NOW()"
     )
     .bind(claims.sub)

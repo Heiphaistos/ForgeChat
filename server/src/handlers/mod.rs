@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod accounts;
 pub mod gifs;
 pub mod password_reset;
 pub mod users;
