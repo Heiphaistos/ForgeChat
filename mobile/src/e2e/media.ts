@@ -13,6 +13,7 @@ import { realtime } from '@/lib/realtime'
 import { useAccountKey } from './accountKey'
 import { currentKey, forgetConv, type ConvKind } from './conversations'
 import * as c from './crypto'
+import { closers } from './mediaClose'
 
 /** Conversation dont la clé chiffre les médias : `dm`, `group` ou `channel` (salon vocal). */
 export type MediaKind = ConvKind | 'channel'
@@ -38,12 +39,35 @@ class MediaKeyProvider extends RNKeyProvider {
   }
 }
 
+interface Cryptor {
+  setKeyIndex(i: number): Promise<boolean>
+  setEnabled(on: boolean): Promise<boolean>
+  dispose(): Promise<void>
+}
+/** Internes de RNE2EEManager (privés en TypeScript, présents à l'exécution). */
+interface ManagerInternals {
+  frameCryptors?: Map<string, Cryptor>
+  setupE2EESender?: (...a: unknown[]) => Promise<void>
+  setupE2EEReceiver?: (...a: unknown[]) => Promise<void>
+}
+
+/**
+ * Un chiffreur natif ne peut être créé ou modifié que sur une connexion vivante.
+ * Créé sur une PeerConnection fermée (raccrochage pendant qu'une piste se publie
+ * ou s'abonne), le FrameCryptor natif lit un pointeur nul : SIGSEGV, l'appli meurt.
+ */
+export function cryptorAllowed(closing: boolean, room: Room | null): boolean {
+  if (closing || !room) return false
+  const engine = (room as unknown as { engine?: { isClosed?: boolean } }).engine
+  return room.state !== 'disconnected' && engine?.isClosed !== true
+}
+
 /**
  * Les chiffreurs d'émission déjà créés gardent leur index : on leur donne celui de
  * la nouvelle époque. Le SDK ne l'expose pas (champ privé), d'où l'accès direct.
  */
 function syncSenders(manager: RNE2EEManager, room: Room, index: number) {
-  const cryptors = (manager as unknown as { frameCryptors?: Map<string, { setKeyIndex(i: number): Promise<boolean> }> }).frameCryptors
+  const cryptors = (manager as unknown as ManagerInternals).frameCryptors
   for (const sid of room.localParticipant.trackPublications.keys()) void cryptors?.get(sid)?.setKeyIndex(index).catch(() => false)
 }
 
@@ -53,7 +77,11 @@ export interface MediaE2EE {
   /** Arrête le suivi des époques et libère le fournisseur natif. */
   stop: () => void
   bind: (room: Room) => void
+  /** Avant room.disconnect() : plus aucun chiffreur créé, chiffreurs libérés tant que la connexion vit. */
+  close: () => Promise<void>
 }
+
+
 
 /**
  * Prépare le chiffrement des médias de la conversation : clé de l'époque courante,
@@ -71,10 +99,37 @@ export async function openMediaE2EE(kind: MediaKind, id: string): Promise<MediaE
   let epoch = first.epoch
   let room: Room | null = null
   let stopped = false
+  let closing = false
+  // Garde sur toute création de chiffreur par le SDK (pistes publiées / reçues).
+  const internals = manager as unknown as ManagerInternals
+  for (const name of ['setupE2EESender', 'setupE2EEReceiver'] as const) {
+    const original = internals[name]?.bind(manager)
+    if (original) internals[name] = async (...a: unknown[]) => { if (cryptorAllowed(closing, room)) await original(...a) }
+  }
   const apply = async (key: Uint8Array) => {
     const index = c.mediaKeyIndex(epoch)
     await keyProvider.setMediaKey(await c.mediaKey(key, conv, epoch), index)
-    if (room) syncSenders(manager, room, index)
+    if (room && cryptorAllowed(closing, room)) syncSenders(manager, room, index)
+  }
+  const close = async () => {
+    if (closing) return
+    closing = true
+    const r = room
+    if (!r || !cryptorAllowed(false, r)) return
+    // Émetteurs : dépubliés (le SDK libère leurs chiffreurs) plutôt que désactivés,
+    // sinon quelques trames partiraient en clair avant la fermeture.
+    const tracks = [...r.localParticipant.trackPublications.values()].flatMap((p) => (p.track ? [p.track] : []))
+    await Promise.race([
+      r.localParticipant.unpublishTracks(tracks).catch(() => undefined),
+      new Promise((res) => setTimeout(res, 1500)),
+    ])
+    // Récepteurs : libérés ici, connexion encore ouverte.
+    const cryptors = internals.frameCryptors
+    for (const [sid, cryptor] of [...(cryptors?.entries() ?? [])]) {
+      cryptors?.delete(sid)
+      await cryptor.setEnabled(false).catch(() => false)
+      await cryptor.dispose().catch(() => undefined)
+    }
   }
   try {
     await apply(first.key)
@@ -94,10 +149,15 @@ export async function openMediaE2EE(kind: MediaKind, id: string): Promise<MediaE
   })
   return {
     encryption: { e2eeManager: manager },
-    bind: (r) => { room = r },
+    bind: (r) => {
+      room = r
+      closers.set(r, close)
+    },
+    close,
     stop: () => {
       if (stopped) return
       stopped = true
+      closing = true
       off()
       keyProvider.dispose()
     },

@@ -7,6 +7,7 @@ import InCallManager from 'react-native-incall-manager'
 import { APP_ENV, BUILD_LIVEKIT_HOST, apiHostname } from '@/config/env'
 import { parseLiveKitAccess, type LiveKitAccess } from '@/config/livekitUrl'
 import { t } from '@/i18n'
+import { closeMediaE2EE } from '@/e2e/mediaClose'
 import { logger } from '@/lib/logger'
 
 /**
@@ -169,6 +170,8 @@ export async function stopScreenShare(room: Room) {
 /** Quitte la salle en libérant une éventuelle capture d'écran en cours. */
 export async function leaveRoom(room: Room) {
   const release = releaseScreenTrack(room)
+  // Chiffrement : chiffreurs natifs libérés AVANT la fermeture des PeerConnection.
+  await closeMediaE2EE(room).catch((e: unknown) => logger.warn('livekit', 'fin du chiffrement', e))
   await room.disconnect().catch(() => undefined)
   release()
 }

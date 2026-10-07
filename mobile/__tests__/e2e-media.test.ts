@@ -8,6 +8,7 @@ const mockSetSharedKey = jest.fn().mockResolvedValue(true)
 const mockDispose = jest.fn()
 const mockHandlers = new Map<string, (e: Record<string, unknown>) => void>()
 const mockCurrentKey = jest.fn()
+const mockCreate = jest.fn()
 
 jest.mock('expo-crypto', () => ({
   getRandomBytes: (n: number) => new Uint8Array(require('crypto').randomBytes(n)),
@@ -19,6 +20,8 @@ jest.mock('@livekit/react-native', () => ({
   },
   RNE2EEManager: class {
     frameCryptors = new Map()
+    async setupE2EESender(...a: unknown[]) { mockCreate('sender', ...a) }
+    async setupE2EEReceiver(...a: unknown[]) { mockCreate('receiver', ...a) }
   },
 }))
 jest.mock('livekit-client', () => ({ RoomEvent: { Disconnected: 'disconnected' } }))
@@ -36,7 +39,8 @@ jest.mock('@/e2e/conversations', () => ({
 }))
 
 import { b64uDecode } from '@/e2e/crypto'
-import { openMediaE2EE } from '@/e2e/media'
+import { cryptorAllowed, openMediaE2EE } from '@/e2e/media'
+import { closeMediaE2EE } from '@/e2e/mediaClose'
 
 const [kind, id] = mockV.media.conv.split(':') as ['group', string]
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -82,4 +86,63 @@ test('clé indisponible : refus, jamais de salle en clair', async () => {
   mockCurrentKey.mockRejectedValue(new Error('E2E_WAITING'))
   await expect(openMediaE2EE('channel', 'salon')).rejects.toThrow('E2E_WAITING')
   expect(mockSetSharedKey).not.toHaveBeenCalled()
+})
+
+describe('raccrochage : plus aucun chiffreur natif sur une connexion fermée (SIGSEGV)', () => {
+  const room = (state = 'connected', isClosed = false) => ({
+    state,
+    engine: { isClosed },
+    localParticipant: { trackPublications: new Map([['TR_cam', { track: { id: 'cam' } }]]), unpublishTracks: jest.fn().mockResolvedValue([]) },
+  })
+  type Internals = { setupE2EESender(...a: unknown[]): Promise<void>; setupE2EEReceiver(...a: unknown[]): Promise<void>; frameCryptors: Map<string, unknown> }
+
+  test('garde : salle vivante seulement', () => {
+    expect(cryptorAllowed(false, room() as never)).toBe(true)
+    expect(cryptorAllowed(false, room('reconnecting') as never)).toBe(true)
+    expect(cryptorAllowed(true, room() as never)).toBe(false)
+    expect(cryptorAllowed(false, room('disconnected') as never)).toBe(false)
+    expect(cryptorAllowed(false, room('connected', true) as never)).toBe(false)
+    expect(cryptorAllowed(false, null)).toBe(false)
+  })
+
+  test('PeerConnection fermée (engine.isClosed) : le SDK ne crée plus de chiffreur', async () => {
+    mockCurrentKey.mockResolvedValue({ epoch: 2, key: b64uDecode(mockV.media.convKey), me: 'moi' })
+    const m = await openMediaE2EE(kind, id)
+    const mgr = m.encryption.e2eeManager as unknown as Internals
+    const r = room()
+    m.bind(r as never)
+    await mgr.setupE2EEReceiver('pub', 'p')
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    r.engine.isClosed = true // déconnexion venue du serveur : fermeture en cours
+    await mgr.setupE2EESender('pub', 'p')
+    await mgr.setupE2EEReceiver('pub', 'p')
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+    m.stop()
+  })
+
+  test('closeMediaE2EE avant disconnect : émetteurs dépubliés, récepteurs libérés, puis plus rien', async () => {
+    mockCurrentKey.mockResolvedValue({ epoch: 2, key: b64uDecode(mockV.media.convKey), me: 'moi' })
+    const m = await openMediaE2EE(kind, id)
+    const mgr = m.encryption.e2eeManager as unknown as Internals
+    const r = room()
+    m.bind(r as never)
+    const receiver = { setEnabled: jest.fn().mockResolvedValue(true), dispose: jest.fn().mockResolvedValue(undefined), setKeyIndex: jest.fn() }
+    mgr.frameCryptors.set('TR_remote', receiver)
+    await closeMediaE2EE(r as never)
+    expect(r.localParticipant.unpublishTracks).toHaveBeenCalledWith([{ id: 'cam' }])
+    expect(receiver.setEnabled).toHaveBeenCalledWith(false)
+    expect(receiver.dispose).toHaveBeenCalled()
+    expect(mgr.frameCryptors.size).toBe(0)
+    // Caméra republiée / piste reçue pendant la fermeture : ignorées.
+    await mgr.setupE2EESender('pub', 'p')
+    await mgr.setupE2EEReceiver('pub', 'p')
+    expect(mockCreate).not.toHaveBeenCalled()
+    // Nouvelle époque pendant la fermeture : aucun chiffreur touché.
+    mockCurrentKey.mockResolvedValue({ epoch: 3, key: new Uint8Array(32).fill(1), me: 'moi' })
+    mockHandlers.get('E2E_KEYS')?.({ conv_kind: kind, conv_id: id })
+    await flush()
+    await flush()
+    expect(receiver.setKeyIndex).not.toHaveBeenCalled()
+    m.stop()
+  })
 })
