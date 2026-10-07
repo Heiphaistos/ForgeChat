@@ -932,66 +932,17 @@ pub async fn upload_dm_attachment(
     .bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !ok { return Err(AppError::Forbidden); }
 
-    let msg_ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2 AND sender_id=$3)"
+    let msg_enc: bool = sqlx::query_scalar::<_, bool>(
+        "SELECT enc IS NOT NULL FROM dm_messages WHERE id=$1 AND dm_channel_id=$2 AND sender_id=$3"
     )
-    .bind(message_id).bind(dm_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if !msg_ok { return Err(AppError::Forbidden); }
+    .bind(message_id).bind(dm_id).bind(claims.sub).fetch_optional(&state.db).await?
+    .ok_or(AppError::Forbidden)?;
 
-    let upload_dir = std::path::PathBuf::from(&state.config.upload_dir);
-    tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
-
-    let mut uploaded = Vec::new();
-    let mut ttl_hours: Option<i64> = None;
-    let mut budget = crate::handlers::uploads::UploadBudget::open(&state, claims.sub).await?;
-
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let field_name = field.name().unwrap_or("").to_string();
-        if field_name == "ttl_hours" {
-            let val = field.text().await.unwrap_or_default();
-            ttl_hours = val.parse::<i64>().ok();
-            continue;
-        }
-
-        let original_name = field.file_name().unwrap_or("fichier").to_string();
-        let ext = std::path::Path::new(&original_name)
-            .extension().and_then(|e| e.to_str()).unwrap_or("bin").to_lowercase();
-
-        let content_type = mime_guess::from_ext(&ext)
-            .first_raw().unwrap_or("application/octet-stream").to_string();
-        if !crate::handlers::uploads::ALLOWED_EXTENSIONS.contains(&ext.as_str()) {
-            return Err(AppError::BadRequest(format!("Extension .{} non autorisée", ext)));
-        }
-
-        let safe_name = std::path::Path::new(&original_name)
-            .file_name().and_then(|n| n.to_str()).unwrap_or("fichier")
-            .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
-
-        let file_id = Uuid::new_v4();
-        let filename = format!("{}.{}", file_id, ext);
-        let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
-
-        let url = format!("/uploads/{}", filename);
-        let expires_at = ttl_hours.map(|h| Utc::now() + chrono::Duration::hours(h));
-
-        let att = sqlx::query(
-            "INSERT INTO attachments (dm_message_id, filename, content_type, size, url, expires_at, uploader_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)
-             RETURNING id, url, filename, content_type, size, expires_at"
-        )
-        .bind(message_id).bind(&safe_name).bind(&content_type).bind(size).bind(&url).bind(expires_at).bind(claims.sub)
-        .fetch_one(&state.db).await?;
-
-        use sqlx::Row;
-        uploaded.push(serde_json::json!({
-            "id": att.get::<Uuid, _>("id"),
-            "url": att.get::<String, _>("url"),
-            "filename": att.get::<String, _>("filename"),
-            "content_type": att.get::<String, _>("content_type"),
-            "size": att.get::<i64, _>("size"),
-            "expires_at": att.get::<Option<chrono::DateTime<Utc>>, _>("expires_at"),
-        }));
-    }
+    // Fichiers chiffrés si le message l'est ; en clair refusés dès que les deux ont une clé.
+    let encrypted = crate::handlers::uploads::conv_file_mode(&state, msg_enc, e2e_conv::Conv::Dm(dm_id)).await?;
+    let uploaded = crate::handlers::uploads::store_attachments(
+        &state, &mut multipart, false, crate::handlers::uploads::AttachmentOwner::DmMessage(message_id), claims.sub, encrypted,
+    ).await?;
 
     // Notifier l'autre utilisateur
     if !uploaded.is_empty() {

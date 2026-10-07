@@ -151,6 +151,8 @@ pub enum AttachmentOwner {
     Message(Uuid),
     ThreadMessage(Uuid),
     ForumReply(Uuid),
+    DmMessage(Uuid),
+    GroupMessage(Uuid),
 }
 
 impl AttachmentOwner {
@@ -160,13 +162,55 @@ impl AttachmentOwner {
             Self::Message(_) => "message_id",
             Self::ThreadMessage(_) => "thread_message_id",
             Self::ForumReply(_) => "forum_reply_id",
+            Self::DmMessage(_) => "dm_message_id",
+            Self::GroupMessage(_) => "group_dm_message_id",
         }
     }
     fn id(self) -> Uuid {
         match self {
-            Self::Message(id) | Self::ThreadMessage(id) | Self::ForumReply(id) => id,
+            Self::Message(id) | Self::ThreadMessage(id) | Self::ForumReply(id) | Self::DmMessage(id) | Self::GroupMessage(id) => id,
         }
     }
+}
+
+// ─── Pièces jointes chiffrées de bout en bout (docs/CHIFFREMENT-E2E.md §12) ──
+
+/// Blob chiffré : nom `<uuid du fichier>.enc` choisi par l'appli (l'uuid est dans
+/// le message chiffré, qui fait le lien), contenu opaque. Rend le nom normalisé.
+pub fn encrypted_blob_name(name: &str) -> Option<String> {
+    let id: Uuid = name.strip_suffix(".enc")?.parse().ok()?;
+    Some(format!("{id}.enc"))
+}
+
+/// Mode des fichiers joints à un message : chiffrés si le message l'est ; un
+/// fichier en clair est refusé (PLAINTEXT_REFUSED) quand la conversation exige
+/// le chiffrement pour cet auteur, comme le texte. Rend vrai pour « chiffrés ».
+pub fn file_mode(message_encrypted: bool, must_encrypt: bool) -> Result<bool> {
+    if message_encrypted {
+        return Ok(true);
+    }
+    crate::handlers::e2e_conv::plaintext_allowed(must_encrypt)?;
+    Ok(false)
+}
+
+/// Fichiers d'un message de salon (message, fil, réponse de forum) : chiffrés
+/// si le message l'est, en clair seulement pour un auteur sans clé de compte.
+/// `message_encrypted` vaut None si le message n'est pas à l'appelant (IDOR).
+async fn channel_file_mode(state: &AppState, message_encrypted: Option<bool>, user: Uuid) -> Result<bool> {
+    let enc = message_encrypted.ok_or(AppError::Forbidden)?;
+    let must = !enc && crate::handlers::e2e_channel::has_key(&state.db, user).await?;
+    file_mode(enc, must)
+}
+
+/// Fichiers d'un MP ou d'un groupe : en clair seulement tant qu'un membre n'a pas de clé.
+pub async fn conv_file_mode(state: &AppState, message_encrypted: bool, conv: crate::handlers::e2e_conv::Conv) -> Result<bool> {
+    let must = if message_encrypted {
+        false
+    } else {
+        let members = crate::handlers::e2e_conv::members(&state.db, conv).await?;
+        crate::handlers::e2e_conv::all_keyed(&state.db, &members).await?
+    };
+    file_mode(message_encrypted, must)
 }
 
 /// Admins/modérateurs/propriétaires peuvent uploader n'importe quel type de fichier.
@@ -194,13 +238,15 @@ pub async fn is_upload_privileged(state: &AppState, server_id: Uuid, user_id: Uu
 /// Enregistre les fichiers d'un multipart sur disque et dans `attachments`,
 /// rattachés à `owner`. Validations communes à toutes les sources : taille,
 /// liste blanche d'extensions (sauf privilégiés), MIME dérivé de l'extension,
-/// nom nettoyé, nom de fichier disque aléatoire.
+/// nom nettoyé, nom de fichier disque aléatoire. `encrypted` : seuls des blobs
+/// chiffrés `<uuid>.enc` sont acceptés (rangés en `application/octet-stream`).
 pub async fn store_attachments(
     state: &AppState,
     multipart: &mut Multipart,
     privileged: bool,
     owner: AttachmentOwner,
     user_id: Uuid,
+    encrypted: bool,
 ) -> Result<Vec<serde_json::Value>> {
     let mut budget = UploadBudget::open(state, user_id).await?;
     let upload_dir = PathBuf::from(&state.config.upload_dir);
@@ -225,6 +271,19 @@ pub async fn store_attachments(
         let original_name = field.file_name()
             .unwrap_or("fichier")
             .to_string();
+        // Pièce jointe éphémère : 1 h à 30 jours (même raison que les messages éphémères).
+        let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 30)));
+
+        if encrypted {
+            // Conversation chiffrée : le serveur ne reçoit qu'un blob opaque.
+            let name = encrypted_blob_name(&original_name)
+                .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
+            let filename = format!("{}.enc", Uuid::new_v4());
+            let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
+            let url = format!("/uploads/{filename}");
+            uploaded.push(insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await?);
+            continue;
+        }
 
         // Le Content-Type du client est ignoré : dérivé de l'extension (anti-spoofing)
         // Valider et normaliser l'extension — bloquer les types dangereux
@@ -256,37 +315,47 @@ pub async fn store_attachments(
         let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
 
         let url = format!("/uploads/{}", filename);
-        // Pièce jointe éphémère : 1 h à 30 jours (même raison que les messages éphémères).
-        let expires_at = ttl_hours.map(|h| Utc::now() + Duration::hours(h.clamp(1, 24 * 30)));
-
-        let attachment = sqlx::query(&format!(
-            "INSERT INTO attachments ({}, filename, content_type, size, url, expires_at, uploader_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING id, url, filename, content_type, size, expires_at",
-            owner.column()
-        ))
-        .bind(owner.id())
-        .bind(&safe_name)
-        .bind(&content_type)
-        .bind(size)
-        .bind(&url)
-        .bind(expires_at)
-        .bind(user_id)
-        .fetch_one(&state.db)
-        .await?;
-
-        use sqlx::Row;
-        uploaded.push(serde_json::json!({
-            "id": attachment.get::<Uuid, _>("id"),
-            "url": attachment.get::<String, _>("url"),
-            "filename": attachment.get::<String, _>("filename"),
-            "content_type": attachment.get::<String, _>("content_type"),
-            "size": attachment.get::<i64, _>("size"),
-            "expires_at": attachment.get::<Option<chrono::DateTime<Utc>>, _>("expires_at"),
-        }));
+        uploaded.push(insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await?);
     }
 
     Ok(uploaded)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_attachment(
+    state: &AppState,
+    owner: AttachmentOwner,
+    filename: &str,
+    content_type: &str,
+    size: i64,
+    url: &str,
+    expires_at: Option<chrono::DateTime<Utc>>,
+    user_id: Uuid,
+) -> Result<serde_json::Value> {
+    use sqlx::Row;
+    let attachment = sqlx::query(&format!(
+        "INSERT INTO attachments ({}, filename, content_type, size, url, expires_at, uploader_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, url, filename, content_type, size, expires_at",
+        owner.column()
+    ))
+    .bind(owner.id())
+    .bind(filename)
+    .bind(content_type)
+    .bind(size)
+    .bind(url)
+    .bind(expires_at)
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(serde_json::json!({
+        "id": attachment.get::<Uuid, _>("id"),
+        "url": attachment.get::<String, _>("url"),
+        "filename": attachment.get::<String, _>("filename"),
+        "content_type": attachment.get::<String, _>("content_type"),
+        "size": attachment.get::<i64, _>("size"),
+        "expires_at": attachment.get::<Option<chrono::DateTime<Utc>>, _>("expires_at"),
+    }))
 }
 
 /// Pièces jointes non expirées de plusieurs propriétaires d'une même source,
@@ -345,21 +414,19 @@ pub async fn upload_file(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
 
-    // Vérifier que le message appartient à l'utilisateur courant et est dans ce canal (IDOR protection)
-    let msg_owned = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2 AND user_id=$3)"
+    // Message de l'utilisateur courant, dans ce canal (IDOR) ; chiffré ou non.
+    let enc: Option<bool> = sqlx::query_scalar(
+        "SELECT enc IS NOT NULL FROM messages WHERE id=$1 AND channel_id=$2 AND user_id=$3"
     )
     .bind(message_id)
     .bind(channel_id)
     .bind(claims.sub)
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await?;
-    if !msg_owned {
-        return Err(AppError::Forbidden);
-    }
+    let encrypted = channel_file_mode(&state, enc, claims.sub).await?;
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::Message(message_id), claims.sub).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::Message(message_id), claims.sub, encrypted).await?;
 
     // Broadcast MESSAGE_ATTACHMENT_ADDED pour mise à jour temps réel
     if !uploaded.is_empty() {
@@ -385,16 +452,16 @@ pub async fn upload_thread_attachment(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
 
     // Message de l'utilisateur, dans ce fil, dans ce salon (IDOR)
-    let owned: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM thread_messages tm JOIN threads t ON t.id = tm.thread_id
-         WHERE tm.id=$1 AND tm.thread_id=$2 AND t.channel_id=$3 AND tm.user_id=$4)"
+    let enc: Option<bool> = sqlx::query_scalar(
+        "SELECT tm.enc IS NOT NULL FROM thread_messages tm JOIN threads t ON t.id = tm.thread_id
+         WHERE tm.id=$1 AND tm.thread_id=$2 AND t.channel_id=$3 AND tm.user_id=$4"
     )
     .bind(msg_id).bind(thread_id).bind(channel_id).bind(claims.sub)
-    .fetch_one(&state.db).await?;
-    if !owned { return Err(AppError::Forbidden); }
+    .fetch_optional(&state.db).await?;
+    let encrypted = channel_file_mode(&state, enc, claims.sub).await?;
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ThreadMessage(msg_id), claims.sub).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ThreadMessage(msg_id), claims.sub, encrypted).await?;
 
     if !uploaded.is_empty() {
         state.broadcast_to_channel_members(channel_id, serde_json::json!({
@@ -418,16 +485,16 @@ pub async fn upload_forum_reply_attachment(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, true).await?;
 
     // Réponse de l'utilisateur, sous ce post, dans ce salon (IDOR)
-    let owned: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM forum_replies fr JOIN forum_posts fp ON fp.id = fr.post_id
-         WHERE fr.id=$1 AND fr.post_id=$2 AND fp.channel_id=$3 AND fr.user_id=$4)"
+    let enc: Option<bool> = sqlx::query_scalar(
+        "SELECT fr.enc IS NOT NULL FROM forum_replies fr JOIN forum_posts fp ON fp.id = fr.post_id
+         WHERE fr.id=$1 AND fr.post_id=$2 AND fp.channel_id=$3 AND fr.user_id=$4"
     )
     .bind(reply_id).bind(post_id).bind(channel_id).bind(claims.sub)
-    .fetch_one(&state.db).await?;
-    if !owned { return Err(AppError::Forbidden); }
+    .fetch_optional(&state.db).await?;
+    let encrypted = channel_file_mode(&state, enc, claims.sub).await?;
 
     let privileged = is_upload_privileged(&state, server_id, claims.sub).await;
-    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ForumReply(reply_id), claims.sub).await?;
+    let uploaded = store_attachments(&state, &mut multipart, privileged, AttachmentOwner::ForumReply(reply_id), claims.sub, encrypted).await?;
 
     if !uploaded.is_empty() {
         state.broadcast_to_channel_members(channel_id, serde_json::json!({
@@ -456,6 +523,9 @@ pub async fn forum_upload(
     tokio::fs::create_dir_all(&upload_dir).await
         .map_err(|e| AppError::Internal(e.into()))?;
 
+    // Auteur muni d'une clé : la publication est chiffrée, ses médias aussi
+    // (blob opaque, clé dans le contenu chiffré de la publication).
+    let encrypted = crate::handlers::e2e_channel::has_key(&state.db, claims.sub).await?;
     let mut budget = UploadBudget::open(&state, claims.sub).await?;
     if let Some(field) = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
@@ -466,6 +536,20 @@ pub async fn forum_upload(
             .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
+
+        if encrypted {
+            let name = encrypted_blob_name(&original_name)
+                .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
+            let filename = format!("{}.enc", Uuid::new_v4());
+            let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+            let url = format!("/uploads/{filename}");
+            sqlx::query(
+                "INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ($1, 'application/octet-stream', $2, $3, $4)"
+            )
+            .bind(&name).bind(size).bind(&url).bind(claims.sub)
+            .execute(&state.db).await?;
+            return Ok(Json(serde_json::json!({ "url": url })));
+        }
 
         if !FORUM_EXTENSIONS.contains(&ext.as_str()) {
             return Err(AppError::BadRequest(
@@ -493,4 +577,34 @@ pub async fn forum_upload(
     }
 
     Err(AppError::BadRequest("Aucun fichier reçu".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nom_de_blob_chiffre() {
+        let id = "0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21";
+        let ok = format!("{id}.enc");
+        assert_eq!(encrypted_blob_name(&ok).as_deref(), Some(ok.as_str()));
+        // Majuscules normalisées ; tout le reste refusé (nom en clair, chemin, autre extension).
+        assert_eq!(encrypted_blob_name(&format!("{}.enc", id.to_uppercase())).as_deref(), Some(ok.as_str()));
+        for bad in ["photo.jpg".to_string(), "x.enc".into(), "../a.enc".into(), format!("{id}.jpg"), format!("{id}.enc.jpg"), format!("dir/{id}.enc"), String::new()] {
+            assert_eq!(encrypted_blob_name(&bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn mode_des_fichiers() {
+        // Message chiffré : fichiers chiffrés.
+        assert!(file_mode(true, false).unwrap());
+        assert!(file_mode(true, true).unwrap());
+        // Message en clair : fichiers en clair seulement pendant la transition.
+        assert!(!file_mode(false, false).unwrap());
+        match file_mode(false, true) {
+            Err(AppError::BadRequest(m)) => assert!(m.starts_with("PLAINTEXT_REFUSED ")),
+            other => panic!("{other:?}"),
+        }
+    }
 }
