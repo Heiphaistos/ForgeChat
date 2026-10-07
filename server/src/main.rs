@@ -542,6 +542,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
         .route("/admin/stats", get(handlers::servers::get_admin_stats))
         .route("/admin/diagnostics", get(handlers::diagnostics::list_reports))
+        .route("/admin/dm-reports", get(handlers::reports::list_dm_reports))
+        .route("/admin/dm-reports/:id", patch(handlers::reports::update_dm_report))
         .route("/admin/diagnostics/:id", get(handlers::diagnostics::get_report).delete(handlers::diagnostics::delete_report))
         .route("/servers/:server_id/stats", get(handlers::servers::get_server_stats))
         .route("/servers/:server_id/leaderboard", get(handlers::servers::get_leaderboard))

@@ -106,6 +106,14 @@ export default function AdvancedSection({ user }: Props) {
               <ClipboardList size={12} /> Rapports d'erreurs reçus
             </button>
           )}
+          {isDiagAdmin && (
+            <button
+              onClick={() => nav('/admin/signalements')}
+              className="flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition"
+            >
+              <ClipboardList size={12} /> Signalements de messages privés
+            </button>
+          )}
         </div>
       </div>
 

@@ -255,7 +255,7 @@ fn is_admin(user_id: Uuid) -> bool {
         .unwrap_or(false)
 }
 
-fn require_admin(claims: &Claims) -> Result<()> {
+pub(crate) fn require_admin(claims: &Claims) -> Result<()> {
     if is_admin(claims.sub) { Ok(()) } else { Err(AppError::Forbidden) }
 }
 

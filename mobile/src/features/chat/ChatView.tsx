@@ -266,7 +266,8 @@ export function ChatView({
     }
     if (!m.pending) list.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
     if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
-    if (!mine && conversation.kind === 'channel') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
+    // MP 1-à-1 : le signalement part aux administrateurs du site (serveur : dm_reports).
+    if (!mine && conversation.kind !== 'group') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
     // Suppression : l'auteur, ou un modérateur (le serveur tranche — 403 sinon).
     if (mine || conversation.kind === 'channel') list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
     return list
