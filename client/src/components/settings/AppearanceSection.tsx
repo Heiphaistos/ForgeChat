@@ -1,60 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Check, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT, type Key } from '../../i18n'
 import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
-
-const THEMES = [
-  { id: 'dark', label: 'settings.theme.dark', accent: '#5865f2', preview: ['#1a1b1e', '#232428', '#36393f'] },
-  { id: 'darker', label: 'AMOLED', accent: '#5865f2', preview: ['#000', '#0a0a0a', '#0d0d0d'] },
-  { id: 'light', label: 'settings.theme.light', accent: '#5865f2', preview: ['#f2f3f5', '#ebedef', '#fff'] },
-  { id: 'dracula', label: 'Dracula', accent: '#bd93f9', preview: ['#282a36', '#1e1f2b', '#353746'] },
-  { id: 'nord', label: 'Nord', accent: '#5e81ac', preview: ['#2e3440', '#3b4252', '#434c5e'] },
-  { id: 'catppuccin', label: 'Catppuccin', accent: '#cba6f7', preview: ['#1e1e2e', '#181825', '#313244'] },
-  { id: 'gruvbox', label: 'Gruvbox', accent: '#d65d0e', preview: ['#1d2021', '#282828', '#3c3836'] },
-  { id: 'tokyonight', label: 'Tokyo Night', accent: '#7aa2f7', preview: ['#1a1b2e', '#1f2040', '#24283b'] },
-  { id: 'onedark', label: 'One Dark', accent: '#61afef', preview: ['#282c34', '#2c313c', '#3b4048'] },
-  { id: 'cyberpunk', label: 'Cyberpunk', accent: '#f0e14a', preview: ['#0d0d0d', '#111111', '#161616'] },
-  { id: 'monokai', label: 'Monokai', accent: '#a6e22e', preview: ['#272822', '#2d2e2a', '#383830'] },
-  { id: 'solarized', label: 'Solarized', accent: '#268bd2', preview: ['#002b36', '#073642', '#0d4a5c'] },
-  { id: 'forest', label: 'settings.theme.forest', accent: '#6cb340', preview: ['#1a2318', '#1e2a1c', '#243222'] },
-  { id: 'ocean', label: 'settings.theme.ocean', accent: '#00d4ff', preview: ['#0f2340', '#0d2238', '#112a47'] },
-  { id: 'neon', label: 'Neon', accent: '#00ff88', preview: ['#0a0a14', '#0d0d1a', '#111120'] },
-  { id: 'matrix', label: 'Matrix', accent: '#00ff00', preview: ['#000000', '#040804', '#060c06'] },
-  // Nouveaux thèmes
-  { id: 'rosepine', label: 'Rosé Pine', accent: '#eb6f92', preview: ['#191724', '#26233a', '#403d52'] },
-  { id: 'everforest', label: 'Everforest', accent: '#a7c080', preview: ['#2d353b', '#343f44', '#374145'] },
-  { id: 'kanagawa', label: 'Kanagawa', accent: '#7e9cd8', preview: ['#1f1f28', '#2a2a37', '#2d2d3f'] },
-  { id: 'midnight', label: 'settings.theme.midnight', accent: '#6272a4', preview: ['#0c0e1a', '#101220', '#151828'] },
-  { id: 'sunset', label: 'settings.theme.sunset', accent: '#f07050', preview: ['#1a1014', '#22141a', '#27151c'] },
-  { id: 'coffee', label: 'settings.theme.coffee', accent: '#c87941', preview: ['#1e1510', '#271a12', '#2c1c14'] },
-  { id: 'winter', label: 'settings.theme.winter', accent: '#3498db', preview: ['#f0f4f8', '#e8f0f8', '#d0e4f0'] },
-  { id: 'emerald', label: 'settings.theme.emerald', accent: '#2ecc71', preview: ['#0d1f18', '#122820', '#162e22'] },
-  { id: 'bloodmoon', label: 'settings.theme.bloodmoon', accent: '#cc2222', preview: ['#120a0a', '#1a0e0e', '#221010'] },
-  { id: 'violet', label: 'Violet', accent: '#9b59b6', preview: ['#160d24', '#1e1130', '#221238'] },
-  { id: 'slate', label: 'settings.theme.slate', accent: '#5d8aa8', preview: ['#1c2230', '#222c3c', '#263042'] },
-  { id: 'retro', label: 'settings.theme.retro', accent: '#d4883a', preview: ['#2b2017', '#352a1e', '#3c2e22'] },
-]
-
-const FONTS = [
-  { name: 'settings.appearance.systemFont', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
-  { name: 'Arial', value: 'Arial, Helvetica, sans-serif' },
-  { name: 'Georgia', value: 'Georgia, "Times New Roman", serif' },
-  { name: 'Trebuchet MS', value: '"Trebuchet MS", Helvetica, sans-serif' },
-  { name: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
-  { name: 'Tahoma', value: 'Tahoma, Geneva, sans-serif' },
-  { name: 'Courier New', value: '"Courier New", Courier, monospace' },
-  { name: 'Consolas', value: 'Consolas, "Courier New", monospace' },
-]
-
-const DENSITIES: { id: string; label: Key }[] = [
-  { id: 'ultra-compact', label: 'settings.appearance.ultraCompact' },
-  { id: 'compact', label: 'settings.appearance.compact' },
-  { id: 'normal', label: 'settings.appearance.normal' },
-  { id: 'comfortable', label: 'settings.appearance.comfortable' },
-]
+import { DEFAULT_THEME_ID, isHex, type CustomTheme } from '../../theme/themeCore'
+import { DEFAULT_LAYOUT } from '../../theme/applyTheme'
+import { useThemeStore } from '../../theme/themeStore'
+import { FONTS, fontId } from '../../theme/fonts'
+import { Toggle } from './shared'
+import ThemeGallery from './appearance/ThemeGallery'
+import ThemeEditor from './appearance/ThemeEditor'
+import LayoutSettings from './appearance/LayoutSettings'
 
 const AVATAR_SHAPES: { id: string; label: Key }[] = [
   { id: 'round', label: 'settings.appearance.round' },
@@ -62,62 +20,45 @@ const AVATAR_SHAPES: { id: string; label: Key }[] = [
   { id: 'square', label: 'settings.appearance.square' },
 ]
 
-const MESSAGE_DISPLAYS: { id: string; label: Key }[] = [
-  { id: 'normal', label: 'settings.appearance.standard' },
-  { id: 'compact', label: 'settings.appearance.compact' },
-  { id: 'ultra-compact', label: 'settings.appearance.ultraCompact' },
-]
-
 const CODE_THEMES = [
   'dracula', 'monokai', 'github-dark', 'nord', 'one-dark-pro',
   'solarized-dark', 'tomorrow-night', 'vscode-dark',
 ]
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!value)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
-        value ? 'bg-fc-accent' : 'bg-fc-hover'
-      }`}
-    >
-      <span className={`inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${
-        value ? 'translate-x-4.5' : 'translate-x-0.5'
-      }`} />
-    </button>
-  )
-}
+const ACCENTS = ['#5865f2', '#00a8fc', '#23a55a', '#f0b232', '#e67e22', '#f23f43', '#eb6f92', '#9b59b6', '#1abc9c', '#ffffff']
 
-function ColorPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+const H = ({ children }: { children: ReactNode }) => (
+  <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{children}</h3>
+)
+
+/** Accent du compte (accent_color) : remplace celui des thèmes prédéfinis, partagé avec le mobile. */
+function AccentPicker() {
   const t = useT()
+  const { accent, setAccent } = useThemeStore()
+  const save = (c: string | null) => {
+    setAccent(c)
+    api.put('/user/settings', { accent_color: c }).catch(() => toast.error(t('settings.appearance.saveError')))
+  }
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-fc-muted">{label}</span>
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={value || '#5865f2'}
-          onChange={e => onChange(e.target.value)}
-          className="w-8 h-8 rounded cursor-pointer border-none bg-transparent"
-        />
-        <span className="text-xs text-fc-muted font-mono">{value || t('settings.appearance.default')}</span>
-        {value && (
-          <button onClick={() => onChange('')} aria-label={t('settings.appearance.reset')} title={t('settings.appearance.reset')} className="text-fc-muted hover:text-white text-xs">
-            <RotateCcw size={12} />
-          </button>
-        )}
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={() => save(null)} aria-pressed={!accent}
+        className={`px-3 h-8 rounded-full text-xs border ${!accent ? 'border-fc-accent text-fc-text' : 'border-fc-hover text-fc-muted'}`}>
+        {t('themes.accentTheme')}
+      </button>
+      {ACCENTS.map(c => (
+        <button key={c} onClick={() => save(c)} aria-pressed={accent === c} aria-label={c} title={c}
+          className={`w-8 h-8 rounded-full border-2 ${accent === c ? 'border-fc-text' : 'border-transparent'}`} style={{ background: c }} />
+      ))}
+      <input type="color" value={accent && isHex(accent) ? accent : '#5865f2'} aria-label={t('themes.accentCustom')}
+        onChange={e => save(e.target.value)} className="w-8 h-8 rounded-full cursor-pointer border border-fc-hover bg-transparent p-0" />
     </div>
   )
 }
 
 export default function AppearanceSection() {
   const t = useT()
-  // Thèmes et polices à nom propre (Dracula, Arial…) : pas de clé, translate renvoie le nom tel quel.
   const name = (s: string) => t(s as Key)
-  const [activeTheme, setActiveTheme] = useState(() =>
-    localStorage.getItem('fc_theme') || 'dark'
-  )
+  const [editing, setEditing] = useState<CustomTheme | null>(null)
 
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
@@ -125,34 +66,21 @@ export default function AppearanceSection() {
     staleTime: 60_000,
   })
 
-  const [fontFamily, setFontFamily] = useState(FONTS[0].value)
+  const [font, setFont] = useState<string>('system')
   const [fontSizePx, setFontSizePx] = useState(14)
-  const [fontColor, setFontColor] = useState('')
-  const [accentColor, setAccentColor] = useState('')
-  const [bgColor, setBgColor] = useState('')
-  const [density, setDensity] = useState('normal')
   const [avatarShape, setAvatarShape] = useState('round')
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
-  const [glassmorphism, setGlassmorphism] = useState(false)
   const [showRoleColors, setShowRoleColors] = useState(true)
-  const [messageDisplay, setMessageDisplay] = useState('normal')
   const [codeTheme, setCodeTheme] = useState('dracula')
 
   useEffect(() => {
-    if (settings) {
-      setFontFamily(settings.font_family ?? FONTS[0].value)
-      setFontSizePx(settings.font_size_px ?? 14)
-      setFontColor(settings.font_color ?? '')
-      setAccentColor(settings.accent_color ?? '')
-      setBgColor(settings.bg_color ?? '')
-      setDensity(settings.interface_density ?? 'normal')
-      setAvatarShape(settings.avatar_shape ?? 'round')
-      setSidebarWidth(settings.sidebar_width_px ?? SIDEBAR_DEFAULT)
-      setGlassmorphism(settings.glassmorphism ?? false)
-      setShowRoleColors(settings.show_role_colors ?? true)
-      setMessageDisplay(settings.message_display ?? 'normal')
-      setCodeTheme(settings.code_theme ?? 'dracula')
-    }
+    if (!settings) return
+    setFont(fontId(settings.font_family))
+    setFontSizePx(settings.font_size_px ?? 14)
+    setAvatarShape(settings.avatar_shape ?? 'round')
+    setSidebarWidth(settings.sidebar_width_px ?? SIDEBAR_DEFAULT)
+    setShowRoleColors(settings.show_role_colors ?? true)
+    setCodeTheme(settings.code_theme ?? 'dracula')
   }, [settings])
 
   const saveMutation = useMutation({
@@ -161,196 +89,94 @@ export default function AppearanceSection() {
     onError: () => toast.error(t('settings.appearance.saveError')),
   })
 
-  const applyTheme = (id: string) => {
-    setActiveTheme(id)
-    localStorage.setItem('fc_theme', id)
-    document.documentElement.setAttribute('data-theme', id)
-    // Partagé avec le bureau et le téléphone.
-    api.put('/user/theme', { theme: id }).catch(() => {})
-    // Effacer l'override custom pour que la CSS du thème prenne effet
-    document.documentElement.style.removeProperty('--fc-accent-rgb')
-    setAccentColor('')
+  const stack = FONTS.find(f => f.id === font)?.stack ?? FONTS[0].stack
+  const applyFont = (id: string) => {
+    setFont(id)
+    document.documentElement.style.setProperty('--fc-font-family', FONTS.find(f => f.id === id)?.stack ?? FONTS[0].stack)
   }
-
   const applyFontSize = (px: number) => {
     setFontSizePx(px)
     document.documentElement.style.setProperty('--fc-font-size', `${px}px`)
   }
 
-  const applyFont = (value: string) => {
-    setFontFamily(value)
-    document.documentElement.style.setProperty('--fc-font-family', value)
-  }
-
   const save = () => {
-    const root = document.documentElement
-    if (fontColor) root.style.setProperty('--fc-text', fontColor)
-    else root.style.removeProperty('--fc-text')
-    if (accentColor) {
-      const [r, g, b] = [
-        parseInt(accentColor.slice(1, 3), 16),
-        parseInt(accentColor.slice(3, 5), 16),
-        parseInt(accentColor.slice(5, 7), 16),
-      ]
-      root.style.setProperty('--fc-accent-rgb', `${r} ${g} ${b}`)
-    } else root.style.removeProperty('--fc-accent-rgb')
-    if (bgColor) root.style.setProperty('--fc-bg', bgColor)
-    else root.style.removeProperty('--fc-bg')
-    root.setAttribute('data-glassmorphism', String(glassmorphism))
-    root.setAttribute('data-avatar-shape', avatarShape)
-    root.setAttribute('data-message-display', messageDisplay)
+    document.documentElement.setAttribute('data-avatar-shape', avatarShape)
     localStorage.setItem('fc_sidebar_width', String(sidebarWidth))
     saveMutation.mutate({
-      font_family: fontFamily,
+      font_family: stack,
       font_size_px: fontSizePx,
-      font_color: fontColor || null,
-      accent_color: accentColor || null,
-      bg_color: bgColor || null,
-      interface_density: density,
       avatar_shape: avatarShape,
       sidebar_width_px: sidebarWidth,
-      glassmorphism,
       show_role_colors: showRoleColors,
-      message_display: messageDisplay,
       code_theme: codeTheme,
     })
   }
 
+  /** Tout revient à l'apparence d'origine (les thèmes perso enregistrés sont conservés). */
+  const resetAll = () => {
+    if (!window.confirm(t('themes.resetAllConfirm'))) return
+    const s = useThemeStore.getState()
+    s.select(DEFAULT_THEME_ID)
+    s.setAccent(null)
+    s.setLayout(DEFAULT_LAYOUT)
+    s.setDensity('normal')
+    applyFont('system')
+    applyFontSize(14)
+    saveMutation.mutate({ accent_color: null, interface_density: 'normal', font_family: FONTS[0].stack, font_size_px: 14 })
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-4">
+        <H>{t('themes.editorTitle')}</H>
+        <ThemeEditor initial={editing} onClose={() => setEditing(null)} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
-      {/* Thèmes */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.theme')}</h3>
-        <div className="grid grid-cols-4 gap-2">
-          {THEMES.map(theme => (
-            <button
-              key={theme.id}
-              onClick={() => applyTheme(theme.id)}
-              title={name(theme.label)}
-              className={`relative rounded-lg overflow-hidden border-2 transition ${
-                activeTheme === theme.id ? 'border-fc-accent' : 'border-transparent hover:border-fc-hover'
-              }`}
-            >
-              <div className="h-12 flex">
-                {theme.preview.map((c, i) => (
-                  <div key={i} style={{ background: c }} className="flex-1" />
-                ))}
-              </div>
-              <div className="py-1 bg-fc-channel text-xs text-fc-muted text-center">{name(theme.label)}</div>
-              {activeTheme === theme.id && (
-                <div className="absolute top-1 right-1 bg-fc-accent rounded-full p-0.5">
-                  <Check size={8} className="text-white" />
-                </div>
-              )}
+        <H>{t('settings.appearance.theme')}</H>
+        <ThemeGallery onEdit={setEditing} />
+      </section>
+
+      <section>
+        <H>{t('settings.appearance.accent')}</H>
+        <AccentPicker />
+        <p className="text-xs text-fc-muted mt-2">{t('themes.accentHint')}</p>
+      </section>
+
+      <section>
+        <H>{t('layout.title')}</H>
+        <LayoutSettings />
+      </section>
+
+      <section>
+        <H>{t('settings.appearance.font')}</H>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {FONTS.map(f => (
+            <button key={f.id} onClick={() => applyFont(f.id)} style={{ fontFamily: f.stack }}
+              className={`px-3 py-2 rounded-lg text-sm border transition text-left ${font === f.id ? 'border-fc-accent bg-fc-accent/10 text-fc-text' : 'border-fc-hover text-fc-muted hover:text-white'}`}>
+              {name(f.label)}
             </button>
           ))}
         </div>
       </section>
 
-      {/* Police */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.font')}</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {FONTS.map(font => (
-            <button
-              key={font.name}
-              onClick={() => applyFont(font.value)}
-              style={{ fontFamily: font.value }}
-              className={`px-3 py-2 rounded-lg text-sm border transition text-left ${
-                fontFamily === font.value
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white hover:border-fc-hover'
-              }`}
-            >
-              {name(font.name)}
-            </button>
-          ))}
-        </div>
+        <H>{t('settings.appearance.fontSize')} — <span className="text-fc-text">{fontSizePx}px</span></H>
+        <input type="range" min={10} max={24} value={fontSizePx} aria-label={t('settings.appearance.fontSize')}
+          onChange={e => applyFontSize(Number(e.target.value))} className="w-full accent-fc-accent" />
+        <div className="flex justify-between text-xs text-fc-muted mt-1"><span>10px</span><span>24px</span></div>
       </section>
 
-      {/* Taille */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-          {t('settings.appearance.fontSize')} — <span className="text-white">{fontSizePx}px</span>
-        </h3>
-        <input
-          type="range" min={10} max={24} value={fontSizePx}
-          onChange={e => applyFontSize(Number(e.target.value))}
-          className="w-full accent-fc-accent"
-        />
-        <div className="flex justify-between text-xs text-fc-muted mt-1">
-          <span>10px</span><span>24px</span>
-        </div>
-      </section>
-
-      {/* Couleurs */}
-      <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.colors')}</h3>
-        <div className="space-y-3 p-4 bg-fc-channel rounded-xl border border-fc-hover">
-          <ColorPicker label={t('settings.appearance.accent')} value={accentColor} onChange={setAccentColor} />
-          <ColorPicker label={t('settings.appearance.textColor')} value={fontColor} onChange={setFontColor} />
-          <ColorPicker label={t('settings.appearance.bgColor')} value={bgColor} onChange={setBgColor} />
-        </div>
-      </section>
-
-      {/* Densité */}
-      <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.density')}</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {DENSITIES.map(d => (
-            <button
-              key={d.id}
-              onClick={() => {
-                setDensity(d.id)
-                document.documentElement.setAttribute('data-density', d.id)
-                localStorage.setItem('fc_density', d.id)
-              }}
-              className={`px-3 py-2 rounded-lg text-sm border transition ${
-                density === d.id
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white'
-              }`}
-            >
-              {t(d.label)}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Affichage messages */}
-      <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.messageDisplay')}</h3>
-        <div className="grid grid-cols-3 gap-2">
-          {MESSAGE_DISPLAYS.map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMessageDisplay(m.id)}
-              className={`px-3 py-2 rounded-lg text-sm border transition ${
-                messageDisplay === m.id
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white'
-              }`}
-            >
-              {t(m.label)}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Avatar + Sidebar */}
-      <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.avatarShape')}</h3>
+        <H>{t('settings.appearance.avatarShape')}</H>
         <div className="flex gap-2">
           {AVATAR_SHAPES.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setAvatarShape(s.id)}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm border transition ${
-                avatarShape === s.id
-                  ? 'border-fc-accent bg-fc-accent/10 text-white'
-                  : 'border-fc-hover text-fc-muted hover:text-white'
-              }`}
-            >
+            <button key={s.id} onClick={() => setAvatarShape(s.id)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm border transition ${avatarShape === s.id ? 'border-fc-accent bg-fc-accent/10 text-fc-text' : 'border-fc-hover text-fc-muted hover:text-white'}`}>
               {t(s.label)}
             </button>
           ))}
@@ -358,50 +184,36 @@ export default function AppearanceSection() {
       </section>
 
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-          {t('settings.appearance.sidebarWidth')} — <span className="text-white">{sidebarWidth}px</span>
-        </h3>
-        <input
-          type="range" min={SIDEBAR_MIN} max={SIDEBAR_MAX} value={sidebarWidth}
-          onChange={e => setSidebarWidth(Number(e.target.value))}
-          className="w-full accent-fc-accent"
-        />
+        <H>{t('settings.appearance.sidebarWidth')} — <span className="text-fc-text">{sidebarWidth}px</span></H>
+        <input type="range" min={SIDEBAR_MIN} max={SIDEBAR_MAX} value={sidebarWidth} aria-label={t('settings.appearance.sidebarWidth')}
+          onChange={e => setSidebarWidth(Number(e.target.value))} className="w-full accent-fc-accent" />
       </section>
 
-      {/* Thème de code */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.codeTheme')}</h3>
-        <select
-          value={codeTheme}
-          onChange={e => setCodeTheme(e.target.value)}
-          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-        >
+        <H>{t('settings.appearance.codeTheme')}</H>
+        <select value={codeTheme} onChange={e => setCodeTheme(e.target.value)}
+          className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-fc-text">
           {CODE_THEMES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </section>
 
-      {/* Toggles */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.options')}</h3>
-        <div className="space-y-3 p-4 bg-fc-channel rounded-xl border border-fc-hover">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white">{t('settings.appearance.glass')}</span>
-            <Toggle value={glassmorphism} onChange={setGlassmorphism} />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-white">{t('settings.appearance.roleColors')}</span>
-            <Toggle value={showRoleColors} onChange={setShowRoleColors} />
-          </div>
+        <H>{t('settings.appearance.options')}</H>
+        <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover flex items-center justify-between">
+          <span className="text-sm text-fc-text">{t('settings.appearance.roleColors')}</span>
+          <Toggle value={showRoleColors} onChange={setShowRoleColors} />
         </div>
       </section>
 
-      <button
-        onClick={save}
-        disabled={saveMutation.isPending}
-        className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
-      >
-        {saveMutation.isPending ? t('common.saving') : t('settings.appearance.save')}
-      </button>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <button onClick={save} disabled={saveMutation.isPending}
+          className="flex-1 py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50">
+          {saveMutation.isPending ? t('common.saving') : t('settings.appearance.save')}
+        </button>
+        <button onClick={resetAll} className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm border border-fc-hover text-fc-muted hover:text-white">
+          <RotateCcw size={14} /> {t('themes.resetAll')}
+        </button>
+      </div>
     </div>
   )
 }
