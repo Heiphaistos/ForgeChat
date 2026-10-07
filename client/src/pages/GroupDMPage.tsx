@@ -22,6 +22,7 @@ import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 
 interface GDMReaction {
@@ -51,6 +52,7 @@ interface GDMMessage {
   sender_id: string
   sender_username: string
   sender_avatar: string | null
+  sender_avatar_decoration?: string | null
   reply_to?: string | null
   reply_to_username?: string | null
   reply_to_content?: string | null
@@ -852,6 +854,7 @@ export default function GroupDMPage() {
                   }
                 }}
               >
+                <AvatarDecoration id={msg.sender_avatar_decoration} size={32}>
                 <button
                   onClick={e => { e.stopPropagation(); setUserPopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY }) }}
                   aria-label={`Voir le profil de ${msg.sender_username}`}
@@ -862,6 +865,7 @@ export default function GroupDMPage() {
                     : msg.sender_username.charAt(0).toUpperCase()
                   }
                 </button>
+                </AvatarDecoration>
                 <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isMe && (
                     <span className="text-xs text-fc-muted mb-0.5 ml-1">{msg.sender_username}</span>

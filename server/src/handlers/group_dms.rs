@@ -214,7 +214,7 @@ pub async fn get_group_messages(
 
         let mut before_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -228,7 +228,7 @@ pub async fn get_group_messages(
 
         let after_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -246,7 +246,7 @@ pub async fn get_group_messages(
     } else if let Some(before_id) = before {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -261,7 +261,7 @@ pub async fn get_group_messages(
     } else {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content
              FROM group_dm_messages m
              JOIN users u ON u.id = m.sender_id
@@ -334,6 +334,7 @@ pub async fn get_group_messages(
             "sender_id": r.get::<Uuid, _>("sender_id"),
             "sender_username": r.get::<String, _>("sender_username"),
             "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
+            "sender_avatar_decoration": r.get::<Option<String>, _>("sender_avatar_decoration"),
             "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
             "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
             "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
@@ -414,7 +415,7 @@ pub async fn send_group_message(
         .bind(rid).fetch_optional(&state.db).await?
     } else { None };
 
-    let user = sqlx::query("SELECT username, avatar FROM users WHERE id=$1")
+    let user = sqlx::query("SELECT username, avatar, avatar_decoration FROM users WHERE id=$1")
         .bind(claims.sub).fetch_one(&state.db).await?;
 
     let msg_json = serde_json::json!({
@@ -425,6 +426,7 @@ pub async fn send_group_message(
         "sender_id": claims.sub,
         "sender_username": user.get::<String, _>("username"),
         "sender_avatar": user.get::<Option<String>, _>("avatar"),
+        "sender_avatar_decoration": user.get::<Option<String>, _>("avatar_decoration"),
         "reply_to": reply_to,
         "reply_to_username": reply_info.as_ref().map(|r| r.get::<String, _>("username")),
         "reply_to_content": reply_info.as_ref().and_then(|r| r.get::<Option<String>, _>("content")),
