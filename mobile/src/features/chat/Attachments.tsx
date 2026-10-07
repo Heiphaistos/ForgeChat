@@ -62,7 +62,7 @@ export function Attachments({ items, pending, onLongPress }: { items: Attachment
         const src = resolveMediaUrl(a.url)!
         if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice onLongPress={onLongPress} />
         return mediaKind(a) === 'video' ? (
-          <VideoAttachment key={a.id} src={src} attachment={a} />
+          <VideoAttachment key={a.id} src={src} label={`Vidéo ${a.filename}`} />
         ) : (
           <AudioAttachment key={a.id} src={src} attachment={a} onLongPress={onLongPress} />
         )

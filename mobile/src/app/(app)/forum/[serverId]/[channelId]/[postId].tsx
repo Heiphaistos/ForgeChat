@@ -1,4 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { Image } from 'expo-image'
 import { router, Stack } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
@@ -14,6 +15,9 @@ import { FormSheet } from '@/features/composer/ChannelExtras'
 import { PERM } from '@/features/servers/perms'
 import { useServerPerms } from '@/features/servers/menus'
 import { TagChips } from '@/features/forum/TagChips'
+import { isVideoMedia } from '@/features/forum/forum'
+import { VideoAttachment } from '@/features/chat/MediaPlayers'
+import { resolveMediaUrl } from '@/lib/links'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -145,6 +149,7 @@ export default function PostScreen() {
         header={
           post ? (
             <View style={styles.post}>
+              {post.mediaUrl ? <PostMedia url={post.mediaUrl} /> : null}
               <Text style={styles.title} accessibilityRole="header">
                 {post.title}
               </Text>
@@ -167,7 +172,19 @@ export default function PostScreen() {
   )
 }
 
+/** Média d'une publication de salon média, en grand (vidéo : plein écran natif du lecteur). */
+function PostMedia({ url }: { url: string }) {
+  const src = resolveMediaUrl(url)
+  if (!src) return null
+  return isVideoMedia(url) ? (
+    <VideoAttachment src={src} label="Vidéo de la publication" />
+  ) : (
+    <Image source={{ uri: src }} style={styles.media} contentFit="contain" accessibilityLabel="Image de la publication" />
+  )
+}
+
 const styles = StyleSheet.create({
+  media: { width: '100%', aspectRatio: 1, backgroundColor: '#000', borderRadius: 8 },
   post: { padding: spacing.lg, gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   title: { color: colors.text, fontSize: font.xl, fontWeight: '800' },
   author: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

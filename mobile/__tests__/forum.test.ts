@@ -1,4 +1,4 @@
-import { createPostBody, MAX_TAGS, nextPostsCursor, normalizePost, normalizePosts, normalizeTag, toggleTag } from '@/features/forum/forum'
+import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, nextPostsCursor, normalizePost, normalizePosts, normalizeTag, toggleTag } from '@/features/forum/forum'
 
 const A = '3af17b11-1c9a-4daf-8895-a2d3eec03894'
 const B = '5aa172f3-305c-4685-bd77-64faf6b911eb'
@@ -33,7 +33,19 @@ describe('normalizePost (forum.rs::list_posts / get_post)', () => {
       locked: false,
       replyCount: 4,
       lastActivity: '2026-10-02T10:00:00Z',
+      mediaUrl: null,
     })
+  })
+
+  it('salon média : garde un média /uploads/, ignore toute autre URL', () => {
+    expect(normalizePost({ ...raw, media_url: '/uploads/a.png' })?.mediaUrl).toBe('/uploads/a.png')
+    expect(normalizePost({ ...raw, media_url: 'https://x.test/a.png' })?.mediaUrl).toBeNull()
+    expect(isVideoMedia('/uploads/a.MP4')).toBe(true)
+    expect(isVideoMedia('/uploads/a.webp')).toBe(false)
+    expect(mediaExtension('video/quicktime')).toBe('mov')
+    expect(mediaExtension('image/JPEG')).toBe('jpg')
+    expect(mediaExtension('application/pdf')).toBeNull()
+    expect(mediaExtension(undefined)).toBeNull()
   })
 
   it('get_post ne renvoie pas last_reply_at : activité = création', () => {
@@ -69,6 +81,7 @@ describe('createPostBody (forum.rs::CreatePostReq)', () => {
     expect(createPostBody('   ', 'x', [])).toBeNull()
     expect(createPostBody('x'.repeat(201), '', [])).toBeNull()
     expect(createPostBody('é'.repeat(200), '', [])).not.toBeNull()
+    expect(createPostBody('T', '', [], '/uploads/a.png')?.media_url).toBe('/uploads/a.png')
   })
 })
 

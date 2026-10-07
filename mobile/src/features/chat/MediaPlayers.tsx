@@ -11,11 +11,11 @@ import { formatDuration } from './media'
  * aucune autre source n'est passée aux lecteurs natifs.
  */
 
-export function VideoAttachment({ src, attachment }: { src: string; attachment: Attachment }) {
+export function VideoAttachment({ src, label }: { src: string; label: string }) {
   // Pas de lecture automatique : le lecteur ne charge la vidéo qu'à l'appui sur « lecture ».
   const player = useVideoPlayer(src)
   return (
-    <View style={styles.video} accessibilityLabel={`Vidéo ${attachment.filename}`}>
+    <View style={styles.video} accessibilityLabel={label}>
       <VideoView player={player} nativeControls contentFit="contain" fullscreenOptions={{ enable: true }} style={StyleSheet.absoluteFill} />
     </View>
   )

@@ -51,6 +51,7 @@ export type ChannelType =
   | 'video'
   | 'announcement'
   | 'forum'
+  | 'media'
   | 'stage'
   | (string & {})
 
