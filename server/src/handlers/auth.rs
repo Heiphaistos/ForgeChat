@@ -437,6 +437,17 @@ pub async fn change_password(
     if new_pw.len() > 128 {
         return Err(AppError::BadRequest("Mot de passe max 128 chars".into()));
     }
+    // Clé E2E ré-enveloppée par l'appli avec le nouveau mot de passe : enregistrée
+    // dans la même transaction, sinon elle resterait scellée par l'ancien.
+    let wrapped = match body.get("wrapped") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(v) => {
+            let w: crate::handlers::user_keys::Wrapped = serde_json::from_value(v.clone())
+                .map_err(|_| AppError::BadRequest("wrapped invalide".into()))?;
+            w.validate()?;
+            Some(serde_json::to_value(&w).map_err(|e| AppError::Internal(e.into()))?)
+        }
+    };
 
     let pw_hash = sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE id=$1")
         .bind(claims.sub)
@@ -459,16 +470,24 @@ pub async fn change_password(
         drop(redis);
     }
 
+    let mut tx = state.db.begin().await?;
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
         .bind(claims.sub)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
-
     sqlx::query("UPDATE users SET password_hash=$2, updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .bind(&new_hash)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
+    if let Some(w) = wrapped {
+        sqlx::query("UPDATE user_keys SET wrapped=$2 WHERE user_id=$1")
+            .bind(claims.sub)
+            .bind(w)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
     // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but
     // d'un changement de mot de passe après un vol de session.
     crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
