@@ -7,6 +7,7 @@ import withLanCleartext from './plugins/withLanCleartext.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
 import withStripBuildPaths from './plugins/withStripBuildPaths.js'
+import withTransparentNavBar from './plugins/withTransparentNavBar.js'
 import withoutDevClientScheme from './plugins/withoutDevClientScheme.js'
 
 /**
@@ -85,7 +86,8 @@ const apiHost = API_URL ? new URL(API_URL).host : null
 
 export default (ctx: ConfigContext): ExpoConfig => {
   // Partage d'écran (MediaProjection) : permissions et service au premier plan, tous profils.
-  const expoConfig = withScreenShare(buildConfig(ctx))
+  // Pas de voile blanc sous la barre de navigation (thèmes sombres).
+  const expoConfig = withTransparentNavBar(withScreenShare(buildConfig(ctx)))
   // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
   if (APP_ENV === 'lan') return withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST })
   // APK distribués (APK DEV, bêta) : signés avec la clé de release hors dépôt, jamais la clé debug.
