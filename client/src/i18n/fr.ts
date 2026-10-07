@@ -2011,6 +2011,21 @@ export const fr = {
   'poll.questionRequired': 'Question requise',
   'poll.twoOptions': 'Au moins 2 options requises',
   'poll.submit': 'Créer le sondage',
+  // --- Sourdine des notifications ---
+  'mute.15': 'Pendant 15 minutes',
+  'mute.60': 'Pendant 1 heure',
+  'mute.480': 'Pendant 8 heures',
+  'mute.1440': 'Pendant 24 heures',
+  'mute.0': "Jusqu'à réactivation",
+  'mute.off': 'Notifications actives',
+  'mute.until': "Coupé jusqu'à {time}",
+  'mute.untilReactivated': "Coupé jusqu'à réactivation",
+  'mute.choice': 'Couper {d}',
+  // --- Dates relatives ---
+  'date.todayAt': "Aujourd'hui à {time}",
+  'date.yesterdayAt': 'Hier à {time}',
+  'poll.endsIn': 'Se termine {when}',
+  'popup.onServerSince': 'Sur ce serveur depuis le {date}',
 } as const
 
 export type Key = keyof typeof fr

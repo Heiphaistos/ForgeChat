@@ -2012,4 +2012,19 @@ export const en: Partial<Record<Key, string>> = {
   'poll.questionRequired': 'Question required',
   'poll.twoOptions': 'At least 2 options required',
   'poll.submit': 'Create poll',
+  // --- Sourdine des notifications ---
+  'mute.15': 'For 15 minutes',
+  'mute.60': 'For 1 hour',
+  'mute.480': 'For 8 hours',
+  'mute.1440': 'For 24 hours',
+  'mute.0': 'Until turned back on',
+  'mute.off': 'Notifications on',
+  'mute.until': 'Muted until {time}',
+  'mute.untilReactivated': 'Muted until turned back on',
+  'mute.choice': 'Mute {d}',
+  // --- Dates relatives ---
+  'date.todayAt': 'Today at {time}',
+  'date.yesterdayAt': 'Yesterday at {time}',
+  'poll.endsIn': 'Ends {when}',
+  'popup.onServerSince': 'On this server since {date}',
 }

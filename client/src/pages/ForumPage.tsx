@@ -18,7 +18,6 @@ import { useTypeToFocus } from '../hooks/useTypeToFocus'
 import { useT } from '../i18n'
 import UserPopup from '../components/UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 
 const POST_PAGE = 50
 

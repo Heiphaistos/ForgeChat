@@ -30,7 +30,7 @@ import FollowChannelModal from '../components/modals/FollowChannelModal'
 import OnboardingModal from '../components/modals/OnboardingModal'
 import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
-import { useT } from '../i18n'
+import { useT, intlLocale } from '../i18n'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
 
 function channelIcon(type: string, size = 18) {
@@ -757,7 +757,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             {timeoutUntil && (
               <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-t border-red-500/20 text-red-400 text-xs">
                 <Timer size={12} />
-                <span>{t('channel.timedOutUntil')} <strong>{timeoutUntil.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</strong></span>
+                <span>{t('channel.timedOutUntil')} <strong>{timeoutUntil.toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' })}</strong></span>
               </div>
             )}
 

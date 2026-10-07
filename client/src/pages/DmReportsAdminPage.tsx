@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
+import { intlLocale } from '../i18n'
 
 /** Signalements de messages privés (réservé aux comptes de FORGECHAT_ADMIN_USER_IDS). */
 
@@ -77,7 +78,7 @@ export default function DmReportsAdminPage() {
               <span className="px-2 py-0.5 rounded bg-fc-red/20 text-fc-red font-medium">{REASONS[r.reason] ?? r.reason}</span>
               <span>par {r.reporter_username ?? 'compte supprimé'}</span>
               <span>· contre <strong className="text-white">{r.author_username ?? 'compte supprimé'}</strong></span>
-              <span className="ml-auto">{new Date(r.created_at).toLocaleString('fr-FR')}</span>
+              <span className="ml-auto">{new Date(r.created_at).toLocaleString(intlLocale())}</span>
             </div>
             <blockquote className="border-l-2 border-fc-hover pl-3 text-sm text-white whitespace-pre-wrap break-words">
               {r.content || <em className="text-fc-muted">(message sans texte)</em>}

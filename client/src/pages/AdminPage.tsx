@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { Users, MessageSquare, Server, Hash, ChevronLeft } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
+import { intlLocale } from '../i18n'
 
 interface AdminStats {
   total_users: number
@@ -67,7 +68,7 @@ export default function AdminPage() {
           {cards.map(c => (
             <div key={c.label} className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
               <div className={`${c.color} mb-2`}>{c.icon}</div>
-              <div className="text-2xl font-bold text-white">{c.value.toLocaleString('fr-FR')}</div>
+              <div className="text-2xl font-bold text-white">{c.value.toLocaleString(intlLocale())}</div>
               <div className="text-xs text-fc-muted mt-1">{c.label}</div>
             </div>
           ))}
@@ -97,7 +98,7 @@ export default function AdminPage() {
                 <div key={s.name} className="flex items-center gap-3">
                   <span className="text-fc-muted text-sm w-5 text-right">{i + 1}.</span>
                   <span className="text-white text-sm flex-1">{s.name}</span>
-                  <span className="text-fc-accent text-sm font-medium">{s.messages.toLocaleString('fr-FR')} msgs</span>
+                  <span className="text-fc-accent text-sm font-medium">{s.messages.toLocaleString(intlLocale())} msgs</span>
                 </div>
               ))}
             </div>

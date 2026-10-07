@@ -1,6 +1,6 @@
 import { MessagesSquare } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { dateLocale } from '../../i18n'
 
 interface ThreadItemProps {
   id: string
@@ -22,7 +22,7 @@ export default function ThreadItem({
   onSelect,
 }: ThreadItemProps) {
   const relativeTime = last_activity
-    ? formatDistanceToNow(new Date(last_activity), { addSuffix: true, locale: fr })
+    ? formatDistanceToNow(new Date(last_activity), { addSuffix: true, locale: dateLocale() })
     : null
 
   const ariaLabel = [

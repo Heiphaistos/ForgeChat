@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { format, isToday, isYesterday } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../api/client'
+import { dateLocale, t as tr } from '../i18n'
 
 export function useFormatDate() {
   const { data: userSettings } = useQuery<Record<string, unknown>>({
@@ -20,22 +20,22 @@ export function useFormatDate() {
 
   const formatShort = (dateStr: string) => {
     const d = new Date(dateStr)
-    return format(d, timeFmt, { locale: fr })
+    return format(d, timeFmt, { locale: dateLocale() })
   }
 
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
-    if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt, { locale: fr })}`
-    if (isYesterday(d)) return `Hier à ${format(d, timeFmt, { locale: fr })}`
-    return format(d, `${dateFmt} ${timeFmt}`, { locale: fr })
+    if (isToday(d)) return tr('date.todayAt', { time: format(d, timeFmt, { locale: dateLocale() }) })
+    if (isYesterday(d)) return tr('date.yesterdayAt', { time: format(d, timeFmt, { locale: dateLocale() }) })
+    return format(d, `${dateFmt} ${timeFmt}`, { locale: dateLocale() })
   }
 
-  const formatDate = (dateStr: string) => format(new Date(dateStr), dateFmt, { locale: fr })
+  const formatDate = (dateStr: string) => format(new Date(dateStr), dateFmt, { locale: dateLocale() })
 
   const formatShortDate = (dateStr: string) => {
     const d = new Date(dateStr)
     const shortDate = dateFormat === 'MM/DD/YYYY' ? 'MM/dd' : dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM'
-    return format(d, `${shortDate} ${timeFmt}`, { locale: fr })
+    return format(d, `${shortDate} ${timeFmt}`, { locale: dateLocale() })
   }
 
   return { formatTs, formatShort, formatDate, formatShortDate, timeFmt, dateFmt }

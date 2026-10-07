@@ -4,6 +4,7 @@ import { Plus, X, AlertCircle } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
+import { intlLocale } from '../../i18n'
 
 interface Task {
   id: string
@@ -47,7 +48,7 @@ function dueDateClass(due?: string): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+  return new Date(iso).toLocaleDateString(intlLocale(), { day: '2-digit', month: 'short' })
 }
 
 interface CreateFormProps {

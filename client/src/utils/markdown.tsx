@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { cachedChannel, cachedRole, cachedUsername } from './mentions'
+import { intlLocale } from '../i18n'
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -189,13 +190,13 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         if (fmt === 'R' || fmt === 'r') {
           display = formatRelativeTime(unix)
         } else {
-          display = new Date(unix * 1000).toLocaleString('fr-FR', {
+          display = new Date(unix * 1000).toLocaleString(intlLocale(), {
             dateStyle: fmt === 'd' || fmt === 'D' ? 'short' : undefined,
             timeStyle: fmt === 't' || fmt === 'T' ? 'short' : undefined,
           })
         }
         result.push(
-          <span key={match.index} className="bg-fc-hover/60 rounded px-1 text-fc-accent font-medium text-xs" title={new Date(unix * 1000).toLocaleString('fr-FR')}>
+          <span key={match.index} className="bg-fc-hover/60 rounded px-1 text-fc-accent font-medium text-xs" title={new Date(unix * 1000).toLocaleString(intlLocale())}>
             {display}
           </span>
         )

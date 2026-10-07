@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { intlLocale } from '../i18n'
 
 /**
  * Notification de mise à jour de l'application BUREAU (Tauri).
@@ -29,7 +30,7 @@ const EVT_PROGRESS = 'update://progress'
 function formatDate(iso: string): string {
   if (!iso) return ''
   const d = new Date(iso)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo; onClose: () => void }) {
