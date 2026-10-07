@@ -525,6 +525,11 @@ export const fr = {
   'voice.tile.stopWatching': 'Arrêter de regarder',
   'voice.tile.popOutScreen': "Ouvrir l'écran de {name} dans une fenêtre",
   'voice.tile.expandScreen': "Agrandir l'écran partagé",
+  'voice.tile.dblclickHint': 'Double-clic : plein écran',
+  'voice.tile.pin': 'Épingler {name} en grand',
+  'voice.tile.unpin': 'Désépingler {name}',
+  'voice.fullscreen.fit': 'Ajuster : vidéo entière',
+  'voice.fullscreen.fill': 'Remplir l’écran',
   // --- Notifications toast globales et bannière de connexion ---
   'toast.othersCount': '{names} et {n} autre(s)',
   'toast.messagesFrom': '💬 {n} messages de {from}',

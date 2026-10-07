@@ -42,7 +42,8 @@ export function PeerTile({
     // Remplit son conteneur : c'est la disposition qui fixe la taille. L'ancien
     // aspect-video forçait une hauteur plus grande que la ligne de grille, et la
     // tuile suivante recouvrait le bas (nom et contrôles) de la précédente.
-    <div onContextMenu={onContextMenu} className={`relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center transition-all
+    <div onContextMenu={onContextMenu} onDoubleClick={hasVideo ? onExpand : undefined} title={hasVideo && onExpand ? t('voice.tile.dblclickHint') : undefined}
+      className={`relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gray-900 flex flex-col items-center justify-center transition-all
       ${speaking ? 'ring-2 ring-fc-green shadow-[0_0_16px_rgba(74,222,128,0.25)]' : 'ring-1 ring-white/5'}
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
       {hasVideo && !hasStream && videoUrl ? (
@@ -128,7 +129,8 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
     if (el && stream && el.srcObject !== stream) el.srcObject = stream
   }
   return (
-    <div className="relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-black flex items-center justify-center ring-1 ring-fc-green/40">
+    <div onDoubleClick={onExpand} title={onExpand ? t('voice.tile.dblclickHint') : undefined}
+      className="relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-black flex items-center justify-center ring-1 ring-fc-green/40">
       {/* muted : le son du partage est joué par PersistentVoiceAudio, avec son
           propre réglage de volume, distinct de celui de la voix du pair. */}
       {stream

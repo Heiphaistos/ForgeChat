@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useContext } from 'react'
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
-  Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
+  Volume2, VolumeX, Maximize2, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
   Layout, Sparkles, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
   Focus, GalleryHorizontal, Tv,
@@ -24,6 +24,7 @@ import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
 import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../components/voice/CallStage'
+import FullscreenVideo, { type FullscreenSource } from '../components/voice/FullscreenVideo'
 import ClipDialog from '../components/voice/ClipDialog'
 import { startClipBuffer, useClipsSetting, type ClipBuffer } from '../lib/clipBuffer'
 import { popOut } from '../lib/popout'
@@ -89,24 +90,6 @@ function VoiceE2EBadge() {
   return (
     <div className="py-1 bg-fc-sidebar border-b border-fc-hover flex-shrink-0">
       <E2ECallBadge encrypted outdatedNames={outdated.map(id => peers.find(p => p.userId === id)?.username ?? '…')} />
-    </div>
-  )
-}
-
-// ─── Fullscreen ───────────────────────────────────────────────────────────────
-function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; label: string; onClose: () => void }) {
-  const ref = useRef<HTMLVideoElement>(null)
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream }, [stream])
-  // `muted` obligatoire : agrandir SA PROPRE tuile rejouait le micro local dans
-  // les haut-parleurs (larsen immédiat), et agrandir celle d'un pair doublait son
-  // audio par-dessus PersistentVoiceAudio.
-  return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
-      <div className="flex items-center justify-between px-4 py-2 bg-black/60">
-        <span className="text-white font-semibold text-sm">{label}</span>
-        <button onClick={onClose} aria-label={tr('voice.closeFullscreen')} className="p-1.5 rounded hover:bg-white/10 text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><X size={18} aria-hidden /></button>
-      </div>
-      <video ref={ref} autoPlay playsInline muted className="flex-1 object-contain" />
     </div>
   )
 }
@@ -255,7 +238,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   // Auto : galerie, et bascule d'elle-même en « stream en grand » dès qu'un écran est partagé.
   const [viewMode, setViewMode] = useState<ViewMode>('auto')
   const [spotlightTileKey, setSpotlightTileKey] = useState<string | null>(null)
-  const [fullscreenStream, setFullscreenStream] = useState<{ stream: MediaStream; label: string } | null>(null)
+  const [fullscreenStream, setFullscreenStream] = useState<FullscreenSource | null>(null)
   const [handRaised, setHandRaised] = useState(false)
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({})
   const [showStats, setShowStats] = useState(false)
@@ -486,7 +469,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           onClip={t.stream && clipSources.has(p.userId) ? () => void takeClip(p.userId) : undefined}
           onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
           onPopOut={() => detach(p.userId, 'screen', p.username, t.url)}
-          onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: tr('voice.screenOf', { name: p.username }) }) : undefined} />
+          onExpand={o.expand && (t.stream || t.url) ? () => setFullscreenStream({ stream: t.stream, url: t.url, label: tr('voice.screenOf', { name: p.username }) }) : undefined} />
       )
     }
     return (
@@ -497,7 +480,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
         onPopOut={() => detach(p.userId, 'camera', p.username, t.url)}
         onContextMenu={e => openTileMenu(e, p.userId)}
-        onExpand={o.expand && t.stream ? () => setFullscreenStream({ stream: t.stream!, label: p.username }) : undefined} />
+        onExpand={o.expand && (t.stream || t.url) ? () => setFullscreenStream({ stream: t.stream, url: t.url, label: p.username }) : undefined} />
     )
   }
 
@@ -774,7 +757,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       )}
 
       {fullscreenStream && (
-        <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />
+        <FullscreenVideo {...fullscreenStream} onClose={() => setFullscreenStream(null)} />
       )}
       {clip && (
         <ClipDialog blob={clip.blob} label={clip.label} serverId={serverId} voiceChannelId={channel.id} onClose={() => setClip(null)} />
