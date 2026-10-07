@@ -3,12 +3,13 @@ import { X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT, type Key } from '../../i18n'
 
-const REASONS = [
-  { value: 'spam', label: '🚫 Spam' },
-  { value: 'harassment', label: '😡 Harcèlement' },
-  { value: 'nsfw', label: '🔞 Contenu NSFW' },
-  { value: 'other', label: '⚠️ Autre' },
+const REASONS: { value: string; label: Key }[] = [
+  { value: 'spam', label: 'report.spam' },
+  { value: 'harassment', label: 'report.harassment' },
+  { value: 'nsfw', label: 'report.nsfw' },
+  { value: 'other', label: 'report.other' },
 ]
 
 interface Props {
@@ -17,23 +18,24 @@ interface Props {
 }
 
 export default function ReportModal({ messageId, onClose }: Props) {
+  const t = useT()
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
   useEscapeKey(onClose)
 
   const submit = async () => {
-    if (!reason) { toast.error('Choisissez une raison'); return }
+    if (!reason) { toast.error(t('report.chooseReason')); return }
     setLoading(true)
     try {
       await api.post(`/messages/${messageId}/report`, {
         reason,
         comment: comment.trim() || undefined,
       })
-      toast.success('Signalement envoyé aux modérateurs')
+      toast.success(t('report.sent'))
       onClose()
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? 'Erreur lors du signalement'
+      const msg = e?.response?.data?.message ?? t('report.error')
       toast.error(msg)
     } finally {
       setLoading(false)
@@ -53,14 +55,14 @@ export default function ReportModal({ messageId, onClose }: Props) {
         aria-labelledby="report-modal-title"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 id="report-modal-title" className="text-white font-semibold text-lg">Signaler le message</h2>
-          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+          <h2 id="report-modal-title" className="text-white font-semibold text-lg">{t('report.title')}</h2>
+          <button onClick={onClose} aria-label={t('common.close')} className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
             <X size={16} aria-hidden />
           </button>
         </div>
 
         <p className="text-xs text-fc-muted mb-4">
-          Sélectionne la raison du signalement. L'équipe de modération sera notifiée.
+          {t('report.intro')}
         </p>
 
         <div className="grid grid-cols-2 gap-2 mb-4">
@@ -74,7 +76,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
                   : 'border-fc-hover bg-fc-bg hover:border-fc-accent/50 text-fc-muted hover:text-white'
               }`}
             >
-              {r.label}
+              {t(r.label)}
             </button>
           ))}
         </div>
@@ -82,7 +84,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
         <textarea
           value={comment}
           onChange={e => setComment(e.target.value)}
-          placeholder="Commentaire optionnel..."
+          placeholder={t('report.comment')}
           maxLength={500}
           rows={3}
           enterKeyHint="done"
@@ -96,13 +98,13 @@ export default function ReportModal({ messageId, onClose }: Props) {
             disabled={!reason || loading}
             className="flex-1 btn-primary text-sm disabled:opacity-40"
           >
-            {loading ? 'Envoi...' : 'Signaler'}
+            {loading ? t('common.sending') : t('report.submit')}
           </button>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded bg-fc-hover text-fc-muted hover:text-white text-sm transition"
           >
-            Annuler
+            {t('common.cancel')}
           </button>
         </div>
       </div>

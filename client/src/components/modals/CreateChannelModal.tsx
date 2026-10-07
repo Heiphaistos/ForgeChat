@@ -4,28 +4,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 type ChannelType = 'text' | 'voice' | 'video' | 'announcement' | 'forum' | 'media' | 'stage'
 
-const CHANNEL_TYPES: { value: ChannelType; icon: any; label: string; desc: string; color: string }[] = [
-  { value: 'text',         icon: Hash,           label: 'Texte',       desc: 'Messages, images, GIFs, embeds...',           color: 'text-fc-muted' },
-  { value: 'announcement', icon: Megaphone,       label: 'Annonces',    desc: 'Partagez des nouvelles importantes.',          color: 'text-yellow-400' },
-  { value: 'forum',        icon: MessagesSquare,  label: 'Forum',       desc: 'Posts organisés avec tags et réponses.',       color: 'text-green-400' },
-  { value: 'media',        icon: Images,          label: 'Médias',      desc: 'Images et vidéos en grille, avec légende et réponses.', color: 'text-green-400' },
-  { value: 'voice',        icon: Volume2,         label: 'Vocal',       desc: 'Chat vocal avec des membres.',                 color: 'text-blue-400' },
-  { value: 'video',        icon: Video,           label: 'Vidéo',       desc: 'Appels vidéo et partage d\'écran.',            color: 'text-purple-400' },
-  { value: 'stage',        icon: Radio,           label: 'Scène',       desc: 'Vocal pour événements (fonctionne comme un vocal standard).', color: 'text-pink-400' },
+// Libellé et description : clés chtype.<type> et chtype.<type>.desc.
+const CHANNEL_TYPES: { value: ChannelType; icon: any; color: string }[] = [
+  { value: 'text',         icon: Hash,           color: 'text-fc-muted' },
+  { value: 'announcement', icon: Megaphone,       color: 'text-yellow-400' },
+  { value: 'forum',        icon: MessagesSquare,  color: 'text-green-400' },
+  { value: 'media',        icon: Images,          color: 'text-green-400' },
+  { value: 'voice',        icon: Volume2,         color: 'text-blue-400' },
+  { value: 'video',        icon: Video,           color: 'text-purple-400' },
+  { value: 'stage',        icon: Radio,           color: 'text-pink-400' },
 ]
 
-const SLOWMODE_OPTIONS = [
-  { label: 'Désactivé', value: 0 },
-  { label: '5 secondes', value: 5 },
-  { label: '10 secondes', value: 10 },
-  { label: '30 secondes', value: 30 },
-  { label: '1 minute', value: 60 },
-  { label: '5 minutes', value: 300 },
-  { label: '1 heure', value: 3600 },
-]
+const SLOWMODE_OPTIONS = [0, 5, 10, 30, 60, 300, 3600] as const
 
 interface Props {
   serverId: string
@@ -34,6 +28,7 @@ interface Props {
 }
 
 export default function CreateChannelModal({ serverId, onClose, defaultCategoryId }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const uid = useId()
   const [name, setName] = useState('')
@@ -66,13 +61,13 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', serverId] })
-      toast.success(`Canal #${name} créé !`)
+      toast.success(t('createChannel.done', { name }))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
-  const selectedType = CHANNEL_TYPES.find(t => t.value === type)!
+  const selectedType = CHANNEL_TYPES.find(ct => ct.value === type)!
   const isVoiceType = ['voice', 'video', 'stage'].includes(type)
   const isTextType = ['text', 'announcement', 'forum', 'media'].includes(type)
 
@@ -83,14 +78,14 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
         <div className="p-6 border-b border-fc-bg">
           <div className="flex items-start justify-between">
             <div>
-              <h2 id="create-channel-modal-title" className="text-xl font-bold text-white">Créer un canal</h2>
+              <h2 id="create-channel-modal-title" className="text-xl font-bold text-white">{t('createChannel.title')}</h2>
               {categoryId && categories.find(c => c.id === categoryId) && (
                 <p className="text-fc-muted text-xs mt-0.5">
-                  Dans : <span className="text-white">{categories.find(c => c.id === categoryId)?.name}</span>
+                  {t('createChannel.in')} <span className="text-white">{categories.find(c => c.id === categoryId)?.name}</span>
                 </p>
               )}
             </div>
-            <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
+            <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
               <X size={20} aria-hidden />
             </button>
           </div>
@@ -99,16 +94,16 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
         <div className="p-6 space-y-5">
           {/* Types */}
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Type de canal</label>
+            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('createChannel.type')}</label>
             <div className="grid grid-cols-2 gap-2">
-              {CHANNEL_TYPES.map(({ value, icon: Icon, label, desc, color }) => (
+              {CHANNEL_TYPES.map(({ value, icon: Icon, color }) => (
                 <button key={value} onClick={() => setType(value)}
                   className={`flex items-start gap-3 p-3 rounded-xl border transition text-left
                     ${type === value ? 'border-fc-accent bg-fc-accent/10' : 'border-fc-hover bg-fc-hover/20 hover:bg-fc-hover/40'}`}>
                   <Icon size={18} className={`mt-0.5 flex-shrink-0 ${type === value ? 'text-fc-accent' : color}`} />
                   <div>
-                    <div className={`font-medium text-sm ${type === value ? 'text-white' : 'text-fc-text'}`}>{label}</div>
-                    <div className="text-xs text-fc-muted leading-snug mt-0.5">{desc}</div>
+                    <div className={`font-medium text-sm ${type === value ? 'text-white' : 'text-fc-text'}`}>{t(`chtype.${value}`)}</div>
+                    <div className="text-xs text-fc-muted leading-snug mt-0.5">{t(`chtype.${value}.desc`)}</div>
                   </div>
                 </button>
               ))}
@@ -117,14 +112,14 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
 
           {/* Nom */}
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Nom du canal</label>
+            <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.name')}</label>
             <div className="relative">
               <span className={`absolute left-3 top-1/2 -translate-y-1/2 ${selectedType.color}`}>
                 <selectedType.icon size={16} />
               </span>
               <input autoFocus value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="Nouveau canal 🎮"
+                placeholder={t('createChannel.namePlaceholder')}
                 maxLength={100}
                 enterKeyHint="next"
                 autoComplete="off"
@@ -137,10 +132,10 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
           {isTextType && (
             <div>
               <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                {type === 'forum' ? 'Description du forum' : 'Description (optionnel)'}
+                {type === 'forum' ? t('createChannel.forumDesc') : t('createChannel.desc')}
               </label>
               <input value={topic} onChange={e => setTopic(e.target.value)}
-                placeholder={type === 'forum' ? 'À quoi sert ce forum ?' : 'Description du canal...'}
+                placeholder={type === 'forum' ? t('createChannel.forumDescPh') : t('createChannel.descPh')}
                 maxLength={1024}
                 enterKeyHint="done"
                 autoCapitalize="sentences"
@@ -152,10 +147,10 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
           {/* Catégorie parente */}
           {categories.length > 0 && (
             <div>
-              <label htmlFor={`${uid}-cat`} className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Catégorie</label>
+              <label htmlFor={`${uid}-cat`} className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.category')}</label>
               <select id={`${uid}-cat`} value={categoryId ?? ''} onChange={e => setCategoryId(e.target.value || null)}
                 className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
-                <option value="">Aucune catégorie</option>
+                <option value="">{t('createChannel.noCategory')}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -165,7 +160,7 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
           <button onClick={() => setShowAdvanced(v => !v)}
             className="flex items-center gap-1.5 text-sm text-fc-muted hover:text-white transition">
             <Settings size={14} />
-            Options avancées
+            {t('createChannel.advanced')}
             <ChevronDown size={14} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
           </button>
 
@@ -174,10 +169,10 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               {/* NSFW */}
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-white">Canal NSFW</div>
-                  <div className="text-xs text-fc-muted">Contenu adulte</div>
+                  <div className="text-sm text-white">{t('createChannel.nsfw')}</div>
+                  <div className="text-xs text-fc-muted">{t('createChannel.nsfwDesc')}</div>
                 </div>
-                <button onClick={() => setIsNsfw(v => !v)}
+                <button onClick={() => setIsNsfw(v => !v)} role="switch" aria-checked={isNsfw} aria-label={t('createChannel.nsfw')}
                   className={`relative w-9 h-5 rounded-full transition ${isNsfw ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                   <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow ${isNsfw ? 'left-4' : 'left-0.5'}`} />
                 </button>
@@ -186,10 +181,10 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               {/* Slowmode (texte seulement) */}
               {isTextType && (
                 <div>
-                  <label htmlFor={`${uid}-slow`} className="block text-xs text-fc-muted mb-1">Mode lent</label>
+                  <label htmlFor={`${uid}-slow`} className="block text-xs text-fc-muted mb-1">{t('createChannel.slowmode')}</label>
                   <select id={`${uid}-slow`} value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
                     className="w-full px-3 py-1.5 bg-fc-input rounded-lg text-white outline-none text-sm">
-                    {SLOWMODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {SLOWMODE_OPTIONS.map(v => <option key={v} value={v}>{t(`slowmode.${v}`)}</option>)}
                   </select>
                 </div>
               )}
@@ -198,8 +193,8 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
               {isVoiceType && (
                 <div>
                   <div className="flex justify-between text-xs text-fc-muted mb-1">
-                    <span>Limite d'utilisateurs</span>
-                    <span className="text-white font-medium">{userLimit === 0 ? 'Illimité' : userLimit}</span>
+                    <span>{t('createChannel.userLimit')}</span>
+                    <span className="text-white font-medium">{userLimit === 0 ? t('invite.unlimited') : userLimit}</span>
                   </div>
                   <input type="range" min={0} max={99} value={userLimit}
                     onChange={e => setUserLimit(Number(e.target.value))}
@@ -212,11 +207,11 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
 
         {/* Footer */}
         <div className="px-6 pb-6 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">Annuler</button>
+          <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">{t('common.cancel')}</button>
           <button onClick={() => name.trim() && create.mutate()}
             disabled={!name.trim() || create.isPending}
             className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
-            {create.isPending ? 'Création...' : 'Créer le canal'}
+            {create.isPending ? t('common.creating') : t('createChannel.submit')}
           </button>
         </div>
       </div>

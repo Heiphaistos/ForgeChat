@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 interface Props {
   messageId: string
@@ -26,6 +27,7 @@ interface Channel {
 }
 
 export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
@@ -67,10 +69,10 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
         channel_id: destChannelId,
       }),
     onSuccess: () => {
-      toast.success('Message transféré')
+      toast.success(t('forward.done'))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur lors du transfert'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('forward.error')),
   })
 
   // Filtre par recherche
@@ -109,11 +111,11 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
         <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover flex-shrink-0">
           <h2 id="forward-modal-title" className="text-sm font-semibold text-white flex items-center gap-2">
             <Send size={14} className="text-fc-accent" />
-            Transférer le message
+            {t('forward.title')}
           </h2>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('common.close')}
             className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
           >
             <X size={16} />
@@ -128,7 +130,8 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un serveur ou canal..."
+              placeholder={t('forward.search')}
+              aria-label={t('forward.search')}
               inputMode="search" autoComplete="off"
               enterKeyHint="search"
               autoCapitalize="none"
@@ -136,7 +139,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
               autoFocus
             />
             {search && (
-              <button onClick={() => setSearch('')} className="text-fc-muted hover:text-white">
+              <button onClick={() => setSearch('')} aria-label={t('settings.clearSearch')} className="text-fc-muted hover:text-white">
                 <X size={12} />
               </button>
             )}
@@ -146,7 +149,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
         {/* Liste serveurs + canaux */}
         <div className="flex-1 overflow-y-auto overscroll-contain py-2">
           {filteredServers.length === 0 && (
-            <div className="text-center text-fc-muted text-sm py-8">Aucun résultat</div>
+            <div className="text-center text-fc-muted text-sm py-8">{t('forward.noResult')}</div>
           )}
           {filteredServers.map(server => {
             const channels = (channelsByServer[server.id] ?? []).filter(c =>
@@ -194,7 +197,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
                       <Hash size={14} className="flex-shrink-0" />
                       <span className="text-sm truncate">{channel.name}</span>
                       {isSameChannel && (
-                        <span className="text-xs text-fc-muted ml-auto">(canal actuel)</span>
+                        <span className="text-xs text-fc-muted ml-auto">{t('forward.current')}</span>
                       )}
                     </button>
                   )
@@ -208,15 +211,15 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
         <div className="px-4 py-3 border-t border-fc-hover flex items-center justify-between flex-shrink-0">
           <div className="text-xs text-fc-muted">
             {selectedChannelId
-              ? `Canal sélectionné`
-              : 'Sélectionne un canal de destination'}
+              ? t('forward.selected')
+              : t('forward.pick')}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               className="px-3 py-1.5 rounded text-sm text-fc-muted hover:text-white hover:bg-fc-hover transition"
             >
-              Annuler
+              {t('common.cancel')}
             </button>
             <button
               onClick={() => selectedChannelId && forwardMutation.mutate(selectedChannelId)}
@@ -224,7 +227,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
               className="px-3 py-1.5 rounded text-sm btn-primary disabled:opacity-40 flex items-center gap-1.5"
             >
               <Send size={13} />
-              {forwardMutation.isPending ? 'Transfert...' : 'Transférer'}
+              {forwardMutation.isPending ? t('forward.sending') : t('forward.submit')}
             </button>
           </div>
         </div>

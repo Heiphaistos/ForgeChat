@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 /**
  * Suppression définitive d'un serveur (propriétaire). Le serveur exige le mot de passe et, si la
@@ -13,6 +14,7 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
  * 403 `totp_required` fait apparaître le champ du code même si le profil local n'est pas à jour.
  */
 export default function DeleteServerModal({ server, onClose }: { server: { id: string; name: string }; onClose: () => void }) {
+  const t = useT()
   useEscapeKey(onClose)
   const qc = useQueryClient()
   const nav = useNavigate()
@@ -27,7 +29,7 @@ export default function DeleteServerModal({ server, onClose }: { server: { id: s
     mutationFn: () => api.delete(`/servers/${server.id}`, { data: { password, totp_code: code.trim() || undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success(`Serveur « ${server.name} » supprimé`)
+      toast.success(t('servers.delete.done', { name: server.name }))
       onClose()
       nav('/friends')
     },
@@ -35,11 +37,11 @@ export default function DeleteServerModal({ server, onClose }: { server: { id: s
       const msg = e.response?.data?.error
       if (e.response?.status === 403 && msg === 'totp_required') {
         setDemande2fa(true)
-        setErreur('Entre le code de ton application de double authentification.')
+        setErreur(t('servers.delete.need2fa'))
       } else if (e.response?.status === 429) {
-        setErreur('Trop d’essais. Réessaie dans quelques minutes.')
+        setErreur(t('servers.delete.tooMany'))
       } else {
-        setErreur(msg ?? 'Suppression impossible.')
+        setErreur(msg ?? t('servers.delete.failed'))
       }
     },
   })
@@ -56,39 +58,39 @@ export default function DeleteServerModal({ server, onClose }: { server: { id: s
       >
         <div className="p-5 border-b border-fc-bg flex items-center justify-between">
           <h2 id="delete-server-title" className="text-lg font-bold text-white flex items-center gap-2">
-            <ShieldAlert size={20} className="text-fc-red" aria-hidden /> Supprimer « {server.name} »
+            <ShieldAlert size={20} className="text-fc-red" aria-hidden /> {t('servers.delete.title', { name: server.name })}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
+          <button type="button" onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
             <X size={18} aria-hidden />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <p className="text-sm text-fc-muted">
-            Tous les salons, messages, rôles et invitations seront <span className="text-white font-semibold">définitivement supprimés</span>. Cette action est irréversible.
+            {t('servers.delete.warnBefore')}<span className="text-white font-semibold">{t('servers.delete.warnStrong')}</span>{t('servers.delete.warnAfter')}
           </p>
           <label className="block">
-            <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Tape le nom du serveur</span>
+            <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('servers.delete.typeName')}</span>
             <input value={nom} onChange={e => setNom(e.target.value)} placeholder={server.name} autoFocus autoComplete="off"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-red text-sm" />
           </label>
           <label className="block">
-            <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Ton mot de passe</span>
+            <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('servers.delete.password')}</span>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-red text-sm" />
           </label>
           {demande2fa && (
             <label className="block">
-              <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Code de double authentification (ou code de secours)</span>
+              <span className="block text-[10px] font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('servers.delete.code')}</span>
               <input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={20}
                 className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-red text-sm tracking-widest" />
             </label>
           )}
           {erreur && <p role="alert" className="text-sm text-fc-red">{erreur}</p>}
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded text-sm text-fc-text hover:bg-fc-hover">Annuler</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded text-sm text-fc-text hover:bg-fc-hover">{t('common.cancel')}</button>
             <button type="submit" disabled={!pret}
               className="px-4 py-2 rounded text-sm font-medium bg-fc-red text-white hover:bg-red-600 transition flex items-center gap-2 disabled:opacity-40">
-              <Trash2 size={14} aria-hidden /> {supprimer.isPending ? 'Suppression…' : 'Supprimer définitivement'}
+              <Trash2 size={14} aria-hidden /> {supprimer.isPending ? t('servers.delete.deleting') : t('settings.adv.deleteForever')}
             </button>
           </div>
         </div>
