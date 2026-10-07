@@ -174,7 +174,7 @@ export function Composer({
       const roles: Suggestion[] = filterRoles(detail.data?.roles ?? [], mention.query).map((r) => ({
         key: `r${r.id}`,
         label: `@${r.name}`,
-        sub: 'Rôle',
+        sub: t('composer.role'),
         icon: 'shield-outline',
         color: roleColor(r.color),
         pick: () => {

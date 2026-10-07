@@ -31,12 +31,12 @@ export default function AppLayout() {
       <Stack.Screen name="channel/[serverId]/[channelId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="dm/[dmId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="thread/[serverId]/[channelId]" options={{ title: t('screen.thread'), ...OWN_BOTTOM }} />
-      <Stack.Screen name="forum/[serverId]/[channelId]/index" options={{ title: 'Forum' }} />
-      <Stack.Screen name="forum/[serverId]/[channelId]/new" options={{ title: 'Nouvelle publication', presentation: 'modal' }} />
-      <Stack.Screen name="forum/[serverId]/[channelId]/[postId]" options={{ title: 'Publication', ...OWN_BOTTOM }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/index" options={{ title: t('screen.forum') }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/new" options={{ title: t('screen.newPost'), presentation: 'modal' }} />
+      <Stack.Screen name="forum/[serverId]/[channelId]/[postId]" options={{ title: t('screen.post'), ...OWN_BOTTOM }} />
       <Stack.Screen name="group/[groupId]" options={{ title: '', ...OWN_BOTTOM }} />
       <Stack.Screen name="group/create" options={{ title: t('screen.newGroup'), presentation: 'modal' }} />
-      <Stack.Screen name="group/manage/[groupId]" options={{ title: 'Gérer le groupe' }} />
+      <Stack.Screen name="group/manage/[groupId]" options={{ title: t('conv.manageGroup') }} />
       <Stack.Screen name="pins" options={{ title: t('screen.pins'), presentation: 'modal' }} />
       <Stack.Screen name="search" options={{ title: t('screen.search') }} />
       <Stack.Screen name="saved" options={{ title: t('you.saved') }} />
@@ -52,21 +52,21 @@ export default function AppLayout() {
       <Stack.Screen name="server/[serverId]/invite" options={{ title: t('screen.invite'), presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/channel-create" options={{ title: t('screen.createChannel'), presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/notifications" options={{ title: t('you.notifications') }} />
-      <Stack.Screen name="server/[serverId]/nickname" options={{ title: 'Mon profil sur ce serveur', presentation: 'modal' }} />
-      <Stack.Screen name="server/[serverId]/delete" options={{ title: 'Supprimer le serveur', presentation: 'modal' }} />
-      <Stack.Screen name="server/[serverId]/onboarding" options={{ title: 'Mes réponses d’accueil', presentation: 'modal' }} />
-      <Stack.Screen name="server/[serverId]/follow" options={{ title: 'Suivre le salon', presentation: 'modal' }} />
-      <Stack.Screen name="server/[serverId]/settings/onboarding" options={{ title: 'Accueil des nouveaux membres' }} />
+      <Stack.Screen name="server/[serverId]/nickname" options={{ title: t('menu.nickname'), presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/delete" options={{ title: t('screen.deleteServer'), presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/onboarding" options={{ title: t('menu.onboarding'), presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/follow" options={{ title: t('screen.followChannel'), presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/settings/onboarding" options={{ title: t('screen.onboardingSettings') }} />
       <Stack.Screen name="server/[serverId]/settings/index" options={{ title: t('screen.serverSettings') }} />
-      <Stack.Screen name="server/[serverId]/settings/overview" options={{ title: "Vue d'ensemble" }} />
-      <Stack.Screen name="server/[serverId]/settings/channels" options={{ title: 'Salons et catégories' }} />
-      <Stack.Screen name="server/[serverId]/settings/channel/[channelId]" options={{ title: 'Modifier le salon' }} />
-      <Stack.Screen name="server/[serverId]/settings/roles" options={{ title: 'Rôles' }} />
-      <Stack.Screen name="server/[serverId]/settings/role/[roleId]" options={{ title: 'Modifier le rôle' }} />
-      <Stack.Screen name="server/[serverId]/settings/member/[userId]" options={{ title: 'Gérer le membre' }} />
-      <Stack.Screen name="server/[serverId]/settings/bans" options={{ title: 'Bannissements' }} />
-      <Stack.Screen name="server/[serverId]/settings/invites" options={{ title: 'Invitations' }} />
-      <Stack.Screen name="server/[serverId]/settings/transfer" options={{ title: 'Transférer la propriété' }} />
+      <Stack.Screen name="server/[serverId]/settings/overview" options={{ title: t('screen.overview') }} />
+      <Stack.Screen name="server/[serverId]/settings/channels" options={{ title: t('screen.channels') }} />
+      <Stack.Screen name="server/[serverId]/settings/channel/[channelId]" options={{ title: t('screen.editChannel') }} />
+      <Stack.Screen name="server/[serverId]/settings/roles" options={{ title: t('screen.roles') }} />
+      <Stack.Screen name="server/[serverId]/settings/role/[roleId]" options={{ title: t('screen.editRole') }} />
+      <Stack.Screen name="server/[serverId]/settings/member/[userId]" options={{ title: t('screen.manageMember') }} />
+      <Stack.Screen name="server/[serverId]/settings/bans" options={{ title: t('screen.bans') }} />
+      <Stack.Screen name="server/[serverId]/settings/invites" options={{ title: t('screen.invites') }} />
+      <Stack.Screen name="server/[serverId]/settings/transfer" options={{ title: t('screen.transfer') }} />
       <Stack.Screen name="user/[userId]" options={{ title: t('screen.profile'), presentation: 'modal' }} />
       <Stack.Screen name="friends/add" options={{ title: t('friends.add'), presentation: 'modal' }} />
       <Stack.Screen name="settings/profile" options={{ title: t('you.profile') }} />

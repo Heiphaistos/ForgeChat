@@ -491,4 +491,22 @@ export const en: Partial<Record<Key, string>> = {
   'error.status': 'Error {status}',
   'error.rateLimited': 'Slow down! Try again in {s} s.',
   'error.forbidden': "You don't have permission to do that.",
+
+  // --- Titres des autres écrans (contenu encore en français) ---
+  'screen.forum': 'Forum',
+  'screen.newPost': 'New post',
+  'screen.post': 'Post',
+  'screen.deleteServer': 'Delete server',
+  'screen.followChannel': 'Follow channel',
+  'screen.onboardingSettings': 'New member onboarding',
+  'screen.overview': 'Overview',
+  'screen.channels': 'Channels and categories',
+  'screen.editChannel': 'Edit channel',
+  'screen.roles': 'Roles',
+  'screen.editRole': 'Edit role',
+  'screen.manageMember': 'Manage member',
+  'screen.bans': 'Bans',
+  'screen.invites': 'Invites',
+  'screen.transfer': 'Transfer ownership',
+  'composer.role': 'Role',
 }

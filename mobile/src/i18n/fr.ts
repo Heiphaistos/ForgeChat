@@ -490,6 +490,24 @@ export const fr = {
   'error.status': 'Erreur {status}',
   'error.rateLimited': 'Doucement ! Réessaie dans {s} s.',
   'error.forbidden': "Tu n'as pas la permission de faire ça.",
+
+  // --- Titres des autres écrans (contenu encore en français) ---
+  'screen.forum': 'Forum',
+  'screen.newPost': 'Nouvelle publication',
+  'screen.post': 'Publication',
+  'screen.deleteServer': 'Supprimer le serveur',
+  'screen.followChannel': 'Suivre le salon',
+  'screen.onboardingSettings': 'Accueil des nouveaux membres',
+  'screen.overview': "Vue d'ensemble",
+  'screen.channels': 'Salons et catégories',
+  'screen.editChannel': 'Modifier le salon',
+  'screen.roles': 'Rôles',
+  'screen.editRole': 'Modifier le rôle',
+  'screen.manageMember': 'Gérer le membre',
+  'screen.bans': 'Bannissements',
+  'screen.invites': 'Invitations',
+  'screen.transfer': 'Transférer la propriété',
+  'composer.role': 'Rôle',
 }
 
 export type Key = keyof typeof fr
