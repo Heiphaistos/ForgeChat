@@ -7,9 +7,11 @@ import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { validateRegistration, passwordStrength } from '@/lib/validation'
 import { useAuth } from '@/stores/auth'
+import { useT } from '@/i18n'
 import { colors, spacing } from '@/theme'
 
 export default function RegisterScreen() {
+  const t = useT()
   const register = useAuth((s) => s.register)
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -40,11 +42,11 @@ export default function RegisterScreen() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <T variant="title" style={{ textAlign: 'center' }}>
-            Créer un compte
+            {t('auth.createAccount')}
           </T>
           <View style={{ gap: spacing.lg, marginTop: spacing.xl }}>
             <TextField
-              label="Nom d'utilisateur"
+              label={t('auth.username')}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -54,7 +56,7 @@ export default function RegisterScreen() {
               error={errors.username}
             />
             <TextField
-              label="Email"
+              label={t('auth.email')}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -63,7 +65,7 @@ export default function RegisterScreen() {
               error={errors.email}
             />
             <PasswordField
-              label="Mot de passe"
+              label={t('auth.password')}
               value={password}
               onChangeText={setPassword}
               autoComplete="new-password"
@@ -88,7 +90,7 @@ export default function RegisterScreen() {
               </View>
             ) : null}
             <PasswordField
-              label="Confirmer le mot de passe"
+              label={t('auth.confirmPassword')}
               value={confirm}
               onChangeText={setConfirm}
               autoComplete="new-password"
@@ -96,8 +98,8 @@ export default function RegisterScreen() {
               error={errors.confirm}
             />
             {serverError ? <T variant="error">{serverError}</T> : null}
-            <Button title="S’inscrire" onPress={submit} loading={loading} />
-            <Button title="J’ai déjà un compte" variant="ghost" onPress={() => router.back()} />
+            <Button title={t('auth.signUp')} onPress={submit} loading={loading} />
+            <Button title={t('auth.haveAccount')} variant="ghost" onPress={() => router.back()} />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

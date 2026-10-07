@@ -6,6 +6,7 @@ import { Avatar, StatusDot } from '@/components/Avatar'
 import { Sheet } from '@/components/Sheet'
 import { Row, Section } from '@/components/ui'
 import { APP_ENV, APP_VERSION, apiHost } from '@/config/env'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { normalizeStatus, SELECTABLE_STATUSES, statusLabel, toServerStatus } from '@/lib/status'
 import { useAuth } from '@/stores/auth'
@@ -24,6 +25,7 @@ const DevInfoRow: (() => React.JSX.Element) | null =
       (require('@/features/devtools/DevInfo') as typeof import('@/features/devtools/DevInfo')).DevInfoRow
 
 export default function YouScreen() {
+  const t = useT()
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
   const setUser = useAuth((s) => s.setUser)
@@ -42,7 +44,7 @@ export default function YouScreen() {
       await usersApi.setStatus(toServerStatus(key))
     } catch (e) {
       setUser({ status: prev })
-      Alert.alert('Statut non modifié', errorMessage(e))
+      Alert.alert(t('you.statusFailed'), errorMessage(e))
     }
   }
 
@@ -61,44 +63,45 @@ export default function YouScreen() {
       <Section>
         <Row
           icon="radio-button-on-outline"
-          title="Statut"
+          title={t('you.status')}
           subtitle={statusLabel(status)}
           onPress={() => setStatusOpen(true)}
           chevron
           right={<StatusDot status={status} size={14} inline />}
         />
-        <Row icon="person-outline" title="Mon profil" onPress={() => router.push('/settings/profile')} chevron />
-        <Row icon="bookmark-outline" title="Messages enregistrés" onPress={() => router.push('/saved')} chevron />
+        <Row icon="person-outline" title={t('you.profile')} onPress={() => router.push('/settings/profile')} chevron />
+        <Row icon="bookmark-outline" title={t('you.saved')} onPress={() => router.push('/saved')} chevron />
       </Section>
 
-      <Section title="Paramètres">
-        <Row icon="shield-checkmark-outline" title="Sécurité et confidentialité" onPress={() => router.push('/settings/security')} chevron />
-        <Row icon="lock-closed-outline" title="Confidentialité et données" onPress={() => router.push('/settings/privacy')} chevron />
-        <Row icon="phone-portrait-outline" title="Appareils connectés" onPress={() => router.push('/settings/sessions')} chevron />
-        <Row icon="notifications-outline" title="Notifications" onPress={() => router.push('/settings/notifications')} chevron />
-        <Row icon="color-palette-outline" title="Apparence" onPress={() => router.push('/settings/appearance')} chevron />
+      <Section title={t('you.settings')}>
+        <Row icon="shield-checkmark-outline" title={t('you.security')} onPress={() => router.push('/settings/security')} chevron />
+        <Row icon="lock-closed-outline" title={t('you.privacy')} onPress={() => router.push('/settings/privacy')} chevron />
+        <Row icon="phone-portrait-outline" title={t('you.sessions')} onPress={() => router.push('/settings/sessions')} chevron />
+        <Row icon="notifications-outline" title={t('you.notifications')} onPress={() => router.push('/settings/notifications')} chevron />
+        <Row icon="color-palette-outline" title={t('you.appearance')} onPress={() => router.push('/settings/appearance')} chevron />
       </Section>
 
       {DevInfoRow ? (
-        <Section title="Développement">
+        <Section title={t('you.dev')}>
           <DevInfoRow />
         </Section>
       ) : null}
 
       <Section>
-        <Row icon="log-out-outline" title="Se déconnecter" danger onPress={() => setLogoutOpen(true)} />
+        <Row icon="log-out-outline" title={t('you.logout')} danger onPress={() => setLogoutOpen(true)} />
       </Section>
 
       <Text style={styles.version}>
         ForgeChat {APP_VERSION}
-        {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${apiHost() || 'aucun serveur'}`}
-        {'\n'}Application mobile créée par aerwx · ForgeChat par Heiphaistos
+        {APP_ENV === 'production' ? '' : ` (${APP_ENV}) · ${apiHost() || t('you.noServer')}`}
+        {'\n'}
+        {t('you.credits')}
       </Text>
 
       <Sheet
         visible={statusOpen}
         onClose={() => setStatusOpen(false)}
-        title="Définir le statut"
+        title={t('you.setStatus')}
         actions={SELECTABLE_STATUSES.map((s) => ({
           label: statusLabel(s),
           icon: 'ellipse',
@@ -110,10 +113,10 @@ export default function YouScreen() {
       <Sheet
         visible={logoutOpen}
         onClose={() => setLogoutOpen(false)}
-        title="Se déconnecter"
+        title={t('you.logout')}
         actions={[
-          { label: 'De cet appareil', icon: 'phone-portrait-outline', onPress: () => void logout('current') },
-          { label: 'De tous les appareils', icon: 'warning-outline', danger: true, onPress: () => void logout('all') },
+          { label: t('you.logoutThis'), icon: 'phone-portrait-outline', onPress: () => void logout('current') },
+          { label: t('you.logoutAll'), icon: 'warning-outline', danger: true, onPress: () => void logout('all') },
         ]}
       />
     </ScrollView>

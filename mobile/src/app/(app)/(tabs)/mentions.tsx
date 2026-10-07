@@ -6,11 +6,13 @@ import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { formatRelative } from '@/lib/format'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function MentionsScreen() {
+  const t = useT()
   const q = useQuery({ queryKey: qk.mentions, queryFn: usersApi.mentions })
   // Le serveur ne renvoie que les mentions NON LUES : la liste change dès qu'on lit un salon ou
   // qu'une nouvelle mention arrive. Rechargée à chaque ouverture de l'onglet.
@@ -28,7 +30,7 @@ export default function MentionsScreen() {
       data={q.data ?? []}
       keyExtractor={(m) => m.message_id}
       refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
-      ListEmptyComponent={<EmptyState icon="at" title="Aucune mention non lue" subtitle="Les messages non lus qui te mentionnent (7 derniers jours) apparaîtront ici." />}
+      ListEmptyComponent={<EmptyState icon="at" title={t('mentions.empty')} subtitle={t('mentions.emptyHint')} />}
       renderItem={({ item }) => (
         <Pressable
           style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}

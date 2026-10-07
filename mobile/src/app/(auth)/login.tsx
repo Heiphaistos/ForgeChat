@@ -5,6 +5,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { apiHost, subscribeApiOrigin } from '@/config/env'
+import { useT } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import { colors, radius, spacing } from '@/theme'
@@ -17,6 +18,7 @@ const DevServerLink =
       (require('@/features/devtools/ServerPicker') as typeof import('@/features/devtools/ServerPicker')).DevServerLink
 
 export default function LoginScreen() {
+  const t = useT()
   const login = useAuth((s) => s.login)
   const notice = useAuth((s) => s.notice)
   const clearNotice = useAuth((s) => s.clearNotice)
@@ -31,11 +33,11 @@ export default function LoginScreen() {
 
   const submit = async () => {
     if (!email.trim() || !password) {
-      setError('Renseigne ton email et ton mot de passe.')
+      setError(t('auth.missingCredentials'))
       return
     }
     if (needTotp && !/^[0-9A-Za-z-]{6,20}$/.test(totp.trim())) {
-      setError('Code 2FA invalide.')
+      setError(t('auth.invalidTotp'))
       return
     }
     setLoading(true)
@@ -67,10 +69,10 @@ export default function LoginScreen() {
             </T>
           </View>
           <T variant="subtitle" style={{ textAlign: 'center' }}>
-            {needTotp ? 'Vérification en deux étapes' : 'Content de te revoir !'}
+            {t(needTotp ? 'auth.twoStep' : 'auth.welcomeBack')}
           </T>
           <T variant="muted" style={{ textAlign: 'center', marginBottom: spacing.xl }}>
-            {needTotp ? 'Saisis le code de ton application d’authentification (ou un code de secours).' : `Connexion à ${host || '— aucun serveur choisi'}`}
+            {needTotp ? t('auth.totpHelp') : t('auth.connectingTo', { host: host || t('auth.noServer') })}
           </T>
 
           {DevServerLink ? <DevServerLink host={host} /> : null}
@@ -80,7 +82,7 @@ export default function LoginScreen() {
             {!needTotp ? (
               <>
                 <TextField
-                  label="Email"
+                  label={t('auth.email')}
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -93,7 +95,7 @@ export default function LoginScreen() {
                 />
                 <PasswordField
                   ref={passwordRef}
-                  label="Mot de passe"
+                  label={t('auth.password')}
                   value={password}
                   onChangeText={setPassword}
                   autoComplete="current-password"
@@ -104,7 +106,7 @@ export default function LoginScreen() {
               </>
             ) : (
               <TextField
-                label="Code 2FA"
+                label={t('auth.totpLabel')}
                 value={totp}
                 onChangeText={setTotp}
                 keyboardType="number-pad"
@@ -117,10 +119,10 @@ export default function LoginScreen() {
               />
             )}
             {error ? <T variant="error">{error}</T> : null}
-            <Button title={needTotp ? 'Vérifier' : 'Se connecter'} onPress={submit} loading={loading} />
+            <Button title={t(needTotp ? 'auth.verify' : 'auth.login')} onPress={submit} loading={loading} />
             {needTotp ? (
               <Button
-                title="Retour"
+                title={t('common.back')}
                 variant="ghost"
                 onPress={() => {
                   setNeedTotp(false)
@@ -130,10 +132,10 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Link href="/forgot-password" asChild>
-                  <Button title="Mot de passe oublié ?" variant="ghost" />
+                  <Button title={t('auth.forgot')} variant="ghost" />
                 </Link>
                 <Link href="/register" asChild>
-                  <Button title="Pas encore de compte ? S’inscrire" variant="ghost" />
+                  <Button title={t('auth.noAccount')} variant="ghost" />
                 </Link>
               </>
             )}

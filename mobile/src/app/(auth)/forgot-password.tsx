@@ -7,16 +7,18 @@ import { authApi } from '@/api/auth'
 import { Button, T, TextField } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { EMAIL_RE } from '@/lib/validation'
+import { useT } from '@/i18n'
 import { spacing } from '@/theme'
 
 export default function ForgotPasswordScreen() {
+  const t = useT()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
 
   const submit = async () => {
-    if (!EMAIL_RE.test(email.trim())) return setError('Adresse e-mail invalide.')
+    if (!EMAIL_RE.test(email.trim())) return setError(t('auth.invalidEmailAddress'))
     setLoading(true)
     setError(null)
     try {
@@ -34,24 +36,23 @@ export default function ForgotPasswordScreen() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <T variant="title" style={{ textAlign: 'center' }}>
-            Mot de passe oublié
+            {t('auth.forgotTitle')}
           </T>
           {sent ? (
             <View style={{ gap: spacing.lg }}>
               <T style={{ textAlign: 'center' }}>
-                Si un compte existe pour {email.trim()}, un e-mail avec un lien de réinitialisation vient d’être envoyé. Le lien expire dans 30
-                minutes.
+                {t('auth.resetSent', { email: email.trim() })}
               </T>
-              <Button title="J’ai reçu le lien" onPress={() => router.push('/reset-password')} />
-              <Button title="Retour à la connexion" variant="ghost" onPress={() => router.back()} />
+              <Button title={t('auth.gotLink')} onPress={() => router.push('/reset-password')} />
+              <Button title={t('auth.backToLogin')} variant="ghost" onPress={() => router.back()} />
             </View>
           ) : (
             <View style={{ gap: spacing.lg }}>
               <T variant="muted" style={{ textAlign: 'center' }}>
-                Saisis l’adresse e-mail de ton compte : nous t’enverrons un lien pour choisir un nouveau mot de passe.
+                {t('auth.forgotHelp')}
               </T>
               <TextField
-                label="Email"
+                label={t('auth.email')}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -63,8 +64,8 @@ export default function ForgotPasswordScreen() {
                 onSubmitEditing={submit}
                 error={error}
               />
-              <Button title="Envoyer le lien" onPress={submit} loading={loading} />
-              <Button title="Retour" variant="ghost" onPress={() => router.back()} />
+              <Button title={t('auth.sendLink')} onPress={submit} loading={loading} />
+              <Button title={t('common.back')} variant="ghost" onPress={() => router.back()} />
             </View>
           )}
         </ScrollView>

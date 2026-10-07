@@ -6,20 +6,22 @@ import { friendsApi, type FriendFilter } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { openDmWith } from '@/features/friends/openDm'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { usePresence } from '@/stores/presence'
 import type { Friend } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 
-const FILTERS: { key: FriendFilter; label: string }[] = [
-  { key: 'online', label: 'En ligne' },
-  { key: 'all', label: 'Tous' },
-  { key: 'pending', label: 'En attente' },
-  { key: 'blocked', label: 'Bloqués' },
+const FILTERS: { key: FriendFilter; label: Key }[] = [
+  { key: 'online', label: 'friends.online' },
+  { key: 'all', label: 'friends.all' },
+  { key: 'pending', label: 'friends.pending' },
+  { key: 'blocked', label: 'friends.blocked' },
 ]
 
 export default function FriendsScreen() {
+  const t = useT()
   const navigation = useNavigation()
   const [filter, setFilter] = useState<FriendFilter>('online')
   const statuses = usePresence((s) => s.statuses)
@@ -29,23 +31,23 @@ export default function FriendsScreen() {
     navigation.setOptions({
       headerRight: () => (
         <View style={{ flexDirection: 'row' }}>
-          <IconButton icon="call-outline" label="Historique des appels" onPress={() => router.push('/friends/calls')} />
-          <IconButton icon="person-add" label="Ajouter un ami" color={colors.success} onPress={() => router.push('/friends/add')} />
+          <IconButton icon="call-outline" label={t('friends.callHistory')} onPress={() => router.push('/friends/calls')} />
+          <IconButton icon="person-add" label={t('friends.add')} color={colors.success} onPress={() => router.push('/friends/add')} />
         </View>
       ),
     })
-  }, [navigation])
+  }, [navigation, t])
 
   const act = useMutation({
     mutationFn: (fn: () => Promise<unknown>) => fn(),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.friendsAll }),
-    onError: (e) => Alert.alert('Action impossible', errorMessage(e)),
+    onError: (e) => Alert.alert(t('common.actionFailed'), errorMessage(e)),
   })
 
   const confirm = (title: string, message: string, onOk: () => Promise<unknown>) =>
     Alert.alert(title, message, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Confirmer', style: 'destructive', onPress: () => act.mutate(onOk) },
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.confirm'), style: 'destructive', onPress: () => act.mutate(onOk) },
     ])
 
   let data = q.data?.friends ?? []
@@ -60,26 +62,30 @@ export default function FriendsScreen() {
     if (f.direction === 'received')
       return (
         <>
-          <IconButton icon="checkmark" label="Accepter" color={colors.success} onPress={() => act.mutate(() => friendsApi.accept(f.id))} />
-          <IconButton icon="close" label="Refuser" color={colors.danger} onPress={() => act.mutate(() => friendsApi.decline(f.id))} />
+          <IconButton icon="checkmark" label={t('friends.accept')} color={colors.success} onPress={() => act.mutate(() => friendsApi.accept(f.id))} />
+          <IconButton icon="close" label={t('friends.decline')} color={colors.danger} onPress={() => act.mutate(() => friendsApi.decline(f.id))} />
         </>
       )
     if (f.direction === 'sent')
-      return <IconButton icon="close" label="Annuler la demande" onPress={() => act.mutate(() => friendsApi.cancel(f.id))} />
+      return <IconButton icon="close" label={t('friends.cancelRequest')} onPress={() => act.mutate(() => friendsApi.cancel(f.id))} />
     if (f.direction === 'blocked')
-      return <IconButton icon="lock-open-outline" label="Débloquer" onPress={() => act.mutate(() => friendsApi.unblock(f.friend_id))} />
+      return <IconButton icon="lock-open-outline" label={t('friends.unblock')} onPress={() => act.mutate(() => friendsApi.unblock(f.friend_id))} />
     return (
       <>
-        <IconButton icon="chatbubble" label={`Message à ${f.username}`} onPress={() => void openDmWith(f.friend_id, f.username)} />
+        <IconButton icon="chatbubble" label={t('friends.messageTo', { name: f.username })} onPress={() => void openDmWith(f.friend_id, f.username)} />
         <IconButton
           icon="ellipsis-vertical"
-          label="Plus d'actions"
+          label={t('friends.more')}
           onPress={() =>
             Alert.alert(f.username, undefined, [
-              { text: 'Voir le profil', onPress: () => router.push(`/user/${f.friend_id}`) },
-              { text: 'Retirer des amis', style: 'destructive', onPress: () => confirm('Retirer cet ami ?', f.username, () => friendsApi.remove(f.friend_id)) },
-              { text: 'Bloquer', style: 'destructive', onPress: () => confirm('Bloquer cet utilisateur ?', `${f.username} ne pourra plus t'écrire ni t'appeler.`, () => friendsApi.block(f.friend_id)) },
-              { text: 'Annuler', style: 'cancel' },
+              { text: t('friends.viewProfile'), onPress: () => router.push(`/user/${f.friend_id}`) },
+              { text: t('friends.remove'), style: 'destructive', onPress: () => confirm(t('friends.removeConfirm'), f.username, () => friendsApi.remove(f.friend_id)) },
+              {
+                text: t('friends.block'),
+                style: 'destructive',
+                onPress: () => confirm(t('friends.blockConfirm'), t('friends.blockBody', { name: f.username }), () => friendsApi.block(f.friend_id)),
+              },
+              { text: t('common.cancel'), style: 'cancel' },
             ])
           }
         />
@@ -98,7 +104,7 @@ export default function FriendsScreen() {
             accessibilityRole="tab"
             accessibilityState={{ selected: filter === f.key }}
           >
-            <Text style={[styles.filterText, filter === f.key && { color: colors.text }]}>{f.label}</Text>
+            <Text style={[styles.filterText, filter === f.key && { color: colors.text }]}>{t(f.label)}</Text>
           </Pressable>
         ))}
       </View>
@@ -114,7 +120,7 @@ export default function FriendsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
-              title={filter === 'pending' ? 'Aucune demande en attente' : filter === 'blocked' ? 'Personne de bloqué' : 'Personne ici pour le moment'}
+              title={t(filter === 'pending' ? 'friends.noPending' : filter === 'blocked' ? 'friends.noBlocked' : 'friends.empty')}
             />
           }
           renderItem={({ item }) => (
@@ -126,9 +132,9 @@ export default function FriendsScreen() {
                 </Text>
                 <Text style={styles.sub} numberOfLines={1}>
                   {item.direction === 'received'
-                    ? 'Demande reçue'
+                    ? t('friends.received')
                     : item.direction === 'sent'
-                      ? 'Demande envoyée'
+                      ? t('friends.sent')
                       : item.custom_status || `${item.username}#${item.discriminator}`}
                 </Text>
               </View>

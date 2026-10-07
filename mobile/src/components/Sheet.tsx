@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, font, radius, spacing } from '@/theme'
+import { useT } from '@/i18n'
 import type { IconName } from './ui'
 
 export interface SheetAction {
@@ -31,9 +32,10 @@ export function Sheet({
   actions: SheetAction[]
 }) {
   const insets = useSafeAreaInsets()
+  const t = useT()
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Fermer" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.grabber} />
         {title ? <Text style={styles.title}>{title}</Text> : null}

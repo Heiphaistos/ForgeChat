@@ -6,6 +6,8 @@
  * « invisible » est diffusé comme hors ligne). « idle » (ou l'ancien « away ») s'affiche « Absent ».
  */
 
+import { t, type Key } from '@/i18n'
+
 export type StatusKey = 'online' | 'away' | 'dnd' | 'invisible' | 'offline'
 
 // Hors ligne / invisible : #80848e au lieu du #72767d du web, qui n'atteint pas 3:1 (WCAG 1.4.11,
@@ -18,12 +20,12 @@ export const STATUS_COLORS = {
   offline: '#80848e',
 } as const satisfies Record<StatusKey, string>
 
-const LABELS: Record<StatusKey, string> = {
-  online: 'En ligne',
-  away: 'Absent',
-  dnd: 'Ne pas déranger',
-  invisible: 'Invisible',
-  offline: 'Hors ligne',
+const LABELS: Record<StatusKey, Key> = {
+  online: 'status.online',
+  away: 'status.away',
+  dnd: 'status.dnd',
+  invisible: 'status.invisible',
+  offline: 'status.offline',
 }
 
 /** Statuts qu'on peut choisir (même ordre que le web). */
@@ -44,7 +46,7 @@ export function toServerStatus(key: StatusKey): 'online' | 'idle' | 'dnd' | 'inv
 }
 
 export const statusColor = (raw: string | null | undefined) => STATUS_COLORS[normalizeStatus(raw)]
-export const statusLabel = (raw: string | null | undefined) => LABELS[normalizeStatus(raw)]
+export const statusLabel = (raw: string | null | undefined) => t(LABELS[normalizeStatus(raw)])
 /** Hors ligne / invisible : anneau creux (en plus de la couleur, pour ne pas dépendre que d'elle). */
 export const statusHollow = (raw: string | null | undefined) => {
   const s = normalizeStatus(raw)

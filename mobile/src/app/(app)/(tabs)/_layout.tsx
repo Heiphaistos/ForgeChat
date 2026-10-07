@@ -4,9 +4,12 @@ import { directUnread, useUnread } from '@/stores/unread'
 import { useQuery } from '@tanstack/react-query'
 import { friendsApi } from '@/api/friends'
 import { qk } from '@/lib/queryClient'
+import { useT } from '@/i18n'
+import { unreadLabel } from '@/lib/format'
 import { colors } from '@/theme'
 
 export default function TabsLayout() {
+  const t = useT()
   const counts = useUnread((s) => s.counts)
   const serverOf = useUnread((s) => s.serverOf)
   const dmUnread = directUnread(counts, serverOf)
@@ -28,8 +31,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Accueil',
-          tabBarAccessibilityLabel: dmUnread > 0 ? `Accueil, ${dmUnread} non lu${dmUnread > 1 ? 's' : ''}` : 'Accueil',
+          title: t('tabs.home'),
+          tabBarAccessibilityLabel: dmUnread > 0 ? t('tabs.homeUnread', { unread: unreadLabel(dmUnread) }) : t('tabs.home'),
           headerShown: false,
           tabBarBadge: dmUnread > 0 ? (dmUnread > 99 ? '99+' : dmUnread) : undefined,
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={22} color={color} />,
@@ -38,8 +41,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="friends"
         options={{
-          title: 'Amis',
-          tabBarAccessibilityLabel: pendingReceived > 0 ? `Amis, ${pendingReceived} demande${pendingReceived > 1 ? 's' : ''} reçue${pendingReceived > 1 ? 's' : ''}` : 'Amis',
+          title: t('tabs.friends'),
+          tabBarAccessibilityLabel:
+            pendingReceived > 0 ? t(pendingReceived > 1 ? 'tabs.friendsPendingMany' : 'tabs.friendsPending', { n: pendingReceived }) : t('tabs.friends'),
           tabBarBadge: pendingReceived > 0 ? pendingReceived : undefined,
           tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'people' : 'people-outline'} size={22} color={color} />,
         }}
@@ -47,16 +51,16 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="mentions"
         options={{
-          title: 'Mentions',
-          tabBarAccessibilityLabel: 'Mentions',
+          title: t('tabs.mentions'),
+          tabBarAccessibilityLabel: t('tabs.mentions'),
           tabBarIcon: ({ color }) => <Ionicons name="at" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="you"
         options={{
-          title: 'Vous',
-          tabBarAccessibilityLabel: 'Vous',
+          title: t('tabs.you'),
+          tabBarAccessibilityLabel: t('tabs.you'),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'person-circle' : 'person-circle-outline'} size={24} color={color} />
           ),

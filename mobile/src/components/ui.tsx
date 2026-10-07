@@ -17,6 +17,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { colors, font, radius, spacing } from '@/theme'
+import { useT } from '@/i18n'
 import { unreadLabel } from '@/lib/format'
 import { eyeIcon, eyeLabel, maskOnAppState } from '@/lib/passwordVisibility'
 
@@ -309,12 +310,13 @@ export function EmptyState({ icon, title, subtitle, action }: { icon: IconName; 
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const t = useT()
   return (
     <EmptyState
       icon="cloud-offline-outline"
-      title="Oups"
+      title={t('common.oops')}
       subtitle={message}
-      action={onRetry ? <Button title="Réessayer" variant="secondary" onPress={onRetry} /> : undefined}
+      action={onRetry ? <Button title={t('common.retry')} variant="secondary" onPress={onRetry} /> : undefined}
     />
   )
 }
