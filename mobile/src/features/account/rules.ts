@@ -1,4 +1,5 @@
 /** Règles pures des écrans Compte / Sécurité / Confidentialité (testées dans __tests__/account-rules.test.ts). */
+import { t } from '@/i18n'
 
 /** Jeton de réinitialisation : 64 caractères alphanumériques (handlers/password_reset.rs). */
 export const RESET_TOKEN_RE = /^[A-Za-z0-9]{64}$/
@@ -17,8 +18,8 @@ export function extractResetToken(input: string | null | undefined): string | nu
 /** Pseudo : mêmes règles que le serveur (users::update_me). */
 export function usernameError(name: string): string | null {
   const n = name.trim()
-  if (n.length < 2 || n.length > 32) return 'Le pseudo doit faire 2 à 32 caractères.'
-  if (!/^[\p{L}\p{N}_-]+$/u.test(n)) return 'Lettres, chiffres, _ et - uniquement.'
+  if (n.length < 2 || n.length > 32) return t('settings.rules.usernameLength')
+  if (!/^[\p{L}\p{N}_-]+$/u.test(n)) return t('settings.rules.usernameChars')
   return null
 }
 
@@ -34,9 +35,9 @@ export function parseBirthday(input: string, now = new Date()): { value: string 
   const [y, m, d] = fr ? [+fr[3]!, +fr[2]!, +fr[1]!] : iso ? [+iso[1]!, +iso[2]!, +iso[3]!] : [0, 0, 0]
   const date = new Date(Date.UTC(y, m - 1, d))
   if (!y || date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) {
-    return { error: 'Date invalide (format JJ/MM/AAAA).' }
+    return { error: t('settings.rules.birthdayInvalid') }
   }
-  if (y < 1900 || date.getTime() > now.getTime()) return { error: 'Date hors limites.' }
+  if (y < 1900 || date.getTime() > now.getTime()) return { error: t('settings.rules.birthdayRange') }
   return { value: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` }
 }
 

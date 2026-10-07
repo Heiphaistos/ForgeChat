@@ -74,18 +74,18 @@ export function ProfileCosmeticsEditor({
 
       <Text style={styles.label}>{t('settings.cosmetics.decoration')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, padding: spacing.sm }}>
-        {[{ id: '', label: t('settings.cosmetics.noDecoration') }, ...DECORATIONS].map((d) => (
+        {[{ id: '', label: 'settings.cosmetics.noDecoration' as const }, ...DECORATIONS].map((d) => (
           <Pressable
             key={d.id || 'none'}
             onPress={() => set({ decoration: d.id })}
             accessibilityRole="button"
-            accessibilityLabel={t('settings.cosmetics.decorationA11y', { name: d.label })}
+            accessibilityLabel={t('settings.cosmetics.decorationA11y', { name: t(d.label) })}
             accessibilityState={{ selected: value.decoration === d.id }}
             style={[styles.deco, value.decoration === d.id && styles.decoOn]}
           >
             <Avatar uri={avatar} name={name} size={40} decoration={d.id} />
             <Text style={styles.decoLabel} numberOfLines={1}>
-              {d.label}
+              {t(d.label)}
             </Text>
           </Pressable>
         ))}
@@ -97,7 +97,7 @@ export function ProfileCosmeticsEditor({
       <Text style={styles.label}>{t('settings.cosmetics.effect')}</Text>
       <View style={styles.wrap}>
         {chip(t('settings.cosmetics.noEffect'), !value.effect, () => set({ effect: '' }), 'none')}
-        {PROFILE_EFFECTS.map((e) => chip(e.label, value.effect === e.id, () => set({ effect: e.id }), e.id))}
+        {PROFILE_EFFECTS.map((e) => chip(t(e.label), value.effect === e.id, () => set({ effect: e.id }), e.id))}
       </View>
     </View>
   )
