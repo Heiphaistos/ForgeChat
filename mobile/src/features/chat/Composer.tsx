@@ -19,6 +19,7 @@ import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
 import { EmojiPanel, GifPanel, QuickRepliesPanel, StickerPanel, useGifSearchAvailable } from '@/features/composer/Panels'
 import { prepareVoiceRecording, VoiceRecorder } from '@/features/composer/VoiceRecorder'
 import { LIMITS } from '@/config/env'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
 import type { ChatMessage } from '@/types/models'
@@ -104,6 +105,7 @@ export function Composer({
   serverId,
   channelId,
 }: Props) {
+  const t = useT()
   const [files, setFiles] = useState<LocalAttachment[]>([])
   // Au-dessus de la barre de navigation Android, clavier fermé comme ouvert (affichage bord à bord).
   const safeBottom = useKeyboardSafeBottom(spacing.sm)
@@ -183,7 +185,7 @@ export function Composer({
       const specials: Suggestion[] = specialMentions(mention.query).map((n) => ({
         key: n,
         label: `@${n}`,
-        sub: n === 'everyone' ? 'Tous les membres du salon' : 'Membres en ligne',
+        sub: t(n === 'everyone' ? 'composer.everyone' : 'composer.here'),
         icon: 'megaphone-outline',
         pick: () => applyText(replaceQuery(draft, mention.start, cursor, `@${n}`)),
       }))
@@ -233,7 +235,7 @@ export function Composer({
       await onSend(text, attached, { expiresInSeconds: serverId ? ttl : null })
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('composer.sendFailed'), errorMessage(e))
     } finally {
       setSending(false)
     }
@@ -265,7 +267,7 @@ export function Composer({
     const accepted: LocalAttachment[] = []
     for (const f of incoming) {
       const err = validateAttachment(f)
-      if (err) Alert.alert('Fichier refusé', `${f.name} : ${err}`)
+      if (err) Alert.alert(t('composer.fileRejected'), `${f.name} : ${err}`)
       else accepted.push(f)
     }
     setFiles((prev) => [...prev, ...accepted].slice(0, MAX_FILES))
@@ -274,7 +276,7 @@ export function Composer({
   const pickImages = async (camera: boolean) => {
     const granted = camera ? (await ImagePicker.requestCameraPermissionsAsync()).granted : await ensurePhotoAccess()
     if (!granted) {
-      Alert.alert('Permission refusée', camera ? 'Autorise l’accès à la caméra dans les réglages.' : 'Autorise l’accès aux photos dans les réglages.')
+      Alert.alert(t('composer.permissionDenied'), t(camera ? 'composer.allowCamera' : 'composer.allowPhotos'))
       return
     }
     const opts: ImagePicker.ImagePickerOptions = {
@@ -355,16 +357,18 @@ export function Composer({
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('composer.sendFailed'), errorMessage(e))
     } finally {
       setSending(false)
     }
   }
 
+  const ttlOption = MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)
+
   if (disabled) {
     return (
       <Animated.View style={[styles.container, { alignItems: 'center', paddingTop: spacing.lg }, safeBottom]}>
-        <Text style={{ color: colors.textMuted }}>{disabledReason ?? 'Tu ne peux pas écrire ici.'}</Text>
+        <Text style={{ color: colors.textMuted }}>{disabledReason ?? t('composer.cannotWrite')}</Text>
       </Animated.View>
     )
   }
@@ -375,7 +379,7 @@ export function Composer({
         <View style={styles.contextBar}>
           <Ionicons name={editing ? 'create-outline' : 'arrow-undo'} size={16} color={colors.textMuted} />
           <Text style={styles.contextText} numberOfLines={1}>
-            {editing ? 'Modification du message' : `Réponse à ${replyTo?.authorName}`}
+            {editing ? t('composer.editing') : t('composer.replyingTo', { name: replyTo?.authorName ?? '' })}
           </Text>
           <Pressable
             onPress={() => {
@@ -386,7 +390,7 @@ export function Composer({
             }}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Annuler"
+            accessibilityLabel={t('composer.cancel')}
           >
             <Ionicons name="close-circle" size={20} color={colors.textMuted} />
           </Pressable>
@@ -411,7 +415,7 @@ export function Composer({
                 style={styles.removeFile}
                 onPress={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                 accessibilityRole="button"
-                accessibilityLabel={`Retirer ${f.name}`}
+                accessibilityLabel={t('composer.remove', { name: f.name })}
                 hitSlop={8}
               >
                 <Ionicons name="close" size={14} color="#fff" />
@@ -422,7 +426,7 @@ export function Composer({
       ) : null}
 
       {suggestions.length ? (
-        <ScrollView style={styles.mentions} keyboardShouldPersistTaps="always" accessibilityLabel="Suggestions">
+        <ScrollView style={styles.mentions} keyboardShouldPersistTaps="always" accessibilityLabel={t('composer.suggestions')}>
           {suggestions.map((c) => (
             <Pressable
               key={c.key}
@@ -451,24 +455,24 @@ export function Composer({
 
       {!editing && !recording ? (
         <View style={styles.toolbar}>
-          <ToolButton icon="happy-outline" label="Emoji" onPress={() => setPanel('emoji')} />
+          <ToolButton icon="happy-outline" label={t('composer.emoji')} onPress={() => setPanel('emoji')} />
           <Pressable onPress={() => setPanel('gif')} style={styles.tool} hitSlop={4} accessibilityRole="button" accessibilityLabel="GIF">
             <Text style={styles.gifLabel}>GIF</Text>
           </Pressable>
-          <ToolButton icon="sparkles-outline" label="Stickers" onPress={() => setPanel('sticker')} />
-          <ToolButton icon="flash-outline" label="Réponses rapides" onPress={() => setPanel('quick')} />
+          <ToolButton icon="sparkles-outline" label={t('composer.stickers')} onPress={() => setPanel('sticker')} />
+          <ToolButton icon="flash-outline" label={t('composer.quickReplies')} onPress={() => setPanel('quick')} />
           {serverId ? (
             <ToolButton
               icon="timer-outline"
-              label={ttl ? `Message éphémère : ${MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)?.label}` : 'Message éphémère'}
+              label={ttlOption ? t('composer.ephemeralValue', { value: t(ttlOption.label) }) : t('composer.ephemeral')}
               active={!!ttl}
               onPress={() => setPanel('ttl')}
             />
           ) : null}
-          {serverId && channelId ? <ToolButton icon="ellipsis-horizontal-circle-outline" label="Sondage et messages programmés" onPress={() => setPanel('more')} /> : null}
+          {serverId && channelId ? <ToolButton icon="ellipsis-horizontal-circle-outline" label={t('composer.more')} onPress={() => setPanel('more')} /> : null}
           {ttl && serverId ? (
             <Text style={styles.ttlLabel} numberOfLines={1}>
-              ⏱ {MESSAGE_TTL_OPTIONS.find((o) => o.seconds === ttl)?.label}
+              ⏱ {ttlOption ? t(ttlOption.label) : null}
             </Text>
           ) : null}
         </View>
@@ -477,7 +481,7 @@ export function Composer({
       <View style={styles.row}>
         {recording ? <VoiceRecorder onDone={onRecorded} /> : null}
         {!recording && !editing ? (
-          <Pressable style={styles.attach} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel="Joindre un fichier" hitSlop={6}>
+          <Pressable style={styles.attach} onPress={() => setPickerOpen(true)} accessibilityRole="button" accessibilityLabel={t('composer.attach')} hitSlop={6}>
             <Ionicons name="add" size={24} color={colors.textSecondary} />
           </Pressable>
         ) : null}
@@ -499,7 +503,7 @@ export function Composer({
           placeholderTextColor={colors.textFaint}
           multiline
           maxLength={LIMITS.messageMaxChars + 200}
-          accessibilityLabel="Message"
+          accessibilityLabel={t('composer.message')}
           textAlignVertical="center"
         />
         )}
@@ -508,7 +512,7 @@ export function Composer({
             style={[styles.send, { backgroundColor: colors.bgElevated }]}
             onPress={() => void startRecording()}
             accessibilityRole="button"
-            accessibilityLabel="Enregistrer un message vocal"
+            accessibilityLabel={t('composer.recordVoice')}
           >
             <Ionicons name="mic" size={20} color={colors.textSecondary} />
           </Pressable>
@@ -518,7 +522,7 @@ export function Composer({
             onPress={submit}
             disabled={!canSend || over}
             accessibilityRole="button"
-            accessibilityLabel={editing ? 'Enregistrer' : 'Envoyer'}
+            accessibilityLabel={t(editing ? 'composer.save' : 'composer.send')}
           >
             <Ionicons name={editing ? 'checkmark' : 'send'} size={18} color="#fff" />
           </Pressable>
@@ -546,9 +550,9 @@ export function Composer({
       <Sheet
         visible={panel === 'ttl'}
         onClose={() => setPanel(null)}
-        title="Expiration du message"
+        title={t('composer.expiry')}
         actions={MESSAGE_TTL_OPTIONS.map((o) => ({
-          label: o.label,
+          label: t(o.label),
           icon: o.seconds ? 'timer-outline' : 'infinite-outline',
           selected: ttl === o.seconds,
           onPress: () => setTtl(o.seconds),
@@ -561,9 +565,9 @@ export function Composer({
             visible={panel === 'more'}
             onClose={() => setPanel(null)}
             actions={[
-              { label: 'Créer un sondage', icon: 'stats-chart-outline', onPress: () => setPanel('poll') },
+              { label: t('composer.createPoll'), icon: 'stats-chart-outline', onPress: () => setPanel('poll') },
               {
-                label: draft.trim() ? 'Programmer ce message' : 'Messages programmés',
+                label: t(draft.trim() ? 'composer.scheduleThis' : 'composer.scheduled'),
                 icon: 'calendar-outline',
                 onPress: () => setPanel('schedule'),
               },
@@ -581,7 +585,7 @@ export function Composer({
               onDraftChange('')
               picked.current.clear()
               setPanel(null)
-              Alert.alert('Message programmé', 'Il partira à l’heure choisie.')
+              Alert.alert(t('composer.scheduledDone'), t('composer.scheduledBody'))
             }}
           />
         </>
@@ -590,11 +594,11 @@ export function Composer({
       <Sheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        title="Joindre"
+        title={t('composer.attachTitle')}
         actions={[
-          { label: 'Photos et vidéos', icon: 'images-outline', onPress: () => void pickImages(false) },
-          { label: 'Prendre une photo', icon: 'camera-outline', onPress: () => void pickImages(true) },
-          { label: 'Fichier', icon: 'document-outline', onPress: () => void pickDocuments() },
+          { label: t('composer.photos'), icon: 'images-outline', onPress: () => void pickImages(false) },
+          { label: t('composer.takePhoto'), icon: 'camera-outline', onPress: () => void pickImages(true) },
+          { label: t('composer.file'), icon: 'document-outline', onPress: () => void pickDocuments() },
         ]}
       />
     </Animated.View>

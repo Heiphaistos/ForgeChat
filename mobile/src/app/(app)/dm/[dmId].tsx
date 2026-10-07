@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -15,34 +16,35 @@ import { usePresenceOf } from '@/stores/presence'
 import { useVoice } from '@/stores/voice'
 import { colors, font } from '@/theme'
 
-const STATUS_LABEL: Record<string, string> = { online: 'En ligne', away: 'Absent', idle: 'Absent', dnd: 'Ne pas déranger' }
+const STATUS_LABEL: Record<string, Key> = { online: 'status.online', away: 'status.away', idle: 'status.away', dnd: 'status.dnd' }
 
 export default function DmScreen() {
+  const t = useT()
   const { valid, ids, text } = useRouteParams(['dmId'] as const, ['name', 'userId'])
   const convs = useQuery({ queryKey: qk.conversations, queryFn: dmsApi.list, enabled: valid })
   const summary = convs.data?.find((c) => c.id === ids.dmId && !c.is_group)
   const otherId = summary && !summary.is_group ? summary.other_user_id : isUuid(text.userId) ? text.userId : undefined
-  const name = summary && !summary.is_group ? summary.username : (text.name ?? 'Message privé')
+  const name = summary && !summary.is_group ? summary.username : (text.name ?? t('conv.dmFallback'))
   const status = usePresenceOf(otherId, summary && !summary.is_group ? summary.status : undefined)
   const startCall = useCall((s) => s.start)
 
-  if (!valid) return <ErrorState message="Lien de conversation invalide." />
+  if (!valid) return <ErrorState message={t('conv.invalidDm')} />
 
   const call = async (type: CallType) => {
     if (!otherId) return
     if (useVoice.getState().channelId) {
-      Alert.alert('Déjà en vocal', 'Quitte le salon vocal avant de lancer un appel.')
+      Alert.alert(t('conv.alreadyInVoice'), t('conv.leaveVoiceFirst'))
       return
     }
     if (useGroupCall.getState().groupId) {
-      Alert.alert('Appel de groupe en cours', 'Quitte l’appel de groupe avant de lancer un appel.')
+      Alert.alert(t('conv.groupCallActive'), t('conv.leaveGroupCallFirst'))
       return
     }
     try {
       await startCall(ids.dmId, otherId, name, type, summary && !summary.is_group ? summary.avatar : null)
       router.push('/call')
     } catch (e) {
-      Alert.alert('Appel impossible', errorMessage(e))
+      Alert.alert(t('conv.callFailed'), errorMessage(e))
     }
   }
 
@@ -57,7 +59,7 @@ export default function DmScreen() {
                 <Text style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} numberOfLines={1}>
                   {name}
                 </Text>
-                {STATUS_LABEL[status] ? <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{STATUS_LABEL[status]}</Text> : null}
+                {STATUS_LABEL[status] ? <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t(STATUS_LABEL[status])}</Text> : null}
               </View>
             </View>
           ),
@@ -65,14 +67,14 @@ export default function DmScreen() {
             <View style={{ flexDirection: 'row' }}>
               <IconButton
                 icon="pin-outline"
-                label="Messages épinglés"
+                label={t('conv.pins')}
                 onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })}
               />
-              <IconButton icon="search-outline" label="Rechercher dans la conversation" onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })} />
+              <IconButton icon="search-outline" label={t('conv.search')} onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })} />
               {otherId ? (
                 <>
-                  <IconButton icon="call-outline" label="Appel vocal" onPress={() => void call('voice')} />
-                  <IconButton icon="videocam-outline" label="Appel vidéo" onPress={() => void call('video')} />
+                  <IconButton icon="call-outline" label={t('conv.voiceCall')} onPress={() => void call('voice')} />
+                  <IconButton icon="videocam-outline" label={t('conv.videoCall')} onPress={() => void call('video')} />
                 </>
               ) : null}
             </View>
@@ -81,12 +83,12 @@ export default function DmScreen() {
       />
       <ChatView
         conversation={{ kind: 'dm', dmId: ids.dmId, otherUserId: otherId }}
-        placeholder={`Envoyer un message à @${name}`}
+        placeholder={t('conv.dmPlaceholder', { name })}
         header={
           <View style={{ padding: 16, gap: 8 }}>
             <Avatar uri={summary && !summary.is_group ? summary.avatar : null} name={name} size={72} />
             <Text style={{ color: colors.text, fontSize: font.xl, fontWeight: '800' }}>{name}</Text>
-            <Text style={{ color: colors.textMuted }}>C’est le début de ta conversation privée avec {name}.</Text>
+            <Text style={{ color: colors.textMuted }}>{t('conv.dmStart', { name })}</Text>
           </View>
         }
       />

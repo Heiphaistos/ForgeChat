@@ -2,6 +2,7 @@
  * Données de la barre de saisie, identiques au client web (MessageInput, EmojiPicker, StickerPicker,
  * QuickReplies) pour que les deux clients envoient et comprennent les mêmes messages.
  */
+import type { Key } from '@/i18n'
 
 export interface EmojiCategory {
   label: string
@@ -121,12 +122,13 @@ export const GLOBAL_STICKERS: readonly GlobalSticker[] = [
 ]
 
 /** Expiration d'un message (secondes) : mêmes choix que le web ; envoyée en `expires_at_seconds`. */
-export const MESSAGE_TTL_OPTIONS: readonly { label: string; seconds: number | null }[] = [
-  { label: 'Aucune expiration', seconds: null },
-  { label: '5 minutes', seconds: 300 },
-  { label: '1 heure', seconds: 3600 },
-  { label: '24 heures', seconds: 86400 },
-  { label: '7 jours', seconds: 604800 },
+/** `label` : clé de traduction (src/i18n). */
+export const MESSAGE_TTL_OPTIONS: readonly { label: Key; seconds: number | null }[] = [
+  { label: 'composer.ttlNone', seconds: null },
+  { label: 'composer.ttl5m', seconds: 300 },
+  { label: 'composer.ttl1h', seconds: 3600 },
+  { label: 'composer.ttl24h', seconds: 86400 },
+  { label: 'composer.ttl7d', seconds: 604800 },
 ]
 
 export interface QuickReply {

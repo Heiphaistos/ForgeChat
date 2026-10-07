@@ -17,6 +17,7 @@ import { serversApi } from '@/api/servers'
 import { threadsApi } from '@/api/threads'
 import { EMOJI_PALETTE, QUICK_REACTIONS } from '@/lib/emojis'
 import { isSameDay } from '@/lib/format'
+import { useT } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
@@ -46,11 +47,16 @@ const GROUP_WINDOW_MS = 5 * 60_000
 const HIGHLIGHT_MS = 2000
 
 function TypingIndicator({ conversationId }: { conversationId: string }) {
+  const t = useT()
   const typers = useTyping((s) => s.byConversation[conversationId])
-  const names = typers ? Object.values(typers).map((t) => t.name) : []
+  const names = typers ? Object.values(typers).map((x) => x.name) : []
   if (!names.length) return <View style={styles.typing} />
   const label =
-    names.length === 1 ? `${names[0]} écrit…` : names.length === 2 ? `${names[0]} et ${names[1]} écrivent…` : 'Plusieurs personnes écrivent…'
+    names.length === 1
+      ? t('chat.typingOne', { a: names[0]! })
+      : names.length === 2
+        ? t('chat.typingTwo', { a: names[0]!, b: names[1]! })
+        : t('chat.typingMany')
   return (
     <View style={styles.typing} accessibilityLiveRegion="polite">
       <Text style={styles.typingText}>{label}</Text>
@@ -74,6 +80,7 @@ export function ChatView({
   /** Salon d'annonces et droit de gérer les messages : « Publier » vers les salons abonnés. */
   publishable?: boolean
 }) {
+  const t = useT()
   const me = useAuth((s) => s.user)
   const conv = useConversation(conversation)
   const draft = useDrafts((s) => s.drafts[conv.id] ?? '')
@@ -162,7 +169,7 @@ export function ChatView({
     }
     const notFound = () => {
       useScrollTarget.getState().done(null)
-      Alert.alert('Message introuvable', 'Il a peut-être été supprimé.')
+      Alert.alert(t('chat.notFound'), t('chat.maybeDeleted'))
     }
     if (!hasOlder) return notFound()
     if (jumping.current === target) return
@@ -178,125 +185,125 @@ export function ChatView({
       .finally(() => {
         jumping.current = null
       })
-  }, [target, messages, hasOlder, isLoading, conversation, conv.id])
+  }, [target, messages, hasOlder, isLoading, conversation, conv.id, t])
   useEffect(() => {
     if (!highlightId) return
-    const t = setTimeout(() => useScrollTarget.getState().done(null), HIGHLIGHT_MS)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => useScrollTarget.getState().done(null), HIGHLIGHT_MS)
+    return () => clearTimeout(timer)
   }, [highlightId])
 
   const react = useCallback(
     (m: ChatMessage, emoji: string, isSuper = false) => {
       if (m.pending || m.id.startsWith('tmp-')) return
-      conv.react(m, emoji, isSuper).catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
+      conv.react(m, emoji, isSuper).catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
     },
-    [conv],
+    [conv, t],
   )
 
   const confirmDelete = useCallback(
     (m: ChatMessage) =>
-      Alert.alert('Supprimer le message ?', 'Cette action est définitive.', [
-        { text: 'Annuler', style: 'cancel' },
+      Alert.alert(t('chat.deleteConfirm'), t('chat.deleteBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Supprimer',
+          text: t('common.delete'),
           style: 'destructive',
-          onPress: () => conv.remove(m.id).catch((e) => Alert.alert('Suppression impossible', errorMessage(e))),
+          onPress: () => conv.remove(m.id).catch((e) => Alert.alert(t('chat.deleteFailed'), errorMessage(e))),
         },
       ]),
-    [conv],
+    [conv, t],
   )
 
   const report = useCallback((m: ChatMessage) => {
     const send = (reason: ReportReason) =>
       messagesApi
         .report(m.id, reason)
-        .then(() => Alert.alert('Merci', 'Le signalement a été transmis aux modérateurs.'))
-        .catch((e) => Alert.alert('Signalement impossible', errorMessage(e)))
-    Alert.alert('Signaler ce message', 'Motif du signalement :', [
-      { text: 'Spam', onPress: () => void send('spam') },
-      { text: 'Harcèlement', onPress: () => void send('harassment') },
-      { text: 'Contenu inapproprié', onPress: () => void send('nsfw') },
-      { text: 'Annuler', style: 'cancel' },
+        .then(() => Alert.alert(t('chat.thanks'), t('chat.reportSent')))
+        .catch((e) => Alert.alert(t('chat.reportFailed'), errorMessage(e)))
+    Alert.alert(t('chat.reportTitle'), t('chat.reportReason'), [
+      { text: t('chat.spam'), onPress: () => void send('spam') },
+      { text: t('chat.harassment'), onPress: () => void send('harassment') },
+      { text: t('chat.inappropriate'), onPress: () => void send('nsfw') },
+      { text: t('common.cancel'), style: 'cancel' },
     ])
-  }, [])
+  }, [t])
 
   const actionsFor = (m: ChatMessage): SheetAction[] => {
     const mine = m.authorId === me?.id
     if (m.failed && m.id.startsWith('tmp-')) {
-      return [{ label: 'Supprimer le brouillon', icon: 'trash-outline', danger: true, onPress: () => conv.discardFailed(m.id) }]
+      return [{ label: t('chat.deleteDraft'), icon: 'trash-outline', danger: true, onPress: () => conv.discardFailed(m.id) }]
     }
     const list: SheetAction[] = []
-    if (!readOnly) list.push({ label: 'Répondre', icon: 'arrow-undo', onPress: () => setReplyTo(m) })
-    list.push({ label: 'Ajouter une réaction', icon: 'happy-outline', onPress: () => setPaletteFor(m) })
+    if (!readOnly) list.push({ label: t('chat.reply'), icon: 'arrow-undo', onPress: () => setReplyTo(m) })
+    list.push({ label: t('chat.addReaction'), icon: 'happy-outline', onPress: () => setPaletteFor(m) })
     const gif = tenorGifUrl(m.content)
-    if (hasEditableText(m)) list.push({ label: 'Copier le texte', icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
-    else if (gif) list.push({ label: 'Copier le lien du GIF', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(gif) })
+    if (hasEditableText(m)) list.push({ label: t('chat.copyText'), icon: 'copy-outline', onPress: () => void Clipboard.setStringAsync(m.content ?? '') })
+    else if (gif) list.push({ label: t('chat.copyGif'), icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(gif) })
     // Vocal, sticker, GIF ou pièce jointe seule : rien à modifier.
-    if (mine && hasEditableText(m) && !readOnly) list.push({ label: 'Modifier', icon: 'create-outline', onPress: () => setEditing(m) })
+    if (mine && hasEditableText(m) && !readOnly) list.push({ label: t('chat.edit'), icon: 'create-outline', onPress: () => setEditing(m) })
     if (conversation.kind === 'channel' || pins.isSuccess) {
       const pinned = isPinned(m)
       list.push({
-        label: pinned ? 'Désépingler' : 'Épingler',
+        label: t(pinned ? 'chat.unpin' : 'chat.pin'),
         icon: 'pin-outline',
         onPress: () =>
           messagesApi
             .pin(conversation, m.id, !pinned)
             .then(() => queryClient.invalidateQueries({ queryKey: qk.pins(conv.id) }))
-            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       })
     }
     if (publishable && conversation.kind === 'channel' && !m.pending && hasEditableText(m)) {
       const { serverId: sid, channelId: cid } = conversation
       list.push({
-        label: 'Publier aux serveurs abonnés',
+        label: t('chat.publish'),
         icon: 'megaphone-outline',
         onPress: () =>
           void announcementsApi
             .publish(sid, cid, m.id)
-            .then((r) => Alert.alert('Annonce publiée', `Envoyée à ${r.delivered} salon${r.delivered > 1 ? 's' : ''} abonné${r.delivered > 1 ? 's' : ''}.`))
-            .catch((e) => Alert.alert('Publication impossible', errorMessage(e))),
+            .then((r) => Alert.alert(t('chat.published'), t(r.delivered > 1 ? 'chat.publishedToMany' : 'chat.publishedTo', { n: r.delivered })))
+            .catch((e) => Alert.alert(t('chat.publishFailed'), errorMessage(e))),
       })
     }
     if (channelId && !m.pending) {
-      if (threadOf.has(m.id)) list.push({ label: 'Ouvrir le fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
-      else if (!readOnly) list.push({ label: 'Créer un fil', icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+      if (threadOf.has(m.id)) list.push({ label: t('chat.openThread'), icon: 'chatbubbles-outline', onPress: () => openThread(m) })
+      else if (!readOnly) list.push({ label: t('chat.createThread'), icon: 'chatbubbles-outline', onPress: () => openThread(m) })
     }
     if (extras && !m.pending) {
       const messageId = m.id
-      list.push({ label: 'Transférer', icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
+      list.push({ label: t('chat.forward'), icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
       const isSaved = savedIds.has(m.id)
       list.push({
-        label: isSaved ? 'Retirer des enregistrés' : 'Enregistrer',
+        label: t(isSaved ? 'chat.unsave' : 'chat.save'),
         icon: isSaved ? 'bookmark' : 'bookmark-outline',
         onPress: () =>
           (isSaved ? messagesApi.unsave(m.id) : messagesApi.save(conversation, m))
             .then(() => queryClient.invalidateQueries({ queryKey: qk.saved }))
-            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       })
-      list.push({ label: 'Me le rappeler', icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
-      if (m.editedAt) list.push({ label: 'Historique des modifications', icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
+      list.push({ label: t('chat.remind'), icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
+      if (m.editedAt) list.push({ label: t('chat.editHistory'), icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
     }
     if (!m.pending && supportsTranslate(conversation) && hasEditableText(m)) {
       list.push(
         translations[m.id]
-          ? { label: 'Masquer la traduction', icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }
-          : { label: 'Traduire en français', icon: 'language-outline', onPress: () => translate(m) },
+          ? { label: t('chat.hideTranslation'), icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }
+          : { label: t('chat.translate'), icon: 'language-outline', onPress: () => translate(m) },
       )
     }
-    if (!m.pending) list.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
-    if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(userRoute(m.authorId, serverId)) })
+    if (!m.pending) list.push({ label: t('chat.copyLink'), icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
+    if (!mine) list.push({ label: t('chat.viewProfile'), icon: 'person-circle-outline', onPress: () => router.push(userRoute(m.authorId, serverId)) })
     // MP 1-à-1 : le signalement part aux administrateurs du site (serveur : dm_reports).
-    if (!mine && conversation.kind !== 'group') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
+    if (!mine && conversation.kind !== 'group') list.push({ label: t('chat.report'), icon: 'flag-outline', danger: true, onPress: () => report(m) })
     // Suppression : l'auteur, ou un modérateur (le serveur tranche — 403 sinon).
-    if (mine || conversation.kind === 'channel') list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
+    if (mine || conversation.kind === 'channel') list.push({ label: t('chat.delete'), icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
     return list
   }
 
   const translate = (m: ChatMessage) =>
     messagesApi
       .translate(m.id)
-      .then((t) => setTranslations((prev) => ({ ...prev, [m.id]: t })))
-      .catch((e) => Alert.alert('Traduction impossible', errorMessage(e)))
+      .then((text) => setTranslations((prev) => ({ ...prev, [m.id]: text })))
+      .catch((e) => Alert.alert(t('chat.translateFailed'), errorMessage(e)))
 
   const showReactors = useMemo(
     () =>
@@ -305,9 +312,9 @@ export function ChatView({
             void messagesApi
               .reactionUsers(m.id, emoji, isSuper)
               .then((users) => setReactors({ emoji, users }))
-              .catch((e) => Alert.alert('Réactions indisponibles', errorMessage(e)))
+              .catch((e) => Alert.alert(t('chat.reactionsUnavailable'), errorMessage(e)))
         : undefined,
-    [conversation],
+    [conversation, t],
   )
 
   const onPressAuthor = useCallback((userId: string) => router.push(userRoute(userId, serverId)), [serverId])
@@ -367,7 +374,7 @@ export function ChatView({
                     react(m, e, isSuper)
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={isSuper ? `Super réaction ${e}` : `Réagir ${e}`}
+                  accessibilityLabel={t(isSuper ? 'chat.superReactTo' : 'chat.reactWith', { emoji: e })}
                 >
                   <Text style={{ fontSize: 24 }}>{e}</Text>
                 </Pressable>
@@ -376,7 +383,7 @@ export function ChatView({
           ))}
         </>
       ) : null,
-    [selected, react, conversation.kind],
+    [selected, react, conversation.kind, t],
   )
 
   // Conversation inaccessible (lien vers une conversation dont on n'est pas membre) : pas de champ de saisie.
@@ -407,7 +414,7 @@ export function ChatView({
           conv.loadingOlder ? (
             <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg }} />
           ) : !conv.hasOlder ? (
-            header ?? <EmptyState icon="chatbubbles-outline" title="C'est le début de la conversation" />
+            header ?? <EmptyState icon="chatbubbles-outline" title={t('chat.start')} />
           ) : null
         }
         windowSize={11}
@@ -421,8 +428,8 @@ export function ChatView({
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={topOffset} onLayout={onKavLayout} style={{ flex: 1, backgroundColor: colors.bg }}>
         {detached ? (
           <View style={styles.detached}>
-            <Text style={styles.detachedText}>Tu consultes des messages plus anciens.</Text>
-            <Button title="Revenir au présent" variant="ghost" icon="arrow-down" onPress={() => setDetached(false)} />
+            <Text style={styles.detachedText}>{t('chat.olderMessages')}</Text>
+            <Button title={t('chat.backToPresent')} variant="ghost" icon="arrow-down" onPress={() => setDetached(false)} />
           </View>
         ) : null}
         <View style={{ flex: 1 }}>{body}</View>
@@ -444,7 +451,7 @@ export function ChatView({
             onEdit={conv.edit}
             onTyping={conv.notifyTyping}
             draft={draft}
-            onDraftChange={(t) => setDraft(conv.id, t)}
+            onDraftChange={(text) => setDraft(conv.id, text)}
             mentionCandidates={mentionCandidates}
             myId={me?.id ?? null}
             serverId={serverId || undefined}
@@ -455,7 +462,7 @@ export function ChatView({
         <Sheet
           visible={!!reactors}
           onClose={() => setReactors(null)}
-          title={reactors ? `${reactors.emoji} · ${reactors.users.length} personne${reactors.users.length > 1 ? 's' : ''}` : undefined}
+          title={reactors ? t(reactors.users.length > 1 ? 'chat.reactorsMany' : 'chat.reactors', { emoji: reactors.emoji, n: reactors.users.length }) : undefined}
           actions={(reactors?.users ?? []).map((u) => ({
             label: u.username,
             icon: 'person-outline',
@@ -483,12 +490,12 @@ export function ChatView({
                     setPaletteFor(null)
                     if (m) react(m, e)
                   }}
-                  accessibilityLabel={`Réagir ${e}`}
+                  accessibilityLabel={t('chat.reactWith', { emoji: e })}
                 >
                   <Text style={{ fontSize: 26 }}>{e}</Text>
                 </Pressable>
               ))}
-              {customEmojis.size ? <Text style={styles.paletteTitle}>Emojis du serveur</Text> : null}
+              {customEmojis.size ? <Text style={styles.paletteTitle}>{t('chat.serverEmojis')}</Text> : null}
               {[...customEmojis].map(([name, url]) => (
                 <Pressable
                   key={`:${name}:`}
@@ -498,7 +505,7 @@ export function ChatView({
                     setPaletteFor(null)
                     if (m) react(m, `:${name}:`)
                   }}
-                  accessibilityLabel={`Réagir :${name}:`}
+                  accessibilityLabel={t('chat.reactWith', { emoji: `:${name}:` })}
                 >
                   <Image source={{ uri: url }} style={{ width: 28, height: 28 }} contentFit="contain" />
                 </Pressable>

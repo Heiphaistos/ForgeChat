@@ -4,7 +4,8 @@ import { memo, useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
-import { formatDay, formatTime } from '@/lib/format'
+import { useT } from '@/i18n'
+import { formatDay, formatTime, unreadLabel } from '@/lib/format'
 import { mentionsUser, previewUrl } from '@/lib/markdown'
 import type { ChatMessage, Reaction } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
@@ -87,15 +88,16 @@ function RemoteGif({ url, provider, onLongPress }: { url: string; provider: stri
 
 /** « ⏱ disparaît dans 4 min », rafraîchi toutes les 30 s. */
 function ExpiryBadge({ expiresAt }: { expiresAt: string }) {
+  const t = useT()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(timer)
   }, [])
   const left = remainingLabel(expiresAt, now)
   return (
-    <Text style={[styles.meta, { color: colors.danger }]} accessibilityLabel={`Message éphémère, disparaît dans ${left}`}>
-      ⏱ disparaît dans {left}
+    <Text style={[styles.meta, { color: colors.danger }]} accessibilityLabel={t('msg.expires', { left })}>
+      {t('msg.expiresShort', { left })}
     </Text>
   )
 }
@@ -140,6 +142,7 @@ function ReactionChip({
   onReact: Props['onReact']
   onReactionLongPress: Props['onReactionLongPress']
 }) {
+  const t = useT()
   const [replay, setReplay] = useState(0)
   const isSuper = !!r.is_super
   return (
@@ -147,10 +150,10 @@ function ReactionChip({
       onPressIn={isSuper ? () => setReplay((n) => n + 1) : undefined}
       onPress={() => onReact(m, r.emoji, isSuper)}
       onLongPress={onReactionLongPress ? () => onReactionLongPress(m, r.emoji, isSuper) : undefined}
-      accessibilityHint={onReactionLongPress ? 'Appui long pour voir qui a réagi' : undefined}
+      accessibilityHint={onReactionLongPress ? t('msg.reactorsHint') : undefined}
       style={[styles.reaction, r.me && styles.reactionMine, isSuper && styles.reactionSuper]}
       accessibilityRole="button"
-      accessibilityLabel={`${isSuper ? 'Super réaction ' : ''}${r.emoji} ${r.count}${r.me ? ', ta réaction' : ''}`}
+      accessibilityLabel={`${isSuper ? t('msg.superReaction', { emoji: r.emoji, n: r.count }) : `${r.emoji} ${r.count}`}${r.me ? t('msg.yourReaction') : ''}`}
     >
       {isSuper ? (
         <SuperBurst trigger={`${r.count}:${replay}`}>
@@ -193,6 +196,7 @@ export const MessageItem = memo(function MessageItem({
   translation,
   decor,
 }: Props) {
+  const t = useT()
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   return (
     <View>
@@ -212,11 +216,11 @@ export const MessageItem = memo(function MessageItem({
           mentioned && styles.mentioned,
           pressed && { backgroundColor: colors.bgAlt },
         ]}
-        accessibilityHint="Appui long pour les actions"
+        accessibilityHint={t('msg.actionsHint')}
       >
         <View style={styles.gutter}>
           {grouped ? null : (
-            <Pressable onPress={() => onPressAuthor(m.authorId)} accessibilityRole="button" accessibilityLabel={`Profil de ${m.authorName}`}>
+            <Pressable onPress={() => onPressAuthor(m.authorId)} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
               <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} />
             </Pressable>
           )}
@@ -238,12 +242,12 @@ export const MessageItem = memo(function MessageItem({
               <Ionicons name="return-down-forward" size={14} color={colors.textFaint} />
               <Text style={styles.replyText} numberOfLines={1}>
                 <Text style={{ fontWeight: '700' }}>{m.reply.authorName ?? 'Message'} </Text>
-                {m.reply.content ?? 'Pièce jointe'}
+                {m.reply.content ?? t('msg.attachment')}
               </Text>
             </View>
           ) : null}
 
-          {m.forwardedFrom ? <Text style={styles.forward}>↪ Transféré de {m.forwardedFrom}</Text> : null}
+          {m.forwardedFrom ? <Text style={styles.forward}>{t('msg.forwardedFrom', { from: m.forwardedFrom })}</Text> : null}
 
           {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
@@ -252,8 +256,8 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
 
           {translation ? (
-            <View style={styles.translation} accessibilityLabel={`Traduction : ${translation}`}>
-              <Text style={styles.meta}>Traduction</Text>
+            <View style={styles.translation} accessibilityLabel={t('msg.translationLabel', { text: translation })}>
+              <Text style={styles.meta}>{t('msg.translation')}</Text>
               <MessageText content={translation} myName={myName} />
             </View>
           ) : null}
@@ -261,16 +265,16 @@ export const MessageItem = memo(function MessageItem({
           {m.pollId && serverId && channelId ? <PollCard serverId={serverId} channelId={channelId} pollId={m.pollId} myId={myId} /> : null}
 
           <Attachments items={m.attachments} pending={m.pending} onLongPress={() => onLongPress(m)} />
-          {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>Pièce jointe en cours d’envoi…</Text> : null}
+          {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>{t('msg.uploading')}</Text> : null}
 
-          {m.editedAt ? <Text style={styles.meta}>(modifié)</Text> : null}
+          {m.editedAt ? <Text style={styles.meta}>{t('msg.edited')}</Text> : null}
           {m.expiresAt ? <ExpiryBadge expiresAt={m.expiresAt} /> : null}
-          {m.pinned ? <Text style={styles.meta}>📌 Épinglé</Text> : null}
+          {m.pinned ? <Text style={styles.meta}>{t('msg.pinned')}</Text> : null}
 
           {m.failed ? (
             <Pressable onPress={() => onRetry(m)} style={styles.failed} accessibilityRole="button">
               <Ionicons name="alert-circle" size={16} color={colors.danger} />
-              <Text style={{ color: colors.danger, fontSize: font.sm }}>Échec de l’envoi — toucher pour les options</Text>
+              <Text style={{ color: colors.danger, fontSize: font.sm }}>{t('msg.failed')}</Text>
             </Pressable>
           ) : null}
 
@@ -279,15 +283,15 @@ export const MessageItem = memo(function MessageItem({
               onPress={() => onOpenThread(m)}
               style={styles.thread}
               accessibilityRole="button"
-              accessibilityLabel={`Ouvrir le fil ${thread.title}, ${thread.messageCount} message${thread.messageCount > 1 ? 's' : ''}`}
+              accessibilityLabel={t('msg.openThread', { title: thread.title, count: t(thread.messageCount > 1 ? 'msg.countMany' : 'msg.count', { n: thread.messageCount }) })}
             >
               <Ionicons name="chatbubbles-outline" size={14} color={colors.primary} />
               <Text style={styles.threadTitle} numberOfLines={1}>
                 {thread.title}
               </Text>
               <Text style={[styles.meta, { marginTop: 0 }]}>
-                {thread.messageCount} message{thread.messageCount > 1 ? 's' : ''}
-                {thread.unreadCount ? ` · ${thread.unreadCount} non lu${thread.unreadCount > 1 ? 's' : ''}` : ''}
+                {t(thread.messageCount > 1 ? 'msg.countMany' : 'msg.count', { n: thread.messageCount })}
+                {thread.unreadCount ? ` · ${unreadLabel(thread.unreadCount)}` : ''}
               </Text>
             </Pressable>
           ) : null}

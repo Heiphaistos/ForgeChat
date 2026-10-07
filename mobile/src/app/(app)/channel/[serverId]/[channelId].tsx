@@ -8,6 +8,7 @@ import { ChatView } from "@/features/chat/ChatView";
 import { pinsParams } from "@/features/chat/pins";
 import { useServerPerms } from "@/features/servers/menus";
 import { NsfwGate } from "@/features/servers/NsfwGate";
+import { useT } from "@/i18n";
 import { OnboardingGate } from "@/features/servers/Onboarding";
 import { PERM } from "@/features/servers/perms";
 import { VerificationGate } from "@/features/servers/VerificationGate";
@@ -17,6 +18,7 @@ import { useLastChannel } from "@/stores/lastChannel";
 import { colors, font } from "@/theme";
 
 export default function ChannelScreen() {
+  const t = useT();
   const { valid, ids, text } = useRouteParams(
     ["serverId", "channelId"] as const,
     ["name"],
@@ -31,9 +33,9 @@ export default function ChannelScreen() {
   useEffect(() => {
     if (valid) useLastChannel.getState().remember(ids.serverId, ids.channelId);
   }, [valid, ids.serverId, ids.channelId]);
-  if (!valid) return <ErrorState message="Lien de salon invalide." />;
+  if (!valid) return <ErrorState message={t("conv.invalidChannel")} />;
   const channel = channels.data?.find((c) => c.id === ids.channelId);
-  const name = channel?.name ?? text.name ?? "salon";
+  const name = channel?.name ?? text.name ?? t("conv.channelFallback");
   const isAnnouncement = channel?.type === "announcement";
 
   return (
@@ -67,7 +69,7 @@ export default function ChannelScreen() {
               {isAnnouncement ? (
                 <IconButton
                   icon="megaphone-outline"
-                  label="Suivre ce salon d’annonces"
+                  label={t("conv.follow")}
                   onPress={() =>
                     router.push({
                       pathname: "/server/[serverId]/follow",
@@ -82,7 +84,7 @@ export default function ChannelScreen() {
               ) : null}
               <IconButton
                 icon="pin-outline"
-                label="Messages épinglés"
+                label={t("conv.pins")}
                 onPress={() =>
                   router.push({
                     pathname: "/pins",
@@ -96,7 +98,7 @@ export default function ChannelScreen() {
               />
               <IconButton
                 icon="search-outline"
-                label="Rechercher dans la conversation"
+                label={t("conv.search")}
                 onPress={() =>
                   router.push({
                     pathname: "/search",
@@ -110,7 +112,7 @@ export default function ChannelScreen() {
               />
               <IconButton
                 icon="people-outline"
-                label="Membres"
+                label={t("conv.members")}
                 onPress={() => router.push(`/server/${ids.serverId}/members`)}
               />
             </View>
@@ -131,7 +133,7 @@ export default function ChannelScreen() {
                 serverId: ids.serverId,
                 channelId: ids.channelId,
               }}
-              placeholder={`Envoyer un message dans #${name}`}
+              placeholder={t("conv.channelPlaceholder", { name })}
               header={
                 <View style={{ padding: 16 }}>
                   <Text
@@ -141,10 +143,10 @@ export default function ChannelScreen() {
                       fontWeight: "800",
                     }}
                   >
-                    Bienvenue dans #{name} !
+                    {t("conv.channelWelcome", { name })}
                   </Text>
                   <Text style={{ color: colors.textMuted }}>
-                    C’est le début du salon.
+                    {t("conv.channelStart")}
                   </Text>
                 </View>
               }
