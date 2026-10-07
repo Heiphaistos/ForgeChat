@@ -7,6 +7,7 @@ import * as serverSettings from './parts/serverSettings'
 import * as social from './parts/social'
 import * as panels from './parts/panels'
 import * as stores from './parts/stores'
+import * as e2e from './parts/e2e'
 
 export const fr = {
   ...settings.fr,
@@ -15,6 +16,7 @@ export const fr = {
   ...social.fr,
   ...panels.fr,
   ...stores.fr,
+  ...e2e.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

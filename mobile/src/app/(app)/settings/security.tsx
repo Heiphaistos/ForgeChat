@@ -6,6 +6,7 @@ import { Alert, ScrollView } from 'react-native'
 import { Row, Section, SwitchRow } from '@/components/ui'
 import { UPDATES_MANIFEST_URL } from '@/config/env'
 import { t as tr, useT, type Key } from '@/i18n'
+import { E2EKeySection } from '@/e2e/E2ESettings'
 import { checkForUpdateNow } from '@/features/updates/useUpdateCheck'
 import { useAuth } from '@/stores/auth'
 import { biometricAvailability } from '@/stores/lock'
@@ -49,7 +50,8 @@ export default function SecuritySettings() {
   }
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
+      <E2EKeySection />
       <Section title={t('settings.security.lockSection')} footer={t('settings.security.lockFooter')}>
         <SwitchRow icon="finger-print" title={t('settings.security.lockApp')} value={s.appLock} onValueChange={(v) => void toggleLock(v)} disabled={bioOk === false && !s.appLock} />
         {s.appLock

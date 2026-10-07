@@ -6,6 +6,7 @@ import { friendsApi } from '@/api/friends'
 import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
+import { SafetyCode } from '@/e2e/E2ESettings'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
 import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
@@ -74,6 +75,7 @@ export default function UserScreen() {
       ) : null}
 
       {!isMe ? <MutualServers userId={u.id} /> : null}
+      {!isMe ? <SafetyCode userId={u.id} /> : null}
       {!isMe && relation.kind === 'friend' ? (
         <SavedText
           title={t('social.user.nickname')}
