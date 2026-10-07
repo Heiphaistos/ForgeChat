@@ -86,6 +86,12 @@ export const comfortFr = {
   'accounts.add': 'Ajouter un compte',
   'accounts.resume': 'Reprendre un compte de cet appareil :',
   'accounts.error': 'Changement de compte impossible',
+  // --- Hors ligne ---
+  'offline.banner': 'Hors ligne : conversations enregistrées sur cet appareil',
+  'offline.pending': '{n} message(s) en attente d’envoi',
+  'offline.queued': 'Hors ligne : le message partira au retour du réseau',
+  'offline.sent': '{n} message(s) envoyé(s) au retour du réseau',
+  'offline.dropped': '{n} message(s) écrit(s) hors ligne n’ont pas pu partir',
 } as const
 
 export const comfortEn: Partial<Record<keyof typeof comfortFr, string>> = {
@@ -170,4 +176,9 @@ export const comfortEn: Partial<Record<keyof typeof comfortFr, string>> = {
   'accounts.add': 'Add an account',
   'accounts.resume': 'Resume an account from this device:',
   'accounts.error': 'Could not switch account',
+  'offline.banner': 'Offline: conversations saved on this device',
+  'offline.pending': '{n} message(s) waiting to be sent',
+  'offline.queued': 'Offline: the message will be sent when the network is back',
+  'offline.sent': '{n} message(s) sent now that the network is back',
+  'offline.dropped': '{n} message(s) written offline could not be sent',
 }

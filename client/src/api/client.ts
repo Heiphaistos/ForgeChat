@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { clearLocalSession } from '../lib/localSession'
+import { installOffline } from '../lib/offline'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const SERVER_URL = isTauri ? 'https://forgechat.heiphaistos.org' : ''
@@ -81,5 +82,8 @@ api.interceptors.response.use(
     return Promise.reject(err)
   }
 )
+
+// Mode hors ligne : lectures resservies, messages chiffrés mis en file (lib/offline).
+installOffline(api)
 
 export default api

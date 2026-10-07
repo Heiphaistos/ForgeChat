@@ -1,6 +1,6 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
-import { comfortFr } from './comfort'
+import { comfortFr } from './comfort.ts'
 
 export const fr = {
   ...comfortFr,

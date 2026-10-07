@@ -29,6 +29,7 @@ import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from
 import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
+import { isQueued } from '../lib/offline'
 
 interface GDMReaction {
   emoji: string
@@ -521,6 +522,7 @@ export default function GroupDMPage() {
       }
     },
     onError: (e, vars) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('gdm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)

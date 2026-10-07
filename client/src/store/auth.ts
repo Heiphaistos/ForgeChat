@@ -9,6 +9,7 @@ import { useWs } from './ws'
 import { useChannelNotif, EMPTY_NOTIF_STATE } from './channelNotif'
 import { disableWebPush } from '../utils/webPush'
 import { listAccounts } from '../lib/accounts'
+import { forgetOfflineData } from '../lib/offline'
 import { queryClient } from '../main'
 import { clearAccountKey, rememberPassword } from '../e2e/accountKey'
 
@@ -76,7 +77,9 @@ export const useAuth = create<AuthState>()(
       await disableWebPush((await listAccounts()).length > 0)
       await api.post('/auth/logout', body).catch(() => {})
       if (isTauri) clearLocalSession()
-      await clearAccountKey(useAuth.getState().user?.id)
+      const uid = useAuth.getState().user?.id
+      await clearAccountKey(uid)
+      if (uid) await forgetOfflineData(uid)
       useWs.getState().disconnect()
       useChat.setState({ messagesByChannel: {}, typing: {} })
       usePresence.setState({ statuses: {}, activities: {} })

@@ -40,6 +40,8 @@ import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import AppLockOverlay from './components/AppLockOverlay'
+import { setOfflineOwner } from './lib/offline'
+import { sendOutbox } from './lib/outboxSend'
 import { startAfkWatch } from './store/afk'
 import { useGameActivity } from './hooks/useGameActivity'
 
@@ -285,6 +287,17 @@ function AppInner() {
     if (!user) return
     return onOpen(() => { fetchUnread() })
   }, [user?.id, onOpen, fetchUnread])
+
+  // Hors ligne : données gardées pour ce compte ; file d'envoi vidée au retour du réseau.
+  useEffect(() => {
+    if (!user) return
+    setOfflineOwner(user.id)
+    const flush = () => { void sendOutbox() }
+    flush()
+    window.addEventListener('online', flush)
+    const offOpen = onOpen(flush)
+    return () => { window.removeEventListener('online', flush); offOpen() }
+  }, [user?.id, onOpen])
 
   // Forcer reconnexion WS immédiate quand l'onglet redevient visible
   // (évite le backoff excessif si le navigateur a suspendu la connexion)

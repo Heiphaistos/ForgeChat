@@ -1,7 +1,7 @@
 // Traduction anglaise. Une clé absente ici s'affiche en français (repli).
 import type { Key } from './fr'
 
-import { comfortEn } from './comfort'
+import { comfortEn } from './comfort.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...comfortEn,
