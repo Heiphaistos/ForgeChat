@@ -111,7 +111,9 @@ export const moderationApi = {
   deleteNote: (serverId: string, noteId: string) => http.delete(path`/servers/${serverId}/notes/${noteId}`),
   reports: (serverId: string) => http.get<Report[]>(path`/servers/${serverId}/reports`),
   setReport: (serverId: string, reportId: string, status: ReportStatus) => http.patch(path`/servers/${serverId}/reports/${reportId}`, { status }),
-  audit: (serverId: string, limit = 100) => http.get<AuditEntry[]>(path`/servers/${serverId}/audit`, { query: { limit } }),
+  /** `q` : recherche dans l'auteur, la cible et l'action (audit_search.rs). */
+  audit: (serverId: string, opts: { q?: string; limit?: number } = {}) =>
+    http.get<AuditEntry[]>(path`/servers/${serverId}/audit`, { query: { limit: 100, ...opts } }),
   automod: (serverId: string) => http.get<AutoMod>(path`/servers/${serverId}/automod`),
   setAutomod: (serverId: string, cfg: AutoMod) => http.put(path`/servers/${serverId}/automod`, cfg),
   stats: (serverId: string) => http.get<ServerStats>(path`/servers/${serverId}/stats`),

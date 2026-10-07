@@ -11,6 +11,7 @@ import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, radius, spacing } from '@/theme'
+import { EventExtras } from '@/features/community/EventExtras'
 
 const RSVPS: { value: Rsvp; label: Key }[] = [
   { value: 'going', label: 'server.events.going' },
@@ -82,6 +83,7 @@ export default function EventsScreen() {
                 ) : null}
               </View>
               {e.description ? <T>{e.description}</T> : null}
+              <EventExtras event={e} />
               <T variant="muted">
                 {attendees(e)}
               </T>

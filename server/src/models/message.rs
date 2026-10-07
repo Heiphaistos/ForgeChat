@@ -59,6 +59,9 @@ pub struct MsgE2e {
     pub reply_to_enc: Option<serde_json::Value>,
     pub reply_to_client_msg_id: Option<Uuid>,
     pub reply_to_author_id: Option<Uuid>,
+    /// Message système (bienvenue, starboard) : métadonnées sans contenu (092).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_meta: Option<serde_json::Value>,
 }
 
 impl MsgE2e {
@@ -80,6 +83,7 @@ impl MsgE2e {
             reply_to_enc: r.try_get("reply_to_enc").ok().flatten(),
             reply_to_client_msg_id: r.try_get("reply_to_client_msg_id").ok().flatten(),
             reply_to_author_id: r.try_get("reply_to_author_id").ok().flatten(),
+            system_meta: r.try_get("system_meta").ok().flatten(),
         }
     }
 }

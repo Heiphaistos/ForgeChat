@@ -236,6 +236,8 @@ pub enum Target {
     /// Appel vers un destinataire hors ligne : l'appelant a déjà reçu
     /// « hors ligne », la notification ouvre la conversation.
     MissedCall { dm_id: Option<Uuid>, caller: Uuid },
+    /// Rappel d'événement : ouvre les événements du serveur.
+    Event { server_id: Uuid },
 }
 
 impl Target {
@@ -247,6 +249,7 @@ impl Target {
                 json!({ "kind": "channel", "server_id": server_id, "channel_id": channel_id })
             }
             Target::MissedCall { dm_id: None, caller } => json!({ "kind": "call", "from": caller }),
+            Target::Event { server_id } => json!({ "kind": "event", "server_id": server_id }),
         }
     }
 
@@ -256,6 +259,7 @@ impl Target {
             Target::Dm(id) | Target::Group(id) => id.to_string(),
             Target::Channel { channel_id, .. } => channel_id.to_string(),
             Target::MissedCall { caller, .. } => format!("call:{caller}"),
+            Target::Event { server_id } => format!("event:{server_id}"),
         }
     }
 }

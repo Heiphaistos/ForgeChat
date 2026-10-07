@@ -27,6 +27,10 @@ pub struct ServerEvent {
     pub max_attendees: Option<i32>,
     pub attendee_count: Option<i64>,
     pub user_rsvp: Option<String>,
+    /// none | daily | weekly | monthly (092) : l'occurrence passée est reportée à la suivante.
+    pub recurrence: String,
+    /// Rappel aux participants N minutes avant le début (092).
+    pub reminder_minutes: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,7 +83,7 @@ pub async fn list_events(
     if let Some(month_range) = q.month.as_deref().and_then(parse_month_range) {
         let (start, end) = month_range;
         let sql = "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
-                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
+                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees, e.recurrence, e.reminder_minutes,
                 COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $2 THEN a.status END) AS user_rsvp
          FROM server_events e
@@ -108,7 +112,7 @@ pub async fn list_events(
 
     let sql = format!(
         "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
-                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
+                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees, e.recurrence, e.reminder_minutes,
                 COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $2 THEN a.status END) AS user_rsvp
          FROM server_events e
@@ -137,6 +141,8 @@ pub struct CreateEvent {
     pub channel_id: Option<Uuid>,
     pub image_url: Option<String>,
     pub max_attendees: Option<i32>,
+    pub recurrence: Option<String>,
+    pub reminder_minutes: Option<i32>,
 }
 
 pub async fn create_event(
@@ -182,13 +188,18 @@ pub async fn create_event(
     if !["event", "meeting", "stream", "other"].contains(&event_type) {
         return Err(AppError::BadRequest("event_type invalide".into()));
     }
+    let recurrence = body.recurrence.as_deref().unwrap_or("none");
+    super::event_tools::validate(Some(recurrence), body.reminder_minutes)?;
+    if body.name.chars().count() > 100 || body.description.as_ref().is_some_and(|d| d.chars().count() > 2000) {
+        return Err(AppError::BadRequest("Nom (100) ou description (2000) trop long".into()));
+    }
 
     let event = sqlx::query_as::<_, ServerEvent>(
         "INSERT INTO server_events (server_id, channel_id, name, description, event_type,
-          start_time, end_time, creator_id, image_url, max_attendees)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          start_time, end_time, creator_id, image_url, max_attendees, recurrence, reminder_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING id, server_id, channel_id, name, description, event_type,
-           start_time, end_time, creator_id, image_url, max_attendees,
+           start_time, end_time, creator_id, image_url, max_attendees, recurrence, reminder_minutes,
            0::BIGINT AS attendee_count, NULL::TEXT AS user_rsvp"
     )
     .bind(server_id)
@@ -201,6 +212,8 @@ pub async fn create_event(
     .bind(claims.sub)
     .bind(body.image_url.as_deref())
     .bind(body.max_attendees)
+    .bind(recurrence)
+    .bind(body.reminder_minutes)
     .fetch_one(&state.db)
     .await?;
 
@@ -219,7 +232,7 @@ pub async fn get_event(
 
     let event = sqlx::query_as::<_, ServerEvent>(
         "SELECT e.id, e.server_id, e.channel_id, e.name, e.description,
-                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees,
+                e.event_type, e.start_time, e.end_time, e.creator_id, e.image_url, e.max_attendees, e.recurrence, e.reminder_minutes,
                 COUNT(a.user_id) FILTER (WHERE a.status = 'going') AS attendee_count,
                 MAX(CASE WHEN a.user_id = $3 THEN a.status END) AS user_rsvp
          FROM server_events e
@@ -250,6 +263,10 @@ pub struct UpdateEvent {
     pub channel_id: Option<serde_json::Value>,
     pub image_url: Option<serde_json::Value>,
     pub max_attendees: Option<serde_json::Value>,
+    pub recurrence: Option<String>,
+    /// null = plus de rappel.
+    #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
+    pub reminder_minutes: Option<Option<i32>>,
 }
 
 pub async fn update_event(
@@ -267,6 +284,7 @@ pub async fn update_event(
         }
     }
 
+    super::event_tools::validate(body.recurrence.as_deref(), body.reminder_minutes.flatten())?;
     if let (Some(start), Some(Some(end))) = (body.start_time, body.end_time) {
         if end <= start {
             return Err(AppError::BadRequest("end_time doit être après start_time".into()));
@@ -281,7 +299,9 @@ pub async fn update_event(
            start_time = COALESCE($6, start_time),
            end_time = CASE WHEN $11 THEN $7::TIMESTAMPTZ ELSE end_time END,
            image_url = CASE WHEN $8::TEXT IS NOT NULL THEN $8::TEXT ELSE image_url END,
-           max_attendees = CASE WHEN $9::INTEGER IS NOT NULL THEN $9::INTEGER ELSE max_attendees END
+           max_attendees = CASE WHEN $9::INTEGER IS NOT NULL THEN $9::INTEGER ELSE max_attendees END,
+           recurrence = COALESCE($12, recurrence),
+           reminder_minutes = CASE WHEN $13 THEN $14::INTEGER ELSE reminder_minutes END
          WHERE id = $1 AND server_id = $2 AND creator_id = $10"
     )
     .bind(event_id)
@@ -295,6 +315,9 @@ pub async fn update_event(
     .bind(body.max_attendees.as_ref().and_then(|v| v.as_i64()).map(|n| n as i32))
     .bind(claims.sub)
     .bind(body.end_time.is_some())
+    .bind(body.recurrence.as_deref())
+    .bind(body.reminder_minutes.is_some())
+    .bind(body.reminder_minutes.flatten())
     .execute(&state.db)
     .await?;
 

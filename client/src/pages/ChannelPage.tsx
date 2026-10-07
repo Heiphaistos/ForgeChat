@@ -36,6 +36,7 @@ import { completeChannelKeys, openBody, openMessage, openMessages, reopenLocked 
 import { channelSendError, editMessage, postMessage, useChannelEncrypted } from '../e2e/channels'
 import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
+import { LockdownBanner } from '../components/community/LockdownBanner'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import DisappearingControl from '../components/chat/DisappearingControl'
 import { ThreadCountsContext } from '../components/chat/threadCounts'
@@ -849,6 +850,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             <span>{t('channel.announceOnly')}</span>
           </div>
         )}
+        {serverData?.lockdown && <LockdownBanner />}
         {/* Salon sans SEND_MESSAGES (overrides compris, calculé par le serveur ;
             repli sur le masque des rôles) : zone de saisie grisée au lieu d'un 403. */}
         {(!isAnnouncement || canPost) && !(currentChannel?.can_send ?? canSendBase) && (

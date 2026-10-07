@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
 import CalendarView from '../components/events/CalendarView'
+import { AddToCalendar, EventRepeatFields, ExportIcsButton, RecurrenceBadge } from '../components/community/EventExtras'
 import { useT, intlLocale, type Key } from '../i18n'
 
 interface Props {
@@ -27,6 +28,8 @@ interface ServerEvent {
   max_attendees: number | null
   attendee_count: number | null
   user_rsvp: string | null
+  recurrence?: string
+  reminder_minutes?: number | null
 }
 
 type FilterType = 'upcoming' | 'past' | 'all'
@@ -69,6 +72,8 @@ interface EventFormData {
   description: string
   start_time: string
   end_time: string
+  recurrence: string
+  reminder: string
 }
 
 interface EventModalProps {
@@ -86,10 +91,12 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
     description: initial?.description ?? '',
     start_time:  initial?.start_time  ?? '',
     end_time:    initial?.end_time    ?? '',
+    recurrence:  initial?.recurrence  ?? 'none',
+    reminder:    initial?.reminder    ?? '',
   })
 
   const set = (k: keyof EventFormData) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(p => ({ ...p, [k]: e.target.value }))
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -188,6 +195,9 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
             </div>
           </div>
 
+          <EventRepeatFields recurrence={form.recurrence} reminder={form.reminder}
+            onRecurrence={set('recurrence')} onReminder={set('reminder')} />
+
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -250,6 +260,8 @@ export default function ServerEventsPage({ serverId }: Props) {
         description: data.description.trim() || undefined,
         start_time: new Date(data.start_time).toISOString(),
         end_time: data.end_time ? new Date(data.end_time).toISOString() : undefined,
+        recurrence: data.recurrence,
+        reminder_minutes: data.reminder ? Number(data.reminder) : undefined,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
@@ -270,6 +282,8 @@ export default function ServerEventsPage({ serverId }: Props) {
         // impossible la moindre retouche d'un événement déjà commencé.
         start_time: data.start_time && data.start_time !== prevStart ? new Date(data.start_time).toISOString() : undefined,
         end_time: data.end_time ? new Date(data.end_time).toISOString() : null,
+        recurrence: data.recurrence,
+        reminder_minutes: data.reminder ? Number(data.reminder) : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
@@ -346,6 +360,7 @@ export default function ServerEventsPage({ serverId }: Props) {
             </button>
           </div>
 
+          <ExportIcsButton serverId={serverId} />
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
@@ -427,6 +442,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                             {formatDateFR(event.start_time)}
                             {event.end_time && ` → ${formatDateFR(event.end_time)}`}
                           </span>
+                          <RecurrenceBadge recurrence={event.recurrence} reminder={event.reminder_minutes} />
                           <span className="flex items-center gap-1">
                             <Users size={11} />
                             {t((event.attendee_count ?? 0) !== 1 ? 'events.participants.other' : 'events.participants.one', { n: event.attendee_count ?? 0 })}
@@ -435,6 +451,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                       </div>
 
                       <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <AddToCalendar serverId={serverId} event={event} />
                         <button
                           onClick={() => toggleAttend.mutate({ id: event.id, rsvp: isAttending ? 'not_going' : 'going' })}
                           disabled={toggleAttend.isPending}
@@ -517,6 +534,8 @@ export default function ServerEventsPage({ serverId }: Props) {
             description: editing.description ?? '',
             start_time:  toDatetimeLocal(editing.start_time),
             end_time:    editing.end_time ? toDatetimeLocal(editing.end_time) : '',
+            recurrence:  editing.recurrence ?? 'none',
+            reminder:    editing.reminder_minutes ? String(editing.reminder_minutes) : '',
           }}
           onClose={() => setEditing(null)}
           onSubmit={data => updateEvent.mutate({ id: editing.id, data, prevStart: toDatetimeLocal(editing.start_time) })}

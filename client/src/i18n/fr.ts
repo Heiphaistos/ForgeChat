@@ -1,5 +1,6 @@
 // Dictionnaire de référence (français). Toute nouvelle clé s'ajoute ici d'abord ;
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
+import { communityFr } from './community.ts'
 import * as messaging from './parts/messaging.ts'
 import { profileFr } from './profileFr.ts'
 import { comfortFr } from './comfort.ts'
@@ -2261,6 +2262,7 @@ export const fr = {
   'e2e.serverKey.recovered': '{n} salons déchiffrés',
   'e2e.serverKey.ownerOnly': 'Réservé au propriétaire du serveur.',
   'e2e.serverKey.unreadable': '[illisible : clé manquante]',
+  ...communityFr,
 } as const
 
 export type Key = keyof typeof fr

@@ -39,17 +39,6 @@ export interface ServerPatch {
   content_filter?: string
 }
 
-/** Serveur public de GET /explore (audit.rs::PublicServer). */
-export interface PublicServer {
-  id: string
-  name: string
-  icon: string | null
-  description: string | null
-  member_count: number
-  invite_code: string | null
-}
-
-
 export const serversApi = {
   list: () => http.get<Server[]>('/servers'),
   /** Serveur + salons visibles + rôles + mes rôles (calcul des permissions : features/servers/perms). */
@@ -63,8 +52,6 @@ export const serversApi = {
   boost: (id: string) => http.post<{ boost_count: number; boost_level: number }>(path`/servers/${id}/boost`),
   /** Enregistre salons, catégories et rôles comme modèle (propriétaire). */
   saveTemplate: (id: string, name: string, isPublic: boolean) => http.post(path`/servers/${id}/template`, { name: name.trim(), is_public: isPublic }),
-  /** Serveurs publics (100 max, les plus peuplés d'abord). */
-  explore: () => http.get<PublicServer[]>('/explore'),
   /** Propriétaire seulement : mot de passe + code 2FA si activée (features/servers/deleteServer). */
   remove: (id: string, body: { password: string; totp_code?: string }) => http.delete(path`/servers/${id}`, { body }),
   uploadImage: (id: string, kind: 'icon' | 'banner', file: { uri: string; name: string; type: string }) => {
@@ -87,8 +74,9 @@ export const serversApi = {
   },
   /** Revient à l'avatar / la bannière du compte. */
   clearServerProfileImage: (id: string, kind: 'avatar' | 'banner') => http.delete(path`/servers/${id}/profile/${kind}`),
-  create: (name: string, description?: string) =>
-    http.post<Server>('/servers', { name: name.trim(), description: description?.trim() || undefined }),
+  /** `template` : modèle intégré (GET /templates → builtin), structure créée par le serveur. */
+  create: (name: string, description?: string, template?: string) =>
+    http.post<Server>('/servers', { name: name.trim(), description: description?.trim() || undefined, template }),
   leave: (id: string) => http.post(path`/servers/${id}/leave`),
   channels: (id: string) => http.get<Channel[]>(path`/servers/${id}/channels`),
   createChannel: (serverId: string, name: string, type: 'text' | 'voice' | 'announcement' | (string & {}), categoryId?: string | null) =>

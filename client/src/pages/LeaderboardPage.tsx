@@ -6,6 +6,7 @@ import { useAuth } from '../store/auth'
 import api, { mediaUrl } from '../api/client'
 import { ChevronLeft } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
+import LevelsBoard from '../components/community/LevelsBoard'
 
 interface LeaderboardEntry {
   user_id: string
@@ -84,6 +85,8 @@ export default function LeaderboardPage() {
             ))}
           </div>
         </div>
+
+        {serverId && <LevelsBoard serverId={serverId} />}
 
         {entries.length === 0 ? (
           <div className="text-center py-16 text-fc-muted">

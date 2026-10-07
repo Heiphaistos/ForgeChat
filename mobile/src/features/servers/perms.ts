@@ -178,6 +178,7 @@ export type ServerMenuKey =
   | 'invite'
   | 'notifications'
   | 'events'
+  | 'community'
   | 'boost'
   | 'createChannel'
   | 'createCategory'
@@ -203,6 +204,7 @@ export type SettingsSection =
   | 'audit'
   | 'automod'
   | 'stats'
+  | 'community'
   | 'onboarding'
   | 'danger'
 
@@ -219,7 +221,7 @@ export function settingsSections(p: ServerPerms): SettingsSection[] {
   if (p.has(PERM.MANAGE_ROLES | PERM.KICK_MEMBERS | PERM.BAN_MEMBERS | PERM.BAN_TEMP | PERM.MANAGE_MESSAGES | voiceMod)) out.push('members')
   if (p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) out.push('reports', 'bans') // reports.rs : BAN_MEMBERS | BAN_TEMP
   // Invitations, emojis, stickers, webhooks, audit, AutoMod, statistiques : MANAGE_SERVER
-  if (manageServer) out.push('invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats')
+  if (manageServer) out.push('invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'community')
   if (p.isOwner) out.push('onboarding', 'danger') // accueil, transfert et suppression : require_owner
   return out
 }
@@ -229,7 +231,7 @@ export function serverMenuKeys(p: ServerPerms): ServerMenuKey[] {
   const out: ServerMenuKey[] = ['read']
   if (p.has(PERM.MANAGE_SERVER)) out.push('invite') // POST /servers/:id/invites
   out.push('notifications')
-  if (p.loaded) out.push('events') // tout membre
+  if (p.loaded) out.push('events', 'community') // tout membre (niveaux, tickets ; verrouillage pour le staff)
   if (p.canCreateChannels) out.push('createChannel', 'createCategory')
   if (settingsSections(p).length) out.push('settings')
   out.push('nickname')

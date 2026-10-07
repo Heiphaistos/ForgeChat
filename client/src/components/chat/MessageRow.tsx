@@ -19,6 +19,7 @@ import { ThreadCountsContext } from './threadCounts'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
+import SystemMessageCard, { isCommunitySystemMessage } from '../community/SystemMessageCard'
 
 export interface MessageRowProps {
   msg: any
@@ -259,7 +260,8 @@ function MessageRow({
                 </div>
               )}
 
-              {msg.content && (() => {
+              {isCommunitySystemMessage(msg) && <SystemMessageCard msg={msg} serverId={serverId} />}
+              {msg.content && !isCommunitySystemMessage(msg) && (() => {
                 const gif = gifMessage(msg.content)
                 if (gif) return <GifMessage url={gif.url} provider={gif.provider} />
                 const sticker = parseStickerMessage(msg.content)

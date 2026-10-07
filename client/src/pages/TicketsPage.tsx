@@ -1,21 +1,30 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
 import api from '../api/client'
-import { Plus, AlertCircle, Clock, CheckCircle, XCircle, ChevronLeft } from 'lucide-react'
+import { Plus, AlertCircle, Clock, CheckCircle, XCircle, ChevronLeft, MessageSquare, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useMobile } from '../contexts/MobileContext'
+import { useT, type Key } from '../i18n'
+import { postMessage, channelSendError } from '../e2e/channels'
+import { exportTranscript } from '../components/community/transcript'
+
+// Tickets natifs : chaque ticket est un SALON PRIVÉ (membre + équipe) chiffré de bout
+// en bout ; le sujet est le premier message, chiffré ici. Le serveur ne garde que
+// « Ticket #N ». La transcription est l'historique du salon, déchiffré sur l'appareil.
 
 interface Ticket {
   id: string
   title: string
+  number: number | null
   status: 'open' | 'in_progress' | 'resolved' | 'closed'
   priority: 'low' | 'medium' | 'high' | 'urgent'
   creator_id: string
   assigned_to: string | null
   category_id: string | null
+  channel_id: string | null
   created_at: string
 }
 
@@ -26,12 +35,13 @@ interface Category {
 }
 
 const COLUMNS = [
-  { status: 'open', label: 'Ouvert', icon: <AlertCircle size={14} />, color: 'text-fc-accent' },
-  { status: 'in_progress', label: 'En cours', icon: <Clock size={14} />, color: 'text-fc-yellow' },
-  { status: 'resolved', label: 'Résolu', icon: <CheckCircle size={14} />, color: 'text-fc-green' },
-  { status: 'closed', label: 'Fermé', icon: <XCircle size={14} />, color: 'text-fc-muted' },
+  { status: 'open', icon: <AlertCircle size={14} />, color: 'text-fc-accent' },
+  { status: 'in_progress', icon: <Clock size={14} />, color: 'text-fc-yellow' },
+  { status: 'resolved', icon: <CheckCircle size={14} />, color: 'text-fc-green' },
+  { status: 'closed', icon: <XCircle size={14} />, color: 'text-fc-muted' },
 ] as const
 
+const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
 const PRIORITY_COLORS: Record<string, string> = {
   low: 'bg-fc-muted/20 text-fc-muted',
   medium: 'bg-fc-accent/20 text-fc-accent',
@@ -39,27 +49,32 @@ const PRIORITY_COLORS: Record<string, string> = {
   urgent: 'bg-fc-red/20 text-fc-red',
 }
 
+const fieldCls = 'bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white'
+
 export default function TicketsPage() {
+  const t = useT()
+  const nav = useNavigate()
   const { serverId } = useParams<{ serverId: string }>()
   const { user } = useAuth()
   const qc = useQueryClient()
   const { on } = useWs()
   const { openSidebar } = useMobile()
-  const [newTitle, setNewTitle] = useState('')
+  const [subject, setSubject] = useState('')
   const [newPriority, setNewPriority] = useState('medium')
   const [newCategoryId, setNewCategoryId] = useState('')
-  const [filterCategoryId, setFilterCategoryId] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [showAddCategory, setShowAddCategory] = useState(false)
   const [newCatName, setNewCatName] = useState('')
-  const [newCatEmoji, setNewCatEmoji] = useState('')
 
+  const { data: settings } = useQuery<{ enabled: boolean; is_staff: boolean }>({
+    queryKey: ['community', serverId, 'tickets/settings'],
+    queryFn: () => api.get(`/servers/${serverId}/tickets/settings`).then(r => r.data),
+    enabled: !!serverId,
+  })
   const { data: tickets = [] } = useQuery<Ticket[]>({
     queryKey: ['tickets', serverId],
     queryFn: () => api.get(`/servers/${serverId}/tickets`).then(r => r.data),
     enabled: !!serverId,
   })
-
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['ticket-categories', serverId],
     queryFn: () => api.get(`/servers/${serverId}/ticket-categories`).then(r => r.data),
@@ -68,221 +83,181 @@ export default function TicketsPage() {
 
   useEffect(() => {
     if (!serverId) return
-    const offCreate = on('TICKET_CREATE', (d: any) => {
-      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['tickets', serverId] })
-    })
-    const offUpdate = on('TICKET_UPDATE', (d: any) => {
-      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['tickets', serverId] })
-    })
-    const offCatCreate = on('TICKET_CATEGORY_CREATE', (d: any) => {
-      if (d.server_id === serverId) qc.invalidateQueries({ queryKey: ['ticket-categories', serverId] })
-    })
-    return () => { offCreate(); offUpdate(); offCatCreate() }
+    const refresh = (key: string) => (d: any) => { if (d.server_id === serverId) qc.invalidateQueries({ queryKey: [key, serverId] }) }
+    const offs = [on('TICKET_CREATE', refresh('tickets')), on('TICKET_UPDATE', refresh('tickets')), on('TICKET_CATEGORY_CREATE', refresh('ticket-categories'))]
+    return () => offs.forEach(off => off())
   }, [serverId, on, qc])
 
-  const createMutation = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/tickets`, {
-      title: newTitle,
-      priority: newPriority,
-      ...(newCategoryId ? { category_id: newCategoryId } : {}),
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tickets', serverId] })
-      setNewTitle('')
-      setShowCreate(false)
-      toast.success('Ticket créé')
+  const create = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<Ticket>(`/servers/${serverId}/tickets`, {
+        priority: newPriority,
+        ...(newCategoryId ? { category_id: newCategoryId } : {}),
+      })
+      // Le salon vient d'être créé : le serveur doit connaître ses membres avant la clé.
+      await qc.invalidateQueries({ queryKey: ['server', serverId] })
+      if (data.channel_id && subject.trim()) {
+        await postMessage(serverId!, data.channel_id, subject.trim(),
+          body => api.post(`/servers/${serverId}/channels/${data.channel_id}/messages`, body))
+      }
+      return data
     },
-    onError: () => toast.error('Erreur lors de la création'),
+    onSuccess: data => {
+      qc.invalidateQueries({ queryKey: ['tickets', serverId] })
+      setSubject('')
+      setShowCreate(false)
+      toast.success(t('community.tickets.opened', { n: data.number ?? '' }))
+      if (data.channel_id) nav(`/servers/${serverId}/channels/${data.channel_id}`)
+    },
+    onError: (e: any) => toast.error(channelSendError(e, e?.response?.data?.error ?? t('common.error'))),
   })
 
-  const updateMutation = useMutation({
+  const update = useMutation({
     mutationFn: ({ id, ...data }: { id: string; status?: string; priority?: string }) =>
       api.patch(`/servers/${serverId}/tickets/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tickets', serverId] }),
-    onError: () => toast.error('Erreur lors de la mise à jour'),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? t('common.error')),
   })
 
-  // create_category (backend, requiert MANAGE_SERVER) existait sans aucun
-  // moyen frontend de l'appeler -- les filtres/sélecteurs de catégorie
-  // ci-dessous ne s'affichaient donc jamais (categories.length > 0 toujours
-  // faux), la fonctionnalité entière restait invisible pour tout le monde.
   const createCategory = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/ticket-categories`, {
-      name: newCatName.trim(),
-      emoji: newCatEmoji.trim() || undefined,
-    }),
+    mutationFn: () => api.post(`/servers/${serverId}/ticket-categories`, { name: newCatName.trim() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['ticket-categories', serverId] })
       setNewCatName('')
-      setNewCatEmoji('')
-      setShowAddCategory(false)
-      toast.success('Catégorie créée')
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur lors de la création'),
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? t('common.error')),
   })
 
-  const visibleTickets = filterCategoryId
-    ? tickets.filter(t => t.category_id === filterCategoryId)
-    : tickets
-  const byStatus = (status: string) => visibleTickets.filter(t => t.status === status)
+  const transcript = async (ticket: Ticket) => {
+    if (!ticket.channel_id || !serverId) return
+    try {
+      const n = await exportTranscript(serverId, ticket.channel_id, ticket.title)
+      toast.success(t('community.tickets.transcriptDone', { n }))
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
+  const staff = !!settings?.is_staff
+  const byStatus = (status: string) => tickets.filter(tk => tk.status === status)
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-fc-hover">
+      <div className="flex items-center justify-between gap-2 px-4 md:px-6 py-4 border-b border-fc-hover flex-wrap">
         <div className="flex items-center gap-3">
           <button
             className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
             onClick={openSidebar}
-            aria-label="Retour"
+            aria-label={t('common.back')}
           >
             <ChevronLeft size={20} />
           </button>
-          <h1 className="text-xl font-bold text-white">Tickets</h1>
-          {categories.length > 0 && (
-            <div role="group" aria-label="Filtrer par catégorie" className="flex items-center gap-1.5 flex-wrap">
-              <button
-                onClick={() => setFilterCategoryId('')}
-                aria-pressed={!filterCategoryId}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${!filterCategoryId ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-              >
-                Tous
-              </button>
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setFilterCategoryId(f => f === cat.id ? '' : cat.id)}
-                  aria-pressed={filterCategoryId === cat.id}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${filterCategoryId === cat.id ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-                >
-                  {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            onClick={() => setShowAddCategory(v => !v)}
-            className="text-xs px-2.5 py-1 rounded-full font-medium bg-fc-hover text-fc-muted hover:text-white transition-colors"
-            title="Ajouter une catégorie (nécessite la permission Gérer le serveur)"
-          >
-            + Catégorie
-          </button>
+          <h1 className="text-xl font-bold text-white">{t('community.tickets.menu')}</h1>
         </div>
-        <button
-          onClick={() => setShowCreate(v => !v)}
-          className="flex items-center gap-2 px-3 py-1.5 bg-fc-accent text-white rounded-lg text-sm font-medium hover:bg-fc-accent/80"
-        >
-          <Plus size={16} /> Nouveau ticket
-        </button>
+        {settings?.enabled && (
+          <button
+            onClick={() => setShowCreate(v => !v)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-fc-accent text-white rounded-lg text-sm font-medium hover:bg-fc-accent/80"
+          >
+            <Plus size={16} /> {t('community.tickets.open')}
+          </button>
+        )}
       </div>
 
-      {showAddCategory && (
-        <div className="px-6 py-3 border-b border-fc-hover bg-fc-channel/50">
-          <div className="flex gap-2 max-w-md">
-            <input
-              value={newCatEmoji}
-              onChange={e => setNewCatEmoji(e.target.value)}
-              placeholder="🎫"
-              maxLength={8}
-              className="w-16 bg-fc-hover border border-fc-hover rounded-lg px-2 py-1.5 text-sm text-white text-center"
-            />
-            <input
-              value={newCatName}
-              onChange={e => setNewCatName(e.target.value)}
-              placeholder="Nom de la catégorie..."
-              maxLength={100}
-              enterKeyHint="done" autoCapitalize="sentences"
-              className="flex-1 bg-fc-hover border border-fc-hover rounded-lg px-3 py-1.5 text-sm text-white"
-              onKeyDown={e => e.key === 'Enter' && newCatName.trim() && createCategory.mutate()}
-            />
-            <button
-              onClick={() => createCategory.mutate()}
-              disabled={!newCatName.trim() || createCategory.isPending}
-              className="px-3 py-1.5 bg-fc-accent text-white rounded-lg text-sm disabled:opacity-50"
-            >
-              Ajouter
-            </button>
-          </div>
-        </div>
+      {settings && !settings.enabled && (
+        <p className="px-6 py-3 text-sm text-fc-muted border-b border-fc-hover">{t('community.tickets.disabled')}</p>
       )}
 
       {showCreate && (
-        <div className="px-6 py-4 border-b border-fc-hover bg-fc-channel/50">
-          <div className="flex gap-3 max-w-lg">
-            <input
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              placeholder="Titre du ticket..."
-              enterKeyHint="done" autoCapitalize="sentences"
-              className="flex-1 bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-              onKeyDown={e => e.key === 'Enter' && newTitle.trim() && createMutation.mutate()}
-            />
-            <select
-              value={newPriority}
-              onChange={e => setNewPriority(e.target.value)}
-              className="bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-            >
-              <option value="low">Faible</option>
-              <option value="medium">Moyen</option>
-              <option value="high">Élevé</option>
-              <option value="urgent">Urgent</option>
+        <div className="px-4 md:px-6 py-4 border-b border-fc-hover bg-fc-channel/50 space-y-2 max-w-xl">
+          <textarea
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            rows={3}
+            maxLength={4000}
+            placeholder={t('community.tickets.subject')}
+            className={`${fieldCls} w-full resize-none`}
+          />
+          <p className="text-xs text-fc-muted">{t('community.tickets.subjectHint')}</p>
+          <div className="flex gap-2 flex-wrap">
+            <select value={newPriority} onChange={e => setNewPriority(e.target.value)} aria-label={t('community.tickets.priority')} className={fieldCls}>
+              {PRIORITIES.map(p => <option key={p} value={p}>{t(`community.tickets.p.${p}` as Key)}</option>)}
             </select>
             {categories.length > 0 && (
-              <select
-                value={newCategoryId}
-                onChange={e => setNewCategoryId(e.target.value)}
-                className="bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
-              >
-                <option value="">Catégorie</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.emoji ? `${cat.emoji} ` : ''}{cat.name}</option>
-                ))}
+              <select value={newCategoryId} onChange={e => setNewCategoryId(e.target.value)} aria-label={t('community.tickets.type')} className={fieldCls}>
+                <option value="">{t('community.tickets.type')}</option>
+                {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.emoji ? `${cat.emoji} ` : ''}{cat.name}</option>)}
               </select>
             )}
             <button
-              onClick={() => createMutation.mutate()}
-              disabled={!newTitle.trim() || createMutation.isPending}
+              onClick={() => create.mutate()}
+              disabled={!subject.trim() || create.isPending}
               className="px-4 py-2 bg-fc-accent text-white rounded-lg text-sm disabled:opacity-50"
             >
-              Créer
+              {create.isPending ? t('common.creating') : t('community.tickets.open')}
             </button>
           </div>
+          {staff && (
+            <div className="flex gap-2 pt-2">
+              <input value={newCatName} onChange={e => setNewCatName(e.target.value)} maxLength={100}
+                placeholder={t('community.tickets.newType')} className={`${fieldCls} flex-1`} />
+              <button onClick={() => createCategory.mutate()} disabled={!newCatName.trim() || createCategory.isPending}
+                className="px-3 py-1.5 bg-fc-hover text-white rounded-lg text-sm disabled:opacity-50">{t('community.add')}</button>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="flex-1 overflow-x-auto p-6">
+      <div className="flex-1 overflow-x-auto p-4 md:p-6">
         <div className="flex gap-4 h-full min-w-max">
           {COLUMNS.map(col => (
             <div key={col.status} className="w-72 flex flex-col gap-3">
               <div className={`flex items-center gap-2 px-1 font-semibold text-sm ${col.color}`}>
                 {col.icon}
-                {col.label}
+                {t(`community.tickets.s.${col.status}` as Key)}
                 <span className="ml-auto text-fc-muted font-normal">{byStatus(col.status).length}</span>
               </div>
               <div className="flex flex-col gap-2 flex-1 overflow-y-auto overscroll-contain">
-                {byStatus(col.status).map(ticket => (
-                  <div key={ticket.id} className="bg-fc-channel border border-fc-hover rounded-xl p-3 space-y-2">
-                    <p className="text-sm text-white font-medium leading-snug">{ticket.title}</p>
-                    <div className="flex items-center justify-between">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[ticket.priority]}`}>
-                        {ticket.priority}
-                      </span>
-                      {ticket.creator_id === user?.id && col.status !== 'closed' && (
-                        <select
-                          value={ticket.status}
-                          onChange={e => updateMutation.mutate({ id: ticket.id, status: e.target.value })}
-                          className="text-xs bg-fc-hover border border-fc-hover rounded px-2 py-0.5 text-fc-muted"
-                        >
-                          <option value="open">Ouvert</option>
-                          <option value="in_progress">En cours</option>
-                          <option value="resolved">Résolu</option>
-                          <option value="closed">Fermé</option>
-                        </select>
-                      )}
+                {byStatus(col.status).map(ticket => {
+                  const mine = ticket.creator_id === user?.id
+                  const closed = ticket.status === 'closed' || ticket.status === 'resolved'
+                  return (
+                    <div key={ticket.id} className="bg-fc-channel border border-fc-hover rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm text-white font-medium">{ticket.title}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[ticket.priority]}`}>
+                          {t(`community.tickets.p.${ticket.priority}` as Key)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {ticket.channel_id && (
+                          <button onClick={() => nav(`/servers/${serverId}/channels/${ticket.channel_id}`)}
+                            className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-fc-hover text-white">
+                            <MessageSquare size={12} aria-hidden /> {t('community.tickets.goTo')}
+                          </button>
+                        )}
+                        {ticket.channel_id && (
+                          <button onClick={() => transcript(ticket)} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-fc-hover text-fc-muted hover:text-white">
+                            <FileText size={12} aria-hidden /> {t('community.tickets.transcript')}
+                          </button>
+                        )}
+                        {staff && !closed && ticket.status !== 'in_progress' && (
+                          <button onClick={() => update.mutate({ id: ticket.id, status: 'in_progress' })} className="text-xs px-2 py-1 rounded bg-fc-hover text-fc-muted hover:text-white">
+                            {t('community.tickets.take')}
+                          </button>
+                        )}
+                        {(mine || staff) && (
+                          <button onClick={() => update.mutate({ id: ticket.id, status: closed ? 'open' : 'closed' })}
+                            className="text-xs px-2 py-1 rounded bg-fc-hover text-fc-muted hover:text-white">
+                            {t(closed ? 'community.tickets.reopen' : 'community.tickets.close')}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 {byStatus(col.status).length === 0 && (
-                  <div className="text-center py-8 text-fc-muted text-xs">Aucun ticket</div>
+                  <div className="text-center py-8 text-fc-muted text-xs">{t('community.tickets.none')}</div>
                 )}
               </div>
             </div>

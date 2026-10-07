@@ -164,6 +164,7 @@ pub async fn create_thread(
     Json(body): Json<CreateThreadReq>,
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
 
     let has_text = !body.first_message.trim().is_empty();
     let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
@@ -439,6 +440,7 @@ pub async fn send_thread_message(
     Json(body): Json<SendThreadMessageReq>,
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
 
     let content_trimmed = body.content.trim().to_string();
     let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());

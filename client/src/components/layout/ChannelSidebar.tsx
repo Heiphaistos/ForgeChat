@@ -24,6 +24,7 @@ import { useContext } from 'react'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal from '../modals/ServerSettingsModal'
+import ServerMenuExtras from '../community/ServerMenuExtras'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
@@ -228,6 +229,7 @@ export default function ChannelSidebar() {
   const { closeSidebar } = useMobile()
   const t = useT()
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [createInCategory, setCreateInCategory] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -531,7 +533,8 @@ export default function ChannelSidebar() {
     const groups: Array<{ key: string; label: string; channels: any[] }> = []
     for (const cat of categories) {
       const catChannels = channels.filter((c: any) => c.category_id === cat.id)
-      if (catChannels.length > 0) {
+      // Catégorie vide (ex. modèle Jötunheim) : montrée à qui peut y créer un salon.
+      if (catChannels.length > 0 || canCreate) {
         groups.push({ key: cat.id, label: cat.name, channels: catChannels })
       }
     }
@@ -548,7 +551,7 @@ export default function ChannelSidebar() {
       groups.push({ key: UNCATEGORIZED_KEY, label: t('channels.uncategorized'), channels: uncategorized })
     }
     return groups
-  }, [channels, categories, t])
+  }, [channels, categories, t, canCreate])
 
   if (!serverId) {
 
@@ -1216,6 +1219,7 @@ export default function ChannelSidebar() {
               >
                 <Settings size={16} /> {t('servers.settings')}
               </button>
+              <ServerMenuExtras serverId={serverId} lockdown={!!data?.lockdown} onDone={() => { setMenuOpen(false); closeSidebar() }} />
               {data?.member?.has_onboarding && (
                 <button
                   onClick={() => { setShowOnboarding(true); setMenuOpen(false) }}
@@ -1282,7 +1286,7 @@ export default function ChannelSidebar() {
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
-                    ...(canCreate ? [{ label: t('channels.create'), onClick: () => setShowCreateChannel(true) }] : []),
+                    ...(canCreate ? [{ label: t('channels.create'), onClick: () => { setCreateInCategory(key); setShowCreateChannel(true) } }] : []),
                     ...(categories.some((c: any) => c.id === key && canDeleteChannel(c.created_by)) ? [
                       { separator: true as const },
                       { label: t('channels.deleteCategory'), danger: true, onClick: () => removeWithBackup('category', key, label) },
@@ -1305,7 +1309,7 @@ export default function ChannelSidebar() {
                     <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide select-none">{label}</span>
                   </div>
                   {canCreate && <button
-                    onClick={(e) => { e.stopPropagation(); setShowCreateChannel(true) }}
+                    onClick={(e) => { e.stopPropagation(); setCreateInCategory(key); setShowCreateChannel(true) }}
                     className="text-fc-muted opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 hover:text-white transition"
                     title={t('channels.createIn', { name: label })}
                     aria-label={t('channels.createIn', { name: label })}
@@ -1395,7 +1399,8 @@ export default function ChannelSidebar() {
       </div>
 
       {showCreateChannel && serverId && (
-        <CreateChannelModal serverId={serverId} onClose={() => setShowCreateChannel(false)} />
+        <CreateChannelModal serverId={serverId} defaultCategoryId={categories.some((c: any) => c.id === createInCategory) ? createInCategory : undefined}
+          onClose={() => { setShowCreateChannel(false); setCreateInCategory(null) }} />
       )}
       {showInvite && server && (
         <InviteModal serverId={server.id} serverName={server.name} onClose={() => setShowInvite(false)} />

@@ -7,7 +7,6 @@ import { serversApi } from '@/api/servers'
 import { Button, Section, T, TextField } from '@/components/ui'
 import { createServer } from '@/features/servers/createFromTemplate'
 import {
-  builtinTemplates,
   channelIcon,
   parseRemoteTemplates,
   serverNameError,
@@ -39,7 +38,7 @@ export default function CreateServerScreen() {
     enabled: step !== 'choice',
     staleTime: 60_000,
   })
-  const publicTemplates = [...builtinTemplates, ...(remote.data?.public ?? [])]
+  const publicTemplates = [...(remote.data?.builtin ?? []), ...(remote.data?.public ?? [])]
   const mine = remote.data?.mine ?? []
 
   const pick = (tpl: ServerTemplate | null) => {

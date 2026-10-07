@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
@@ -23,6 +23,7 @@ import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
 import MyServerProfileTab from './MyServerProfileTab'
 import ServerKeySettings from '../../e2e/ServerKeySettings'
+import CommunitySettings from '../community/CommunitySettings'
 import { useT, type Key } from '../../i18n'
 
 interface Server {
@@ -53,6 +54,7 @@ interface Server {
   require_2fa_for_moderation?: boolean
   server_locale?: string
   max_video_channel_users?: number
+  discovery_tags?: string[]
 }
 
 interface Props {
@@ -61,7 +63,7 @@ interface Props {
   isAdmin?: boolean
 }
 
-type Tab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding'
+type Tab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding' | 'community'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -328,6 +330,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
         ...(isAdmin ? [{ id: 'webhooks' as Tab, icon: Link }] : []),
         { id: 'feeds', icon: Rss },
         ...(estProprietaire ? [{ id: 'onboarding' as Tab, icon: Sparkles }] : []),
+        ...(isAdmin ? [{ id: 'community' as Tab, icon: Trophy }] : []),
       ],
     },
     {
@@ -860,6 +863,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
             {tab === 'stats'   && <StatsTab serverId={server.id} />}
             {tab === 'onboarding' && <OnboardingTab serverId={server.id} channels={channels} />}
+            {tab === 'community' && <CommunitySettings server={server} channels={channels} />}
             {tab === 'roles'   && <RolesTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
             {tab === 'bans'    && <BansTab serverId={server.id} />}

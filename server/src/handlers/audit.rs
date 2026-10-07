@@ -8,67 +8,6 @@ use uuid::Uuid;
 
 use crate::{error::AppError, middleware::auth::Claims, state::AppState};
 
-#[derive(Serialize)]
-pub struct AuditEntry {
-    pub id: Uuid,
-    pub action: String,
-    pub user_id: Option<Uuid>,
-    pub username: Option<String>,
-    pub target_id: Option<Uuid>,
-    pub target_name: Option<String>,
-    pub details: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Deserialize)]
-pub struct AuditQuery {
-    pub action: Option<String>,
-    pub limit: Option<i64>,
-}
-
-pub async fn get_audit_log(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(server_id): Path<Uuid>,
-    Query(q): Query<AuditQuery>,
-) -> Result<Json<Vec<AuditEntry>>, AppError> {
-    _check_manage(claims.sub, server_id, &state).await?;
-
-    use sqlx::Row;
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-
-    let rows = if let Some(action) = &q.action {
-        sqlx::query(
-            "SELECT id, action, user_id, username, target_id, target_name, details, created_at
-             FROM audit_log WHERE server_id=$1 AND action=$2
-             ORDER BY created_at DESC LIMIT $3"
-        )
-        .bind(server_id).bind(action).bind(limit)
-        .fetch_all(&state.db).await?
-    } else {
-        sqlx::query(
-            "SELECT id, action, user_id, username, target_id, target_name, details, created_at
-             FROM audit_log WHERE server_id=$1
-             ORDER BY created_at DESC LIMIT $2"
-        )
-        .bind(server_id).bind(limit)
-        .fetch_all(&state.db).await?
-    };
-
-    let entries = rows.iter().map(|r| AuditEntry {
-        id: r.get("id"),
-        action: r.get("action"),
-        user_id: r.get("user_id"),
-        username: r.get("username"),
-        target_id: r.get("target_id"),
-        target_name: r.get("target_name"),
-        details: r.get("details"),
-        created_at: r.get("created_at"),
-    }).collect();
-
-    Ok(Json(entries))
-}
-
 // Fonction utilitaire appelée par d'autres handlers pour logger un event
 pub async fn log_event(
     state: &AppState,
@@ -110,6 +49,10 @@ pub struct AutoModConfig {
     pub max_links: i32,
     pub anti_spam: bool,
     pub anti_caps: bool,
+    /// Domaines refusés par l'appli avant chiffrement (liste intégrée + serveur, 088).
+    /// Réglés par PUT …/automod/advanced, jamais par ce PUT (anciennes applis).
+    #[serde(default, skip_deserializing)]
+    pub dangerous_domains: Vec<String>,
 }
 
 pub async fn get_automod(
@@ -135,7 +78,7 @@ pub async fn get_automod_rules(
 async fn automod_config(state: &AppState, server_id: Uuid) -> Result<Json<AutoModConfig>, AppError> {
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps
+        "SELECT enabled, word_filter, max_mentions, max_links, anti_spam, anti_caps, block_dangerous_links, blocked_domains
          FROM automod_rules WHERE server_id=$1"
     )
     .bind(server_id)
@@ -150,6 +93,9 @@ async fn automod_config(state: &AppState, server_id: Uuid) -> Result<Json<AutoMo
             max_links: r.get("max_links"),
             anti_spam: r.get("anti_spam"),
             anti_caps: r.get("anti_caps"),
+            dangerous_domains: crate::handlers::automod::dangerous_domains(
+                r.get("block_dangerous_links"), &r.get::<Vec<String>, _>("blocked_domains"),
+            ),
         }))
     } else {
         Ok(Json(AutoModConfig {
@@ -159,6 +105,7 @@ async fn automod_config(state: &AppState, server_id: Uuid) -> Result<Json<AutoMo
             max_links: 0,
             anti_spam: false,
             anti_caps: false,
+            dangerous_domains: Vec::new(),
         }))
     }
 }
@@ -328,54 +275,6 @@ pub async fn check_automod(state: &AppState, server_id: Uuid, user_id: Uuid, con
     }
 
     None
-}
-
-// Server discovery
-#[derive(Serialize)]
-pub struct PublicServer {
-    pub id: Uuid,
-    pub name: String,
-    pub icon: Option<String>,
-    pub description: Option<String>,
-    pub member_count: i32,
-    pub invite_code: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct DiscoverQuery {
-    pub category: Option<String>,
-}
-
-pub async fn discover_servers(
-    State(state): State<AppState>,
-    _claims: Extension<Claims>,
-    Query(q): Query<DiscoverQuery>,
-) -> Result<Json<Vec<PublicServer>>, AppError> {
-    use sqlx::Row;
-    // ServerDiscoveryPage.tsx envoie ?category=<key> pour chaque bouton de
-    // filtre sauf "all" -- jamais lu ici avant ce fix, donc les 7 catégories
-    // n'avaient strictement aucun effet sur les résultats affichés.
-    let category = q.category.filter(|c| c != "all");
-    let rows = sqlx::query(
-        "SELECT id, name, icon, description, member_count, invite_code
-         FROM servers
-         WHERE is_public=true AND ($1::TEXT IS NULL OR server_category = $1)
-         ORDER BY member_count DESC LIMIT 100"
-    )
-    .bind(category)
-    .fetch_all(&state.db)
-    .await?;
-
-    let servers = rows.iter().map(|r| PublicServer {
-        id: r.get("id"),
-        name: r.get("name"),
-        icon: r.get("icon"),
-        description: r.get("description"),
-        member_count: r.get("member_count"),
-        invite_code: r.get("invite_code"),
-    }).collect();
-
-    Ok(Json(servers))
 }
 
 // Réactions détaillées (qui a réagi)

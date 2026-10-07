@@ -2,7 +2,7 @@
 // Le mobile vérifie les mêmes cas (mobile/__tests__/channel-text.test.ts).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { automodBlock, containsWord, firstUrl, mentionMeta } from '../src/e2e/channelText.ts'
+import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta } from '../src/e2e/channelText.ts'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const R = '22222222-2222-4222-8222-222222222222'
@@ -40,4 +40,15 @@ test('AutoMod : mêmes règles que le serveur', () => {
 test('première URL', () => {
   assert.equal(firstUrl('voir https://forgechat.fr/a?b=1 puis http://x.fr'), 'https://forgechat.fr/a?b=1')
   assert.equal(firstUrl('rien'), null)
+})
+
+test('AutoMod : liens dangereux (liste locale), sous-domaines compris', () => {
+  const r = { ...rules, max_links: 0, dangerous_domains: ['grabify.link', 'mauvais.example'] }
+  assert.equal(automodBlock(r, 'regarde https://grabify.link/abc'), 'dangerous_link')
+  assert.equal(automodBlock(r, 'www.Mauvais.Example/x'), 'dangerous_link')
+  assert.equal(automodBlock(r, 'http://cdn.mauvais.example'), 'dangerous_link')
+  assert.equal(automodBlock(r, 'https://pasmauvais.example et grabify.link sans lien'), null)
+  assert.equal(automodBlock({ ...r, dangerous_domains: [] }, 'https://grabify.link'), null)
+  assert.deepEqual(linkHosts('https://user@a.fr:8080/x http://www.b.fr.'), ['a.fr', 'b.fr'])
+  assert.equal(automodBlock(r, 'https://google.com@grabify.link/x'), 'dangerous_link')
 })

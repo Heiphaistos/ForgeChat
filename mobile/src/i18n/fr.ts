@@ -8,6 +8,7 @@ import * as social from './parts/social'
 import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
+import * as community from './parts/community'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
 
@@ -19,6 +20,7 @@ export const fr = {
   ...panels.fr,
   ...stores.fr,
   ...e2e.fr,
+  ...community.fr,
   ...messaging.fr,
   ...comfort.fr,
 

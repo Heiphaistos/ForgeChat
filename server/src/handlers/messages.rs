@@ -212,6 +212,7 @@ pub async fn send_message(
     crate::handlers::servers::require_can_post(
         &state, claims.sub, server_id, channel_id, body.has_attachments.unwrap_or(false),
     ).await?;
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
 
     // Une réponse ne peut citer qu'un message du MÊME salon : sinon l'aperçu de
     // réponse renvoyait le contenu de n'importe quel message dont on connaît l'id.
@@ -443,6 +444,7 @@ pub async fn send_message(
         "pending_attachments": pending_attachments,
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+    crate::handlers::levels::on_message(&state, server_id, claims.sub);
 
     // Bot slash commands : "/cmd args" est envoyé comme un message normal par le
     // client (voir MessageInput.tsx) — c'est ici qu'on détecte et dispatch aux bots.
@@ -661,6 +663,7 @@ pub async fn add_reaction(
         "emoji": emoji,
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
+    crate::handlers::community::on_reaction(&state, server_id, channel_id, message_id, &emoji);
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

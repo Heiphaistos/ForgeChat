@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import AutoModAdvanced from '../community/AutoModAdvanced'
 
 interface Server {
   id: string
@@ -198,6 +199,7 @@ export default function AutoModTab({ server }: Props) {
           {save.isPending ? t('common.saving') : t('common.save')}
         </button>
       </div>
+      <AutoModAdvanced serverId={server.id} />
     </div>
   )
 }

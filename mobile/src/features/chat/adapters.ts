@@ -31,6 +31,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     pollId: m.poll_id ?? null,
     ...e2eFields(m),
     ...(m.unencrypted === true ? { unencrypted: true } : {}),
+    ...(m.type === 'welcome' || m.type === 'starboard' ? { system: { kind: m.type, meta: m.system_meta ?? {} } } : {}),
     // Aperçu de lien du message chiffré : celui de l'expéditeur, sans appel à /og.
     ...(m.e2e === 'ok' ? { preview: normalizeOg(m.e2e_body?.p, firstUrl(m.content ?? '') ?? '') } : {}),
   }

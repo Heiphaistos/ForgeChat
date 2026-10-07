@@ -1,19 +1,14 @@
-import { dateLocale, t as tr } from '@/i18n'
-import builtin from './builtinServerTemplates.json'
+import { dateLocale, t as tr, type Key } from '@/i18n'
 
 /**
  * Modèles de serveur — mêmes modèles et même parcours que le client web (CreateServerModal) :
  *  - « Créer depuis zéro » ;
- *  - modèles publics = modèles intégrés du web (builtinServerTemplates.json, généré depuis le
- *    source web par scripts/sync-server-templates.mjs) + modèles publics du serveur ;
- *  - « Mes modèles » (créés depuis un de mes serveurs).
+ *  - modèles intégrés (Gaming, Amis, Communauté, Étude, Créateur, Jötunheim), tenus par le
+ *    serveur (GET /templates → builtin) ; noms et descriptions traduits ici (server.tpl.<id>) ;
+ *  - modèles publics et « Mes modèles » (créés depuis un serveur).
  *
- * Création :
- *  - modèle intégré : comme le web (création du serveur, puis catégories et salons) ; le salon
- *    « général » créé d'office par le serveur est retiré si le modèle définit le sien (le web
- *    garde les deux) ;
- *  - modèle partagé : POST /templates/:id/use (le serveur recrée catégories, salons ET rôles et
- *    compte l'utilisation ; le web les recrée lui-même et perd les rôles).
+ * Création : le serveur fait tout, en une transaction (POST /servers {template} pour un modèle
+ * intégré, POST /templates/:id/use pour un modèle partagé).
  */
 
 export interface TemplateCategory {
@@ -73,16 +68,10 @@ export function parseTemplateData(raw: unknown): TemplateData {
   }
 }
 
-export const builtinTemplates: ServerTemplate[] = builtin.templates.map((t) => ({
-  id: t.id,
-  name: t.name,
-  description: t.description,
-  data: parseTemplateData(t.template_data),
-  source: 'builtin' as const,
-}))
+const BUILTIN_IDS = ['gaming', 'friends', 'community', 'study', 'creator', 'jotunheim'] as const
 
-/** Réponse de GET /templates → modèles publics et personnels (même libellés que le web). */
-export function parseRemoteTemplates(raw: unknown): { public: ServerTemplate[]; mine: ServerTemplate[] } {
+/** Réponse de GET /templates → modèles intégrés, publics et personnels (même libellés que le web). */
+export function parseRemoteTemplates(raw: unknown): { builtin: ServerTemplate[]; public: ServerTemplate[]; mine: ServerTemplate[] } {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   const one = (source: TemplateSource) => (t: Record<string, unknown>): ServerTemplate | null => {
     const id = str(t.id, 64)
@@ -101,7 +90,15 @@ export function parseRemoteTemplates(raw: unknown): { public: ServerTemplate[]; 
       .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object')
       .map(one(source))
       .filter((t): t is ServerTemplate => t !== null)
-  return { public: list(o.public, 'public'), mine: list(o.mine, 'mine') }
+  const builtin = (Array.isArray(o.builtin) ? (o.builtin as unknown[]) : [])
+    .filter((b): b is Record<string, unknown> => !!b && typeof b === 'object')
+    .flatMap((b) => {
+      const id = BUILTIN_IDS.find((x) => x === b.id)
+      return id
+        ? [{ id, name: tr(`community.tpl.${id}` as Key), description: tr(`community.tpl.${id}.desc` as Key), data: parseTemplateData(b.template_data), source: 'builtin' as const }]
+        : []
+    })
+  return { builtin, public: list(o.public, 'public'), mine: list(o.mine, 'mine') }
 }
 
 export const channelIcon = (type: string) => (type === 'voice' ? '🔊' : type === 'announcement' ? '📢' : '#')
@@ -123,16 +120,6 @@ export function templatePreview(data: TemplateData) {
     roles: [...data.roles].sort(byPos),
     channelCount: data.channels.length,
     categoryCount: data.categories.length,
-  }
-}
-
-/** Création d'un modèle intégré : catégories puis salons, dans l'ordre du modèle. */
-export function planBuiltinCreation(data: TemplateData) {
-  return {
-    categories: data.categories.map((c, i) => ({ key: c.id ?? `cat-${i}`, name: c.name })),
-    channels: data.channels.map((c) => ({ name: c.name, type: c.type, categoryKey: c.category_id ?? null })),
-    // Le serveur crée d'office un salon texte « général » : on le retire si le modèle a le sien.
-    replaceDefaultGeneral: data.channels.some((c) => c.type === 'text' && c.name.trim().toLowerCase() === 'général'),
   }
 }
 

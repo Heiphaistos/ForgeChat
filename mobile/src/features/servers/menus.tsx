@@ -101,6 +101,8 @@ function serverAction(key: ServerMenuKey, s: Server): SheetAction {
       return { label: t('menu.serverNotifications'), icon: 'notifications-outline', onPress: go(`/server/${s.id}/notifications`) }
     case 'events':
       return { label: t('menu.events'), icon: 'calendar-outline', onPress: go(`/server/${s.id}/events`) }
+    case 'community':
+      return { label: t('community.menu'), icon: 'trophy-outline', onPress: go(`/server/${s.id}/community`) }
     case 'boost':
       return { label: t('menu.boostServer'), icon: 'flash-outline', onPress: () => confirmBoost(s) }
     case 'createChannel':

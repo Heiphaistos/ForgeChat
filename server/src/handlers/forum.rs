@@ -173,6 +173,7 @@ pub async fn create_post(
     Json(body): Json<CreatePostReq>,
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
@@ -423,6 +424,7 @@ pub async fn reply_to_post(
     Json(body): Json<CreateReplyReq>,
 ) -> Result<Json<serde_json::Value>> {
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"

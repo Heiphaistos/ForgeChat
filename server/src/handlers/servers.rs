@@ -19,71 +19,18 @@ pub async fn create_server(
     Extension(claims): Extension<Claims>,
     Json(body): Json<CreateServerRequest>,
 ) -> Result<Json<Server>> {
-    if body.name.len() < 2 || body.name.len() > 100 {
-        return Err(AppError::BadRequest("Nom serveur 2-100 chars".into()));
-    }
-
-    // Limiter à 100 serveurs possédés par utilisateur (anti-spam)
-    let owned_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM servers WHERE owner_id=$1"
-    )
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-    if owned_count >= 100 {
-        return Err(AppError::BadRequest("Limite de 100 serveurs atteinte".into()));
-    }
-
-    let invite_code = generate_invite_code();
-
-    let server = sqlx::query_as::<_, Server>(
-        "INSERT INTO servers (name, description, owner_id, invite_code, is_public)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *"
-    )
-    .bind(&body.name)
-    .bind(&body.description)
-    .bind(claims.sub)
-    .bind(&invite_code)
-    .bind(body.is_public.unwrap_or(false))
-    .fetch_one(&state.db)
-    .await?;
-
-    // Créer le rôle @everyone
-    sqlx::query(
-        "INSERT INTO roles (server_id, name, permissions, position, is_everyone)
-         VALUES ($1, '@everyone', $2, 0, true)"
-    )
-    .bind(server.id)
-    .bind(
-        crate::models::role::Permissions::VIEW_CHANNEL
-            | crate::models::role::Permissions::SEND_MESSAGES
-            | crate::models::role::Permissions::READ_HISTORY
-            | crate::models::role::Permissions::ADD_REACTIONS
-            | crate::models::role::Permissions::ATTACH_FILES
-            | crate::models::role::Permissions::CONNECT_VOICE
-            | crate::models::role::Permissions::SPEAK_VOICE
-            | crate::models::role::Permissions::STREAM,
-    )
-    .execute(&state.db)
-    .await?;
-
-    // Ajouter le créateur comme membre owner
-    sqlx::query(
-        "INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, true)"
-    )
-    .bind(claims.sub)
-    .bind(server.id)
-    .execute(&state.db)
-    .await?;
-
-    // Canal général par défaut
-    sqlx::query(
-        "INSERT INTO channels (server_id, name, type, position, created_by) VALUES ($1, 'général', 'text', 0, (SELECT owner_id FROM servers WHERE id=$1))"
-    )
-    .bind(server.id)
-    .execute(&state.db)
-    .await?;
-
+    // Modèle intégré choisi à la création (Gaming, Amis, … Jötunheim).
+    let tpl = match body.template.as_deref() {
+        None | Some("") => None,
+        Some(id) => {
+            let data = crate::handlers::template_builtin::get(id)
+                .ok_or_else(|| AppError::BadRequest("Modèle inconnu".into()))?;
+            Some(crate::handlers::templates::parse_template(&data).map_err(AppError::BadRequest)?)
+        }
+    };
+    let server = crate::handlers::templates::create_server_from(
+        &state, claims.sub, &body.name, body.description.as_deref(), body.is_public.unwrap_or(false), tpl.as_ref(),
+    ).await?;
     Ok(Json(server))
 }
 
@@ -167,6 +114,7 @@ pub async fn get_server(
         .filter(|r| r.is_everyone || my_roles.contains(&r.id))
         .fold(0i64, |acc, r| acc | r.permissions);
     let is_owner = server.owner_id == claims.sub;
+    let lockdown = crate::handlers::automod::is_locked(&state, server_id).await?;
 
     let channels_json: Vec<serde_json::Value> = channels.iter().filter(|c| !forbidden.contains(&c.id)).map(|c| {
         let perms = crate::state::apply_channel_overrides(
@@ -176,7 +124,8 @@ pub async fn get_server(
         let mut v = serde_json::to_value(c).unwrap_or_default();
         if let serde_json::Value::Object(ref mut m) = v {
             m.insert("hidden".to_string(), serde_json::json!(hidden_ids.contains(&c.id)));
-            m.insert("can_send".to_string(), serde_json::json!(perms & crate::models::role::Permissions::SEND_MESSAGES != 0));
+            let staff = perms & crate::handlers::automod::STAFF != 0;
+            m.insert("can_send".to_string(), serde_json::json!(perms & crate::models::role::Permissions::SEND_MESSAGES != 0 && (staff || !lockdown)));
             m.insert("has_voice_password".to_string(), serde_json::json!(c.voice_password_hash.is_some()));
         }
         v
@@ -197,6 +146,7 @@ pub async fn get_server(
         "member": member,
         "current_user_id": claims.sub,
         "my_role_ids": my_role_ids,
+        "lockdown": lockdown,
     })))
 }
 
@@ -285,6 +235,15 @@ pub async fn update_server(
     .fetch_one(&state.db)
     .await?;
 
+    // Étiquettes de l'annuaire des serveurs publics (092).
+    let server = match &body.discovery_tags {
+        Some(tags) => {
+            let tags = crate::handlers::directory::clean_tags(tags).map_err(AppError::BadRequest)?;
+            sqlx::query_as::<_, Server>("UPDATE servers SET discovery_tags=$2 WHERE id=$1 RETURNING *")
+                .bind(server_id).bind(&tags).fetch_one(&state.db).await?
+        }
+        None => server,
+    };
     log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None, None).await;
     let event = serde_json::json!({ "type": "SERVER_UPDATE", "server_id": server_id, "server": server });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
@@ -491,6 +450,9 @@ pub async fn join_server(
     if already {
         return Err(AppError::Conflict("Déjà membre".into()));
     }
+    if crate::handlers::automod::is_locked(&state, server_id).await? {
+        return Err(AppError::ForbiddenMsg("Ce serveur est verrouillé (anti-raid) : réessaie plus tard.".into()));
+    }
 
     if invite.is_some() {
         // Réclamer atomiquement un "usage" de l'invitation dans le même UPDATE qui
@@ -554,6 +516,8 @@ pub async fn join_server(
             "username": u.username,
             "avatar": u.avatar,
         }).to_string()).await;
+        crate::handlers::automod::after_join(&state, server_id).await;
+        crate::handlers::community::on_join(&state, server_id, claims.sub, &u.username).await;
     }
 
     Ok(Json(server))
@@ -1232,6 +1196,10 @@ pub async fn require_can_post(
         .await?;
     if chan_type.as_deref() == Some("announcement") && !has(Permissions::MANAGE_MESSAGES) {
         return Err(AppError::Forbidden);
+    }
+    // Verrouillage (manuel ou anti-raid) : seul le staff écrit encore.
+    if !has(crate::handlers::automod::STAFF) && crate::handlers::automod::is_locked(state, server_id).await? {
+        return Err(AppError::ForbiddenMsg("Serveur verrouillé par la modération : seul le staff peut écrire pour l'instant.".into()));
     }
     require_not_timed_out(state, user_id, server_id).await
 }
