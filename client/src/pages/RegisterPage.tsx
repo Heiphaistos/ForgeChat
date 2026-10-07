@@ -5,6 +5,7 @@ import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 import { LegalLinks } from './LegalPages'
+import { t as tr, useT } from '../i18n'
 
 function getPasswordStrength(pwd: string): { score: number; label: string; color: string } {
   if (pwd.length === 0) return { score: 0, label: '', color: '' }
@@ -14,9 +15,9 @@ function getPasswordStrength(pwd: string): { score: number; label: string; color
   if (/[A-Z]/.test(pwd)) score++
   if (/[0-9]/.test(pwd)) score++
   if (/[^A-Za-z0-9]/.test(pwd)) score++
-  if (score <= 1) return { score, label: 'Faible', color: 'bg-red-500' }
-  if (score <= 3) return { score, label: 'Moyen', color: 'bg-yellow-500' }
-  return { score, label: 'Fort', color: 'bg-green-500' }
+  if (score <= 1) return { score, label: tr('auth.register.weak'), color: 'bg-red-500' }
+  if (score <= 3) return { score, label: tr('auth.register.medium'), color: 'bg-yellow-500' }
+  return { score, label: tr('auth.register.strong'), color: 'bg-green-500' }
 }
 
 export default function RegisterPage() {
@@ -29,6 +30,7 @@ export default function RegisterPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const { register } = useAuth()
   const nav = useNavigate()
+  const t = useT()
 
   const strength = getPasswordStrength(password)
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
@@ -36,11 +38,11 @@ export default function RegisterPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (password !== confirmPassword) {
-      toast.error('Les mots de passe ne correspondent pas')
+      toast.error(t('auth.passwordMismatch'))
       return
     }
     if (!acceptedTerms) {
-      toast.error("Acceptez les conditions d'utilisation pour créer un compte")
+      toast.error(t('auth.register.acceptTerms'))
       return
     }
     setLoading(true)
@@ -48,7 +50,7 @@ export default function RegisterPage() {
       await register(username, email, password)
       nav('/friends')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? 'Erreur lors de l\'inscription')
+      toast.error(err.response?.data?.error ?? t('auth.register.error'))
     } finally {
       setLoading(false)
     }
@@ -60,12 +62,12 @@ export default function RegisterPage() {
         <div className="flex justify-center mb-4">
           <Logo3D size={56} />
         </div>
-        <h1 className="text-2xl font-bold text-white text-center mb-2">Créer un compte</h1>
-        <p className="text-fc-muted text-center mb-6">Rejoins ForgeChat gratuitement</p>
+        <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.register.title')}</h1>
+        <p className="text-fc-muted text-center mb-6">{t('auth.register.subtitle')}</p>
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Nom d'utilisateur</label>
+            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.username')}</label>
             <input
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -75,7 +77,7 @@ export default function RegisterPage() {
               type="text"
               autoFocus
               autoComplete="username"
-              placeholder="tonpseudo"
+              placeholder={t('auth.register.usernamePlaceholder')}
               enterKeyHint="next"
               autoCapitalize="none"
               autoCorrect="off"
@@ -83,14 +85,14 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Email</label>
+            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
-              placeholder="email@exemple.com"
+              placeholder={t('auth.emailPlaceholder')}
               enterKeyHint="next"
               inputMode="email"
               className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
@@ -98,7 +100,7 @@ export default function RegisterPage() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-fc-muted uppercase">Mot de passe</label>
+              <label className="block text-xs font-semibold text-fc-muted uppercase">{t('auth.password')}</label>
               {strength.label && (
                 <span className={`text-xs font-medium ${
                   strength.score <= 1 ? 'text-red-400' : strength.score <= 3 ? 'text-yellow-400' : 'text-green-400'
@@ -115,7 +117,7 @@ export default function RegisterPage() {
                 required
                 minLength={8}
                 autoComplete="new-password"
-                placeholder="8 caractères minimum"
+                placeholder={t('auth.register.passwordPlaceholder')}
                 enterKeyHint="next"
                 className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
               />
@@ -124,7 +126,7 @@ export default function RegisterPage() {
                 onClick={() => setShowPassword(v => !v)}
                 tabIndex={-1}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white transition"
-                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -144,21 +146,21 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Confirmer le mot de passe</label>
+            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.confirm')}</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               required
               autoComplete="new-password"
-              placeholder="Répéter le mot de passe"
+              placeholder={t('auth.register.confirmPlaceholder')}
               enterKeyHint="done"
               className={`w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 ${
                 passwordMismatch ? 'focus:ring-red-500 ring-1 ring-red-500/50' : 'focus:ring-fc-accent'
               }`}
             />
             {passwordMismatch && (
-              <p className="text-xs text-red-400 mt-1">Les mots de passe ne correspondent pas</p>
+              <p className="text-xs text-red-400 mt-1">{t('auth.passwordMismatch')}</p>
             )}
           </div>
 
@@ -171,10 +173,10 @@ export default function RegisterPage() {
               className="mt-1 accent-indigo-500"
             />
             <span>
-              J'accepte les{' '}
-              <Link to="/cgu" target="_blank" className="text-fc-accent hover:underline">conditions d'utilisation</Link>
-              {' '}et j'ai lu la{' '}
-              <Link to="/confidentialite" target="_blank" className="text-fc-accent hover:underline">politique de confidentialité</Link>.
+              {t('auth.register.termsBefore')}{' '}
+              <Link to="/cgu" target="_blank" className="text-fc-accent hover:underline">{t('auth.register.termsLink')}</Link>
+              {' '}{t('auth.register.termsMiddle')}{' '}
+              <Link to="/confidentialite" target="_blank" className="text-fc-accent hover:underline">{t('auth.register.privacyLink')}</Link>.
             </span>
           </label>
 
@@ -183,16 +185,16 @@ export default function RegisterPage() {
             disabled={loading || passwordMismatch || !acceptedTerms}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
-            {loading ? 'Création...' : 'Créer un compte'}
+            {loading ? t('auth.register.submitting') : t('auth.register.title')}
           </button>
         </form>
 
         <p className="text-fc-muted text-sm text-center mt-4">
-          Déjà un compte ?{' '}
-          <Link to="/login" className="text-fc-accent hover:underline">Se connecter</Link>
+          {t('auth.register.haveAccount')}{' '}
+          <Link to="/login" className="text-fc-accent hover:underline">{t('auth.login.submit')}</Link>
         </p>
         <p className="text-center mt-3">
-          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
+          <Link to="/" className="text-xs text-fc-muted hover:text-white transition">{t('auth.backHome')}</Link>
         </p>
         <LegalLinks className="mt-3" />
       </div>

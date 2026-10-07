@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../api/client'
+import { useT } from '../i18n'
 
 const inputCls =
   'w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent'
@@ -15,6 +16,7 @@ function tokenFromHash(): string {
 /** /forgot-password : demande du lien ; /reset-password#token=... : nouveau mot de passe. */
 export default function PasswordResetPage() {
   const [token] = useState(tokenFromHash)
+  const t = useT()
   useEffect(() => {
     if (window.location.hash) window.history.replaceState(null, '', window.location.pathname)
   }, [])
@@ -23,7 +25,7 @@ export default function PasswordResetPage() {
       <div className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-md">
         {token ? <ResetForm token={token} /> : <RequestForm />}
         <p className="text-center mt-4">
-          <Link to="/login" className="text-xs text-fc-muted hover:text-white transition">← Retour à la connexion</Link>
+          <Link to="/login" className="text-xs text-fc-muted hover:text-white transition">{t('auth.reset.backToLogin')}</Link>
         </p>
       </div>
     </div>
@@ -34,6 +36,7 @@ function RequestForm() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const t = useT()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,7 +45,7 @@ function RequestForm() {
       await api.post('/auth/forgot-password', { email })
       setSent(true)
     } catch (err: any) {
-      toast.error(err.response?.status === 429 ? 'Trop de demandes, réessaie plus tard' : (err.response?.data?.error ?? 'Erreur'))
+      toast.error(err.response?.status === 429 ? t('auth.reset.tooMany') : (err.response?.data?.error ?? t('auth.reset.error')))
     } finally {
       setLoading(false)
     }
@@ -51,27 +54,26 @@ function RequestForm() {
   if (sent) {
     return (
       <>
-        <h1 className="text-2xl font-bold text-white text-center mb-2">Vérifie ta boîte mail</h1>
+        <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.reset.checkMail')}</h1>
         <p className="text-fc-muted text-center text-sm">
-          Si un compte correspond à <span className="text-white">{email}</span>, un lien de réinitialisation
-          vient d'être envoyé. Il expire dans 30 minutes.
+          {t('auth.reset.sentBefore')} <span className="text-white">{email}</span>{t('auth.reset.sentAfter')}
         </p>
       </>
     )
   }
   return (
     <>
-      <h1 className="text-2xl font-bold text-white text-center mb-2">Mot de passe oublié</h1>
-      <p className="text-fc-muted text-center mb-6 text-sm">Saisis l'e-mail de ton compte : tu recevras un lien pour choisir un nouveau mot de passe.</p>
+      <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.reset.title')}</h1>
+      <p className="text-fc-muted text-center mb-6 text-sm">{t('auth.reset.intro')}</p>
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label htmlFor="fp-email" className="block text-xs font-semibold text-fc-muted uppercase mb-1">Email</label>
+          <label htmlFor="fp-email" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
           <input id="fp-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus
-            autoComplete="email" inputMode="email" placeholder="email@exemple.com" className={inputCls} />
+            autoComplete="email" inputMode="email" placeholder={t('auth.emailPlaceholder')} className={inputCls} />
         </div>
         <button type="submit" disabled={loading}
           className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50">
-          {loading ? 'Envoi...' : 'Envoyer le lien'}
+          {loading ? t('auth.reset.sending') : t('auth.reset.send')}
         </button>
       </form>
     </>
@@ -83,17 +85,18 @@ function ResetForm({ token }: { token: string }) {
   const [pw2, setPw2] = useState('')
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
+  const t = useT()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (pw !== pw2) { toast.error('Les mots de passe ne correspondent pas'); return }
+    if (pw !== pw2) { toast.error(t('auth.passwordMismatch')); return }
     setLoading(true)
     try {
       await api.post('/auth/reset-password', { token, new_password: pw })
-      toast.success('Mot de passe modifié. Tous tes appareils ont été déconnectés.')
+      toast.success(t('auth.reset.done'))
       nav('/login')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? 'Lien invalide ou expiré')
+      toast.error(err.response?.data?.error ?? t('auth.reset.invalid'))
     } finally {
       setLoading(false)
     }
@@ -101,21 +104,21 @@ function ResetForm({ token }: { token: string }) {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-white text-center mb-6">Nouveau mot de passe</h1>
+      <h1 className="text-2xl font-bold text-white text-center mb-6">{t('auth.reset.newPassword')}</h1>
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label htmlFor="rp-pw" className="block text-xs font-semibold text-fc-muted uppercase mb-1">Nouveau mot de passe</label>
+          <label htmlFor="rp-pw" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.reset.newPassword')}</label>
           <input id="rp-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} required minLength={8} maxLength={128}
             autoFocus autoComplete="new-password" className={inputCls} />
         </div>
         <div>
-          <label htmlFor="rp-pw2" className="block text-xs font-semibold text-fc-muted uppercase mb-1">Confirmer</label>
+          <label htmlFor="rp-pw2" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.reset.confirm')}</label>
           <input id="rp-pw2" type="password" value={pw2} onChange={e => setPw2(e.target.value)} required minLength={8} maxLength={128}
             autoComplete="new-password" className={inputCls} />
         </div>
         <button type="submit" disabled={loading}
           className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50">
-          {loading ? 'Enregistrement...' : 'Changer le mot de passe'}
+          {loading ? t('auth.reset.saving') : t('auth.reset.submit')}
         </button>
       </form>
     </>

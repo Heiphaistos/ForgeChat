@@ -5,6 +5,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
+import { useT } from '../i18n'
 
 // Dans l'application bureau, « / » redirige vers /login : le lien bouclerait sur lui-même.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const { login } = useAuth()
   const nav = useNavigate()
   const [searchParams] = useSearchParams()
+  const t = useT()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,9 +34,9 @@ export default function LoginPage() {
       if (msg === 'totp_required') {
         setNeedTotp(true)
         setTotpCode('')
-        toast('Entrez votre code 2FA')
+        toast(t('auth.login.enterTotp'))
       } else {
-        toast.error(msg || 'Erreur de connexion')
+        toast.error(msg || t('auth.login.error'))
       }
     } finally {
       setLoading(false)
@@ -47,14 +49,14 @@ export default function LoginPage() {
         <div className="flex justify-center mb-4">
           <Logo3D size={56} />
         </div>
-        <h1 className="text-2xl font-bold text-white text-center mb-2">Content de te revoir !</h1>
-        <p className="text-fc-muted text-center mb-6">Connecte-toi à ton compte ForgeChat</p>
+        <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.login.title')}</h1>
+        <p className="text-fc-muted text-center mb-6">{t('auth.login.subtitle')}</p>
 
         <form onSubmit={submit} className="space-y-4">
           {!needTotp ? (
             <>
               <div>
-                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Email</label>
+                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
                 <input
                   type="email"
                   value={email}
@@ -62,14 +64,14 @@ export default function LoginPage() {
                   required
                   autoFocus
                   autoComplete="email"
-                  placeholder="email@exemple.com"
+                  placeholder={t('auth.emailPlaceholder')}
                   enterKeyHint="next"
                   inputMode="email"
                   className="w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Mot de passe</label>
+                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.password')}</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -86,7 +88,7 @@ export default function LoginPage() {
                     onClick={() => setShowPassword(v => !v)}
                     tabIndex={-1}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white transition"
-                    aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -96,10 +98,9 @@ export default function LoginPage() {
           ) : (
             <div>
               <p className="text-fc-muted text-sm mb-3">
-                La double authentification est activée. Entrez votre code depuis l'application d'authentification,
-                ou l'un de vos codes de secours si vous avez perdu l'accès.
+                {t('auth.login.totpHelp')}
               </p>
-              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code 2FA ou code de secours</label>
+              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.login.totpLabel')}</label>
               <input
                 type="text"
                 inputMode="text"
@@ -117,7 +118,7 @@ export default function LoginPage() {
                 onClick={() => setNeedTotp(false)}
                 className="mt-2 text-xs text-fc-muted hover:text-white transition"
               >
-                ← Retour
+                {t('auth.login.back')}
               </button>
             </div>
           )}
@@ -127,25 +128,25 @@ export default function LoginPage() {
             disabled={loading || (needTotp && totpCode.length < 6)}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
-            {loading ? 'Connexion...' : needTotp ? 'Valider le code' : 'Se connecter'}
+            {loading ? t('auth.login.submitting') : needTotp ? t('auth.login.verifyCode') : t('auth.login.submit')}
           </button>
         </form>
 
         {!needTotp && (
           <>
             <p className="text-fc-muted text-sm text-center mt-4">
-              Pas de compte ?{' '}
-              <Link to="/register" className="text-fc-accent hover:underline">S'inscrire</Link>
+              {t('auth.login.noAccount')}{' '}
+              <Link to="/register" className="text-fc-accent hover:underline">{t('auth.login.signUp')}</Link>
             </p>
             <p className="text-fc-muted text-xs text-center mt-2">
-              Mot de passe oublié ?{' '}
+              {t('auth.login.forgot')}{' '}
               <Link to="/forgot-password" className="text-fc-accent hover:underline">
-                Réinitialiser
+                {t('auth.login.reset')}
               </Link>
             </p>
             {!isTauri && (
               <p className="text-center mt-3">
-                <Link to="/" className="text-xs text-fc-muted hover:text-white transition">← Retour à l'accueil</Link>
+                <Link to="/" className="text-xs text-fc-muted hover:text-white transition">{t('auth.backHome')}</Link>
               </p>
             )}
             <LegalLinks className="mt-2" />

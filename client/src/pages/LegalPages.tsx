@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import Logo3D from '../components/Logo3D'
+import { useT } from '../i18n'
 
 // Mentions légales, politique de confidentialité et CGU propres à forgechat.heiphaistos.org.
 // Date de mise à jour écrite en dur : elle ne doit changer que si le texte change.
@@ -25,11 +26,12 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function LegalLinks({ className = '' }: { className?: string }) {
+  const t = useT()
   return (
-    <nav aria-label="Informations légales" className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-fc-muted ${className}`}>
-      <Link to="/mentions-legales" className="py-1 hover:text-white transition">Mentions légales</Link>
-      <Link to="/confidentialite" className="py-1 hover:text-white transition">Confidentialité</Link>
-      <Link to="/cgu" className="py-1 hover:text-white transition">Conditions d'utilisation</Link>
+    <nav aria-label={t('legal.nav')} className={`flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-fc-muted ${className}`}>
+      <Link to="/mentions-legales" className="py-1 hover:text-white transition">{t('legal.notice')}</Link>
+      <Link to="/confidentialite" className="py-1 hover:text-white transition">{t('legal.privacy')}</Link>
+      <Link to="/cgu" className="py-1 hover:text-white transition">{t('legal.terms')}</Link>
     </nav>
   )
 }
