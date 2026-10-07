@@ -26,7 +26,8 @@ import { hasEditableText, tenorGifUrl } from '@/features/composer/formats'
 import { Composer } from './Composer'
 import { buildEmojiMap, CustomEmojiContext } from './customEmojis'
 import type { MentionCandidate } from './mentions'
-import { MessageItem } from './MessageItem'
+import { MessageItem, SUPER_COLOR } from './MessageItem'
+import { userRoute } from '@/features/servers/memberProfile'
 import { messagesKey } from './cache'
 import { useScrollTarget } from './pins'
 import { messageLink, supportsMessageExtras, supportsReactionDetail, supportsTranslate, type ReactionUser } from './messageExtras'
@@ -179,9 +180,9 @@ export function ChatView({
   }, [highlightId])
 
   const react = useCallback(
-    (m: ChatMessage, emoji: string) => {
+    (m: ChatMessage, emoji: string, isSuper = false) => {
       if (m.pending || m.id.startsWith('tmp-')) return
-      conv.react(m, emoji).catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
+      conv.react(m, emoji, isSuper).catch((e) => Alert.alert('Réaction impossible', errorMessage(e)))
     },
     [conv],
   )
@@ -265,7 +266,7 @@ export function ChatView({
       )
     }
     if (!m.pending) list.push({ label: 'Copier le lien', icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
-    if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(`/user/${m.authorId}`) })
+    if (!mine) list.push({ label: 'Voir le profil', icon: 'person-circle-outline', onPress: () => router.push(userRoute(m.authorId, serverId)) })
     if (!mine && conversation.kind === 'channel') list.push({ label: 'Signaler', icon: 'flag-outline', danger: true, onPress: () => report(m) })
     // Suppression : l'auteur, ou un modérateur (le serveur tranche — 403 sinon).
     if (mine || conversation.kind === 'channel') list.push({ label: 'Supprimer', icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
@@ -281,16 +282,16 @@ export function ChatView({
   const showReactors = useMemo(
     () =>
       supportsReactionDetail(conversation)
-        ? (m: ChatMessage, emoji: string) =>
+        ? (m: ChatMessage, emoji: string, isSuper = false) =>
             void messagesApi
-              .reactionUsers(m.id, emoji)
+              .reactionUsers(m.id, emoji, isSuper)
               .then((users) => setReactors({ emoji, users }))
               .catch((e) => Alert.alert('Réactions indisponibles', errorMessage(e)))
         : undefined,
     [conversation],
   )
 
-  const onPressAuthor = useCallback((userId: string) => router.push(`/user/${userId}`), [])
+  const onPressAuthor = useCallback((userId: string) => router.push(userRoute(userId, serverId)), [serverId])
   const onLongPress = useCallback((m: ChatMessage) => setSelected(m), [])
 
   const renderItem = useCallback(
@@ -332,25 +333,30 @@ export function ChatView({
   const quickReactions = useMemo(
     () =>
       selected && !selected.pending && !selected.id.startsWith('tmp-') ? (
-        <View style={styles.quickRow}>
-          {QUICK_REACTIONS.map((e) => (
-            <Pressable
-              key={e}
-              style={styles.quick}
-              onPress={() => {
-                const m = selected
-                setSelected(null)
-                react(m, e)
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Réagir ${e}`}
-            >
-              <Text style={{ fontSize: 24 }}>{e}</Text>
-            </Pressable>
+        <>
+          {/* Seconde rangée : super réactions (salons de serveur, 10 par 24 h). */}
+          {(conversation.kind === 'channel' ? [false, true] : [false]).map((isSuper) => (
+            <View key={String(isSuper)} style={styles.quickRow}>
+              {QUICK_REACTIONS.map((e) => (
+                <Pressable
+                  key={e}
+                  style={[styles.quick, isSuper && styles.quickSuper]}
+                  onPress={() => {
+                    const m = selected
+                    setSelected(null)
+                    react(m, e, isSuper)
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={isSuper ? `Super réaction ${e}` : `Réagir ${e}`}
+                >
+                  <Text style={{ fontSize: 24 }}>{e}</Text>
+                </Pressable>
+              ))}
+            </View>
           ))}
-        </View>
+        </>
       ) : null,
-    [selected, react],
+    [selected, react, conversation.kind],
   )
 
   // Conversation inaccessible (lien vers une conversation dont on n'est pas membre) : pas de champ de saisie.
@@ -493,6 +499,7 @@ const styles = StyleSheet.create({
   typingText: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   quick: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  quickSuper: { borderWidth: 2, borderColor: SUPER_COLOR, backgroundColor: SUPER_COLOR + '33' },
   paletteBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
   palette: { backgroundColor: colors.bgAlt, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   paletteTitle: { width: '100%', color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textTransform: 'uppercase', marginTop: spacing.sm, paddingHorizontal: spacing.xs },

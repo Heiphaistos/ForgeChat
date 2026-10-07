@@ -73,6 +73,16 @@ export const serversApi = {
   transfer: (id: string, userId: string, password: string) => http.post(path`/servers/${id}/transfer`, { user_id: userId, password }),
   /** Pseudo sur ce serveur ; null = retirer. */
   setNickname: (id: string, nickname: string | null) => http.patch(path`/servers/${id}/nickname`, { nickname }),
+  /** Profil propre à ce serveur : bio (null = celle du compte). */
+  setServerBio: (id: string, bio: string | null) => http.patch(path`/servers/${id}/profile`, { bio }),
+  /** Avatar ou bannière propre à ce serveur (8 / 10 Mo, PNG JPG GIF WEBP). */
+  uploadServerProfileImage: (id: string, kind: 'avatar' | 'banner', file: { uri: string; name: string; type: string }) => {
+    const fd = new FormData()
+    fd.append('file', file as unknown as Blob)
+    return http.upload(path`/servers/${id}/profile/${kind}`, fd)
+  },
+  /** Revient à l'avatar / la bannière du compte. */
+  clearServerProfileImage: (id: string, kind: 'avatar' | 'banner') => http.delete(path`/servers/${id}/profile/${kind}`),
   create: (name: string, description?: string) =>
     http.post<Server>('/servers', { name: name.trim(), description: description?.trim() || undefined }),
   leave: (id: string) => http.post(path`/servers/${id}/leave`),

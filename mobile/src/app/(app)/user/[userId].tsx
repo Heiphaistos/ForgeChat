@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { friendsApi } from '@/api/friends'
+import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
@@ -10,16 +11,20 @@ import { MessageText } from '@/components/MessageText'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
+import { shownProfile } from '@/features/servers/memberProfile'
 import { errorMessage } from '@/lib/http'
-import { useRouteParams } from '@/lib/params'
+import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { colors, font, spacing } from '@/theme'
 
 export default function UserScreen() {
-  const { valid, ids } = useRouteParams(['userId'] as const)
+  const { valid, ids, text } = useRouteParams(['userId'] as const, ['serverId'])
+  // Ouverte depuis un serveur : profil propre à ce serveur (surnom, avatar, bannière, bio).
+  const serverId = isUuid(text.serverId) ? text.serverId : ''
   const me = useAuth((s) => s.user)
   const q = useQuery({ queryKey: qk.user(ids.userId ?? ''), queryFn: () => usersApi.get(ids.userId), enabled: valid })
+  const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: valid && !!serverId })
   const accepted = useQuery({ queryKey: qk.friends('all'), queryFn: () => friendsApi.list('all') })
   const pending = useQuery({ queryKey: qk.friends('pending'), queryFn: () => friendsApi.list('pending') })
   const blocked = useQuery({ queryKey: qk.friends('blocked'), queryFn: () => friendsApi.list('blocked') })
@@ -27,6 +32,7 @@ export default function UserScreen() {
   if (q.isLoading) return <Loading />
   if (q.error || !q.data) return <ErrorState message={errorMessage(q.error, 'Profil introuvable')} onRetry={() => void q.refetch()} />
   const u = q.data
+  const shown = shownProfile(u, members.data?.find((m) => m.user_id === u.id))
   const isMe = u.id === me?.id
   const relation = relationWith(u.id, [blocked.data?.friends, accepted.data?.friends, pending.data?.friends])
 
@@ -40,10 +46,10 @@ export default function UserScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
-      <ProfileBanner uri={u.banner} name={u.username} />
+      <ProfileBanner uri={shown.banner} name={u.username} />
       <View style={styles.header}>
-        <Avatar uri={u.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus />
-        <Text style={styles.name}>{u.username}</Text>
+        <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus />
+        <Text style={styles.name}>{shown.name}</Text>
         <Text style={styles.tag}>
           {u.username}#{u.discriminator}
           {u.pronouns ? ` · ${u.pronouns}` : ''}
@@ -51,10 +57,10 @@ export default function UserScreen() {
         {u.custom_status ? <Text style={styles.status}>{u.custom_status}</Text> : null}
       </View>
 
-      {u.bio ? (
+      {shown.bio ? (
         <Section title="À propos">
           <View style={{ padding: spacing.lg }}>
-            <MessageText content={u.bio} />
+            <MessageText content={shown.bio} />
           </View>
         </Section>
       ) : null}

@@ -76,6 +76,18 @@ describe('cache des messages', () => {
     removeMessage('dm', 'c1', '1')
     expect(flattenNewestFirst(get())).toEqual([])
   })
+
+  it('compte les super réactions à part de la réaction normale du même emoji', () => {
+    seed([[msg('1')]])
+    applyReactionDelta('dm', 'c1', '1', '🔥', 1, false)
+    applyReactionDelta('dm', 'c1', '1', '🔥', 1, true, true)
+    expect(get().pages[0]![0]!.reactions).toEqual([
+      { emoji: '🔥', count: 1, me: false },
+      { emoji: '🔥', count: 1, me: true, is_super: true },
+    ])
+    applyReactionDelta('dm', 'c1', '1', '🔥', -1, true, true)
+    expect(get().pages[0]![0]!.reactions).toEqual([{ emoji: '🔥', count: 1, me: false }])
+  })
 })
 
 describe('adaptateurs de formats serveur', () => {

@@ -236,13 +236,14 @@ export function useConversation(ref: ConversationRef) {
   )
 
   const react = useCallback(
-    async (msg: ChatMessage, emoji: string) => {
-      const mine = msg.reactions.find((r) => r.emoji === emoji)?.me ?? false
+    async (msg: ChatMessage, emoji: string, isSuper = false) => {
+      const mine = msg.reactions.find((r) => r.emoji === emoji && !!r.is_super === isSuper)?.me ?? false
       if (stableRef.kind === 'channel') {
         // Le serveur diffuse REACTION_ADD/REMOVE à tous (nous compris) : pas d'optimisme ici.
-        await messagesApi.react(stableRef, msg.id, emoji, mine)
+        await messagesApi.react(stableRef, msg.id, emoji, mine, isSuper)
         return
       }
+      if (isSuper) return // super réactions : salons de serveur seulement
       // DM/groupes : l'événement toggle revient aussi ; l'optimisme reste léger.
       applyReactionDelta(stableRef.kind, id, msg.id, emoji, mine ? -1 : 1, true)
       try {

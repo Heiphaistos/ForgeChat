@@ -67,7 +67,7 @@ export function mergeAttachments(kind: ConvKind, id: string, messageId: string, 
   })
 }
 
-/** Réaction explicite (salons : REACTION_ADD / REACTION_REMOVE). */
+/** Réaction explicite (salons : REACTION_ADD / REACTION_REMOVE, `isSuper` pour les super réactions). */
 export function applyReactionDelta(
   kind: ConvKind,
   id: string,
@@ -75,18 +75,19 @@ export function applyReactionDelta(
   emoji: string,
   delta: 1 | -1,
   byMe: boolean,
+  isSuper = false,
 ) {
   patchMessage(kind, id, messageId, (m) => {
-    const existing = m.reactions.find((r) => r.emoji === emoji)
+    const existing = m.reactions.find((r) => r.emoji === emoji && !!r.is_super === isSuper)
     let reactions = m.reactions
     if (existing) {
       const count = existing.count + delta
       reactions =
         count <= 0
-          ? m.reactions.filter((r) => r.emoji !== emoji)
-          : m.reactions.map((r) => (r.emoji === emoji ? { ...r, count, me: byMe ? delta > 0 : r.me } : r))
+          ? m.reactions.filter((r) => r !== existing)
+          : m.reactions.map((r) => (r === existing ? { ...r, count, me: byMe ? delta > 0 : r.me } : r))
     } else if (delta > 0) {
-      reactions = [...m.reactions, { emoji, count: 1, me: byMe }]
+      reactions = [...m.reactions, { emoji, count: 1, me: byMe, ...(isSuper ? { is_super: true } : {}) }]
     }
     return { ...m, reactions }
   })
