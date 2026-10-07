@@ -18,7 +18,7 @@ affichée avant), vérifiés par SHA-256 au téléchargement et à chaque lectur
 
 ## Fonctionnement
 
-- Moteur : transformers.js 4.3.1 (Apache-2.0) recopié dans `client/src/ai/vendor/transformers.min.js`
+- Moteur : transformers.js 4.3.1 (Apache-2.0) recopié dans `client/src/ai/third-party/transformers.min.js`
   (il embarque onnxruntime-web, MIT), exécuté dans un Worker (`client/src/ai/engine.worker.ts`) en
   WebAssembly, un seul fil (pas d'en-têtes COOP/COEP). Le Worker n'a aucun accès réseau : `env.fetch`
   sert les fichiers depuis IndexedDB (`forgechat-ai`), et toute demande hors manifeste reçoit un 404.

@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 // Moteur de l'IA sur l'appareil, dans un Worker pour ne jamais bloquer l'interface.
-// transformers.js (copie locale, src/ai/vendor) + onnxruntime-web en WebAssembly.
+// transformers.js (copie locale, src/ai/third-party) + onnxruntime-web en WebAssembly.
 // AUCUN accès réseau ici : chaque fichier vient du stockage local, vérifié par SHA-256.
-import { env, pipeline, Tensor, type Pipe } from './vendor/transformers.min.js'
+import { env, pipeline, Tensor, type Pipe } from './third-party/transformers.min.js'
 import { AI_LANGS, PACKS, fileByPath, type PackId, type Step } from './manifest.ts'
 import { readVerified } from './modelStore.ts'
 import { chunkLine, needsTranslation } from './text.ts'
