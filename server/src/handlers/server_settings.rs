@@ -281,7 +281,7 @@ pub async fn get_members_detailed(
     let (members_res, roles_res, tags_res) = tokio::join!(
         sqlx::query(
             "SELECT sm.user_id, sm.nickname, sm.joined_at, sm.is_owner,
-                    u.username, u.discriminator, u.avatar, u.status
+                    u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.status
              FROM server_members sm
              JOIN users u ON u.id = sm.user_id
              WHERE sm.server_id=$1

@@ -49,7 +49,7 @@ pub async fn get_messages(
 
         let half = limit / 2;
         let before_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -63,7 +63,7 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -91,7 +91,7 @@ pub async fn get_messages(
         let ts = cursor_ts.ok_or_else(|| AppError::NotFound("Curseur invalide".into()))?;
 
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -105,7 +105,7 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
              FROM messages m
              JOIN users u ON u.id = m.user_id
@@ -130,9 +130,9 @@ pub async fn get_messages(
         .bind(&msg_ids)
         .fetch_all(&state.db),
         sqlx::query(
-            "SELECT r.message_id, r.emoji, COUNT(*) as count,
+            "SELECT r.message_id, r.emoji, r.is_super, COUNT(*) as count,
              bool_or(r.user_id = $2) as me
-             FROM reactions r WHERE r.message_id = ANY($1) GROUP BY r.message_id, r.emoji"
+             FROM reactions r WHERE r.message_id = ANY($1) GROUP BY r.message_id, r.emoji, r.is_super"
         )
         .bind(&msg_ids)
         .bind(claims.sub)
@@ -153,6 +153,7 @@ pub async fn get_messages(
             emoji: r.get("emoji"),
             count: r.get("count"),
             me: r.get("me"),
+            is_super: r.get("is_super"),
         });
     }
 
@@ -323,9 +324,14 @@ pub async fn send_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
+        // Avatar du profil de ce serveur s'il y en a un (075), sinon celui du compte.
+        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified,
+                COALESCE((SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id
+                          WHERE c.id = $2 AND sm.user_id = u.id), u.avatar) AS avatar
+         FROM users u WHERE u.id=$1"
     )
     .bind(claims.sub)
+    .bind(channel_id)
     .fetch_one(&state.db)
     .await?;
 
@@ -546,27 +552,34 @@ pub async fn delete_message(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Contrôles communs aux réactions normales et super : emoji borné, salon visible,
+/// ADD_REACTIONS après overrides du salon, pas en timeout, message bien dans ce salon.
+pub(crate) async fn require_can_react(
+    state: &AppState, user_id: Uuid, server_id: Uuid, channel_id: Uuid, message_id: Uuid, emoji: &str,
+) -> Result<()> {
+    if emoji.is_empty() || emoji.chars().count() > 64 {
+        return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
+    }
+    require_member_and_channel(state, user_id, server_id, channel_id).await?;
+    let (_, perms) = state.effective_channel_permissions(user_id, channel_id).await.ok_or(AppError::Forbidden)?;
+    if perms & Permissions::ADD_REACTIONS == 0 {
+        return Err(AppError::Forbidden);
+    }
+    crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await?;
+
+    let msg_in_channel: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
+    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
+    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
+    Ok(())
+}
+
 pub async fn add_reaction(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id, emoji)): Path<(Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
-    if emoji.is_empty() || emoji.chars().count() > 64 {
-        return Err(AppError::BadRequest("Emoji invalide (1-64 chars)".into()));
-    }
-    // Salon visible, ADD_REACTIONS après overrides du salon, pas en timeout.
-    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
-    let (_, perms) = state.effective_channel_permissions(claims.sub, channel_id).await.ok_or(AppError::Forbidden)?;
-    if perms & Permissions::ADD_REACTIONS == 0 {
-        return Err(AppError::Forbidden);
-    }
-    crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
-
-    // Vérifier que le message appartient bien au canal
-    let msg_in_channel: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)"
-    ).bind(message_id).bind(channel_id).fetch_one(&state.db).await?;
-    if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
+    require_can_react(&state, claims.sub, server_id, channel_id, message_id, &emoji).await?;
 
     sqlx::query(
         "INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
@@ -607,7 +620,7 @@ pub async fn remove_reaction(
     if !msg_in_channel { return Err(AppError::NotFound("Message introuvable".into())); }
 
     sqlx::query(
-        "DELETE FROM reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3"
+        "DELETE FROM reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3 AND NOT is_super"
     )
     .bind(message_id)
     .bind(claims.sub)
@@ -720,7 +733,7 @@ pub async fn search_messages(
     let q_esc = q.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     let pattern = format!("%{}%", q_esc);
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar, u.is_bot, u.is_verified,
+        "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, u.is_bot, u.is_verified,
                 rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username
          FROM messages m
          JOIN users u ON u.id = m.user_id
@@ -905,9 +918,14 @@ pub async fn forward_message(
         .await?;
 
     let user = sqlx::query(
-        "SELECT username, discriminator, avatar, is_bot, is_verified FROM users WHERE id=$1"
+        // Avatar du profil de ce serveur s'il y en a un (075), sinon celui du compte.
+        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified,
+                COALESCE((SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id
+                          WHERE c.id = $2 AND sm.user_id = u.id), u.avatar) AS avatar
+         FROM users u WHERE u.id=$1"
     )
     .bind(claims.sub)
+    .bind(body.channel_id)
     .fetch_one(&state.db)
     .await?;
 

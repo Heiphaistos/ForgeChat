@@ -598,7 +598,7 @@ pub async fn get_members(
     require_member(&state, claims.sub, server_id).await?;
 
     let members = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, u.avatar, u.status, u.custom_status,
+        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.status, u.custom_status,
                 COALESCE((SELECT array_agg(mr.role_id) FROM member_roles mr
                           WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id),
                          '{}'::uuid[]) AS role_ids,
@@ -624,7 +624,10 @@ pub async fn get_members(
                 "is_owner": r.get::<bool, _>("is_owner"),
                 "username": r.get::<String, _>("username"),
                 "discriminator": r.get::<String, _>("discriminator"),
+                // Avatar du profil de serveur s'il existe (075), sinon celui du compte.
                 "avatar": r.get::<Option<String>, _>("avatar"),
+                "server_banner": r.get::<Option<String>, _>("server_banner"),
+                "server_bio": r.get::<Option<String>, _>("server_bio"),
                 "status": r.get::<String, _>("status"),
                 "custom_status": r.get::<Option<String>, _>("custom_status"),
                 // Hiérarchie : le client n'affiche Expulser / Bannir / Timeout
@@ -653,6 +656,7 @@ pub async fn get_member(
 
     let row = sqlx::query(
         "SELECT sm.nickname, sm.joined_at, sm.is_owner, sm.voice_muted, sm.voice_deafened,
+                sm.server_avatar, sm.server_banner, sm.server_bio,
                 (SELECT expires_at FROM user_timeouts t
                  WHERE t.server_id = sm.server_id AND t.user_id = sm.user_id AND t.expires_at > NOW()) AS timeout_until
          FROM server_members sm
@@ -679,6 +683,10 @@ pub async fn get_member(
         "user_id": user_id,
         "server_id": server_id,
         "nickname": row.get::<Option<String>, _>("nickname"),
+        // Profil propre à ce serveur (NULL = profil du compte).
+        "server_avatar": row.get::<Option<String>, _>("server_avatar"),
+        "server_banner": row.get::<Option<String>, _>("server_banner"),
+        "server_bio": row.get::<Option<String>, _>("server_bio"),
         "joined_at": row.get::<chrono::DateTime<chrono::Utc>, _>("joined_at"),
         "is_owner": row.get::<bool, _>("is_owner"),
         "voice_muted": row.get::<bool, _>("voice_muted"),

@@ -734,6 +734,13 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/automod", put(handlers::audit::set_automod))
         // Server discovery
         .route("/explore", get(handlers::audit::discover_servers))
+        // Super réactions (074) et profil par serveur (075)
+        .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/super-reactions/:emoji",
+            put(handlers::super_reactions::add_super_reaction).delete(handlers::super_reactions::remove_super_reaction))
+        .route("/users/me/super-reactions", get(handlers::super_reactions::get_quota))
+        .route("/servers/:server_id/profile", patch(handlers::member_profile::update_profile))
+        .route("/servers/:server_id/profile/:kind",
+            post(handlers::member_profile::upload_profile_image).delete(handlers::member_profile::delete_profile_image))
         // Reaction detail
         .route("/reactions", get(handlers::audit::get_reaction_detail))
         // OG preview

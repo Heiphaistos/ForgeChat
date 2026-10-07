@@ -24,6 +24,19 @@ pub const ALLOWED_EXTENSIONS: &[&str] = &[
     "bin",
 ];
 
+/// Extension d'une image d'avatar / de bannière : liste blanche stricte sur le type MIME.
+pub fn image_ext(content_type: &str) -> Result<&'static str> {
+    match content_type {
+        "image/png" => Ok("png"),
+        "image/gif" => Ok("gif"),
+        "image/webp" => Ok("webp"),
+        "image/jpeg" | "image/jpg" => Ok("jpg"),
+        _ => Err(AppError::BadRequest(
+            "Type de fichier non supporté. Acceptés: PNG, GIF, WEBP, JPEG".into()
+        )),
+    }
+}
+
 /// Écrit un fichier reçu morceau par morceau sur le disque, sans jamais le charger entier en
 /// mémoire (jusqu'à 500 Mo par fichier). Au-delà de `max` octets, le fichier partiel est supprimé
 /// et l'envoi refusé. Rend la taille écrite.
