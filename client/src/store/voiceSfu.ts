@@ -23,7 +23,7 @@ import {
   type NativeTrackEvent, type NativeStateEvent,
 } from '../lib/nativeVoice'
 import { t } from '../i18n'
-import { enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, watchOutdated } from '../e2e/media'
+import { enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, retryWhenKeyReady, watchOutdated } from '../e2e/media'
 
 export function warn(ctx: string, e: unknown) {
   console.warn(`[voice] ${ctx}`, e)
@@ -63,6 +63,8 @@ let _ctx: MeshCtx | null = null
 let _nativeRoom: string | null = null
 /** Suivi de la clé de média du vocal natif (nouvelles époques du salon). */
 let _stopNativeKeys: (() => void) | null = null
+/** Connexion en attente de la clé du salon (compte pas encore déverrouillé, enveloppe attendue). */
+let _keyWait: (() => void) | null = null
 
 export const getLocalStream = () => _localStream
 export const getRawMicTrack = () => _rawMicTrack
@@ -319,12 +321,24 @@ function onNativeState(e: NativeStateEvent, ctx: MeshCtx) {
 async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak: boolean, e2eeChannel: string | null) {
   const ice = (await getIceConfig())?.iceServers ?? []
   const s = ctx.get()
+  // Salon chiffré : clé du salon donnée au SDK natif, jamais de connexion en clair.
+  let keys: Awaited<ReturnType<typeof nativeMediaKey>> | null = null
+  if (e2eeChannel) {
+    try {
+      keys = await nativeMediaKey('channel', e2eeChannel)
+    } catch (e) {
+      ctx.set({ mediaStatus: 'failed', error: t(mediaE2EEError(e)) })
+      _keyWait = retryWhenKeyReady(e, 'channel', e2eeChannel, () => {
+        _keyWait = null
+        if (ctx.get().joined) void connectMedia(url, token, roomName, ctx, canSpeak, e2eeChannel)
+      })
+      if (!_keyWait) ctx.onMediaLost?.('network')
+      return
+    }
+    if (!ctx.get().joined) { keys.stop(); return }
+  }
   _nativeRoom = roomName
   try {
-    // Salon chiffré : clé du salon donnée au SDK natif, jamais de connexion en clair.
-    const keys = e2eeChannel ? await nativeMediaKey('channel', e2eeChannel).catch((e: unknown) => {
-      throw new Error(t(mediaE2EEError(e)))
-    }) : null
     _stopNativeKeys = keys?.stop ?? null
     // Sans droit de parole, le jeton refuse le micro : ne pas le demander, sinon
     // la connexion entière échouait et on ne pouvait même pas écouter.
@@ -368,6 +382,10 @@ export async function connectMedia(url: string, token: string, roomName: string,
       e2ee = await openMediaE2EE('channel', e2eeChannel)
     } catch (e) {
       ctx.set({ mediaStatus: 'failed', error: t(mediaE2EEError(e)) })
+      _keyWait = retryWhenKeyReady(e, 'channel', e2eeChannel, () => {
+        _keyWait = null
+        if (ctx.get().joined) void connectMedia(url, token, roomName, ctx, canSpeak, e2eeChannel)
+      })
       return
     }
     if (_room || !ctx.get().joined) { e2ee.stop(); return }
@@ -488,6 +506,8 @@ async function publishMic(room: Room) {
 }
 
 export async function disconnectMedia() {
+  _keyWait?.()
+  _keyWait = null
   _stopNativeKeys?.()
   _stopNativeKeys = null
   if (_nativeRoom !== null) {

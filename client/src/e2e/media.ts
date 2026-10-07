@@ -12,6 +12,7 @@
 import { RoomEvent, isE2EESupported, type Room, type RoomOptions } from 'livekit-client'
 import { isNativeVoice, nativeSetKey, type NativeMediaKey } from '../lib/nativeVoice'
 import { useWs } from '../store/ws'
+import { useAccountKey } from './accountKey'
 import { currentKey, forgetConv, type ConvKind } from './conversations'
 import * as c from './crypto'
 import { MediaKeyProvider } from './mediaKeyProvider'
@@ -117,6 +118,31 @@ export function watchOutdated(room: Room, cb: (identities: string[]) => void) {
     .on(RoomEvent.ParticipantAttributesChanged, check)
     .on(RoomEvent.Connected, check)
   check()
+}
+
+/**
+ * Clé de média pas encore disponible (`E2E_LOCKED` : clé de compte pas encore
+ * ouverte, ce qui arrive au chargement de la page ; `E2E_WAITING` : enveloppe
+ * de l'époque pas encore reçue) : `retry` dès qu'elle peut l'être. Sans ça, un
+ * salon rejoint au chargement (scène, vocal restauré) restait muet pour de bon.
+ * Rend l'annulation, ou null si l'erreur n'est pas de celles qui se résolvent seules.
+ */
+export function retryWhenKeyReady(e: unknown, kind: MediaKind, id: string, retry: () => void): (() => void) | null {
+  const m = e instanceof Error ? e.message : ''
+  if (m !== 'E2E_LOCKED' && m !== 'E2E_WAITING') return null
+  let done = false
+  const fire = () => {
+    if (done) return
+    stop()
+    retry()
+  }
+  const offKeys = useWs.getState().on('E2E_KEYS', (raw) => {
+    const d = raw as { conv_kind?: string; conv_id?: string }
+    if (d.conv_kind === kind && d.conv_id === id) fire()
+  })
+  const offAccount = useAccountKey.subscribe((s, prev) => { if (s.status === 'ready' && prev.status !== 'ready') fire() })
+  const stop = () => { done = true; offKeys(); offAccount() }
+  return stop
 }
 
 /** Message lisible d'un échec de préparation du chiffrement. */
