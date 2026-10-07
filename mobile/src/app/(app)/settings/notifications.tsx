@@ -1,13 +1,15 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Alert, ScrollView, View } from 'react-native'
+import { Alert, Platform, ScrollView, View } from 'react-native'
 import { emailPrefsKey, settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { usersApi } from '@/api/users'
 import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
 import { PUSH_AVAILABLE } from '@/config/env'
 import { isHHMM, toHHMM } from '@/features/account/rules'
+import { keepConnectedEnabled } from '@/features/notifications/backgroundRules'
 import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
+import { useKeepAlive } from '@/services/keepAlive'
 import { useAuth } from '@/stores/auth'
 import { useSettings } from '@/stores/settings'
 import { colors, spacing } from '@/theme'
@@ -31,15 +33,47 @@ export default function NotificationSettings() {
             disabled={!s.pushEnabled}
           />
         </Section>
-      ) : (
+      ) : Platform.OS === 'android' ? null : (
         <Section title="Notifications push" footer="En attendant, les messages et les appels arrivent quand l'app est ouverte.">
           <Row icon="notifications-off-outline" title="Pas encore disponibles" subtitle="Prévues dans une prochaine version de ForgeChat." />
         </Section>
       )}
+      {Platform.OS === 'android' ? <KeepConnected /> : null}
       <FocusMode />
       <QuietHours />
       <EmailPrefs />
     </ScrollView>
+  )
+}
+
+/** Mode « Notifications sans Google » (services/keepAlive) : actif par défaut sans jeton push. */
+function KeepConnected() {
+  const s = useSettings()
+  const hasPushToken = useKeepAlive((k) => k.hasPushToken)
+  const on = keepConnectedEnabled(s.keepConnected, hasPushToken)
+  return (
+    <Section
+      title="Notifications sans Google"
+      footer="Garde une connexion ouverte avec le serveur pour recevoir messages privés, mentions et appels app en arrière-plan, sans Google. Impact modéré sur la batterie ; une notification discrète reste affichée tant que c'est actif."
+    >
+      <SwitchRow
+        icon="radio-outline"
+        title="Notifications sans Google"
+        subtitle="Garde une connexion ouverte"
+        value={on}
+        onValueChange={(v) => s.set({ keepConnected: v })}
+      />
+      {PUSH_AVAILABLE ? null : (
+        <SwitchRow
+          icon="eye-outline"
+          title="Afficher le contenu des messages"
+          subtitle="Désactivé : « Nouveau message de X » uniquement."
+          value={s.pushPreview}
+          onValueChange={(v) => s.set({ pushPreview: v })}
+          disabled={!on}
+        />
+      )}
+    </Section>
   )
 }
 

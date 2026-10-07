@@ -15,6 +15,8 @@ interface SettingsState {
   pushEnabled: boolean
   /** Afficher le contenu des messages dans les notifications. */
   pushPreview: boolean
+  /** Android : connexion gardée en arrière-plan pour notifier sans Google (null : choix par défaut, services/keepAlive). */
+  keepConnected: boolean | null
   /** Confirmer avant d'ouvrir un lien externe. */
   confirmLinks: boolean
   /** Vérifier au démarrage (une fois par jour) s'il existe une nouvelle version sur le serveur ForgeChat. */
@@ -35,6 +37,7 @@ export const useSettings = create<SettingsState>()(
       privacyScreen: true,
       pushEnabled: true,
       pushPreview: false, // vie privée par défaut : pas de contenu sur l'écran verrouillé
+      keepConnected: null,
       confirmLinks: true,
       updateCheck: true,
       updateLastCheckAt: 0,
