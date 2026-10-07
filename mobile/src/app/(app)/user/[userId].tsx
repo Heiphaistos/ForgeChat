@@ -145,6 +145,7 @@ export default function UserScreen() {
       {!isMe ? (
         <View style={{ gap: spacing.md }}>
           <Button title={t('social.user.sendMessage')} icon="chatbubble" onPress={() => void openDmWith(u.id, u.username)} />
+          <Button title={t('rs.button')} icon="help-buoy-outline" variant="secondary" onPress={() => void openDmWith(u.id, u.username, true)} />
           {relation.kind === 'none' ? (
             <Button
               title={t('social.user.addFriend')}

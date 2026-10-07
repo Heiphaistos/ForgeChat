@@ -5,7 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { Ionicons } from '@expo/vector-icons'
 import { messagesApi } from '@/api/messages'
-import { useT } from '@/i18n'
+import { t, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { expired, formatId, webViewerLink, type SupportPayload } from '@/lib/remoteSupport'
 import type { ChatMessage } from '@/types/models'
@@ -17,6 +17,18 @@ const used = new Set<string>()
 /** Envoie une carte de support chiffrée dans le MP (texte lisible sans identifiant ni code). */
 export async function sendSupport(dmId: string, rs: SupportPayload, text: string) {
   await messagesApi.send({ kind: 'dm', dmId }, { content: text, support: rs })
+}
+
+/** Menu « Support à distance » d'un MP : Android ne fait qu'aider (visionneuse web), il ne partage pas son écran. */
+export function promptSupport(dmId: string) {
+  Alert.alert(t('rs.button'), undefined, [
+    {
+      text: t('rs.help'),
+      onPress: () => void sendSupport(dmId, { v: 1, k: 'offer' }, t('rs.text.offer')).catch((e) => Alert.alert(t('rs.sendError'), errorMessage(e))),
+    },
+    { text: t('rs.ask'), onPress: () => Alert.alert(t('rs.button'), t('rs.androidHost')) },
+    { text: t('common.cancel'), style: 'cancel' },
+  ])
 }
 
 export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: string; mine: boolean; reply?: SupportPayload['k'] }) {
