@@ -6,11 +6,13 @@ import * as messaging from './parts/messaging.ts'
 import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
+import { voiceLotEn } from './voiceLotEn.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
   ...socialEn,
   ...comfortEn,
+  ...voiceLotEn,
   ...messaging.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',

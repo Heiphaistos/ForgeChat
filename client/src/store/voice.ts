@@ -19,6 +19,8 @@ import {
 import { maybeBlur } from '../utils/backgroundBlur'
 import type { ConnectionQuality } from 'livekit-client'
 import { initVoiceModeration } from './voiceModeration'
+import { initVoiceWaiting, useVoiceWaiting } from './voiceWaiting'
+import { t } from '../i18n'
 import { e2eeClaim } from '../e2e/media'
 import { playJoinSound } from '../lib/joinSound'
 
@@ -43,6 +45,8 @@ export interface VoicePeer {
   prioritySpeaker?: boolean
   /** Enregistre la conversation : affiché à tout le salon. */
   recording?: boolean
+  /** Refuse d'être enregistré : retiré du mixage des enregistrements. */
+  noRecord?: boolean
   /** Muet / sourdine imposés par un modérateur (P2-2). */
   serverMuted?: boolean
   serverDeafened?: boolean
@@ -85,6 +89,8 @@ interface VoiceStore {
   screenSharing: boolean
   /** J'enregistre le salon (annoncé aux autres). */
   recording: boolean
+  /** Je refuse d'être enregistré (annoncé aux autres). */
+  noRecord: boolean
   error: string | null
   notice: string | null
   roomParticipants: Record<string, VoiceRoomParticipant[]>
@@ -123,6 +129,7 @@ interface VoiceStore {
   shareScreen(): Promise<void>
   stopScreenShare(): Promise<void>
   setRecording(on: boolean): void
+  setNoRecord(on: boolean): void
   clearError(): void
   clearNotice(): void
   initGlobalListeners(): () => void
@@ -268,6 +275,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       video: s.videoEnabled,
       screen: s.screenSharing,
       recording: s.recording,
+      no_record: s.noRecord,
     })
   }
 
@@ -332,6 +340,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
   const teardown = (announce: boolean) => {
     const { channelId, joined, screenSharing } = get()
     if (!joined) return
+    useVoiceWaiting.setState({ waitingIn: null })
 
     if (announce) {
       const ws = useWs.getState()
@@ -421,6 +430,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     videoEnabled: false,
     screenSharing: false,
     recording: false,
+    noRecord: false,
     error: null,
     notice: null,
     roomParticipants: {},
@@ -526,7 +536,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               [d.channel_id]: current.map(p => p.userId === d.user_id ? { ...p, muted: d.muted, video: d.video, screen: d.screen } : p),
             },
             peers: s.peers.map(p => p.userId === d.user_id
-              ? { ...p, muted: d.muted, deafened: !!d.deafened, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording }
+              ? { ...p, muted: d.muted, deafened: !!d.deafened, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording, noRecord: !!d.no_record }
               : p),
           }
         })
@@ -551,8 +561,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
       const offOpen = ws.onOpen(() => { void bootstrap() })
       const offModeration = initVoiceModeration(get, set, (m, d) => { applyImposed(m, d); broadcastState() })
+      const offWaiting = initVoiceWaiting(
+        () => get().channelId,
+        () => { const s = get(); if (s.joined && s.channelId) sendJoin(s.channelId, s.listenOnly) },
+        () => { get().leave(); set({ error: t('voiceLot.waiting.denied') }) },
+      )
 
-      return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd(); offOpen(); offModeration() }
+      return () => { offJoined(); offLeft(); offVoiceState(); offStreamStart(); offStreamEnd(); offOpen(); offModeration(); offWaiting() }
     },
 
     // ── Join ────────────────────────────────────────────────────────────────
@@ -680,6 +695,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               discriminator: peer.discriminator, muted: peer.muted,
               videoEnabled: peer.video ?? false, screenSharing: peer.screen ?? false,
               recording: !!peer.recording,
+              noRecord: !!peer.no_record,
               serverMuted: peer.server_muted ?? false, serverDeafened: peer.server_deafened ?? false,
             }, ctx)
             if (peer.recording) toast(`🔴 ${peer.username ?? 'Un membre'} enregistre cette conversation`, { duration: 8000 })
@@ -896,6 +912,12 @@ export const useVoice = create<VoiceStore>((set, get) => {
     setRecording: (on) => {
       if (get().recording === on) return
       set({ recording: on })
+      broadcastState()
+    },
+
+    setNoRecord: (on) => {
+      if (get().noRecord === on) return
+      set({ noRecord: on })
       broadcastState()
     },
 

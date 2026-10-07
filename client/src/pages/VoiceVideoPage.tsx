@@ -26,6 +26,9 @@ import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
 import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../components/voice/CallStage'
 import FullscreenVideo, { type FullscreenSource } from '../components/voice/FullscreenVideo'
 import ClipDialog from '../components/voice/ClipDialog'
+import RecordingBanner from '../components/voice/RecordingBanner'
+import WaitingRoomPanel from '../components/voice/WaitingRoomPanel'
+import { useVoiceRecording } from '../components/voice/useVoiceRecording'
 import { startClipBuffer, useClipsSetting, type ClipBuffer } from '../lib/clipBuffer'
 import { popOut } from '../lib/popout'
 import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
@@ -194,7 +197,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     localVideoUrl, localScreenUrl, nativeSpeakers, sfuSpeakers, autoWatchStreams, watchStream,
     leave, toggleMute, toggleDeafen, toggleVideo, shareScreen, stopScreenShare,
     userVolumes, setUserVolume, screenVolumes, setScreenVolume, joined, channelId: activeChannelId,
-    roomParticipants, notice, clearNotice, error, clearError, recording: isRecording, setRecording,
+    roomParticipants, notice, clearNotice, error, clearError, recording: isRecording,
   } = useVoice()
   const isLocalSpeaking = useVoiceActivity(localStream)
   const remoteSpeaking = usePeersVoiceActivity(peers.map(p => ({ userId: p.userId, stream: p.stream })))
@@ -299,60 +302,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     return unsub
   }, [channel.id, on, user?.id, soundboardSounds])
 
-  // Recording
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const recChunksRef = useRef<Blob[]>([])
-
-  const recCtxRef = useRef<AudioContext | null>(null)
-
-  // Enregistre TOUTE la conversation (micro local + chaque participant + son des
-  // partages), pas seulement son propre micro. Le salon est prévenu par le
-  // serveur (drapeau `recording` de VOICE_STATE), comme sur Discord/Teams.
-  // ponytail: les participants arrivés après le début ne sont pas ajoutés au mixage.
-  const startRecording = useCallback(() => {
-    const sources = [localStream, ...peers.flatMap(p => [p.stream, p.screenStream])]
-      .filter((st): st is MediaStream => !!st && st.getAudioTracks().length > 0)
-    if (!sources.length) { toast.error(tr('voice.nothingToRecord')); return }
-    const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
-      .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
-    try {
-      const ctx = new AudioContext()
-      const dest = ctx.createMediaStreamDestination()
-      for (const st of sources) ctx.createMediaStreamSource(new MediaStream(st.getAudioTracks())).connect(dest)
-      recCtxRef.current = ctx
-      const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined)
-      recorder.ondataavailable = e => { if (e.data.size > 0) recChunksRef.current.push(e.data) }
-      recorder.onstop = () => {
-        const blob = new Blob(recChunksRef.current, { type: mimeType || 'audio/webm' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm'
-        a.download = `forgechat-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${ext}`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        setTimeout(() => URL.revokeObjectURL(url), 10_000)
-        recChunksRef.current = []
-        void recCtxRef.current?.close()
-        recCtxRef.current = null
-      }
-      recorder.start(1000)
-      recorderRef.current = recorder
-      setRecording(true)
-      toast.success(tr('voice.recordingStarted'))
-    } catch {
-      toast.error(tr('voice.recordingFailed'))
-    }
-  }, [localStream, peers, setRecording])
-
-  const stopRecording = useCallback(() => {
-    recorderRef.current?.stop()
-    recorderRef.current = null
-    setRecording(false)
-  }, [setRecording])
-
-  useEffect(() => () => { recorderRef.current?.stop(); useVoice.getState().setRecording(false) }, [])
+  // Enregistrement : mixage sur l'appareil, envoi chiffré (ClipDialog) ou téléchargement.
+  const rec = useVoiceRecording()
 
   // Clips : un tampon par stream affiché (ceux des autres qu'on regarde, et son
   // propre partage), seulement si l'option est activée. Le tampon s'arrête dès
@@ -493,15 +444,6 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <span className="text-sm font-semibold text-white truncate max-w-[120px] md:max-w-none">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />
           <CallQualityIndicator />
-          {(isRecording || peers.some(p => p.recording)) && (
-            <span
-              className="flex items-center gap-1 text-[11px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 animate-pulse"
-              title={t('voice.recordingBy', { names: [...(isRecording ? [t('voice.you')] : []), ...peers.filter(p => p.recording).map(p => p.username)].join(', ') })}
-              role="status"
-            >
-              ● REC
-            </span>
-          )}
           {clipSources.size > 0 && (
             <span className="text-[11px] text-fc-muted border border-fc-hover rounded px-1.5 py-0.5"
               title={t('voice.clipsTitle')}>
@@ -540,6 +482,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         </div>
       </div>
       <VoiceE2EBadge />
+      <RecordingBanner />
+      <WaitingRoomPanel serverId={serverId} channelId={channel.id} />
 
       {/* Main area */}
       <div className="flex-1 overflow-hidden relative">
@@ -664,7 +608,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               />
             )}
             <CtrlBtn
-              active={isRecording} onClick={isRecording ? stopRecording : startRecording}
+              active={isRecording} onClick={isRecording ? rec.stop : rec.start}
               activeIcon={<Square size={14} className="fill-current" />}
               inactiveIcon={<Circle size={14} />}
               activeClass="bg-fc-red text-white animate-pulse" inactiveClass="bg-fc-hover text-fc-muted"
@@ -761,6 +705,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       )}
       {clip && (
         <ClipDialog blob={clip.blob} label={clip.label} serverId={serverId} voiceChannelId={channel.id} onClose={() => setClip(null)} />
+      )}
+      {rec.result && (
+        <ClipDialog recording blob={rec.result} label={channel.name} serverId={serverId} voiceChannelId={channel.id} onClose={rec.clearResult} />
       )}
       {tileMenu.node}
       {moderation.node}

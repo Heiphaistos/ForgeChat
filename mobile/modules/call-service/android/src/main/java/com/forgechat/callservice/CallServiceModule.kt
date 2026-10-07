@@ -21,6 +21,9 @@ class CallServiceModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ForgeCallService")
 
+    // Fond virtuel de la caméra (BackgroundEffect.kt) : processeur déclaré une fois auprès de WebRTC.
+    OnCreate { BackgroundEffect.register() }
+
     // Retours explicites (null) : un `return@Function` nu (Unit) ne s'accorde pas avec le type
     // déduit du lambda (Kotlin 2 : « Return type mismatch: expected 'Any?', actual 'Unit' »).
     Function("start") { title: String ->
@@ -91,7 +94,7 @@ class CallServiceModule : Module() {
     }
 
     // ── Mise à jour de l'APK (UpdateInstaller, src/features/updates/installer.ts) ──
-    Events("onUpdateProgress", "onPipChange")
+    Events("onUpdateProgress", "onPipChange", "onVolumeKey")
 
     // Téléchargement sur un fil dédié : la file des AsyncFunction est partagée par tous les modules Expo.
     AsyncFunction("downloadUpdate") { url: String, expectedSha: String, promise: Promise ->
@@ -197,6 +200,46 @@ class CallServiceModule : Module() {
       val activity = appContext.currentActivity ?: return@Function null
       CallWindow.enterPip(activity, width, height) { sendEvent("onPipChange", mapOf("active" to it)) }
       null
+    }
+
+    // ── Voix et vidéo (src/services/voiceFx.ts) ──
+    // Suppression de bruit forte : porte de bruit après le traitement WebRTC (NoiseGate.kt).
+    Function("setNoiseGate") { on: Boolean -> NoiseGate.set(on) }
+
+    // Fond virtuel : 0 aucun, 1 flou, 2 image (chemin rendu par importBackground).
+    Function("setVideoBackground") { mode: Int, imagePath: String? ->
+      BackgroundEffect.configure(mode.coerceIn(0, 2), imagePath?.takeIf { it.isNotEmpty() })
+      null
+    }
+
+    // Image de fond choisie (file:// ou content://) : réduite à 1280 px et copiée dans les fichiers
+    // de l'app (jamais envoyée) ; renvoie son chemin.
+    AsyncFunction("importBackground") { uri: String ->
+      val ctx = appContext.reactContext ?: throw IllegalStateException("contexte indisponible")
+      val u = android.net.Uri.parse(uri)
+      val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      ctx.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+      var sample = 1
+      while (bounds.outWidth / (sample * 2) >= 1280 || bounds.outHeight / (sample * 2) >= 1280) sample *= 2
+      val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+      val bmp = ctx.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+        ?: throw IllegalArgumentException("image illisible")
+      val out = java.io.File(ctx.filesDir, "forgechat-background.jpg")
+      try {
+        java.io.FileOutputStream(out).use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
+      } finally {
+        bmp.recycle()
+      }
+      out.absolutePath
+    }
+
+    // Appuyer pour parler avec la touche volume bas (VolumeKeys.kt) ; événement onVolumeKey { down }.
+    Function("setVolumeKeys") { on: Boolean ->
+      val activity = appContext.currentActivity ?: return@Function false
+      activity.runOnUiThread {
+        VolumeKeys.set(activity, on) { down -> sendEvent("onVolumeKey", mapOf("down" to down)) }
+      }
+      true
     }
 
     // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS

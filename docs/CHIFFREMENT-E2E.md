@@ -133,6 +133,10 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Appli Linux native : pas d'alerte « participant à mettre à jour » (le processus natif ne remonte pas les attributs des participants) ; le chiffrement lui-même est actif.
 - Salons vocaux : chiffrés seulement quand le type de conversation `channel` existe (étape 3).
 
+### Lot vocal (2026-10-07) : traitements locaux et enregistrement
+- Suppression de bruit (web : RNNoise & co ; mobile : options WebRTC + porte de bruit native `NoiseGate.kt`), fond virtuel (web : MediaPipe ; mobile : `BackgroundEffect.kt`, ellipse sans détourage) et voix spatiale (web, PannerNode) s'exécutent sur l'appareil, avant l'encodage et le chiffrement des trames (ou après le déchiffrement pour la lecture) : le SFU ne voit toujours que des trames chiffrées.
+- Enregistrement d'un salon vocal (web et bureau Windows) : mixage local des pistes déjà déchiffrées, sauf les participants qui refusent (`no_record` de VOICE_STATE, diffusé à tout le salon avec le drapeau `recording`) ; le fichier est envoyé comme pièce jointe d'un salon texte du serveur, donc chiffré comme toute pièce jointe (`prepareFiles`), ou téléchargé sur l'appareil. Le refus est respecté par les applis à jour, pas imposé par le serveur (il ne voit pas l'audio).
+
 
 ## 10. Étape 3 réalisée : salons de serveur chiffrés (texte)
 

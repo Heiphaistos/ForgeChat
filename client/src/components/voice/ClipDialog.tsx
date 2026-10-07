@@ -16,14 +16,16 @@ const MAX_SIZE = 500 * 1024 * 1024 // = server/src/config.rs, comme MessageInput
 
 interface Channel { id: string; name: string; type: string; category_id?: string | null }
 
-export default function ClipDialog({ blob, label, serverId, voiceChannelId, onClose }: {
-  blob: Blob; label: string; serverId: string; voiceChannelId: string; onClose: () => void
+/** `recording` : enregistrement du salon vocal (même envoi chiffré, autre titre). */
+export default function ClipDialog({ blob, label, serverId, voiceChannelId, onClose, recording }: {
+  blob: Blob; label: string; serverId: string; voiceChannelId: string; onClose: () => void; recording?: boolean
 }) {
   const t = useT()
   useEscapeKey(onClose)
   const url = useMemo(() => URL.createObjectURL(blob), [blob])
   useEffect(() => () => URL.revokeObjectURL(url), [url])
-  const filename = `clip-${label}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${clipExtension(blob)}`
+  const title = recording ? t('voiceLot.rec.title', { name: label }) : t('clip.title', { name: label })
+  const filename = `${recording ? 'enregistrement' : 'clip'}-${label}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${recording ? (blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm') : clipExtension(blob)}`
     .replace(/[^\w.-]+/g, '_')
 
   const { data: channels = [] } = useQuery<Channel[]>({
@@ -55,7 +57,7 @@ export default function ClipDialog({ blob, label, serverId, voiceChannelId, onCl
     try {
       // Salon chiffré : légende ET clip chiffrés (clé du clip dans le message chiffré, §12).
       const prepared = await prepareFiles('channel', chosen, [{ file: new File([blob], filename, { type: blob.type }) }])
-      const res = await postMessage(serverId, chosen, `🎬 ${t('clip.title', { name: label })}`,
+      const res = await postMessage(serverId, chosen, `${recording ? '🎙️' : '🎬'} ${title}`,
         body => api.post(`/servers/${serverId}/channels/${chosen}/messages`, body), filesExtra(prepared))
       await uploadPrepared(`/servers/${serverId}/channels/${chosen}/messages/${res.data.id}/attachments`, prepared)
       toast.success(t('clip.sent'))
@@ -72,10 +74,13 @@ export default function ClipDialog({ blob, label, serverId, voiceChannelId, onCl
       <div role="dialog" aria-modal="true" aria-label={t('clip.dialog')} onClick={e => e.stopPropagation()}
         className="w-full max-w-lg bg-fc-sidebar rounded-xl border border-fc-hover p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-white font-semibold text-sm truncate">{t('clip.title', { name: label })}</h3>
+          <h3 className="text-white font-semibold text-sm truncate">{title}</h3>
           <button onClick={onClose} aria-label={t('common.close')} className="p-1.5 rounded hover:bg-white/10 text-fc-muted hover:text-white"><X size={16} aria-hidden /></button>
         </div>
-        <video src={url} controls playsInline className="w-full max-h-72 bg-black rounded-lg" />
+        {recording
+          ? <audio src={url} controls className="w-full" />
+          : <video src={url} controls playsInline className="w-full max-h-72 bg-black rounded-lg" />}
+        {recording && <p className="text-xs text-fc-muted">{t('voiceLot.rec.sendHint')}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={download} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fc-hover hover:bg-fc-channel text-white text-sm">
             <Download size={14} aria-hidden /> {t('settings.privacy.download')}

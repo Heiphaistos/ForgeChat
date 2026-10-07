@@ -5,6 +5,8 @@ import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
 import { useClipsSetting } from '../../lib/clipBuffer'
 import { useT, intlLocale } from '../../i18n'
+import toast from 'react-hot-toast'
+import { backgroundImage, clearBackgroundImage, saveBackgroundImage } from '../../utils/backgroundBlur'
 
 export default function VideoSection() {
   const t = useT()
@@ -30,6 +32,7 @@ export default function VideoSection() {
   const setClipsEnabled = useClipsSetting(s => s.setEnabled)
   const [screenHint, setScreenHint] = useState(() => localStorage.getItem('fc_screen_hint') ?? 'motion')
   const [camBlur, setCamBlur] = useState(() => localStorage.getItem('fc_cam_blur') ?? 'false')
+  const [bgImage, setBgImage] = useState(backgroundImage)
 
   const savePref = (key: string, value: string, setter: (v: string) => void) => {
     localStorage.setItem(key, value)
@@ -237,6 +240,21 @@ export default function VideoSection() {
           {t('settings.video.blur')}
         </label>
         <p className="text-xs text-fc-muted mt-1">{t('settings.video.blurHint')}</p>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          {bgImage && <img src={bgImage} alt="" className="h-10 w-16 object-cover rounded border border-fc-hover" />}
+          <label className="text-xs px-2 py-1 rounded bg-fc-hover hover:bg-fc-accent/30 text-white cursor-pointer">
+            {t('voiceLot.bg.pick')}
+            <input type="file" accept="image/*" className="hidden" onChange={e => {
+              const f = e.target.files?.[0]
+              if (f) void saveBackgroundImage(f).then(setBgImage).catch(() => toast.error(t('voiceLot.bg.error')))
+            }} />
+          </label>
+          {bgImage && (
+            <button onClick={() => { clearBackgroundImage(); setBgImage(null) }}
+              className="text-xs px-2 py-1 rounded bg-fc-hover hover:bg-fc-red text-white">{t('voiceLot.bg.remove')}</button>
+          )}
+        </div>
+        <p className="text-xs text-fc-muted mt-1">{t('voiceLot.bg.hint')}</p>
       </Field>
 
       <Field label={t('settings.video.screenQuality')}>

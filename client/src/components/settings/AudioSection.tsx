@@ -5,9 +5,12 @@ import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
 import { NOISE_ENGINES, getNoiseEngine, type NoiseEngine } from '../../lib/audio'
 import { useT } from '../../i18n'
+import { useSpatial } from '../../store/spatial'
 
 export default function AudioSection() {
   const t = useT()
+  const spatial = useSpatial(s => s.on)
+  const setSpatial = useSpatial(s => s.set)
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedInput, setSelectedInput] = useState(localStorage.getItem('fc_audio_input') ?? '')
   const [selectedOutput, setSelectedOutput] = useState(localStorage.getItem('fc_audio_output') ?? '')
@@ -269,6 +272,14 @@ export default function AudioSection() {
             {t('settings.audio.noSink')}
           </p>
         )}
+      </Field>
+
+      <Field label={t('voiceLot.spatial.title')}>
+        <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+          <input type="checkbox" checked={spatial} onChange={e => setSpatial(e.target.checked)} className="accent-fc-accent" />
+          {t('voiceLot.spatial.toggle')}
+        </label>
+        <p className="text-xs text-fc-muted mt-1">{t('voiceLot.spatial.hint')}</p>
       </Field>
     </div>
   )

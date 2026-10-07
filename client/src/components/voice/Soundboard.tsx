@@ -31,10 +31,13 @@ const ALLOWED_EXTS = ['.mp3', '.wav', '.ogg']
 // ─── Upload Form ──────────────────────────────────────────────────────────────
 function UploadForm({
   serverId,
+  personal,
   onDone,
   onCancel,
 }: {
   serverId: string
+  /** Son perso (à moi, jouable dans tous mes salons) plutôt que son du serveur. */
+  personal: boolean
   onDone: () => void
   onCancel: () => void
 }) {
@@ -53,15 +56,15 @@ function UploadForm({
       form.append('name', name.trim())
       if (emoji.trim()) form.append('emoji', emoji.trim())
       form.append('file', file)
-      return api.post(`/servers/${serverId}/soundboard`, form)
+      return api.post(personal ? '/users/me/sounds' : `/servers/${serverId}/soundboard`, form)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['soundboard', serverId] })
+      qc.invalidateQueries({ queryKey: personal ? ['my_sounds'] : ['soundboard', serverId] })
       toast.success(t('sb.added'))
       onDone()
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? t('sb.uploadError'))
+      toast.error(err?.response?.data?.error ?? err?.message ?? t('sb.uploadError'))
     },
   })
 
@@ -84,7 +87,7 @@ function UploadForm({
 
   return (
     <div className="mt-3 p-3 bg-fc-bg rounded-lg border border-fc-hover space-y-2">
-      <p className="text-xs font-semibold text-white">{t('sb.new')}</p>
+      <p className="text-xs font-semibold text-white">{personal ? t('voiceLot.sb.newPersonal') : t('sb.new')}</p>
 
       <input
         type="text"
@@ -224,7 +227,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
     const stored = localStorage.getItem(VOLUME_KEY)
     return stored ? Math.min(100, Math.max(0, parseInt(stored, 10))) : 80
   })
-  const [showUpload, setShowUpload] = useState(false)
+  const [showUpload, setShowUpload] = useState<null | 'server' | 'personal'>(null)
 
   const { data: sounds = [], isLoading, isError } = useQuery<Sound[]>({
     queryKey: ['soundboard', serverId],
@@ -241,6 +244,20 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
     staleTime: 60_000,
   })
   const autres = mySounds.filter(s => s.server_id !== serverId)
+  // Sons perso : à moi, jouables dans tous mes salons vocaux.
+  const { data: personal = [] } = useQuery<Sound[]>({
+    queryKey: ['my_sounds'],
+    queryFn: () => api.get('/users/me/sounds').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const deletePersonal = useMutation({
+    mutationFn: (soundId: string) => api.delete(`/users/me/sounds/${soundId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my_sounds'] })
+      toast.success(t('sb.deleted'))
+    },
+    onError: () => toast.error(t('settings.adv.deleteError')),
+  })
 
   const deleteMutation = useMutation({
     mutationFn: (soundId: string) =>
@@ -320,6 +337,17 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
             ))}
           </div>
         )}
+        {personal.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-fc-muted mb-1">{t('voiceLot.sb.mine')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {personal.map(sound => (
+                <SoundButton key={sound.id} sound={sound} volume={volume} channelId={channelId} serverId={serverId}
+                  onDelete={id => deletePersonal.mutate(id)} />
+              ))}
+            </div>
+          </div>
+        )}
         {[...new Set(autres.map(s => s.server_id))].map(sid => {
           const liste = autres.filter(s => s.server_id === sid)
           return (
@@ -339,16 +367,22 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       {showUpload ? (
         <UploadForm
           serverId={serverId}
-          onDone={() => setShowUpload(false)}
-          onCancel={() => setShowUpload(false)}
+          personal={showUpload === 'personal'}
+          onDone={() => setShowUpload(null)}
+          onCancel={() => setShowUpload(null)}
         />
       ) : (
-        <button
-          onClick={() => setShowUpload(true)}
-          className="mt-3 w-full flex items-center justify-center gap-2 text-xs text-fc-muted hover:text-white bg-fc-hover hover:bg-fc-accent/20 border border-dashed border-fc-hover hover:border-fc-accent rounded-lg py-2 transition"
-        >
-          <Plus size={12} /> {t('sb.add')}
-        </button>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {(['server', 'personal'] as const).map(kind => (
+            <button
+              key={kind}
+              onClick={() => setShowUpload(kind)}
+              className="flex items-center justify-center gap-1 text-xs text-fc-muted hover:text-white bg-fc-hover hover:bg-fc-accent/20 border border-dashed border-fc-hover hover:border-fc-accent rounded-lg py-2 transition"
+            >
+              <Plus size={12} /> {kind === 'server' ? t('sb.add') : t('voiceLot.sb.addPersonal')}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )

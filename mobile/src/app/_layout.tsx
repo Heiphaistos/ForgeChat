@@ -25,6 +25,7 @@ import { replayablePath } from '@/lib/deepLinks'
 import '@/stores/call' // enregistre les handlers d'appel entrant dès le démarrage
 import '@/stores/groupCall' // sonnerie des appels de groupe
 import '@/stores/voice' // reprise du vocal à la reconnexion du WebSocket
+import '@/stores/voiceExtras' // salle d'attente, appuyer pour parler, effets locaux
 import { useLock } from '@/stores/lock'
 import { bindOutbox } from '@/services/outbox'
 import { bindWidgets } from '@/services/widgets'

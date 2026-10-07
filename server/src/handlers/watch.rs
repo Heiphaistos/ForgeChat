@@ -1,4 +1,5 @@
-//! « Regarder ensemble » : une vidéo YouTube synchronisée dans un salon vocal.
+//! « Regarder ensemble » / « Musique ensemble » : une vidéo YouTube (ou YouTube Music)
+//! synchronisée dans un salon vocal, avec file d'attente partagée.
 //!
 //! Protocole WebSocket (client → serveur, tous avec `channel_id`) :
 //! - `WATCH_ADD { url }` : lance la vidéo, ou l'ajoute à la file si une joue déjà ;
@@ -48,7 +49,7 @@ pub fn parse_video_id(input: &str) -> Option<String> {
     let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
     let id = match host.to_ascii_lowercase().as_str() {
         "youtu.be" => path.strip_prefix('/')?.trim_end_matches('/'),
-        "youtube.com" | "www.youtube.com" | "m.youtube.com" => {
+        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "music.youtube.com" => {
             if path.trim_end_matches('/') == "/watch" {
                 query.split('&').find_map(|kv| kv.strip_prefix("v="))?
             } else {
@@ -253,6 +254,8 @@ mod tests {
         assert_eq!(parse_video_id("https://youtu.be/dQw4w9WgXcQ?si=abc"), id);
         assert_eq!(parse_video_id("http://YOUTU.BE/dQw4w9WgXcQ/"), id);
         assert_eq!(parse_video_id("https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=x"), id);
+        // YouTube Music (musique en salon vocal) : même identifiant.
+        assert_eq!(parse_video_id("https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RDAMVM"), id);
         for bad in [
             "dQw4w9WgXcQ",
             "https://www.youtube.com/watch?v=dQw4w9WgXc",

@@ -29,6 +29,7 @@ import { useWatch } from '@/stores/watch'
 import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
+import { VoiceLotBanners } from '@/features/voice/VoiceLotBanners'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
 const VOLUMES: { label: Key; value: number }[] = [
@@ -261,6 +262,7 @@ export default function VoiceScreen() {
           {v.error ? <Banner text={v.error} tone="danger" onPress={v.dismiss} /> : v.notice ? <Banner text={v.notice} tone="info" onPress={v.dismiss} /> : null}
           {status ? <Banner text={status} tone="warning" /> : null}
           <E2ECallBadge encrypted={v.e2ee} outdatedNames={v.e2eeOutdated.map((id) => v.peers.find((p) => p.userId === id)?.username ?? '…')} />
+          <VoiceLotBanners canAdmit={perms.has(PERM.MOVE_MEMBERS)} />
           {watching && !v.stage && v.channelId ? (
             <WatchPanel channelId={v.channelId} onClose={() => setWatching(false)} />
           ) : watch && !v.stage ? (

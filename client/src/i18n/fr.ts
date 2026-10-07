@@ -5,11 +5,13 @@ import * as messaging from './parts/messaging.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
+import { voiceLotFr } from './voiceLotFr.ts'
 
 export const fr = {
   ...profileFr,
   ...socialFr,
   ...comfortFr,
+  ...voiceLotFr,
   ...messaging.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',

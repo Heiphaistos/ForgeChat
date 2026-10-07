@@ -18,4 +18,9 @@ dependencies {
   implementation "androidx.core:core-ktx:1.17.0"
   // HeadlessJsTaskService (version alignée par le plugin Gradle de React Native).
   implementation "com.facebook.react:react-android"
+  // Porte de bruit (NoiseGate.kt) et fond virtuel (BackgroundEffect.kt) : points d'insertion audio
+  // et vidéo de LiveKit React Native et de sa pile WebRTC (projets Gradle liés automatiquement,
+  // mêmes noms que dans node_modules/@livekit/react-native/android/build.gradle).
+  implementation project(':livekit_react-native')
+  implementation project(':livekit_react-native-webrtc')
 }

@@ -37,6 +37,9 @@ pub struct VoiceStateData {
     /// Enregistre la conversation : tout le salon doit le voir (consentement).
     #[serde(default)]
     pub recording: bool,
+    /// Refuse d'être enregistré : retiré du mixage des enregistrements (§ lot vocal).
+    #[serde(default)]
+    pub no_record: bool,
 }
 
 /// Instantané sérialisé dans Redis. La mémoire process reste la source de

@@ -11,6 +11,7 @@ import { playSoundFile } from '@/services/soundboard'
 import { t } from '@/i18n'
 import { getMyId, registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, retryWhenKeyReady, watchOutdated, type MediaE2EE } from '@/e2e/media'
+import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
 
 /**
  * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -47,6 +48,8 @@ export interface VoicePeer {
   screen: boolean
   /** Ce pair enregistre la conversation. */
   recording: boolean
+  /** Ce pair refuse d'être enregistré. */
+  noRecord?: boolean
   handRaised: boolean
 }
 
@@ -109,6 +112,11 @@ interface VoiceState {
   notice: string | null
   /** Salon Scène en cours (null pour un salon vocal ordinaire). */
   stage: StageState | null
+  /** Salle d'attente : un modérateur doit nous faire entrer (server/src/handlers/voice_waiting.rs). */
+  waiting: boolean
+  /** Je refuse d'être enregistré (annoncé au salon : retiré des enregistrements). */
+  noRecord: boolean
+  setNoRecord: (on: boolean) => void
   join: (serverId: string, channelId: string, channelName: string, password?: string, listenOnly?: boolean) => Promise<void>
   leave: () => void
   toggleMute: () => void
@@ -229,8 +237,8 @@ export const useVoice = create<VoiceState>((set, get) => {
   }
 
   const broadcastState = () => {
-    const { channelId, joined, muted, deafened, video, screenSharing } = get()
-    if (channelId && joined) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video, screen: screenSharing, recording: false })
+    const { channelId, joined, muted, deafened, video, screenSharing, noRecord } = get()
+    if (channelId && joined) realtime.send({ type: 'VOICE_STATE', channel_id: channelId, muted, deafened, video, screen: screenSharing, recording: false, no_record: noRecord })
   }
 
   const setMic = (on: boolean) => void room?.localParticipant.setMicrophoneEnabled(on).catch((e: unknown) => logger.warn('voice', 'micro', e))
@@ -303,7 +311,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     // Pas d'adaptiveStream : il suppose des éléments vidéo observés (VideoTrack) et mettrait en pause
     // les vidéos affichées par RTCView. ponytail: qualité fixée par piste ci-dessous ; passer à
     // VideoTrack + adaptiveStream si le débit en 4G pose encore problème.
-    const r = new Room({ adaptiveStream: false, dynacast: true, ...(e2ee ? { encryption: e2ee.encryption } : {}) })
+    const r = new Room({ adaptiveStream: false, dynacast: true, audioCaptureDefaults: audioCaptureDefaults(), ...(e2ee ? { encryption: e2ee.encryption } : {}) })
+    watchCameraEffect(r)
     room = r
     roomName = access.room
     set({ mediaStatus: 'connecting' })
@@ -423,7 +432,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     // Réponse à un re-VOICE_JOIN (reconnexion WS) : retirer ceux partis entre-temps.
     const present = new Set(peers.map((p) => String(p.user_id)))
     const before = new Map(s.peers.map((p) => [p.userId, p]))
-    set((st) => ({ joined: true, joining: false, error: null, peers: st.peers.filter((p) => present.has(p.userId)) }))
+    set((st) => ({ joined: true, joining: false, waiting: false, error: null, peers: st.peers.filter((p) => present.has(p.userId)) }))
     const hands = new Set((Array.isArray(e.hand_raises) ? (e.hand_raises as Record<string, unknown>[]) : []).map((h) => String(h.user_id)))
     for (const raw of peers) {
       if (!isStr(raw.user_id) || raw.user_id === me) continue
@@ -435,6 +444,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         video: raw.video === true,
         screen: raw.screen === true,
         recording,
+        noRecord: raw.no_record === true,
         handRaised: raw.hand_raised === true || hands.has(raw.user_id),
       })
       if (recording && !before.get(raw.user_id)?.recording) {
@@ -492,8 +502,23 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (!before) return
     const screen = e.screen === true
     const recording = e.recording === true
-    patchPeer(e.user_id, { muted: e.muted === true, video: e.video === true, screen, recording, ...(screen ? {} : { screenStream: null }) })
+    patchPeer(e.user_id, { muted: e.muted === true, video: e.video === true, screen, recording, noRecord: e.no_record === true, ...(screen ? {} : { screenStream: null }) })
     if (recording && !before.recording) set({ notice: t('store.voice.recordingStarted', { name: before.username }) })
+  })
+
+  // Salle d'attente : pas de délai d'abandon pendant l'attente ; admis = VOICE_JOIN rejoué.
+  realtime.on('VOICE_WAITING', (e) => {
+    if (!here(e.channel_id)) return
+    clearRejoinTimer()
+    set({ waiting: true })
+  })
+  realtime.on('VOICE_ADMITTED', (e) => {
+    if (!here(e.channel_id)) return
+    set({ waiting: false })
+    rejoin()
+  })
+  realtime.on('VOICE_WAITING_DENIED', (e) => {
+    if (here(e.channel_id)) fail(t('voiceLot.waiting.denied'))
   })
 
   realtime.on('VOICE_JOIN_ERROR', (e) => {
@@ -679,6 +704,14 @@ export const useVoice = create<VoiceState>((set, get) => {
     error: null,
     notice: null,
     stage: null,
+    waiting: false,
+    noRecord: false,
+
+    setNoRecord: (on) => {
+      if (get().noRecord === on) return
+      set({ noRecord: on })
+      broadcastState()
+    },
 
     join: async (serverId, channelId, channelName, password, listenOnly = false) => {
       const cur = get()
@@ -763,6 +796,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         e2ee: false,
         e2eeOutdated: [],
         notice: null,
+        waiting: false,
       })
     },
 

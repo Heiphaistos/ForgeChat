@@ -48,13 +48,36 @@ describe('modules/call-service', () => {
       const body = kt.slice(kt.indexOf(`Function("${f}")`))
       expect(body.slice(0, body.indexOf('\n    }'))).toMatch(/\n {6}null$/)
     }
-    expect(kt).toContain('Events("onUpdateProgress", "onPipChange")')
+    expect(kt).toContain('Events("onUpdateProgress", "onPipChange", "onVolumeKey")')
     const win = readFileSync(join(dir, 'CallWindow.kt'), 'utf8')
     // Tout sur le fil UI ; entrée automatique Android 12+ ; ratio borné (sinon Android lève une exception).
     expect(win.match(/runOnUiThread/g)?.length).toBe(3)
     expect(win).toContain('setAutoEnterEnabled(enabled)')
     expect(win).toContain('coerceIn(0.42, 2.38)')
     expect(win).toContain('SCREEN_ORIENTATION_FULL_SENSOR')
+  })
+
+  it('voix et vidéo : porte de bruit, fond virtuel, touche volume, partage d’écran', () => {
+    const dir = join(root, 'android', 'src', 'main', 'java', 'com', 'forgechat', 'callservice')
+    const kt = readFileSync(join(dir, 'CallServiceModule.kt'), 'utf8')
+    for (const f of ['setNoiseGate', 'setVideoBackground', 'setVolumeKeys', 'importBackground']) expect(kt).toContain(`Function("${f}")`)
+    expect(kt).toContain('OnCreate { BackgroundEffect.register() }')
+    // Touche volume : fenêtre modifiée sur le fil UI seulement.
+    expect(kt.slice(kt.indexOf('Function("setVolumeKeys")'))).toMatch(/^[^]*?runOnUiThread[^]*?VolumeKeys\.set/)
+    const gradle = readFileSync(join(root, 'android', 'build.gradle'), 'utf8')
+    expect(gradle).toContain("project(':livekit_react-native')")
+    expect(gradle).toContain("project(':livekit_react-native-webrtc')")
+    // Trame non traitée = null (la trame d'origine part) ; jamais la même trame renvoyée (double release).
+    const bg = readFileSync(join(dir, 'BackgroundEffect.kt'), 'utf8')
+    expect(bg).not.toMatch(/return frame\b/)
+    expect(bg).toContain('src.release()')
+    const gate = readFileSync(join(dir, 'NoiseGate.kt'), 'utf8')
+    expect(gate).toContain('ByteOrder.nativeOrder()')
+    expect(gate).toContain('broken = true')
+    // Partage d'écran : permission déclarée, mais PAS de type mediaProjection sur le service d'appel.
+    const manifest = readFileSync(join(root, 'android', 'src', 'main', 'AndroidManifest.xml'), 'utf8')
+    expect(manifest).toContain('android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"')
+    expect(manifest).not.toMatch(/foregroundServiceType="[^"]*mediaProjection/)
   })
 
   it('est un module Expo Android lié automatiquement', () => {

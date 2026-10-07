@@ -21,6 +21,15 @@ export const SOUND_EXTS = ['mp3', 'wav', 'ogg', 'webm', 'm4a'] as const
 export const soundboardApi = {
   list: (serverId: string) => http.get<Sound[]>(path`/servers/${serverId}/soundboard`),
   mine: () => http.get<MySound[]>('/users/me/soundboard'),
+  /** Mes sons perso (à moi, jouables dans tous mes salons vocaux). */
+  personal: () => http.get<Sound[]>('/users/me/sounds'),
+  uploadPersonal: (name: string, file: { uri: string; name: string; type: string }) => {
+    const fd = new FormData()
+    fd.append('name', name)
+    fd.append('file', file as unknown as Blob)
+    return http.upload<Sound>('/users/me/sounds', fd)
+  },
+  deletePersonal: (id: string) => http.delete<unknown>(path`/users/me/sounds/${id}`),
   /** MANAGE_SERVER requis ; le serveur exige un type MIME audio/*. */
   upload: (serverId: string, name: string, file: { uri: string; name: string; type: string }) => {
     const fd = new FormData()
