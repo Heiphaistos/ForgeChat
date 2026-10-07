@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { requireOptionalNativeModule } from 'expo'
 import { useEffect } from 'react'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
+import { useLang } from '@/i18n'
 import { isHexColor, THEMES } from '@/theme/palettes'
 import { saveAppearance, useAppearance, type AppearancePrefs } from '@/theme/prefs'
 
@@ -20,7 +21,7 @@ export function serverAppearancePatch(s: Partial<ServerSideSettings>, local: App
 }
 
 /**
- * Reprend l'accent, le format de l'heure et le mode streamer choisis sur le web. L'heure et le mode
+ * Reprend l'accent, le format de l'heure, le mode streamer et la langue choisis sur le web. L'heure et le mode
  * streamer s'appliquent tout de suite, l'accent au prochain lancement (couleurs lues au démarrage).
  */
 export function useAppearanceSync() {
@@ -30,6 +31,8 @@ export function useAppearanceSync() {
     if (!data) return
     const patch = serverAppearancePatch(data, useAppearance.getState())
     if (Object.keys(patch).length) saveAppearance(patch)
+    // Langue du compte : appliquée tout de suite (et mémorisée pour le prochain écran de connexion).
+    if (data.language) useLang.getState().setLang(data.language)
   }, [data])
   // Thème choisi sur le web ou le bureau : appliqué au prochain lancement (couleurs lues au démarrage).
   useEffect(() => {

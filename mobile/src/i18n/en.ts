@@ -1,0 +1,46 @@
+// Traduction anglaise. Une clé absente ici s'affiche en français (repli).
+import type { Key } from './fr'
+
+export const en: Partial<Record<Key, string>> = {
+  // --- Commun ---
+  'common.cancel': 'Cancel',
+  'common.confirm': 'Confirm',
+  'common.retry': 'Retry',
+  'common.back': 'Back',
+  'common.close': 'Close',
+  'common.delete': 'Delete',
+  'common.error': 'Error',
+  'common.oops': 'Oops',
+  'common.actionFailed': 'Action failed',
+  'common.unread': '{n} unread',
+  'common.unreadMany': '{n} unread',
+
+  // --- Réglages > Apparence et langue ---
+  'appearance.notSynced': 'Setting not synced',
+  'appearance.notSyncedBody': 'Kept on this device only.\n{error}',
+  'appearance.themeSaved': 'Theme saved',
+  'appearance.reopenForTheme': 'Close and reopen the app to apply the theme.',
+  'appearance.restartAndroid': 'Restart the app to apply the colors and text size.',
+  'appearance.restartIos': 'Close and reopen the app to apply the colors and text size.',
+  'appearance.restartNow': 'Restart now',
+  'appearance.theme': 'Theme',
+  'appearance.themeFooter': 'Same themes as on the web. The theme is specific to this device.',
+  'appearance.themeLabel': 'Theme {name}',
+  'appearance.accent': 'Accent color',
+  'appearance.accentLabel': 'Accent {color}',
+  'appearance.accentTheme': 'Theme accent',
+  'appearance.syncedF': 'Synced with the web.',
+  'appearance.synced': 'Synced with the web.',
+  'appearance.textSize': 'Text size',
+  'appearance.textSmall': 'Small',
+  'appearance.textNormal': 'Normal',
+  'appearance.textLarge': 'Large',
+  'appearance.textXLarge': 'Extra large',
+  'appearance.timeFormat': 'Time format',
+  'appearance.time24': '24-hour (14:05)',
+  'appearance.time12': '12-hour (02:05 PM)',
+  'appearance.streamerFooter': 'Hides your tag and invite codes on screen, like on the web.',
+  'appearance.streamer': 'Streamer mode',
+  'language.title': 'Language',
+  'language.footer': 'Interface language, saved to your account (web and desktop included).',
+}

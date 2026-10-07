@@ -19,6 +19,8 @@ export interface ServerSideSettings {
   accent_color: string | null
   time_format: string
   streamer_mode: boolean
+  /** Langue de l'interface (fr, en…), partagée avec le web et le bureau. */
+  language: string
 }
 
 export const settingsKey = ['user-settings'] as const

@@ -18,11 +18,12 @@ export interface AppearancePrefs {
   streamerMode: boolean
 }
 
+/** `label` : clé de traduction (src/i18n). */
 export const TEXT_SCALES = [
-  { value: 0.9, label: 'Petit' },
-  { value: 1, label: 'Normal' },
-  { value: 1.15, label: 'Grand' },
-  { value: 1.3, label: 'Très grand' },
+  { value: 0.9, label: 'appearance.textSmall' },
+  { value: 1, label: 'appearance.textNormal' },
+  { value: 1.15, label: 'appearance.textLarge' },
+  { value: 1.3, label: 'appearance.textXLarge' },
 ] as const
 
 export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false }

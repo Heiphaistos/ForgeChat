@@ -1,0 +1,36 @@
+import { en } from '@/i18n/en'
+import { fr } from '@/i18n/fr'
+import { pickLang, translate } from '@/i18n/translate'
+
+describe('translate', () => {
+  it('prend la langue active, sinon le français, sinon la clé', () => {
+    expect(translate({ a: 'Hello' }, { a: 'Bonjour', b: 'Salut' }, 'a')).toBe('Hello')
+    expect(translate({ a: 'Hello' }, { a: 'Bonjour', b: 'Salut' }, 'b')).toBe('Salut')
+    expect(translate({}, {}, 'inconnue')).toBe('inconnue')
+  })
+
+  it('remplace les variables connues et laisse les autres', () => {
+    expect(translate({}, { k: '{n} non lus sur {total}' }, 'k', { n: 3 })).toBe('3 non lus sur {total}')
+    expect(translate({ k: '{n} unread' }, {}, 'k', { n: 0 })).toBe('0 unread')
+  })
+
+  it('anglais : chaque clé existe en français et garde les mêmes variables', () => {
+    const vars = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join()
+    for (const [key, text] of Object.entries(en)) {
+      expect(Object.keys(fr)).toContain(key)
+      expect(vars(text!)).toBe(vars(fr[key as keyof typeof fr]))
+    }
+  })
+})
+
+describe('pickLang', () => {
+  it('fr pour toute locale française, anglais sinon', () => {
+    expect(pickLang('fr')).toBe('fr')
+    expect(pickLang('fr-CA')).toBe('fr')
+    expect(pickLang('FR_be')).toBe('fr')
+    expect(pickLang('en-US')).toBe('en')
+    expect(pickLang('es')).toBe('en')
+    expect(pickLang(null)).toBe('en')
+    expect(pickLang(undefined)).toBe('en')
+  })
+})

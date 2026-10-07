@@ -4,11 +4,18 @@ import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { Button, Row, Section, SwitchRow } from '@/components/ui'
 import { restartApp } from '@/features/appearance/sync'
+import { useLang, useT, type Lang } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 import { THEMES } from '@/theme/palettes'
 import { appearance, saveAppearance, TEXT_SCALES, useAppearance, type AppearancePrefs } from '@/theme/prefs'
+
+/** Langues traduites (libellés dans leur propre langue, jamais traduits). */
+const LANGS: { code: Lang; label: string }[] = [
+  { code: 'fr', label: 'Français' },
+  { code: 'en', label: 'English' },
+]
 
 /** Accents proposés (null = celui du thème) : accent_color du web, partagé entre appareils. */
 const ACCENTS = [null, '#5865f2', '#00a8fc', '#23a55a', '#f0b232', '#e67e22', '#f23f43', '#eb6f92', '#9b59b6'] as const
@@ -18,14 +25,17 @@ const needsRestart = (p: AppearancePrefs) => p.theme !== appearance.theme || p.a
 
 export default function AppearanceScreen() {
   const prefs = useAppearance()
+  const t = useT()
+  const lang = useLang((s) => s.lang)
+  const setLang = useLang((s) => s.setLang)
   const save = useMutation({
     mutationFn: (patch: Partial<ServerSideSettings>) => settingsApi.update(patch),
     onSuccess: (data) => queryClient.setQueryData(settingsKey, data),
-    onError: (e) => Alert.alert('Réglage non synchronisé', `Gardé sur cet appareil seulement.\n${errorMessage(e)}`),
+    onError: (e) => Alert.alert(t('appearance.notSynced'), t('appearance.notSyncedBody', { error: errorMessage(e) })),
   })
 
   const restart = () => {
-    if (!restartApp()) Alert.alert('Thème enregistré', 'Ferme et rouvre l’app pour appliquer le thème.')
+    if (!restartApp()) Alert.alert(t('appearance.themeSaved'), t('appearance.reopenForTheme'))
   }
 
   return (
@@ -33,35 +43,50 @@ export default function AppearanceScreen() {
       {needsRestart(prefs) ? (
         <View style={styles.pending}>
           <Text style={styles.pendingText}>
-            {Platform.OS === 'android' ? 'Redémarre l’app pour appliquer les couleurs et la taille du texte.' : 'Ferme et rouvre l’app pour appliquer les couleurs et la taille du texte.'}
+            {t(Platform.OS === 'android' ? 'appearance.restartAndroid' : 'appearance.restartIos')}
           </Text>
-          {Platform.OS === 'android' ? <Button title="Redémarrer maintenant" icon="refresh" onPress={restart} /> : null}
+          {Platform.OS === 'android' ? <Button title={t('appearance.restartNow')} icon="refresh" onPress={restart} /> : null}
         </View>
       ) : null}
 
-      <Section title="Thème" footer="Mêmes thèmes que sur le web. Le thème est propre à cet appareil.">
+      <Section title={t('language.title')} footer={t('language.footer')}>
+        {LANGS.map((l) => (
+          <Row
+            key={l.code}
+            title={l.label}
+            selected={lang === l.code}
+            onPress={() => {
+              setLang(l.code)
+              save.mutate({ language: l.code })
+            }}
+            right={lang === l.code ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null}
+          />
+        ))}
+      </Section>
+
+      <Section title={t('appearance.theme')} footer={t('appearance.themeFooter')}>
         <View style={styles.grid}>
-          {THEMES.map((t) => {
-            const selected = prefs.theme === t.id
+          {THEMES.map((th) => {
+            const selected = prefs.theme === th.id
             return (
               <Pressable
-                key={t.id}
+                key={th.id}
                 onPress={() => {
-                  saveAppearance({ theme: t.id })
-                  settingsApi.setTheme(t.id).catch(() => undefined)
+                  saveAppearance({ theme: th.id })
+                  settingsApi.setTheme(th.id).catch(() => undefined)
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Thème ${t.label}`}
+                accessibilityLabel={t('appearance.themeLabel', { name: th.label })}
                 accessibilityState={{ selected }}
-                style={[styles.card, { backgroundColor: t.palette.bg, borderColor: selected ? colors.primary : colors.border }]}
+                style={[styles.card, { backgroundColor: th.palette.bg, borderColor: selected ? colors.primary : colors.border }]}
               >
                 <View style={styles.swatches}>
-                  {[t.palette.bgDeep, t.palette.bgAlt, t.palette.primary, t.palette.text].map((c, i) => (
+                  {[th.palette.bgDeep, th.palette.bgAlt, th.palette.primary, th.palette.text].map((c, i) => (
                     <View key={i} style={[styles.swatch, { backgroundColor: c }]} />
                   ))}
                 </View>
-                <Text style={[styles.cardLabel, { color: t.palette.text }]} numberOfLines={1}>
-                  {t.label}
+                <Text style={[styles.cardLabel, { color: th.palette.text }]} numberOfLines={1}>
+                  {th.label}
                 </Text>
                 {selected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.check} /> : null}
               </Pressable>
@@ -70,7 +95,7 @@ export default function AppearanceScreen() {
         </View>
       </Section>
 
-      <Section title="Couleur d'accent" footer="Synchronisée avec le web.">
+      <Section title={t('appearance.accent')} footer={t('appearance.syncedF')}>
         <View style={styles.accents}>
           {ACCENTS.map((c) => {
             const selected = prefs.accent === c
@@ -82,7 +107,7 @@ export default function AppearanceScreen() {
                   save.mutate({ accent_color: c })
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={c ? `Accent ${c}` : 'Accent du thème'}
+                accessibilityLabel={c ? t('appearance.accentLabel', { color: c }) : t('appearance.accentTheme')}
                 accessibilityState={{ selected }}
                 style={[styles.accent, { backgroundColor: c ?? colors.bgElevated, borderColor: selected ? colors.text : 'transparent' }]}
               >
@@ -93,11 +118,11 @@ export default function AppearanceScreen() {
         </View>
       </Section>
 
-      <Section title="Taille du texte">
+      <Section title={t('appearance.textSize')}>
         {TEXT_SCALES.map((s) => (
           <Row
             key={s.value}
-            title={s.label}
+            title={t(s.label)}
             selected={prefs.textScale === s.value}
             onPress={() => saveAppearance({ textScale: s.value })}
             right={prefs.textScale === s.value ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null}
@@ -105,11 +130,11 @@ export default function AppearanceScreen() {
         ))}
       </Section>
 
-      <Section title="Format de l'heure" footer="Synchronisé avec le web.">
+      <Section title={t('appearance.timeFormat')} footer={t('appearance.synced')}>
         {(['24h', '12h'] as const).map((f) => (
           <Row
             key={f}
-            title={f === '24h' ? '24 heures (14:05)' : '12 heures (02:05 PM)'}
+            title={t(f === '24h' ? 'appearance.time24' : 'appearance.time12')}
             selected={prefs.timeFormat === f}
             onPress={() => {
               saveAppearance({ timeFormat: f })
@@ -120,10 +145,10 @@ export default function AppearanceScreen() {
         ))}
       </Section>
 
-      <Section footer="Masque ton tag et les codes d'invitation à l'écran, comme sur le web.">
+      <Section footer={t('appearance.streamerFooter')}>
         <SwitchRow
           icon="videocam-outline"
-          title="Mode streamer"
+          title={t('appearance.streamer')}
           value={prefs.streamerMode}
           onValueChange={(v) => {
             saveAppearance({ streamerMode: v })

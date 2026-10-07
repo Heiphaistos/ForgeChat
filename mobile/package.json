@@ -86,7 +86,8 @@
       "^@/(.*)$": "<rootDir>/src/$1"
     },
     "setupFiles": [
-      "<rootDir>/__tests__/setup/expo-config.ts"
+      "<rootDir>/__tests__/setup/expo-config.ts",
+      "<rootDir>/__tests__/setup/i18n.ts"
     ]
   }
 }
