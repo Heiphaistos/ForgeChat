@@ -22,6 +22,7 @@ import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 import { forwardText, mustEncrypt, openRaw, openRawList, seal, withSeal } from '@/e2e/conversations'
 import { isBotCommand, sendChannelText } from '@/e2e/channels'
 import type { FileEntry } from '@/e2e/crypto'
+import type { SupportPayload } from '@/lib/remoteSupport'
 import { firstUrl, mentionMeta } from '@/e2e/channelText'
 import { queryClient } from '@/lib/queryClient'
 
@@ -104,7 +105,11 @@ export const messagesApi = {
 
   async send(
     ref: ConversationRef,
-    input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null; files?: FileEntry[] },
+    input: {
+      content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null; files?: FileEntry[]
+      /** MP : carte de support à distance, dans le contenu chiffré (`rs`). */
+      support?: SupportPayload
+    },
   ): Promise<ChatMessage> {
     const extra = {
       reply_to: input.replyTo ?? undefined,
@@ -116,9 +121,11 @@ export const messagesApi = {
     const conv = e2eConv(ref)
     // MP/groupe : chiffré sur l'appareil ; le serveur ne renvoie pas le texte, on garde celui saisi.
     const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }), null,
-      { extra: input.files?.length ? { f: input.files } : undefined })
+      { extra: input.files?.length || input.support ? { ...(input.files?.length ? { f: input.files } : {}), ...(input.support ? { rs: input.support } : {}) } : undefined })
     const m = adaptMessage(ref, raw)
-    return raw?.enc ? { ...m, content: input.content, e2e: 'ok', ...(input.files?.length ? { files: input.files } : {}) } : m
+    return raw?.enc
+      ? { ...m, content: input.content, e2e: 'ok', ...(input.files?.length ? { files: input.files } : {}), ...(input.support ? { support: input.support } : {}) }
+      : m
   },
 
   /** Édition chiffrée : même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */

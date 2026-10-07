@@ -272,6 +272,8 @@ export interface ChatMessage {
   unencrypted?: boolean
   /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */
   preview?: LinkPreviewData | null
+  /** MP : carte « Support à distance » (contenu chiffré `rs`, validé). */
+  support?: import('@/lib/remoteSupport').SupportPayload | null
 }
 
 export type ConversationRef =

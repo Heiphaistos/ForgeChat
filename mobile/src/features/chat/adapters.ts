@@ -2,6 +2,7 @@ import type { ChatMessage, ConversationRef, DmMessage, GroupMessage, ServerMessa
 import { firstUrl } from '@/e2e/channelText'
 import { fileEntries } from '@/e2e/crypto'
 import { normalizeOg } from './messageExtras'
+import { parseSupport } from '@/lib/remoteSupport'
 
 /**
  * Le serveur expose 3 formats de message (salon, DM 1:1, groupe). L'UI n'en
@@ -57,7 +58,14 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     reactions: m.reactions ?? [],
     pinned: false,
     ...e2eFields(m),
+    ...supportField(m),
   }
+}
+
+/** MP : carte de support à distance du contenu déchiffré (`rs`), si elle est bien formée. */
+function supportField(m: { e2e?: 'ok' | 'locked' }) {
+  const support = m.e2e === 'ok' ? parseSupport((m as { e2e_body?: { rs?: unknown } }).e2e_body?.rs) : null
+  return support ? { support } : {}
 }
 
 /** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`, les clés des fichiers dans `files`). */

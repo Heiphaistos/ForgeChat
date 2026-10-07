@@ -8,6 +8,7 @@ import * as panels from './parts/panels'
 import * as stores from './parts/stores'
 import * as e2e from './parts/e2e'
 import * as comfort from './parts/comfort'
+import * as remoteSupport from './parts/remoteSupport'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -18,6 +19,7 @@ export const en: Partial<Record<Key, string>> = {
   ...stores.en,
   ...e2e.en,
   ...comfort.en,
+  ...remoteSupport.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

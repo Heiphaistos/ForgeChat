@@ -36,6 +36,7 @@ import { useScrollTarget } from './pins'
 import { messageLink, supportsMessageExtras, supportsReactionDetail, supportsTranslate, type ReactionUser } from './messageExtras'
 import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
+import type { SupportPayload } from '@/lib/remoteSupport'
 import { useRoleDecor } from '@/features/servers/roleDecor'
 
 /** Brouillons en mémoire uniquement (jamais persistés sur disque). */
@@ -112,6 +113,13 @@ export function ChatView({
   const serverId = conversation.kind === 'channel' ? conversation.serverId : ''
   const channelId = conversation.kind === 'channel' ? conversation.channelId : ''
   const groupId = conversation.kind === 'group' ? conversation.groupId : ''
+  const dmId = conversation.kind === 'dm' ? conversation.dmId : undefined
+  // Support à distance : réponse (acceptée, refusée, invitation en retour) donnée à chaque carte.
+  const supportReplies = useMemo(() => {
+    const map = new Map<string, SupportPayload['k']>()
+    for (const m of conv.messages) if (m.support?.ref && m.support.k !== 'offer') map.set(m.support.ref, m.support.k)
+    return map
+  }, [conv.messages])
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
   const decorOf = useRoleDecor(serverId)
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
@@ -365,11 +373,13 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
             onReactionLongPress={showReactors}
             translation={translations[item.id]}
             decor={serverId ? decorOf(item.authorId) : undefined}
+            dmId={dmId}
+            supportReply={item.clientMsgId ? supportReplies.get(item.clientMsgId) : undefined}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations, decorOf],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations, decorOf, dmId, supportReplies],
   )
 
   const quickReactions = useMemo(
