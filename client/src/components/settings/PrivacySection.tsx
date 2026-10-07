@@ -4,8 +4,10 @@ import { Toggle, Select, Field } from './shared'
 import api from '../../api/client'
 import { AUTO_ACTIVITY_KEY } from '../../hooks/useGameActivity'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 export default function PrivacySection() {
+  const t = useT()
   const [autoActivity, setAutoActivity] = useState(() => { try { return localStorage.getItem(AUTO_ACTIVITY_KEY) !== 'false' } catch { return true } })
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
@@ -15,7 +17,7 @@ export default function PrivacySection() {
 
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+    onSuccess: () => { toast.success(t('common.saved')); refetch() },
   })
 
   const [showOnline, setShowOnline] = useState(true)
@@ -37,8 +39,8 @@ export default function PrivacySection() {
   return (
     <div className="space-y-4">
       {[
-        { label: 'Afficher mon statut en ligne', desc: 'Les autres peuvent voir si vous êtes connecté', value: showOnline, onChange: setShowOnline },
-        { label: 'Autoriser les DMs de tout le monde', desc: 'Messages directs de personnes non-amies', value: dmFromAll, onChange: setDmFromAll },
+        { label: t('settings.privacy.showOnline'), desc: t('settings.privacy.showOnlineDesc'), value: showOnline, onChange: setShowOnline },
+        { label: t('settings.privacy.dmAll'), desc: t('settings.privacy.dmAllDesc'), value: dmFromAll, onChange: setDmFromAll },
       ].map(item => (
         <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div>
@@ -52,29 +54,29 @@ export default function PrivacySection() {
       {'__TAURI_INTERNALS__' in window && (
         <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div>
-            <div className="text-sm font-medium text-white">Afficher le jeu auquel je joue</div>
-            <div className="text-xs text-fc-muted">L'app de bureau repère le jeu lancé (Steam, Epic, Riot…) et l'affiche sur ton profil. Détection sur ton ordinateur uniquement.</div>
+            <div className="text-sm font-medium text-white">{t('settings.privacy.game')}</div>
+            <div className="text-xs text-fc-muted">{t('settings.privacy.gameDesc')}</div>
           </div>
           <Toggle value={autoActivity} onChange={v => { setAutoActivity(v); try { localStorage.setItem(AUTO_ACTIVITY_KEY, String(v)) } catch { /* réglage non mémorisé */ } }} />
         </div>
       )}
 
-      <Field label="Qui peut voir votre activité">
+      <Field label={t('settings.privacy.activity')}>
         <Select value={activityVisibility} onChange={setActivityVisibility} className="w-full"
-          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends', label: 'Amis uniquement' }, { value: 'nobody', label: 'Personne' }]} />
+          options={[{ value: 'everyone', label: t('settings.privacy.everyone') }, { value: 'friends', label: t('settings.privacy.friendsOnly') }, { value: 'nobody', label: t('settings.privacy.nobody') }]} />
       </Field>
 
-      <Field label="Qui peut vous envoyer des demandes d'amis">
+      <Field label={t('settings.privacy.friendRequests')}>
         <Select value={friendRequestFrom} onChange={setFriendRequestFrom} className="w-full"
-          options={[{ value: 'everyone', label: 'Tout le monde' }, { value: 'friends_of_friends', label: "Amis d'amis" }, { value: 'nobody', label: 'Personne' }]} />
+          options={[{ value: 'everyone', label: t('settings.privacy.everyone') }, { value: 'friends_of_friends', label: t('settings.privacy.friendsOfFriends') }, { value: 'nobody', label: t('settings.privacy.nobody') }]} />
       </Field>
 
-      <Field label="Filtre de contenu explicite">
+      <Field label={t('settings.privacy.explicit')}>
         <Select value={explicitFilter} onChange={setExplicitFilter} className="w-full"
           options={[
-            { value: 'none', label: 'Désactivé' },
-            { value: 'members_without_roles', label: 'Membres sans rôles' },
-            { value: 'all', label: 'Tous les messages' },
+            { value: 'none', label: t('settings.privacy.off') },
+            { value: 'members_without_roles', label: t('settings.privacy.noRoles') },
+            { value: 'all', label: t('settings.privacy.allMessages') },
           ]} />
       </Field>
 
@@ -83,12 +85,12 @@ export default function PrivacySection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
 
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-        <div className="text-sm font-medium text-white mb-1">Exporter mes données</div>
-        <div className="text-xs text-fc-muted mb-3">Télécharger une copie JSON de votre profil, messages, serveurs et amis (RGPD).</div>
+        <div className="text-sm font-medium text-white mb-1">{t('settings.privacy.export')}</div>
+        <div className="text-xs text-fc-muted mb-3">{t('settings.privacy.exportDesc')}</div>
         <button
           onClick={() => {
             api.get('/users/me/data-export', { responseType: 'blob' }).then(res => {
@@ -98,11 +100,11 @@ export default function PrivacySection() {
               a.download = 'forgechat-mes-donnees.json'
               a.click()
               URL.revokeObjectURL(url)
-            }).catch(() => toast.error('Erreur lors de l\'export'))
+            }).catch(() => toast.error(t('settings.privacy.exportError')))
           }}
           className="px-4 py-2 bg-fc-sidebar hover:bg-fc-hover text-white text-sm rounded-lg transition"
         >
-          Télécharger
+          {t('settings.privacy.download')}
         </button>
       </div>
     </div>

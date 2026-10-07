@@ -4,8 +4,10 @@ import { Mail } from 'lucide-react'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 export default function NotificationsEmailSection() {
+  const t = useT()
   const { data, refetch } = useQuery({
     queryKey: ['email-prefs'],
     queryFn: () => api.get('/user/email-prefs').then(r => r.data),
@@ -20,8 +22,8 @@ export default function NotificationsEmailSection() {
 
   const save = useMutation({
     mutationFn: () => api.put('/user/email-prefs', { dm_unread_notify: dmNotify }),
-    onSuccess: () => { toast.success('Préférences email sauvegardées'); refetch() },
-    onError: () => toast.error('Erreur lors de la sauvegarde'),
+    onSuccess: () => { toast.success(t('settings.email.saved')); refetch() },
+    onError: () => toast.error(t('settings.email.saveError')),
   })
 
   return (
@@ -31,10 +33,10 @@ export default function NotificationsEmailSection() {
           <div>
             <div className="text-sm font-medium text-white flex items-center gap-2">
               <Mail size={14} />
-              Résumé email — DMs non lus
+              {t('settings.email.digest')}
             </div>
             <div className="text-xs text-fc-muted mt-0.5">
-              Reçois un email si tu as des messages directs non lus depuis plus de 24h (au plus une fois par jour)
+              {t('settings.email.digestDesc')}
             </div>
           </div>
           <Toggle value={dmNotify} onChange={setDmNotify} />
@@ -46,7 +48,7 @@ export default function NotificationsEmailSection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
     </div>
   )

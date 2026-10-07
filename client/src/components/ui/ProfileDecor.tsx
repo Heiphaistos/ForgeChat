@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties, type ReactNode } from 'react'
+import type { Key } from '../../i18n'
 
 /**
  * Personnalisation du profil (gratuite) : décoration d'avatar, thème de la fiche
@@ -6,31 +7,31 @@ import { useMemo, type CSSProperties, type ReactNode } from 'react'
  * (server/src/models/user.rs) et au mobile (mobile/src/features/account/profileDecor.ts).
  */
 
-type Deco = { id: string; label: string; colors: string[]; kind: 'ring' | 'dashed' | 'double'; anim?: 'spin' | 'pulse' }
+type Deco = { id: string; label: Key; colors: string[]; kind: 'ring' | 'dashed' | 'double'; anim?: 'spin' | 'pulse' }
 
 export const DECORATIONS: Deco[] = [
-  { id: 'gold', label: 'Or', colors: ['#f7d774', '#b8860b', '#fff1b8', '#b8860b'], kind: 'ring' },
-  { id: 'silver', label: 'Argent', colors: ['#f4f6f8', '#8e9aa6', '#ffffff', '#8e9aa6'], kind: 'ring' },
-  { id: 'neon', label: 'Néon', colors: ['#00f0ff', '#ff00e5'], kind: 'ring', anim: 'spin' },
-  { id: 'rainbow', label: 'Arc-en-ciel', colors: ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#af52de'], kind: 'ring', anim: 'spin' },
-  { id: 'fire', label: 'Feu', colors: ['#ff3d00', '#ffb300', '#ff6d00'], kind: 'ring', anim: 'pulse' },
-  { id: 'ice', label: 'Glace', colors: ['#a8e6ff', '#ffffff', '#5ac8fa'], kind: 'ring' },
-  { id: 'emerald', label: 'Émeraude', colors: ['#2ecc71', '#0b6623', '#7dffb0'], kind: 'ring' },
-  { id: 'sakura', label: 'Sakura', colors: ['#ffb7c5', '#ff6f91'], kind: 'ring', anim: 'pulse' },
-  { id: 'void', label: 'Néant', colors: ['#6a00ff', '#120024', '#b388ff'], kind: 'ring', anim: 'spin' },
-  { id: 'sunset', label: 'Coucher de soleil', colors: ['#ff7e5f', '#feb47b', '#c471ed'], kind: 'ring' },
-  { id: 'ocean', label: 'Océan', colors: ['#00c6ff', '#0072ff'], kind: 'ring', anim: 'spin' },
-  { id: 'dashed', label: 'Pointillés', colors: ['#5ee7df'], kind: 'dashed', anim: 'spin' },
-  { id: 'double', label: 'Double anneau', colors: ['#b388ff'], kind: 'double' },
-  { id: 'glow', label: 'Halo', colors: ['#ffffff'], kind: 'ring', anim: 'pulse' },
+  { id: 'gold', label: 'profile.deco.gold', colors: ['#f7d774', '#b8860b', '#fff1b8', '#b8860b'], kind: 'ring' },
+  { id: 'silver', label: 'profile.deco.silver', colors: ['#f4f6f8', '#8e9aa6', '#ffffff', '#8e9aa6'], kind: 'ring' },
+  { id: 'neon', label: 'profile.deco.neon', colors: ['#00f0ff', '#ff00e5'], kind: 'ring', anim: 'spin' },
+  { id: 'rainbow', label: 'profile.deco.rainbow', colors: ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#af52de'], kind: 'ring', anim: 'spin' },
+  { id: 'fire', label: 'profile.deco.fire', colors: ['#ff3d00', '#ffb300', '#ff6d00'], kind: 'ring', anim: 'pulse' },
+  { id: 'ice', label: 'profile.deco.ice', colors: ['#a8e6ff', '#ffffff', '#5ac8fa'], kind: 'ring' },
+  { id: 'emerald', label: 'profile.deco.emerald', colors: ['#2ecc71', '#0b6623', '#7dffb0'], kind: 'ring' },
+  { id: 'sakura', label: 'profile.deco.sakura', colors: ['#ffb7c5', '#ff6f91'], kind: 'ring', anim: 'pulse' },
+  { id: 'void', label: 'profile.deco.void', colors: ['#6a00ff', '#120024', '#b388ff'], kind: 'ring', anim: 'spin' },
+  { id: 'sunset', label: 'profile.deco.sunset', colors: ['#ff7e5f', '#feb47b', '#c471ed'], kind: 'ring' },
+  { id: 'ocean', label: 'profile.deco.ocean', colors: ['#00c6ff', '#0072ff'], kind: 'ring', anim: 'spin' },
+  { id: 'dashed', label: 'profile.deco.dashed', colors: ['#5ee7df'], kind: 'dashed', anim: 'spin' },
+  { id: 'double', label: 'profile.deco.double', colors: ['#b388ff'], kind: 'double' },
+  { id: 'glow', label: 'profile.deco.glow', colors: ['#ffffff'], kind: 'ring', anim: 'pulse' },
 ]
 
-export const PROFILE_EFFECTS: { id: string; label: string; char: string; color: string; motion: 'fall' | 'rise' | 'twinkle' }[] = [
-  { id: 'sparkles', label: 'Étincelles', char: '✦', color: '#ffe680', motion: 'twinkle' },
-  { id: 'snow', label: 'Neige', char: '❄', color: '#e6f4ff', motion: 'fall' },
-  { id: 'hearts', label: 'Cœurs', char: '♥', color: '#ff5c8a', motion: 'rise' },
-  { id: 'stars', label: 'Étoiles', char: '★', color: '#ffd166', motion: 'fall' },
-  { id: 'bubbles', label: 'Bulles', char: '○', color: '#9be7ff', motion: 'rise' },
+export const PROFILE_EFFECTS: { id: string; label: Key; char: string; color: string; motion: 'fall' | 'rise' | 'twinkle' }[] = [
+  { id: 'sparkles', label: 'profile.effect.sparkles', char: '✦', color: '#ffe680', motion: 'twinkle' },
+  { id: 'snow', label: 'profile.effect.snow', char: '❄', color: '#e6f4ff', motion: 'fall' },
+  { id: 'hearts', label: 'profile.effect.hearts', char: '♥', color: '#ff5c8a', motion: 'rise' },
+  { id: 'stars', label: 'profile.effect.stars', char: '★', color: '#ffd166', motion: 'fall' },
+  { id: 'bubbles', label: 'profile.effect.bubbles', char: '○', color: '#9be7ff', motion: 'rise' },
 ]
 
 /** Entier 0xRRGGBB → « #rrggbb ». */

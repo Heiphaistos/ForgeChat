@@ -3,12 +3,13 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, RotateCcw } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
 
 const THEMES = [
-  { id: 'dark', label: 'Sombre', accent: '#5865f2', preview: ['#1a1b1e', '#232428', '#36393f'] },
+  { id: 'dark', label: 'settings.theme.dark', accent: '#5865f2', preview: ['#1a1b1e', '#232428', '#36393f'] },
   { id: 'darker', label: 'AMOLED', accent: '#5865f2', preview: ['#000', '#0a0a0a', '#0d0d0d'] },
-  { id: 'light', label: 'Clair', accent: '#5865f2', preview: ['#f2f3f5', '#ebedef', '#fff'] },
+  { id: 'light', label: 'settings.theme.light', accent: '#5865f2', preview: ['#f2f3f5', '#ebedef', '#fff'] },
   { id: 'dracula', label: 'Dracula', accent: '#bd93f9', preview: ['#282a36', '#1e1f2b', '#353746'] },
   { id: 'nord', label: 'Nord', accent: '#5e81ac', preview: ['#2e3440', '#3b4252', '#434c5e'] },
   { id: 'catppuccin', label: 'Catppuccin', accent: '#cba6f7', preview: ['#1e1e2e', '#181825', '#313244'] },
@@ -18,27 +19,27 @@ const THEMES = [
   { id: 'cyberpunk', label: 'Cyberpunk', accent: '#f0e14a', preview: ['#0d0d0d', '#111111', '#161616'] },
   { id: 'monokai', label: 'Monokai', accent: '#a6e22e', preview: ['#272822', '#2d2e2a', '#383830'] },
   { id: 'solarized', label: 'Solarized', accent: '#268bd2', preview: ['#002b36', '#073642', '#0d4a5c'] },
-  { id: 'forest', label: 'Forêt', accent: '#6cb340', preview: ['#1a2318', '#1e2a1c', '#243222'] },
-  { id: 'ocean', label: 'Océan', accent: '#00d4ff', preview: ['#0f2340', '#0d2238', '#112a47'] },
+  { id: 'forest', label: 'settings.theme.forest', accent: '#6cb340', preview: ['#1a2318', '#1e2a1c', '#243222'] },
+  { id: 'ocean', label: 'settings.theme.ocean', accent: '#00d4ff', preview: ['#0f2340', '#0d2238', '#112a47'] },
   { id: 'neon', label: 'Neon', accent: '#00ff88', preview: ['#0a0a14', '#0d0d1a', '#111120'] },
   { id: 'matrix', label: 'Matrix', accent: '#00ff00', preview: ['#000000', '#040804', '#060c06'] },
   // Nouveaux thèmes
   { id: 'rosepine', label: 'Rosé Pine', accent: '#eb6f92', preview: ['#191724', '#26233a', '#403d52'] },
   { id: 'everforest', label: 'Everforest', accent: '#a7c080', preview: ['#2d353b', '#343f44', '#374145'] },
   { id: 'kanagawa', label: 'Kanagawa', accent: '#7e9cd8', preview: ['#1f1f28', '#2a2a37', '#2d2d3f'] },
-  { id: 'midnight', label: 'Minuit', accent: '#6272a4', preview: ['#0c0e1a', '#101220', '#151828'] },
-  { id: 'sunset', label: 'Coucher de soleil', accent: '#f07050', preview: ['#1a1014', '#22141a', '#27151c'] },
-  { id: 'coffee', label: 'Café', accent: '#c87941', preview: ['#1e1510', '#271a12', '#2c1c14'] },
-  { id: 'winter', label: 'Hiver', accent: '#3498db', preview: ['#f0f4f8', '#e8f0f8', '#d0e4f0'] },
-  { id: 'emerald', label: 'Émeraude', accent: '#2ecc71', preview: ['#0d1f18', '#122820', '#162e22'] },
-  { id: 'bloodmoon', label: 'Lune de sang', accent: '#cc2222', preview: ['#120a0a', '#1a0e0e', '#221010'] },
+  { id: 'midnight', label: 'settings.theme.midnight', accent: '#6272a4', preview: ['#0c0e1a', '#101220', '#151828'] },
+  { id: 'sunset', label: 'settings.theme.sunset', accent: '#f07050', preview: ['#1a1014', '#22141a', '#27151c'] },
+  { id: 'coffee', label: 'settings.theme.coffee', accent: '#c87941', preview: ['#1e1510', '#271a12', '#2c1c14'] },
+  { id: 'winter', label: 'settings.theme.winter', accent: '#3498db', preview: ['#f0f4f8', '#e8f0f8', '#d0e4f0'] },
+  { id: 'emerald', label: 'settings.theme.emerald', accent: '#2ecc71', preview: ['#0d1f18', '#122820', '#162e22'] },
+  { id: 'bloodmoon', label: 'settings.theme.bloodmoon', accent: '#cc2222', preview: ['#120a0a', '#1a0e0e', '#221010'] },
   { id: 'violet', label: 'Violet', accent: '#9b59b6', preview: ['#160d24', '#1e1130', '#221238'] },
-  { id: 'slate', label: 'Ardoise', accent: '#5d8aa8', preview: ['#1c2230', '#222c3c', '#263042'] },
-  { id: 'retro', label: 'Rétro', accent: '#d4883a', preview: ['#2b2017', '#352a1e', '#3c2e22'] },
+  { id: 'slate', label: 'settings.theme.slate', accent: '#5d8aa8', preview: ['#1c2230', '#222c3c', '#263042'] },
+  { id: 'retro', label: 'settings.theme.retro', accent: '#d4883a', preview: ['#2b2017', '#352a1e', '#3c2e22'] },
 ]
 
 const FONTS = [
-  { name: 'Système', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
+  { name: 'settings.appearance.systemFont', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
   { name: 'Arial', value: 'Arial, Helvetica, sans-serif' },
   { name: 'Georgia', value: 'Georgia, "Times New Roman", serif' },
   { name: 'Trebuchet MS', value: '"Trebuchet MS", Helvetica, sans-serif' },
@@ -48,23 +49,23 @@ const FONTS = [
   { name: 'Consolas', value: 'Consolas, "Courier New", monospace' },
 ]
 
-const DENSITIES = [
-  { id: 'ultra-compact', label: 'Ultra compact' },
-  { id: 'compact', label: 'Compact' },
-  { id: 'normal', label: 'Normal' },
-  { id: 'comfortable', label: 'Confortable' },
+const DENSITIES: { id: string; label: Key }[] = [
+  { id: 'ultra-compact', label: 'settings.appearance.ultraCompact' },
+  { id: 'compact', label: 'settings.appearance.compact' },
+  { id: 'normal', label: 'settings.appearance.normal' },
+  { id: 'comfortable', label: 'settings.appearance.comfortable' },
 ]
 
-const AVATAR_SHAPES = [
-  { id: 'round', label: 'Rond' },
-  { id: 'rounded', label: 'Arrondi' },
-  { id: 'square', label: 'Carré' },
+const AVATAR_SHAPES: { id: string; label: Key }[] = [
+  { id: 'round', label: 'settings.appearance.round' },
+  { id: 'rounded', label: 'settings.appearance.rounded' },
+  { id: 'square', label: 'settings.appearance.square' },
 ]
 
-const MESSAGE_DISPLAYS = [
-  { id: 'normal', label: 'Standard' },
-  { id: 'compact', label: 'Compact' },
-  { id: 'ultra-compact', label: 'Ultra compact' },
+const MESSAGE_DISPLAYS: { id: string; label: Key }[] = [
+  { id: 'normal', label: 'settings.appearance.standard' },
+  { id: 'compact', label: 'settings.appearance.compact' },
+  { id: 'ultra-compact', label: 'settings.appearance.ultraCompact' },
 ]
 
 const CODE_THEMES = [
@@ -88,6 +89,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 }
 
 function ColorPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const t = useT()
   return (
     <div className="flex items-center justify-between">
       <span className="text-sm text-fc-muted">{label}</span>
@@ -98,9 +100,9 @@ function ColorPicker({ label, value, onChange }: { label: string; value: string;
           onChange={e => onChange(e.target.value)}
           className="w-8 h-8 rounded cursor-pointer border-none bg-transparent"
         />
-        <span className="text-xs text-fc-muted font-mono">{value || 'défaut'}</span>
+        <span className="text-xs text-fc-muted font-mono">{value || t('settings.appearance.default')}</span>
         {value && (
-          <button onClick={() => onChange('')} className="text-fc-muted hover:text-white text-xs">
+          <button onClick={() => onChange('')} aria-label={t('settings.appearance.reset')} title={t('settings.appearance.reset')} className="text-fc-muted hover:text-white text-xs">
             <RotateCcw size={12} />
           </button>
         )}
@@ -110,6 +112,9 @@ function ColorPicker({ label, value, onChange }: { label: string; value: string;
 }
 
 export default function AppearanceSection() {
+  const t = useT()
+  // Thèmes et polices à nom propre (Dracula, Arial…) : pas de clé, translate renvoie le nom tel quel.
+  const name = (s: string) => t(s as Key)
   const [activeTheme, setActiveTheme] = useState(() =>
     localStorage.getItem('fc_theme') || 'dark'
   )
@@ -152,8 +157,8 @@ export default function AppearanceSection() {
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Apparence sauvegardée'); refetch() },
-    onError: () => toast.error('Erreur de sauvegarde'),
+    onSuccess: () => { toast.success(t('settings.appearance.saved')); refetch() },
+    onError: () => toast.error(t('settings.appearance.saveError')),
   })
 
   const applyTheme = (id: string) => {
@@ -215,13 +220,13 @@ export default function AppearanceSection() {
     <div className="space-y-8">
       {/* Thèmes */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Thème</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.theme')}</h3>
         <div className="grid grid-cols-4 gap-2">
           {THEMES.map(theme => (
             <button
               key={theme.id}
               onClick={() => applyTheme(theme.id)}
-              title={theme.label}
+              title={name(theme.label)}
               className={`relative rounded-lg overflow-hidden border-2 transition ${
                 activeTheme === theme.id ? 'border-fc-accent' : 'border-transparent hover:border-fc-hover'
               }`}
@@ -231,7 +236,7 @@ export default function AppearanceSection() {
                   <div key={i} style={{ background: c }} className="flex-1" />
                 ))}
               </div>
-              <div className="py-1 bg-fc-channel text-xs text-fc-muted text-center">{theme.label}</div>
+              <div className="py-1 bg-fc-channel text-xs text-fc-muted text-center">{name(theme.label)}</div>
               {activeTheme === theme.id && (
                 <div className="absolute top-1 right-1 bg-fc-accent rounded-full p-0.5">
                   <Check size={8} className="text-white" />
@@ -244,7 +249,7 @@ export default function AppearanceSection() {
 
       {/* Police */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Police d'écriture</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.font')}</h3>
         <div className="grid grid-cols-2 gap-2">
           {FONTS.map(font => (
             <button
@@ -257,7 +262,7 @@ export default function AppearanceSection() {
                   : 'border-fc-hover text-fc-muted hover:text-white hover:border-fc-hover'
               }`}
             >
-              {font.name}
+              {name(font.name)}
             </button>
           ))}
         </div>
@@ -266,7 +271,7 @@ export default function AppearanceSection() {
       {/* Taille */}
       <section>
         <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-          Taille de police — <span className="text-white">{fontSizePx}px</span>
+          {t('settings.appearance.fontSize')} — <span className="text-white">{fontSizePx}px</span>
         </h3>
         <input
           type="range" min={10} max={24} value={fontSizePx}
@@ -280,17 +285,17 @@ export default function AppearanceSection() {
 
       {/* Couleurs */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Couleurs personnalisées</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.colors')}</h3>
         <div className="space-y-3 p-4 bg-fc-channel rounded-xl border border-fc-hover">
-          <ColorPicker label="Couleur d'accent" value={accentColor} onChange={setAccentColor} />
-          <ColorPicker label="Couleur du texte" value={fontColor} onChange={setFontColor} />
-          <ColorPicker label="Couleur de fond" value={bgColor} onChange={setBgColor} />
+          <ColorPicker label={t('settings.appearance.accent')} value={accentColor} onChange={setAccentColor} />
+          <ColorPicker label={t('settings.appearance.textColor')} value={fontColor} onChange={setFontColor} />
+          <ColorPicker label={t('settings.appearance.bgColor')} value={bgColor} onChange={setBgColor} />
         </div>
       </section>
 
       {/* Densité */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Densité d'interface</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.density')}</h3>
         <div className="grid grid-cols-2 gap-2">
           {DENSITIES.map(d => (
             <button
@@ -306,7 +311,7 @@ export default function AppearanceSection() {
                   : 'border-fc-hover text-fc-muted hover:text-white'
               }`}
             >
-              {d.label}
+              {t(d.label)}
             </button>
           ))}
         </div>
@@ -314,7 +319,7 @@ export default function AppearanceSection() {
 
       {/* Affichage messages */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Mode d'affichage des messages</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.messageDisplay')}</h3>
         <div className="grid grid-cols-3 gap-2">
           {MESSAGE_DISPLAYS.map(m => (
             <button
@@ -326,7 +331,7 @@ export default function AppearanceSection() {
                   : 'border-fc-hover text-fc-muted hover:text-white'
               }`}
             >
-              {m.label}
+              {t(m.label)}
             </button>
           ))}
         </div>
@@ -334,7 +339,7 @@ export default function AppearanceSection() {
 
       {/* Avatar + Sidebar */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Forme des avatars</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.avatarShape')}</h3>
         <div className="flex gap-2">
           {AVATAR_SHAPES.map(s => (
             <button
@@ -346,7 +351,7 @@ export default function AppearanceSection() {
                   : 'border-fc-hover text-fc-muted hover:text-white'
               }`}
             >
-              {s.label}
+              {t(s.label)}
             </button>
           ))}
         </div>
@@ -354,7 +359,7 @@ export default function AppearanceSection() {
 
       <section>
         <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-          Largeur de la barre latérale — <span className="text-white">{sidebarWidth}px</span>
+          {t('settings.appearance.sidebarWidth')} — <span className="text-white">{sidebarWidth}px</span>
         </h3>
         <input
           type="range" min={SIDEBAR_MIN} max={SIDEBAR_MAX} value={sidebarWidth}
@@ -365,26 +370,26 @@ export default function AppearanceSection() {
 
       {/* Thème de code */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Thème blocs de code</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.codeTheme')}</h3>
         <select
           value={codeTheme}
           onChange={e => setCodeTheme(e.target.value)}
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
         >
-          {CODE_THEMES.map(t => <option key={t} value={t}>{t}</option>)}
+          {CODE_THEMES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </section>
 
       {/* Toggles */}
       <section>
-        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Options d'interface</h3>
+        <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('settings.appearance.options')}</h3>
         <div className="space-y-3 p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white">Effet vitré (Glassmorphism)</span>
+            <span className="text-sm text-white">{t('settings.appearance.glass')}</span>
             <Toggle value={glassmorphism} onChange={setGlassmorphism} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-white">Couleurs des rôles</span>
+            <span className="text-sm text-white">{t('settings.appearance.roleColors')}</span>
             <Toggle value={showRoleColors} onChange={setShowRoleColors} />
           </div>
         </div>
@@ -395,7 +400,7 @@ export default function AppearanceSection() {
         disabled={saveMutation.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {saveMutation.isPending ? 'Sauvegarde...' : 'Sauvegarder l\'apparence'}
+        {saveMutation.isPending ? t('common.saving') : t('settings.appearance.save')}
       </button>
     </div>
   )

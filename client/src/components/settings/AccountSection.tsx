@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 interface Props {
   user: any
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function AccountSection({ user, updateMe }: Props) {
+  const t = useT()
   const [username, setUsername] = useState(user.username)
   const [showPwForm, setShowPwForm] = useState(false)
   const [oldPw, setOldPw] = useState('')
@@ -20,14 +22,14 @@ export default function AccountSection({ user, updateMe }: Props) {
 
   const saveProfile = useMutation({
     mutationFn: () => api.patch('/users/me', { username }),
-    onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onSuccess: r => { updateMe(r.data); toast.success(t('settings.account.profileUpdated')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const changePw = useMutation({
     mutationFn: () => api.post('/auth/change-password', { old_password: oldPw, new_password: newPw }),
-    onSuccess: () => { toast.success('Mot de passe modifié'); setShowPwForm(false); setOldPw(''); setNewPw('') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Mot de passe incorrect'),
+    onSuccess: () => { toast.success(t('settings.account.pwChanged')); setShowPwForm(false); setOldPw(''); setNewPw('') },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.account.pwWrong')),
   })
 
   return (
@@ -45,7 +47,7 @@ export default function AccountSection({ user, updateMe }: Props) {
         </div>
       </div>
 
-      <Field label="Nom d'utilisateur">
+      <Field label={t('settings.account.username')}>
         <input
           value={username}
           onChange={e => setUsername(e.target.value)}
@@ -61,28 +63,28 @@ export default function AccountSection({ user, updateMe }: Props) {
         disabled={saveProfile.isPending || username === user.username}
         className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
       >
-        {saveProfile.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {saveProfile.isPending ? t('common.saving') : t('common.save')}
       </button>
 
       <div className="border-t border-fc-hover pt-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-white">Mot de passe</h3>
-            <p className="text-xs text-fc-muted">Modifier votre mot de passe de connexion</p>
+            <h3 className="text-sm font-semibold text-white">{t('auth.password')}</h3>
+            <p className="text-xs text-fc-muted">{t('settings.account.pwDesc')}</p>
           </div>
           <button
             onClick={() => setShowPwForm(!showPwForm)}
             className="px-3 py-1.5 text-xs bg-fc-hover text-white rounded-lg hover:bg-fc-hover/80 transition"
           >
-            {showPwForm ? 'Annuler' : 'Modifier'}
+            {showPwForm ? t('common.cancel') : t('common.edit')}
           </button>
         </div>
 
         {showPwForm && (
           <div className="space-y-3">
             {[
-              { label: 'Mot de passe actuel', value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld), autoComplete: 'current-password', enterKeyHint: 'next' as const },
-              { label: 'Nouveau mot de passe', value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew), autoComplete: 'new-password', enterKeyHint: 'done' as const },
+              { label: t('settings.account.currentPw'), value: oldPw, setValue: setOldPw, show: showOld, toggle: () => setShowOld(!showOld), autoComplete: 'current-password', enterKeyHint: 'next' as const },
+              { label: t('settings.account.newPw'), value: newPw, setValue: setNewPw, show: showNew, toggle: () => setShowNew(!showNew), autoComplete: 'new-password', enterKeyHint: 'done' as const },
             ].map(field => (
               <Field key={field.label} label={field.label}>
                 <div className="relative">
@@ -96,7 +98,7 @@ export default function AccountSection({ user, updateMe }: Props) {
                   />
                   <button
                     onClick={field.toggle}
-                    aria-label={field.show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-label={field.show ? t('auth.hidePassword') : t('auth.showPassword')}
                     className="absolute right-3 top-2.5 text-fc-muted hover:text-white transition"
                   >
                     {field.show ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -109,7 +111,7 @@ export default function AccountSection({ user, updateMe }: Props) {
               disabled={changePw.isPending || !oldPw || !newPw}
               className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
             >
-              {changePw.isPending ? 'Modification...' : 'Changer le mot de passe'}
+              {changePw.isPending ? t('settings.account.changing') : t('settings.account.changePw')}
             </button>
           </div>
         )}

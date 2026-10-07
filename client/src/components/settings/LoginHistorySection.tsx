@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Monitor, Smartphone, Globe } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useT, dateLocale, t as tr } from '../../i18n'
 
 interface Session {
   id: string
@@ -20,14 +20,16 @@ function getDeviceIcon(deviceInfo?: string) {
 }
 
 function parseDevice(deviceInfo?: string) {
-  if (!deviceInfo) return 'Appareil inconnu'
-  if (deviceInfo.includes('Tauri')) return 'Application ForgeChat'
+  if (!deviceInfo) return tr('settings.sessions.unknownDevice')
+  if (deviceInfo.includes('Tauri')) return tr('settings.sessions.app')
   const match = deviceInfo.match(/\(([^)]+)\)/)
   if (match) return match[1].split(';')[0].trim()
   return deviceInfo.slice(0, 50)
 }
 
 export default function LoginHistorySection() {
+  const t = useT()
+  const locale = dateLocale()
   const { data: sessions = [], isLoading } = useQuery<Session[]>({
     queryKey: ['login-history'],
     queryFn: () => api.get('/users/me/login-history').then(r => r.data),
@@ -43,7 +45,7 @@ export default function LoginHistorySection() {
   return (
     <div className="space-y-3">
       <div className="text-xs text-fc-muted mb-4">
-        20 dernières connexions à votre compte
+        {t('settings.history.intro')}
       </div>
       {sessions.map(s => (
         <div key={s.id} className="flex items-start gap-3 p-3 rounded-xl border bg-fc-channel border-fc-hover">
@@ -58,16 +60,16 @@ export default function LoginHistorySection() {
               <div className="text-xs text-fc-muted mt-0.5">{s.ip_address}</div>
             )}
             <div className="text-xs text-fc-muted mt-0.5">
-              Dernière activité {formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale: fr })}
+              {t('settings.sessions.lastActive', { when: formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale }) })}
             </div>
             <div className="text-xs text-fc-muted">
-              Créée {formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale: fr })}
+              {t('settings.sessions.created', { when: formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale }) })}
             </div>
           </div>
         </div>
       ))}
       {sessions.length === 0 && (
-        <div className="text-fc-muted text-sm text-center py-8">Aucun historique disponible</div>
+        <div className="text-fc-muted text-sm text-center py-8">{t('settings.history.empty')}</div>
       )}
     </div>
   )

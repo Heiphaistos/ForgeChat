@@ -4,8 +4,13 @@ import { Camera, RefreshCw, ShieldCheck, ShieldX, Monitor } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
 import { useClipsSetting } from '../../lib/clipBuffer'
+import { useT, intlLocale } from '../../i18n'
 
 export default function VideoSection() {
+  const t = useT()
+  const rec = t('settings.video.recommended')
+  const mbps = (n: number) => `${n.toLocaleString(intlLocale())} Mb/s`
+  const fps = (n: number) => t('settings.video.fps', { n })
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedCamera, setSelectedCamera] = useState(localStorage.getItem('fc_video_input') ?? '')
   const [previewActive, setPreviewActive] = useState(false)
@@ -56,7 +61,7 @@ export default function VideoSection() {
   const requestPermission = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      stream.getTracks().forEach(t => t.stop())
+      stream.getTracks().forEach(tr => tr.stop())
       setPermission('granted')
       await refreshDevices()
     } catch {
@@ -87,7 +92,7 @@ export default function VideoSection() {
   }
 
   const stopPreview = () => {
-    streamRef.current?.getTracks().forEach(t => t.stop())
+    streamRef.current?.getTracks().forEach(tr => tr.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
     setPreviewActive(false)
@@ -127,40 +132,41 @@ export default function VideoSection() {
             : <ShieldCheck size={20} className="text-fc-accent flex-shrink-0" />}
           <div className="flex-1">
             <p className="text-sm font-medium text-white">
-              {permission === 'denied' ? 'Accès caméra refusé' : 'Accès caméra requis'}
+              {permission === 'denied' ? t('settings.video.denied') : t('settings.video.required')}
             </p>
             <p className="text-xs text-fc-muted mt-0.5">
               {permission === 'denied'
-                ? 'Autorisez la caméra dans les paramètres de votre navigateur.'
-                : 'Cliquez pour autoriser ForgeChat à accéder à votre caméra.'}
+                ? t('settings.video.deniedHelp')
+                : t('settings.video.requiredHelp')}
             </p>
           </div>
           {permission !== 'denied' && (
             <button onClick={requestPermission} className="btn-primary text-xs px-3 py-1.5 flex-shrink-0">
-              Autoriser
+              {t('settings.audio.allow')}
             </button>
           )}
         </div>
       )}
 
-      <Field label="Caméra">
+      <Field label={t('settings.video.camera')}>
         <div className="flex gap-2">
           <select
             value={selectedCamera}
             onChange={e => handleCameraChange(e.target.value)}
             className="flex-1 bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white"
           >
-            <option value="">Défaut du système</option>
+            <option value="">{t('settings.audio.systemDefault')}</option>
             {devices.map(d => (
               <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `Caméra ${d.deviceId.slice(0, 6)}`}
+                {d.label || t('settings.video.camN', { id: d.deviceId.slice(0, 6) })}
               </option>
             ))}
           </select>
           <button
             onClick={refreshDevices}
             className="p-2 bg-fc-hover rounded-lg hover:bg-fc-channel text-fc-muted"
-            title="Actualiser la liste"
+            title={t('settings.video.refresh')}
+            aria-label={t('settings.video.refresh')}
           >
             <RefreshCw size={16} />
           </button>
@@ -169,7 +175,7 @@ export default function VideoSection() {
 
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-white font-medium uppercase tracking-wide">Aperçu caméra</p>
+          <p className="text-xs text-white font-medium uppercase tracking-wide">{t('settings.video.preview')}</p>
           <button
             onClick={previewActive ? stopPreview : startPreview}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition
@@ -179,7 +185,7 @@ export default function VideoSection() {
               }`}
           >
             <Camera size={12} />
-            {previewActive ? 'Arrêter' : 'Aperçu'}
+            {previewActive ? t('settings.audio.stop') : t('settings.video.previewBtn')}
           </button>
         </div>
         <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
@@ -194,7 +200,7 @@ export default function VideoSection() {
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-fc-muted">
               <Camera size={32} className="opacity-30" />
-              <span className="text-xs">Cliquez sur Aperçu pour tester votre caméra</span>
+              <span className="text-xs">{t('settings.video.previewHint')}</span>
             </div>
           )}
         </div>
@@ -202,83 +208,83 @@ export default function VideoSection() {
 
       {/* Qualité d'émission — aucune de ces valeurs n'était réglable, et aucun
           plafond de débit n'était appliqué aux senders (mesh N-à-N sans limite). */}
-      <Field label="Qualité de la caméra">
+      <Field label={t('settings.video.camQuality')}>
         <div className="grid grid-cols-2 gap-2">
           <select value={camHeight} onChange={e => savePref('fc_cam_height', e.target.value, setCamHeight)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
-            <option value="360">360p (économe)</option>
+            <option value="360">{`360p (${t('settings.video.saver')})`}</option>
             <option value="480">480p</option>
-            <option value="720">720p (recommandé)</option>
+            <option value="720">{`720p (${rec})`}</option>
             <option value="1080">1080p</option>
           </select>
           <select value={camBitrate} onChange={e => savePref('fc_cam_bitrate', e.target.value, setCamBitrate)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
-            <option value="500000">0,5 Mb/s</option>
-            <option value="1200000">1,2 Mb/s (recommandé)</option>
-            <option value="2500000">2,5 Mb/s</option>
+            <option value="500000">{mbps(0.5)}</option>
+            <option value="1200000">{`${mbps(1.2)} (${rec})`}</option>
+            <option value="2500000">{mbps(2.5)}</option>
             <option value="4000000">4 Mb/s</option>
             <option value="6000000">6 Mb/s</option>
           </select>
         </div>
         <p className="text-xs text-fc-muted mt-1">
-          Chaque participant reçoit son propre flux : au-delà de 5-6 caméras, baissez la résolution et le débit.
+          {t('settings.video.camQualityHint')}
         </p>
       </Field>
 
-      <Field label="Arrière-plan">
+      <Field label={t('settings.video.background')}>
         <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
           <input type="checkbox" checked={camBlur === 'true'} onChange={e => savePref('fc_cam_blur', String(e.target.checked), setCamBlur)} className="accent-fc-accent" />
-          Flouter l’arrière-plan de ma caméra
+          {t('settings.video.blur')}
         </label>
-        <p className="text-xs text-fc-muted mt-1">Calculé sur ton appareil, rien n’est envoyé ailleurs. S’applique à la prochaine activation de la caméra.</p>
+        <p className="text-xs text-fc-muted mt-1">{t('settings.video.blurHint')}</p>
       </Field>
 
-      <Field label="Qualité du partage d'écran">
+      <Field label={t('settings.video.screenQuality')}>
         <div className="grid grid-cols-2 gap-2">
           <select value={screenHeight} onChange={e => savePref('fc_screen_height', e.target.value, setScreenHeight)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
             <option value="720">720p</option>
-            <option value="1080">1080p (recommandé)</option>
+            <option value="1080">{`1080p (${rec})`}</option>
             <option value="1440">1440p</option>
             <option value="2160">2160p (4K)</option>
           </select>
           <select value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
-            <option value="15">15 images/s</option>
-            <option value="30">30 images/s</option>
-            <option value="60">60 images/s (jeu)</option>
+            <option value="15">{fps(15)}</option>
+            <option value="30">{fps(30)}</option>
+            <option value="60">{`${fps(60)} (${t('settings.video.game')})`}</option>
           </select>
           <select value={screenBitrate} onChange={e => savePref('fc_screen_bitrate', e.target.value, setScreenBitrate)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
-            <option value="1500000">1,5 Mb/s</option>
-            <option value="4000000">4 Mb/s (recommandé)</option>
+            <option value="1500000">{mbps(1.5)}</option>
+            <option value="4000000">{`${mbps(4)} (${rec})`}</option>
             <option value="8000000">8 Mb/s</option>
             <option value="12000000">12 Mb/s (4K)</option>
-            <option value="20000000">20 Mb/s (4K, 60 images/s)</option>
+            <option value="20000000">{`${mbps(20)} (4K, ${fps(60)})`}</option>
           </select>
           <select value={screenHint} onChange={e => savePref('fc_screen_hint', e.target.value, setScreenHint)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
-            <option value="motion">Fluidité (jeu, vidéo)</option>
-            <option value="detail">Netteté (texte, code)</option>
+            <option value="motion">{t('settings.video.motion')}</option>
+            <option value="detail">{t('settings.video.detail')}</option>
           </select>
         </div>
         <p className="text-xs text-fc-muted mt-1 flex items-center gap-1">
-          <Monitor size={12} /> Le son du partage n'est transmis que pour un onglet ou l'écran entier — une fenêtre seule ne peut pas partager son audio.
+          <Monitor size={12} /> {t('settings.video.audioHint')}
         </p>
       </Field>
-      <Field label="Streams des autres">
+      <Field label={t('settings.video.others')}>
         <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
           <input type="checkbox" checked={autoWatchStreams} onChange={e => setAutoWatchStreams(e.target.checked)} className="accent-fc-accent" />
-          Regarder automatiquement les streams
+          {t('settings.video.autoWatch')}
         </label>
-        <p className="text-xs text-fc-muted mt-1">Désactivé, un stream n'est téléchargé qu'après un clic sur « Regarder » : utile sur une connexion lente ou avec plusieurs streams à la fois.</p>
+        <p className="text-xs text-fc-muted mt-1">{t('settings.video.autoWatchHint')}</p>
       </Field>
-      <Field label="Clips">
+      <Field label={t('settings.video.clips')}>
         <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
           <input type="checkbox" checked={clipsEnabled} onChange={e => setClipsEnabled(e.target.checked)} className="accent-fc-accent" />
-          Garder les 30 dernières secondes des streams pour les clipper
+          {t('settings.video.clipsKeep')}
         </label>
-        <p className="text-xs text-fc-muted mt-1">Bouton « Clip » sur un stream affiché (ou Alt+C) : le clip se télécharge ou s'envoie dans un salon texte. Tout reste sur ton appareil tant que tu n'envoies rien ; consomme un peu de mémoire et de processeur pendant qu'un stream est affiché.</p>
+        <p className="text-xs text-fc-muted mt-1">{t('settings.video.clipsHint')}</p>
       </Field>
     </div>
   )

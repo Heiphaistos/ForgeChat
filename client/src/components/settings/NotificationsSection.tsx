@@ -4,12 +4,14 @@ import { Moon, Bell, BellOff, Volume2 } from 'lucide-react'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 import { enableWebPush, disableWebPush, isWebPushActive, webPushSupported } from '../../utils/webPush'
 
 // Web Push : alertes (mentions, MP, appels) même onglet fermé. Le serveur ne
 // pousse que si aucune session n'est ouverte et selon les réglages de sourdine.
 function WebPushBlock() {
+  const t = useT()
   const [active, setActive] = useState(false)
   const [busy, setBusy] = useState(false)
   useEffect(() => { isWebPushActive().then(setActive) }, [])
@@ -21,16 +23,16 @@ function WebPushBlock() {
       if (active) {
         await disableWebPush()
         setActive(false)
-        toast.success('Notifications push désactivées sur ce navigateur')
+        toast.success(t('settings.notif.pushOff'))
       } else {
         const r = await enableWebPush()
-        if (r === 'ok') { setActive(true); toast.success('Notifications push activées') }
-        else if (r === 'denied') toast.error('Permission refusée par le navigateur')
-        else if (r === 'disabled') toast.error("Le serveur n'a pas configuré les notifications push")
-        else toast.error('Notifications push indisponibles ici')
+        if (r === 'ok') { setActive(true); toast.success(t('settings.notif.pushOn')) }
+        else if (r === 'denied') toast.error(t('settings.notif.denied'))
+        else if (r === 'disabled') toast.error(t('settings.notif.pushDisabled'))
+        else toast.error(t('settings.notif.pushUnavailable'))
       }
     } catch {
-      toast.error("Impossible de modifier l'abonnement push")
+      toast.error(t('settings.notif.pushError'))
     } finally {
       setBusy(false)
     }
@@ -39,8 +41,8 @@ function WebPushBlock() {
   return (
     <div className="flex items-center justify-between gap-3 pt-2 border-t border-fc-hover">
       <div>
-        <div className="text-sm text-white">Notifications push</div>
-        <div className="text-xs text-fc-muted">Mentions, messages privés et appels, même quand ForgeChat est fermé.</div>
+        <div className="text-sm text-white">{t('settings.notif.push')}</div>
+        <div className="text-xs text-fc-muted">{t('settings.notif.pushDesc')}</div>
       </div>
       <Toggle value={active} onChange={() => { if (!busy) toggle() }} />
     </div>
@@ -48,6 +50,7 @@ function WebPushBlock() {
 }
 
 function DesktopNotifBlock() {
+  const t = useT()
   const [perm, setPerm] = useState<NotificationPermission>(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   )
@@ -57,35 +60,35 @@ function DesktopNotifBlock() {
     if (!supported) return
     const result = await Notification.requestPermission()
     setPerm(result)
-    if (result === 'granted') toast.success('Notifications bureau activées !')
-    else if (result === 'denied') toast.error('Permission refusée par le navigateur')
+    if (result === 'granted') toast.success(t('settings.notif.desktopOn'))
+    else if (result === 'denied') toast.error(t('settings.notif.denied'))
   }
 
   const test = () => {
     if (perm !== 'granted') return
-    new Notification('ForgeChat', { body: 'Les notifications fonctionnent !', icon: '/icon.svg' })
+    new Notification('ForgeChat', { body: t('settings.notif.testBody'), icon: '/icon.svg' })
   }
 
   return (
     <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
       <div className="flex items-center gap-2 text-sm font-medium text-white">
         {perm === 'granted' ? <Bell size={14} className="text-fc-green" /> : <BellOff size={14} className="text-fc-muted" />}
-        Notifications bureau
+        {t('settings.notif.desktop')}
       </div>
-      {!supported && <p className="text-xs text-fc-muted">Non supporté par ce navigateur.</p>}
+      {!supported && <p className="text-xs text-fc-muted">{t('settings.notif.unsupported')}</p>}
       {supported && perm === 'granted' && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-fc-green">Activées</span>
-          <button onClick={test} className="text-xs text-fc-muted underline hover:text-white">Tester</button>
+          <span className="text-xs text-fc-green">{t('settings.notif.enabled')}</span>
+          <button onClick={test} className="text-xs text-fc-muted underline hover:text-white">{t('settings.audio.test')}</button>
         </div>
       )}
       {supported && perm === 'default' && (
         <button onClick={request} className="w-full py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium transition">
-          Activer les notifications bureau
+          {t('settings.notif.enableDesktop')}
         </button>
       )}
       {supported && perm === 'denied' && (
-        <p className="text-xs text-fc-muted">Permission refusée. Modifie les paramètres de ton navigateur pour les activer.</p>
+        <p className="text-xs text-fc-muted">{t('settings.notif.deniedHelp')}</p>
       )}
       <WebPushBlock />
     </div>
@@ -93,6 +96,7 @@ function DesktopNotifBlock() {
 }
 
 export default function NotificationsSection() {
+  const t = useT()
   const { enabled: audioEnabled, setEnabled: setAudioEnabled, playMention } = useAudioNotifications()
 
   const { data: settings, refetch } = useQuery({
@@ -103,7 +107,7 @@ export default function NotificationsSection() {
 
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+    onSuccess: () => { toast.success(t('common.saved')); refetch() },
   })
 
   const [quietEnabled, setQuietEnabled] = useState(false)
@@ -128,8 +132,8 @@ export default function NotificationsSection() {
           <div className="flex items-center gap-3">
             <Volume2 size={16} className={audioEnabled ? 'text-fc-accent' : 'text-fc-muted'} />
             <div>
-              <p className="text-sm font-medium text-white">Sons de notification</p>
-              <p className="text-xs text-fc-muted mt-0.5">Sons pour les messages, mentions et appels entrants</p>
+              <p className="text-sm font-medium text-white">{t('settings.notif.sounds')}</p>
+              <p className="text-xs text-fc-muted mt-0.5">{t('settings.notif.soundsDesc')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -138,7 +142,7 @@ export default function NotificationsSection() {
                 onClick={playMention}
                 className="text-xs text-fc-muted hover:text-white underline"
               >
-                Tester
+                {t('settings.audio.test')}
               </button>
             )}
             <Toggle value={audioEnabled} onChange={setAudioEnabled} />
@@ -148,8 +152,8 @@ export default function NotificationsSection() {
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium text-white flex items-center gap-2"><Moon size={14} /> Heures silencieuses</div>
-            <div className="text-xs text-fc-muted">Aucune notification pendant cette plage</div>
+            <div className="text-sm font-medium text-white flex items-center gap-2"><Moon size={14} /> {t('settings.notif.quiet')}</div>
+            <div className="text-xs text-fc-muted">{t('settings.notif.quietDesc')}</div>
           </div>
           <Toggle value={quietEnabled} onChange={setQuietEnabled} />
         </div>
@@ -157,12 +161,12 @@ export default function NotificationsSection() {
         {quietEnabled && (
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-fc-hover">
             <div>
-              <label className="text-xs text-fc-muted mb-1 block">Début</label>
+              <label className="text-xs text-fc-muted mb-1 block">{t('settings.notif.start')}</label>
               <input type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)}
                 className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
             </div>
             <div>
-              <label className="text-xs text-fc-muted mb-1 block">Fin</label>
+              <label className="text-xs text-fc-muted mb-1 block">{t('settings.notif.end')}</label>
               <input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)}
                 className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
             </div>
@@ -175,7 +179,7 @@ export default function NotificationsSection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
     </div>
   )

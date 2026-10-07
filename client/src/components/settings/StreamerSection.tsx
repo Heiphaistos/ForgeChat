@@ -4,14 +4,16 @@ import { Film, Check } from 'lucide-react'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 
-const HIDDEN_ITEMS = [
-  'Adresse e-mail', 'Tag utilisateur', 'Invitations de serveur',
-  'URLs de streaming', 'Informations personnelles du profil',
-  "Notifications d'appel entrant",
+const HIDDEN_ITEMS: Key[] = [
+  'settings.streamer.email', 'settings.streamer.tag', 'settings.streamer.invites',
+  'settings.streamer.urls', 'settings.streamer.personal',
+  'settings.streamer.calls',
 ]
 
 export default function StreamerSection() {
+  const t = useT()
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -19,7 +21,7 @@ export default function StreamerSection() {
   })
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+    onSuccess: () => { toast.success(t('common.saved')); refetch() },
   })
   const [streamerMode, setStreamerMode] = useState(false)
 
@@ -34,18 +36,18 @@ export default function StreamerSection() {
     <div className="space-y-6">
       <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div>
-          <div className="text-sm font-medium text-white flex items-center gap-2"><Film size={14} /> Mode Streamer</div>
-          <div className="text-xs text-fc-muted">Masque les informations sensibles à l'écran</div>
+          <div className="text-sm font-medium text-white flex items-center gap-2"><Film size={14} /> {t('settings.section.streamer')}</div>
+          <div className="text-xs text-fc-muted">{t('settings.streamer.desc')}</div>
         </div>
         <Toggle value={streamerMode} onChange={handleToggle} />
       </div>
 
       {streamerMode && (
         <div className="space-y-2">
-          <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold">Éléments masqués</p>
+          <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold">{t('settings.streamer.hidden')}</p>
           {HIDDEN_ITEMS.map(item => (
             <div key={item} className="flex items-center gap-2 text-sm text-fc-muted">
-              <Check size={12} className="text-fc-green" /> {item}
+              <Check size={12} className="text-fc-green" /> {t(item)}
             </div>
           ))}
         </div>
@@ -56,7 +58,7 @@ export default function StreamerSection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
     </div>
   )

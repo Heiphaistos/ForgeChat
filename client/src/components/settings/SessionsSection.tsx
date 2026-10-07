@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import { Monitor, Smartphone, Trash2, Globe, Shield, Clock, Cpu } from 'lucide-react'
-import { formatDistanceToNow, format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { formatDistanceToNow } from 'date-fns'
+import { useT, t as tr, dateLocale, intlLocale } from '../../i18n'
 
 interface Session {
   id: string
@@ -14,7 +14,7 @@ interface Session {
 }
 
 function parseDevice(device: string | null): { label: string; Icon: typeof Monitor } {
-  if (!device) return { label: 'Appareil inconnu', Icon: Monitor }
+  if (!device) return { label: tr('settings.sessions.unknownDevice'), Icon: Monitor }
   const d = device.toLowerCase()
   if (d.includes('mobile') || d.includes('android') || d.includes('iphone') || d.includes('ios'))
     return { label: device, Icon: Smartphone }
@@ -31,6 +31,8 @@ function getBrowser(device: string | null): string {
 }
 
 export default function SessionsSection() {
+  const t = useT()
+  const locale = dateLocale()
   const qc = useQueryClient()
   const { data: sessions = [], isLoading } = useQuery<Session[]>({
     queryKey: ['sessions'],
@@ -64,17 +66,17 @@ export default function SessionsSection() {
         <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
           <Cpu size={18} className="mx-auto text-fc-accent mb-1" />
           <p className="text-lg font-bold text-white">{sessions.length}</p>
-          <p className="text-xs text-fc-muted">Session{sessions.length > 1 ? 's' : ''} active{sessions.length > 1 ? 's' : ''}</p>
+          <p className="text-xs text-fc-muted">{t(sessions.length > 1 ? 'settings.sessions.active.other' : 'settings.sessions.active.one')}</p>
         </div>
         <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
           <Globe size={18} className="mx-auto text-fc-muted mb-1" />
           <p className="text-lg font-bold text-white">{new Set(sessions.map(s => s.ip)).size}</p>
-          <p className="text-xs text-fc-muted">IP distincte{new Set(sessions.map(s => s.ip)).size > 1 ? 's' : ''}</p>
+          <p className="text-xs text-fc-muted">{t(new Set(sessions.map(s => s.ip)).size > 1 ? 'settings.sessions.ips.other' : 'settings.sessions.ips.one')}</p>
         </div>
         <div className="p-3 bg-fc-channel rounded-xl border border-fc-hover text-center">
           <Shield size={18} className="mx-auto text-fc-green mb-1" />
           <p className="text-lg font-bold text-white">{others.length}</p>
-          <p className="text-xs text-fc-muted">Autre{others.length > 1 ? 's' : ''}</p>
+          <p className="text-xs text-fc-muted">{t(others.length > 1 ? 'settings.sessions.others.other' : 'settings.sessions.others.one')}</p>
         </div>
       </div>
 
@@ -82,7 +84,7 @@ export default function SessionsSection() {
       {current && (
         <section>
           <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 flex items-center gap-1.5">
-            <Shield size={11} className="text-fc-green" /> Session actuelle
+            <Shield size={11} className="text-fc-green" /> {t('settings.sessions.current')}
           </h3>
           <div className="p-4 bg-fc-channel rounded-xl border border-fc-green/30">
             <div className="flex items-start gap-3">
@@ -93,15 +95,15 @@ export default function SessionsSection() {
                   {getBrowser(current.device) && (
                     <span className="text-xs bg-fc-hover text-fc-muted px-1.5 py-0.5 rounded">{getBrowser(current.device)}</span>
                   )}
-                  <span className="text-xs bg-fc-green/20 text-fc-green px-2 py-0.5 rounded-full">Actuelle</span>
+                  <span className="text-xs bg-fc-green/20 text-fc-green px-2 py-0.5 rounded-full">{t('settings.sessions.currentBadge')}</span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fc-muted">
                   <span className="flex items-center gap-1"><Globe size={11} /> {current.ip ?? '—'}</span>
                   <span className="flex items-center gap-1"><Clock size={11} />
-                    Connecté {formatDistanceToNow(new Date(current.last_seen), { addSuffix: true, locale: fr })}
+                    {t('settings.sessions.connected', { when: formatDistanceToNow(new Date(current.last_seen), { addSuffix: true, locale }) })}
                   </span>
                   <span className="flex items-center gap-1">
-                    Depuis le {format(new Date(current.created_at), 'dd/MM/yyyy', { locale: fr })}
+                    {t('settings.sessions.since', { date: new Date(current.created_at).toLocaleDateString(intlLocale()) })}
                   </span>
                 </div>
               </div>
@@ -115,14 +117,14 @@ export default function SessionsSection() {
         <section>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide flex items-center gap-1.5">
-              <Monitor size={11} /> {current ? 'Autres sessions' : 'Sessions'} ({others.length})
+              <Monitor size={11} /> {current ? t('settings.sessions.otherSessions') : t('settings.section.sessions')} ({others.length})
             </h3>
             {current && <button
               onClick={() => revokeAll.mutate()}
               disabled={revokeAll.isPending}
               className="text-xs text-fc-red hover:text-red-300 transition disabled:opacity-50"
             >
-              {revokeAll.isPending ? 'Révocation...' : 'Tout révoquer'}
+              {revokeAll.isPending ? t('settings.sessions.revoking') : t('settings.sessions.revokeAll')}
             </button>}
           </div>
           <div className="space-y-2">
@@ -140,16 +142,17 @@ export default function SessionsSection() {
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-fc-muted">
                       <span className="flex items-center gap-1"><Globe size={10} /> {s.ip ?? '—'}</span>
                       <span className="flex items-center gap-1"><Clock size={10} />
-                        {formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale: fr })}
+                        {formatDistanceToNow(new Date(s.last_seen), { addSuffix: true, locale })}
                       </span>
-                      <span>Créé le {format(new Date(s.created_at), 'dd/MM/yyyy', { locale: fr })}</span>
+                      <span>{t('settings.sessions.createdOn', { date: new Date(s.created_at).toLocaleDateString(intlLocale()) })}</span>
                     </div>
                   </div>
                   <button
                     onClick={() => revoke.mutate(s.id)}
                     disabled={revoke.isPending}
                     className="p-1.5 text-fc-muted hover:text-fc-red rounded-lg hover:bg-fc-red/10 transition disabled:opacity-50 flex-shrink-0"
-                    title="Révoquer cette session"
+                    title={t('settings.sessions.revoke')}
+                    aria-label={t('settings.sessions.revoke')}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -161,7 +164,7 @@ export default function SessionsSection() {
       )}
 
       {sessions.length === 0 && (
-        <p className="text-sm text-fc-muted text-center py-8">Aucune session enregistrée</p>
+        <p className="text-sm text-fc-muted text-center py-8">{t('settings.sessions.empty')}</p>
       )}
     </div>
   )

@@ -57,28 +57,8 @@ const NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
   { id: 'stats', label: 'settings.section.stats', icon: <BarChart3 size={16} /> },
 ]
 
-// Mots-clés de recherche par section (contenu des réglages, pas seulement le titre)
-const KEYWORDS: Record<Section, string> = {
-  account: 'email mot de passe pseudo nom utilisateur supprimer compte',
-  profile: 'avatar photo bannière bio à propos couleur',
-  connected: 'github google spotify comptes liés oauth liaison',
-  appearance: 'thème sombre clair couleur accent apparence fond',
-  text_display: 'taille police texte compact horodatage heure aperçus liens emoji markdown',
-  notifications: 'sons push mentions badge notification silencieux',
-  notifications_email: 'email courriel résumé newsletter',
-  keybindings: 'raccourcis clavier touches combinaisons',
-  language: 'langue français fuseau horaire format date heure région',
-  audio: 'micro microphone casque entrée sortie volume bruit écho',
-  video: 'caméra webcam qualité résolution arrière-plan',
-  privacy: 'vie privée dm messages privés amis qui peut confidentialité lecture',
-  security: 'mot de passe 2fa a2f double authentification totp code',
-  sessions: 'appareils connectés déconnexion à distance',
-  login_history: 'historique connexions ip localisation appareil',
-  accessibility: 'contraste animations réduites mouvement lecteur écran daltonien',
-  streamer: 'stream masquer informations sensibles obs',
-  advanced: 'développeur debug cache données expérimental',
-  stats: 'statistiques messages activité graphiques',
-}
+// Mots-clés de recherche par section (contenu des réglages, pas seulement le titre) :
+// clés settings.keywords.<section> du dictionnaire.
 
 // Recherche insensible aux accents et à la casse
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
@@ -118,7 +98,7 @@ export default function SettingsPage() {
 
   const nq = norm(query.trim())
   const filteredNav = nq
-    ? NAV.filter(item => norm(`${t(item.label)} ${KEYWORDS[item.id]}`).includes(nq))
+    ? NAV.filter(item => norm(`${t(item.label)} ${t(`settings.keywords.${item.id}`)}`).includes(nq))
     : NAV
 
   if (!user) return null
