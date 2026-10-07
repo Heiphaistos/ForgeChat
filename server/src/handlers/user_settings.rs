@@ -770,6 +770,47 @@ pub async fn put_theme(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+// ─── Thèmes perso et disposition (partagés web / bureau / mobile) ────────────
+// { customs: [thème…], layout: {…} } : chaque client valide le contenu à la lecture (couleurs
+// hexadécimales, nombres bornés, URL https) ; le serveur exige un objet JSON et borne la taille.
+
+pub const MAX_THEME_STUDIO_BYTES: usize = 1024 * 1024;
+
+fn valid_theme_studio(v: &serde_json::Value) -> bool {
+    v.is_object() && v.to_string().len() <= MAX_THEME_STUDIO_BYTES
+}
+
+pub async fn get_theme_studio(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    let data: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT data FROM user_theme_studio WHERE user_id = $1")
+            .bind(claims.sub)
+            .fetch_optional(&state.db)
+            .await?;
+    Ok(Json(data.unwrap_or(serde_json::Value::Null)))
+}
+
+pub async fn put_theme_studio(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    if !valid_theme_studio(&body) {
+        return Err(AppError::BadRequest("Thèmes invalides ou trop lourds".into()));
+    }
+    sqlx::query(
+        "INSERT INTO user_theme_studio (user_id, data) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()",
+    )
+    .bind(claims.sub)
+    .bind(&body)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 #[cfg(test)]
 mod theme_tests {
     use super::valid_theme;
@@ -777,5 +818,16 @@ mod theme_tests {
     fn theme_ids() {
         assert!(valid_theme("dark") && valid_theme("tokyo-night") && valid_theme("rose_pine"));
         assert!(!valid_theme("") && !valid_theme("Dark") && !valid_theme("a b") && !valid_theme(&"x".repeat(41)));
+        assert!(valid_theme("c-mgx3k2ab9f1z") && valid_theme("g-aurora"));
+    }
+
+    #[test]
+    fn theme_studio_shape_and_size() {
+        use super::{valid_theme_studio, MAX_THEME_STUDIO_BYTES};
+        assert!(valid_theme_studio(&serde_json::json!({ "customs": [], "layout": {} })));
+        assert!(!valid_theme_studio(&serde_json::json!([1, 2])));
+        assert!(!valid_theme_studio(&serde_json::json!("texte")));
+        let big = "x".repeat(MAX_THEME_STUDIO_BYTES);
+        assert!(!valid_theme_studio(&serde_json::json!({ "customs": big })));
     }
 }

@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { Button, Row, Section, SwitchRow } from '@/components/ui'
-import { restartApp } from '@/features/appearance/sync'
+import { accountCustomThemes, restartApp, themeStudioKey } from '@/features/appearance/sync'
 import { useLang, useT, type Lang } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
-import { THEMES } from '@/theme/palettes'
-import { appearance, saveAppearance, TEXT_SCALES, useAppearance, type AppearancePrefs } from '@/theme/prefs'
+import { paletteFromSpec, THEMES, type Palette } from '@/theme/palettes'
+import { appearance, deviceCustom, DENSITIES, saveAppearance, TEXT_SCALES, useAppearance, type AppearancePrefs } from '@/theme/prefs'
+import { cssGradient, type PresetGroup, type ThemeSpec } from '@/theme/themeCore'
 
 /** Langues traduites (libellés dans leur propre langue, jamais traduits). */
 const LANGS: { code: Lang; label: string }[] = [
@@ -20,8 +21,55 @@ const LANGS: { code: Lang; label: string }[] = [
 /** Accents proposés (null = celui du thème) : accent_color du web, partagé entre appareils. */
 const ACCENTS = [null, '#5865f2', '#00a8fc', '#23a55a', '#f0b232', '#e67e22', '#f23f43', '#eb6f92', '#9b59b6'] as const
 
-/** Réglages qui ne s'appliquent qu'au lancement (couleurs et tailles lues avant tout écran). */
-const needsRestart = (p: AppearancePrefs) => p.theme !== appearance.theme || p.accent !== appearance.accent || p.textScale !== appearance.textScale
+/** Réglages qui ne s'appliquent qu'au lancement (couleurs, tailles et espacements lus avant tout écran). */
+const needsRestart = (p: AppearancePrefs) =>
+  p.theme !== appearance.theme ||
+  p.accent !== appearance.accent ||
+  p.textScale !== appearance.textScale ||
+  p.density !== appearance.density ||
+  JSON.stringify(p.custom) !== JSON.stringify(appearance.custom)
+
+const GROUPS: { id: PresetGroup; title: 'appearance.themeBase' | 'appearance.themeGradient' | 'appearance.themeClassic' }[] = [
+  { id: 'base', title: 'appearance.themeBase' },
+  { id: 'gradient', title: 'appearance.themeGradient' },
+  { id: 'classic', title: 'appearance.themeClassic' },
+]
+
+interface CardTheme {
+  id: string
+  label: string
+  palette: Palette
+  gradient: string | null
+  spec?: ThemeSpec
+}
+
+/** Vignette d'un thème : ses couleurs (et son dégradé) sur une carte. */
+function ThemeCard({ th, selected, onPress }: { th: CardTheme; selected: boolean; onPress: () => void }) {
+  const t = useT()
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('appearance.themeLabel', { name: th.label })}
+      accessibilityState={{ selected }}
+      style={[
+        styles.card,
+        { backgroundColor: th.palette.bg, borderColor: selected ? colors.primary : colors.border },
+        th.gradient ? { experimental_backgroundImage: th.gradient } : null,
+      ]}
+    >
+      <View style={styles.swatches}>
+        {[th.palette.bgDeep, th.palette.bgAlt, th.palette.primary, th.palette.text].map((c, i) => (
+          <View key={i} style={[styles.swatch, { backgroundColor: c }]} />
+        ))}
+      </View>
+      <Text style={[styles.cardLabel, { color: th.palette.text }]} numberOfLines={1}>
+        {th.label}
+      </Text>
+      {selected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.check} /> : null}
+    </Pressable>
+  )
+}
 
 export default function AppearanceScreen() {
   const prefs = useAppearance()
@@ -33,6 +81,13 @@ export default function AppearanceScreen() {
     onSuccess: (data) => queryClient.setQueryData(settingsKey, data),
     onError: (e) => Alert.alert(t('appearance.notSynced'), t('appearance.notSyncedBody', { error: errorMessage(e) })),
   })
+
+  const studio = useQuery({ queryKey: themeStudioKey, queryFn: settingsApi.themeStudio })
+  const customs = accountCustomThemes(studio.data)
+  const pickTheme = (id: string, custom?: ThemeSpec) => {
+    saveAppearance({ theme: id, custom: custom ? deviceCustom(custom) : null })
+    settingsApi.setTheme(id).catch(() => undefined)
+  }
 
   const restart = () => {
     if (!restartApp()) Alert.alert(t('appearance.themeSaved'), t('appearance.reopenForTheme'))
@@ -64,35 +119,34 @@ export default function AppearanceScreen() {
         ))}
       </Section>
 
-      <Section title={t('appearance.theme')} footer={t('appearance.themeFooter')}>
-        <View style={styles.grid}>
-          {THEMES.map((th) => {
-            const selected = prefs.theme === th.id
-            return (
-              <Pressable
+      {GROUPS.map((g) => (
+        <Section key={g.id} title={t(g.title)} footer={g.id === 'base' ? t('appearance.themeFooter') : undefined}>
+          <View style={styles.grid}>
+            {THEMES.filter((th) => th.group === g.id).map((th) => (
+              <ThemeCard
                 key={th.id}
-                onPress={() => {
-                  saveAppearance({ theme: th.id })
-                  settingsApi.setTheme(th.id).catch(() => undefined)
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={t('appearance.themeLabel', { name: th.label })}
-                accessibilityState={{ selected }}
-                style={[styles.card, { backgroundColor: th.palette.bg, borderColor: selected ? colors.primary : colors.border }]}
-              >
-                <View style={styles.swatches}>
-                  {[th.palette.bgDeep, th.palette.bgAlt, th.palette.primary, th.palette.text].map((c, i) => (
-                    <View key={i} style={[styles.swatch, { backgroundColor: c }]} />
-                  ))}
-                </View>
-                <Text style={[styles.cardLabel, { color: th.palette.text }]} numberOfLines={1}>
-                  {th.label}
-                </Text>
-                {selected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} style={styles.check} /> : null}
-              </Pressable>
-            )
-          })}
-        </View>
+                th={{ ...th, label: th.label[lang] }}
+                selected={prefs.theme === th.id}
+                onPress={() => pickTheme(th.id)}
+              />
+            ))}
+          </View>
+        </Section>
+      ))}
+
+      <Section title={t('appearance.themeCustom')} footer={t('appearance.customFooter')}>
+        {customs.length ? (
+          <View style={styles.grid}>
+            {customs.map((c) => (
+              <ThemeCard
+                key={c.id}
+                th={{ id: c.id, label: c.name, palette: paletteFromSpec(c), gradient: c.gradient ? cssGradient(c.gradient) : null }}
+                selected={prefs.theme === c.id}
+                onPress={() => pickTheme(c.id, c)}
+              />
+            ))}
+          </View>
+        ) : null}
       </Section>
 
       <Section title={t('appearance.accent')} footer={t('appearance.syncedF')}>
@@ -116,6 +170,18 @@ export default function AppearanceScreen() {
             )
           })}
         </View>
+      </Section>
+
+      <Section title={t('appearance.density')} footer={t('appearance.densityFooter')}>
+        {DENSITIES.map((d) => (
+          <Row
+            key={d.value}
+            title={t(d.label)}
+            selected={prefs.density === d.value}
+            onPress={() => saveAppearance({ density: d.value })}
+            right={prefs.density === d.value ? <Ionicons name="checkmark" size={20} color={colors.primary} /> : null}
+          />
+        ))}
       </Section>
 
       <Section title={t('appearance.textSize')}>

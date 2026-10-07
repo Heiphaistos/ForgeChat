@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store'
 import { create } from 'zustand'
 import { DEFAULT_THEME, isHexColor } from './palettes'
+import { sanitizeTheme, type ThemeSpec } from './themeCore'
 
 /**
  * Préférences d'apparence de cet appareil. Lues de façon SYNCHRONE au chargement de theme/index.ts,
@@ -16,6 +17,25 @@ export interface AppearancePrefs {
   textScale: number
   /** Mode streamer (streamer_mode du serveur) : masque le tag et les codes d'invitation. */
   streamerMode: boolean
+  /** Thème perso actif (`theme` = « c-… »), copié du compte sans son image : lu au démarrage. */
+  custom: ThemeSpec | null
+  /** Densité : espacements de toute l'application (réglage de cet appareil). */
+  density: Density
+}
+
+export type Density = 'compact' | 'normal' | 'comfortable'
+
+/** `label` : clé de traduction (src/i18n) ; `scale` : facteur des espacements. */
+export const DENSITIES = [
+  { value: 'compact', label: 'appearance.densityCompact', scale: 0.8 },
+  { value: 'normal', label: 'appearance.densityNormal', scale: 1 },
+  { value: 'comfortable', label: 'appearance.densityComfortable', scale: 1.2 },
+] as const
+
+/** Thème perso gardé sur l'appareil : sans image (stockage sécurisé limité, le mobile ne l'affiche pas). */
+export const deviceCustom = (raw: unknown): ThemeSpec | null => {
+  const spec = sanitizeTheme(raw)
+  return spec ? { ...spec, image: null } : null
 }
 
 /** `label` : clé de traduction (src/i18n). */
@@ -26,7 +46,7 @@ export const TEXT_SCALES = [
   { value: 1.3, label: 'appearance.textXLarge' },
 ] as const
 
-export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false }
+export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false, custom: null, density: 'normal' }
 
 /** Valeur stockée → préférences valides (tout champ invalide reprend sa valeur par défaut). */
 export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
@@ -43,6 +63,8 @@ export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
     timeFormat: v.timeFormat === '12h' ? '12h' : '24h',
     textScale: TEXT_SCALES.some((s) => s.value === v.textScale) ? (v.textScale as number) : 1,
     streamerMode: v.streamerMode === true,
+    custom: v.custom ? deviceCustom(v.custom) : null,
+    density: DENSITIES.some((d) => d.value === v.density) ? (v.density as Density) : 'normal',
   }
 }
 
@@ -70,7 +92,7 @@ export const useAppearance = create<AppearancePrefs>(() => ({ ...appearance }))
 export function saveAppearance(patch: Partial<AppearancePrefs>): void {
   useAppearance.setState(patch)
   const savedAppearance = useAppearance.getState()
-  // Effets immédiats seulement : thème, accent et taille de texte attendent le redémarrage.
+  // Effets immédiats seulement : thème, accent, taille de texte et densité attendent le redémarrage.
   appearance.timeFormat = savedAppearance.timeFormat
   appearance.streamerMode = savedAppearance.streamerMode
   try {

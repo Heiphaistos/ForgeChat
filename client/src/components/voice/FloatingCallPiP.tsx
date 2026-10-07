@@ -173,7 +173,7 @@ function Widget({
           {label}
         </span>
       </div>
-      <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-[#232629]">
+      <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-fc-sidebar">
         <button
           onClick={onToggleMic}
           aria-label={micMuted ? 'Activer le micro' : 'Couper le micro'}

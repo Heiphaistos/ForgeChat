@@ -38,7 +38,7 @@ export default function VoiceBar() {
   }
 
   return (
-    <div className="bg-[#232629] border-t border-black/40 flex-shrink-0">
+    <div className="bg-fc-sidebar border-t border-black/40 flex-shrink-0">
       {/* Bandeau connecté */}
       <div className="flex items-center gap-2 px-3 pt-2 pb-1">
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${speaking ? 'bg-green-400' : 'bg-green-600'}`} />

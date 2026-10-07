@@ -25,12 +25,8 @@ import { stripMarkdown } from './utils/mdShortcuts'
 import { mentionsToText } from './utils/mentions'
 import { syncWebPush } from './utils/webPush'
 
-function hexToRgb(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `${r} ${g} ${b}`
-}
+import { useThemeStore, asDensity } from './theme/themeStore'
+import { fontStack } from './theme/fonts'
 
 // Imports statiques pour le chemin critique
 import MainLayout from './components/layout/MainLayout'
@@ -201,39 +197,12 @@ function AppInner() {
 
   useEffect(() => { fetchMe() }, [])
 
-  // Appliquer le thème sauvegardé au démarrage
-  useEffect(() => {
-    const saved = localStorage.getItem('fc_theme') || 'dark'
-    document.documentElement.setAttribute('data-theme', saved)
-  }, [])
-
-  // Thème du compte (choisi sur un autre appareil) : il remplace celui de ce navigateur.
+  // Thème, thèmes perso et disposition du compte (choisis sur un autre appareil) :
+  // le thème local est déjà appliqué au chargement de theme/themeStore.
   useEffect(() => {
     if (!user) return
-    api.get('/user/theme').then(({ data }) => {
-      const t = typeof data?.theme === 'string' ? data.theme : null
-      if (!t || t === localStorage.getItem('fc_theme')) return
-      localStorage.setItem('fc_theme', t)
-      document.documentElement.setAttribute('data-theme', t)
-    }).catch(() => {})
+    useThemeStore.getState().loadRemote().catch(() => {})
   }, [user])
-
-  // Synchroniser la barre de statut mobile (meta theme-color) avec le fond du
-  // thème actif — recalculé à chaque changement de data-theme, sans mapping manuel
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]')
-    if (!meta) return
-    const sync = () => {
-      requestAnimationFrame(() => {
-        const bg = getComputedStyle(document.body).backgroundColor
-        if (bg) meta.setAttribute('content', bg)
-      })
-    }
-    sync()
-    const obs = new MutationObserver(sync)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => obs.disconnect()
-  }, [])
 
   // Appliquer le zoom sauvegardé au démarrage
   useEffect(() => {
@@ -319,29 +288,17 @@ function AppInner() {
         root.setAttribute('data-streamer-mode', String(d.streamer_mode ?? false))
 
         // Densité
-        const density = (d.interface_density as string | undefined) ?? 'normal'
-        root.setAttribute('data-density', density)
-        localStorage.setItem('fc_density', density)
+        useThemeStore.getState().setDensity(asDensity(d.interface_density))
 
-        // Typographie
-        const fontFamily = (d.font_family as string | undefined) ?? 'Inter'
-        root.style.setProperty('--fc-font-family', `'${fontFamily}', sans-serif`)
+        // Typographie (polices connues uniquement)
+        root.style.setProperty('--fc-font-family', fontStack(d.font_family))
         const fontSize = typeof d.font_size_px === 'number' ? d.font_size_px : 14
         root.style.setProperty('--fc-font-size', `${fontSize}px`)
 
-        // Couleurs personnalisées
-        if (typeof d.accent_color === 'string' && d.accent_color) {
-          root.style.setProperty('--fc-accent-rgb', hexToRgb(d.accent_color))
-        }
-        if (typeof d.font_color === 'string' && d.font_color)
-          root.style.setProperty('--fc-text', d.font_color)
-        if (typeof d.bg_color === 'string' && d.bg_color)
-          root.style.setProperty('--fc-bg', d.bg_color)
+        // Accent du compte (remplace celui des thèmes prédéfinis, partagé avec le mobile)
+        useThemeStore.getState().setAccent(typeof d.accent_color === 'string' ? d.accent_color : null)
 
-        // Glassmorphism, forme avatar, affichage messages
-        root.setAttribute('data-glassmorphism', String(d.glassmorphism ?? false))
         root.setAttribute('data-avatar-shape', (d.avatar_shape as string | undefined) ?? 'round')
-        root.setAttribute('data-message-display', (d.message_display as string | undefined) ?? 'normal')
 
         // Largeur sidebar — sync vers localStorage uniquement si pas déjà forcée par l'utilisateur
         if (typeof d.sidebar_width_px === 'number' && !localStorage.getItem('fc_sidebar_width'))

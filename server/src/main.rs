@@ -846,6 +846,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/channel-notif/:channel_id", post(handlers::user_settings::set_channel_notification_override))
         .route("/users/me/server-layout", get(handlers::user_settings::get_server_layout).put(handlers::user_settings::put_server_layout).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/user/theme", get(handlers::user_settings::get_theme).put(handlers::user_settings::put_theme))
+        .route("/user/theme-studio", get(handlers::user_settings::get_theme_studio).put(handlers::user_settings::put_theme_studio).layer(DefaultBodyLimit::max(handlers::user_settings::MAX_THEME_STUDIO_BYTES + 4096)))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))

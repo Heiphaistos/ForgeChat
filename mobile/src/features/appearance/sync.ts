@@ -3,8 +3,9 @@ import { requireOptionalNativeModule } from 'expo'
 import { useEffect } from 'react'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { useLang } from '@/i18n'
-import { isHexColor, THEMES } from '@/theme/palettes'
-import { saveAppearance, useAppearance, type AppearancePrefs } from '@/theme/prefs'
+import { isHexColor } from '@/theme/palettes'
+import { deviceCustom, saveAppearance, useAppearance, type AppearancePrefs } from '@/theme/prefs'
+import { findTheme, sanitizeCustomList, type CustomTheme } from '@/theme/themeCore'
 
 /** Réglages du compte (web) → préférences locales ; seuls les champs qui diffèrent sont rendus. */
 export function serverAppearancePatch(s: Partial<ServerSideSettings>, local: AppearancePrefs): Partial<AppearancePrefs> {
@@ -20,6 +21,26 @@ export function serverAppearancePatch(s: Partial<ServerSideSettings>, local: App
   return patch
 }
 
+export const themeStudioKey = ['theme-studio'] as const
+
+/** Thèmes perso du compte (créés sur le web ou le bureau), validés. */
+export const accountCustomThemes = (data: { customs?: unknown } | null | undefined): CustomTheme[] => sanitizeCustomList(data?.customs)
+
+/**
+ * Thème du compte → préférences locales. Un thème perso (« c-… ») n'est retenu que si ses couleurs
+ * sont connues ; elles sont copiées sur l'appareil (lues au démarrage, sans réseau).
+ */
+export function serverThemePatch(theme: string | null | undefined, customs: CustomTheme[], local: AppearancePrefs): Partial<AppearancePrefs> | null {
+  if (!theme) return null
+  if (theme.startsWith('c-')) {
+    const found = customs.find((c) => c.id === theme)
+    if (!found) return null
+    const custom = deviceCustom(found)
+    return theme !== local.theme || JSON.stringify(custom) !== JSON.stringify(local.custom) ? { theme, custom } : null
+  }
+  return findTheme(theme) && theme !== local.theme ? { theme, custom: null } : null
+}
+
 /**
  * Reprend l'accent, le format de l'heure, le mode streamer et la langue choisis sur le web. L'heure et le mode
  * streamer s'appliquent tout de suite, l'accent au prochain lancement (couleurs lues au démarrage).
@@ -27,6 +48,7 @@ export function serverAppearancePatch(s: Partial<ServerSideSettings>, local: App
 export function useAppearanceSync() {
   const { data } = useQuery({ queryKey: settingsKey, queryFn: settingsApi.get })
   const theme = useQuery({ queryKey: ['user-theme'], queryFn: settingsApi.theme })
+  const studio = useQuery({ queryKey: themeStudioKey, queryFn: settingsApi.themeStudio })
   useEffect(() => {
     if (!data) return
     const patch = serverAppearancePatch(data, useAppearance.getState())
@@ -36,9 +58,9 @@ export function useAppearanceSync() {
   }, [data])
   // Thème choisi sur le web ou le bureau : appliqué au prochain lancement (couleurs lues au démarrage).
   useEffect(() => {
-    const t = theme.data?.theme
-    if (t && t !== useAppearance.getState().theme && THEMES.some((x) => x.id === t)) saveAppearance({ theme: t })
-  }, [theme.data])
+    const patch = serverThemePatch(theme.data?.theme, accountCustomThemes(studio.data), useAppearance.getState())
+    if (patch) saveAppearance(patch)
+  }, [theme.data, studio.data])
 }
 
 const nativeApp = requireOptionalNativeModule<{ restart(): void }>('ForgeCallService')

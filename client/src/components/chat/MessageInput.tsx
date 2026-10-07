@@ -1093,7 +1093,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         </div>
       )}
 
-      <div className="bg-fc-input rounded-lg">
+      <div className="fc-composer-box bg-fc-input rounded-lg">
         {/* Barre Rich Text — toujours sur desktop ; sur mobile dès qu'on tape
             (seul moyen de formater au tactile, masquée composer vide pour l'espace) */}
         <div className={`${content.trim() ? 'flex' : 'hidden'} md:flex items-center gap-0.5 px-2 pt-1.5 pb-1 border-b border-fc-hover overflow-x-auto`}>

@@ -243,7 +243,7 @@ export default function MemberList({ serverId, onClose }: Props) {
       onScroll={measure}
       role="complementary"
       aria-label={t('channel.members')}
-      className="absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
+      className="fc-member-list absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
     >
       {/* Header mobile avec fermeture (la liste est un overlay plein écran) */}
       <div className="lg:hidden flex items-center justify-between px-2 py-2 border-b border-fc-bg mb-2">
