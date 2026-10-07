@@ -22,6 +22,8 @@ pub const TEMP_CHANNEL_GRACE: Duration = Duration::from_secs(10);
 /// TTL du cache Redis de reprise de l'état vocal (N2/N3).
 pub const VOICE_REDIS_TTL_S: u64 = 120;
 const VOICE_REDIS_KEY: &str = "voice:snapshot";
+/// Délai laissé aux clients pour rejouer VOICE_JOIN après un redémarrage du serveur.
+const VOICE_RESTORE_GRACE_S: u64 = 60;
 
 pub type WsSender = broadcast::Sender<String>;
 pub type ClientMap = Arc<RwLock<HashMap<Uuid, WsSender>>>;
@@ -150,6 +152,23 @@ impl AppState {
 
         state.restore_voice_from_redis().await;
 
+        // Après un redémarrage, l'état vocal restauré n'a plus de session WS
+        // propriétaire : ni VOICE_LEAVE ni la fermeture de l'onglet ne peuvent
+        // alors le nettoyer (cleanup_voice exige la session propriétaire), et le
+        // rafraîchissement ci-dessous le réécrit dans Redis à chaque fois. Ceux
+        // qui n'ont pas rejoué VOICE_JOIN dans le délai sont donc des fantômes.
+        // ponytail: un VOICE_JOIN pile entre voice_join et l'enregistrement de sa
+        // session (quelques µs, une seule fois au démarrage) serait retiré à
+        // tort. Insérer la session avant voice_join si ça se voit un jour.
+        let reaper = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(VOICE_RESTORE_GRACE_S)).await;
+            for user_id in reaper.voice_without_session().await {
+                tracing::info!(user_id = %user_id, "Voice: présence restaurée sans reconnexion, retirée");
+                crate::handlers::websocket::cleanup_voice(&reaper, user_id, None).await;
+            }
+        });
+
         // Rafraîchissement du TTL Redis : l'instantané expire en 120 s si le
         // process meurt, mais reste vivant tant qu'il tourne.
         let refresher = state.clone();
@@ -185,6 +204,12 @@ impl AppState {
             .set_ex(VOICE_REDIS_KEY, json, VOICE_REDIS_TTL_S)
             .await
             .unwrap_or(());
+    }
+
+    /// Utilisateurs comptés en vocal sans session WS qui détient ce vocal.
+    pub async fn voice_without_session(&self) -> Vec<Uuid> {
+        let sessions = self.voice_sessions.read().await;
+        self.user_voice.read().await.keys().filter(|u| !sessions.contains_key(u)).copied().collect()
     }
 
     async fn restore_voice_from_redis(&self) {
