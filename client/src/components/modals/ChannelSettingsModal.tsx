@@ -8,46 +8,32 @@ import { useAuth } from '../../store/auth'
 import { useServerPerms } from '../../hooks/useServerPerms'
 import { deleteWithBackup } from '../../lib/deleteWithBackup'
 import ChannelFollowsSection from './ChannelFollowsSection'
+import { useT, type Key } from '../../i18n'
 
-const SLOWMODE_OPTIONS = [
-  { label: 'Désactivé', value: 0 },
-  { label: '5 secondes', value: 5 },
-  { label: '10 secondes', value: 10 },
-  { label: '15 secondes', value: 15 },
-  { label: '30 secondes', value: 30 },
-  { label: '1 minute', value: 60 },
-  { label: '2 minutes', value: 120 },
-  { label: '5 minutes', value: 300 },
-  { label: '10 minutes', value: 600 },
-  { label: '1 heure', value: 3600 },
-]
+// Libellés : clés slowmode.<secondes>.
+const SLOWMODE_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 300, 600, 3600] as const
 
 // Permissions affichables dans les overrides canal — mêmes bits que le serveur
-// (server/src/models/role.rs::Permissions), seuls appliqués.
+// (server/src/models/role.rs::Permissions), seuls appliqués. Libellés : clés chperm.<key>.
 const CHANNEL_PERMISSION_BITS = [
-  { key: 'VIEW_CHANNEL',     bit: Math.pow(2, 0),  label: 'Voir le salon' },
-  { key: 'SEND_MESSAGES',    bit: Math.pow(2, 1),  label: 'Envoyer des messages' },
-  { key: 'READ_HISTORY',     bit: Math.pow(2, 2),  label: 'Lire l\'historique' },
-  { key: 'MANAGE_MESSAGES',  bit: Math.pow(2, 3),  label: 'Gérer les messages' },
-  { key: 'ATTACH_FILES',     bit: Math.pow(2, 10), label: 'Joindre des fichiers' },
-  { key: 'ADD_REACTIONS',    bit: Math.pow(2, 12), label: 'Ajouter des réactions' },
-  { key: 'EMBED_LINKS',      bit: Math.pow(2, 11), label: 'Intégrer des liens' },
-  { key: 'MENTION_EVERYONE', bit: Math.pow(2, 9),  label: 'Mentionner @everyone' },
-  { key: 'CONNECT_VOICE',    bit: Math.pow(2, 13), label: 'Rejoindre la voix' },
-  { key: 'SPEAK_VOICE',      bit: Math.pow(2, 14), label: 'Parler' },
-  { key: 'STREAM',           bit: Math.pow(2, 40), label: 'Partager l\'écran' },
-  { key: 'MUTE_MEMBERS',     bit: Math.pow(2, 15), label: 'Rendre muet' },
-  { key: 'DEAFEN_MEMBERS',   bit: Math.pow(2, 16), label: 'Rendre sourd' },
-  { key: 'MOVE_MEMBERS',     bit: Math.pow(2, 17), label: 'Déplacer des membres' },
-  { key: 'PRIORITY_SPEAKER', bit: Math.pow(2, 18), label: 'Orateur prioritaire' },
-]
+  { key: 'VIEW_CHANNEL',     bit: Math.pow(2, 0) },
+  { key: 'SEND_MESSAGES',    bit: Math.pow(2, 1) },
+  { key: 'READ_HISTORY',     bit: Math.pow(2, 2) },
+  { key: 'MANAGE_MESSAGES',  bit: Math.pow(2, 3) },
+  { key: 'ATTACH_FILES',     bit: Math.pow(2, 10) },
+  { key: 'ADD_REACTIONS',    bit: Math.pow(2, 12) },
+  { key: 'EMBED_LINKS',      bit: Math.pow(2, 11) },
+  { key: 'MENTION_EVERYONE', bit: Math.pow(2, 9) },
+  { key: 'CONNECT_VOICE',    bit: Math.pow(2, 13) },
+  { key: 'SPEAK_VOICE',      bit: Math.pow(2, 14) },
+  { key: 'STREAM',           bit: Math.pow(2, 40) },
+  { key: 'MUTE_MEMBERS',     bit: Math.pow(2, 15) },
+  { key: 'DEAFEN_MEMBERS',   bit: Math.pow(2, 16) },
+  { key: 'MOVE_MEMBERS',     bit: Math.pow(2, 17) },
+  { key: 'PRIORITY_SPEAKER', bit: Math.pow(2, 18) },
+] as const
 
-const FORUM_SORT_OPTIONS = [
-  { value: 'latest_activity', label: 'Dernière activité' },
-  { value: 'creation_date', label: 'Date de création' },
-  { value: 'most_replies', label: 'Nombre de réponses' },
-  { value: 'most_reactions', label: 'Nombre de réactions' },
-]
+const FORUM_SORT_OPTIONS = ['latest_activity', 'creation_date', 'most_replies', 'most_reactions'] as const
 
 interface Channel {
   id: string
@@ -92,6 +78,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 // ─── Onglet Permissions ───────────────────────────────────────────────────────
 
 function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const [selectedTarget, setSelectedTarget] = useState<{ id: string; name: string; type: 'role' | 'user' } | null>(null)
   const [editAllow, setEditAllow] = useState(0)
@@ -115,14 +102,14 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
       allow: editAllow,
       deny: editDeny,
     }),
-    onSuccess: () => { refetch(); toast.success('Permissions sauvegardées') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onSuccess: () => { refetch(); toast.success(t('chset.permsSaved')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const deleteOverride = useMutation({
     mutationFn: (targetId: string) => api.delete(`/channels/${channel.id}/permissions/${targetId}`),
-    onSuccess: () => { refetch(); setSelectedTarget(null); toast.success('Override supprimé') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onSuccess: () => { refetch(); setSelectedTarget(null); toast.success(t('chset.overrideDeleted')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const selectTarget = (target: { id: string; name: string; type: 'role' | 'user' }) => {
@@ -170,7 +157,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
     <div className="flex gap-4 h-full min-h-0">
       {/* Targets list */}
       <div className="w-48 flex-shrink-0">
-        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-2">Rôles / Membres</p>
+        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-2">{t('chset.targets')}</p>
         <div className="space-y-0.5 mb-3">
           {(overrides as any[]).map((o: any) => {
             const role = (roles as any[]).find((r: any) => r.id === o.target_id)
@@ -191,7 +178,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
         </div>
 
         {/* Ajouter un rôle */}
-        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-1">Ajouter</p>
+        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-1">{t('chset.add')}</p>
         <div className="space-y-0.5">
           {(roles as any[]).filter((r: any) => !(overrides as any[]).find((o: any) => o.target_id === r.id)).map((r: any) => (
             <button key={r.id}
@@ -213,10 +200,10 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
               <button onClick={() => saveOverride.mutate()}
                 disabled={saveOverride.isPending}
                 className="px-3 py-1 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition disabled:opacity-50">
-                Sauvegarder
+                {t('common.save')}
               </button>
               <button onClick={() => deleteOverride.mutate(selectedTarget.id)}
-                className="p-1 text-fc-muted hover:text-red-400 rounded transition" title="Supprimer l'override">
+                className="p-1 text-fc-muted hover:text-red-400 rounded transition" title={t('chset.deleteOverride')} aria-label={t('chset.deleteOverride')}>
                 <Trash2 size={14} />
               </button>
             </div>
@@ -224,9 +211,9 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
 
           {/* Légende */}
           <div className="flex gap-3 text-xs text-fc-muted mb-3 flex-shrink-0">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500" /> Autorisé</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500" /> Refusé</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-fc-muted/30" /> Hérité</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500" /> {t('chset.allowed')}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500" /> {t('chset.denied')}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-fc-muted/30" /> {t('chset.inherited')}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto overscroll-contain space-y-1 pr-1">
@@ -235,18 +222,18 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
               return (
                 <div key={p.key}
                   className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-fc-hover/20 transition">
-                  <span className="text-sm text-white">{p.label}</span>
+                  <span className="text-sm text-white">{t(`chperm.${p.key}`)}</span>
                   <div className="flex items-center gap-1">
                     {/* Neutre */}
-                    <button onClick={() => setState(p.bit, 'neutral')}
+                    <button onClick={() => setState(p.bit, 'neutral')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.inherited')}`} aria-pressed={state === 'neutral'}
                       className={`w-6 h-6 rounded-full transition border-2 ${state === 'neutral' ? 'bg-fc-muted/30 border-fc-muted' : 'border-transparent hover:border-fc-muted/50'}`} />
                     {/* Autorisé */}
-                    <button onClick={() => setState(p.bit, 'allow')}
+                    <button onClick={() => setState(p.bit, 'allow')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.allowed')}`} aria-pressed={state === 'allow'}
                       className={`w-6 h-6 rounded-full transition flex items-center justify-center ${state === 'allow' ? 'bg-green-500' : 'hover:bg-green-500/20 border border-fc-hover'}`}>
                       {state === 'allow' && <span className="text-white text-xs">✓</span>}
                     </button>
                     {/* Refusé */}
-                    <button onClick={() => setState(p.bit, 'deny')}
+                    <button onClick={() => setState(p.bit, 'deny')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.denied')}`} aria-pressed={state === 'deny'}
                       className={`w-6 h-6 rounded-full transition flex items-center justify-center ${state === 'deny' ? 'bg-red-500' : 'hover:bg-red-500/20 border border-fc-hover'}`}>
                       {state === 'deny' && <span className="text-white text-xs">✕</span>}
                     </button>
@@ -258,7 +245,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-fc-muted text-sm">
-          Sélectionne un rôle pour modifier ses permissions dans ce canal
+          {t('chset.pickRole')}
         </div>
       )}
     </div>
@@ -268,6 +255,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
 // ─── Modal principale ─────────────────────────────────────────────────────────
 
 export default function ChannelSettingsModal({ channel, serverId, onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const qc = useQueryClient()
   const [tab, setTab] = useState<TabId>('general')
@@ -336,10 +324,10 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', serverId] })
-      toast.success('Canal mis à jour')
+      toast.success(t('chset.updated'))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const removeChannel = async () => {
@@ -349,7 +337,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     setDeleting(false)
     if (!done) return
     qc.invalidateQueries({ queryKey: ['server', serverId] })
-    toast.success('Canal supprimé')
+    toast.success(t('chset.deleted'))
     onClose()
   }
 
@@ -357,16 +345,16 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     const tag = newTag.trim()
     if (!tag) return
     api.post(`/channels/${channel.id}/tags`, { name: tag }).then(() => {
-      setForumTags(t => [...t, tag])
+      setForumTags(tags => [...tags, tag])
       setNewTag('')
-    }).catch((e: any) => toast.error(e.response?.data?.error ?? "Impossible d'ajouter le tag"))
+    }).catch((e: any) => toast.error(e.response?.data?.error ?? t('chset.tagAddError')))
   }
 
   const removeForumTag = (tag: string) => {
-    setForumTags(t => t.filter(x => x !== tag))
+    setForumTags(tags => tags.filter(x => x !== tag))
     api.delete(`/channels/${channel.id}/tags/${encodeURIComponent(tag)}`).catch((e: any) => {
-      setForumTags(t => t.includes(tag) ? t : [...t, tag])
-      toast.error(e.response?.data?.error ?? 'Impossible de supprimer le tag')
+      setForumTags(tags => tags.includes(tag) ? tags : [...tags, tag])
+      toast.error(e.response?.data?.error ?? t('chset.tagRemoveError'))
     })
   }
 
@@ -378,10 +366,10 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
     : channel.type === 'stage' ? 'text-pink-400' : channel.type === 'announcement' ? 'text-yellow-400'
     : channel.type === 'forum' ? 'text-green-400' : 'text-fc-muted'
 
-  const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-    { id: 'general', label: 'Général', icon: <Settings size={14} /> },
-    ...(canEditChannels ? [{ id: 'permissions' as TabId, label: 'Permissions', icon: <Lock size={14} /> }] : []),
-    { id: 'advanced', label: 'Avancé', icon: <Shield size={14} /> },
+  const TABS: { id: TabId; label: Key; icon: React.ReactNode }[] = [
+    { id: 'general', label: 'chset.tab.general', icon: <Settings size={14} /> },
+    ...(canEditChannels ? [{ id: 'permissions' as TabId, label: 'chset.tab.permissions' as Key, icon: <Lock size={14} /> }] : []),
+    { id: 'advanced', label: 'settings.section.advanced', icon: <Shield size={14} /> },
   ]
 
   return (
@@ -393,22 +381,22 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
             <TypeIcon size={20} className={typeColor} />
             <div>
               <h2 id="channel-settings-modal-title" className="font-bold text-white text-lg">#{channel.name}</h2>
-              <p className="text-xs text-fc-muted capitalize">{channel.type}</p>
+              <p className="text-xs text-fc-muted">{t(`chtype.${channel.type}` as Key)}</p>
             </div>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
+          <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
             <X size={18} aria-hidden />
           </button>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-1 px-5 border-b border-fc-bg flex-shrink-0">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
+          {TABS.map(tb => (
+            <button key={tb.id} onClick={() => setTab(tb.id)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition border-b-2
-                ${tab === t.id ? 'text-white border-fc-accent' : 'text-fc-muted border-transparent hover:text-white'}`}>
-              {t.icon}
-              {t.label}
+                ${tab === tb.id ? 'text-white border-fc-accent' : 'text-fc-muted border-transparent hover:text-white'}`}>
+              {tb.icon}
+              {t(tb.label)}
             </button>
           ))}
         </div>
@@ -419,7 +407,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
           {tab === 'general' && (
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Nom du canal</label>
+                <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.name')}</label>
                 <div className="relative">
                   <TypeIcon size={14} className={`absolute left-3 top-3 ${typeColor}`} />
                   <input value={name}
@@ -435,12 +423,12 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
               {isText(channel.type) && (
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                    {channel.type === 'forum' ? 'Description du forum' : 'Sujet du canal'}
+                    {channel.type === 'forum' ? t('createChannel.forumDesc') : t('chset.topic')}
                     <span className="ml-2 normal-case font-normal">({topic.length}/1024)</span>
                   </label>
                   <textarea value={topic} onChange={e => setTopic(e.target.value)}
                     maxLength={1024} rows={3}
-                    placeholder={channel.type === 'forum' ? 'À quoi sert ce forum ?' : 'Décrivez ce canal...'}
+                    placeholder={channel.type === 'forum' ? t('createChannel.forumDescPh') : t('chset.topicPh')}
                     className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
                   />
                 </div>
@@ -448,10 +436,10 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
               {isText(channel.type) && (
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Mode lent</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.slowmode')}</label>
                   <select value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
-                    {SLOWMODE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {SLOWMODE_OPTIONS.map(v => <option key={v} value={v}>{t(`slowmode.${v}`)}</option>)}
                   </select>
                 </div>
               )}
@@ -459,28 +447,28 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
               {channel.type === 'forum' && (
                 <>
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">Tri par défaut</label>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('chset.defaultSort')}</label>
                     <select value={defaultSort} onChange={e => setDefaultSort(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
-                      {FORUM_SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      {FORUM_SORT_OPTIONS.map(v => <option key={v} value={v}>{t(`forumSort.${v}`)}</option>)}
                     </select>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-xl border border-fc-hover">
                     <div>
-                      <div className="text-sm font-medium text-white">Exiger un tag</div>
-                      <div className="text-xs text-fc-muted">Les posts doivent avoir un tag pour être créés</div>
+                      <div className="text-sm font-medium text-white">{t('chset.requireTag')}</div>
+                      <div className="text-xs text-fc-muted">{t('chset.requireTagDesc')}</div>
                     </div>
                     <Toggle value={requireTag} onChange={setRequireTag} />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Tags du forum</label>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('chset.forumTags')}</label>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {forumTags.map(tag => (
                         <span key={tag} className="flex items-center gap-1 px-2.5 py-1 bg-fc-hover rounded-full text-xs text-white">
                           {tag}
-                          <button onClick={() => removeForumTag(tag)} aria-label={`Supprimer le tag ${tag}`} className="text-fc-muted hover:text-red-400 transition">
+                          <button onClick={() => removeForumTag(tag)} aria-label={t('chset.removeTag', { tag })} className="text-fc-muted hover:text-red-400 transition">
                             <X size={10} />
                           </button>
                         </span>
@@ -489,13 +477,14 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                     <div className="flex gap-2">
                       <input value={newTag} onChange={e => setNewTag(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && addForumTag()}
-                        placeholder="Nouveau tag..."
+                        placeholder={t('chset.newTag')}
+                        aria-label={t('chset.newTag')}
                         maxLength={20}
                         enterKeyHint="done"
                         autoCapitalize="none"
                         className="flex-1 px-3 py-1.5 bg-fc-input rounded-lg text-white outline-none text-sm"
                       />
-                      <button onClick={addForumTag} aria-label="Ajouter le tag"
+                      <button onClick={addForumTag} aria-label={t('chset.addTag')}
                         className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm transition">
                         <Plus size={14} />
                       </button>
@@ -508,7 +497,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                      Limite d'utilisateurs — <span className="text-white">{userLimit === 0 ? 'Illimité' : userLimit}</span>
+                      {t('createChannel.userLimit')} — <span className="text-white">{userLimit === 0 ? t('invite.unlimited') : userLimit}</span>
                     </label>
                     <input type="range" min={0} max={99} value={userLimit}
                       onChange={e => setUserLimit(Number(e.target.value))}
@@ -518,7 +507,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                   {channel.type !== 'stage' && !ownsTemp && (
                     <div>
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                        Débit audio — <span className="text-white">{Math.round(bitrate / 1000)} kbps</span>
+                        {t('chset.bitrate')} — <span className="text-white">{Math.round(bitrate / 1000)} kbps</span>
                       </label>
                       <input type="range" min={8000} max={384000} step={8000} value={bitrate}
                         onChange={e => setBitrate(Number(e.target.value))}
@@ -532,17 +521,18 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                   {channel.type === 'voice' && (
                     <div>
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-                        {ownsTemp ? 'Verrouiller (mot de passe)' : 'Mot de passe vocal'}
+                        {ownsTemp ? t('chset.lock') : t('chset.voicePassword')}
                       </label>
                       {hasExistingPassword && (
                         <label className="flex items-center gap-2 text-xs text-fc-muted mb-2 cursor-pointer">
                           <input type="checkbox" checked={removePassword} onChange={e => setRemovePassword(e.target.checked)} className="accent-red-400" />
-                          Supprimer le mot de passe existant
+                          {t('chset.removePassword')}
                         </label>
                       )}
                       {!removePassword && (
                         <input type="password" value={voicePassword} onChange={e => setVoicePassword(e.target.value)}
-                          placeholder={hasExistingPassword ? 'Nouveau (vide = inchangé)' : 'Définir un mot de passe...'}
+                          placeholder={hasExistingPassword ? t('chset.newPassword') : t('chset.setPassword')}
+                          aria-label={t('chset.voicePassword')}
                           autoComplete="new-password"
                           className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm"
                         />
@@ -553,8 +543,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                   {!ownsTemp && <div className="p-4 bg-fc-bg/50 rounded-xl border border-fc-hover space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-sm font-medium text-white">Canal auto-create</div>
-                        <div className="text-xs text-fc-muted">Crée un vocal temporaire au join</div>
+                        <div className="text-sm font-medium text-white">{t('chset.autoCreate')}</div>
+                        <div className="text-xs text-fc-muted">{t('chset.autoCreateDesc')}</div>
                       </div>
                       <Toggle value={isAutoCreate} onChange={setIsAutoCreate} />
                     </div>
@@ -572,8 +562,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
               {!ownsTemp && <div className="flex items-center justify-between p-3 bg-fc-bg/50 rounded-xl border border-fc-hover">
                 <div>
-                  <div className="text-sm font-medium text-white">Canal NSFW</div>
-                  <div className="text-xs text-fc-muted">Contenu réservé aux adultes</div>
+                  <div className="text-sm font-medium text-white">{t('createChannel.nsfw')}</div>
+                  <div className="text-xs text-fc-muted">{t('chset.nsfwDesc')}</div>
                 </div>
                 <Toggle value={isNsfw} onChange={setIsNsfw} />
               </div>}
@@ -591,10 +581,10 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
           {tab === 'advanced' && (
             <div className="space-y-4">
               <div className="bg-fc-bg/50 rounded-xl border border-fc-hover p-4 space-y-3">
-                <h4 className="text-sm font-semibold text-white">Informations</h4>
+                <h4 className="text-sm font-semibold text-white">{t('chset.info')}</h4>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-fc-muted">ID : </span><span className="text-white font-mono">{channel.id.slice(0, 18)}...</span></div>
-                  <div><span className="text-fc-muted">Type : </span><span className="text-white capitalize">{channel.type}</span></div>
+                  <div><span className="text-fc-muted">{t('chset.typeLabel')} </span><span className="text-white">{t(`chtype.${channel.type}` as Key)}</span></div>
                   <div><span className="text-fc-muted">Position : </span><span className="text-white">{channel.position ?? 'N/A'}</span></div>
                 </div>
               </div>
@@ -605,19 +595,19 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
 
               {channel.type === 'stage' && (
                 <div className="p-4 bg-pink-500/10 rounded-xl border border-pink-500/30">
-                  <h4 className="text-sm font-semibold text-pink-300 mb-1">Canal Scène (Stage)</h4>
-                  <p className="text-xs text-fc-muted">Fonctionne actuellement comme un canal vocal standard : tous les membres qui rejoignent peuvent parler librement.</p>
+                  <h4 className="text-sm font-semibold text-pink-300 mb-1">{t('chset.stage')}</h4>
+                  <p className="text-xs text-fc-muted">{t('chset.stageDesc')}</p>
                 </div>
               )}
 
               {canDeleteChannel(channel.created_by) && (
                 <div className="border-t border-fc-hover pt-4">
-                  <h4 className="text-sm font-semibold text-red-400 mb-2">Zone dangereuse</h4>
+                  <h4 className="text-sm font-semibold text-red-400 mb-2">{t('settings.adv.danger')}</h4>
                   <button onClick={removeChannel}
                     disabled={deleting}
                     className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition disabled:opacity-50">
                     <Trash2 size={14} />
-                    Supprimer le canal #{channel.name}
+                    {t('chset.delete', { name: channel.name })}
                   </button>
                 </div>
               )}
@@ -628,11 +618,11 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
         {/* Footer */}
         {tab !== 'permissions' && (
           <div className="px-5 py-4 border-t border-fc-bg flex justify-end gap-3 flex-shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">Annuler</button>
+            <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">{t('common.cancel')}</button>
             {tab === 'general' && (canEditChannels || ownsTemp) && (
               <button onClick={() => save.mutate()} disabled={save.isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
-                {save.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                {save.isPending ? t('common.recording') : t('common.record')}
               </button>
             )}
           </div>
