@@ -200,11 +200,13 @@ pub async fn get_server(
     })))
 }
 
-/// Adresse d'invitation personnalisée valide : 3-30 caractères a-z, 0-9, tiret (pas en bord).
+/// Adresse d'invitation personnalisée valide : 3-30 caractères a-z, 0-9, tiret (pas en bord),
+/// et jamais la forme d'un code d'invitation (8 alphanumériques, cf. generate_invite_code).
 pub fn valid_vanity(v: &str) -> bool {
     (3..=30).contains(&v.len())
         && v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
         && !v.starts_with('-') && !v.ends_with('-')
+        && (v.len() != 8 || v.contains('-'))
 }
 
 pub async fn update_server(
@@ -427,7 +429,8 @@ pub async fn join_server(
         // … ou l'adresse personnalisée choisie par le propriétaire (invitation volontairement publique).
         None => match sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM servers WHERE (invite_code=$1 AND is_public=true)
-                OR (vanity_url IS NOT NULL AND lower(vanity_url)=lower($1)) LIMIT 1"
+                OR (vanity_url IS NOT NULL AND lower(vanity_url)=lower($1))
+             ORDER BY (invite_code=$1) DESC LIMIT 1"
         )
             .bind(&code)
             .fetch_optional(&state.db)
@@ -1645,5 +1648,9 @@ mod vanity_tests {
         assert!(!valid_vanity("-tiret"));
         assert!(!valid_vanity("a b c"));
         assert!(!valid_vanity(&"a".repeat(31)));
+        // Forme d'un code d'invitation : refusée, le code ne doit jamais être imité.
+        assert!(!valid_vanity("abcd1234"));
+        assert!(valid_vanity("abcd-123"));
+        assert!(valid_vanity("abcd12345"));
     }
 }
