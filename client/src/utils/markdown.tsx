@@ -1,8 +1,9 @@
 import api, { mediaUrl } from '../api/client'
 import hljs from 'highlight.js/lib/common'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { cachedRole, cachedUsername } from './mentions'
+import { cachedChannel, cachedRole, cachedUsername } from './mentions'
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -138,7 +139,7 @@ function formatRelativeTime(unix: number): string {
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
   // __/_ exigent une frontière de mot (comme CommonMark) -- sinon un identifiant
   // comme max_retries_value se retrouvait partiellement italicisé (_retries_).
-  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|(?<![\w_])__(.+?)__(?![\w_])|(?<![\w_])_(.+?)_(?![\w_])|~~(.+?)~~|\|\|(.+?)\|\||<a?:[a-z0-9_]{1,32}:[0-9a-f-]{36}>|<@[^>]+>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
+  const pattern = /(`[^`]+`|\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|(?<![\w_])__(.+?)__(?![\w_])|(?<![\w_])_(.+?)_(?![\w_])|~~(.+?)~~|\|\|(.+?)\|\||<a?:[a-z0-9_]{1,32}:[0-9a-f-]{36}>|<@[^>]+>|<#[0-9a-f-]{36}>|<t:\d+:[RrDdFftT]>|@everyone|@here|@\w+|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+|:[a-z0-9_]+:)/g
   const result: React.ReactNode[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -233,6 +234,12 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         </a>
       )
       if (trailing) result.push(trailing)
+    } else if (/^<#[0-9a-f-]{36}>$/.test(full)) {
+      // Mention de salon : #nom cliquable si le salon est connu (même rendu que le mobile).
+      const ch = cachedChannel(full.slice(2, -1))
+      result.push(ch?.server_id
+        ? <Link key={match.index} to={`/servers/${ch.server_id}/channels/${ch.id}`} className="mention">#{ch.name}</Link>
+        : <span key={match.index} className="mention">#{ch?.name ?? 'salon-inconnu'}</span>)
     } else if (/^<a?:[a-z0-9_]{1,32}:[0-9a-f-]{36}>$/.test(full)) {
       // Emoji d'un autre serveur (<:nom:id>) : affiché partout, même hors de ce serveur.
       const [, name, id] = full.slice(1, -1).split(':')

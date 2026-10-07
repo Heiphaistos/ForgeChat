@@ -26,6 +26,15 @@ export function cachedRole(id: string): RoleLike | undefined {
   return undefined
 }
 
+/** Salon <#id> : cherché dans les listes de salons déjà chargées (tous serveurs). */
+export function cachedChannel(id: string): { id: string; name: string; server_id?: string } | undefined {
+  for (const [, list] of queryClient.getQueriesData<{ id: string; name: string; server_id?: string }[]>({ queryKey: ['channels'] })) {
+    const hit = Array.isArray(list) ? list.find(c => c.id === id) : undefined
+    if (hit) return hit
+  }
+  return undefined
+}
+
 /** Texte lisible (toasts, notifications système) : jetons remplacés par @nom. */
 export function mentionsToText(content: string): string {
   return content.replace(MENTION_TOKEN_RE, (_, kind: string, id: string) =>
