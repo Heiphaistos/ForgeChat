@@ -4,6 +4,11 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <!-- Partage d'écran (MediaProjection) : le service au premier plan de type mediaProjection est
+       celui de @livekit/react-native-webrtc (MediaProjectionService, déclaré dans son manifeste) ;
+       la permission est aussi posée par plugins/withScreenShare.js. CallForegroundService ne prend
+       PAS ce type : démarré sans jeton de capture, Android 14 le refuserait (SecurityException). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
   <!-- Mode « Notifications sans Google » : connexion gardée en arrière-plan (KeepAliveService). -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
   <application>

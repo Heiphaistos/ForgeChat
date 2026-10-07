@@ -23,6 +23,8 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
   const [url, setUrl] = useState('')
   const [muted, setMuted] = useState(false)
   const [failedItem, setFailedItem] = useState<number | null>(null)
+  // Musique ensemble : lecteur réduit (toujours visible, comme l'exige YouTube), commandes et file en avant.
+  const [music, setMusic] = useState(false)
 
   useEffect(
     () =>
@@ -57,16 +59,19 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
         {watch ? (
           <IconButton icon="open-outline" label={t('panel.watch.openYoutube')} size={18} onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)} />
         ) : null}
+        <IconButton icon="musical-notes" label={t('voiceLot.music.toggle')} size={18} active={music} onPress={() => setMusic((m) => !m)} />
         <IconButton icon="close" label={t('panel.watch.hide')} size={18} onPress={onClose} />
       </View>
 
       {watch && !failed ? (
-        <WatchPlayer
-          watch={watch}
-          muted={muted}
-          onEnded={(item) => send({ type: 'WATCH_NEXT', item })}
-          onFailed={setFailedItem}
-        />
+        <View style={music ? styles.small : undefined}>
+          <WatchPlayer
+            watch={watch}
+            muted={muted}
+            onEnded={(item) => send({ type: 'WATCH_NEXT', item })}
+            onFailed={setFailedItem}
+          />
+        </View>
       ) : (
         <View style={styles.placeholder}>
           <Text style={styles.hint}>
@@ -101,7 +106,7 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
           value={url}
           onChangeText={setUrl}
           maxLength={300}
-          placeholder="https://www.youtube.com/watch?v=…"
+          placeholder={music ? 'https://music.youtube.com/watch?v=…' : 'https://www.youtube.com/watch?v=…'}
           placeholderTextColor={colors.textFaint}
           accessibilityLabel={t('panel.watch.urlA11y')}
           autoCapitalize="none"
@@ -123,6 +128,7 @@ const styles = StyleSheet.create({
   panel: { margin: spacing.md, marginBottom: 0, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bgAlt },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   title: { flex: 1, color: colors.text, fontSize: font.sm, fontWeight: '700' },
+  small: { width: 200, alignSelf: 'center', borderRadius: radius.sm, overflow: 'hidden' },
   placeholder: { aspectRatio: 16 / 9, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md },
   hint: { color: colors.textMuted, fontSize: font.sm, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },

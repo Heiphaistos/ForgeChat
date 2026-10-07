@@ -7,7 +7,7 @@ import { t, type Key } from '@/i18n'
 const ID_RE = /^[A-Za-z0-9_-]{11}$/
 
 /**
- * Identifiant d'une adresse youtube.com/watch?v=, youtu.be/ ou youtube.com/shorts/.
+ * Identifiant d'une adresse youtube.com/watch?v= (ou music.youtube.com), youtu.be/ ou youtube.com/shorts/.
  * Même règle que `parse_video_id` côté serveur (qui reste l'autorité).
  */
 export function parseYouTubeId(input: string): string | null {
@@ -21,7 +21,7 @@ export function parseYouTubeId(input: string): string | null {
   let id: string | undefined
   if (host === 'youtu.be') {
     id = path.startsWith('/') ? path.slice(1).replace(/\/+$/, '') : undefined
-  } else if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com') {
+  } else if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
     if (path.replace(/\/+$/, '') === '/watch') {
       id = query.split('&').find((kv) => kv.startsWith('v='))?.slice(2)
     } else if (path.startsWith('/shorts/')) {

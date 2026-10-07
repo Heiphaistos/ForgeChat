@@ -9,6 +9,7 @@ import { ensureMediaPermissions, ringtones } from '@/services/media'
 import { t } from '@/i18n'
 import { registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
+import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
 
 /**
  * Appels vocaux/vidéo de groupe privé — server/src/handlers/group_calls.rs et le client web
@@ -126,7 +127,8 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
         return
       }
     }
-    const r = new Room({ adaptiveStream: false, dynacast: true, ...(e2ee ? { encryption: e2ee.encryption } : {}) })
+    const r = new Room({ adaptiveStream: false, dynacast: true, audioCaptureDefaults: audioCaptureDefaults(), ...(e2ee ? { encryption: e2ee.encryption } : {}) })
+    watchCameraEffect(r)
     room = r
     set({ e2ee: !!e2ee })
     if (e2ee) {

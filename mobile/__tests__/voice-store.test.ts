@@ -274,6 +274,38 @@ describe('stores/voice (LiveKit)', () => {
     expect(useVoice.getState().error).toBe('Salon plein (5/5)')
   })
 
+  it('salle d’attente : pas d’abandon à la reconnexion, admis = VOICE_JOIN rejoué, refusé = sortie', async () => {
+    jest.useFakeTimers()
+    await useVoice.getState().join('srv', 'salon', 'Salon', 'secret')
+    fire('VOICE_WAITING', { channel_id: 'salon' })
+    expect(useVoice.getState().waiting).toBe(true)
+    mockOpenHandlers.forEach((h) => h())
+    fire('VOICE_WAITING', { channel_id: 'salon' })
+    jest.advanceTimersByTime(60_000)
+    expect(useVoice.getState().channelId).toBe('salon')
+    mockSend.mockClear()
+    fire('VOICE_ADMITTED', { channel_id: 'salon' })
+    expect(useVoice.getState().waiting).toBe(false)
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'VOICE_JOIN', channel_id: 'salon', password: 'secret' }))
+    fire('VOICE_EXISTING_PEERS', { channel_id: 'salon', peers, livekit: ACCESS, can_speak: true })
+    expect(useVoice.getState().joined).toBe(true)
+    useVoice.getState().leave()
+    await useVoice.getState().join('srv', 'salon', 'Salon')
+    fire('VOICE_WAITING', { channel_id: 'salon' })
+    fire('VOICE_WAITING_DENIED', { channel_id: 'salon' })
+    expect(useVoice.getState().channelId).toBeNull()
+    expect(useVoice.getState().error).toMatch(/refusé/)
+  })
+
+  it('refus d’enregistrement : annoncé dans VOICE_STATE et lu chez les pairs', async () => {
+    await joinAndEnter()
+    mockSend.mockClear()
+    useVoice.getState().setNoRecord(true)
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ type: 'VOICE_STATE', channel_id: 'salon', no_record: true }))
+    fire('VOICE_STATE_UPDATE', { channel_id: 'salon', user_id: 'bob', muted: false, recording: false, no_record: true })
+    expect(useVoice.getState().peers[0]?.noRecord).toBe(true)
+  })
+
   describe('soundboard', () => {
     it('jouer un son : SOUNDBOARD_PLAY envoyé et son joué localement', async () => {
       await joinAndEnter()
