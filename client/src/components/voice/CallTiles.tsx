@@ -3,6 +3,7 @@
 import { mediaUrl } from '../../api/client'
 import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff, Film } from 'lucide-react'
 import NativeVideo from './NativeVideo'
+import { useT } from '../../i18n'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
 export function PeerTile({
@@ -21,6 +22,7 @@ export function PeerTile({
   /** Menu de modération vocale sur le participant. */
   onContextMenu?: (e: React.MouseEvent) => void
 }) {
+  const t = useT()
   const hasStream = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
   const hasVideo = peer.videoEnabled && (hasStream || !!videoUrl)
 
@@ -65,31 +67,31 @@ export function PeerTile({
         <div className="flex items-center gap-1">
           {peer.muted ? <MicOff size={11} className="text-fc-red" /> : null}
           {peer.screenSharing ? <Monitor size={11} className="text-fc-green" /> : null}
-          <span className={`${compact ? 'text-[10px] max-w-[80px]' : 'text-xs max-w-[160px]'} text-white truncate`}>{isLocal ? `${peer.username} (Vous)` : peer.username}</span>
+          <span className={`${compact ? 'text-[10px] max-w-[80px]' : 'text-xs max-w-[160px]'} text-white truncate`}>{isLocal ? t('voice.tile.youSuffix', { name: peer.username }) : peer.username}</span>
         </div>
         <div className="flex items-center gap-1">
           {onVolume && (
-            <button onClick={onVolume} aria-label={`Régler le volume de ${peer.username}`} title="Volume" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onVolume} aria-label={t('voice.tile.volumeOf', { name: peer.username })} title={t('voice.tile.volume')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Volume2 size={11} aria-hidden />
             </button>
           )}
           {onPopOut && hasVideo && (
-            <button onClick={onPopOut} aria-label={`Ouvrir la vidéo de ${peer.username} dans une fenêtre`} title="Détacher dans une fenêtre" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onPopOut} aria-label={t('voice.tile.popOutVideo', { name: peer.username })} title={t('voice.tile.popOut')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <ExternalLink size={11} aria-hidden />
             </button>
           )}
           {onExpand && hasVideo && (
-            <button onClick={onExpand} aria-label="Agrandir la vidéo" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onExpand} aria-label={t('voice.tile.expandVideo')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Maximize2 size={11} aria-hidden />
             </button>
           )}
         </div>
       </div>
 
-      {isLocal && <div className="absolute top-2 left-2 bg-fc-accent/90 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">Vous</div>}
+      {isLocal && <div className="absolute top-2 left-2 bg-fc-accent/90 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">{t('voice.you')}</div>}
       {connectionLost && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-fc-yellow/90 text-black text-[10px] px-2 py-0.5 rounded-full font-semibold">
-          Reconnexion...
+          {t('voice.tile.reconnecting')}
         </div>
       )}
       {handRaised && (
@@ -109,14 +111,15 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
   onClip?: () => void
   compact?: boolean
 }) {
+  const t = useT()
   if (!stream && !url && onWatch) {
     return (
       <div className="relative w-full h-full min-h-0 rounded-xl overflow-hidden bg-gradient-to-br from-gray-900 to-black flex flex-col items-center justify-center gap-2 ring-1 ring-fc-red/40">
         <span className="px-2 py-0.5 rounded bg-fc-red text-white text-[10px] font-bold tracking-wide">LIVE</span>
-        <span className={`${compact ? 'text-[10px]' : 'text-sm'} text-white/80 truncate max-w-[90%]`}>Écran de {label}</span>
+        <span className={`${compact ? 'text-[10px]' : 'text-sm'} text-white/80 truncate max-w-[90%]`}>{t('voice.screenOf', { name: label })}</span>
         <button onClick={e => { e.stopPropagation(); onWatch() }}
           className={`flex items-center gap-1.5 rounded-lg bg-fc-accent hover:bg-fc-accent/80 text-white font-medium ${compact ? 'px-2 py-1 text-[10px]' : 'px-3 py-1.5 text-sm'}`}>
-          <Eye size={compact ? 11 : 14} aria-hidden /> Regarder
+          <Eye size={compact ? 11 : 14} aria-hidden /> {t('voice.tile.watch')}
         </button>
       </div>
     )
@@ -134,31 +137,31 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
       <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-2 py-1 bg-gradient-to-t from-black/70 to-transparent">
         <div className="flex items-center gap-1">
           <Monitor size={11} className="text-fc-green" />
-          <span className={`${compact ? 'text-[10px] max-w-[90px]' : 'text-xs max-w-[220px]'} text-white truncate`}>Écran de {label}</span>
+          <span className={`${compact ? 'text-[10px] max-w-[90px]' : 'text-xs max-w-[220px]'} text-white truncate`}>{t('voice.screenOf', { name: label })}</span>
         </div>
         <div className="flex items-center gap-1">
           {onClip && (
-            <button onClick={onClip} aria-label={`Clip des dernières secondes de l'écran de ${label}`} title="Clip (30 dernières secondes)" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onClip} aria-label={t('voice.tile.clipOf', { name: label })} title={t('voice.tile.clip')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Film size={11} aria-hidden />
             </button>
           )}
           {onVolume && (
-            <button onClick={onVolume} aria-label={`Volume du partage de ${label}`} title="Volume du partage" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onVolume} aria-label={t('voice.tile.shareVolumeOf', { name: label })} title={t('voice.tile.shareVolume')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Volume2 size={11} aria-hidden />
             </button>
           )}
           {onStopWatching && (
-            <button onClick={onStopWatching} aria-label={`Arrêter de regarder l'écran de ${label}`} title="Arrêter de regarder" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onStopWatching} aria-label={t('voice.tile.stopWatchingOf', { name: label })} title={t('voice.tile.stopWatching')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <EyeOff size={11} aria-hidden />
             </button>
           )}
           {onPopOut && (
-            <button onClick={onPopOut} aria-label={`Ouvrir l'écran de ${label} dans une fenêtre`} title="Détacher dans une fenêtre" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onPopOut} aria-label={t('voice.tile.popOutScreen', { name: label })} title={t('voice.tile.popOut')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <ExternalLink size={11} aria-hidden />
             </button>
           )}
           {onExpand && (
-            <button onClick={onExpand} aria-label="Agrandir l'écran partagé" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+            <button onClick={onExpand} aria-label={t('voice.tile.expandScreen')} className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Maximize2 size={11} aria-hidden />
             </button>
           )}

@@ -4,9 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import { useVoice } from '../../store/voice'
 import { useVoiceActivity } from '../../hooks/useVoiceActivity'
 import { useWakeLock } from '../../hooks/useWakeLock'
+import { useT } from '../../i18n'
 
 export default function VoiceBar() {
   const nav = useNavigate()
+  const t = useT()
   const {
     joined, channelId, channelName, serverId,
     muted, deafened, videoEnabled, screenSharing, localStream,
@@ -42,22 +44,22 @@ export default function VoiceBar() {
         <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${speaking ? 'bg-green-400' : 'bg-green-600'}`} />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold text-green-400 leading-tight">
-            Vocal connecté
-            <span className="text-fc-muted font-normal ml-1.5 tabular-nums" aria-label={`Durée de l'appel ${callDuration}`}>{callDuration}</span>
+            {t('voice.connected')}
+            <span className="text-fc-muted font-normal ml-1.5 tabular-nums" aria-label={t('voice.callDuration', { d: callDuration })}>{callDuration}</span>
           </div>
           <button
             onClick={goToChannel}
             className="text-[11px] text-fc-muted hover:text-white transition truncate block max-w-full text-left"
           >
             <Volume2 size={10} className="inline mr-0.5 -mt-0.5" />
-            {channelName ?? 'retour au canal'}
+            {channelName ?? t('voice.backToChannel')}
           </button>
         </div>
         {/* Quitter */}
         <button
           onClick={leave}
-          title="Quitter le vocal"
-          aria-label="Quitter le salon vocal"
+          title={t('voice.leaveVoiceTitle')}
+          aria-label={t('voice.leaveVoice')}
           className="p-2 md:p-1 rounded hover:bg-red-500/20 text-fc-muted hover:text-red-400 transition flex-shrink-0 min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center"
         >
           <PhoneOff size={14} />
@@ -72,7 +74,7 @@ export default function VoiceBar() {
           inactiveIcon={<MicOff size={14} />}
           onClick={toggleMute}
           danger={muted}
-          title={muted ? 'Réactiver le micro' : 'Couper le micro'}
+          title={muted ? t('voice.micUnmute') : t('voice.micMute')}
         />
         <VoiceBarBtn
           active={!deafened}
@@ -80,14 +82,14 @@ export default function VoiceBar() {
           inactiveIcon={<VolumeX size={14} />}
           onClick={toggleDeafen}
           danger={deafened}
-          title={deafened ? 'Réactiver le son' : 'Couper le son'}
+          title={deafened ? t('voice.soundRestore') : t('voice.soundOff')}
         />
         <VoiceBarBtn
           active={videoEnabled}
           activeIcon={<Video size={14} />}
           inactiveIcon={<VideoOff size={14} />}
           onClick={() => toggleVideo()}
-          title={videoEnabled ? 'Désactiver la caméra' : 'Activer la caméra'}
+          title={videoEnabled ? t('voice.cameraOff') : t('voice.cameraOn')}
         />
         <VoiceBarBtn
           active={screenSharing}
@@ -95,7 +97,7 @@ export default function VoiceBar() {
           inactiveIcon={<MonitorOff size={14} />}
           onClick={screenSharing ? stopScreenShare : shareScreen}
           accent={screenSharing}
-          title={screenSharing ? 'Arrêter le partage' : 'Partager l\'écran'}
+          title={screenSharing ? t('voice.stopShare') : t('voice.shareScreen')}
         />
       </div>
     </div>

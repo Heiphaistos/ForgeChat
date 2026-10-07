@@ -31,6 +31,7 @@ import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
 import { useContextMenu } from '../components/ui/ContextMenu'
 import { useMemberModeration } from '../components/chat/MemberModeration'
+import { t as tr, useT, type Key } from '../i18n'
 
 
 interface Props {
@@ -62,16 +63,17 @@ function MeetingTimer({ startTime }: { startTime: number }) {
 function CallQualityIndicator() {
   const status = useVoice(s => s.mediaStatus)
   const q = useVoice(s => s.mediaQuality)
+  const t = useT()
   const view =
-    status === 'connecting' ? { icon: <Wifi size={12} />, color: 'text-fc-muted', label: 'Connexion…' }
-    : status === 'reconnecting' ? { icon: <WifiOff size={12} />, color: 'text-fc-yellow', label: 'Reconnexion…' }
-    : status === 'failed' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: 'Hors ligne' }
-    : q === 'excellent' || q === 'good' ? { icon: <Wifi size={12} />, color: 'text-fc-green', label: q === 'excellent' ? 'Excellente' : 'Bonne' }
-    : q === 'poor' ? { icon: <Wifi size={12} />, color: 'text-fc-yellow', label: 'Faible' }
-    : q === 'lost' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: 'Perdue' }
+    status === 'connecting' ? { icon: <Wifi size={12} />, color: 'text-fc-muted', label: t('voice.q.connecting') }
+    : status === 'reconnecting' ? { icon: <WifiOff size={12} />, color: 'text-fc-yellow', label: t('voice.q.reconnecting') }
+    : status === 'failed' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: t('voice.q.offline') }
+    : q === 'excellent' || q === 'good' ? { icon: <Wifi size={12} />, color: 'text-fc-green', label: q === 'excellent' ? t('voice.q.excellent') : t('voice.q.good') }
+    : q === 'poor' ? { icon: <Wifi size={12} />, color: 'text-fc-yellow', label: t('voice.q.poor') }
+    : q === 'lost' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: t('voice.q.lost') }
     : { icon: <Wifi size={12} />, color: 'text-fc-muted', label: '' }
   return (
-    <div className={`flex items-center gap-1 text-xs ${view.color}`} title={`Connexion audio/vidéo : ${view.label || 'inconnue'}`} role="status">
+    <div className={`flex items-center gap-1 text-xs ${view.color}`} title={t('voice.q.title', { q: view.label || t('voice.q.unknown') })} role="status">
       {view.icon}{view.label && <span>{view.label}</span>}
     </div>
   )
@@ -88,7 +90,7 @@ function FullscreenViewer({ stream, label, onClose }: { stream: MediaStream; lab
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 bg-black/60">
         <span className="text-white font-semibold text-sm">{label}</span>
-        <button onClick={onClose} aria-label="Fermer le plein écran" className="p-1.5 rounded hover:bg-white/10 text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><X size={18} aria-hidden /></button>
+        <button onClick={onClose} aria-label={tr('voice.closeFullscreen')} className="p-1.5 rounded hover:bg-white/10 text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><X size={18} aria-hidden /></button>
       </div>
       <video ref={ref} autoPlay playsInline muted className="flex-1 object-contain" />
     </div>
@@ -100,6 +102,7 @@ function VoiceLobby({
   channel, serverId, participantCount, voicePassword,
 }: { channel: { id: string; name: string; type: string }; serverId: string; participantCount: number; voicePassword?: string }) {
   const { join, error } = useVoice()
+  const t = useT()
 
   // La bannière d'erreur ci-dessous ne s'affiche qu'à l'écran de pré-connexion --
   // une erreur survenant APRÈS avoir rejoint (ex: shareScreen qui échoue) ne serait
@@ -128,7 +131,7 @@ function VoiceLobby({
         <button
           className="flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour aux canaux"
+          aria-label={t('voice.backToChannels')}
         >
           <ChevronLeft size={20} />
         </button>
@@ -142,8 +145,8 @@ function VoiceLobby({
         <h2 className="text-xl font-bold text-white">{channel.name}</h2>
         <p className="text-fc-muted text-sm">
           {participantCount > 0
-            ? `${participantCount} participant${participantCount > 1 ? 's' : ''} dans ce canal`
-            : 'Aucun participant pour le moment'}
+            ? t(participantCount > 1 ? 'voice.participants.other' : 'voice.participants.one', { n: participantCount })
+            : t('voice.noParticipants')}
         </p>
       </div>
       {error && (
@@ -155,18 +158,18 @@ function VoiceLobby({
         <label className="flex items-center gap-2 text-sm text-fc-text cursor-pointer select-none">
           <input type="checkbox" checked={withVideo} onChange={e => setWithVideo(e.target.checked)}
             className="w-4 h-4 rounded accent-fc-accent" />
-          Activer la caméra à la connexion
+          {t('voice.cameraOnJoin')}
         </label>
       )}
       <div className="flex gap-3">
         <button onClick={handleJoin} disabled={joining}
           className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-semibold transition disabled:opacity-50 text-sm">
           <Mic size={16} />
-          {joining ? 'Connexion...' : 'Rejoindre le vocal'}
+          {joining ? t('voice.joining') : t('voice.join')}
         </button>
       </div>
       <p className="text-xs text-fc-muted">
-        Votre navigateur peut demander l'accès au microphone
+        {t('voice.micPermission')}
       </p>
     </div>
     </div>
@@ -176,6 +179,7 @@ function VoiceLobby({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
+  const t = useT()
   // Modération vocale (P2-2) : clic droit sur la tuile d'un participant.
   const tileMenu = useContextMenu()
   const moderation = useMemberModeration(serverId)
@@ -254,7 +258,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       if (data.channel_id !== channel.id) return
       setRaisedHands(prev => ({ ...prev, [data.user_id]: data.raised }))
       if (data.raised && data.user_id !== user?.id) {
-        toast(`✋ ${data.username} a levé la main`, { duration: 3000 })
+        toast(tr('voice.handRaised', { name: data.username }), { duration: 3000 })
       }
     })
     return unsub
@@ -311,7 +315,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const startRecording = useCallback(() => {
     const sources = [localStream, ...peers.flatMap(p => [p.stream, p.screenStream])]
       .filter((st): st is MediaStream => !!st && st.getAudioTracks().length > 0)
-    if (!sources.length) { toast.error('Aucun son à enregistrer'); return }
+    if (!sources.length) { toast.error(tr('voice.nothingToRecord')); return }
     const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
       .find(t => MediaRecorder.isTypeSupported(t)) ?? ''
     try {
@@ -339,9 +343,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       recorder.start(1000)
       recorderRef.current = recorder
       setRecording(true)
-      toast.success('Enregistrement démarré : les participants sont prévenus')
+      toast.success(tr('voice.recordingStarted'))
     } catch {
-      toast.error("Impossible de démarrer l'enregistrement")
+      toast.error(tr('voice.recordingFailed'))
     }
   }, [localStream, peers, setRecording])
 
@@ -374,10 +378,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     // Raccourci : le premier stream tamponné.
     const id = userId ?? clipBuffers.keys().next().value
     const b = id ? clipBuffers.get(id) : undefined
-    if (!id || !b) { toast.error('Aucun stream à clipper'); return }
+    if (!id || !b) { toast.error(tr('voice.noStreamToClip')); return }
     const blob = await b.buf.clip()
-    if (!blob) { toast.error('Clip indisponible, réessayez dans un instant'); return }
-    setClip({ blob, label: id === user?.id ? user.username : peers.find(p => p.userId === id)?.username ?? 'inconnu' })
+    if (!blob) { toast.error(tr('voice.clipUnavailable')); return }
+    setClip({ blob, label: id === user?.id ? user.username : peers.find(p => p.userId === id)?.username ?? tr('msg.unknown') })
   }, [clipBuffers, user, peers])
   useEffect(() => {
     const onClip = () => { void takeClip() }
@@ -451,10 +455,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     if (isNativeVoice()) {
       // Linux : la vue web ne partage pas de flux entre fenêtres, la fenêtre relit le flux local.
       if (url) void nativePopOut(url, kind === 'screen' ? `Écran de ${label} — ForgeChat` : `${label} — ForgeChat`)
-        .catch(e => toast.error(`Fenêtre impossible : ${String(e)}`))
+        .catch(e => toast.error(tr('voice.windowFailed', { error: String(e) })))
       return
     }
-    if (!popOut(userId, kind, label)) toast.error('Fenêtre bloquée : autorisez les fenêtres surgissantes pour ForgeChat.')
+    if (!popOut(userId, kind, label)) toast.error(tr('voice.popupBlocked'))
   }
 
   const renderTile = (t: StageTile, o: RenderOpts) => {
@@ -468,7 +472,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           onClip={t.stream && clipSources.has(p.userId) ? () => void takeClip(p.userId) : undefined}
           onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
           onPopOut={() => detach(p.userId, 'screen', p.username, t.url)}
-          onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${p.username}` }) : undefined} />
+          onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: tr('voice.screenOf', { name: p.username }) }) : undefined} />
       )
     }
     return (
@@ -495,7 +499,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           {(isRecording || peers.some(p => p.recording)) && (
             <span
               className="flex items-center gap-1 text-[11px] font-semibold text-white bg-red-600 rounded px-1.5 py-0.5 animate-pulse"
-              title={[...(isRecording ? ['Vous'] : []), ...peers.filter(p => p.recording).map(p => p.username)].join(', ') + ' enregistre la conversation'}
+              title={t('voice.recordingBy', { names: [...(isRecording ? [t('voice.you')] : []), ...peers.filter(p => p.recording).map(p => p.username)].join(', ') })}
               role="status"
             >
               ● REC
@@ -503,27 +507,27 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           )}
           {clipSources.size > 0 && (
             <span className="text-[11px] text-fc-muted border border-fc-hover rounded px-1.5 py-0.5"
-              title="Clips activés : les dernières secondes des streams affichés restent en mémoire sur cet appareil (Alt+C pour clipper)">
+              title={t('voice.clipsTitle')}>
               Clips
             </span>
           )}
         </div>
 
         {/* View mode switcher — masqué sur mobile */}
-        <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1" role="group" aria-label="Disposition d'affichage">
+        <div className="hidden md:flex items-center gap-1 bg-fc-channel rounded-lg p-1" role="group" aria-label={t('voice.layout')}>
           {([
-            { mode: 'auto' as ViewMode, icon: <Sparkles size={14} />, label: 'Auto (le stream passe en grand)' },
-            { mode: 'grid' as ViewMode, icon: <Grid2x2 size={14} />, label: 'Grille' },
-            { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'Spotlight' },
-            { mode: 'sidebar' as ViewMode, icon: <Layout size={14} />, label: 'Barre latérale' },
-            { mode: 'focus' as ViewMode, icon: <Focus size={14} />, label: 'Focus (suit l\'orateur)' },
-            { mode: 'filmstrip' as ViewMode, icon: <GalleryHorizontal size={14} />, label: 'Bandeau' },
-          ] as const).map(({ mode, icon, label }) => (
+            { mode: 'auto' as ViewMode, icon: <Sparkles size={14} />, label: 'voice.layout.auto' },
+            { mode: 'grid' as ViewMode, icon: <Grid2x2 size={14} />, label: 'voice.layout.grid' },
+            { mode: 'spotlight' as ViewMode, icon: <Maximize2 size={14} />, label: 'voice.layout.spotlight' },
+            { mode: 'sidebar' as ViewMode, icon: <Layout size={14} />, label: 'voice.layout.sidebar' },
+            { mode: 'focus' as ViewMode, icon: <Focus size={14} />, label: 'voice.layout.focus' },
+            { mode: 'filmstrip' as ViewMode, icon: <GalleryHorizontal size={14} />, label: 'voice.layout.filmstrip' },
+          ] as { mode: ViewMode; icon: React.ReactNode; label: Key }[]).map(({ mode, icon, label }) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
-              title={label}
-              aria-label={label}
+              title={t(label)}
+              aria-label={t(label)}
               aria-pressed={viewMode === mode}
               className={`p-1.5 rounded transition ${viewMode === mode ? 'bg-fc-accent text-white' : 'text-fc-muted hover:text-white'}`}
             >
@@ -533,7 +537,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs text-fc-muted hidden md:inline">{allPeers.length} participant{allPeers.length > 1 ? 's' : ''}</span>
+          <span className="text-xs text-fc-muted hidden md:inline">{t(allPeers.length > 1 ? 'voice.peopleCount.other' : 'voice.peopleCount.one', { n: allPeers.length })}</span>
           <Users size={14} className="text-fc-muted md:hidden" />
           <span className="text-xs text-fc-muted md:hidden">{allPeers.length}</span>
         </div>
@@ -598,28 +602,28 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
             active={!muted} onClick={toggleMute}
             activeIcon={<Mic size={18} />} inactiveIcon={<MicOff size={18} />}
             activeClass="bg-fc-hover text-white" inactiveClass="bg-fc-red text-white"
-            label={muted ? 'Activer le micro' : 'Désactiver le micro'}
+            label={muted ? t('voice.micOn') : t('voice.micOffAction')}
           />
           <CtrlBtn
             active={!deafened} onClick={toggleDeafen}
             activeIcon={<Volume2 size={18} />} inactiveIcon={<VolumeX size={18} />}
             activeClass="bg-fc-hover text-white" inactiveClass="bg-fc-red text-white"
-            label={deafened ? 'Activer le son' : 'Couper le son'}
+            label={deafened ? t('voice.soundOn') : t('voice.soundOff')}
           />
           <CtrlBtn
             active={videoEnabled} onClick={() => toggleVideo()}
             activeIcon={<Video size={18} />} inactiveIcon={<VideoOff size={18} />}
             activeClass="bg-fc-hover text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label={videoEnabled ? 'Désactiver la caméra' : 'Activer la caméra'}
+            label={videoEnabled ? t('voice.cameraOff') : t('voice.cameraOn')}
           />
           <CtrlBtn
             active={screenSharing} onClick={screenSharing ? stopScreenShare : () => shareScreen()}
             activeIcon={<Monitor size={18} />} inactiveIcon={<MonitorOff size={18} />}
             activeClass="bg-fc-green text-white" inactiveClass="bg-fc-hover text-fc-muted"
-            label={screenSharing ? 'Arrêter le partage' : 'Partager l\'écran'}
+            label={screenSharing ? t('voice.stopShare') : t('voice.shareScreen')}
           />
           {screenSharing && (
-            <span className="hidden md:flex items-center gap-1 text-xs text-fc-green" title="Spectateurs de votre partage">
+            <span className="hidden md:flex items-center gap-1 text-xs text-fc-green" title={t('voice.viewers')}>
               <Users size={12} />{peers.length}
             </span>
           )}
@@ -628,12 +632,12 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
           <button
             onClick={leave}
-            title="Quitter l'appel"
-            aria-label="Quitter l'appel"
+            title={t('voice.leaveCall')}
+            aria-label={t('voice.leaveCall')}
             className="p-2.5 md:px-5 md:py-2 bg-fc-red hover:bg-fc-red/80 text-white rounded-xl font-medium text-sm flex items-center gap-2 transition"
           >
             <PhoneOff size={16} aria-hidden />
-            <span className="hidden md:inline">Quitter</span>
+            <span className="hidden md:inline">{t('voice.leave')}</span>
           </button>
         </div>
 
@@ -644,21 +648,21 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               active={handRaised} onClick={toggleHandRaise}
               activeIcon={<Hand size={16} />} inactiveIcon={<Hand size={16} />}
               activeClass="bg-fc-yellow text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Lever/baisser la main"
+              label={t('voice.raiseHand')}
             />
             <CtrlBtn
               active={blurBackground} onClick={() => setBlurBackground(v => !v)}
               activeIcon={<span className="text-xs font-bold">BG</span>}
               inactiveIcon={<span className="text-xs">BG</span>}
               activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Flou d'arrière-plan"
+              label={t('voice.blur')}
             />
             {captionsSupported && (
               <CtrlBtn
                 active={captionsOn} onClick={() => { toggleCaptions(); setShowCaptions(v => !v) }}
                 activeIcon={<MessageSquare size={16} />} inactiveIcon={<MessageSquare size={16} />}
                 activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-                label="Sous-titres automatiques"
+                label={t('voice.captions')}
               />
             )}
             <CtrlBtn
@@ -666,31 +670,31 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               activeIcon={<Square size={14} className="fill-current" />}
               inactiveIcon={<Circle size={14} />}
               activeClass="bg-fc-red text-white animate-pulse" inactiveClass="bg-fc-hover text-fc-muted"
-              label={isRecording ? 'Arrêter l\'enregistrement' : 'Enregistrer'}
+              label={isRecording ? t('voice.stopRecording') : t('voice.record')}
             />
             <CtrlBtn
               active={showSoundboard} onClick={() => setShowSoundboard(v => !v)}
               activeIcon={<Music2 size={16} />} inactiveIcon={<Music2 size={16} />}
               activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Soundboard"
+              label={t('voice.soundboard')}
             />
             <CtrlBtn
               active={showStats} onClick={() => setShowStats(v => !v)}
               activeIcon={<BarChart2 size={16} />} inactiveIcon={<BarChart2 size={16} />}
               activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Statistiques orateurs"
+              label={t('voice.speakerStats')}
             />
             <CtrlBtn
               active={showWhiteboard} onClick={() => setShowWhiteboard(v => !v)}
               activeIcon={<PenLine size={16} />} inactiveIcon={<PenLine size={16} />}
               activeClass="bg-fc-accent text-white" inactiveClass="bg-fc-hover text-fc-muted"
-              label="Tableau blanc"
+              label={t('voice.whiteboard')}
             />
           </div>
           <button
             onClick={() => setShowWatch(v => !v)}
-            title="Regarder ensemble (YouTube)"
-            aria-label="Regarder ensemble (YouTube)"
+            title={t('voice.watchTogether')}
+            aria-label={t('voice.watchTogether')}
             aria-pressed={showWatch}
             className={`relative p-2.5 rounded-xl transition ${showWatch ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
           >
@@ -700,7 +704,8 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <button
             onClick={() => setShowEmojiBar(p => !p)}
             className={`p-2.5 rounded-xl transition ${showEmojiBar ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
-            title="Envoyer une réaction"
+            title={t('voice.sendReaction')}
+            aria-label={t('voice.sendReaction')}
           >
             😄
           </button>
@@ -741,7 +746,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         <div className="absolute bottom-24 left-4 z-50">
           <VolumeSlider
             userId={volumeTarget.userId}
-            username={volumeTarget.kind === 'screen' ? `Partage de ${volumeTarget.username}` : volumeTarget.username}
+            username={volumeTarget.kind === 'screen' ? t('voice.shareOf', { name: volumeTarget.username }) : volumeTarget.username}
             initialVolume={volumeTarget.kind === 'screen'
               ? (screenVolumes[volumeTarget.userId] ?? 100)
               : (userVolumes[volumeTarget.userId] ?? 100)}
