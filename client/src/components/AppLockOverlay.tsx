@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { useAppLock, watchInactivity } from '../lib/appLock'
 import { useAuth } from '../store/auth'
@@ -13,7 +13,8 @@ export default function AppLockOverlay({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  // Avant le premier affichage : aucune image du contenu quand le verrou est actif.
+  useLayoutEffect(() => {
     useAppLock.getState().load(userId)
     const stop = watchInactivity()
     return () => { stop(); useAppLock.getState().load(null) }
