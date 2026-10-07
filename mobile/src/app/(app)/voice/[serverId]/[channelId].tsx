@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Stack, router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { RTCView } from '@livekit/react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
@@ -9,6 +9,7 @@ import { Sheet, type SheetAction } from '@/components/Sheet'
 import { StreamViewer, type ViewerSource } from '@/components/StreamViewer'
 import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
+import { watchLink } from '@/lib/watchTogether'
 import { useRouteParams } from '@/lib/params'
 import { isScreenShareCancel } from '@/features/calls/screenShareLogic'
 import { useServerPerms } from '@/features/servers/menus'
@@ -20,6 +21,7 @@ import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
 import { useVoice, type VoicePeer } from '@/stores/voice'
+import { useWatch } from '@/stores/watch'
 import { colors, font, radius, spacing } from '@/theme'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
@@ -43,6 +45,7 @@ export default function VoiceScreen() {
   const [more, setMore] = useState(false)
   const [sounds, setSounds] = useState(false)
   const perms = useServerPerms(ids.serverId ?? '', valid)
+  const watch = useWatch((s) => s.watch)
   if (!valid) return <ErrorState message="Lien de salon vocal invalide." />
 
   // Salon auto-création : channelId devient le salon temporaire, entryChannelId reste celui choisi.
@@ -163,6 +166,22 @@ export default function VoiceScreen() {
         <>
           {v.error ? <Banner text={v.error} tone="danger" onPress={v.dismiss} /> : v.notice ? <Banner text={v.notice} tone="info" onPress={v.dismiss} /> : null}
           {status ? <Banner text={status} tone="warning" /> : null}
+          {watch && !v.stage ? (
+            // « Regarder ensemble » lancé depuis le web : pas de lecteur intégré, ouverture dans YouTube au bon moment.
+            <Pressable
+              style={[styles.banner, { backgroundColor: colors.primary }]}
+              onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)}
+              accessibilityRole="link"
+              accessibilityHint="Ouvre la vidéo dans YouTube au moment où en est le salon"
+            >
+              <Ionicons name="logo-youtube" size={16} color="#fff" />
+              <Text style={[styles.bannerText, { color: '#fff' }]} numberOfLines={2}>
+                {watch.by === myId ? 'Tu regardes' : `${v.peers.find((p) => p.userId === watch.by)?.username ?? 'Le salon'} regarde`} : youtu.be/
+                {watch.videoId}
+                {watch.playing ? '' : ' (en pause)'} — Ouvrir
+              </Text>
+            </Pressable>
+          ) : null}
           {v.stage ? (
             <View style={{ flex: 1 }}>
               <StagePanel
