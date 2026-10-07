@@ -8,6 +8,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
  * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
+ * celui du mode « Notifications sans Google » (src/services/keepAlive.ts),
  * et redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement).
  */
 class CallServiceModule : Module() {
@@ -30,6 +31,26 @@ class CallServiceModule : Module() {
     Function("stop") {
       val ctx = appContext.reactContext ?: return@Function null
       ctx.stopService(Intent(ctx, CallForegroundService::class.java))
+      null
+    }
+
+    // Mode « Notifications sans Google » (KeepAliveService). Appelé app au premier plan ; une relance
+    // (après un appel, dont le service a libéré le verrou de veille partagé) passe par startService :
+    // permis en arrière-plan tant qu'un service au premier plan tourne, contrairement à startForegroundService.
+    Function("startKeepAlive") {
+      val ctx = appContext.reactContext ?: return@Function null
+      val intent = Intent(ctx, KeepAliveService::class.java)
+      try {
+        if (KeepAliveService.running) ctx.startService(intent) else ContextCompat.startForegroundService(ctx, intent)
+      } catch (e: Exception) {
+        Log.w("ForgeKeepAlive", "service de connexion refusé", e)
+      }
+      null
+    }
+
+    Function("stopKeepAlive") {
+      val ctx = appContext.reactContext ?: return@Function null
+      ctx.stopService(Intent(ctx, KeepAliveService::class.java))
       null
     }
 

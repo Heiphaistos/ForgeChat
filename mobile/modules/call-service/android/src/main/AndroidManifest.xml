@@ -4,10 +4,16 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <!-- Mode « Notifications sans Google » : connexion gardée en arrière-plan (KeepAliveService). -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
   <application>
     <service
       android:name="com.forgechat.callservice.CallForegroundService"
       android:exported="false"
       android:foregroundServiceType="microphone|camera" />
+    <service
+      android:name="com.forgechat.callservice.KeepAliveService"
+      android:exported="false"
+      android:foregroundServiceType="remoteMessaging" />
   </application>
 </manifest>
