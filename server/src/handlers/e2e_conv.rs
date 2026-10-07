@@ -193,6 +193,20 @@ pub async fn all_keyed(db: &PgPool, members: &[Uuid]) -> Result<bool> {
     Ok(!members.is_empty() && fingerprints(db, members).await?.len() == members.len())
 }
 
+/// Les médias (vocal, appel, caméra, écran) de cette conversation doivent être
+/// chiffrés de bout en bout : même règle que le texte (tous les membres ont une
+/// clé de compte). Générique sur `kind` : `dm`, `group`, et tout autre type de
+/// conversation reconnu par `Conv::parse` (salons de serveur). Type inconnu :
+/// pas de clé de conversation, donc média en clair. Erreur de base : chiffré
+/// (les applis échouent proprement plutôt que de parler en clair).
+pub async fn media_e2ee(db: &PgPool, kind: &str, id: Uuid) -> bool {
+    let Ok(conv) = Conv::parse(kind, id) else { return false };
+    match members(db, conv).await {
+        Ok(m) => all_keyed(db, &m).await.unwrap_or(true),
+        Err(_) => true,
+    }
+}
+
 async fn current_epoch(db: &PgPool, conv: Conv) -> Result<Option<(i32, bool)>> {
     Ok(sqlx::query_as("SELECT current_epoch, rotate_needed FROM conversation_epochs WHERE conv_kind=$1 AND conv_id=$2")
         .bind(conv.kind())

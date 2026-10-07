@@ -90,6 +90,10 @@ struct Claims<'a> {
     nbf: u64,
     exp: u64,
     video: VideoGrant<'a>,
+    /// Attributs du participant, visibles des autres : `e2ee = "1"` quand son
+    /// appli chiffre les médias (les nouvelles applis préviennent sinon).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attributes: Option<serde_json::Value>,
 }
 
 fn now() -> u64 {
@@ -123,8 +127,9 @@ pub fn room_for_group(group_id: uuid::Uuid) -> String {
     format!("gdm-{group_id}")
 }
 
-/// Jeton de participation à une salle.
-pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, publish: Publish) -> Option<String> {
+/// Jeton de participation à une salle. `e2ee` : l'appli de ce participant a
+/// annoncé qu'elle chiffre les médias de bout en bout (attribut `e2ee = "1"`).
+pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, publish: Publish, e2ee: bool) -> Option<String> {
     let sources = publish.sources();
     let t = now();
     sign(cfg, &Claims {
@@ -144,6 +149,7 @@ pub fn join_token(cfg: &LiveKitConfig, room: &str, identity: &str, name: &str, p
             can_publish_sources: Some(sources),
             can_update_own_metadata: Some(false),
         },
+        attributes: e2ee.then(|| serde_json::json!({ "e2ee": "1" })),
     })
 }
 
@@ -187,6 +193,7 @@ fn admin_token(cfg: &LiveKitConfig, room: &str) -> Option<String> {
             can_publish_sources: None,
             can_update_own_metadata: None,
         },
+        attributes: None,
     })
 }
 
@@ -270,7 +277,7 @@ mod tests {
 
     #[test]
     fn le_jeton_porte_la_salle_et_les_sources_autorisees() {
-        let tok = join_token(&cfg(), "voice-1", "user-1", "Momo", Publish { microphone: true, camera: true, screen: false, deafened: false }).unwrap();
+        let tok = join_token(&cfg(), "voice-1", "user-1", "Momo", Publish { microphone: true, camera: true, screen: false, deafened: false }, false).unwrap();
         let c = lire(&tok);
         assert_eq!(c["sub"], "user-1");
         assert_eq!(c["video"]["room"], "voice-1");
@@ -278,6 +285,13 @@ mod tests {
         assert_eq!(c["video"]["canPublish"], true);
         assert_eq!(c["video"]["canPublishSources"], serde_json::json!(["microphone", "camera"]));
         assert!(c["video"].get("roomAdmin").is_none());
+        assert!(c.get("attributes").is_none());
+    }
+
+    #[test]
+    fn le_jeton_annonce_le_chiffrement_des_medias() {
+        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish::default(), true).unwrap());
+        assert_eq!(c["attributes"]["e2ee"], "1");
     }
 
     fn signe_webhook(body: &[u8], secret: &str, iss: &str) -> String {
@@ -320,13 +334,13 @@ mod tests {
         let b = update_body("voice-1", "u", Publish { microphone: false, camera: true, screen: false, deafened: true });
         assert_eq!(b["permission"]["canPublishSources"], serde_json::json!(["CAMERA"]));
         assert_eq!(b["permission"]["canSubscribe"], false);
-        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish { deafened: true, ..Publish::default() }).unwrap());
+        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish { deafened: true, ..Publish::default() }, false).unwrap());
         assert_eq!(c["video"]["canSubscribe"], false);
     }
 
     #[test]
     fn un_spectateur_ne_peut_rien_publier() {
-        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish::default()).unwrap());
+        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish::default(), false).unwrap());
         assert_eq!(c["video"]["canPublish"], false);
         assert_eq!(c["video"]["canSubscribe"], true);
     }

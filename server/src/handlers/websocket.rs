@@ -459,6 +459,7 @@ async fn accept_dm_call(
     cached_username: &str,
     to: Uuid,
     dm_id: &serde_json::Value,
+    accepter_e2ee: bool,
 ) {
     // Historique : appel décroché — started_at repart pour mesurer le temps de parole
     let _ = sqlx::query(
@@ -477,11 +478,30 @@ async fn accept_dm_call(
     // Accès au SFU pour les deux interlocuteurs, délivré seulement après
     // la vérification de la conversation privée commune ci-dessus.
     let room = crate::livekit::room_for_dm(user_id, to);
-    let media = |uid: Uuid, name: &str| state.livekit.as_ref().map(|lk| serde_json::json!({
+    // Médias chiffrés de bout en bout dès que la conversation privée l'est (§5).
+    // Conversation retrouvée par la paire : jamais le `dm_id` fourni par le client.
+    let dm: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM dm_channels WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1) LIMIT 1"
+    )
+    .bind(user_id).bind(to)
+    .fetch_optional(&state.db).await.ok().flatten();
+    let e2ee = match dm {
+        Some(dm) => crate::handlers::e2e_conv::media_e2ee(&state.db, "dm", dm).await,
+        None => false,
+    };
+    // L'appli de l'appelant a annoncé le chiffrement dans son DM_CALL_INIT.
+    let caller_e2ee: bool = {
+        use redis::AsyncCommands;
+        let mut redis = state.redis.lock().await;
+        redis.get::<_, Option<String>>(format!("call_e2ee:{to}:{user_id}")).await.ok().flatten().is_some()
+    };
+    let media = |uid: Uuid, name: &str, claims_e2ee: bool| state.livekit.as_ref().map(|lk| serde_json::json!({
         "url": lk.public_url,
         "room": room,
         "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
-            crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }),
+            crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }, claims_e2ee),
+        "e2ee": e2ee,
+        "conv_id": dm,
     }));
     let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
         .bind(to).fetch_optional(&state.db).await.ok().flatten()
@@ -490,7 +510,7 @@ async fn accept_dm_call(
         "type": "DM_CALL_ACCEPTED",
         "from": user_id,
         "dm_id": dm_id,
-        "livekit": media(to, &caller_name),
+        "livekit": media(to, &caller_name, caller_e2ee),
     });
     state.broadcast_to_user(to, event.to_string()).await;
     // Seule la session qui a décroché se connecte (les autres onglets
@@ -499,7 +519,7 @@ async fn accept_dm_call(
         "type": "DM_CALL_MEDIA",
         "dm_id": dm_id,
         "session_id": session_id,
-        "livekit": media(user_id, cached_username),
+        "livekit": media(user_id, cached_username, accepter_e2ee),
     }).to_string()).await;
     notify_call_taken(state, user_id, session_id, dm_id, "accepted").await;
 }
@@ -1001,7 +1021,10 @@ async fn handle_ws_message(
                         &user_id.to_string(),
                         &joiner_name,
                         rights.publish(listen_only),
+                        msg["e2ee"].as_bool() == Some(true),
                     ),
+                    // Salon vocal = conversation `channel` (clé du salon, §5).
+                    "e2ee": crate::handlers::e2e_conv::media_e2ee(&state.db, "channel", effective_channel_id).await,
                 },
             }).to_string()).await;
             // « Regarder ensemble » déjà en cours : l'arrivant rejoint au bon moment.
@@ -1432,7 +1455,7 @@ async fn handle_ws_message(
                 "SELECT EXISTS(SELECT 1 FROM call_history WHERE caller_id=$1 AND callee_id=$2 AND status='ringing')"
             ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
             if crossed {
-                accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"]).await;
+                accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"], msg["e2ee"].as_bool() == Some(true)).await;
                 return;
             }
             // Informer l'appelant si le destinataire est hors ligne
@@ -1457,6 +1480,12 @@ async fn handle_ws_message(
                 });
                 state.broadcast_to_user(user_id, err.to_string()).await;
                 return;
+            }
+            // L'appli de l'appelant chiffre les médias : son jeton le dira à l'acceptation.
+            if msg["e2ee"].as_bool() == Some(true) {
+                use redis::AsyncCommands;
+                let mut redis = state.redis.lock().await;
+                let _: () = redis.set_ex(format!("call_e2ee:{user_id}:{to}"), "1", DM_RING_TIMEOUT_S + 15).await.unwrap_or(());
             }
             // Historique d'appels : nouvelle entrée en sonnerie
             let dm_uuid = msg["dm_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
@@ -1516,7 +1545,7 @@ async fn handle_ws_message(
                 return;
             };
             if !users_share_dm(state, user_id, to).await { return; }
-            accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"]).await;
+            accept_dm_call(state, user_id, session_id, cached_username, to, &msg["dm_id"], msg["e2ee"].as_bool() == Some(true)).await;
         }
 
         Some("DM_CALL_DECLINE") => {
