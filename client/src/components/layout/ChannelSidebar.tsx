@@ -34,6 +34,7 @@ import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useMobile } from '../../contexts/MobileContext'
 import { useMemberModeration } from '../chat/MemberModeration'
 import { t as tr, useT } from '../../i18n'
+import { openMessages, type RawMsg } from '../../e2e/conversations'
 
 /** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
 const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
@@ -862,7 +863,8 @@ export default function ChannelSidebar() {
     if (!serverId) return
     qc.prefetchQuery({
       queryKey: ['messages', serverId, chId, null],
-      queryFn: () => api.get(`/servers/${serverId}/channels/${chId}/messages`).then(r => r.data),
+      // Même forme que ChannelPage : messages chiffrés déjà déchiffrés dans le cache.
+      queryFn: () => api.get(`/servers/${serverId}/channels/${chId}/messages`).then(r => openMessages('channel', chId, r.data as RawMsg[])),
       staleTime: 30_000,
     })
   }

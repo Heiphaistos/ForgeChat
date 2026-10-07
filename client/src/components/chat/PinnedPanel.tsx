@@ -7,6 +7,7 @@ import api, { mediaUrl } from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { renderMarkdown } from '../../utils/markdown'
 import toast from 'react-hot-toast'
+import { openMessages } from '../../e2e/conversations'
 
 interface Props {
   serverId: string
@@ -28,7 +29,8 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
   const { data: pinned = [], isLoading } = useQuery({
     queryKey: ['pinned', channelId],
-    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/pins`).then(r => r.data),
+    // Épingles chiffrées : déchiffrées ici (enc, client_msg_id, author_id).
+    queryFn: () => api.get(`/servers/${serverId}/channels/${channelId}/pins`).then(r => openMessages('channel', channelId, r.data)),
   })
 
   const unpin = useMutation({

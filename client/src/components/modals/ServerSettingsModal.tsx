@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
@@ -22,6 +22,7 @@ import OnboardingTab from './OnboardingTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
 import MyServerProfileTab from './MyServerProfileTab'
+import ServerKeySettings from '../../e2e/ServerKeySettings'
 import { useT, type Key } from '../../i18n'
 
 interface Server {
@@ -59,7 +60,7 @@ interface Props {
   isAdmin?: boolean
 }
 
-type Tab = 'general' | 'profile' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding'
+type Tab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -309,6 +310,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       tabs: [
         { id: 'general' },
         { id: 'profile' },
+        { id: 'e2e', icon: Lock },
       ],
     },
     {
@@ -839,6 +841,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
             )}
 
             {tab === 'profile' && <MyServerProfileTab serverId={server.id} />}
+            {tab === 'e2e' && <ServerKeySettings serverId={server.id} serverName={server.name} isOwner={estProprietaire} />}
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
             {tab === 'stats'   && <StatsTab serverId={server.id} />}
             {tab === 'onboarding' && <OnboardingTab serverId={server.id} channels={channels} />}

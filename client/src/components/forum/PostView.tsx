@@ -19,6 +19,10 @@ import { useTypeToFocus } from '../../hooks/useTypeToFocus'
 import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import { useT, dateLocale } from '../../i18n'
+import { postScope, type EncPayload } from '../../e2e/crypto'
+import { channelSendError } from '../../e2e/channels'
+import { openPost, openReplies, sealPost, sendScoped } from '../../e2e/channelScopes'
+import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 
 const REPLY_PAGE = 50
 
@@ -27,8 +31,14 @@ const forumDrafts = new Map<string, string>()
 export interface ForumPost {
   id: string
   title: string
-  content?: string
+  content?: string | null
   creator_id: string
+  /** Salon chiffré : {t: contenu, title} chiffrés, déchiffrés à l'affichage (title vide côté serveur). */
+  enc?: EncPayload | null
+  /** Toujours présent : lie la publication et ses réponses (AAD). */
+  client_msg_id?: string | null
+  unencrypted?: boolean
+  e2e?: 'ok' | 'locked'
   creator_username: string
   creator_avatar?: string
   tags: string[]
@@ -63,6 +73,11 @@ export interface ForumReply {
   user_id: string
   content: string
   created_at: string
+  enc?: EncPayload | null
+  client_msg_id?: string | null
+  unencrypted?: boolean
+  e2e?: 'ok' | 'locked'
+  e2e_body?: { p?: unknown }
   author: { id: string; username: string; avatar?: string; discriminator: string }
   reactions?: { emoji: string; count: number; me: boolean; users?: string[] }[]
   attachments?: SimpleAttachment[]
@@ -111,14 +126,21 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   const { formatShortDate, formatDate } = useFormatDate()
 
   const savePost = useMutation({
-    mutationFn: () => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, { content: editPostContent.trim() }),
+    // Salon chiffré : nouveau {t, title} chiffré avec le même id client (le titre ne change pas).
+    mutationFn: async () => {
+      const url = `/servers/${serverId}/channels/${channelId}/posts/${post.id}`
+      const cmid = data?.post?.client_msg_id ?? post.client_msg_id
+      if (!cmid) return void await api.patch(url, { content: editPostContent.trim() })
+      await sealPost(serverId, channelId, localPost.title, editPostContent.trim(),
+        body => api.patch(url, body.enc ? { enc: body.enc } : { content: body.content ?? '' }), { clientMsgId: cmid })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
       setEditingPost(false)
       toast.success(t('post.edited'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('post.editError')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? t('post.editError'))),
   })
 
   const togglePin = useMutation({
@@ -145,9 +167,13 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   // (curseur = id de la réponse la plus ancienne reçue)
   const { data: pages, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['forum-post', post.id],
-    queryFn: ({ pageParam }) => api.get<{ post: any; replies: ForumReply[] }>(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, {
+    // Salon chiffré : publication et réponses déchiffrées ici (portée de la publication).
+    queryFn: ({ pageParam }) => api.get<{ post: ForumPost; replies: ForumReply[] }>(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`, {
       params: { limit: REPLY_PAGE, ...(pageParam ? { before: pageParam } : {}) },
-    }).then(r => r.data),
+    }).then(async r => ({
+      post: await openPost(channelId, r.data.post),
+      replies: await openReplies(channelId, r.data.post.client_msg_id, r.data.replies),
+    })),
     initialPageParam: null as string | null,
     getNextPageParam: last => (last.replies.length === REPLY_PAGE ? last.replies[0]?.id ?? null : null),
   })
@@ -187,8 +213,19 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       if (d.post_id !== post.id) return
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
     })
-    return () => { offEdit(); offDelete(); offReact(); offAtt() }
-  }, [post.id, on, qc])
+    // Clés du salon reçues : publication et réponses en attente s'ouvrent.
+    const offKeys = on('E2E_KEYS', (d: any) => {
+      if (d.conv_kind === 'channel' && d.conv_id === channelId) qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
+    })
+    return () => { offEdit(); offDelete(); offReact(); offAtt(); offKeys() }
+  }, [post.id, channelId, on, qc])
+
+  /** Portée de la publication (AAD) pour ses réponses. */
+  const replyScope = () => {
+    const cmid = data?.post?.client_msg_id ?? post.client_msg_id
+    if (!cmid) throw new Error('E2E_WAITING')
+    return postScope(channelId, cmid)
+  }
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
   // Double-tap sur une réponse → réaction ❤️ (parité canaux/groupes/threads)
@@ -209,14 +246,17 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   })
 
   const editReply = useMutation({
+    // Même id client que la réponse (lié à l'AAD), ou un nouveau pour une ancienne réponse en clair.
     mutationFn: ({ replyId, content }: { replyId: string; content: string }) =>
-      api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}`, { content }),
+      sendScoped(serverId, channelId, replyScope(), content,
+        body => api.patch(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}`, body),
+        { clientMsgId: replies.find(r => r.id === replyId)?.client_msg_id }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       setEditingReplyId(null)
       toast.success(t('post.replyEdited'))
     },
-    onError: () => toast.error(t('gdm.editError')),
+    onError: (e) => toast.error(channelSendError(e, t('gdm.editError'))),
   })
 
   const deleteReply = useMutation({
@@ -251,10 +291,11 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   }, [replies.length])
 
   const sendReply = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies`, {
-      content: reply.trim(),
-      has_attachments: pending.files.length > 0,
-    }),
+    mutationFn: () => sendScoped(serverId, channelId, replyScope(), reply.trim(),
+      body => api.post(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies`, {
+        ...body,
+        has_attachments: pending.files.length > 0,
+      })),
     onSuccess: async (res) => {
       const files = pending.files
       const replyId: string | undefined = res.data?.reply?.id
@@ -267,7 +308,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
         qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       }
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? t('common.error'))),
   })
 
   // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
@@ -380,7 +421,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               </button>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
               <span className="text-xs text-fc-muted">{formatShortDate(post.created_at)}</span>
-              {user?.id === post.creator_id && !editingPost && (
+              {user?.id === post.creator_id && !editingPost && data.post.e2e !== 'locked' && (
                 <button
                   onClick={() => { setEditPostContent(data.post.content ?? ''); setEditingPost(true) }}
                   className="ml-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 text-fc-muted hover:text-white rounded transition"
@@ -421,7 +462,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             ) : (
               <>
                 <MediaContent text={data.post.content} className="text-fc-text text-sm leading-relaxed" />
-                {linkPreviewEnabled && (() => {
+                {/* Publication chiffrée : pas d'aperçu demandé au serveur (il verrait l'URL). */}
+                {linkPreviewEnabled && !data.post.enc && (() => {
                   const url = extractFirstUrl(data.post.content)
                   return url ? <LinkPreview url={url} /> : null
                 })()}
@@ -508,7 +550,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                     aria-label={t('post.reactLabel')}
                   ><SmilePlus size={13} aria-hidden /></button>
                 )}
-                {r.user_id === user?.id && editingReplyId !== r.id && (
+                {r.unencrypted === true && <UnencryptedBadge />}
+                {r.user_id === user?.id && editingReplyId !== r.id && r.e2e !== 'locked' && (
                   <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 transition">
                     <button
                       onClick={() => { setEditingReplyId(r.id); setEditContent(r.content) }}
@@ -570,6 +613,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                   <MediaContent text={r.content} />
                   <AttachmentList attachments={r.attachments} />
                   {linkPreviewEnabled && (() => {
+                    // Réponse chiffrée : aperçu calculé par l'expéditeur, jamais demandé au serveur.
+                    if (r.enc) return r.e2e_body?.p ? <LinkPreview url={extractFirstUrl(r.content) ?? ''} data={r.e2e_body.p} /> : null
                     const url = extractFirstUrl(r.content)
                     return url ? <LinkPreview url={url} /> : null
                   })()}

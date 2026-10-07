@@ -7,7 +7,7 @@ import NsfwGate, { useNsfwOk } from '../components/chat/NsfwGate'
 import { useMobile } from '../contexts/MobileContext'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
-import { useChat, useDraft } from '../store/chat'
+import { useChat, useDraft, type ChatMessage } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import { useShallow } from 'zustand/react/shallow'
 import { useWs } from '../store/ws'
@@ -32,6 +32,10 @@ import KanbanBoard from '../components/tasks/KanbanBoard'
 import toast from 'react-hot-toast'
 import { useT, intlLocale } from '../i18n'
 import ChannelNotifModal from '../components/modals/ChannelNotifModal'
+import { completeChannelKeys, openBody, openMessage, openMessages, reopenLocked } from '../e2e/conversations'
+import { channelSendError, editMessage, postMessage, useChannelEncrypted } from '../e2e/channels'
+import { ChannelLock } from '../e2e/ChannelBadge'
+import { ServerKeyPrompt } from '../e2e/ServerKeySettings'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -67,6 +71,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const highlightMessageId = searchParams.get('highlight')
   const { addMessages, addMessage, updateMessage, deleteMessage, mergeAttachments, addReaction, removeReaction, setTyping, clearTyping, clearChannel } = useChat()
   const typingUsers = useChat(useShallow(s => Object.values(s.typing[channelId ?? ''] ?? {})))
+  // Recherche dans un salon chiffré : sur les messages déjà chargés et déchiffrés.
+  const loadedMessages = useChat(s => s.messagesByChannel[channelId ?? ''])
   const { on, onOpen, subscribeChannel } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
@@ -120,10 +126,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           const res = await api.get(
             `/servers/${serverId}/channels/${channelId}/messages?around=${highlightMessageId}&limit=50`
           )
-          if (res.data?.length > 0) return res.data
+          if (res.data?.length > 0) return openMessages('channel', channelId!, res.data as ChatMessage[])
         } catch {}
       }
-      return api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => r.data)
+      return api.get(`/servers/${serverId}/channels/${channelId}/messages`).then(r => openMessages('channel', channelId!, r.data as ChatMessage[]))
     },
     enabled: !!channelId && !!serverId,
     staleTime: highlightMessageId ? 0 : 30_000,
@@ -171,11 +177,31 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (!channelId) return
     subscribeChannel(channelId)
     const offs = [
-      on('MESSAGE_CREATE', (d: any) => {
-        if (d.message.channel_id === channelId && !d.pending_attachments) addMessage(d.message)
+      on('MESSAGE_CREATE', async (d: any) => {
+        if (d.message.channel_id === channelId && !d.pending_attachments) addMessage(await openMessage('channel', channelId, d.message))
       }),
-      on('MESSAGE_UPDATE', (d: any) => {
-        if (d.channel_id === channelId) updateMessage(channelId, d.message_id, { content: d.content, edited_at: d.edited_at })
+      on('MESSAGE_UPDATE', async (d: any) => {
+        if (d.channel_id !== channelId) return
+        if (!d.enc) {
+          updateMessage(channelId, d.message_id, { content: d.content, edited_at: d.edited_at })
+          return
+        }
+        // Édition chiffrée : auteur = auteur du message en mémoire (lié à l'AAD).
+        const author = useChat.getState().messagesByChannel[channelId]?.find(m => m.id === d.message_id)?.author_id
+        const body = author ? await openBody('channel', channelId, d.enc, author, d.client_msg_id) : null
+        if (body) {
+          updateMessage(channelId, d.message_id, {
+            content: body.t, enc: d.enc, client_msg_id: d.client_msg_id, e2e: 'ok', e2e_body: body, unencrypted: false, edited_at: d.edited_at,
+          })
+        }
+      }),
+      // Clés du salon reçues : les messages en attente s'ouvrent.
+      on('E2E_KEYS', async (d: any) => {
+        if (d.conv_kind !== 'channel' || d.conv_id !== channelId) return
+        const opened = await reopenLocked('channel', channelId, useChat.getState().messagesByChannel[channelId] ?? [])
+        opened.forEach((m, id) => updateMessage(channelId, id, m as Partial<ChatMessage>))
+        qc.invalidateQueries({ queryKey: ['pinned', channelId] })
+        qc.invalidateQueries({ queryKey: ['poll'] })
       }),
       on('MESSAGE_DELETE', (d: any) => {
         if (d.channel_id === channelId) deleteMessage(channelId, d.message_id)
@@ -256,16 +282,17 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   }
 
   const sendMsg = useMutation({
+    // Chiffré dès que j'ai une clé (AutoMod et aperçu de lien faits ici) ; mentions en métadonnées.
     mutationFn: ({ content, reply_to, expires_at_seconds, has_attachments }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null; has_attachments?: boolean }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content, reply_to, expires_at_seconds, has_attachments }),
+      postMessage(serverId!, channelId!, content ?? '', body =>
+        api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, expires_at_seconds, has_attachments })),
     onError: (e: any) => {
       if (e?.response?.status === 429) {
         const delay = e?.response?.data?.retry_after ?? currentChannel?.slowmode_delay ?? 30
         startSlowmodeCooldown(delay)
         toast.error(t('channel.slowmodeWait', { s: delay }))
       } else {
-        const msg = e?.response?.data?.error || e?.response?.data?.message || t('channel.sendFailed')
-        toast.error(msg)
+        toast.error(channelSendError(e, e?.response?.data?.error || e?.response?.data?.message || t('channel.sendFailed')))
       }
     },
   })
@@ -279,9 +306,17 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const editMsg = useMutation({
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
-      api.patch(`/servers/${serverId}/channels/${channelId}/messages/${msgId}`, { content }),
-    onError: () => toast.error(t('channel.editFailed')),
+      editMessage(serverId!, channelId!, content,
+        useChat.getState().messagesByChannel[channelId!]?.find(m => m.id === msgId)?.client_msg_id,
+        body => api.patch(`/servers/${serverId}/channels/${channelId}/messages/${msgId}`, body)),
+    onError: (e) => toast.error(channelSendError(e, t('channel.editFailed'))),
   })
+
+  // Salon chiffré : clés distribuées aux membres arrivés depuis, et à la clé du serveur.
+  const encrypted = useChannelEncrypted(channelId)
+  useEffect(() => {
+    if (encrypted && channelId) void completeChannelKeys(channelId)
+  }, [encrypted, channelId])
 
   const loadMore = useCallback(async (): Promise<boolean> => {
     if (!channelId || !serverId || !hasMore) return false
@@ -294,7 +329,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         `/servers/${serverId}/channels/${channelId}/messages?before=${oldestId}&limit=50`
       )
       if (data.length === 0) { setHasMore(false); return false }
-      addMessages(channelId, data, true)
+      addMessages(channelId, await openMessages('channel', channelId, data), true)
       if (data.length < 50) setHasMore(false)
       return true
     } catch (e: any) {
@@ -503,6 +538,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           )}
           <span className="text-fc-muted flex-shrink-0">{channelIcon(currentChannel?.type ?? 'text')}</span>
           <span className="font-semibold text-white truncate min-w-0 max-w-[140px] sm:max-w-[240px] md:max-w-none" title={currentChannel?.name}>{currentChannel?.name ?? '...'}</span>
+          <ChannelLock channelId={channelId} />
           {currentChannel?.type === 'announcement' && (
             <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">{t('channel.announcements')}</span>
           )}
@@ -636,6 +672,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             )}
           </div>
         </div>
+
+        {/* Propriétaire d'un serveur sans clé de récupération : invite une fois par session. */}
+        {!isSplit && serverData?.server?.owner_id === meId && (
+          <ServerKeyPrompt serverId={serverId} serverName={server?.name ?? ''} />
+        )}
 
         {/* Onglets Messages / Tâches */}
         <div
@@ -842,6 +883,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
           channelId={channelId}
           channelName={currentChannel?.name ?? ''}
           onClose={() => setShowSearch(false)}
+          channelEncrypted={!!encrypted}
+          localMessages={encrypted ? loadedMessages : undefined}
         />
       )}
 

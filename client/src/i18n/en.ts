@@ -1204,6 +1204,7 @@ export const en: Partial<Record<Key, string>> = {
   'srv.tab.webhooks': 'Webhooks',
   'srv.tab.feeds': 'RSS feeds',
   'srv.tab.onboarding': 'Onboarding',
+  'srv.tab.e2e': 'Encryption',
   'srv.tab.events': 'Events',
   'srv.tab.audit': 'Audit Log',
   'srv.tab.automod': 'AutoMod',

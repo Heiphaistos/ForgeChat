@@ -7,6 +7,9 @@ import api from '../../api/client'
 import toast from 'react-hot-toast'
 import ThreadItem from '../threads/ThreadItem'
 import { useWs } from '../../store/ws'
+import type { EncPayload } from '../../e2e/crypto'
+import { channelSendError } from '../../e2e/channels'
+import { createThread as createThreadE2E, openThreads } from '../../e2e/channelScopes'
 
 interface ThreadData {
   id: string
@@ -16,6 +19,10 @@ interface ThreadData {
   last_activity?: string | null
   creator_username?: string
   parent_message_id?: string | null
+  creator_id: string
+  client_id?: string | null
+  /** Titre chiffré (déchiffré ici) : `title` est alors vide côté serveur. */
+  title_enc?: EncPayload | null
 }
 
 const PAGE_SIZE = 50
@@ -55,7 +62,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
     queryFn: ({ pageParam }) =>
       api.get<ThreadData[]>(`/servers/${serverId}/channels/${channelId}/threads`, {
         params: { limit: PAGE_SIZE, ...(pageParam ? { before: pageParam } : {}) },
-      }).then(r => r.data),
+      }).then(r => openThreads(channelId, r.data)),
     initialPageParam: null as string | null,
     getNextPageParam: last => (last.length === PAGE_SIZE ? last[last.length - 1]?.id ?? null : null),
     staleTime: 10_000,
@@ -63,8 +70,10 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
   const threads = data?.pages.flat() ?? []
 
   const createThread = useMutation({
+    // Salon chiffré : titre ET premier message chiffrés avec la portée du nouveau fil.
     mutationFn: (payload: { title: string; first_message: string }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/threads`, payload),
+      createThreadE2E(serverId, channelId, payload.title, payload.first_message, undefined,
+        body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body)),
     onSuccess: (res) => {
       toast.success('Fil créé !')
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
@@ -73,7 +82,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       const tid: string | undefined = res.data?.thread?.id
       if (tid) onSelectThread(tid)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur lors de la création'),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur lors de la création')),
   })
 
   const handleCreate = () => {

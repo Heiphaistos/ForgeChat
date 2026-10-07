@@ -1203,6 +1203,7 @@ export const fr = {
   'srv.tab.webhooks': 'Webhooks',
   'srv.tab.feeds': 'Flux RSS',
   'srv.tab.onboarding': 'Accueil',
+  'srv.tab.e2e': 'Chiffrement',
   'srv.tab.events': 'Événements',
   'srv.tab.audit': 'Audit Log',
   'srv.tab.automod': 'AutoMod',

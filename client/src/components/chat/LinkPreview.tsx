@@ -12,12 +12,23 @@ interface OGData {
 
 interface Props {
   url: string
+  /** Message chiffré : aperçu déjà dans le contenu chiffré, pas d'appel à /og (le serveur ne voit pas l'URL). */
+  data?: unknown
 }
 
 // Première URL http(s) d'un contenu — partagé entre les surfaces qui affichent une preview
 const URL_REGEX = /https?:\/\/[^\s<>"]+/g
 export function extractFirstUrl(content: string): string | null {
   return content.match(URL_REGEX)?.[0] ?? null
+}
+
+/** Aperçu venu d'un contenu chiffré (donc de l'expéditeur) : on ne garde que des chaînes. */
+function asOg(v: unknown): OGData | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Record<string, unknown>
+  const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : undefined)
+  const url = str('url')
+  return url ? { url, title: str('title'), description: str('description'), image: str('image'), site_name: str('site_name') } : null
 }
 
 function isSafeUrl(url: string): boolean {
@@ -29,17 +40,24 @@ function isSafeUrl(url: string): boolean {
   }
 }
 
-export default function LinkPreview({ url }: Props) {
-  const { data, isLoading, isError } = useQuery<OGData | null>({
+export default function LinkPreview({ url, data: given }: Props) {
+  const query = useQuery<OGData | null>({
     queryKey: ['og', url],
     queryFn: () => api.get(`/og?url=${encodeURIComponent(url)}`).then(r => r.data),
     staleTime: 3_600_000,
     retry: false,
+    enabled: given === undefined,
   })
+  const embedded = given === undefined ? undefined : asOg(given)
+  const data = given === undefined ? query.data : embedded
+  const isLoading = given === undefined && query.isLoading
+  const isError = given === undefined && query.isError
 
   if (isLoading || isError || !data || (!data.title && !data.description && !data.image)) return null
 
-  const safeUrl = isSafeUrl(data.url) ? data.url : '#'
+  // Aperçu fourni par l'expéditeur : le lien suit l'URL visible dans le message, pas celle de l'aperçu.
+  const target = given === undefined ? data.url : url
+  const safeUrl = isSafeUrl(target) ? target : '#'
   const safeImage = data.image && isSafeUrl(data.image) ? data.image : undefined
 
   return (

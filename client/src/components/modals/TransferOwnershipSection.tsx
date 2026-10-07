@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { useT } from '../../i18n'
+import { serverKeyForNewOwner } from '../../e2e/serverKey'
 
 interface Member { user_id: string; username: string; nickname: string | null; is_owner: boolean }
 
@@ -27,7 +28,10 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
   })
 
   const transfer = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/transfer`, { user_id: target, password }),
+    // Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code).
+    mutationFn: async () => api.post(`/servers/${serverId}/transfer`, {
+      user_id: target, password, server_key_owner_wrapped: await serverKeyForNewOwner(serverId, target),
+    }),
     onSuccess: () => {
       toast.success(t('transfer.done'))
       setTarget(''); setConfirmName(''); setPassword('')

@@ -9,6 +9,7 @@ import api from '../../api/client'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { clipExtension } from '../../lib/clipBuffer'
 import { useT } from '../../i18n'
+import { channelSendError, postMessage } from '../../e2e/channels'
 
 const MAX_SIZE = 500 * 1024 * 1024 // = server/src/config.rs, comme MessageInput
 
@@ -51,14 +52,16 @@ export default function ClipDialog({ blob, label, serverId, voiceChannelId, onCl
     if (blob.size > MAX_SIZE) { toast.error(t('clip.tooBig')); return }
     setSending(true)
     try {
-      const res = await api.post(`/servers/${serverId}/channels/${chosen}/messages`, { content: `🎬 ${t('clip.title', { name: label })}` })
+      // Salon chiffré : légende chiffrée comme un message normal.
+      const res = await postMessage(serverId, chosen, `🎬 ${t('clip.title', { name: label })}`,
+        body => api.post(`/servers/${serverId}/channels/${chosen}/messages`, body))
       const form = new FormData()
       form.append('file', blob, filename)
       await api.post(`/servers/${serverId}/channels/${chosen}/messages/${res.data.id}/attachments`, form)
       toast.success(t('clip.sent'))
       onClose()
-    } catch {
-      toast.error(t('clip.sendError'))
+    } catch (e) {
+      toast.error(channelSendError(e, t('clip.sendError')))
     } finally {
       setSending(false)
     }

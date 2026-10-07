@@ -13,6 +13,7 @@ import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import { useT } from '../../i18n'
+import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 
 export interface MessageRowProps {
   msg: any
@@ -205,6 +206,7 @@ function MessageRow({
                 <time dateTime={msg.created_at} className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</time>
               )}
               {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
+              {msg.unencrypted === true && <UnencryptedBadge />}
             </div>
           )}
 
@@ -387,6 +389,8 @@ function MessageRow({
 
               {/* Link preview */}
               {linkPreviewEnabled && msg.content && !msg.attachments?.length && !msg.poll_id && (() => {
+                // Message chiffré : aperçu calculé par l'expéditeur, jamais demandé au serveur.
+                if (msg.enc) return msg.e2e_body?.p ? <LinkPreview url={extractFirstUrl(msg.content) ?? ''} data={msg.e2e_body.p} /> : null
                 const url = extractFirstUrl(msg.content)
                 return url ? <LinkPreview url={url} /> : null
               })()}
@@ -579,7 +583,8 @@ function MessageRow({
               </button>
             )}
 
-            {onPublishMessage && msg.type !== 'crosspost' && (
+            {/* Message chiffré : publication refusée par le serveur (la copie exigerait la clé des salons cibles). */}
+            {onPublishMessage && msg.type !== 'crosspost' && !msg.enc && (
               <button
                 onClick={() => onPublishMessage(msg.id)}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
@@ -590,7 +595,7 @@ function MessageRow({
               </button>
             )}
 
-            {isOwn && (
+            {isOwn && msg.e2e !== 'locked' && (
               <button
                 onClick={() => onStartEdit(msg.id, msg.content ?? '')}
                 className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
@@ -603,11 +608,11 @@ function MessageRow({
 
             <button
               onClick={() => onToggleTranslation(msg.id)}
-              className={`p-1.5 rounded hover:bg-fc-hover transition ${translation ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-              title={translation ? t('msg.hideTranslation') : t('msg.translate')}
-              aria-label={translation ? t('msg.hideTranslation') : t('msg.translateLabel')}
+              className={`p-1.5 rounded hover:bg-fc-hover transition disabled:opacity-40 disabled:cursor-not-allowed ${translation ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+              title={msg.enc ? t('e2e.translate.disabled') : translation ? t('msg.hideTranslation') : t('msg.translate')}
+              aria-label={msg.enc ? t('e2e.translate.disabled') : translation ? t('msg.hideTranslation') : t('msg.translateLabel')}
               aria-pressed={!!translation}
-              disabled={isTranslating}
+              disabled={isTranslating || !!msg.enc}
             >
               {isTranslating ? <Loader2 size={14} className="animate-spin" /> : <Languages size={14} />}
             </button>

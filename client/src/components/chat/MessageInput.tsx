@@ -25,6 +25,9 @@ import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 import PickerShell, { PickerFallback } from '../ui/PickerShell'
 import { t as tr, useT, type Key } from '../../i18n'
+import { openMessages, withSeal } from '../../e2e/conversations'
+import { channelSendError, postMessage, sendChannel } from '../../e2e/channels'
+import { sealPoll } from '../../e2e/channelScopes'
 
 // ─── Emoji shortcodes ────────────────────────────────────────────────────────
 
@@ -328,21 +331,24 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const { data: scheduledMessages = [] } = useQuery<any[]>({
     queryKey: ['scheduled_messages', serverId, channelId],
     queryFn: () =>
-      api.get(`/servers/${serverId}/channels/${channelId}/scheduled`).then(r => r.data),
+      api.get(`/servers/${serverId}/channels/${channelId}/scheduled`).then(r => openMessages('channel', channelId, r.data)),
     enabled: showScheduled,
     staleTime: 15_000,
   })
 
   const createScheduled = useMutation({
+    // Chiffré à la création (portée du salon) : le serveur le recopie tel quel à l'heure dite.
     mutationFn: ({ content, send_at }: { content: string; send_at: string }) =>
-      api.post(`/servers/${serverId}/channels/${channelId}/scheduled`, { content, send_at }),
+      sendChannel(channelId, content, body => api.post(`/servers/${serverId}/channels/${channelId}/scheduled`, {
+        ...body, content: body.content ?? '', send_at,
+      }), { serverId: serverId ?? '', preview: true }),
     onSuccess: () => {
       toast.success(tr('input.scheduled'))
       setScheduledAt('')
       setContent('')
       queryClient.invalidateQueries({ queryKey: ['scheduled_messages', serverId, channelId] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
 
   const deleteScheduled = useMutation({
@@ -359,12 +365,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   // POST .../polls -- la feature "sondage" n'avait littéralement aucun moyen
   // d'être créée depuis l'interface, malgré un affichage/vote/fermeture complets.
   const createPoll = useMutation({
+    // Salon chiffré : question et options chiffrées (portée du sondage), textes vides côté serveur.
     mutationFn: () =>
-      api.post(`/servers/${serverId}/channels/${channelId}/polls`, {
-        question: pollQuestion.trim(),
-        options: pollOptions.map(o => o.trim()).filter(Boolean),
-        multiple_choice: pollMultiple,
-      }),
+      sealPoll(serverId ?? '', channelId, pollQuestion.trim(), pollOptions.map(o => o.trim()).filter(Boolean), body =>
+        api.post(`/servers/${serverId}/channels/${channelId}/polls`, { ...body, multiple_choice: pollMultiple })),
     onSuccess: () => {
       toast.success(tr('input.pollCreated'))
       setShowPollCreator(false)
@@ -372,7 +376,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       setPollOptions(['', ''])
       setPollMultiple(false)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -827,8 +831,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       // -- même contrat (id renvoyé, endpoint d'attachment équivalent) que côté serveur,
       // ce chemin retournait juste tôt avant sans jamais appeler l'API en DM.
       const res = serverId
-        ? await api.post(`/servers/${serverId}/channels/${channelId}/messages`, { content })
-        : await api.post(`/dms/${channelId}/messages`, { content })
+        ? await postMessage(serverId, channelId, content, body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body))
+        : await withSeal('dm', channelId, content, body => api.post(`/dms/${channelId}/messages`, body))
       const formData = new FormData()
       const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm'
       formData.append('file', blob, `voice-${Date.now()}.${ext}`)
@@ -837,8 +841,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         : `/dms/${channelId}/messages/${res.data.id}/attachments`
       await api.post(uploadUrl, formData)
       setShowVoiceRecorder(false)
-    } catch {
-      toast.error(tr('input.voiceFailed'))
+    } catch (e) {
+      toast.error(channelSendError(e, tr('input.voiceFailed')))
       setShowVoiceRecorder(false)
     }
   }, [channelId, serverId])
