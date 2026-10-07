@@ -28,6 +28,8 @@ use axum::extract::DefaultBodyLimit;
 
 /// Corps des routes publiques et des petits réglages JSON (anti-saturation mémoire).
 const SMALL_JSON_LIMIT: usize = 64 * 1024;
+/// Webhooks entrants et routes bot : JSON seulement (aucun fichier), 1 Mo suffit.
+const INBOUND_JSON_LIMIT: usize = 1024 * 1024;
 use axum::http::{header, HeaderValue};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -214,14 +216,14 @@ async fn main() -> anyhow::Result<()> {
         // WebSocket
         .route("/ws", get(handlers::websocket::ws_handler))
         // Routes bot (sans JWT — auth via Bearer token)
-        .route("/api/bot/messages", post(handlers::bots::bot_send_message))
-        .route("/api/bots/:bot_id/commands", post(handlers::bots::register_bot_command))
+        .route("/api/bot/messages", post(handlers::bots::bot_send_message).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
+        .route("/api/bots/:bot_id/commands", post(handlers::bots::register_bot_command).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Webhook entrant (sans JWT — auth via token dans l'URL)
-        .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook))
+        .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Webhook GitHub entrant (sans JWT — push/PR/issues)
-        .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook))
+        .route("/api/github-webhook/:channel_id", post(handlers::webhooks::receive_github_webhook).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Événements du SFU (sans JWT — signés par LiveKit, vérifiés dans le handler)
-        .route("/api/livekit/webhook", post(handlers::voice::livekit_webhook))
+        .route("/api/livekit/webhook", post(handlers::voice::livekit_webhook).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Rapports d'erreurs des applis (sans JWT : une page blanche n'est pas
         // connectée). Corps borné ici, limite par IP dans le handler.
         .route(
