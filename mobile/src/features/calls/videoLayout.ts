@@ -96,6 +96,8 @@ export interface AutoHide {
   poke(): void
   /** Appui sur la vidéo : masque ou réaffiche. */
   toggle(): void
+  /** Masque tout de suite (entrée en plein écran), si le masquage est actif. */
+  hide(): void
   /** Masquage actif seulement quand il y a une vidéo à regarder ; sinon toujours visibles. */
   setEnabled(on: boolean): void
   dispose(): void
@@ -125,6 +127,7 @@ export function createAutoHide(delayMs: number, onChange: (visible: boolean) => 
   return {
     poke: () => show(true),
     toggle: () => show(!visible || !enabled),
+    hide: () => show(!enabled),
     setEnabled: (on) => {
       if (on === enabled) return
       enabled = on

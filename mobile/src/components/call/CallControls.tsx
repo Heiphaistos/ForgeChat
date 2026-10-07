@@ -60,7 +60,7 @@ export function useAutoHide(enabled: boolean) {
   const ctl = useMemo(() => createAutoHide(CONTROLS_HIDE_MS, setVisible), [])
   useEffect(() => ctl.setEnabled(enabled), [ctl, enabled])
   useEffect(() => () => ctl.dispose(), [ctl])
-  return { visible, poke: ctl.poke, toggle: ctl.toggle }
+  return { visible, poke: ctl.poke, toggle: ctl.toggle, hide: ctl.hide }
 }
 
 /** Fondu + glissement des commandes (fil UI, Reanimated) ; ne capte plus les appuis une fois masquées. */

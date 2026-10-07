@@ -1,5 +1,5 @@
 import { AndroidAudioTypePresets, AudioSession, registerGlobals } from '@livekit/react-native'
-import { MediaStream } from '@livekit/react-native-webrtc'
+import type { MediaStream } from '@livekit/react-native-webrtc'
 import { requireOptionalNativeModule } from 'expo'
 import { Track, type Room } from 'livekit-client'
 import { AppRegistry, Platform } from 'react-native'
@@ -31,25 +31,16 @@ export function liveKitAccess(v: unknown): { access: LiveKitAccess } | { error: 
   return r
 }
 
-/** Un flux par piste : en recréer un à chaque événement faisait clignoter la vidéo et fuyait côté natif. */
-const streams = new Map<string, MediaStream>()
-
-/** Flux affichable (RTCView) pour une piste LiveKit, ou null. */
+/**
+ * Flux affichable (RTCView) d'une piste LiveKit, ou null : celui que LiveKit tient lui-même
+ * (`track.mediaStream`), jamais une copie. Ne JAMAIS le relâcher ici : LiveKit dispose la piste
+ * native quand elle s'arrête, et relâcher ensuite un flux qui la contient fait planter l'app
+ * (« MediaStreamTrack has been disposed » sur le fil WebRTC, constaté à l'arrêt d'une caméra).
+ */
 export function streamOf(track: Track | null | undefined): MediaStream | null {
-  for (const [id, s] of streams) {
-    if (s.getTracks().every((t) => t.readyState === 'ended')) {
-      s.release(false) // la piste appartient à LiveKit : ne libérer que le flux
-      streams.delete(id)
-    }
-  }
   const mst = track?.mediaStreamTrack
   if (!mst || mst.readyState === 'ended') return null
-  let s = streams.get(mst.id)
-  if (!s) {
-    s = new MediaStream([mst as never])
-    streams.set(mst.id, s)
-  }
-  return s
+  return (track.mediaStream as unknown as MediaStream | undefined) ?? null
 }
 
 /** Service au premier plan Android (modules/call-service) : micro et caméra gardés en arrière-plan. */
@@ -127,8 +118,6 @@ export const callAudio = {
     } catch (e) {
       logger.warn('livekit', 'fin du service d’appel', e)
     }
-    for (const s of streams.values()) s.release(false)
-    streams.clear()
     await AudioSession.stopAudioSession().catch((e: unknown) => logger.warn('livekit', 'fin session audio', e))
   }),
   async setSpeaker(on: boolean) {
