@@ -182,35 +182,26 @@ pub fn encrypted_blob_name(name: &str) -> Option<String> {
     Some(format!("{id}.enc"))
 }
 
-/// Mode des fichiers joints à un message : chiffrés si le message l'est ; un
-/// fichier en clair est refusé (PLAINTEXT_REFUSED) quand la conversation exige
-/// le chiffrement pour cet auteur, comme le texte. Rend vrai pour « chiffrés ».
-pub fn file_mode(message_encrypted: bool, must_encrypt: bool) -> Result<bool> {
+/// Mode des fichiers joints à un message : chiffrement obligatoire, un fichier
+/// n'est accepté que joint à un message chiffré (blob opaque), sinon
+/// PLAINTEXT_REFUSED comme le texte. Rend vrai pour « chiffrés ».
+pub fn file_mode(message_encrypted: bool) -> Result<bool> {
     if message_encrypted {
-        return Ok(true);
-    }
-    crate::handlers::e2e_conv::plaintext_allowed(must_encrypt)?;
-    Ok(false)
-}
-
-/// Fichiers d'un message de salon (message, fil, réponse de forum) : chiffrés
-/// si le message l'est, en clair seulement pour un auteur sans clé de compte.
-/// `message_encrypted` vaut None si le message n'est pas à l'appelant (IDOR).
-async fn channel_file_mode(state: &AppState, message_encrypted: Option<bool>, user: Uuid) -> Result<bool> {
-    let enc = message_encrypted.ok_or(AppError::Forbidden)?;
-    let must = !enc && crate::handlers::e2e_channel::has_key(&state.db, user).await?;
-    file_mode(enc, must)
-}
-
-/// Fichiers d'un MP ou d'un groupe : en clair seulement tant qu'un membre n'a pas de clé.
-pub async fn conv_file_mode(state: &AppState, message_encrypted: bool, conv: crate::handlers::e2e_conv::Conv) -> Result<bool> {
-    let must = if message_encrypted {
-        false
+        Ok(true)
     } else {
-        let members = crate::handlers::e2e_conv::members(&state.db, conv).await?;
-        crate::handlers::e2e_conv::all_keyed(&state.db, &members).await?
-    };
-    file_mode(message_encrypted, must)
+        Err(crate::handlers::e2e_conv::plaintext_refused())
+    }
+}
+
+/// Fichiers d'un message de salon (message, fil, réponse de forum).
+/// `message_encrypted` vaut None si le message n'est pas à l'appelant (IDOR).
+async fn channel_file_mode(_state: &AppState, message_encrypted: Option<bool>, _user: Uuid) -> Result<bool> {
+    file_mode(message_encrypted.ok_or(AppError::Forbidden)?)
+}
+
+/// Fichiers d'un MP ou d'un groupe.
+pub async fn conv_file_mode(_state: &AppState, message_encrypted: bool, _conv: crate::handlers::e2e_conv::Conv) -> Result<bool> {
+    file_mode(message_encrypted)
 }
 
 /// Admins/modérateurs/propriétaires peuvent uploader n'importe quel type de fichier.
@@ -523,9 +514,9 @@ pub async fn forum_upload(
     tokio::fs::create_dir_all(&upload_dir).await
         .map_err(|e| AppError::Internal(e.into()))?;
 
-    // Auteur muni d'une clé : la publication est chiffrée, ses médias aussi
-    // (blob opaque, clé dans le contenu chiffré de la publication).
-    let encrypted = crate::handlers::e2e_channel::has_key(&state.db, claims.sub).await?;
+    // Chiffrement obligatoire : les médias d'une publication sont toujours des
+    // blobs opaques (clé dans le contenu chiffré de la publication).
+    let encrypted = true;
     let mut budget = UploadBudget::open(&state, claims.sub).await?;
     if let Some(field) = multipart.next_field().await
         .map_err(|e| AppError::BadRequest(e.to_string()))? {
@@ -598,11 +589,9 @@ mod tests {
     #[test]
     fn mode_des_fichiers() {
         // Message chiffré : fichiers chiffrés.
-        assert!(file_mode(true, false).unwrap());
-        assert!(file_mode(true, true).unwrap());
-        // Message en clair : fichiers en clair seulement pendant la transition.
-        assert!(!file_mode(false, false).unwrap());
-        match file_mode(false, true) {
+        assert!(file_mode(true).unwrap());
+        // Message en clair : fichier toujours refusé (chiffrement obligatoire).
+        match file_mode(false) {
             Err(AppError::BadRequest(m)) => assert!(m.starts_with("PLAINTEXT_REFUSED ")),
             other => panic!("{other:?}"),
         }
