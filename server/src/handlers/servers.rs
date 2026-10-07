@@ -119,7 +119,11 @@ pub async fn get_server(
         .bind(server_id)
         .fetch_all(&state.db),
         sqlx::query(
-            "SELECT verified_at FROM server_members WHERE user_id=$1 AND server_id=$2"
+            // Onboarding en attente : des questions existent et le membre (hors
+            // propriétaire) n'y a encore ni répondu ni passé.
+            "SELECT verified_at, onboarded_at IS NULL AND NOT is_owner
+                    AND EXISTS(SELECT 1 FROM onboarding_questions WHERE server_id=$2) AS onboarding_pending
+             FROM server_members WHERE user_id=$1 AND server_id=$2"
         )
         .bind(claims.sub)
         .bind(server_id)
@@ -179,7 +183,10 @@ pub async fn get_server(
     }).collect();
 
     let member = member_row.map(|r| {
-        serde_json::json!({ "verified_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("verified_at") })
+        serde_json::json!({
+            "verified_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("verified_at"),
+            "onboarding_pending": r.get::<bool, _>("onboarding_pending"),
+        })
     });
 
     Ok(Json(serde_json::json!({
