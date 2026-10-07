@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Shield, Tag, UserMinus } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 interface Role { id: string; name: string; color: number }
 interface MemberTag { id: string; name: string; color: number }
@@ -23,6 +24,7 @@ function colorIntToHex(c: number): string {
 }
 
 export default function MembersTab({ serverId }: { serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -46,37 +48,37 @@ export default function MembersTab({ serverId }: { serverId: string }) {
     mutationFn: (userId: string) => api.post(`/servers/${serverId}/members/${userId}/kick`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['members_detailed', serverId] })
-      toast.success('Membre expulsé')
+      toast.success(t('mtab.kicked'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const assignRole = useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
       api.put(`/servers/${serverId}/members/${userId}/roles/${roleId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['members_detailed', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const removeRole = useMutation({
     mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) =>
       api.delete(`/servers/${serverId}/members/${userId}/roles/${roleId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['members_detailed', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const assignTag = useMutation({
     mutationFn: ({ userId, tagId }: { userId: string; tagId: string }) =>
       api.put(`/servers/${serverId}/members/${userId}/tags/${tagId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['members_detailed', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const removeTagMutation = useMutation({
     mutationFn: ({ userId, tagId }: { userId: string; tagId: string }) =>
       api.delete(`/servers/${serverId}/members/${userId}/tags/${tagId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['members_detailed', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const filtered = members.filter(m =>
@@ -87,10 +89,10 @@ export default function MembersTab({ serverId }: { serverId: string }) {
 
   const memberStatusLabel = (status: string) => {
     switch (status) {
-      case 'online': return 'En ligne'
-      case 'idle': return 'Absent'
-      case 'dnd': return 'Ne pas déranger'
-      default: return 'Hors ligne'
+      case 'online': return t('presence.online')
+      case 'idle': return t('presence.idle')
+      case 'dnd': return t('presence.dnd')
+      default: return t('presence.offline')
     }
   }
 
@@ -99,13 +101,13 @@ export default function MembersTab({ serverId }: { serverId: string }) {
       <div className="flex items-center gap-2">
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher un membre..."
-          aria-label="Rechercher un membre"
+          placeholder={t('mtab.search')}
+          aria-label={t('mtab.searchLabel')}
           inputMode="search" autoComplete="off"
           enterKeyHint="search" autoCapitalize="none"
           className="flex-1 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent"
         />
-        <span aria-live="polite" aria-atomic="true" className="text-fc-muted text-sm">{filtered.length} membre(s)</span>
+        <span aria-live="polite" aria-atomic="true" className="text-fc-muted text-sm">{t('mtab.count', { n: filtered.length })}</span>
       </div>
 
       <div className="space-y-1">
@@ -116,7 +118,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               role="button"
               tabIndex={0}
               aria-expanded={expandedId === m.user_id}
-              aria-label={`${m.username}${m.nickname ? ` (${m.nickname})` : ''}${m.is_owner ? ', propriétaire' : ''} — ${memberStatusLabel(m.status)}`}
+              aria-label={`${m.username}${m.nickname ? ` (${m.nickname})` : ''}${m.is_owner ? t('mtab.ownerSuffix') : ''} — ${memberStatusLabel(m.status)}`}
               className="flex items-center gap-3 p-3 cursor-pointer hover:bg-fc-hover transition"
               onClick={() => setExpandedId(expandedId === m.user_id ? null : m.user_id)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === m.user_id ? null : m.user_id) } }}
@@ -137,7 +139,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-white text-sm font-medium">{m.username}</span>
                   {m.is_owner && (
-                    <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">Owner</span>
+                    <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">{t('mtab.owner')}</span>
                   )}
                   {m.roles.map(r => (
                     <span key={r.id} className="text-xs px-1.5 py-0.5 rounded font-medium"
@@ -146,11 +148,11 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                       {r.name}
                     </span>
                   ))}
-                  {m.tags.map(t => (
-                    <span key={t.id} className="text-xs px-1.5 py-0.5 rounded font-medium border"
-                      style={{ borderColor: colorIntToHex(t.color), color: colorIntToHex(t.color) }}
+                  {m.tags.map(tg => (
+                    <span key={tg.id} className="text-xs px-1.5 py-0.5 rounded font-medium border"
+                      style={{ borderColor: colorIntToHex(tg.color), color: colorIntToHex(tg.color) }}
                     >
-                      [{t.name}]
+                      [{tg.name}]
                     </span>
                   ))}
                 </div>
@@ -158,7 +160,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               {!m.is_owner && (
                 <button
                   onClick={e => { e.stopPropagation(); kick.mutate(m.user_id) }}
-                  aria-label={`Expulser ${m.username}`}
+                  aria-label={t('mtab.kick', { name: m.username })}
                   className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition flex-shrink-0"
                 >
                   <UserMinus size={14} aria-hidden />
@@ -173,7 +175,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                 {nonEveryoneRoles.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 text-xs text-fc-muted uppercase font-semibold mb-1.5">
-                      <Shield size={11} aria-hidden /> Rôles
+                      <Shield size={11} aria-hidden /> {t('srv.tab.roles')}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {nonEveryoneRoles.map((r: any) => {
@@ -199,22 +201,22 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                 {tags.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1 text-xs text-fc-muted uppercase font-semibold mb-1.5">
-                      <Tag size={11} aria-hidden /> Tags clan
+                      <Tag size={11} aria-hidden /> {t('srv.tab.tags')}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {tags.map((t: any) => {
-                        const has = m.tags.some(mt => mt.id === t.id)
+                      {tags.map((tg: any) => {
+                        const has = m.tags.some(mt => mt.id === tg.id)
                         return (
-                          <button key={t.id}
+                          <button key={tg.id}
                             onClick={() => has
-                              ? removeTagMutation.mutate({ userId: m.user_id, tagId: t.id })
-                              : assignTag.mutate({ userId: m.user_id, tagId: t.id })}
+                              ? removeTagMutation.mutate({ userId: m.user_id, tagId: tg.id })
+                              : assignTag.mutate({ userId: m.user_id, tagId: tg.id })}
                             aria-pressed={has}
-                            style={{ borderColor: colorIntToHex(t.color), color: has ? colorIntToHex(t.color) : undefined }}
+                            style={{ borderColor: colorIntToHex(tg.color), color: has ? colorIntToHex(tg.color) : undefined }}
                             className={`text-xs px-2 py-1 rounded transition font-medium border
                               ${has ? 'bg-white/5' : 'border-fc-hover text-fc-muted hover:text-white'}`}
                           >
-                            [{t.name}]
+                            [{tg.name}]
                           </button>
                         )
                       })}

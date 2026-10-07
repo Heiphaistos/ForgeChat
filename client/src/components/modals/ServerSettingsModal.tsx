@@ -22,6 +22,7 @@ import OnboardingTab from './OnboardingTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
 import MyServerProfileTab from './MyServerProfileTab'
+import { useT, type Key } from '../../i18n'
 
 interface Server {
   id: string
@@ -62,20 +63,21 @@ type Tab = 'general' | 'profile' | 'roles' | 'members' | 'bans' | 'tags' | 'emoj
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
+  const t = useT()
   const qc = useQueryClient()
   const boost = useMutation({
     mutationFn: () => api.post(`/servers/${server.id}/boost`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success('Merci pour le boost !')
+      toast.success(t('srv.boostThanks'))
     },
-    onError: () => toast.error('Impossible de booster'),
+    onError: () => toast.error(t('srv.boostError')),
   })
   const LEVELS = [
-    { level: 1, threshold: 2, label: 'Niveau 1', color: 'from-indigo-500 to-purple-500' },
-    { level: 2, threshold: 7, label: 'Niveau 2', color: 'from-purple-500 to-fuchsia-500' },
-    { level: 3, threshold: 14, label: 'Niveau 3', color: 'from-amber-500 to-yellow-400' },
+    { level: 1, threshold: 2, label: t('srv.level', { n: 1 }), color: 'from-indigo-500 to-purple-500' },
+    { level: 2, threshold: 7, label: t('srv.level', { n: 2 }), color: 'from-purple-500 to-fuchsia-500' },
+    { level: 3, threshold: 14, label: t('srv.level', { n: 3 }), color: 'from-amber-500 to-yellow-400' },
   ]
   const currentLevel = server?.boost_level ?? 0
   const count = server?.boost_count ?? 0
@@ -84,13 +86,13 @@ function BoostSection({ server }: { server: any }) {
 
   return (
     <div className="mt-4 p-4 bg-fc-channel rounded-xl">
-      <h3 className="text-sm font-semibold text-white mb-3">⚡ Boosts du serveur</h3>
+      <h3 className="text-sm font-semibold text-white mb-3">{t('srv.boosts')}</h3>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-2xl font-bold text-white">{count}</span>
-        <span className="text-fc-muted text-sm">boost{count !== 1 ? 's' : ''} actif{count !== 1 ? 's' : ''}</span>
+        <span className="text-fc-muted text-sm">{t(count !== 1 ? 'srv.activeBoosts.other' : 'srv.activeBoosts.one')}</span>
         {currentLevel > 0 && (
           <span className="ml-auto px-2 py-0.5 bg-fc-accent/20 text-fc-accent text-xs rounded-full">
-            Niveau {currentLevel}
+            {t('srv.level', { n: currentLevel })}
           </span>
         )}
       </div>
@@ -102,7 +104,7 @@ function BoostSection({ server }: { server: any }) {
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-xs text-fc-muted">{count}/{next.threshold} pour {next.label}</p>
+          <p className="text-xs text-fc-muted">{t('srv.boostProgress', { count, threshold: next.threshold, level: next.label })}</p>
         </>
       )}
       <button
@@ -110,13 +112,14 @@ function BoostSection({ server }: { server: any }) {
         onClick={() => boost.mutate()}
         disabled={boost.isPending}
       >
-        ⚡ Booster ce serveur (gratuit)
+        {t('srv.boostButton')}
       </button>
     </div>
   )
 }
 
 export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   // Liste des bans : bannir définitivement OU temporairement.
   const canSeeBans = useServerPerms(server.id).has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)
@@ -159,9 +162,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     onSuccess: (data) => {
       setBannerUrl(data.banner)
       qc.invalidateQueries({ queryKey: ['server', server.id] })
-      toast.success('Bannière mise à jour')
+      toast.success(t('settings.profile.bannerUpdated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload bannière'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.profile.bannerError')),
   })
 
   const updateVerification = useMutation({
@@ -171,9 +174,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
-      toast.success('Vérification mise à jour')
+      toast.success(t('srv.verificationUpdated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const update = useMutation({
@@ -195,9 +198,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', server.id] })
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success('Serveur mis à jour')
+      toast.success(t('srv.updated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const uploadIcon = useMutation({
@@ -211,7 +214,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       setIconPreview(data.icon)
       qc.invalidateQueries({ queryKey: ['server', server.id] })
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success('Icône mise à jour')
+      toast.success(t('srv.iconUpdated'))
     },
     onError: (e: any) => {
       // Le clic sur "Changer l'icône" affiche un aperçu local optimiste
@@ -219,7 +222,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       // échoue, revenir à l'icône réellement enregistrée au lieu de laisser
       // l'aperçu d'un fichier jamais sauvegardé affiché comme si de rien n'était.
       setIconPreview(server.icon ?? null)
-      toast.error(e.response?.data?.error ?? 'Erreur upload')
+      toast.error(e.response?.data?.error ?? t('srv.uploadError'))
     },
   })
 
@@ -241,15 +244,15 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['custom_emojis', server.id] })
       setEmojiName('')
-      toast.success('Emoji ajouté')
+      toast.success(t('srv.emojiAdded'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const deleteEmoji = useMutation({
     mutationFn: (emojiId: string) => api.delete(`/servers/${server.id}/emojis/${emojiId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['custom_emojis', server.id] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   // Bots
@@ -265,15 +268,15 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
       qc.invalidateQueries({ queryKey: ['bots', server.id] })
       setNewBotName('')
       setCreatedToken({ name: data.name, token: data.token })
-      toast.success('Bot créé')
+      toast.success(t('srv.botCreated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const deleteBot = useMutation({
     mutationFn: (botId: string) => api.delete(`/servers/${server.id}/bots/${botId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['bots', server.id] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const regenToken = useMutation({
@@ -281,9 +284,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     onSuccess: (data, botId) => {
       const bot = bots.find((b: any) => b.bot_user_id === botId)
       setCreatedToken({ name: bot?.name ?? 'Bot', token: data.token })
-      toast.success('Token régénéré')
+      toast.success(t('srv.tokenRegenerated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const copyToken = () => {
@@ -299,36 +302,37 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
     queryFn: () => api.get(`/servers/${server.id}/channels`).then(r => r.data),
   })
 
-  const tabGroups = [
+  // Libellés : clés srv.tab.<onglet> et srv.group.<groupe>.
+  const tabGroups: { label: Key | null; tabs: { id: Tab; icon?: typeof Shield }[] }[] = [
     {
       label: null,
       tabs: [
-        { id: 'general' as Tab, label: 'Général' },
-        { id: 'profile' as Tab, label: 'Mon profil sur ce serveur' },
+        { id: 'general' },
+        { id: 'profile' },
       ],
     },
     {
-      label: 'Communauté',
+      label: 'srv.group.community',
       tabs: [
-        { id: 'roles'    as Tab, label: 'Rôles',     icon: Shield },
-        { id: 'members'  as Tab, label: 'Membres',   icon: Users },
-        { id: 'tags'     as Tab, label: 'Tags clan',  icon: Tag },
-        ...(isAdmin || canSeeBans ? [{ id: 'bans' as Tab, label: 'Bans', icon: Ban }] : []),
-        { id: 'emojis'   as Tab, label: 'Emojis',    icon: SmilePlus },
-        { id: 'bots'     as Tab, label: 'Bots',      icon: Bot },
-        ...(isAdmin ? [{ id: 'webhooks' as Tab, label: 'Webhooks', icon: Link }] : []),
-        { id: 'feeds'    as Tab, label: 'Flux RSS',  icon: Rss },
-        ...(estProprietaire ? [{ id: 'onboarding' as Tab, label: 'Accueil', icon: Sparkles }] : []),
+        { id: 'roles', icon: Shield },
+        { id: 'members', icon: Users },
+        { id: 'tags', icon: Tag },
+        ...(isAdmin || canSeeBans ? [{ id: 'bans' as Tab, icon: Ban }] : []),
+        { id: 'emojis', icon: SmilePlus },
+        { id: 'bots', icon: Bot },
+        ...(isAdmin ? [{ id: 'webhooks' as Tab, icon: Link }] : []),
+        { id: 'feeds', icon: Rss },
+        ...(estProprietaire ? [{ id: 'onboarding' as Tab, icon: Sparkles }] : []),
       ],
     },
     {
-      label: 'Modération',
+      label: 'srv.group.moderation',
       tabs: [
-        { id: 'events'  as Tab, label: 'Événements', icon: Calendar },
+        { id: 'events', icon: Calendar },
         ...(isAdmin ? [
-          { id: 'audit'   as Tab, label: 'Audit Log',    icon: ScrollText },
-          { id: 'automod' as Tab, label: 'AutoMod',      icon: Shield },
-          { id: 'stats'   as Tab, label: 'Statistiques', icon: BarChart2 },
+          { id: 'audit' as Tab, icon: ScrollText },
+          { id: 'automod' as Tab, icon: Shield },
+          { id: 'stats' as Tab, icon: BarChart2 },
         ] : []),
       ],
     },
@@ -342,7 +346,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           ${mobileShowContent ? 'hidden md:flex' : 'flex'}`}>
           <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-2 truncate flex items-center justify-between">
             <span>{server.name}</span>
-            <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded">
+            <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded">
               <X size={16} />
             </button>
           </div>
@@ -350,18 +354,18 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
             <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
               {group.label && (
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 px-2">
-                  {group.label}
+                  {t(group.label)}
                 </div>
               )}
-              {group.tabs.map(t => {
-                const Icon = (t as any).icon
+              {group.tabs.map(tb => {
+                const Icon = tb.icon
                 return (
-                  <button key={t.id} onClick={() => { setTab(t.id); setMobileShowContent(true) }}
+                  <button key={tb.id} onClick={() => { setTab(tb.id); setMobileShowContent(true) }}
                     className={`w-full text-left px-2 py-1.5 rounded text-sm transition mb-0.5 flex items-center gap-2
-                      ${tab === t.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
+                      ${tab === tb.id ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}
                   >
                     {Icon && <Icon size={13} />}
-                    {t.label}
+                    {t(`srv.tab.${tb.id}`)}
                   </button>
                 )
               })}
@@ -377,12 +381,12 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
           <div className="max-w-2xl mx-auto p-4 md:p-8">
             <div className="flex items-center justify-between mb-6 md:mb-8">
               <div className="flex items-center gap-2">
-                <button onClick={() => setMobileShowContent(false)} className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition hover:bg-fc-hover rounded">
+                <button onClick={() => setMobileShowContent(false)} aria-label={t('common.back')} className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition hover:bg-fc-hover rounded">
                   <X size={18} />
                 </button>
-                <h2 id="server-settings-modal-title" className="text-xl md:text-2xl font-bold text-white">Paramètres du serveur</h2>
+                <h2 id="server-settings-modal-title" className="text-xl md:text-2xl font-bold text-white">{t('srv.title')}</h2>
               </div>
-              <button onClick={onClose} aria-label="Fermer" className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
+              <button onClick={onClose} aria-label={t('common.close')} className="hidden md:block text-fc-muted hover:text-white transition p-2 hover:bg-fc-hover rounded">
                 <X size={20} />
               </button>
             </div>
@@ -391,7 +395,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
             {tab === 'general' && (
               <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Icône du serveur</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('srv.icon')}</label>
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center font-bold text-2xl text-white overflow-hidden flex-shrink-0">
                       {iconPreview ? <img src={mediaUrl(iconPreview)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
@@ -409,15 +413,15 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
                       >
                         <Upload size={14} />
-                        {uploadIcon.isPending ? 'Upload...' : "Changer l'icône"}
+                        {uploadIcon.isPending ? t('srv.uploading') : t('srv.changeIcon')}
                       </button>
-                      <p className="text-xs text-fc-muted mt-1">PNG, JPG, GIF, WEBP · max 8 MB</p>
+                      <p className="text-xs text-fc-muted mt-1">{t('srv.iconFormats')}</p>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Nom du serveur</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('servers.create.name')}</label>
                   <input value={name} onChange={e => setName(e.target.value)} maxLength={100}
                     enterKeyHint="done"
                     autoCapitalize="sentences"
@@ -426,36 +430,37 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Description</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.description')}</label>
                   <textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={500} rows={3}
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
-                    placeholder="Décrivez votre serveur..."
+                    placeholder={t('srv.descriptionPh')}
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-                    Message de bienvenue
+                    {t('srv.welcome')}
                     <span className="ml-1 normal-case font-normal text-fc-muted/60">({welcomeMessage.length}/500)</span>
                   </label>
                   <textarea value={welcomeMessage} onChange={e => setWelcomeMessage(e.target.value)} maxLength={500} rows={3}
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
-                    placeholder="Message affiché aux membres sur l'écran de bienvenue..."
+                    placeholder={t('srv.welcomePh')}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">Bannière du serveur</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('srv.banner')}</label>
                   {bannerUrl && (
                     <div className="mb-3 rounded-lg overflow-hidden h-[120px] bg-fc-channel">
-                      <img src={mediaUrl(bannerUrl)} alt="bannière" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      <img src={mediaUrl(bannerUrl)} alt={t('srv.bannerAlt')} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                   )}
                   <div className="flex gap-2">
                     <input
                       value={bannerUrl}
                       onChange={e => setBannerUrl(e.target.value)}
-                      placeholder="https://... (URL de l'image)"
+                      placeholder={t('srv.bannerUrlPh')}
+                      aria-label={t('srv.bannerUrlPh')}
                       enterKeyHint="done"
                       inputMode="url"
                       autoCapitalize="none"
@@ -467,7 +472,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         const file = e.target.files?.[0]
                         if (!file) return
                         if (file.size > 2 * 1024 * 1024) {
-                          toast.error('Bannière max 2 MB')
+                          toast.error(t('srv.bannerTooBig'))
                           return
                         }
                         uploadBanner.mutate(file)
@@ -477,20 +482,21 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                       onClick={() => bannerInputRef.current?.click()}
                       disabled={uploadBanner.isPending}
                       className="flex items-center gap-2 px-3 py-2 bg-fc-channel hover:bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition disabled:opacity-50"
-                      title="Uploader une image"
+                      title={t('srv.uploadImage')}
+                      aria-label={t('srv.uploadImage')}
                     >
                       <Image size={14} />
                     </button>
                   </div>
-                  <p className="text-xs text-fc-muted mt-1">URL ou upload · PNG, JPG, GIF · max 2 MB</p>
+                  <p className="text-xs text-fc-muted mt-1">{t('srv.bannerFormats')}</p>
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-fc-channel rounded-lg">
                   <div>
-                    <div className="font-medium text-white text-sm">Serveur public</div>
-                    <div className="text-xs text-fc-muted">Visible dans la liste des serveurs publics</div>
+                    <div className="font-medium text-white text-sm">{t('srv.public')}</div>
+                    <div className="text-xs text-fc-muted">{t('srv.publicDesc')}</div>
                   </div>
-                  <button onClick={() => setIsPublic(!isPublic)}
+                  <button onClick={() => setIsPublic(!isPublic)} role="switch" aria-checked={isPublic} aria-label={t('srv.public')}
                     className={`w-11 h-6 rounded-full transition relative ${isPublic ? 'bg-fc-green' : 'bg-fc-muted'}`}
                   >
                     <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${isPublic ? 'left-6' : 'left-1'}`} />
@@ -498,16 +504,16 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Catégorie</label>
-                  <p className="text-xs text-fc-muted mb-2">Utilisée pour le filtre de la page Découvrir (serveurs publics)</p>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('createChannel.category')}</label>
+                  <p className="text-xs text-fc-muted mb-2">{t('srv.categoryDesc')}</p>
                   <select value={serverCategory} onChange={e => setServerCategory(e.target.value)}
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                    <option value="">Aucune</option>
+                    <option value="">{t('settings.cosmetics.noneF')}</option>
                     <option value="gaming">Gaming</option>
-                    <option value="community">Communauté</option>
+                    <option value="community">{t('tpl.community')}</option>
                     <option value="tech">Tech</option>
-                    <option value="music">Musique</option>
-                    <option value="education">Éducation</option>
+                    <option value="music">{t('tpl.music')}</option>
+                    <option value="education">{t('tpl.education')}</option>
                     <option value="arts">Arts</option>
                     <option value="18plus">18+</option>
                   </select>
@@ -515,34 +521,34 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
 
                 {/* Canaux système */}
                 <div className="border-t border-fc-hover pt-4 space-y-4">
-                  <h3 className="text-sm font-semibold text-white">Canaux système</h3>
+                  <h3 className="text-sm font-semibold text-white">{t('srv.systemChannels')}</h3>
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal système</label>
-                    <p className="text-xs text-fc-muted mb-2">Messages de bienvenue et de boost de serveur</p>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.systemChannel')}</label>
+                    <p className="text-xs text-fc-muted mb-2">{t('srv.systemChannelDesc')}</p>
                     <select value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                      <option value="">Aucun</option>
+                      <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'text').map((c: any) => (
                         <option key={c.id} value={c.id}>#{c.name}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal des règles</label>
-                    <p className="text-xs text-fc-muted mb-2">Affiché sur l'écran de vérification des membres</p>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.rulesChannel')}</label>
+                    <p className="text-xs text-fc-muted mb-2">{t('srv.rulesChannelDesc')}</p>
                     <select value={rulesChannelId} onChange={e => setRulesChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                      <option value="">Aucun</option>
+                      <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'text').map((c: any) => (
                         <option key={c.id} value={c.id}>#{c.name}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Canal AFK (inactif)</label>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.afkChannel')}</label>
                     <select value={afkChannelId} onChange={e => setAfkChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                      <option value="">Aucun</option>
+                      <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'voice').map((c: any) => (
                         <option key={c.id} value={c.id}>🔊 {c.name}</option>
                       ))}
@@ -551,12 +557,12 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   {afkChannelId && (
                     <div>
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-                        Délai AFK — {afkTimeout >= 3600 ? `${afkTimeout/3600}h` : `${afkTimeout/60} min`}
+                        {t('srv.afkTimeout')} — {afkTimeout >= 3600 ? `${afkTimeout/3600}h` : `${afkTimeout/60} min`}
                       </label>
                       <select value={afkTimeout} onChange={e => setAfkTimeout(Number(e.target.value))}
                         className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                        {[60, 120, 300, 600, 900, 1800, 3600].map(t => (
-                          <option key={t} value={t}>{t >= 3600 ? `${t/3600}h` : `${t/60} min`}</option>
+                        {[60, 120, 300, 600, 900, 1800, 3600].map(s => (
+                          <option key={s} value={s}>{s >= 3600 ? `${s/3600}h` : `${s/60} min`}</option>
                         ))}
                       </select>
                     </div>
@@ -565,33 +571,34 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
 
                 {/* Modération */}
                 <div className="border-t border-fc-hover pt-4 space-y-4">
-                  <h3 className="text-sm font-semibold text-white">Modération</h3>
+                  <h3 className="text-sm font-semibold text-white">{t('srv.group.moderation')}</h3>
                   <div>
-                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Filtre de contenu explicite</label>
+                    <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('settings.privacy.explicit')}</label>
                     <select value={explicitFilter} onChange={e => setExplicitFilter(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
-                      <option value="none">Désactivé</option>
-                      <option value="no_role">Membres sans rôles</option>
-                      <option value="all">Tous les membres</option>
+                      <option value="none">{t('settings.privacy.off')}</option>
+                      <option value="no_role">{t('settings.privacy.noRoles')}</option>
+                      <option value="all">{t('srv.allMembers')}</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Vanity URL */}
                 <div className="border-t border-fc-hover pt-4">
-                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Lien d'invitation personnalisé</label>
+                  <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.vanity')}</label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-xs text-fc-muted">forgechat/</span>
                     <input value={vanityUrl} onChange={e => setVanityUrl(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                       maxLength={30}
-                      placeholder="mon-serveur"
+                      placeholder={t('srv.vanityPh')}
+                      aria-label={t('srv.vanity')}
                       enterKeyHint="done"
                       autoCapitalize="none"
                       autoComplete="off"
                       className="w-full pl-24 pr-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-accent"
                     />
                   </div>
-                  <p className="text-xs text-fc-muted mt-1">Uniquement des lettres minuscules, chiffres et tirets</p>
+                  <p className="text-xs text-fc-muted mt-1">{t('srv.vanityHint')}</p>
                 </div>
 
                 <BoostSection server={server} />
@@ -599,14 +606,14 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <TransferOwnershipSection serverId={server.id} ownerId={server.owner_id ?? ''} />
 
                 {estProprietaire && <div className="p-4 bg-fc-channel/50 rounded-lg border border-fc-red/40">
-                  <div className="text-xs font-semibold text-fc-red uppercase tracking-wide mb-2">Zone de danger</div>
+                  <div className="text-xs font-semibold text-fc-red uppercase tracking-wide mb-2">{t('srv.danger')}</div>
                   <p className="text-sm text-fc-muted mb-3">
-                    Suppression définitive : nom du serveur, mot de passe et code de double authentification demandés.
+                    {t('srv.dangerDesc')}
                   </p>
                   <button onClick={() => setShowDelete(true)}
                     className="px-4 py-2 rounded text-sm font-medium bg-fc-red text-white hover:bg-red-600 transition flex items-center gap-2"
                   >
-                    <Trash2 size={14} /> Supprimer le serveur
+                    <Trash2 size={14} /> {t('srv.delete')}
                   </button>
                   {showDelete && <DeleteServerModal server={server} onClose={() => setShowDelete(false)} />}
                 </div>}
@@ -614,22 +621,22 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <button onClick={() => update.mutate()} disabled={update.isPending}
                   className="px-5 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded font-medium text-sm transition disabled:opacity-50"
                 >
-                  {update.isPending ? 'Sauvegarde...' : 'Sauvegarder les modifications'}
+                  {update.isPending ? t('common.saving') : t('srv.saveChanges')}
                 </button>
 
                 {/* ─── Verification Gate ─── */}
                 <div className="border-t border-fc-hover pt-6 mt-2">
                   <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
                     <Shield size={16} className="text-fc-accent" />
-                    Vérification requise
+                    {t('srv.verification')}
                   </h3>
 
                   <div className="flex items-center justify-between p-4 bg-fc-channel rounded-lg mb-4">
                     <div>
-                      <div className="font-medium text-white text-sm">Activer la vérification</div>
-                      <div className="text-xs text-fc-muted">Les membres doivent accepter les règles avant d'accéder aux canaux</div>
+                      <div className="font-medium text-white text-sm">{t('srv.enableVerification')}</div>
+                      <div className="text-xs text-fc-muted">{t('srv.enableVerificationDesc')}</div>
                     </div>
-                    <button onClick={() => setVerificationEnabled(!verificationEnabled)}
+                    <button onClick={() => setVerificationEnabled(!verificationEnabled)} role="switch" aria-checked={verificationEnabled} aria-label={t('srv.enableVerification')}
                       className={`w-11 h-6 rounded-full transition relative ${verificationEnabled ? 'bg-fc-green' : 'bg-fc-muted'}`}
                     >
                       <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${verificationEnabled ? 'left-6' : 'left-1'}`} />
@@ -639,7 +646,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   {verificationEnabled && (
                     <div className="mb-4">
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
-                        Règles du serveur
+                        {t('srv.rules')}
                         <span className="ml-1 normal-case font-normal text-fc-muted/60">({verificationRules.length}/2000)</span>
                       </label>
                       <textarea
@@ -647,7 +654,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                         onChange={e => setVerificationRules(e.target.value)}
                         maxLength={2000}
                         rows={6}
-                        placeholder="Écris les règles que les membres devront accepter..."
+                        placeholder={t('srv.rulesPh')}
                         className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
                       />
                     </div>
@@ -658,7 +665,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                     disabled={updateVerification.isPending}
                     className="px-5 py-2 bg-fc-channel hover:bg-fc-hover border border-fc-hover text-white rounded font-medium text-sm transition disabled:opacity-50"
                   >
-                    {updateVerification.isPending ? 'Sauvegarde...' : 'Sauvegarder la vérification'}
+                    {updateVerification.isPending ? t('common.saving') : t('srv.saveVerification')}
                   </button>
                 </div>
               </div>
@@ -670,16 +677,17 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
                     <SmilePlus size={18} className="text-fc-accent" />
-                    Emojis personnalisés
+                    {t('srv.emojis')}
                   </h3>
                   <p className="text-sm text-fc-muted mb-4">
-                    Ajoutez des emojis propres à votre serveur. Format : PNG/GIF · max 256 KB · nom alphanumérique.
+                    {t('srv.emojisDesc')}
                   </p>
 
                   {/* Upload form */}
                   <div className="flex gap-2 mb-6">
                     <input value={emojiName} onChange={e => setEmojiName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                      placeholder="nom_emoji (alphanum + _)"
+                      placeholder={t('srv.emojiNamePh')}
+                      aria-label={t('srv.emojiNamePh')}
                       maxLength={32}
                       enterKeyHint="done"
                       autoCapitalize="none"
@@ -691,7 +699,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                       className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
                     >
                       <Plus size={14} />
-                      {uploadEmoji.isPending ? 'Upload...' : 'Ajouter'}
+                      {uploadEmoji.isPending ? t('srv.uploading') : t('chset.add')}
                     </button>
                     <input ref={emojiInputRef} type="file" accept="image/*" className="hidden"
                       onChange={e => {
@@ -706,7 +714,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   {/* Liste emojis */}
                   {emojis.length === 0 ? (
                     <div className="text-center text-fc-muted py-10 text-sm">
-                      Aucun emoji personnalisé pour ce serveur.
+                      {t('srv.noEmoji')}
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -718,7 +726,8 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                           </div>
                           <button onClick={() => deleteEmoji.mutate(emoji.id)}
                             className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition"
-                            title="Supprimer"
+                            title={t('common.delete')}
+                            aria-label={t('common.delete')}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -736,17 +745,18 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
                     <Bot size={18} className="text-fc-accent" />
-                    Bots du serveur
+                    {t('srv.bots')}
                   </h3>
                   <p className="text-sm text-fc-muted mb-4">
-                    Créez des bots qui peuvent envoyer des messages via API.<br />
-                    Endpoint : <code className="bg-fc-input px-1 rounded text-xs text-fc-accent">POST /api/bot/messages</code> avec <code className="bg-fc-input px-1 rounded text-xs">Authorization: Bot &lt;token&gt;</code>
+                    {t('srv.botsDesc')}<br />
+                    {t('srv.endpoint')} <code className="bg-fc-input px-1 rounded text-xs text-fc-accent">POST /api/bot/messages</code> {t('srv.with')} <code className="bg-fc-input px-1 rounded text-xs">Authorization: Bot &lt;token&gt;</code>
                   </p>
 
                   {/* Créer un bot */}
                   <div className="flex gap-2 mb-6">
                     <input value={newBotName} onChange={e => setNewBotName(e.target.value)}
-                      placeholder="Nom du bot"
+                      placeholder={t('srv.botName')}
+                      aria-label={t('srv.botName')}
                       maxLength={32}
                       enterKeyHint="done"
                       autoCapitalize="sentences"
@@ -759,7 +769,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                       className="flex items-center gap-2 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
                     >
                       <Plus size={14} />
-                      {createBot.isPending ? 'Création...' : 'Créer le bot'}
+                      {createBot.isPending ? t('common.creating') : t('srv.createBot')}
                     </button>
                   </div>
 
@@ -767,20 +777,20 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   {createdToken && (
                     <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
                       <div className="text-yellow-400 font-semibold text-sm mb-2">
-                        ⚠️ Token de {createdToken.name} — Copiez-le maintenant !
+                        {t('srv.tokenWarning', { name: createdToken.name })}
                       </div>
                       <div className="flex items-center gap-2">
                         <code className="flex-1 bg-fc-input px-3 py-2 rounded text-sm text-white font-mono break-all">
                           {createdToken.token}
                         </code>
-                        <button onClick={copyToken} aria-label="Copier le jeton"
+                        <button onClick={copyToken} aria-label={t('srv.copyToken')}
                           className={`p-2 rounded transition flex-shrink-0 ${copiedToken ? 'bg-fc-green text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
                         >
                           {copiedToken ? <Check size={16} /> : <Copy size={16} />}
                         </button>
                       </div>
                       <button onClick={() => setCreatedToken(null)} className="text-xs text-fc-muted mt-2 hover:text-white transition">
-                        Fermer
+                        {t('common.close')}
                       </button>
                     </div>
                   )}
@@ -788,7 +798,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                   {/* Liste bots */}
                   {bots.length === 0 ? (
                     <div className="text-center text-fc-muted py-10 text-sm">
-                      Aucun bot sur ce serveur.
+                      {t('srv.noBot')}
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -808,13 +818,15 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false }
                           </div>
                           <button onClick={() => regenToken.mutate(bot.bot_user_id)}
                             className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                            title="Régénérer le token"
+                            title={t('srv.regenToken')}
+                            aria-label={t('srv.regenToken')}
                           >
                             <RefreshCw size={14} />
                           </button>
                           <button onClick={() => deleteBot.mutate(bot.bot_user_id)}
                             className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition"
-                            title="Supprimer le bot"
+                            title={t('srv.deleteBot')}
+                            aria-label={t('srv.deleteBot')}
                           >
                             <Trash2 size={14} />
                           </button>

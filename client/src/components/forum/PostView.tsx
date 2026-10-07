@@ -18,7 +18,7 @@ import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { useTypeToFocus } from '../../hooks/useTypeToFocus'
 import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useT, dateLocale } from '../../i18n'
 
 const REPLY_PAGE = 50
 
@@ -69,13 +69,14 @@ export interface ForumReply {
 }
 
 export function AttachButton({ uploading, onClick }: { uploading: boolean; onClick: () => void }) {
+  const t = useT()
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={uploading}
-      title="Joindre une image ou vidéo"
-      aria-label="Joindre une image ou vidéo"
+      title={t('post.attachMedia')}
+      aria-label={t('post.attachMedia')}
       className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
     >
       {uploading ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Paperclip size={16} aria-hidden />}
@@ -83,6 +84,7 @@ export function AttachButton({ uploading, onClick }: { uploading: boolean; onCli
   )
 }
 export default function PostView({ serverId, channelId, post, onBack, canManageMessages }: { serverId: string; channelId: string; post: ForumPost; onBack: () => void; canManageMessages?: boolean }) {
+  const t = useT()
   const [reply, setReply] = useState(() => forumDrafts.get(post.id) ?? '')
   // Sauvegarder le brouillon en continu (purgé à l'envoi)
   useEffect(() => {
@@ -114,9 +116,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
       setEditingPost(false)
-      toast.success('Post modifié')
+      toast.success(t('post.edited'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible de modifier le post'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('post.editError')),
   })
 
   const togglePin = useMutation({
@@ -124,9 +126,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     onSuccess: () => {
       setLocalPost(p => ({ ...p, pinned: !p.pinned }))
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
-      toast.success(localPost.pinned ? 'Post désépinglé' : 'Post épinglé')
+      toast.success(localPost.pinned ? t('post.unpinned') : t('post.pinned'))
     },
-    onError: () => toast.error('Permission refusée'),
+    onError: () => toast.error(t('post.denied')),
   })
 
   const toggleLock = useMutation({
@@ -134,9 +136,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     onSuccess: () => {
       setLocalPost(p => ({ ...p, locked: !p.locked }))
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
-      toast.success(localPost.locked ? 'Post déverrouillé' : 'Post verrouillé')
+      toast.success(localPost.locked ? t('post.unlocked') : t('post.locked'))
     },
-    onError: () => toast.error('Permission refusée'),
+    onError: () => toast.error(t('post.denied')),
   })
 
   // Post + réponses par pages de 50, des plus récentes aux plus anciennes
@@ -203,7 +205,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     mutationFn: ({ replyId, emoji }: { replyId: string; emoji: string }) =>
       api.put(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/reactions/${encodeURIComponent(emoji)}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['forum-post', post.id] }),
-    onError: () => toast.error('Impossible de réagir'),
+    onError: () => toast.error(t('post.reactError')),
   })
 
   const editReply = useMutation({
@@ -212,9 +214,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       setEditingReplyId(null)
-      toast.success('Réponse modifiée')
+      toast.success(t('post.replyEdited'))
     },
-    onError: () => toast.error('Impossible de modifier'),
+    onError: () => toast.error(t('gdm.editError')),
   })
 
   const deleteReply = useMutation({
@@ -223,9 +225,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
-      toast.success('Réponse supprimée')
+      toast.success(t('post.replyDeleted'))
     },
-    onError: () => toast.error('Impossible de supprimer'),
+    onError: () => toast.error(t('gdm.deleteError')),
   })
 
   const deletePost = useMutation({
@@ -233,10 +235,10 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       api.delete(`/servers/${serverId}/channels/${channelId}/posts/${post.id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
-      toast.success('Post supprimé')
+      toast.success(t('post.deleted'))
       onBack()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible de supprimer'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('gdm.deleteError')),
   })
 
   const replies: ForumReply[] = pages ? [...pages.pages].reverse().flatMap(p => p.replies) : []
@@ -259,13 +261,13 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       setReply('')
       pending.clear()
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
-      toast.success('Réponse ajoutée !')
+      toast.success(t('post.replyAdded'))
       if (replyId && files.length > 0) {
         await uploadPendingFiles(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/attachments`, files).catch(() => {})
         qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       }
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
@@ -273,7 +275,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   const trySendReply = () => {
     if (!canSend || sendReply.isPending) return
     if (reply.trim().length > 4000) {
-      toast.error(`Réponse trop longue : ${reply.trim().length}/4000 caractères`)
+      toast.error(t('post.tooLong', { n: reply.trim().length }))
       return
     }
     sendReply.mutate()
@@ -282,7 +284,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-bg flex-shrink-0">
-        <button onClick={onBack} aria-label="Retour" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
+        <button onClick={onBack} aria-label={t('common.back')} className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white transition rounded hover:bg-fc-hover">
           <ArrowLeft size={18} aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
@@ -291,7 +293,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             {localPost.locked && <Lock size={14} className="text-red-400 flex-shrink-0" />}
             <h2 className="font-bold text-white truncate">{localPost.title}</h2>
           </div>
-          <p className="text-xs text-fc-muted">par {localPost.creator_username} · {formatDate(localPost.created_at)}</p>
+          <p className="text-xs text-fc-muted">{t('post.by', { name: localPost.creator_username })} · {formatDate(localPost.created_at)}</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
@@ -301,12 +303,12 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               if (navigator.share) {
                 navigator.share({ title: post.title, url }).catch(() => {})
               } else {
-                navigator.clipboard.writeText(url).then(() => toast.success('Lien du post copié')).catch(() => toast.error('Impossible de copier'))
+                navigator.clipboard.writeText(url).then(() => toast.success(t('post.linkCopied'))).catch(() => toast.error(t('gdm.copyError')))
               }
             }}
             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
-            title="Partager le lien du post"
-            aria-label="Partager le lien du post"
+            title={t('post.share')}
+            aria-label={t('post.share')}
           >
             <Link2 size={15} aria-hidden />
           </button>
@@ -314,14 +316,16 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             <>
               <button
                 onClick={() => togglePin.mutate()}
-                title={localPost.pinned ? 'Désépingler' : 'Épingler'}
+                title={localPost.pinned ? t('msg.unpin') : t('msg.pin')}
+                aria-label={localPost.pinned ? t('msg.unpin') : t('msg.pin')}
                 className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.pinned ? 'text-yellow-400' : 'text-fc-muted hover:text-yellow-400'}`}
               >
                 <Pin size={15} />
               </button>
               <button
                 onClick={() => toggleLock.mutate()}
-                title={localPost.locked ? 'Déverrouiller' : 'Verrouiller'}
+                title={localPost.locked ? t('post.unlock') : t('post.lock')}
+                aria-label={localPost.locked ? t('post.unlock') : t('post.lock')}
                 className={`p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition ${localPost.locked ? 'text-red-400' : 'text-fc-muted hover:text-red-400'}`}
               >
                 <Lock size={15} />
@@ -330,9 +334,10 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           )}
           {user && post.creator_id === user.id && (
             <button
-              onClick={async () => { if (await confirm({ message: 'Supprimer ce post et toutes ses réponses ?', danger: true, confirmLabel: 'Supprimer' })) deletePost.mutate() }}
+              onClick={async () => { if (await confirm({ message: t('post.deleteConfirm'), danger: true, confirmLabel: t('common.delete') })) deletePost.mutate() }}
               disabled={deletePost.isPending}
-              title="Supprimer le post"
+              title={t('post.delete')}
+              aria-label={t('post.delete')}
               className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition text-fc-muted hover:text-red-400 disabled:opacity-50"
             >
               <Trash2 size={15} />
@@ -366,7 +371,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             <div className="flex items-center gap-2 mb-3">
               <button
                 onClick={e => { e.stopPropagation(); setUserPopup({ userId: post.creator_id, x: e.clientX, y: e.clientY }) }}
-                aria-label={`Voir le profil de ${post.creator_username}`}
+                aria-label={t('gdm.profileOf', { name: post.creator_username })}
                 className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {post.creator_avatar
@@ -379,8 +384,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                 <button
                   onClick={() => { setEditPostContent(data.post.content ?? ''); setEditingPost(true) }}
                   className="ml-auto opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 text-fc-muted hover:text-white rounded transition"
-                  title="Modifier le post"
-                  aria-label="Modifier le post"
+                  title={t('post.edit')}
+                  aria-label={t('post.edit')}
                 >
                   <Pencil size={13} aria-hidden />
                 </button>
@@ -391,6 +396,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                 <textarea
                   value={editPostContent}
                   onChange={e => setEditPostContent(e.target.value)}
+                  aria-label={t('post.edit')}
                   onKeyDown={e => {
                     if (handleMarkdownShortcut(e, editPostContent, setEditPostContent)) return
                     if (e.key === 'Escape') setEditingPost(false)
@@ -406,10 +412,10 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                     disabled={!editPostContent.trim() || savePost.isPending}
                     className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded font-medium transition disabled:opacity-50"
                   >
-                    {savePost.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                    {savePost.isPending ? t('common.recording') : t('common.record')}
                   </button>
-                  <button onClick={() => setEditingPost(false)} className="px-3 py-1.5 text-fc-muted hover:text-white transition">Annuler</button>
-                  <span className="text-fc-muted hidden md:inline">Échap pour annuler · Ctrl+Entrée pour enregistrer</span>
+                  <button onClick={() => setEditingPost(false)} className="px-3 py-1.5 text-fc-muted hover:text-white transition">{t('common.cancel')}</button>
+                  <span className="text-fc-muted hidden md:inline">{t('post.editHint')}</span>
                 </div>
               </div>
             ) : (
@@ -434,7 +440,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               className="text-xs text-fc-accent hover:underline disabled:opacity-50 flex items-center gap-1"
             >
               {isFetchingNextPage && <Loader2 size={12} className="animate-spin" aria-hidden />}
-              Charger les réponses précédentes
+              {t('post.loadOlder')}
             </button>
           </div>
         )}
@@ -442,9 +448,9 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           const prev = replies[ri - 1]
           const rDate = new Date(r.created_at)
           const showDateDiv = !prev || new Date(prev.created_at).toDateString() !== rDate.toDateString()
-          const dateLabel = isToday(rDate) ? "Aujourd'hui"
-            : isYesterday(rDate) ? 'Hier'
-            : format(rDate, 'EEEE d MMMM yyyy', { locale: fr })
+          const dateLabel = isToday(rDate) ? t('saved.today')
+            : isYesterday(rDate) ? t('gdm.yesterday')
+            : format(rDate, t('gdm.dateFormat'), { locale: dateLocale() })
           return (
           <div key={r.id}>
           {showDateDiv && (
@@ -478,7 +484,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           >
             <button
               onClick={e => { e.stopPropagation(); setUserPopup({ userId: r.user_id, x: e.clientX, y: e.clientY }) }}
-              aria-label={`Voir le profil de ${r.author?.username ?? 'l\'auteur'}`}
+              aria-label={t('gdm.profileOf', { name: r.author?.username ?? t('post.author') })}
               className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
             >
               {r.author?.avatar
@@ -488,18 +494,18 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 mb-1">
                 <span className={`text-sm font-medium ${r.user_id === user?.id ? 'text-fc-accent' : 'text-white'}`}>
-                  {r.author?.username ?? 'Utilisateur supprimé'}
+                  {r.author?.username ?? t('post.deletedUser')}
                 </span>
                 <span className="text-xs text-fc-muted">{formatShortDate(r.created_at)}</span>
                 {(r as any).edited_at && (
-                  <span className="text-[9px] text-fc-muted/60" title="Réponse modifiée">(modifié)</span>
+                  <span className="text-[9px] text-fc-muted/60" title={t('post.replyEdited')}>{t('msg.edited')}</span>
                 )}
                 {editingReplyId !== r.id && (
                   <button
                     onClick={() => setReactionPickerFor(cur => cur === r.id ? null : r.id)}
                     className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${r.user_id === user?.id ? '' : 'ml-auto'} ${reactionPickerFor === r.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                    title="Réagir"
-                    aria-label="Réagir à la réponse"
+                    title={t('msg.react')}
+                    aria-label={t('post.reactLabel')}
                   ><SmilePlus size={13} aria-hidden /></button>
                 )}
                 {r.user_id === user?.id && editingReplyId !== r.id && (
@@ -507,14 +513,16 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                     <button
                       onClick={() => { setEditingReplyId(r.id); setEditContent(r.content) }}
                       className="p-1 text-fc-muted hover:text-white rounded transition"
-                      title="Modifier"
+                      title={t('common.edit')}
+                      aria-label={t('common.edit')}
                     >
                       <Pencil size={12} />
                     </button>
                     <button
                       onClick={() => deleteReply.mutate(r.id)}
                       className="p-1 text-fc-muted hover:text-red-400 rounded transition"
-                      title="Supprimer"
+                      title={t('common.delete')}
+                      aria-label={t('common.delete')}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -526,6 +534,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                   <textarea
                     value={editContent}
                     onChange={e => setEditContent(e.target.value)}
+                    aria-label={t('common.edit')}
                     className="flex-1 px-2 py-1 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent resize-none"
                     rows={2}
                     autoFocus
@@ -543,12 +552,14 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                       onClick={() => editContent.trim() && editReply.mutate({ replyId: r.id, content: editContent.trim() })}
                       disabled={!editContent.trim() || editReply.isPending}
                       className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded disabled:opacity-50"
+                      aria-label={t('msg.saveEdit')}
                     >
                       <Check size={12} />
                     </button>
                     <button
                       onClick={() => setEditingReplyId(null)}
                       className="p-1.5 text-fc-muted hover:text-white rounded"
+                      aria-label={t('common.cancel')}
                     >
                       <X size={12} />
                     </button>
@@ -572,7 +583,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                             rc.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
                           }`}
                           title={(rc.users ?? []).join(', ')}
-                          aria-label={`${rc.emoji} ${rc.count} réaction${rc.count > 1 ? 's' : ''}${rc.users?.length ? ' — ' + rc.users.join(', ') : ''}`}
+                          aria-label={`${rc.emoji} ${t(rc.count > 1 ? 'gdm.reactions.other' : 'gdm.reactions.one', { n: rc.count })}${rc.users?.length ? ' — ' + rc.users.join(', ') : ''}`}
                           aria-pressed={rc.me}
                         >
                           <span aria-hidden>{rc.emoji}</span>
@@ -597,7 +608,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
         })}
 
         {replies.length === 0 && (
-          <div className="text-center text-fc-muted py-8 text-sm">Aucune réponse. Soyez le premier !</div>
+          <div className="text-center text-fc-muted py-8 text-sm">{t('post.noReplies')}</div>
         )}
       </div>
 
@@ -609,8 +620,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             <button
               type="button"
               onClick={pending.pick}
-              title="Joindre des fichiers"
-              aria-label="Joindre des fichiers"
+              title={t('post.attachFiles')}
+              aria-label={t('post.attachFiles')}
               className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition flex-shrink-0"
             >
               <Paperclip size={16} aria-hidden />
@@ -630,7 +641,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                   trySendReply()
                 }
               }}
-              placeholder="Écrire une réponse..."
+              placeholder={t('post.replyPh')}
+              aria-label={t('post.replyPh')}
               rows={2}
               enterKeyHint="send"
               className="flex-1 px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
@@ -640,14 +652,14 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
               disabled={!canSend || sendReply.isPending}
               className="px-4 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
             >
-              Répondre
+              {t('msg.reply')}
             </button>
           </div>
         </div>
       )}
       {localPost.locked && (
         <div className="p-3 bg-red-500/10 border-t border-red-500/20 text-center text-xs text-red-400 flex items-center justify-center gap-1 flex-shrink-0">
-          <Lock size={12} /> Ce post est verrouillé
+          <Lock size={12} /> {t('post.lockedNotice')}
         </div>
       )}
 

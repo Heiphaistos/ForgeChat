@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { format, isToday, isYesterday } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import { ChevronDown, Loader2, SmilePlus, Copy, Link, Share2, CornerUpLeft, MessagesSquare, Forward, Pin, Pencil, Trash2, Flag } from 'lucide-react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
@@ -19,7 +18,7 @@ import { stripMarkdown } from '../../utils/mdShortcuts'
 import api from '../../api/client'
 import { useRoleDecor } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
-import { t as tr, useT } from '../../i18n'
+import { t as tr, useT, dateLocale } from '../../i18n'
 import MessageRow from './MessageRow'
 import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
 
@@ -123,7 +122,7 @@ export default function MessageList({
     if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt)}`
     if (isYesterday(d)) return `Hier à ${format(d, timeFmt)}`
     const dateFmt = dateFormat === 'MM/DD/YYYY' ? 'MM/dd/yyyy' : dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM/yyyy'
-    return format(d, `${dateFmt} ${timeFmt}`, { locale: fr })
+    return format(d, `${dateFmt} ${timeFmt}`, { locale: dateLocale() })
   }
   const formatShortTs = (dateStr: string) => format(new Date(dateStr), timeFormat === '12h' ? 'hh:mm a' : 'HH:mm')
 
@@ -764,9 +763,9 @@ export default function MessageList({
           const msgDate = new Date(msg.created_at)
           const prevDateStr = prev ? new Date(prev.created_at).toDateString() : null
           const showDateDivider = prevDateStr !== msgDate.toDateString()
-          const dateLabel = isToday(msgDate) ? "Aujourd'hui"
-            : isYesterday(msgDate) ? 'Hier'
-            : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
+          const dateLabel = isToday(msgDate) ? tr('saved.today')
+            : isYesterday(msgDate) ? tr('gdm.yesterday')
+            : format(msgDate, tr('gdm.dateFormat'), { locale: dateLocale() })
 
           // Props scindées par message : dérivées ici d'un état partagé ("quel message
           // a X ouvert") en valeurs primitives par ligne, pour que React.memo(MessageRow)

@@ -10,6 +10,7 @@ import ServerStatsPage from './ServerStatsPage'
 import AuditLogPage from './AuditLogPage'
 import AutoModPage from './AutoModPage'
 import ServerEventsPage from './ServerEventsPage'
+import { intlLocale } from '../i18n'
 
 class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -168,7 +169,7 @@ function ReportsTab({ serverId }: { serverId: string }) {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium text-white">{REASON_LABEL[r.reason] ?? r.reason}</span>
               <span className="text-xs text-fc-muted">par {r.reporter_username}</span>
-              <span className="text-xs text-fc-muted">{new Date(r.created_at).toLocaleDateString('fr-FR')}</span>
+              <span className="text-xs text-fc-muted">{new Date(r.created_at).toLocaleDateString(intlLocale())}</span>
             </div>
             <p className="text-xs text-fc-muted mt-1 truncate italic">
               {r.message_content ? `"${r.message_content}"` : 'Message supprimé depuis'}

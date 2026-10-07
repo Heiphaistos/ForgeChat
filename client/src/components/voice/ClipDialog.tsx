@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { clipExtension } from '../../lib/clipBuffer'
+import { useT } from '../../i18n'
 
 const MAX_SIZE = 500 * 1024 * 1024 // = server/src/config.rs, comme MessageInput
 
@@ -16,6 +17,7 @@ interface Channel { id: string; name: string; type: string; category_id?: string
 export default function ClipDialog({ blob, label, serverId, voiceChannelId, onClose }: {
   blob: Blob; label: string; serverId: string; voiceChannelId: string; onClose: () => void
 }) {
+  const t = useT()
   useEscapeKey(onClose)
   const url = useMemo(() => URL.createObjectURL(blob), [blob])
   useEffect(() => () => URL.revokeObjectURL(url), [url])
@@ -46,17 +48,17 @@ export default function ClipDialog({ blob, label, serverId, voiceChannelId, onCl
   // Même chemin que les messages vocaux : message puis pièce jointe.
   const send = async () => {
     if (!chosen) return
-    if (blob.size > MAX_SIZE) { toast.error('Le clip dépasse la limite de 500 Mo'); return }
+    if (blob.size > MAX_SIZE) { toast.error(t('clip.tooBig')); return }
     setSending(true)
     try {
-      const res = await api.post(`/servers/${serverId}/channels/${chosen}/messages`, { content: `🎬 Clip de l'écran de ${label}` })
+      const res = await api.post(`/servers/${serverId}/channels/${chosen}/messages`, { content: `🎬 ${t('clip.title', { name: label })}` })
       const form = new FormData()
       form.append('file', blob, filename)
       await api.post(`/servers/${serverId}/channels/${chosen}/messages/${res.data.id}/attachments`, form)
-      toast.success('Clip envoyé')
+      toast.success(t('clip.sent'))
       onClose()
     } catch {
-      toast.error("Impossible d'envoyer le clip")
+      toast.error(t('clip.sendError'))
     } finally {
       setSending(false)
     }
@@ -64,26 +66,26 @@ export default function ClipDialog({ blob, label, serverId, voiceChannelId, onCl
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Clip du stream" onClick={e => e.stopPropagation()}
+      <div role="dialog" aria-modal="true" aria-label={t('clip.dialog')} onClick={e => e.stopPropagation()}
         className="w-full max-w-lg bg-fc-sidebar rounded-xl border border-fc-hover p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-white font-semibold text-sm truncate">Clip de l'écran de {label}</h3>
-          <button onClick={onClose} aria-label="Fermer" className="p-1.5 rounded hover:bg-white/10 text-fc-muted hover:text-white"><X size={16} aria-hidden /></button>
+          <h3 className="text-white font-semibold text-sm truncate">{t('clip.title', { name: label })}</h3>
+          <button onClick={onClose} aria-label={t('common.close')} className="p-1.5 rounded hover:bg-white/10 text-fc-muted hover:text-white"><X size={16} aria-hidden /></button>
         </div>
         <video src={url} controls playsInline className="w-full max-h-72 bg-black rounded-lg" />
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={download} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fc-hover hover:bg-fc-channel text-white text-sm">
-            <Download size={14} aria-hidden /> Télécharger
+            <Download size={14} aria-hidden /> {t('settings.privacy.download')}
           </button>
           {serverId && textChannels.length > 0 && (
             <>
-              <select value={chosen} onChange={e => setTarget(e.target.value)} aria-label="Salon où envoyer le clip"
+              <select value={chosen} onChange={e => setTarget(e.target.value)} aria-label={t('clip.channel')}
                 className="flex-1 min-w-0 bg-fc-channel border border-fc-hover rounded-lg px-2 py-1.5 text-sm text-white">
                 {textChannels.map(c => <option key={c.id} value={c.id}>#{c.name}</option>)}
               </select>
               <button onClick={send} disabled={sending || !chosen}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 text-white text-sm">
-                <Send size={14} aria-hidden /> {sending ? 'Envoi...' : 'Envoyer'}
+                <Send size={14} aria-hidden /> {sending ? t('common.sending') : t('friends.send')}
               </button>
             </>
           )}

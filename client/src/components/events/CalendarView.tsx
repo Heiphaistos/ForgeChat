@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import api from '../../api/client'
+import { useT, intlLocale } from '../../i18n'
 
 interface CalendarEvent {
   id: string
@@ -18,7 +19,6 @@ interface CalendarViewProps {
   onCreateEvent?: (date: Date) => void
 }
 
-const WEEKDAYS = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di']
 
 const EVENT_COLORS = [
   'bg-indigo-500/80 text-white',
@@ -61,11 +61,11 @@ function sameDay(a: Date, b: Date): boolean {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatFull(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', {
+  return new Date(iso).toLocaleDateString(intlLocale(), {
     weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   })
 }
@@ -77,6 +77,7 @@ interface EventPopoverProps {
 }
 
 function EventPopover({ event, anchorRef, onClose }: EventPopoverProps) {
+  const t = useT()
   const popRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0 })
 
@@ -112,7 +113,7 @@ function EventPopover({ event, anchorRef, onClose }: EventPopoverProps) {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className="text-sm font-semibold text-white leading-snug">{event.title}</span>
-        <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white flex-shrink-0 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-fc-hover transition">
+        <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white flex-shrink-0 p-1 min-w-[32px] min-h-[32px] flex items-center justify-center rounded hover:bg-fc-hover transition">
           <X size={14} aria-hidden />
         </button>
       </div>
@@ -126,6 +127,7 @@ function EventPopover({ event, anchorRef, onClose }: EventPopoverProps) {
 }
 
 export default function CalendarView({ serverId, onCreateEvent }: CalendarViewProps) {
+  const t = useT()
   const today = new Date()
   const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() })
   const [activeEvent, setActiveEvent] = useState<{ event: CalendarEvent; ref: React.RefObject<HTMLElement | null> } | null>(null)
@@ -170,7 +172,7 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
     })
   }
 
-  const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleDateString('fr-FR', {
+  const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleDateString(intlLocale(), {
     month: 'long', year: 'numeric',
   })
 
@@ -183,10 +185,10 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
   return (
     <div className="flex flex-col h-full select-none">
       {/* Navigation mois */}
-      <div className="flex items-center justify-between px-1 mb-3" role="navigation" aria-label="Navigation du calendrier">
+      <div className="flex items-center justify-between px-1 mb-3" role="navigation" aria-label={t('cal.nav')}>
         <button
           onClick={prevMonth}
-          aria-label="Mois précédent"
+          aria-label={t('cal.prev')}
           className="p-1.5 min-w-[44px] min-h-[44px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
         >
           <ChevronLeft size={16} aria-hidden />
@@ -194,7 +196,7 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
         <span className="text-sm font-semibold text-white capitalize" aria-live="polite" aria-atomic="true">{monthLabel}</span>
         <button
           onClick={nextMonth}
-          aria-label="Mois suivant"
+          aria-label={t('cal.next')}
           className="p-1.5 min-w-[44px] min-h-[44px] md:min-w-[32px] md:min-h-[32px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
         >
           <ChevronRight size={16} aria-hidden />
@@ -203,7 +205,7 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
 
       {/* En-tête jours */}
       <div className="grid grid-cols-7 mb-1">
-        {WEEKDAYS.map(d => (
+        {t('cal.weekdays').split(',').map(d => (
           <div key={d} className="text-center text-[11px] font-semibold text-fc-muted uppercase py-1">
             {d}
           </div>
@@ -249,7 +251,7 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
               ))}
 
               {overflow > 0 && (
-                <span className="text-[10px] text-fc-muted pl-1">+{overflow} autres</span>
+                <span className="text-[10px] text-fc-muted pl-1">{t('cal.more', { n: overflow })}</span>
               )}
             </div>
           )

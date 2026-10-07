@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 interface Props {
   serverId: string
@@ -14,17 +15,18 @@ interface Props {
 }
 
 export default function VerificationGateModal({ serverId, serverName, rules, onVerified, onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose ?? (() => {}))
   const [accepted, setAccepted] = useState(false)
 
   const verify = useMutation({
     mutationFn: () => api.post(`/servers/${serverId}/verify`),
     onSuccess: () => {
-      toast.success('Accès accordé !')
+      toast.success(t('gate.granted'))
       onVerified()
     },
     onError: (e: any) => {
-      toast.error(e.response?.data?.error ?? 'Erreur de vérification')
+      toast.error(e.response?.data?.error ?? t('gate.error'))
     },
   })
 
@@ -38,33 +40,33 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
               <Shield size={20} className="text-fc-accent" />
             </div>
             <div>
-              <h2 id="verification-gate-modal-title" className="text-white font-bold text-lg">Vérification requise</h2>
+              <h2 id="verification-gate-modal-title" className="text-white font-bold text-lg">{t('srv.verification')}</h2>
               <p className="text-fc-muted text-xs">{serverName}</p>
             </div>
           </div>
           {onClose && (
-            <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
+            <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
               <X size={18} aria-hidden />
             </button>
           )}
         </div>
 
         <p className="text-fc-muted text-sm mb-4">
-          Ce serveur exige que tu acceptes ses règles avant d'accéder aux canaux.
+          {t('gate.intro')}
         </p>
 
         {/* Règles */}
         <div className="flex-1 overflow-y-auto mb-5">
           <div className="bg-fc-bg rounded-lg p-4 min-h-[120px] max-h-[300px] overflow-y-auto">
             <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-              Règles du serveur
+              {t('srv.rules')}
             </h3>
             {rules ? (
               <pre className="text-white text-sm whitespace-pre-wrap font-sans leading-relaxed">
                 {rules}
               </pre>
             ) : (
-              <p className="text-fc-muted text-sm italic">Aucune règle spécifiée.</p>
+              <p className="text-fc-muted text-sm italic">{t('gate.noRules')}</p>
             )}
           </div>
         </div>
@@ -91,7 +93,7 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
               </div>
             </div>
             <span className="text-sm text-fc-muted group-hover:text-white transition leading-relaxed">
-              J'ai lu et j'accepte les règles du serveur
+              {t('gate.accept')}
             </span>
           </label>
 
@@ -100,7 +102,7 @@ export default function VerificationGateModal({ serverId, serverName, rules, onV
             disabled={!accepted || verify.isPending}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition"
           >
-            {verify.isPending ? 'Vérification...' : 'Accéder au serveur'}
+            {verify.isPending ? t('settings.security.verifying') : t('gate.enter')}
           </button>
         </div>
       </div>

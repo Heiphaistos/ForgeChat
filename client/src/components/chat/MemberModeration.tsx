@@ -8,7 +8,7 @@ import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { confirm } from '../ui/ConfirmModal'
 import type { ContextMenuEntry } from '../ui/ContextMenu'
-import { t as tr } from '../../i18n'
+import { t as tr, intlLocale } from '../../i18n'
 
 /**
  * Actions de modération sur un membre (audit P1-9 / P2-2) : expulser, bannir,
@@ -153,7 +153,7 @@ function NotesDialog({ serverId, member, onClose }: { serverId: string; member: 
           <div key={n.id} className="bg-fc-bg/60 rounded-lg px-3 py-2 text-sm text-fc-text flex gap-2">
             <div className="flex-1 min-w-0">
               <p className="whitespace-pre-wrap break-words">{n.note}</p>
-              <p className="text-[10px] text-fc-muted mt-1">{new Date(n.created_at).toLocaleString('fr-FR')}</p>
+              <p className="text-[10px] text-fc-muted mt-1">{new Date(n.created_at).toLocaleString(intlLocale())}</p>
             </div>
             <button onClick={() => void remove(n.id)} aria-label="Supprimer la note"
               className="self-start p-1 rounded text-fc-muted hover:text-red-400 hover:bg-fc-hover">

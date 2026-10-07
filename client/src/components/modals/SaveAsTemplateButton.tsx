@@ -6,8 +6,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { LayoutTemplate } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
+import { useT } from '../../i18n'
 
 export default function SaveAsTemplateButton({ serverId, serverName }: { serverId: string; serverName: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(serverName)
@@ -15,10 +17,10 @@ export default function SaveAsTemplateButton({ serverId, serverName }: { serverI
     mutationFn: () => api.post(`/servers/${serverId}/template`, { name: name.trim() }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server-templates'] })
-      toast.success('Modèle enregistré')
+      toast.success(t('saveTpl.done'))
       setOpen(false)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? "Impossible d'enregistrer le modèle"),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('saveTpl.error')),
   })
   const valid = name.trim().length >= 2 && name.trim().length <= 100
 
@@ -28,7 +30,7 @@ export default function SaveAsTemplateButton({ serverId, serverName }: { serverI
         onClick={() => setOpen(true)}
         className="w-full text-left px-2 py-1.5 rounded text-sm text-fc-muted hover:text-white hover:bg-fc-hover/50 transition flex items-center gap-2 mb-1"
       >
-        <LayoutTemplate size={14} /> Enregistrer comme modèle
+        <LayoutTemplate size={14} /> {t('saveTpl.button')}
       </button>
     )
   }
@@ -42,15 +44,15 @@ export default function SaveAsTemplateButton({ serverId, serverName }: { serverI
         onChange={e => setName(e.target.value)}
         maxLength={100}
         autoFocus
-        aria-label="Nom du modèle"
+        aria-label={t('saveTpl.name')}
         className="w-full px-2 py-1 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
       />
       <div className="flex gap-1.5">
         <button type="submit" disabled={!valid || save.isPending} className="px-2 py-1 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded disabled:opacity-50">
-          Enregistrer
+          {t('common.record')}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="px-2 py-1 text-xs text-fc-muted hover:text-white">
-          Annuler
+          {t('common.cancel')}
         </button>
       </div>
     </form>

@@ -5,6 +5,7 @@ import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import ProfileCosmetics from './ProfileCosmetics'
+import { useT } from '../../i18n'
 
 interface Props {
   user: any
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function ProfileSection({ user, updateMe }: Props) {
+  const t = useT()
   const [bio, setBio] = useState(user.bio ?? '')
   const [pronouns, setPronouns] = useState(user.pronouns ?? '')
   const [birthday, setBirthday] = useState<string>(user.birthday ?? '')
@@ -21,8 +23,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
 
   const saveBio = useMutation({
     mutationFn: () => api.patch('/users/me', { bio, pronouns, birthday: birthday || null }),
-    onSuccess: r => { updateMe(r.data); toast.success('Profil mis à jour') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onSuccess: r => { updateMe(r.data); toast.success(t('settings.account.profileUpdated')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const uploadAvatar = useMutation({
@@ -31,8 +33,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
       fd.append('avatar', file)
       return api.post('/users/me/avatar', fd)
     },
-    onSuccess: r => { updateMe(r.data); toast.success('Avatar mis à jour') },
-    onError: () => toast.error('Erreur upload avatar'),
+    onSuccess: r => { updateMe(r.data); toast.success(t('settings.profile.avatarUpdated')) },
+    onError: () => toast.error(t('settings.profile.avatarError')),
   })
 
   const uploadBanner = useMutation({
@@ -44,16 +46,16 @@ export default function ProfileSection({ user, updateMe }: Props) {
     onSuccess: r => {
       setBannerPreview(r.data.banner)
       updateMe({ ...user, banner: r.data.banner })
-      toast.success('Bannière mise à jour')
+      toast.success(t('settings.profile.bannerUpdated'))
     },
-    onError: () => toast.error('Erreur upload bannière'),
+    onError: () => toast.error(t('settings.profile.bannerError')),
   })
 
   return (
     <div className="space-y-6">
       {/* Bannière */}
       <div>
-        <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Bannière de profil</label>
+        <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('settings.profile.banner')}</label>
         <div
           className="relative h-24 rounded-lg overflow-hidden cursor-pointer group border border-fc-hover hover:border-fc-accent transition"
           onClick={() => bannerRef.current?.click()}
@@ -63,7 +65,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
             : <div className="w-full h-full bg-fc-channel flex items-center justify-center">
                 <div className="text-center">
                   <Camera size={20} className="text-fc-muted mx-auto mb-1" />
-                  <p className="text-xs text-fc-muted">Cliquer pour ajouter une bannière</p>
+                  <p className="text-xs text-fc-muted">{t('settings.profile.addBanner')}</p>
                 </div>
               </div>}
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
@@ -76,9 +78,9 @@ export default function ProfileSection({ user, updateMe }: Props) {
                 e.stopPropagation()
                 api.patch('/users/me', { banner: '' })
                   .then(() => { setBannerPreview(null); updateMe({ ...user, banner: null }) })
-                  .catch((err: any) => toast.error(err.response?.data?.error ?? 'Erreur'))
+                  .catch((err: any) => toast.error(err.response?.data?.error ?? t('common.error')))
               }}
-              aria-label="Retirer la bannière"
+              aria-label={t('settings.profile.removeBanner')}
               className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded-full text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition hover:bg-red-600"
             >
               <Trash2 size={11} />
@@ -95,7 +97,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
             if (file) uploadBanner.mutate(file)
           }}
         />
-        <p className="text-xs text-fc-muted mt-1">PNG, JPG, GIF ou WEBP · max 10 MB</p>
+        <p className="text-xs text-fc-muted mt-1">{t('settings.profile.bannerFormats')}</p>
       </div>
 
       {/* Avatar */}
@@ -108,6 +110,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
           </div>
           <button
             onClick={() => fileRef.current?.click()}
+            aria-label={t('settings.profile.changeAvatar')}
             className="absolute -bottom-1 -right-1 p-1.5 bg-fc-accent rounded-full text-white hover:bg-fc-accent/80 transition"
           >
             <Camera size={12} />
@@ -125,29 +128,29 @@ export default function ProfileSection({ user, updateMe }: Props) {
         </div>
         <div>
           <p className="text-sm font-medium text-white">{user.username}</p>
-          <p className="text-xs text-fc-muted">Cliquez sur l'avatar pour le changer</p>
+          <p className="text-xs text-fc-muted">{t('settings.profile.avatarHint')}</p>
         </div>
       </div>
 
-      <Field label="Bio" hint={`${bio.length}/190 caractères`}>
+      <Field label={t('settings.profile.bio')} hint={t('settings.profile.bioCount', { n: bio.length })}>
         <textarea
           value={bio}
           onChange={e => setBio(e.target.value)}
           maxLength={190}
           rows={3}
-          placeholder="Décrivez-vous en quelques mots..."
+          placeholder={t('settings.profile.bioPlaceholder')}
           enterKeyHint="done"
           autoCapitalize="sentences"
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted streamer-blur"
         />
       </Field>
 
-      <Field label="Pronoms" hint="Ex : il/lui, elle/elle, iel/iel">
+      <Field label={t('settings.profile.pronouns')} hint={t('settings.profile.pronounsHint')}>
         <input
           value={pronouns}
           onChange={e => setPronouns(e.target.value)}
           maxLength={30}
-          placeholder="il/lui"
+          placeholder={t('settings.profile.pronounsPlaceholder')}
           enterKeyHint="done"
           autoCapitalize="none"
           autoComplete="off"
@@ -155,7 +158,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
         />
       </Field>
 
-      <Field label="Date de naissance (optionnel)">
+      <Field label={t('settings.profile.birthday')}>
         <input
           type="date"
           value={birthday}
@@ -170,7 +173,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
         disabled={saveBio.isPending}
         className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
       >
-        {saveBio.isPending ? 'Sauvegarde...' : 'Sauvegarder le profil'}
+        {saveBio.isPending ? t('common.saving') : t('settings.profile.save')}
       </button>
 
       <ProfileCosmetics user={user} updateMe={updateMe} />

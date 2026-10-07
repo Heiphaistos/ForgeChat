@@ -5,6 +5,7 @@ import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useChannelNotif } from '../../store/channelNotif'
 import { MuteSelect, muteRequest, type MuteChoice } from './muteOptions'
+import { useT, type Key } from '../../i18n'
 
 interface Props {
   channelId: string
@@ -15,14 +16,16 @@ interface Props {
 
 type Level = 'inherit' | 'all' | 'mentions' | 'nothing'
 
-const LEVELS: { value: Level; label: string; desc: string; icon: React.ReactNode }[] = [
-  { value: 'inherit', label: 'Par défaut du serveur', desc: 'Suit les paramètres du serveur', icon: <Bell size={16} /> },
-  { value: 'all', label: 'Tous les messages', desc: 'Notification pour chaque message', icon: <BellRing size={16} /> },
-  { value: 'mentions', label: 'Mentions seulement', desc: 'Uniquement les @mentions et réponses', icon: <Bell size={16} /> },
-  { value: 'nothing', label: 'Aucune notification', desc: 'Silencieux pour ce canal', icon: <BellOff size={16} /> },
+// Libellés : clés notif.level.<niveau> et notif.level.<niveau>.desc.
+const LEVELS: { value: Level; icon: React.ReactNode }[] = [
+  { value: 'inherit', icon: <Bell size={16} /> },
+  { value: 'all', icon: <BellRing size={16} /> },
+  { value: 'mentions', icon: <Bell size={16} /> },
+  { value: 'nothing', icon: <BellOff size={16} /> },
 ]
 
 export default function ChannelNotifModal({ channelId, channelName, onClose, anchorRef }: Props) {
+  const t = useT()
   const [level, setLevel] = useState<Level>('inherit')
   const [mute, setMute] = useState<MuteChoice>('off')
   const [current, setCurrent] = useState<{ muted: boolean; until: number | null }>({ muted: false, until: null })
@@ -64,10 +67,10 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
       await api.post(`/user/channel-notif/${channelId}`, { level, ...body })
       setStoreMuted(channelId, body.muted, until)
       setStoreLevel(channelId, level)
-      toast.success('Préférences sauvegardées')
+      toast.success(t('notif.saved'))
       onClose()
     } catch {
-      toast.error('Erreur de sauvegarde')
+      toast.error(t('settings.appearance.saveError'))
     } finally {
       setSaving(false)
     }
@@ -90,12 +93,12 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
       {isSheet && <div className="mx-auto mb-2 w-10 h-1 rounded-full bg-fc-hover" aria-hidden />}
       <div className="flex items-center justify-between mb-3">
         <span id="cn-title" className="text-white text-sm font-semibold truncate">#{channelName}</span>
-        <button onClick={onClose} aria-label="Fermer les notifications" className="text-fc-muted hover:text-white transition">
+        <button onClick={onClose} aria-label={t('notif.close')} className="text-fc-muted hover:text-white transition">
           <X size={14} aria-hidden />
         </button>
       </div>
 
-      <p id="cn-notif-label" className="text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-2">Notifications</p>
+      <p id="cn-notif-label" className="text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-2">{t('settings.section.notifications')}</p>
 
       <div role="radiogroup" aria-labelledby="cn-notif-label" className="space-y-1 mb-3">
         {LEVELS.map(opt => (
@@ -110,14 +113,14 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
           >
             <span className="mt-0.5 flex-shrink-0" aria-hidden>{opt.icon}</span>
             <div>
-              <div className="text-sm font-medium leading-tight">{opt.label}</div>
-              <div className="text-[11px] text-fc-muted leading-tight">{opt.desc}</div>
+              <div className="text-sm font-medium leading-tight">{t(`notif.level.${opt.value}` as Key)}</div>
+              <div className="text-[11px] text-fc-muted leading-tight">{t(`notif.level.${opt.value}.desc` as Key)}</div>
             </div>
           </button>
         ))}
       </div>
 
-      <label htmlFor="cn-mute" className="block text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-1">Sourdine</label>
+      <label htmlFor="cn-mute" className="block text-[11px] text-fc-muted uppercase font-semibold tracking-wide mb-1">{t('notif.mute')}</label>
       <div className="mb-3">
         <MuteSelect id="cn-mute" value={mute} onChange={setMute} currentUntil={current.until} wasMuted={current.muted} />
       </div>
@@ -127,7 +130,7 @@ export default function ChannelNotifModal({ channelId, channelName, onClose, anc
         disabled={saving}
         className="w-full py-1.5 bg-fc-accent hover:bg-fc-accent/80 text-white text-sm font-medium rounded transition disabled:opacity-50"
       >
-        {saving ? 'Enregistrement…' : 'Appliquer'}
+        {saving ? t('notif.saving') : t('notif.apply')}
       </button>
     </div>
   )

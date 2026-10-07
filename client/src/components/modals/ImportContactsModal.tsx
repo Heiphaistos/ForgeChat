@@ -5,6 +5,7 @@ import { useDropzone } from 'react-dropzone'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 interface ImportContactsModalProps {
   onClose: () => void
@@ -58,6 +59,7 @@ function parseCsv(text: string): ParsedContact[] {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ImportContactsModal({ onClose }: ImportContactsModalProps) {
+  const t = useT()
   useEscapeKey(onClose)
   const [contacts, setContacts] = useState<ParsedContact[]>([])
   const [result, setResult] = useState<BulkResult | null>(null)
@@ -71,10 +73,10 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
       const text = e.target?.result as string
       const parsed = parseCsv(text)
       setContacts(parsed)
-      if (parsed.length === 0) toast.error('Aucun contact trouvé dans le fichier')
+      if (parsed.length === 0) toast.error(t('import.noContact'))
     }
     reader.readAsText(file, 'utf-8')
-  }, [])
+  }, [t])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'text/csv': ['.csv'], 'text/plain': ['.txt'] },
@@ -90,9 +92,9 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
     },
     onSuccess: (data) => {
       setResult(data)
-      toast.success(`${data.sent} invitation(s) envoyée(s)`)
+      toast.success(t('import.sent', { n: data.sent }))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const emailCount    = contacts.filter(c => c.email && !c.username).length
@@ -114,11 +116,11 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Users size={18} className="text-fc-accent" />
-            <h2 id="import-contacts-modal-title" className="text-base font-bold text-white">Importer des contacts</h2>
+            <h2 id="import-contacts-modal-title" className="text-base font-bold text-white">{t('import.title')}</h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('common.close')}
             className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-fc-hover rounded"
           >
             <X size={16} aria-hidden />
@@ -140,8 +142,8 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
             <p className="text-sm font-medium text-white">{fileName}</p>
           ) : (
             <>
-              <p className="text-sm font-medium">Glisser un fichier CSV ici</p>
-              <p className="text-xs mt-1 opacity-60">ou cliquer pour parcourir (.csv, .txt)</p>
+              <p className="text-sm font-medium">{t('import.drop')}</p>
+              <p className="text-xs mt-1 opacity-60">{t('import.browse')}</p>
             </>
           )}
         </div>
@@ -149,10 +151,10 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
         {/* Info format */}
         {contacts.length === 0 && (
           <div className="bg-fc-bg/50 rounded-lg px-3 py-2 text-xs text-fc-muted mb-4 flex-shrink-0">
-            <p className="font-semibold text-white mb-1">Format attendu :</p>
-            <p>CSV avec colonnes <code className="text-fc-accent">email</code> ou{' '}
-              <code className="text-fc-accent">username</code> (ou les deux). Une valeur par ligne.</p>
-            <p className="mt-1 opacity-70">Maximum 50 contacts par import.</p>
+            <p className="font-semibold text-white mb-1">{t('import.format')}</p>
+            <p>{t('import.formatBefore')}<code className="text-fc-accent">email</code>{t('import.formatOr')}{' '}
+              <code className="text-fc-accent">username</code>{t('import.formatAfter')}</p>
+            <p className="mt-1 opacity-70">{t('import.max')}</p>
           </div>
         )}
 
@@ -160,9 +162,9 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
         {contacts.length > 0 && !result && (
           <>
             <div className="text-xs text-fc-muted mb-2 flex-shrink-0">
-              <span className="text-white font-medium">{contacts.length}</span> contact(s) détecté(s)
-              {usernameCount > 0 && ` · ${usernameCount} usernames`}
-              {emailCount > 0 && ` · ${emailCount} emails (non envoyés)`}
+              <span className="text-white font-medium">{contacts.length}</span>{t('import.detected')}
+              {usernameCount > 0 && t('import.usernames', { n: usernameCount })}
+              {emailCount > 0 && t('import.emails', { n: emailCount })}
             </div>
             <div className="overflow-y-auto overscroll-contain flex-1 min-h-0 mb-4 rounded-lg border border-fc-hover divide-y divide-fc-hover/50">
               {contacts.slice(0, 50).map((c, i) => (
@@ -187,24 +189,24 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
             <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">
               <CheckCircle size={14} className="text-green-400 flex-shrink-0" />
               <span className="text-sm text-white">
-                <strong>{result.sent}</strong> invitation(s) envoyée(s)
+                <strong>{result.sent}</strong>{t('import.sentSuffix')}
               </span>
             </div>
             {result.already_friends > 0 && (
               <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2">
                 <CheckCircle size={14} className="text-blue-400 flex-shrink-0" />
-                <span className="text-sm text-fc-text">{result.already_friends} déjà ami(s)</span>
+                <span className="text-sm text-fc-text">{t('import.already', { n: result.already_friends })}</span>
               </div>
             )}
             {result.not_found.length > 0 && (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-2 mb-1">
                   <AlertCircle size={14} className="text-yellow-400 flex-shrink-0" />
-                  <span className="text-sm text-fc-text">{result.not_found.length} non trouvé(s)</span>
+                  <span className="text-sm text-fc-text">{t('import.notFound', { n: result.not_found.length })}</span>
                 </div>
                 <div className="text-xs text-fc-muted truncate">
                   {result.not_found.slice(0, 5).join(', ')}
-                  {result.not_found.length > 5 ? ` + ${result.not_found.length - 5} autres` : ''}
+                  {result.not_found.length > 5 ? t('import.others', { n: result.not_found.length - 5 }) : ''}
                 </div>
               </div>
             )}
@@ -214,7 +216,7 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
         {/* Actions */}
         <div className="flex items-center gap-2 justify-end flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">
-            {result ? 'Fermer' : 'Annuler'}
+            {result ? t('common.close') : t('common.cancel')}
           </button>
           {!result && contacts.length > 0 && (
             <button
@@ -223,7 +225,7 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
               className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded font-medium
                 text-sm transition disabled:opacity-40 flex items-center gap-2"
             >
-              {sendInvites.isPending ? 'Envoi...' : `Envoyer ${usernameCount} invitation(s)`}
+              {sendInvites.isPending ? t('common.sending') : t('import.send', { n: usernameCount })}
             </button>
           )}
         </div>

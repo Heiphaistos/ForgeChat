@@ -853,7 +853,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offTimeout = on('USER_TIMEOUT', (d: any) => {
-      toast.error(`${tr('toast.timedOut', { time: new Date(d.expires_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) })}${d.reason ? ` — ${d.reason}` : ''}`, { duration: 8000 })
+      toast.error(`${tr('toast.timedOut', { time: new Date(d.expires_at).toLocaleTimeString(intlLocale(), { hour: '2-digit', minute: '2-digit' }) })}${d.reason ? ` — ${d.reason}` : ''}`, { duration: 8000 })
     })
     const offLift = on('USER_TIMEOUT_LIFTED', () => {
       toast.success(tr('toast.timeoutLifted'), { duration: 4000 })
@@ -1197,7 +1197,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
-import { t as tr, useLang } from './i18n'
+import { t as tr, useLang, intlLocale } from './i18n'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

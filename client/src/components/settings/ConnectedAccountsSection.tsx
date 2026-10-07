@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Check, ExternalLink } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 
 interface ConnectedAccount {
   id: string
@@ -12,20 +13,22 @@ interface ConnectedAccount {
   verified: boolean
 }
 
+// placeholder : clé i18n, ou identifiant (username, @username) que translate renvoie tel quel.
 const PLATFORMS: { id: string; label: string; icon: string; placeholder: string; urlTemplate?: string }[] = [
   { id: 'github', label: 'GitHub', icon: '🐙', placeholder: 'username', urlTemplate: 'https://github.com/{username}' },
   { id: 'twitter', label: 'Twitter / X', icon: '𝕏', placeholder: '@username' },
-  { id: 'steam', label: 'Steam', icon: '🎮', placeholder: 'Profil Steam ID' },
-  { id: 'spotify', label: 'Spotify', icon: '🎵', placeholder: 'URL ou username Spotify' },
-  { id: 'youtube', label: 'YouTube', icon: '▶️', placeholder: 'URL de la chaîne' },
+  { id: 'steam', label: 'Steam', icon: '🎮', placeholder: 'settings.connected.steamPh' },
+  { id: 'spotify', label: 'Spotify', icon: '🎵', placeholder: 'settings.connected.spotifyPh' },
+  { id: 'youtube', label: 'YouTube', icon: '▶️', placeholder: 'settings.connected.youtubePh' },
   { id: 'twitch', label: 'Twitch', icon: '💜', placeholder: 'username', urlTemplate: 'https://twitch.tv/{username}' },
-  { id: 'linkedin', label: 'LinkedIn', icon: '💼', placeholder: 'URL profil' },
+  { id: 'linkedin', label: 'LinkedIn', icon: '💼', placeholder: 'settings.connected.linkedinPh' },
   { id: 'reddit', label: 'Reddit', icon: '🟠', placeholder: 'u/username', urlTemplate: 'https://reddit.com/user/{username}' },
   { id: 'instagram', label: 'Instagram', icon: '📸', placeholder: '@username' },
   { id: 'tiktok', label: 'TikTok', icon: '🎬', placeholder: '@username' },
 ]
 
 export default function ConnectedAccountsSection() {
+  const t = useT()
   const qc = useQueryClient()
   const [adding, setAdding] = useState<string | null>(null)
   const [username, setUsername] = useState('')
@@ -54,19 +57,19 @@ export default function ConnectedAccountsSection() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connected-accounts'] })
-      toast.success('Compte connecté')
+      toast.success(t('settings.connected.added'))
       setAdding(null)
       setUsername('')
       setUrl('')
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (platform: string) => api.delete(`/user/connected-accounts/${platform}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['connected-accounts'] })
-      toast.success('Compte déconnecté')
+      toast.success(t('settings.connected.removed'))
     },
   })
 
@@ -78,7 +81,7 @@ export default function ConnectedAccountsSection() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-fc-muted">
-        Connectez vos comptes externes pour les afficher sur votre profil.
+        {t('settings.connected.intro')}
       </p>
 
       <div className="space-y-2">
@@ -108,6 +111,7 @@ export default function ConnectedAccountsSection() {
                     href={connected.platform_url}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label={t('settings.connected.open', { name: platform.label })}
                     className="p-1.5 text-fc-muted hover:text-white rounded transition"
                   >
                     <ExternalLink size={14} />
@@ -117,6 +121,7 @@ export default function ConnectedAccountsSection() {
                   <button
                     onClick={() => deleteMutation.mutate(platform.id)}
                     disabled={deleteMutation.isPending}
+                    aria-label={t('settings.connected.disconnect', { name: platform.label })}
                     className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
                   >
                     <Trash2 size={14} />
@@ -126,7 +131,7 @@ export default function ConnectedAccountsSection() {
                     onClick={() => setAdding(platform.id)}
                     className="flex items-center gap-1 px-3 py-1.5 text-xs bg-fc-accent/20 hover:bg-fc-accent/30 text-fc-accent rounded-lg transition"
                   >
-                    <Plus size={12} /> Connecter
+                    <Plus size={12} /> {t('settings.connected.connect')}
                   </button>
                 )}
               </div>
@@ -143,16 +148,16 @@ export default function ConnectedAccountsSection() {
             onClick={e => e.stopPropagation()}
           >
             <h3 className="font-semibold text-white">
-              Connecter {platformMeta.label} {platformMeta.icon}
+              {t('settings.connected.title', { name: platformMeta.label })} {platformMeta.icon}
             </h3>
 
             <div>
-              <label className="text-xs text-fc-muted mb-1 block">Nom d'utilisateur</label>
+              <label className="text-xs text-fc-muted mb-1 block">{t('settings.account.username')}</label>
               <input
                 autoFocus
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder={platformMeta.placeholder}
+                placeholder={t(platformMeta.placeholder as Key)}
                 enterKeyHint="next"
                 autoCapitalize="none"
                 className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white placeholder-fc-muted focus:border-fc-accent outline-none"
@@ -160,7 +165,7 @@ export default function ConnectedAccountsSection() {
             </div>
 
             <div>
-              <label className="text-xs text-fc-muted mb-1 block">URL du profil (optionnel)</label>
+              <label className="text-xs text-fc-muted mb-1 block">{t('settings.connected.url')}</label>
               <input
                 value={url}
                 onChange={e => setUrl(e.target.value)}
@@ -178,14 +183,14 @@ export default function ConnectedAccountsSection() {
                 onClick={() => { setAdding(null); setUsername(''); setUrl('') }}
                 className="flex-1 py-2 rounded-lg border border-fc-hover text-fc-muted hover:text-white text-sm transition"
               >
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => addMutation.mutate(adding)}
                 disabled={!username.trim() || addMutation.isPending}
                 className="flex-1 py-2 rounded-lg bg-fc-accent hover:bg-fc-accent/80 text-white text-sm font-medium transition disabled:opacity-50"
               >
-                {addMutation.isPending ? 'Connexion...' : 'Connecter'}
+                {addMutation.isPending ? t('settings.connected.connecting') : t('settings.connected.connect')}
               </button>
             </div>
           </div>

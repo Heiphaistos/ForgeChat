@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api, { mediaUrl } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import UserPrivateNotes from './UserPrivateNotes'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
+import { dateLocale, t as tr } from '../i18n'
 
 const ACTIVITY_ICONS: Record<string, string> = {
   playing: '🎮',
@@ -209,13 +209,13 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
 
             <div className="flex items-center gap-1.5 text-xs text-fc-muted mb-4">
               <Calendar size={12} />
-              Membre depuis {format(new Date(user.created_at), 'MMM yyyy', { locale: fr })}
+              {tr('settings.stats.memberSince')} {format(new Date(user.created_at), 'MMM yyyy', { locale: dateLocale() })}
             </div>
 
             {member && (
               <div className="mb-4 -mt-2 space-y-2">
                 <div className="text-xs text-fc-muted">
-                  Sur ce serveur depuis le {format(new Date(member.joined_at), 'd MMM yyyy', { locale: fr })}
+                  {tr('popup.onServerSince', { date: format(new Date(member.joined_at), 'd MMM yyyy', { locale: dateLocale() }) })}
                 </div>
                 {(member.roles ?? []).length > 0 && (
                   <div>

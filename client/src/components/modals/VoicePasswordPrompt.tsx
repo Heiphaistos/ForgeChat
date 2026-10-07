@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Lock } from 'lucide-react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT } from '../../i18n'
 
 interface Props {
   channelName: string
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const [password, setPassword] = useState('')
 
@@ -29,15 +31,15 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Lock size={18} className="text-yellow-400" />
-            <h2 id="voice-password-modal-title" className="text-lg font-bold text-white">Canal protégé</h2>
+            <h2 id="voice-password-modal-title" className="text-lg font-bold text-white">{t('vpw.title')}</h2>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
+          <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover">
             <X size={18} aria-hidden />
           </button>
         </div>
 
         <p className="text-sm text-fc-muted mb-4">
-          Le canal <span className="text-white font-semibold">#{channelName}</span> est protégé par un mot de passe.
+          {t('vpw.before')}<span className="text-white font-semibold">#{channelName}</span>{t('vpw.after')}
         </p>
 
         <input
@@ -45,7 +47,8 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
           value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
-          placeholder="Mot de passe..."
+          placeholder={t('vpw.placeholder')}
+          aria-label={t('auth.password')}
           enterKeyHint="go"
           autoFocus
           autoComplete="current-password"
@@ -54,14 +57,14 @@ export default function VoicePasswordPrompt({ channelName, onConfirm, onClose }:
 
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">
-            Annuler
+            {t('common.cancel')}
           </button>
           <button
             onClick={submit}
             disabled={!password.trim()}
             className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
-            Rejoindre
+            {t('explore.join')}
           </button>
         </div>
       </div>

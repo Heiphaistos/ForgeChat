@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { BarChart2, Clock, CheckCircle2, Loader2, X } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
+import { dateLocale, t as tr } from '../../i18n'
 
 interface PollOption {
   id: string
@@ -157,8 +157,8 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
               <span className={`flex items-center gap-1 text-xs ${isExpired ? 'text-red-400' : 'text-fc-muted'}`}>
                 <Clock size={10} aria-hidden />
                 {isExpired
-                  ? 'Terminé'
-                  : `Se termine ${formatDistanceToNow(new Date(poll.ends_at), { addSuffix: true, locale: fr })}`}
+                  ? tr('friends.call.ended')
+                  : tr('poll.endsIn', { when: formatDistanceToNow(new Date(poll.ends_at), { addSuffix: true, locale: dateLocale() }) })}
               </span>
             )}
           </div>

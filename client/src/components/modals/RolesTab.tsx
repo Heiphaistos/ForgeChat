@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import { RoleIcon, roleNameStyle } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 
 // Utilise des puissances de 2 comme nombres JS (safe jusqu'à 2**52 avec Number)
 const B = (n: number) => Math.pow(2, n)
@@ -12,59 +13,56 @@ const B = (n: number) => Math.pow(2, n)
 // les seuls que le serveur applique. L'ancienne liste (50+ droits, numérotés
 // comme Discord) enregistrait des bits que le serveur lisait autrement :
 // « Administrateur » cochait en réalité « Voir le salon ».
-const PERMISSION_GROUPS = [
+// Libellés : clés perm.<KEY>, perm.<KEY>.desc et perm.group.<key>.
+const PERMISSION_GROUPS: { key: string; color: string; perms: { key: string; bit: number }[] }[] = [
   {
     key: 'admin',
-    label: 'Administration',
     color: 'text-red-400',
     perms: [
-      { key: 'ADMINISTRATOR',    bit: B(31), label: 'Administrateur',        desc: 'Toutes les permissions, ignore les restrictions des salons' },
-      { key: 'MANAGE_SERVER',    bit: B(8),  label: 'Gérer le serveur',      desc: 'Modifier le nom, l\'icône et les paramètres du serveur' },
-      { key: 'MANAGE_ROLES',     bit: B(5),  label: 'Gérer les rôles',       desc: 'Créer, modifier, supprimer et attribuer des rôles' },
-      { key: 'MANAGE_CHANNELS',  bit: B(4),  label: 'Gérer les salons',      desc: 'Créer, modifier et supprimer des salons (vaut les quatre droits ci-dessous, sauf les salons du propriétaire)' },
-      { key: 'CREATE_CHANNELS',  bit: B(19), label: 'Créer des salons',      desc: 'Créer des salons et des catégories' },
-      { key: 'EDIT_CHANNELS',    bit: B(20), label: 'Modifier les salons',   desc: 'Nom, sujet, réglages, ordre, archivage, permissions, tags, flux RSS, webhook GitHub' },
-      { key: 'DELETE_CHANNELS',  bit: B(21), label: 'Supprimer tous les salons', desc: 'Supprimer n’importe quel salon ou catégorie, sauf ceux créés par le propriétaire' },
-      { key: 'DELETE_OWN_CHANNELS', bit: B(22), label: 'Supprimer ses propres salons', desc: 'Supprimer uniquement les salons et catégories qu’on a créés' },
+      { key: 'ADMINISTRATOR',    bit: B(31) },
+      { key: 'MANAGE_SERVER',    bit: B(8) },
+      { key: 'MANAGE_ROLES',     bit: B(5) },
+      { key: 'MANAGE_CHANNELS',  bit: B(4) },
+      { key: 'CREATE_CHANNELS',  bit: B(19) },
+      { key: 'EDIT_CHANNELS',    bit: B(20) },
+      { key: 'DELETE_CHANNELS',  bit: B(21) },
+      { key: 'DELETE_OWN_CHANNELS', bit: B(22) },
     ]
   },
   {
     key: 'members',
-    label: 'Gestion des membres',
     color: 'text-orange-400',
     perms: [
-      { key: 'KICK_MEMBERS',     bit: B(6),  label: 'Expulser des membres',  desc: 'Expulser des membres du serveur' },
-      { key: 'BAN_MEMBERS',      bit: B(7),  label: 'Bannir définitivement', desc: 'Bannir définitivement ou temporairement, lever tout bannissement' },
-      { key: 'BAN_TEMP',         bit: B(23), label: 'Bannir temporairement', desc: 'Bannir pour une durée limitée et lever les bannissements temporaires' },
+      { key: 'KICK_MEMBERS',     bit: B(6) },
+      { key: 'BAN_MEMBERS',      bit: B(7) },
+      { key: 'BAN_TEMP',         bit: B(23) },
     ]
   },
   {
     key: 'channels',
-    label: 'Salons texte',
     color: 'text-blue-400',
     perms: [
-      { key: 'VIEW_CHANNEL',     bit: B(0),  label: 'Voir les salons',       desc: 'Voir les salons et leur contenu' },
-      { key: 'READ_HISTORY',     bit: B(2),  label: 'Lire l\'historique',    desc: 'Voir les messages précédents dans un salon' },
-      { key: 'SEND_MESSAGES',    bit: B(1),  label: 'Envoyer des messages',  desc: 'Écrire des messages dans les salons texte' },
-      { key: 'MANAGE_MESSAGES',  bit: B(3),  label: 'Gérer les messages',    desc: 'Supprimer et épingler les messages des autres' },
-      { key: 'MENTION_EVERYONE', bit: B(9),  label: 'Mentionner @everyone',  desc: 'Mentionner @everyone et @here' },
-      { key: 'ATTACH_FILES',     bit: B(10), label: 'Joindre des fichiers',  desc: 'Envoyer des fichiers et images' },
-      { key: 'EMBED_LINKS',      bit: B(11), label: 'Intégrer des liens',    desc: 'Générer des aperçus de liens' },
-      { key: 'ADD_REACTIONS',    bit: B(12), label: 'Ajouter des réactions', desc: 'Réagir aux messages avec des emojis' },
+      { key: 'VIEW_CHANNEL',     bit: B(0) },
+      { key: 'READ_HISTORY',     bit: B(2) },
+      { key: 'SEND_MESSAGES',    bit: B(1) },
+      { key: 'MANAGE_MESSAGES',  bit: B(3) },
+      { key: 'MENTION_EVERYONE', bit: B(9) },
+      { key: 'ATTACH_FILES',     bit: B(10) },
+      { key: 'EMBED_LINKS',      bit: B(11) },
+      { key: 'ADD_REACTIONS',    bit: B(12) },
     ]
   },
   {
     key: 'voice',
-    label: 'Vocal & Vidéo',
     color: 'text-green-400',
     perms: [
-      { key: 'CONNECT_VOICE',    bit: B(13), label: 'Rejoindre la voix',     desc: 'Accéder aux salons vocaux' },
-      { key: 'SPEAK_VOICE',      bit: B(14), label: 'Parler',                desc: 'Parler dans les salons vocaux' },
-      { key: 'STREAM',           bit: B(40), label: 'Partager l\'écran / Go Live', desc: 'Partager son écran ou sa caméra' },
-      { key: 'PRIORITY_SPEAKER', bit: B(18), label: 'Orateur prioritaire',   desc: 'Voix amplifiée, autres atténuées' },
-      { key: 'MUTE_MEMBERS',     bit: B(15), label: 'Rendre muet',           desc: 'Couper le micro des autres en vocal' },
-      { key: 'DEAFEN_MEMBERS',   bit: B(16), label: 'Rendre sourd',          desc: 'Couper le son des autres en vocal' },
-      { key: 'MOVE_MEMBERS',     bit: B(17), label: 'Déplacer des membres',  desc: 'Déplacer des membres entre salons vocaux' },
+      { key: 'CONNECT_VOICE',    bit: B(13) },
+      { key: 'SPEAK_VOICE',      bit: B(14) },
+      { key: 'STREAM',           bit: B(40) },
+      { key: 'PRIORITY_SPEAKER', bit: B(18) },
+      { key: 'MUTE_MEMBERS',     bit: B(15) },
+      { key: 'DEAFEN_MEMBERS',   bit: B(16) },
+      { key: 'MOVE_MEMBERS',     bit: B(17) },
     ]
   },
 ]
@@ -107,7 +105,8 @@ interface Role {
 
 function PermGroup({
   group, perms, onChange, disabled,
-}: { group: typeof PERMISSION_GROUPS[0]; perms: number; onChange: (p: number) => void; disabled: boolean }) {
+}: { group: typeof PERMISSION_GROUPS[number]; perms: number; onChange: (p: number) => void; disabled: boolean }) {
+  const t = useT()
   const [open, setOpen] = useState(true)
   const enabledCount = group.perms.filter(p => hasBit(perms, p.bit)).length
 
@@ -143,7 +142,7 @@ function PermGroup({
       >
         <div className="flex items-center gap-2">
           {open ? <ChevronDown size={14} className="text-fc-muted" /> : <ChevronRight size={14} className="text-fc-muted" />}
-          <span className={`text-sm font-semibold ${group.color}`}>{group.label}</span>
+          <span className={`text-sm font-semibold ${group.color}`}>{t(`perm.group.${group.key}` as Key)}</span>
           <span className="text-xs text-fc-muted">({enabledCount}/{group.perms.length})</span>
         </div>
         {!disabled && (
@@ -151,13 +150,13 @@ function PermGroup({
             <button
               onClick={checkAll}
               className="px-2 py-0.5 text-[10px] rounded bg-fc-accent/20 text-fc-accent hover:bg-fc-accent/30 transition font-medium"
-              title="Tout cocher dans cette catégorie"
-            >Tout</button>
+              title={t('roles.checkAll')}
+            >{t('roles.all')}</button>
             <button
               onClick={uncheckAll}
               className="px-2 py-0.5 text-[10px] rounded bg-fc-red/20 text-fc-red hover:bg-fc-red/30 transition font-medium"
-              title="Tout décocher dans cette catégorie"
-            >Aucun</button>
+              title={t('roles.uncheckAll')}
+            >{t('settings.access.none')}</button>
           </div>
         )}
       </div>
@@ -169,8 +168,8 @@ function PermGroup({
               <label key={p.key}
                 className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-fc-hover/30 cursor-pointer transition select-none group">
                 <div className="flex-1 min-w-0 pr-3">
-                  <div className="text-sm text-white font-medium">{p.label}</div>
-                  <div className="text-xs text-fc-muted truncate">{p.desc}</div>
+                  <div className="text-sm text-white font-medium">{t(`perm.${p.key}` as Key)}</div>
+                  <div className="text-xs text-fc-muted truncate">{t(`perm.${p.key}.desc` as Key)}</div>
                 </div>
                 <div
                   onClick={() => { if (!disabled) onChange(toggleBit(perms, p.bit)) }}
@@ -190,6 +189,7 @@ function PermGroup({
 }
 
 export default function RolesTab({ serverId }: { serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Role | null>(null)
   const [editName, setEditName] = useState('')
@@ -228,7 +228,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
       setNewName('')
       if (res.data) selectRole(res.data)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const saveRole = useMutation({
@@ -244,9 +244,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roles', serverId] })
-      toast.success('Rôle sauvegardé')
+      toast.success(t('roles.saved'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const uploadIcon = useMutation({
@@ -259,9 +259,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     onSuccess: (role) => {
       setEditIcon(role.icon ?? '')
       qc.invalidateQueries({ queryKey: ['roles', serverId] })
-      toast.success('Icône mise à jour')
+      toast.success(t('srv.iconUpdated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload icône'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('roles.iconError')),
   })
   const pickIcon = () => {
     const input = document.createElement('input')
@@ -276,9 +276,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roles', serverId] })
       setSelected(null)
-      toast.success('Rôle supprimé')
+      toast.success(t('roles.deleted'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   // Plus haut en premier ; @everyone reste toujours en bas (position 0) et ne bouge pas.
@@ -289,7 +289,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
   const reorder = useMutation({
     mutationFn: (roleIds: string[]) => api.patch(`/servers/${serverId}/roles/order`, { role_ids: roleIds }),
     onSettled: () => qc.invalidateQueries({ queryKey: ['roles', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
   const move = (idx: number, delta: number) => {
     const ids = orderable.map(r => r.id)
@@ -313,7 +313,8 @@ export default function RolesTab({ serverId }: { serverId: string }) {
         <div className="flex gap-2">
           <input
             value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="Nouveau rôle"
+            placeholder={t('roles.new')}
+            aria-label={t('roles.new')}
             enterKeyHint="done" autoCapitalize="words"
             className="flex-1 px-2 py-1.5 bg-fc-input rounded text-white text-xs outline-none focus:ring-1 focus:ring-fc-accent"
             onKeyDown={e => e.key === 'Enter' && newName.trim() && createRole.mutate(newName.trim())}
@@ -322,7 +323,8 @@ export default function RolesTab({ serverId }: { serverId: string }) {
             onClick={() => newName.trim() && createRole.mutate(newName.trim())}
             disabled={!newName.trim() || createRole.isPending}
             className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded transition disabled:opacity-50"
-            title="Créer"
+            title={t('common.create')}
+            aria-label={t('common.create')}
           >
             <Plus size={14} />
           </button>
@@ -345,11 +347,11 @@ export default function RolesTab({ serverId }: { serverId: string }) {
               {idx >= 0 && (
                 <div className="flex flex-col">
                   <button onClick={() => move(idx, -1)} disabled={idx === 0 || reorder.isPending}
-                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title="Monter" aria-label={`Monter ${r.name}`}>
+                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title={t('roles.up')} aria-label={t('roles.upName', { name: r.name })}>
                     <ChevronUp size={12} />
                   </button>
                   <button onClick={() => move(idx, 1)} disabled={idx === orderable.length - 1 || reorder.isPending}
-                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title="Descendre" aria-label={`Descendre ${r.name}`}>
+                    className="p-0.5 text-fc-muted hover:text-white disabled:opacity-20" title={t('roles.down')} aria-label={t('roles.downName', { name: r.name })}>
                     <ChevronDown size={12} />
                   </button>
                 </div>
@@ -373,28 +375,28 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                   <Shield size={9}/> ADMIN
                 </span>
               )}
-              <span className="text-xs text-fc-muted">{totalEnabled}/{ALL_PERMISSIONS.length} permissions</span>
+              <span className="text-xs text-fc-muted">{t('roles.permCount', { n: totalEnabled, total: ALL_PERMISSIONS.length })}</span>
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => saveRole.mutate()} disabled={saveRole.isPending}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition disabled:opacity-50">
                 <Save size={12}/>
-                {saveRole.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+                {saveRole.isPending ? t('common.saving') : t('common.save')}
               </button>
               {!selected.is_everyone && (
                 <>
                   <button onClick={() => setShowDeleteConfirm(true)}
-                    className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition" title="Supprimer le rôle">
+                    className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition" title={t('roles.delete')} aria-label={t('roles.delete')}>
                     <Trash2 size={14} />
                   </button>
                   {showDeleteConfirm && (
                     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
                       <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                        <h3 className="text-lg font-bold text-white mb-2">Supprimer « {selected.name} »</h3>
-                        <p className="text-sm text-fc-muted mb-5">Ce rôle sera retiré de tous les membres. Cette action est irréversible.</p>
+                        <h3 className="text-lg font-bold text-white mb-2">{t('servers.delete.title', { name: selected.name })}</h3>
+                        <p className="text-sm text-fc-muted mb-5">{t('roles.deleteWarn')}</p>
                         <div className="flex gap-3 justify-end">
-                          <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
-                          <button onClick={() => { deleteRole.mutate(selected.id); setShowDeleteConfirm(false) }} disabled={deleteRole.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Supprimer</button>
+                          <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">{t('common.cancel')}</button>
+                          <button onClick={() => { deleteRole.mutate(selected.id); setShowDeleteConfirm(false) }} disabled={deleteRole.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">{t('common.delete')}</button>
                         </div>
                       </div>
                     </div>
@@ -406,11 +408,11 @@ export default function RolesTab({ serverId }: { serverId: string }) {
 
           {/* Tabs */}
           <div className="flex gap-1 border-b border-fc-hover flex-shrink-0">
-            {(['info', 'perms', 'members'] as const).map(t => (
-              <button key={t} onClick={() => setActiveTab(t)}
+            {(['info', 'perms', 'members'] as const).map(tb => (
+              <button key={tb} onClick={() => setActiveTab(tb)}
                 className={`px-3 py-1.5 text-sm font-medium transition rounded-t-lg
-                  ${activeTab === t ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}>
-                {t === 'info' ? 'Informations' : t === 'perms' ? 'Permissions' : 'Membres'}
+                  ${activeTab === tb ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}>
+                {t(`roles.tab.${tb}`)}
               </button>
             ))}
           </div>
@@ -421,14 +423,14 @@ export default function RolesTab({ serverId }: { serverId: string }) {
               <div className="space-y-4 pr-1">
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Nom du rôle</label>
+                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">{t('roles.name')}</label>
                     <input value={editName} onChange={e => setEditName(e.target.value)}
                       disabled={selected.is_everyone}
                       className="w-full px-3 py-2 bg-fc-input rounded-lg text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent disabled:opacity-50"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Couleur</label>
+                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">{t('roles.color')}</label>
                     <div className="flex items-center gap-2">
                       <input type="color" value={editColor} onChange={e => setEditColor(e.target.value)}
                         className="w-10 h-[38px] rounded-lg cursor-pointer border-0 bg-transparent p-0.5"
@@ -436,6 +438,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                       <input value={editColor} onChange={e => setEditColor(e.target.value)}
                         className="w-24 px-2 py-2 bg-fc-input rounded-lg text-white text-xs outline-none font-mono"
                         placeholder="#7289da"
+                        aria-label={t('roles.color')}
                       />
                     </div>
                   </div>
@@ -443,16 +446,16 @@ export default function RolesTab({ serverId }: { serverId: string }) {
 
                 <div className="flex flex-wrap gap-4">
                   <div>
-                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Dégradé</label>
+                    <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">{t('roles.gradient')}</label>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={() => setEditColor2(c => c ? null : '#ffffff')}
-                        role="switch" aria-checked={!!editColor2} aria-label="Pseudo en dégradé"
+                        role="switch" aria-checked={!!editColor2} aria-label={t('roles.gradientName')}
                         className={`w-11 h-6 rounded-full relative transition flex-shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editColor2 ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editColor2 ? 'left-[23px]' : 'left-[3px]'}`} />
                       </button>
                       {editColor2 && (
                         <input type="color" value={editColor2} onChange={e => setEditColor2(e.target.value)}
-                          aria-label="Seconde couleur du dégradé"
+                          aria-label={t('roles.gradientColor')}
                           className="w-10 h-[38px] rounded-lg cursor-pointer border-0 bg-transparent p-0.5"
                         />
                       )}
@@ -460,7 +463,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                   </div>
                   {!selected.is_everyone && (
                     <div>
-                      <label htmlFor="role-icon-emoji" className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">Icône</label>
+                      <label htmlFor="role-icon-emoji" className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">{t('roles.icon')}</label>
                       <div className="flex items-center gap-2">
                         <span className="w-8 h-8 flex items-center justify-center bg-fc-input rounded-lg">
                           <RoleIcon icon={editIcon} title={editName} />
@@ -471,10 +474,10 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                         />
                         <button type="button" onClick={pickIcon} disabled={uploadIcon.isPending}
                           className="px-3 py-2 bg-fc-hover hover:bg-fc-hover/70 text-white rounded-lg text-xs transition disabled:opacity-50">
-                          {uploadIcon.isPending ? 'Envoi…' : 'Image'}
+                          {uploadIcon.isPending ? t('roles.sending') : t('roles.image')}
                         </button>
                         {editIcon && (
-                          <button type="button" onClick={() => setEditIcon('')} className="text-xs text-fc-muted hover:text-white transition">Retirer</button>
+                          <button type="button" onClick={() => setEditIcon('')} className="text-xs text-fc-muted hover:text-white transition">{t('roles.remove')}</button>
                         )}
                       </div>
                     </div>
@@ -482,26 +485,26 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 block">Options</label>
+                  <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3 block">{t('roles.options')}</label>
                   <div className="space-y-3">
                     <label className="flex items-center justify-between px-4 py-3 bg-fc-channel rounded-xl cursor-pointer hover:bg-fc-hover/40 transition select-none">
                       <div>
-                        <div className="text-sm text-white font-medium">Afficher séparément dans la liste</div>
-                        <div className="text-xs text-fc-muted">Les membres avec ce rôle apparaissent dans leur propre groupe (hoist)</div>
+                        <div className="text-sm text-white font-medium">{t('roles.hoist')}</div>
+                        <div className="text-xs text-fc-muted">{t('roles.hoistDesc')}</div>
                       </div>
                       <button type="button" onClick={() => setEditHoisted(v => !v)}
-                        role="switch" aria-checked={editHoisted}
+                        role="switch" aria-checked={editHoisted} aria-label={t('roles.hoist')}
                         className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editHoisted ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editHoisted ? 'left-[23px]' : 'left-[3px]'}`} />
                       </button>
                     </label>
                     <label className="flex items-center justify-between px-4 py-3 bg-fc-channel rounded-xl cursor-pointer hover:bg-fc-hover/40 transition select-none">
                       <div>
-                        <div className="text-sm text-white font-medium">Permettre @mention du rôle</div>
-                        <div className="text-xs text-fc-muted">Tout le monde peut mentionner ce rôle pour notifier ses membres</div>
+                        <div className="text-sm text-white font-medium">{t('roles.mentionable')}</div>
+                        <div className="text-xs text-fc-muted">{t('roles.mentionableDesc')}</div>
                       </div>
                       <button type="button" onClick={() => setEditMentionable(v => !v)}
-                        role="switch" aria-checked={editMentionable}
+                        role="switch" aria-checked={editMentionable} aria-label={t('roles.mentionable')}
                         className={`w-11 h-6 rounded-full relative transition flex-shrink-0 ml-4 cursor-pointer focus:outline-none focus:ring-2 focus:ring-fc-accent ${editMentionable ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
                         <div className={`w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow ${editMentionable ? 'left-[23px]' : 'left-[3px]'}`} />
                       </button>
@@ -510,7 +513,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                 </div>
 
                 <div className="bg-fc-channel rounded-xl p-4">
-                  <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Aperçu</div>
+                  <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('roles.preview')}</div>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-white font-bold text-sm">A</div>
                     <div>
@@ -518,7 +521,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                         {editName || selected.name}
                       </span>
                       <span className="ml-1"><RoleIcon icon={editIcon} title={editName} /></span>
-                      <div className="text-xs text-fc-muted">Exemple de message</div>
+                      <div className="text-xs text-fc-muted">{t('roles.sample')}</div>
                     </div>
                   </div>
                 </div>
@@ -532,8 +535,8 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                   <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-3 flex items-center gap-2">
                     <Shield size={16} className="text-red-400 flex-shrink-0" />
                     <div>
-                      <div className="text-sm text-red-300 font-semibold">Permission Administrateur active</div>
-                      <div className="text-xs text-red-400/70">Ce rôle a toutes les permissions automatiquement</div>
+                      <div className="text-sm text-red-300 font-semibold">{t('roles.adminActive')}</div>
+                      <div className="text-xs text-red-400/70">{t('roles.adminActiveDesc')}</div>
                     </div>
                   </div>
                 )}
@@ -558,8 +561,8 @@ export default function RolesTab({ serverId }: { serverId: string }) {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fc-muted">
           <Shield size={40} className="opacity-20" />
-          <div className="text-sm">Sélectionne un rôle pour le modifier</div>
-          <div className="text-xs opacity-60">ou crée-en un nouveau à gauche</div>
+          <div className="text-sm">{t('roles.pick')}</div>
+          <div className="text-xs opacity-60">{t('roles.pickOrCreate')}</div>
         </div>
       )}
     </div>
@@ -568,6 +571,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
 
 // Sous-composant : membres du rôle
 function RoleMembersTab({ serverId, roleId, roleName }: { serverId: string; roleId: string; roleName: string }) {
+  const t = useT()
   const { data: members = [] } = useQuery({
     queryKey: ['role-members', serverId, roleId],
     queryFn: () => api.get(`/servers/${serverId}/roles/${roleId}/members`).then(r => r.data).catch(() => []),
@@ -576,10 +580,10 @@ function RoleMembersTab({ serverId, roleId, roleName }: { serverId: string; role
   return (
     <div className="space-y-1">
       <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-        Membres avec le rôle {roleName} · {(members as any[]).length}
+        {t('roles.membersWith', { name: roleName, n: (members as any[]).length })}
       </div>
       {!(members as any[]).length && (
-        <p className="text-sm text-fc-muted">Aucun membre avec ce rôle.</p>
+        <p className="text-sm text-fc-muted">{t('roles.noMember')}</p>
       )}
       {(members as any[]).map((m: any) => (
         <div key={m.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-fc-hover/30 transition">

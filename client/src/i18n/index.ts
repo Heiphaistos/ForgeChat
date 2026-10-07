@@ -2,6 +2,7 @@
 // (toute clé absente de en.ts retombe sur le français).
 import { useCallback } from 'react'
 import { create } from 'zustand'
+import { fr as dfFr, enUS } from 'date-fns/locale'
 import { fr, type Key } from './fr'
 import { en } from './en'
 import { translate, pickLang, type Vars } from './translate'
@@ -43,6 +44,11 @@ document.documentElement.lang = useLang.getState().lang
 export function t(key: Key, vars?: Vars): string {
   return translate(DICTS[useLang.getState().lang], fr, key, vars)
 }
+
+// Formats régionaux de la langue active (Intl et date-fns). Dans un composant,
+// appeler après useT() pour se re-rendre au changement de langue.
+export const intlLocale = () => (useLang.getState().lang === 'fr' ? 'fr-FR' : 'en-US')
+export const dateLocale = () => (useLang.getState().lang === 'fr' ? dfFr : enUS)
 
 // Dans un composant : se re-rend quand la langue change.
 export function useT() {

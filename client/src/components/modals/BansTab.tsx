@@ -3,6 +3,7 @@ import { UserCheck } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useServerPerms, PERM } from '../../hooks/useServerPerms'
+import { useT, intlLocale } from '../../i18n'
 
 interface Ban {
   user_id: string
@@ -16,6 +17,7 @@ interface Ban {
 }
 
 export default function BansTab({ serverId }: { serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   // Lever un ban définitif exige « Bannir définitivement » (BAN_MEMBERS).
   const canBanForever = useServerPerms(serverId).has(PERM.BAN_MEMBERS)
@@ -31,25 +33,25 @@ export default function BansTab({ serverId }: { serverId: string }) {
     mutationFn: (userId: string) => api.delete(`/servers/${serverId}/bans/${userId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bans', serverId] })
-      toast.success('Membre débanni')
+      toast.success(t('bans.unbanned'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
-  if (isLoading) return <div role="status" aria-label="Chargement des bans" className="text-fc-muted text-sm">Chargement...</div>
+  if (isLoading) return <div role="status" aria-label={t('bans.loading')} className="text-fc-muted text-sm">{t('common.loading')}</div>
 
   if (bans.length === 0) {
     return (
       <div role="status" className="text-center text-fc-muted py-12 text-sm">
         <div className="text-3xl mb-3" aria-hidden>🔓</div>
-        Aucun ban actif sur ce serveur.
+        {t('bans.none')}
       </div>
     )
   }
 
   return (
     <div className="space-y-2">
-      <p aria-live="polite" aria-atomic="true" className="text-fc-muted text-sm mb-4">{bans.length} utilisateur(s) banni(s)</p>
+      <p aria-live="polite" aria-atomic="true" className="text-fc-muted text-sm mb-4">{t('bans.count', { n: bans.length })}</p>
       {bans.map(b => (
         <div key={b.user_id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
           <div className="w-10 h-10 rounded-full bg-red-900/40 flex items-center justify-center font-bold text-red-400 overflow-hidden flex-shrink-0" aria-hidden>
@@ -60,23 +62,23 @@ export default function BansTab({ serverId }: { serverId: string }) {
           <div className="flex-1 min-w-0">
             <div className="text-white text-sm font-medium">{b.username}#{b.discriminator}</div>
             {b.reason && (
-              <div className="text-xs text-fc-muted truncate">Raison : {b.reason}</div>
+              <div className="text-xs text-fc-muted truncate">{t('bans.reason', { reason: b.reason })}</div>
             )}
             <div className="text-xs text-fc-muted">
-              Banni le {new Date(b.banned_at).toLocaleDateString('fr-FR')}
-              {b.expires_at ? ` · jusqu'au ${new Date(b.expires_at).toLocaleString('fr-FR')}` : ' · définitif'}
+              {t('bans.on', { date: new Date(b.banned_at).toLocaleDateString(intlLocale()) })}
+              {b.expires_at ? t('bans.until', { date: new Date(b.expires_at).toLocaleString(intlLocale()) }) : t('bans.permanent')}
             </div>
           </div>
           {(b.expires_at || canBanForever) && <button
             onClick={() => unban.mutate(b.user_id)}
             disabled={unban.isPending}
-            aria-label={`Débannir ${b.username}`}
+            aria-label={t('bans.unbanName', { name: b.username })}
             aria-busy={unban.isPending}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-hover hover:bg-green-600/20 hover:text-green-400
                        text-fc-muted rounded text-xs transition disabled:opacity-50"
           >
             <UserCheck size={13} aria-hidden />
-            <span aria-hidden>Débannir</span>
+            <span aria-hidden>{t('bans.unban')}</span>
           </button>}
         </div>
       ))}

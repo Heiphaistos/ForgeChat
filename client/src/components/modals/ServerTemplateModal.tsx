@@ -5,11 +5,12 @@ import { X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useT, type Key } from '../../i18n'
 
 interface ServerTemplate {
   id: string
-  name: string
-  description: string
+  name: Key
+  description: Key
   icon: string
   channels: Array<{ name: string; type: 'text' | 'voice' | 'announcement' }>
   categories: string[]
@@ -18,9 +19,9 @@ interface ServerTemplate {
 const TEMPLATES: ServerTemplate[] = [
   {
     id: 'gaming',
-    name: 'Gaming',
+    name: 'tpl.gaming',
     icon: '🎮',
-    description: 'Serveur pour jouer ensemble',
+    description: 'tpl.gaming.desc',
     categories: ['Texte', 'Vocal'],
     channels: [
       { name: 'général', type: 'text' },
@@ -33,9 +34,9 @@ const TEMPLATES: ServerTemplate[] = [
   },
   {
     id: 'community',
-    name: 'Communauté',
+    name: 'tpl.community',
     icon: '🌍',
-    description: 'Serveur communautaire ouvert',
+    description: 'tpl.community.desc',
     categories: ['Info', 'Discussion'],
     channels: [
       { name: 'accueil', type: 'text' },
@@ -47,9 +48,9 @@ const TEMPLATES: ServerTemplate[] = [
   },
   {
     id: 'devteam',
-    name: 'Dev Team',
+    name: 'tpl.devteam',
     icon: '💻',
-    description: 'Espace de travail pour développeurs',
+    description: 'tpl.devteam.desc',
     categories: ['Général', 'Vocal'],
     channels: [
       { name: 'général', type: 'text' },
@@ -62,9 +63,9 @@ const TEMPLATES: ServerTemplate[] = [
   },
   {
     id: 'music',
-    name: 'Musique',
+    name: 'tpl.music',
     icon: '🎵',
-    description: 'Partagez vos coups de cœur musicaux',
+    description: 'tpl.music.desc',
     categories: ['Texte', 'Vocal'],
     channels: [
       { name: 'découvertes', type: 'text' },
@@ -75,9 +76,9 @@ const TEMPLATES: ServerTemplate[] = [
   },
   {
     id: 'education',
-    name: 'Éducation',
+    name: 'tpl.education',
     icon: '📚',
-    description: 'Apprendre et progresser ensemble',
+    description: 'tpl.education.desc',
     categories: ['Info', 'Travail'],
     channels: [
       { name: 'annonces', type: 'announcement' },
@@ -94,6 +95,7 @@ interface Props {
 }
 
 export default function ServerTemplateModal({ onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const [selected, setSelected] = useState<ServerTemplate | null>(null)
   const [name, setName] = useState('')
@@ -118,16 +120,16 @@ export default function ServerTemplateModal({ onClose }: Props) {
     },
     onSuccess: res => {
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success('Serveur créé depuis le template !')
+      toast.success(t('servers.create.fromTemplateOk'))
       nav(`/servers/${res.data.id}`)
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur lors de la création'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('servers.create.error')),
   })
 
-  const handleSelect = (t: ServerTemplate) => {
-    setSelected(t)
-    setName(t.name)
+  const handleSelect = (tpl: ServerTemplate) => {
+    setSelected(tpl)
+    setName(t(tpl.name))
     setStep('name')
   }
 
@@ -152,15 +154,16 @@ export default function ServerTemplateModal({ onClose }: Props) {
               <button
                 onClick={() => setStep('grid')}
                 className="text-fc-muted hover:text-white transition text-sm mr-3"
+                aria-label={t('common.back')}
               >
                 ←
               </button>
             )}
             <span id="server-template-modal-title" className="text-lg font-bold text-white">
-              {step === 'grid' ? 'Choisir un template' : `Template : ${selected?.icon} ${selected?.name}`}
+              {step === 'grid' ? t('servers.create.chooseTemplate') : t('servers.create.template', { name: `${selected?.icon} ${selected ? t(selected.name) : ''}` })}
             </span>
           </div>
-          <button onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+          <button onClick={onClose} aria-label={t('common.close')} className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
             <X size={16} aria-hidden />
           </button>
         </div>
@@ -168,20 +171,20 @@ export default function ServerTemplateModal({ onClose }: Props) {
         {/* Grid */}
         {step === 'grid' && (
           <div className="flex-1 overflow-y-auto p-5">
-            <p className="text-sm text-fc-muted mb-4">Sélectionnez un template pour créer votre serveur avec des canaux préconfigurés.</p>
+            <p className="text-sm text-fc-muted mb-4">{t('servers.create.gridIntro')}</p>
             <div className="grid grid-cols-1 gap-3">
-              {TEMPLATES.map(t => (
+              {TEMPLATES.map(tpl => (
                 <button
-                  key={t.id}
-                  onClick={() => handleSelect(t)}
+                  key={tpl.id}
+                  onClick={() => handleSelect(tpl)}
                   className="flex items-start gap-4 p-4 bg-fc-bg hover:bg-fc-hover rounded-xl text-left transition border border-transparent hover:border-fc-accent/40 group"
                 >
-                  <span className="text-3xl flex-shrink-0 mt-0.5">{t.icon}</span>
+                  <span className="text-3xl flex-shrink-0 mt-0.5">{tpl.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-white group-hover:text-fc-accent transition">{t.name}</div>
-                    <div className="text-xs text-fc-muted mt-0.5">{t.description}</div>
+                    <div className="font-semibold text-white group-hover:text-fc-accent transition">{t(tpl.name)}</div>
+                    <div className="text-xs text-fc-muted mt-0.5">{t(tpl.description)}</div>
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {t.channels.map(ch => (
+                      {tpl.channels.map(ch => (
                         <span key={ch.name} className="text-[10px] bg-fc-hover px-1.5 py-0.5 rounded text-fc-muted">
                           {ch.type === 'voice' ? '🔊' : ch.type === 'announcement' ? '📢' : '#'} {ch.name}
                         </span>
@@ -198,16 +201,16 @@ export default function ServerTemplateModal({ onClose }: Props) {
         {step === 'name' && selected && (
           <div className="p-5">
             <p className="text-sm text-fc-muted mb-4">
-              {selected.channels.length} canaux seront créés automatiquement.
+              {t('servers.create.willCreateAuto', { n: selected.channels.length })}
             </p>
             <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-              Nom du serveur
+              {t('servers.create.name')}
             </label>
             <input
               autoFocus
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder={selected.name}
+              placeholder={t(selected.name)}
               maxLength={100}
               enterKeyHint="done"
               autoCapitalize="sentences"
@@ -216,14 +219,14 @@ export default function ServerTemplateModal({ onClose }: Props) {
             />
             <div className="flex justify-end gap-2">
               <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={!name.trim() || createServer.isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 text-white rounded-lg text-sm transition font-medium"
               >
-                {createServer.isPending ? 'Création...' : 'Créer le serveur'}
+                {createServer.isPending ? t('common.creating') : t('servers.create.submit')}
               </button>
             </div>
           </div>

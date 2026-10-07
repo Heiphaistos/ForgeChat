@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Trash2, ArrowRight, Image, Link2, FileText, File, ChevronLeft } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
 import { isToday, isThisWeek, isThisMonth } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useT, t as tr, dateLocale, type Key } from '../i18n'
 import api, { mediaUrl } from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
@@ -56,21 +56,21 @@ function detectType(item: SavedMessage): FilterType {
   return 'text'
 }
 
-function getDateGroup(dateStr: string): string {
+function getDateGroup(dateStr: string): Key {
   const d = new Date(dateStr)
-  if (isToday(d)) return "Aujourd'hui"
-  if (isThisWeek(d, { locale: fr })) return 'Cette semaine'
-  if (isThisMonth(d)) return 'Ce mois'
-  return 'Plus ancien'
+  if (isToday(d)) return 'saved.today'
+  if (isThisWeek(d, { locale: dateLocale() })) return 'saved.thisWeek'
+  if (isThisMonth(d)) return 'saved.thisMonth'
+  return 'saved.older'
 }
 
-const DATE_GROUP_ORDER = ["Aujourd'hui", 'Cette semaine', 'Ce mois', 'Plus ancien']
+const DATE_GROUP_ORDER: Key[] = ['saved.today', 'saved.thisWeek', 'saved.thisMonth', 'saved.older']
 
 function formatFileSize(bytes?: number): string {
   if (!bytes) return ''
-  if (bytes < 1024) return `${bytes} o`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+  if (bytes < 1024) return tr('saved.bytes', { n: bytes })
+  if (bytes < 1024 * 1024) return tr('saved.kb', { n: (bytes / 1024).toFixed(1) })
+  return tr('saved.mb', { n: (bytes / (1024 * 1024)).toFixed(1) })
 }
 
 // ── Tab button ─────────────────────────────────────────────────────────────
@@ -141,7 +141,8 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function SavedPage() {
-  usePageTitle('Messages sauvegardés')
+  const t = useT()
+  usePageTitle(t('saved.title'))
   const nav = useNavigate()
   const qc = useQueryClient()
   const { openSidebar } = useMobile()
@@ -152,7 +153,7 @@ export default function SavedPage() {
 
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
-    document.title = `${prefix}Messages sauvegardés | ForgeChat`
+    document.title = `${prefix}${tr('saved.title')} | ForgeChat`
     return () => {
       const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
       document.title = `${p}ForgeChat`
@@ -168,9 +169,9 @@ export default function SavedPage() {
     mutationFn: (messageId: string) => api.delete(`/saved/${messageId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['saved_messages'] })
-      toast.success('Message retiré des sauvegardés')
+      toast.success(t('saved.removed'))
     },
-    onError: () => toast.error('Erreur lors de la suppression'),
+    onError: () => toast.error(t('saved.removeError')),
   })
 
   const goToMessage = (item: SavedMessage) => {
@@ -196,11 +197,10 @@ export default function SavedPage() {
 
   // Grouped by date
   const grouped = useMemo(() => {
-    const map: Record<string, SavedMessage[]> = {}
+    const map: Partial<Record<Key, SavedMessage[]>> = {}
     for (const item of processed) {
       const group = getDateGroup(item.saved_at)
-      if (!map[group]) map[group] = []
-      map[group].push(item)
+      ;(map[group] ??= []).push(item)
     }
     return map
   }, [processed])
@@ -214,12 +214,12 @@ export default function SavedPage() {
         <button
           className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour"
+          aria-label={t('common.back')}
         >
           <ChevronLeft size={20} />
         </button>
         <Bookmark size={20} className="text-fc-accent" />
-        <h1 className="text-lg font-bold text-white">Messages sauvegardés</h1>
+        <h1 className="text-lg font-bold text-white">{t('saved.title')}</h1>
         {saved.length > 0 && (
           <span className="text-xs text-fc-muted bg-fc-hover px-2 py-0.5 rounded-full">{saved.length}</span>
         )}
@@ -227,21 +227,22 @@ export default function SavedPage() {
 
       {/* ── Filter bar ── */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-fc-hover flex-wrap">
-        <div role="tablist" aria-label="Filtrer les messages sauvegardés" className="flex items-center gap-2 flex-wrap">
-          <TabButton active={filter === 'all'} onClick={() => setFilter('all')} icon={Bookmark} label="Tout" />
-          <TabButton active={filter === 'text'} onClick={() => setFilter('text')} icon={FileText} label="Messages" />
-          <TabButton active={filter === 'image'} onClick={() => setFilter('image')} icon={Image} label="Images" />
-          <TabButton active={filter === 'link'} onClick={() => setFilter('link')} icon={Link2} label="Liens" />
-          <TabButton active={filter === 'file'} onClick={() => setFilter('file')} icon={File} label="Fichiers" />
+        <div role="tablist" aria-label={t('saved.filter')} className="flex items-center gap-2 flex-wrap">
+          <TabButton active={filter === 'all'} onClick={() => setFilter('all')} icon={Bookmark} label={t('roles.all')} />
+          <TabButton active={filter === 'text'} onClick={() => setFilter('text')} icon={FileText} label={t('saved.tab.text')} />
+          <TabButton active={filter === 'image'} onClick={() => setFilter('image')} icon={Image} label={t('saved.tab.image')} />
+          <TabButton active={filter === 'link'} onClick={() => setFilter('link')} icon={Link2} label={t('saved.tab.link')} />
+          <TabButton active={filter === 'file'} onClick={() => setFilter('file')} icon={File} label={t('saved.tab.file')} />
         </div>
         <div className="ml-auto">
           <select
             value={sort}
             onChange={e => setSort(e.target.value as SortType)}
+            aria-label={t('saved.sort')}
             className="bg-fc-channel text-sm text-white px-2 py-1.5 rounded border border-fc-hover focus:outline-none focus:border-fc-accent cursor-pointer"
           >
-            <option value="newest">Plus récent</option>
-            <option value="oldest">Plus ancien</option>
+            <option value="newest">{t('saved.newest')}</option>
+            <option value="oldest">{t('saved.older')}</option>
           </select>
         </div>
       </div>
@@ -256,11 +257,11 @@ export default function SavedPage() {
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
             <Bookmark size={48} className="text-fc-muted opacity-40" />
             <p className="text-fc-muted text-sm">
-              {filter === 'all' ? 'Aucun message sauvegardé' : `Aucun message de type "${filter}"`}
+              {filter === 'all' ? t('saved.none') : t('saved.noneOfType', { type: filter })}
             </p>
             {filter === 'all' && (
               <p className="text-fc-muted/60 text-xs max-w-xs">
-                Survole un message et clique sur l'icône Bookmark pour le sauvegarder.
+                {t('saved.hint')}
               </p>
             )}
           </div>
@@ -270,13 +271,13 @@ export default function SavedPage() {
               <div key={group}>
                 {/* Sticky date separator */}
                 <div className="sticky top-0 z-10 flex items-center gap-3 py-2 mb-3 bg-fc-bg">
-                  <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{group}</span>
+                  <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{t(group)}</span>
                   <div className="flex-1 h-px bg-fc-hover" />
-                  <span className="text-xs text-fc-muted">{grouped[group].length}</span>
+                  <span className="text-xs text-fc-muted">{grouped[group]?.length}</span>
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {grouped[group].map(item => {
+                  {grouped[group]?.map(item => {
                     const isExp = expanded[item.id]
                     const content = item.content ?? ''
                     const isLong = content.length > 200
@@ -329,7 +330,7 @@ export default function SavedPage() {
                                     onClick={() => toggleExpanded(item.id)}
                                     className="ml-1 text-fc-accent hover:underline text-xs"
                                   >
-                                    {isExp ? 'Réduire' : 'Voir plus'}
+                                    {isExp ? t('profile.collapse') : t('saved.more')}
                                   </button>
                                 )}
                               </div>
@@ -346,7 +347,7 @@ export default function SavedPage() {
 
                             {/* Saved date */}
                             <p className="text-xs text-fc-muted/60 mt-2">
-                              Sauvegardé le {formatTs(item.saved_at)}
+                              {t('saved.savedOn', { date: formatTs(item.saved_at) })}
                             </p>
                           </div>
 
@@ -355,14 +356,16 @@ export default function SavedPage() {
                             <button
                               onClick={() => goToMessage(item)}
                               className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
-                              title="Aller au message"
+                              title={t('saved.goTo')}
+                              aria-label={t('saved.goTo')}
                             >
                               <ArrowRight size={14} />
                             </button>
                             <button
                               onClick={() => remove.mutate(item.message_id)}
                               className="p-1.5 text-fc-muted hover:text-red-400 rounded hover:bg-fc-hover transition"
-                              title="Retirer"
+                              title={t('roles.remove')}
+                              aria-label={t('roles.remove')}
                             >
                               <Trash2 size={14} />
                             </button>

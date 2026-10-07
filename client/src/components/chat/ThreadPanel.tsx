@@ -15,8 +15,8 @@ import { handleMarkdownShortcut } from '../../utils/mdShortcuts'
 import { useEscapePanel } from '../../hooks/useEscapeKey'
 import UserPopup from '../UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
+import { dateLocale, t as tr } from '../../i18n'
 
 interface Props {
   serverId: string
@@ -506,9 +506,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
           const prev: any = messages[i - 1]
           const msgDate = new Date(msg.created_at)
           const showDateDivider = !prev || new Date(prev.created_at).toDateString() !== msgDate.toDateString()
-          const dateLabel = isToday(msgDate) ? "Aujourd'hui"
-            : isYesterday(msgDate) ? 'Hier'
-            : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
+          const dateLabel = isToday(msgDate) ? tr('saved.today')
+            : isYesterday(msgDate) ? tr('gdm.yesterday')
+            : format(msgDate, tr('gdm.dateFormat'), { locale: dateLocale() })
           return (
             <div key={msg.id}>
             {showDateDivider && (

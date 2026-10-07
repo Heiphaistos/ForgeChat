@@ -19,21 +19,15 @@ import {
 
 export type NoiseEngine = 'off' | 'browser' | 'gate' | 'speex' | 'rnnoise' | 'gtcrn'
 
-export const NOISE_ENGINES: { id: NoiseEngine; label: string; hint: string }[] = [
-  { id: 'off', label: 'Désactivée', hint: 'Micro brut : ni réduction de bruit ni gain automatique' },
-  { id: 'browser', label: 'Navigateur', hint: 'Annulation d\'écho + réduction de bruit natives (CPU négligeable)' },
-  { id: 'gate', label: 'Porte de bruit', hint: 'Coupe les silences, très léger' },
-  { id: 'speex', label: 'Speex', hint: 'Réduction spectrale classique, ~2 % CPU' },
-  { id: 'rnnoise', label: 'RNNoise (recommandé)', hint: 'Réseau de neurones, supprime clavier et ventilateur, ~5 % CPU' },
-  { id: 'gtcrn', label: 'GTCRN (maximum)', hint: 'Modèle le plus agressif, voix hors champ et bruits complexes, ~12 % CPU' },
-]
+// Libellés et descriptions : clés settings.audio.engine.<id> du dictionnaire i18n.
+export const NOISE_ENGINES: NoiseEngine[] = ['off', 'browser', 'gate', 'speex', 'rnnoise', 'gtcrn']
 
 const STORAGE_KEY = 'fc_noise_engine'
 const LEGACY_KEY = 'fc_noise_suppression'
 
 export function getNoiseEngine(): NoiseEngine {
   const raw = localStorage.getItem(STORAGE_KEY)
-  if (raw && NOISE_ENGINES.some(e => e.id === raw)) return raw as NoiseEngine
+  if (raw && NOISE_ENGINES.some(e => e === raw)) return raw as NoiseEngine
   // Migration de l'ancien toggle booléen
   if (localStorage.getItem(LEGACY_KEY) === 'false') return 'browser'
   return 'rnnoise'

@@ -4,9 +4,9 @@ import {
   Pin, Users, UserPlus, Zap, ChevronLeft,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import api, { mediaUrl } from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
+import { dateLocale } from '../i18n'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
 
   const timeAgo = formatDistanceToNow(new Date(item.timestamp), {
     addSuffix: true,
-    locale: fr,
+    locale: dateLocale(),
   })
 
   return (

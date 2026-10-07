@@ -3,8 +3,10 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Field, Toggle, Select } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 export default function TextDisplaySection() {
+  const t = useT()
   const { data: settings, refetch } = useQuery({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -13,7 +15,7 @@ export default function TextDisplaySection() {
 
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
-    onSuccess: () => { toast.success('Sauvegardé'); refetch() },
+    onSuccess: () => { toast.success(t('common.saved')); refetch() },
   })
 
   const [emojiStyle, setEmojiStyle] = useState('native')
@@ -38,44 +40,44 @@ export default function TextDisplaySection() {
 
   return (
     <div className="space-y-6">
-      <Field label="Style d'emojis">
+      <Field label={t('settings.text.emoji')}>
         <Select value={emojiStyle} onChange={setEmojiStyle} className="w-full"
-          options={[{ value: 'native', label: 'Emojis natifs du système' }, { value: 'twemoji', label: 'Twemoji (Twitter)' }]} />
+          options={[{ value: 'native', label: t('settings.text.emojiNative') }, { value: 'twemoji', label: 'Twemoji (Twitter)' }]} />
       </Field>
 
-      <Field label="Format de l'heure">
+      <Field label={t('settings.text.timeFormat')}>
         <Select value={timeFormat} onChange={setTimeFormat} className="w-full"
-          options={[{ value: '24h', label: '24 heures (14:30)' }, { value: '12h', label: '12 heures (2:30 PM)' }]} />
+          options={[{ value: '24h', label: t('settings.text.h24') }, { value: '12h', label: t('settings.text.h12') }]} />
       </Field>
 
-      <Field label="Format de date">
+      <Field label={t('settings.text.dateFormat')}>
         <Select value={dateFormat} onChange={setDateFormat} className="w-full"
           options={[
-            { value: 'DD/MM/YYYY', label: 'JJ/MM/AAAA (31/12/2025)' },
-            { value: 'MM/DD/YYYY', label: 'MM/JJ/AAAA (12/31/2025)' },
+            { value: 'DD/MM/YYYY', label: t('settings.text.dmy') },
+            { value: 'MM/DD/YYYY', label: t('settings.text.mdy') },
             { value: 'YYYY-MM-DD', label: 'ISO (2025-12-31)' },
           ]} />
       </Field>
 
-      <Field label="Affichage des horodatages">
+      <Field label={t('settings.text.timestamps')}>
         <Select value={timestamps} onChange={setTimestamps} className="w-full"
           options={[
-            { value: 'always', label: 'Toujours visible' },
-            { value: 'hover', label: 'Au survol' },
-            { value: 'never', label: 'Jamais' },
+            { value: 'always', label: t('settings.text.alwaysVisible') },
+            { value: 'hover', label: t('settings.text.hover') },
+            { value: 'never', label: t('settings.text.never') },
           ]} />
       </Field>
 
-      <Field label="Lecture automatique des GIFs">
+      <Field label={t('settings.text.gif')}>
         <Select value={gifAutoplay} onChange={setGifAutoplay} className="w-full"
           options={[
-            { value: 'always', label: 'Toujours' },
-            { value: 'hover', label: 'Au survol' },
-            { value: 'never', label: 'Jamais' },
+            { value: 'always', label: t('settings.text.always') },
+            { value: 'hover', label: t('settings.text.hover') },
+            { value: 'never', label: t('settings.text.never') },
           ]} />
       </Field>
 
-      <Field label={`Délai de regroupement des messages — ${messageGrouping} min`}>
+      <Field label={t('settings.text.grouping', { n: messageGrouping })}>
         <input type="range" min={1} max={30} value={messageGrouping}
           onChange={e => setMessageGrouping(Number(e.target.value))}
           className="w-full accent-fc-accent" />
@@ -83,8 +85,8 @@ export default function TextDisplaySection() {
 
       <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div>
-          <div className="text-sm font-medium text-white">Prévisualisations de liens</div>
-          <div className="text-xs text-fc-muted">Affiche un aperçu des URLs partagées</div>
+          <div className="text-sm font-medium text-white">{t('settings.text.links')}</div>
+          <div className="text-xs text-fc-muted">{t('settings.text.linksDesc')}</div>
         </div>
         <Toggle value={linkPreview} onChange={setLinkPreview} />
       </div>
@@ -94,7 +96,7 @@ export default function TextDisplaySection() {
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >
-        {save.isPending ? 'Sauvegarde...' : 'Sauvegarder'}
+        {save.isPending ? t('common.saving') : t('common.save')}
       </button>
     </div>
   )

@@ -20,13 +20,14 @@ import toast from 'react-hot-toast'
 import { renderMarkdown } from '../utils/markdown'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { useMobile } from '../contexts/MobileContext'
+import { useT, type Key } from '../i18n'
 
-const STATUS_LABEL: Record<string, string> = {
-  online: 'En ligne',
-  idle: 'Absent',
-  dnd: 'Ne pas déranger',
-  invisible: 'Invisible',
-  offline: 'Hors ligne',
+const STATUS_LABEL: Record<string, Key> = {
+  online: 'presence.online',
+  idle: 'presence.idle',
+  dnd: 'presence.dnd',
+  invisible: 'presence.invisible',
+  offline: 'presence.offline',
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -48,6 +49,7 @@ interface E2eMsg {
 }
 
 export default function DMPage() {
+  const t = useT()
   const { dmId } = useParams<{ dmId: string }>()
   const [searchParams] = useSearchParams()
   const highlightMessageId = searchParams.get('highlight')
@@ -167,11 +169,11 @@ export default function DMPage() {
       pinned ? api.delete(`/dms/${dmId}/pins/${msgId}`) : api.post(`/dms/${dmId}/pins/${msgId}`),
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: ['dm_pins', dmId] })
-      toast.success(vars.pinned ? 'Message désépinglé' : 'Message épinglé')
+      toast.success(vars.pinned ? t('dm.unpinned') : t('dm.pinned'))
     },
     onError: (e: unknown) => {
       const err = e as { response?: { data?: { error?: string } } }
-      toast.error(err.response?.data?.error ?? 'Erreur')
+      toast.error(err.response?.data?.error ?? t('common.error'))
     },
   })
 
@@ -302,7 +304,7 @@ export default function DMPage() {
           } catch {
             return {
               id: msg.id,
-              content: '🔒 [impossible à déchiffrer]',
+              content: t('dm.undecryptable'),
               sender_id: msg.sender_id,
               sender_username: msg.sender_username ?? partnerName,
               sender_avatar: msg.sender_avatar ?? null,
@@ -406,7 +408,7 @@ export default function DMPage() {
           created_at: d.message.created_at,
         }])
       } catch {
-        toast.error('Message E2E impossible à déchiffrer')
+        toast.error(t('dm.e2eDecryptError'))
       }
     })
     return off
@@ -415,7 +417,7 @@ export default function DMPage() {
   const editDm = useMutation({
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
       api.patch(`/dms/${dmId}/messages/${msgId}`, { content }),
-    onError: () => toast.error('Modification impossible'),
+    onError: () => toast.error(t('dm.editError')),
   })
 
   // Normal DM mutation (non-E2E)
@@ -458,7 +460,7 @@ export default function DMPage() {
       }
     },
     onError: (_e, vars) => {
-      toast.error('Envoi impossible')
+      toast.error(t('dm.sendError'))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)
     },
@@ -472,22 +474,22 @@ export default function DMPage() {
       return
     }
     if (!partnerId) {
-      toast.error('Conversation non chargée, réessayez')
+      toast.error(t('dm.notLoaded'))
       return
     }
     try {
       await generateAndStoreKeyPair()
       const key = await getSharedKey(partnerId)
       if (!key) {
-        toast.error(`${partnerName} n'a pas encore activé le chiffrement E2E`)
+        toast.error(t('dm.partnerNoE2e', { name: partnerName }))
         return
       }
       setE2eMode(true)
-      toast.success('Chiffrement E2E activé 🔒', { icon: '🔐' })
+      toast.success(t('dm.e2eOn'), { icon: '🔐' })
     } catch {
-      toast.error('Impossible d\'activer le chiffrement E2E')
+      toast.error(t('dm.e2eOnError'))
     }
-  }, [e2eMode, partnerId, partnerName, generateAndStoreKeyPair, getSharedKey])
+  }, [e2eMode, partnerId, partnerName, generateAndStoreKeyPair, getSharedKey, t])
 
   // Send an E2E-encrypted message
   const sendE2e = useCallback(async () => {
@@ -504,17 +506,17 @@ export default function DMPage() {
         id: data.id ?? crypto.randomUUID(),
         content: plaintext,
         sender_id: data.sender_id ?? me?.id ?? '',
-        sender_username: data.sender_username ?? me?.username ?? 'Moi',
+        sender_username: data.sender_username ?? me?.username ?? t('dm.me'),
         sender_avatar: data.sender_avatar ?? me?.avatar ?? null,
         created_at: data.created_at ?? new Date().toISOString(),
       }])
       setE2eInput('')
     } catch {
-      toast.error('Envoi E2E impossible')
+      toast.error(t('dm.e2eSendError'))
     } finally {
       setE2eSending(false)
     }
-  }, [e2eInput, partnerId, e2eSending, encrypt, getSharedKey, dmId, me])
+  }, [e2eInput, partnerId, e2eSending, encrypt, getSharedKey, dmId, me, t])
 
   if (!dmId) return null
 
@@ -527,8 +529,8 @@ export default function DMPage() {
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour aux messages privés"
-          title="Messages"
+          aria-label={t('dm.back')}
+          title={t('dm.messages')}
         >
           <ChevronLeft size={20} />
         </button>
@@ -546,20 +548,20 @@ export default function DMPage() {
             {partnerName}
             {e2eMode && (
               <span className="text-green-400 text-[10px] font-normal bg-green-900/40 px-1.5 py-0.5 rounded">
-                E2E chiffré
+                {t('dm.e2eBadge')}
               </span>
             )}
           </div>
           <div className={`text-xs mt-0.5 ${status === 'online' ? 'text-fc-green' : 'text-fc-muted'}`}>
-            {STATUS_LABEL[status] ?? 'Hors ligne'}
+            {t(STATUS_LABEL[status] ?? 'presence.offline')}
           </div>
         </div>
 
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={toggleE2e}
-            title={e2eMode ? 'Désactiver le chiffrement E2E' : 'Activer le chiffrement E2E (ECDH P-256 + AES-GCM)'}
-            aria-label={e2eMode ? 'Désactiver le chiffrement de bout en bout' : 'Activer le chiffrement de bout en bout'}
+            title={e2eMode ? t('dm.e2eOffTitle') : t('dm.e2eOnTitle')}
+            aria-label={e2eMode ? t('dm.e2eOffLabel') : t('dm.e2eOnLabel')}
             aria-pressed={e2eMode}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${
               e2eMode
@@ -572,36 +574,36 @@ export default function DMPage() {
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }
-              if (callBusyElsewhere) { toast.error('Un appel est déjà en cours ailleurs'); return }
-              if (!partnerId || !dmId) { toast.error('Informations du contact non chargées'); return }
-              startCall(dmId, partnerId, 'voice').catch(() => toast.error('Accès au micro refusé'))
+              if (callBusyElsewhere) { toast.error(t('dm.callBusy')); return }
+              if (!partnerId || !dmId) { toast.error(t('dm.contactNotLoaded')); return }
+              startCall(dmId, partnerId, 'voice').catch(() => toast.error(t('dm.micDenied')))
             }}
             disabled={(!partnerId && callState === 'idle') || callBusyElsewhere}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${isThisCallActive && callType === 'voice' ? 'text-fc-green bg-green-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
-            title={isThisCallActive && callType === 'voice' ? 'Raccrocher' : 'Appel vocal'}
-            aria-label={isThisCallActive && callType === 'voice' ? 'Raccrocher' : 'Démarrer un appel vocal'}
+            title={isThisCallActive && callType === 'voice' ? t('dm.hangUp') : t('friends.call.voice')}
+            aria-label={isThisCallActive && callType === 'voice' ? t('dm.hangUp') : t('dm.startVoice')}
           >
             <Phone size={18} />
           </button>
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }
-              if (callBusyElsewhere) { toast.error('Un appel est déjà en cours ailleurs'); return }
-              if (!partnerId || !dmId) { toast.error('Informations du contact non chargées'); return }
-              startCall(dmId, partnerId, 'video').catch(() => toast.error('Accès caméra refusé'))
+              if (callBusyElsewhere) { toast.error(t('dm.callBusy')); return }
+              if (!partnerId || !dmId) { toast.error(t('dm.contactNotLoaded')); return }
+              startCall(dmId, partnerId, 'video').catch(() => toast.error(t('settings.video.denied')))
             }}
             disabled={(!partnerId && callState === 'idle') || callBusyElsewhere}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${isThisCallActive && callType === 'video' ? 'text-fc-accent bg-indigo-900/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'} disabled:opacity-40`}
-            title={isThisCallActive && callType === 'video' ? 'Terminer l\'appel' : 'Appel vidéo'}
-            aria-label={isThisCallActive && callType === 'video' ? 'Terminer l\'appel vidéo' : 'Démarrer un appel vidéo'}
+            title={isThisCallActive && callType === 'video' ? t('dm.endCall') : t('friends.call.video')}
+            aria-label={isThisCallActive && callType === 'video' ? t('dm.endVideo') : t('dm.startVideo')}
           >
             <Video size={18} />
           </button>
           <button
             onClick={() => setShowSearch(s => !s)}
             className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showSearch ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-            title="Rechercher dans la conversation"
-            aria-label="Rechercher dans la conversation"
+            title={t('dm.search')}
+            aria-label={t('dm.search')}
             aria-pressed={showSearch}
           >
             <Search size={18} />
@@ -610,8 +612,8 @@ export default function DMPage() {
             <button
               onClick={() => setShowPins(p => !p)}
               className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showPins ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-              title="Messages épinglés"
-              aria-label="Messages épinglés"
+              title={t('dm.pins')}
+              aria-label={t('dm.pins')}
               aria-pressed={showPins}
             >
               <Pin size={18} />
@@ -642,7 +644,7 @@ export default function DMPage() {
               {callState === 'connected' && (remoteStream || remoteVideoUrl) && (
                 <span
                   className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-xs font-medium tabular-nums select-none"
-                  aria-label={`Durée de l'appel ${callDuration}`}
+                  aria-label={t('dm.callDuration', { d: callDuration })}
                 >
                   {callDuration}
                 </span>
@@ -654,7 +656,7 @@ export default function DMPage() {
                   </div>
                   <p className="text-white font-semibold text-sm">{partnerName}</p>
                   <p className={`text-xs ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`}>
-                    {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : `Connecté — ${callDuration}`}
+                    {callState === 'calling' ? t('dm.calling') : callState === 'ringing' ? t('dm.connecting') : t('dm.connected', { d: callDuration })}
                   </p>
                 </div>
               )}
@@ -666,8 +668,8 @@ export default function DMPage() {
                 {partnerAvatar ? <img src={mediaUrl(partnerAvatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : partnerName.charAt(0).toUpperCase()}
               </div>
               <p className="text-white font-semibold">{partnerName}</p>
-              <p className={`text-sm ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`} aria-label={callState === 'connected' ? `Appel connecté, durée ${callDuration}` : undefined}>
-                {callState === 'calling' ? 'Appel en cours...' : callState === 'ringing' ? 'Connexion...' : `● Connecté — ${callDuration}`}
+              <p className={`text-sm ${callState === 'connected' ? 'text-fc-green tabular-nums' : 'text-fc-muted animate-pulse'}`} aria-label={callState === 'connected' ? t('dm.connectedLabel', { d: callDuration }) : undefined}>
+                {callState === 'calling' ? t('dm.calling') : callState === 'ringing' ? t('dm.connecting') : `● ${t('dm.connected', { d: callDuration })}`}
               </p>
             </div>
           )}
@@ -676,8 +678,8 @@ export default function DMPage() {
               <button
                 onClick={toggleCam}
                 className={`p-3 rounded-full transition ${camOff ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-                title={camOff ? 'Activer caméra' : 'Désactiver caméra'}
-                aria-label={camOff ? 'Activer la caméra' : 'Désactiver la caméra'}
+                title={camOff ? t('dm.camOn') : t('dm.camOff')}
+                aria-label={camOff ? t('dm.camOnLabel') : t('dm.camOffLabel')}
                 aria-pressed={!camOff}
               >
                 {camOff ? <VideoOff size={20} /> : <Video size={20} />}
@@ -686,8 +688,8 @@ export default function DMPage() {
             <button
               onClick={toggleMic}
               className={`p-3 rounded-full transition ${micMuted ? 'bg-fc-red text-white' : 'bg-fc-hover text-fc-muted hover:text-white'}`}
-              title={micMuted ? 'Activer micro' : 'Couper micro'}
-              aria-label={micMuted ? 'Activer le microphone' : 'Couper le microphone'}
+              title={micMuted ? t('dm.micOn') : t('dm.micOff')}
+              aria-label={micMuted ? t('dm.micOnLabel') : t('dm.micOffLabel')}
               aria-pressed={!micMuted}
             >
               {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
@@ -695,8 +697,8 @@ export default function DMPage() {
             <button
               onClick={hangup}
               className="p-3 bg-fc-red rounded-full text-white hover:bg-red-600 transition"
-              title="Raccrocher"
-              aria-label="Raccrocher"
+              title={t('dm.hangUp')}
+              aria-label={t('dm.hangUp')}
             >
               <PhoneOff size={20} />
             </button>
@@ -707,7 +709,7 @@ export default function DMPage() {
       {/* Panneau de recherche DM */}
       {showSearch && dmId && (
         <div className="border-b border-fc-bg">
-          <SearchPanel channelId={dmId} serverId="" channelName="Messages directs" onClose={() => setShowSearch(false)} />
+          <SearchPanel channelId={dmId} serverId="" channelName={t('dm.direct')} onClose={() => setShowSearch(false)} />
         </div>
       )}
 
@@ -717,11 +719,11 @@ export default function DMPage() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-fc-bg">
             <div className="flex items-center gap-2">
               <Pin size={15} className="text-fc-accent" aria-hidden />
-              <span className="font-semibold text-white text-sm">Messages épinglés — {dmPins.length}</span>
+              <span className="font-semibold text-white text-sm">{t('dm.pins')} — {dmPins.length}</span>
             </div>
             <button
               onClick={() => setShowPins(false)}
-              aria-label="Fermer les messages épinglés"
+              aria-label={t('dm.closePins')}
               className="p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
             >
               <X size={15} aria-hidden />
@@ -729,27 +731,27 @@ export default function DMPage() {
           </div>
           <div className="max-h-56 overflow-y-auto overscroll-contain p-3 space-y-2">
             {dmPins.length === 0 && (
-              <p className="text-center text-fc-muted text-sm py-4">Aucun message épinglé.<br />Utilise l'épingle sur un message.</p>
+              <p className="text-center text-fc-muted text-sm py-4">{t('dm.noPins')}<br />{t('dm.noPinsHint')}</p>
             )}
             {dmPins.map(pin => (
               <div key={pin.id} className="relative group/pin bg-fc-bg/50 rounded-lg p-2.5 border border-fc-hover/40 hover:border-fc-hover transition">
                 <button
                   onClick={() => { setShowPins(false); nav(`/dms/${dmId}?highlight=${pin.message_id}`) }}
                   className="text-left w-full"
-                  aria-label={`Aller au message de ${pin.message.sender_name}`}
+                  aria-label={t('dm.goToMessageOf', { name: pin.message.sender_name })}
                 >
                   <div className="flex items-baseline gap-2 mb-0.5">
                     <span className="text-xs font-semibold text-white">{pin.message.sender_name}</span>
                     <span className="text-[10px] text-fc-muted">{formatShort(pin.message.created_at)}</span>
                   </div>
                   <div className="text-xs text-fc-text leading-relaxed line-clamp-2">
-                    {pin.message.content ?? '📎 Pièce jointe'}
+                    {pin.message.content ?? t('common.attachment')}
                   </div>
                 </button>
                 <button
                   onClick={() => togglePin.mutate({ msgId: pin.message_id, pinned: true })}
-                  aria-label="Désépingler"
-                  title="Désépingler"
+                  aria-label={t('dm.unpin')}
+                  title={t('dm.unpin')}
                   className="absolute top-1.5 right-1.5 p-1 rounded text-fc-muted hover:text-fc-red hover:bg-fc-hover transition opacity-100 md:opacity-0 md:group-hover/pin:opacity-100"
                 >
                   <X size={12} aria-hidden />
@@ -767,10 +769,10 @@ export default function DMPage() {
             {e2eMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-fc-muted gap-3 pt-12">
                 <Lock size={40} className="text-green-500/60" />
-                <p className="text-sm font-medium text-green-400">Conversation chiffrée de bout en bout</p>
+                <p className="text-sm font-medium text-green-400">{t('dm.e2eEmpty')}</p>
                 <p className="text-xs text-center max-w-xs">
-                  Les messages sont chiffrés avec ECDH P-256 + AES-GCM 256-bit.<br/>
-                  Le serveur ne peut pas lire leur contenu.
+                  {t('dm.e2eEmptyLine1')}<br/>
+                  {t('dm.e2eEmptyLine2')}
                 </p>
               </div>
             ) : (
@@ -804,7 +806,7 @@ export default function DMPage() {
               <input
                 autoFocus
                 className="flex-1 bg-transparent text-sm text-fc-text outline-none placeholder:text-fc-muted"
-                placeholder={`Message chiffré à @${partnerName}`}
+                placeholder={t('dm.e2ePlaceholder', { name: partnerName })}
                 value={e2eInput}
                 onChange={e => setE2eInput(e.target.value)}
                 onKeyDown={e => {
@@ -822,7 +824,7 @@ export default function DMPage() {
                 disabled={!e2eInput.trim() || e2eSending}
                 className="text-xs px-2.5 py-1 rounded-md bg-green-700 hover:bg-green-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {e2eSending ? '…' : 'Envoyer'}
+                {e2eSending ? '…' : t('friends.send')}
               </button>
             </div>
           </div>
@@ -831,12 +833,12 @@ export default function DMPage() {
         <>
           {highlightMessageId && (
             <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
-              <span className="text-xs text-fc-accent">Contexte d'un message.</span>
+              <span className="text-xs text-fc-accent">{t('dm.context')}</span>
               <button
                 onClick={() => nav(`/dms/${dmId}`)}
                 className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
               >
-                Voir les derniers messages →
+                {t('channel.latest')}
               </button>
             </div>
           )}

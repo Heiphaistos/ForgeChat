@@ -3,27 +3,28 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RotateCcw, Pencil, X } from 'lucide-react'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 
-const DEFAULT_KEYBINDINGS: { action: string; label: string; default: string }[] = [
-  { action: 'toggle_mute', label: 'Activer/désactiver le micro', default: 'Ctrl+M' },
-  { action: 'toggle_deafen', label: 'Activer/désactiver le casque', default: 'Ctrl+D' },
-  { action: 'push_to_talk', label: 'Push-to-Talk', default: 'Ctrl+Shift+Space' },
-  { action: 'toggle_screen_share', label: 'Partager l\'écran', default: 'Ctrl+Alt+S' },
-  { action: 'focus_chat', label: 'Focus sur le chat', default: 'Ctrl+L' },
-  { action: 'search', label: 'Recherche globale', default: 'Ctrl+K' },
-  { action: 'next_unread', label: 'Canal non-lu suivant', default: 'Alt+ArrowDown' },
-  { action: 'prev_unread', label: 'Canal non-lu précédent', default: 'Alt+ArrowUp' },
-  { action: 'close_modal', label: 'Fermer la fenêtre', default: 'Escape' },
-  { action: 'toggle_emoji', label: 'Sélecteur d\'emojis', default: 'Ctrl+E' },
-  { action: 'upload_file', label: 'Uploader un fichier', default: 'Ctrl+U' },
-  { action: 'toggle_sidebar', label: 'Afficher/masquer membres', default: 'Ctrl+Alt+M' },
-  { action: 'reply', label: 'Répondre au dernier message', default: 'R' },
-  { action: 'edit_last', label: 'Modifier le dernier message', default: 'ArrowUp' },
-  { action: 'mark_all_read', label: 'Tout marquer comme lu', default: 'Ctrl+Shift+A' },
-  { action: 'open_settings', label: 'Ouvrir les paramètres', default: 'Ctrl+,' },
-  { action: 'hand_raise', label: 'Lever/baisser la main', default: 'Ctrl+Space' },
-  { action: 'toggle_camera', label: 'Activer/désactiver la caméra', default: 'Ctrl+Shift+C' },
-  { action: 'clip_stream', label: 'Clip du stream (si les Clips sont activés)', default: 'Alt+C' },
+const DEFAULT_KEYBINDINGS: { action: string; label: Key; default: string }[] = [
+  { action: 'toggle_mute', label: 'settings.keys.toggle_mute', default: 'Ctrl+M' },
+  { action: 'toggle_deafen', label: 'settings.keys.toggle_deafen', default: 'Ctrl+D' },
+  { action: 'push_to_talk', label: 'settings.keys.push_to_talk', default: 'Ctrl+Shift+Space' },
+  { action: 'toggle_screen_share', label: 'settings.keys.toggle_screen_share', default: 'Ctrl+Alt+S' },
+  { action: 'focus_chat', label: 'settings.keys.focus_chat', default: 'Ctrl+L' },
+  { action: 'search', label: 'settings.keys.search', default: 'Ctrl+K' },
+  { action: 'next_unread', label: 'settings.keys.next_unread', default: 'Alt+ArrowDown' },
+  { action: 'prev_unread', label: 'settings.keys.prev_unread', default: 'Alt+ArrowUp' },
+  { action: 'close_modal', label: 'settings.keys.close_modal', default: 'Escape' },
+  { action: 'toggle_emoji', label: 'settings.keys.toggle_emoji', default: 'Ctrl+E' },
+  { action: 'upload_file', label: 'settings.keys.upload_file', default: 'Ctrl+U' },
+  { action: 'toggle_sidebar', label: 'settings.keys.toggle_sidebar', default: 'Ctrl+Alt+M' },
+  { action: 'reply', label: 'settings.keys.reply', default: 'R' },
+  { action: 'edit_last', label: 'settings.keys.edit_last', default: 'ArrowUp' },
+  { action: 'mark_all_read', label: 'settings.keys.mark_all_read', default: 'Ctrl+Shift+A' },
+  { action: 'open_settings', label: 'settings.keys.open_settings', default: 'Ctrl+,' },
+  { action: 'hand_raise', label: 'settings.keys.hand_raise', default: 'Ctrl+Space' },
+  { action: 'toggle_camera', label: 'settings.keys.toggle_camera', default: 'Ctrl+Shift+C' },
+  { action: 'clip_stream', label: 'settings.keys.clip_stream', default: 'Alt+C' },
 ]
 
 function formatKey(e: KeyboardEvent): string {
@@ -42,6 +43,7 @@ function formatKey(e: KeyboardEvent): string {
 }
 
 export default function KeybindingsSection() {
+  const t = useT()
   const qc = useQueryClient()
   const [capturing, setCapturing] = useState<string | null>(null)
   const [preview, setPreview] = useState('')
@@ -60,9 +62,9 @@ export default function KeybindingsSection() {
       qc.invalidateQueries({ queryKey: ['keybindings'] })
       setCapturing(null)
       setPreview('')
-      toast.success('Raccourci enregistré')
+      toast.success(t('settings.keys.saved'))
     },
-    onError: () => toast.error('Erreur'),
+    onError: () => toast.error(t('common.error')),
   })
 
   const resetMutation = useMutation({
@@ -101,14 +103,14 @@ export default function KeybindingsSection() {
   return (
     <div className="space-y-4" ref={captureRef}>
       <p className="text-sm text-fc-muted">
-        Cliquez sur un raccourci pour le modifier, puis appuyez sur la nouvelle combinaison de touches.
+        {t('settings.keys.intro')}
       </p>
 
       {capturing && (
         <div className="p-3 bg-fc-accent/10 border border-fc-accent rounded-lg text-sm text-white animate-pulse">
           {preview
-            ? `Combinaison : ${preview} — relâchez pour valider`
-            : 'Appuyez sur la nouvelle combinaison... (Échap pour annuler)'}
+            ? t('settings.keys.combo', { combo: preview })
+            : t('settings.keys.press')}
         </div>
       )}
 
@@ -127,7 +129,7 @@ export default function KeybindingsSection() {
                   : 'bg-fc-channel border border-transparent hover:border-fc-hover'
               }`}
             >
-              <span className="text-sm text-white">{kb.label}</span>
+              <span className="text-sm text-white">{t(kb.label)}</span>
 
               <div className="flex items-center gap-2">
                 <button
@@ -139,13 +141,14 @@ export default function KeybindingsSection() {
                   }`}
                 >
                   {isCapturing ? <X size={10} /> : <Pencil size={10} />}
-                  {isCapturing ? 'Annuler' : combo}
+                  {isCapturing ? t('common.cancel') : combo}
                 </button>
 
                 {custom && (
                   <button
                     onClick={() => resetMutation.mutate(kb.action)}
-                    title={`Remettre par défaut (${kb.default})`}
+                    title={t('settings.keys.reset', { combo: kb.default })}
+                    aria-label={t('settings.keys.reset', { combo: kb.default })}
                     className="p-1.5 text-fc-muted hover:text-white rounded transition"
                   >
                     <RotateCcw size={12} />

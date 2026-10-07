@@ -21,7 +21,7 @@ import { renderMarkdown } from '../utils/markdown'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import { useT, dateLocale } from '../i18n'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 
@@ -76,6 +76,7 @@ interface GroupDM {
 }
 
 export default function GroupDMPage() {
+  const t = useT()
   const { groupId } = useParams<{ groupId: string }>()
   const [searchParams] = useSearchParams()
   const highlightMsgId = searchParams.get('highlight')
@@ -165,9 +166,9 @@ export default function GroupDMPage() {
     mutationFn: (msgId: string) => api.put(`/dms/groups/${groupId}/messages/${msgId}/pin`),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['group-dm-pins', groupId] })
-      toast.success(res.data?.pinned ? 'Message épinglé' : 'Message désépinglé')
+      toast.success(res.data?.pinned ? t('dm.pinned') : t('dm.unpinned'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const { data: initialMessages, isError: gdmError, refetch: refetchGdm } = useQuery<GDMMessage[]>({
@@ -445,11 +446,11 @@ export default function GroupDMPage() {
       }
     } catch (e: any) {
       if (e?.response?.status === 404) setHasMore(false)
-      else toast.error('Erreur de chargement')
+      else toast.error(t('gdm.loadError'))
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMore, allMessages, groupId])
+  }, [loadingMore, hasMore, allMessages, groupId, t])
 
   const sendMsg = useMutation({
     mutationFn: ({ text, files, replyToId }: { text: string; files: File[]; replyToId?: string }) =>
@@ -467,7 +468,7 @@ export default function GroupDMPage() {
       }
     },
     onError: (_e, vars) => {
-      toast.error("Erreur d'envoi")
+      toast.error(t('gdm.sendError'))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)
     },
@@ -476,39 +477,39 @@ export default function GroupDMPage() {
   const editMsg = useMutation({
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
       api.patch(`/dms/groups/${groupId}/messages/${msgId}`, { content }),
-    onSuccess: () => { setEditingMsgId(null); toast.success('Message modifié') },
-    onError: () => toast.error('Impossible de modifier'),
+    onSuccess: () => { setEditingMsgId(null); toast.success(t('gdm.edited')) },
+    onError: () => toast.error(t('gdm.editError')),
   })
 
   const toggleReaction = useCallback(async (msgId: string, emoji: string) => {
     try {
       await api.put(`/dms/groups/${groupId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
     } catch {
-      toast.error('Impossible d\'ajouter la réaction')
+      toast.error(t('gdm.reactError'))
     }
-  }, [groupId])
+  }, [groupId, t])
 
   const leaveGroup = useMutation({
     mutationFn: () => api.post(`/dms/groups/${groupId}/leave`),
-    onSuccess: () => { toast.success('Groupe quitté'); navigate('/') },
-    onError: () => toast.error('Impossible de quitter le groupe'),
+    onSuccess: () => { toast.success(t('gdm.left')); navigate('/') },
+    onError: () => toast.error(t('gdm.leaveError')),
   })
 
   const renameGroup = useMutation({
     mutationFn: (name: string) => api.patch(`/dms/groups/${groupId}/rename`, { name }),
-    onSuccess: (_, name) => { toast.success(`Groupe renommé en "${name}"`); setRenameInput(''); queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] }) },
-    onError: () => toast.error('Impossible de renommer'),
+    onSuccess: (_, name) => { toast.success(t('gdm.renamed', { name })); setRenameInput(''); queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] }) },
+    onError: () => toast.error(t('gdm.renameError')),
   })
 
   const addMember = useMutation({
     mutationFn: (userId: string) => api.post(`/dms/groups/${groupId}/members`, { user_id: userId }),
     onSuccess: () => {
-      toast.success('Membre ajouté')
+      toast.success(t('gdm.memberAdded'))
       setAddMemberInput('')
       queryClient.invalidateQueries({ queryKey: ['group-dm', groupId] })
       queryClient.invalidateQueries({ queryKey: ['dms'] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Impossible d\'ajouter'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('gdm.addError')),
   })
 
   const { data: userSearchResults = [] } = useQuery<{ id: string; username: string; discriminator: string }[]>({
@@ -536,7 +537,7 @@ export default function GroupDMPage() {
           <button
             className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
             onClick={openSidebar}
-            aria-label="Retour aux messages"
+            aria-label={t('gdm.back')}
           >
             <ChevronLeft size={20} />
           </button>
@@ -545,29 +546,29 @@ export default function GroupDMPage() {
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-white font-semibold text-sm truncate">{group.name}</h2>
-            <p className="text-xs text-fc-muted">{group.members.length} membres</p>
+            <p className="text-xs text-fc-muted">{t('explore.members.other', { n: group.members.length })}</p>
           </div>
           <button
             onClick={() => void joinGroupCall(group.id, 'voice')}
             className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
-            title="Appel vocal de groupe"
-            aria-label="Lancer ou rejoindre l'appel vocal du groupe"
+            title={t('gdm.voiceCall')}
+            aria-label={t('gdm.voiceCallLabel')}
           >
             <Phone size={18} />
           </button>
           <button
             onClick={() => void joinGroupCall(group.id, 'video')}
             className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
-            title="Appel vidéo de groupe"
-            aria-label="Lancer ou rejoindre l'appel vidéo du groupe"
+            title={t('gdm.videoCall')}
+            aria-label={t('gdm.videoCallLabel')}
           >
             <Video size={18} />
           </button>
           <button
             onClick={() => setShowSearch(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSearch ? 'text-white' : 'text-fc-muted'}`}
-            title="Rechercher"
-            aria-label="Rechercher dans le groupe"
+            title={t('gdm.search')}
+            aria-label={t('gdm.searchLabel')}
             aria-pressed={showSearch}
           >
             <Search size={18} />
@@ -575,8 +576,8 @@ export default function GroupDMPage() {
           <button
             onClick={() => setShowPins(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showPins ? 'text-white' : 'text-fc-muted'}`}
-            title="Messages épinglés"
-            aria-label="Messages épinglés"
+            title={t('dm.pins')}
+            aria-label={t('dm.pins')}
             aria-pressed={showPins}
           >
             <Pin size={18} />
@@ -584,8 +585,8 @@ export default function GroupDMPage() {
           <button
             onClick={() => setShowSettings(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showSettings ? 'text-white' : 'text-fc-muted'}`}
-            title="Paramètres du groupe"
-            aria-label="Paramètres du groupe"
+            title={t('gdm.settings')}
+            aria-label={t('gdm.settings')}
             aria-pressed={showSettings}
           >
             <Settings size={18} />
@@ -593,8 +594,8 @@ export default function GroupDMPage() {
           <button
             onClick={() => setShowMembers(v => !v)}
             className={`min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition ${showMembers ? 'text-white' : 'text-fc-muted'}`}
-            title="Voir les membres"
-            aria-label="Membres du groupe"
+            title={t('gdm.showMembers')}
+            aria-label={t('gdm.members')}
             aria-pressed={showMembers}
           >
             <Users size={18} />
@@ -611,7 +612,8 @@ export default function GroupDMPage() {
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') setSearchQuery(searchInput.trim()) }}
-                placeholder="Rechercher dans ce groupe..."
+                placeholder={t('gdm.searchPh')}
+                aria-label={t('gdm.searchLabel')}
                 inputMode="search" autoComplete="off"
                 enterKeyHint="search" autoCapitalize="none"
                 className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -620,19 +622,20 @@ export default function GroupDMPage() {
               <button
                 onClick={() => setSearchQuery(searchInput.trim())}
                 disabled={searchInput.trim().length < 2}
+                aria-label={t('gdm.search')}
                 className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition disabled:opacity-40"
               >
                 <Search size={14} />
               </button>
-              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} aria-label="Fermer la recherche" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white">
+              <button onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchInput('') }} aria-label={t('gdm.closeSearch')} className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white">
                 <X size={16} aria-hidden />
               </button>
             </div>
             {searchQuery.trim().length >= 2 && (
               <div className="max-h-56 overflow-y-auto overscroll-contain space-y-1">
-                {searchFetching && <p className="text-xs text-fc-muted text-center py-2">Recherche...</p>}
+                {searchFetching && <p className="text-xs text-fc-muted text-center py-2">{t('gdm.searching')}</p>}
                 {!searchFetching && searchResults.length === 0 && (
-                  <p className="text-xs text-fc-muted text-center py-2">Aucun résultat pour "{searchQuery}"</p>
+                  <p className="text-xs text-fc-muted text-center py-2">{t('explore.noResult', { q: searchQuery })}</p>
                 )}
                 {searchResults.map((msg: any) => (
                   <div key={msg.id} className="bg-fc-channel rounded p-2 text-xs">
@@ -640,7 +643,7 @@ export default function GroupDMPage() {
                       <span className="font-semibold text-white">{msg.author_username}</span>
                       <span className="text-fc-muted">{formatShortDate(msg.created_at)}</span>
                     </div>
-                    <p className="text-fc-text">{msg.content ?? '📎 Pièce jointe'}</p>
+                    <p className="text-fc-text">{msg.content ?? t('common.attachment')}</p>
                   </div>
                 ))}
               </div>
@@ -653,12 +656,13 @@ export default function GroupDMPage() {
           <div className="border-b border-fc-hover bg-fc-bg/50 px-4 py-3 space-y-3">
             {/* Renommer */}
             <div>
-              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">Renommer le groupe</p>
+              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">{t('gdm.rename')}</p>
               <div className="flex gap-2">
                 <input
                   value={renameInput}
                   onChange={e => setRenameInput(e.target.value)}
                   placeholder={group.name}
+                  aria-label={t('gdm.rename')}
                   enterKeyHint="done"
                   autoCapitalize="sentences"
                   className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -667,6 +671,7 @@ export default function GroupDMPage() {
                 <button
                   onClick={() => renameInput.trim() && renameGroup.mutate(renameInput.trim())}
                   disabled={!renameInput.trim() || renameGroup.isPending}
+                  aria-label={t('gdm.rename')}
                   className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition disabled:opacity-40"
                 >
                   <Check size={14} />
@@ -675,12 +680,13 @@ export default function GroupDMPage() {
             </div>
             {/* Ajouter membre */}
             <div>
-              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">Ajouter un membre</p>
+              <p className="text-[10px] text-fc-muted uppercase font-semibold mb-1">{t('gdm.addMember')}</p>
               <div className="flex gap-2 mb-1">
                 <input
                   value={addMemberInput}
                   onChange={e => setAddMemberInput(e.target.value)}
-                  placeholder="Rechercher un utilisateur..."
+                  placeholder={t('gdm.searchUser')}
+                  aria-label={t('gdm.addMember')}
                   inputMode="search" autoComplete="off"
                   enterKeyHint="search" autoCapitalize="none"
                   className="flex-1 px-2 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -693,6 +699,7 @@ export default function GroupDMPage() {
                       <span className="text-white">{u.username}#{u.discriminator}</span>
                       <button
                         onClick={() => { addMember.mutate(u.id); setAddMemberInput('') }}
+                        aria-label={t('gdm.addName', { name: u.username })}
                         className="p-1 text-fc-accent hover:text-indigo-400"
                       >
                         <UserPlus size={12} />
@@ -708,19 +715,19 @@ export default function GroupDMPage() {
               className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition"
             >
               <LogOut size={13} />
-              Quitter le groupe
+              {t('gdm.leave')}
             </button>
             {showLeaveConfirm && (
               <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowLeaveConfirm(false)}>
                 <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-lg font-bold text-white mb-2">Quitter le groupe</h3>
+                  <h3 className="text-lg font-bold text-white mb-2">{t('gdm.leave')}</h3>
                   <p className="text-sm text-fc-muted mb-5">
-                    Tu ne pourras plus accéder aux messages de ce groupe sans y être réinvité.
-                    {group.owner_id === user?.id && group.members.length > 1 && " La propriété passera au membre le plus ancien : pour choisir, cède-la d'abord depuis la liste des membres."}
+                    {t('gdm.leaveWarn')}
+                    {group.owner_id === user?.id && group.members.length > 1 && t('gdm.leaveOwner')}
                   </p>
                   <div className="flex gap-3 justify-end">
-                    <button onClick={() => setShowLeaveConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
-                    <button onClick={() => { leaveGroup.mutate(); setShowLeaveConfirm(false) }} disabled={leaveGroup.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">Quitter</button>
+                    <button onClick={() => setShowLeaveConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">{t('common.cancel')}</button>
+                    <button onClick={() => { leaveGroup.mutate(); setShowLeaveConfirm(false) }} disabled={leaveGroup.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">{t('gdm.leaveShort')}</button>
                   </div>
                 </div>
               </div>
@@ -731,12 +738,12 @@ export default function GroupDMPage() {
         {/* Jump-to-present banner */}
         {highlightMsgId && (
           <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
-            <span className="text-xs text-fc-accent">Contexte d'un message.</span>
+            <span className="text-xs text-fc-accent">{t('dm.context')}</span>
             <button
               onClick={() => navigate(`/dms/groups/${groupId}`)}
               className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
             >
-              Voir les derniers messages →
+              {t('channel.latest')}
             </button>
           </div>
         )}
@@ -772,13 +779,13 @@ export default function GroupDMPage() {
           {gdmError && allMessages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" role="alert">
               <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-3xl" aria-hidden>⚠️</div>
-              <p className="text-base font-semibold text-white">Impossible de charger les messages</p>
-              <p className="text-sm text-fc-muted">Problème réseau ou serveur.</p>
+              <p className="text-base font-semibold text-white">{t('gdm.loadMessagesError')}</p>
+              <p className="text-sm text-fc-muted">{t('gdm.networkError')}</p>
               <button
                 onClick={() => refetchGdm()}
                 className="mt-1 px-4 py-2 min-h-[44px] bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition"
               >
-                Réessayer
+                {t('gdm.retry')}
               </button>
             </div>
           )}
@@ -794,7 +801,7 @@ export default function GroupDMPage() {
                   ? <Loader2 size={14} className="animate-spin" />
                   : <ChevronUp size={14} />
                 }
-                {loadingMore ? 'Chargement...' : 'Charger plus'}
+                {loadingMore ? t('common.loading') : t('gdm.loadMore')}
               </button>
             </div>
           )}
@@ -804,9 +811,9 @@ export default function GroupDMPage() {
             const prev = allMessages[i - 1]
             const msgDate = new Date(msg.created_at)
             const showDateDivider = !prev || new Date(prev.created_at).toDateString() !== msgDate.toDateString()
-            const dateLabel = isToday(msgDate) ? "Aujourd'hui"
-              : isYesterday(msgDate) ? 'Hier'
-              : format(msgDate, 'EEEE d MMMM yyyy', { locale: fr })
+            const dateLabel = isToday(msgDate) ? t('saved.today')
+              : isYesterday(msgDate) ? t('gdm.yesterday')
+              : format(msgDate, t('gdm.dateFormat'), { locale: dateLocale() })
             return (
               <div key={msg.id}>
               {showDateDivider && (
@@ -819,9 +826,9 @@ export default function GroupDMPage() {
                 </div>
               )}
               {firstUnreadIdG.current === msg.id && (
-                <div className="flex items-center gap-2 my-2 px-2 select-none" role="separator" aria-label="Nouveaux messages">
+                <div className="flex items-center gap-2 my-2 px-2 select-none" role="separator" aria-label={t('msg.newMessages')}>
                   <div className="flex-1 h-px bg-red-400/60" />
-                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">Nouveaux messages</span>
+                  <span className="text-xs font-semibold text-red-400 uppercase tracking-wide whitespace-nowrap">{t('msg.newMessages')}</span>
                   <div className="flex-1 h-px bg-red-400/60" />
                 </div>
               )}
@@ -857,7 +864,7 @@ export default function GroupDMPage() {
                 <AvatarDecoration id={msg.sender_avatar_decoration} size={32}>
                 <button
                   onClick={e => { e.stopPropagation(); setUserPopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY }) }}
-                  aria-label={`Voir le profil de ${msg.sender_username}`}
+                  aria-label={t('gdm.profileOf', { name: msg.sender_username })}
                   className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
                 >
                   {msg.sender_avatar
@@ -875,6 +882,7 @@ export default function GroupDMPage() {
                       <input
                         value={editContent}
                         onChange={e => setEditContent(e.target.value)}
+                        aria-label={t('msg.editLabel')}
                         className="flex-1 px-3 py-1.5 bg-fc-input rounded-xl text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
                         autoFocus
                         enterKeyHint="send"
@@ -889,9 +897,11 @@ export default function GroupDMPage() {
                       />
                       <button onClick={() => editContent.trim() && editMsg.mutate({ msgId: msg.id, content: editContent.trim() })}
                         className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg"
+                        aria-label={t('msg.saveEdit')}
                       ><Check size={13} /></button>
                       <button onClick={() => setEditingMsgId(null)}
                         className="p-1.5 text-fc-muted hover:text-white rounded-lg"
+                        aria-label={t('msg.cancel')}
                       ><X size={13} /></button>
                     </div>
                   ) : (
@@ -901,8 +911,8 @@ export default function GroupDMPage() {
                           <button
                             onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}
                             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-fc-accent rounded transition"
-                            title="Réagir"
-                            aria-label="Ajouter une réaction"
+                            title={t('msg.react')}
+                            aria-label={t('msg.addReaction')}
                           >
                             <SmilePlus size={12} aria-hidden />
                           </button>
@@ -918,25 +928,25 @@ export default function GroupDMPage() {
                         <button
                           onClick={() => setReplyTo({ id: msg.id, author_username: msg.sender_username, content: msg.content })}
                           className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                          title="Répondre"
-                          aria-label="Répondre au message"
+                          title={t('msg.reply')}
+                          aria-label={t('msg.replyLabel')}
                         >
                           <CornerUpLeft size={12} aria-hidden />
                         </button>
                         <button
                           onClick={() => togglePin.mutate(msg.id)}
                           className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                          title="Épingler / désépingler"
-                          aria-label="Épingler ou désépingler le message"
+                          title={t('gdm.pinToggle')}
+                          aria-label={t('gdm.pinToggleLabel')}
                         >
                           <Pin size={12} aria-hidden />
                         </button>
                         {msg.content && (
                           <button
-                            onClick={() => { navigator.clipboard.writeText(msg.content ?? '').then(() => toast.success('Texte copié')).catch(() => toast.error('Impossible de copier')) }}
+                            onClick={() => { navigator.clipboard.writeText(msg.content ?? '').then(() => toast.success(t('gdm.textCopied'))).catch(() => toast.error(t('gdm.copyError'))) }}
                             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                            title="Copier le texte"
-                            aria-label="Copier le texte du message"
+                            title={t('msg.copyText')}
+                            aria-label={t('gdm.copyTextLabel')}
                           >
                             <Copy size={12} aria-hidden />
                           </button>
@@ -944,11 +954,11 @@ export default function GroupDMPage() {
                         <button
                           onClick={() => {
                             const url = `${window.location.origin}/dms/groups/${groupId}?highlight=${msg.id}`
-                            navigator.clipboard.writeText(url).then(() => toast.success('Lien du message copié')).catch(() => toast.error('Impossible de copier'))
+                            navigator.clipboard.writeText(url).then(() => toast.success(t('gdm.linkCopied'))).catch(() => toast.error(t('gdm.copyError')))
                           }}
                           className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                          title="Copier le lien"
-                          aria-label="Copier le lien du message"
+                          title={t('msg.copyLink')}
+                          aria-label={t('msg.copyLinkLabel')}
                         >
                           <Link2 size={12} aria-hidden />
                         </button>
@@ -957,14 +967,14 @@ export default function GroupDMPage() {
                             onClick={() => {
                               const url = `${window.location.origin}/dms/groups/${groupId}?highlight=${msg.id}`
                               navigator.share({
-                                title: 'Message ForgeChat',
+                                title: t('gdm.shareTitle'),
                                 text: msg.content ? stripMarkdown(msg.content).slice(0, 200) : undefined,
                                 url,
                               }).catch(() => { /* partage annulé par l'utilisateur */ })
                             }}
                             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                            title="Partager"
-                            aria-label="Partager le message"
+                            title={t('msg.share')}
+                            aria-label={t('gdm.shareLabel')}
                           >
                             <Share2 size={12} aria-hidden />
                           </button>
@@ -973,16 +983,16 @@ export default function GroupDMPage() {
                           <button
                             onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content ?? '') }}
                             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                            title="Modifier"
-                            aria-label="Modifier le message"
+                            title={t('msg.edit')}
+                            aria-label={t('msg.editLabel')}
                           >
                             <Pencil size={12} aria-hidden />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(msg.id)}
                             className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
-                            title="Supprimer"
-                            aria-label="Supprimer le message"
+                            title={t('msg.delete')}
+                            aria-label={t('msg.deleteLabel')}
                           >
                             <Trash2 size={12} aria-hidden />
                           </button>
@@ -1003,7 +1013,7 @@ export default function GroupDMPage() {
                             <CornerUpLeft size={10} className="text-fc-accent flex-shrink-0" aria-hidden />
                             {msg.reply_to_username && <span className="font-semibold text-white/80 flex-shrink-0">{msg.reply_to_username}</span>}
                             <span className="italic truncate">
-                              {msg.reply_to_content ? stripMarkdown(msg.reply_to_content).slice(0, 60) : 'Message supprimé'}
+                              {msg.reply_to_content ? stripMarkdown(msg.reply_to_content).slice(0, 60) : t('channel.deleted')}
                             </span>
                           </button>
                         )}
@@ -1014,7 +1024,7 @@ export default function GroupDMPage() {
                               : 'bg-fc-channel text-fc-text rounded-tl-sm'
                           }`}>
                             {(() => { const gif = gifMessage(msg.content); return gif ? <GifMessage url={gif.url} provider={gif.provider} /> : renderMarkdown(msg.content) })()}
-                            {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">(modifié)</span>}
+                            {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">{t('msg.edited')}</span>}
                           </div>
                         )}
                         {/* Aperçu de lien (1 seul, pas si pièces jointes) */}
@@ -1061,7 +1071,7 @@ export default function GroupDMPage() {
                                 key={r.emoji}
                                 onClick={() => toggleReaction(msg.id, r.emoji)}
                                 title={(r.users ?? []).join(', ')}
-                                aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
+                                aria-label={`${r.emoji} ${t(r.count > 1 ? 'gdm.reactions.other' : 'gdm.reactions.one', { n: r.count })}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
                                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition ${
                                   r.me
                                     ? 'bg-fc-accent/20 border-fc-accent/50 text-white'
@@ -1092,10 +1102,10 @@ export default function GroupDMPage() {
         {newMsgCount > 0 && (
           <button
             onClick={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setNewMsgCount(0) }}
-            aria-label={`${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''} — défiler vers le bas`}
+            aria-label={t(newMsgCount > 1 ? 'gdm.newScroll.other' : 'gdm.newScroll.one', { n: newMsgCount })}
             className="absolute bottom-20 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-fc-accent text-white text-xs font-semibold shadow-lg z-30 hover:bg-fc-accent/80 transition animate-bounce-subtle"
           >
-            ↓ {newMsgCount} nouveau{newMsgCount > 1 ? 'x' : ''} message{newMsgCount > 1 ? 's' : ''}
+            ↓ {t(newMsgCount > 1 ? 'gdm.new.other' : 'gdm.new.one', { n: newMsgCount })}
           </button>
         )}
 
@@ -1103,21 +1113,21 @@ export default function GroupDMPage() {
         {Object.keys(typingUsers).length > 0 && (
           <div className="px-4 pb-1 text-xs text-fc-muted flex-shrink-0">
             {Object.values(typingUsers).map(u => u.username).join(', ')}
-            {Object.keys(typingUsers).length === 1 ? ' est en train d\'écrire...' : ' écrivent...'}
+            {Object.keys(typingUsers).length === 1 ? t('gdm.typingOne') : t('gdm.typingMany')}
           </div>
         )}
 
         {/* Input */}
         <MessageInput
           channelId={groupId!}
-          placeholder={`Message dans ${group.name}...`}
+          placeholder={t('gdm.placeholder', { name: group.name })}
           sending={sendMsg.isPending}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={async (content, replyToId, files) => {
-            const t = content?.trim() ?? ''
-            if (!t && (!files || files.length === 0)) return
-            sendMsg.mutate({ text: t, files: files?.map(f => f.file) ?? [], replyToId })
+            const text = content?.trim() ?? ''
+            if (!text && (!files || files.length === 0)) return
+            sendMsg.mutate({ text, files: files?.map(f => f.file) ?? [], replyToId })
             setReplyTo(null)
           }}
           onEdit={(msgId, content) => editMsg.mutate({ msgId, content })}
@@ -1130,11 +1140,11 @@ export default function GroupDMPage() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
             <div className="flex items-center gap-2">
               <Pin size={16} className="text-fc-accent" aria-hidden />
-              <span className="font-semibold text-white text-sm">Messages épinglés</span>
+              <span className="font-semibold text-white text-sm">{t('dm.pins')}</span>
             </div>
             <button
               onClick={() => setShowPins(false)}
-              aria-label="Fermer les messages épinglés"
+              aria-label={t('dm.closePins')}
               className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
             >
               <X size={16} aria-hidden />
@@ -1142,28 +1152,28 @@ export default function GroupDMPage() {
           </div>
           <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
             {groupPins.length === 0 && (
-              <p className="text-center text-fc-muted text-sm py-8">Aucun message épinglé.<br/>Utilisez l'épingle sur un message.</p>
+              <p className="text-center text-fc-muted text-sm py-8">{t('dm.noPins')}<br/>{t('gdm.noPinsHint')}</p>
             )}
             {groupPins.map(pin => (
               <div key={pin.id} className="relative group/pin bg-fc-bg/50 rounded-lg p-3 border border-fc-hover/40 hover:border-fc-hover transition">
                 <button
                   onClick={() => { setShowPins(false); navigate(`/dms/groups/${groupId}?highlight=${pin.id}`) }}
                   className="text-left w-full"
-                  aria-label={`Aller au message de ${pin.sender_username}`}
+                  aria-label={t('dm.goToMessageOf', { name: pin.sender_username })}
                 >
                   <div className="flex items-baseline gap-2 mb-1">
                     <span className="text-xs font-semibold text-white">{pin.sender_username}</span>
                     <span className="text-[10px] text-fc-muted">{formatShortDate(pin.created_at)}</span>
                   </div>
                   <div className="text-xs text-fc-text leading-relaxed line-clamp-3">
-                    {pin.content ? stripMarkdown(pin.content) : '📎 Pièce jointe'}
+                    {pin.content ? stripMarkdown(pin.content) : t('common.attachment')}
                   </div>
                 </button>
                 <button
                   onClick={() => togglePin.mutate(pin.id)}
                   className="absolute top-1.5 right-1.5 opacity-100 md:opacity-0 md:group-hover/pin:opacity-100 p-1.5 text-fc-muted hover:text-fc-red rounded transition"
-                  title="Désépingler"
-                  aria-label="Désépingler ce message"
+                  title={t('dm.unpin')}
+                  aria-label={t('gdm.unpinLabel')}
                 >
                   <X size={12} aria-hidden />
                 </button>
@@ -1183,23 +1193,23 @@ export default function GroupDMPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[300] px-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-fc-channel rounded-xl shadow-2xl w-full max-w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-fc-hover">
-              <h3 className="text-white font-semibold">Supprimer le message</h3>
+              <h3 className="text-white font-semibold">{t('msg.deleteTitle')}</h3>
             </div>
             <div className="px-5 py-4">
-              <p className="text-fc-text text-sm">Êtes-vous sûr de vouloir supprimer ce message ? Cette action est irréversible.</p>
+              <p className="text-fc-text text-sm">{t('msg.deleteConfirm')}</p>
             </div>
             <div className="px-5 pb-4 flex justify-end gap-3">
               <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 rounded text-sm text-fc-text hover:text-white hover:bg-fc-hover transition">
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => {
-                  api.delete(`/dms/groups/${groupId}/messages/${deleteConfirmId}`).catch(() => toast.error('Impossible de supprimer'))
+                  api.delete(`/dms/groups/${groupId}/messages/${deleteConfirmId}`).catch(() => toast.error(t('gdm.deleteError')))
                   setDeleteConfirmId(null)
                 }}
                 className="px-4 py-2 rounded text-sm font-medium bg-fc-red hover:bg-red-500 text-white transition"
               >
-                Supprimer
+                {t('common.delete')}
               </button>
             </div>
           </div>

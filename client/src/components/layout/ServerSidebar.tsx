@@ -12,7 +12,7 @@ import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
 import { useMobile } from '../../contexts/MobileContext'
-import { useT } from '../../i18n'
+import { useT, intlLocale, type Key } from '../../i18n'
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -49,11 +49,12 @@ function genFolderId() {
 
 // ─── Built-in Templates ─────────────────────────────────────
 
-const BUILTIN_TEMPLATES = [
+// name / description : clés i18n (traduites à l'affichage).
+const BUILTIN_TEMPLATES: { id: string; name: Key; description: Key; template_data: any }[] = [
   {
     id: '__gaming__',
-    name: 'Gaming',
-    description: 'Serveur pour jouer ensemble',
+    name: 'tpl.gaming',
+    description: 'tpl.gaming.desc',
     template_data: {
       categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
       channels: [
@@ -68,8 +69,8 @@ const BUILTIN_TEMPLATES = [
   },
   {
     id: '__community__',
-    name: 'Communauté',
-    description: 'Serveur communautaire ouvert',
+    name: 'tpl.community',
+    description: 'tpl.community.desc',
     template_data: {
       categories: [{ id: '__cat1__', name: 'Info', position: 0 }, { id: '__cat2__', name: 'Discussion', position: 1 }],
       channels: [
@@ -84,8 +85,8 @@ const BUILTIN_TEMPLATES = [
   },
   {
     id: '__study__',
-    name: 'Étude',
-    description: 'Groupe de révision et d\'entraide',
+    name: 'tpl.study',
+    description: 'tpl.study.desc',
     template_data: {
       categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
       channels: [
@@ -99,8 +100,8 @@ const BUILTIN_TEMPLATES = [
   },
   {
     id: '__team__',
-    name: 'Team',
-    description: 'Espace de travail collaboratif',
+    name: 'tpl.team',
+    description: 'tpl.team.desc',
     template_data: {
       categories: [{ id: '__cat1__', name: 'Général', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
       channels: [
@@ -808,6 +809,7 @@ function CreateServerModal({
   onCreate: (name: string, templateData?: any) => void
   isPending: boolean
 }) {
+  const t = useT()
   const nav = useNavigate()
   const [step, setStep] = useState<Step>('choice')
   const [name, setName] = useState('')
@@ -821,20 +823,20 @@ function CreateServerModal({
   })
 
   const allPublicTemplates = [
-    ...BUILTIN_TEMPLATES,
-    ...(remoteTemplates?.public ?? []).map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      description: t.description ?? `Utilisé ${t.usage_count} fois`,
-      template_data: t.template_data,
+    ...BUILTIN_TEMPLATES.map(b => ({ ...b, name: t(b.name), description: t(b.description) })),
+    ...(remoteTemplates?.public ?? []).map((tp: any) => ({
+      id: tp.id,
+      name: tp.name,
+      description: tp.description ?? t('servers.create.used', { n: tp.usage_count }),
+      template_data: tp.template_data,
     })),
   ]
 
-  const myRemoteTemplates = (remoteTemplates?.mine ?? []).map((t: any) => ({
-    id: t.id,
-    name: t.name,
-    description: t.description ?? `Créé le ${new Date(t.created_at).toLocaleDateString('fr-FR')}`,
-    template_data: t.template_data,
+  const myRemoteTemplates = (remoteTemplates?.mine ?? []).map((tp: any) => ({
+    id: tp.id,
+    name: tp.name,
+    description: tp.description ?? t('servers.create.createdOn', { date: new Date(tp.created_at).toLocaleDateString(intlLocale()) }),
+    template_data: tp.template_data,
   }))
 
   const handleCreate = () => {
@@ -849,14 +851,14 @@ function CreateServerModal({
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Créer un serveur"
+        aria-label={t('servers.create.title')}
       >
         {/* ── Étape 1 : Choix ── */}
         {step === 'choice' && (
           <div className="p-6">
-            <h2 className="text-xl font-bold text-white mb-1 text-center">Créer un serveur</h2>
+            <h2 className="text-xl font-bold text-white mb-1 text-center">{t('servers.create.title')}</h2>
             <p className="text-fc-muted text-sm mb-6 text-center">
-              Commence depuis zéro ou utilise un template.
+              {t('servers.create.intro')}
             </p>
             <div className="space-y-3">
               <button
@@ -864,10 +866,10 @@ function CreateServerModal({
                 className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
               >
                 <div className="font-semibold text-white group-hover:text-fc-accent transition">
-                  Créer depuis zéro
+                  {t('servers.create.scratch')}
                 </div>
                 <div className="text-xs text-fc-muted mt-0.5">
-                  Serveur vide avec un canal général
+                  {t('servers.create.scratchDesc')}
                 </div>
               </button>
               <button
@@ -875,10 +877,10 @@ function CreateServerModal({
                 className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
               >
                 <div className="font-semibold text-white group-hover:text-fc-accent transition">
-                  Depuis un template
+                  {t('servers.create.fromTemplate')}
                 </div>
                 <div className="text-xs text-fc-muted mt-0.5">
-                  Gaming, Communauté, Étude, Team et plus...
+                  {t('servers.create.fromTemplateDesc')}
                 </div>
               </button>
               <button
@@ -886,15 +888,15 @@ function CreateServerModal({
                 className="w-full p-4 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group"
               >
                 <div className="font-semibold text-white group-hover:text-fc-accent transition">
-                  Importer depuis Discord (ArchiveForge)
+                  {t('servers.create.import')}
                 </div>
                 <div className="text-xs text-fc-muted mt-0.5">
-                  Recrée un serveur Discord exporté : salons, rôles, messages, fichiers
+                  {t('servers.create.importDesc')}
                 </div>
               </button>
             </div>
             <button onClick={onClose} className="mt-4 w-full py-2 text-fc-muted hover:text-white text-sm transition">
-              Annuler
+              {t('common.cancel')}
             </button>
           </div>
         )}
@@ -903,26 +905,26 @@ function CreateServerModal({
         {step === 'template-grid' && (
           <div className="p-6">
             <div className="flex items-center gap-2 mb-4">
-              <button onClick={() => setStep('choice')} className="text-fc-muted hover:text-white transition">
+              <button onClick={() => setStep('choice')} aria-label={t('common.back')} className="text-fc-muted hover:text-white transition">
                 ←
               </button>
-              <h2 className="text-lg font-bold text-white">Choisir un template</h2>
+              <h2 className="text-lg font-bold text-white">{t('servers.create.chooseTemplate')}</h2>
             </div>
 
             {/* Templates publics / built-in */}
             <div className="mb-4">
-              <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Templates publics</div>
+              <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('servers.create.public')}</div>
               <div className="grid grid-cols-2 gap-2 max-h-[260px] overflow-y-auto overscroll-contain pr-1">
-                {allPublicTemplates.map(t => (
+                {allPublicTemplates.map(tp => (
                   <button
-                    key={t.id}
-                    onClick={() => { setSelectedTemplate(t); setStep('name') }}
+                    key={tp.id}
+                    onClick={() => { setSelectedTemplate(tp); setStep('name') }}
                     className="p-3 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group border border-transparent hover:border-fc-accent/40"
                   >
-                    <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{t.name}</div>
-                    <div className="text-xs text-fc-muted mt-0.5 leading-snug line-clamp-2">{t.description}</div>
+                    <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{tp.name}</div>
+                    <div className="text-xs text-fc-muted mt-0.5 leading-snug line-clamp-2">{tp.description}</div>
                     <div className="text-[10px] text-fc-muted/60 mt-1">
-                      {t.template_data.channels?.length ?? 0} canaux
+                      {t('servers.create.channels', { n: tp.template_data.channels?.length ?? 0 })}
                     </div>
                   </button>
                 ))}
@@ -932,16 +934,16 @@ function CreateServerModal({
             {/* Mes templates perso */}
             {myRemoteTemplates.length > 0 && (
               <div>
-                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">Mes templates</div>
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('servers.create.mine')}</div>
                 <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto overscroll-contain pr-1">
-                  {myRemoteTemplates.map(t => (
+                  {myRemoteTemplates.map(tp => (
                     <button
-                      key={t.id}
-                      onClick={() => { setSelectedTemplate(t); setStep('name') }}
+                      key={tp.id}
+                      onClick={() => { setSelectedTemplate(tp); setStep('name') }}
                       className="p-3 bg-fc-bg hover:bg-fc-hover rounded-lg text-left transition group border border-transparent hover:border-fc-accent/40"
                     >
-                      <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{t.name}</div>
-                      <div className="text-xs text-fc-muted mt-0.5 line-clamp-2">{t.description}</div>
+                      <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{tp.name}</div>
+                      <div className="text-xs text-fc-muted mt-0.5 line-clamp-2">{tp.description}</div>
                     </button>
                   ))}
                 </div>
@@ -954,26 +956,26 @@ function CreateServerModal({
         {step === 'name' && (
           <div className="p-6">
             <div className="flex items-center gap-2 mb-1">
-              <button onClick={() => setStep(selectedTemplate ? 'template-grid' : 'choice')} className="text-fc-muted hover:text-white transition">
+              <button onClick={() => setStep(selectedTemplate ? 'template-grid' : 'choice')} aria-label={t('common.back')} className="text-fc-muted hover:text-white transition">
                 ←
               </button>
               <h2 className="text-xl font-bold text-white">
-                {selectedTemplate ? `Template : ${selectedTemplate.name}` : 'Créer depuis zéro'}
+                {selectedTemplate ? t('servers.create.template', { name: selectedTemplate.name }) : t('servers.create.scratch')}
               </h2>
             </div>
             {selectedTemplate && (
               <p className="text-xs text-fc-muted mb-3 ml-6">
-                {selectedTemplate.template_data.channels?.length ?? 0} canaux seront créés
+                {t('servers.create.willCreate', { n: selectedTemplate.template_data.channels?.length ?? 0 })}
               </p>
             )}
             <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 mt-3">
-              Nom du serveur
+              {t('servers.create.name')}
             </label>
             <input
               autoFocus
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Mon serveur"
+              placeholder={t('servers.create.namePlaceholder')}
               maxLength={100}
               enterKeyHint="done"
               autoCapitalize="sentences"
@@ -982,14 +984,14 @@ function CreateServerModal({
             />
             <div className="flex justify-end gap-2">
               <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition">
-                Annuler
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={!name.trim() || isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 disabled:opacity-50 text-white rounded transition"
               >
-                {isPending ? 'Création...' : 'Créer'}
+                {isPending ? t('common.creating') : t('common.create')}
               </button>
             </div>
           </div>

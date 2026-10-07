@@ -5,6 +5,7 @@ import { ChevronLeft, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
+import { intlLocale } from '../i18n'
 
 /** Rapports d'erreurs des applis (réservé aux comptes de FORGECHAT_ADMIN_USER_IDS). */
 
@@ -32,7 +33,7 @@ interface ReportDetail extends Omit<ReportSummary, 'has_log'> {
 const PAGE = 50
 const PLATFORMS = ['', 'web', 'windows', 'linux', 'macos', 'other']
 const KINDS = ['', 'js_error', 'unhandled_rejection', 'react_crash', 'startup_failure', 'desktop_log', 'manual']
-const fmt = (d: string) => new Date(d).toLocaleString('fr-FR')
+const fmt = (d: string) => new Date(d).toLocaleString(intlLocale())
 
 export default function DiagnosticsAdminPage() {
   const nav = useNavigate()

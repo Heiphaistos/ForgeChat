@@ -49,6 +49,7 @@ const PRESENCE_COLOR: Record<string, string> = {
 
 // Modal léger pour créer un groupe DM
 function CreateGroupModal({ onClose }: { onClose: () => void }) {
+  const t = useT()
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [selected, setSelected] = useState<{ id: string; username: string }[]>([])
@@ -70,7 +71,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
       nav(`/dms/groups/${dm.dm_id ?? dm.id}`)
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création groupe'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('group.createError')),
   })
 
   const toggle = (u: { id: string; username: string }) => {
@@ -85,13 +86,14 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="create-group-title" className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h2 id="create-group-title" className="font-semibold text-white text-sm">Nouveau groupe (max 10)</h2>
-          <button onClick={onClose} aria-label="Fermer" title="Fermer" className="text-fc-muted hover:text-white p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition"><X size={16} aria-hidden /></button>
+          <h2 id="create-group-title" className="font-semibold text-white text-sm">{t('group.title')}</h2>
+          <button onClick={onClose} aria-label={t('common.close')} title={t('common.close')} className="text-fc-muted hover:text-white p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition"><X size={16} aria-hidden /></button>
         </div>
 
         <input
           className="w-full bg-fc-input text-sm text-white rounded-lg px-3 py-2 mb-3 outline-none placeholder:text-fc-muted"
-          placeholder="Chercher des amis..."
+          placeholder={t('group.search')}
+          aria-label={t('group.search')}
           value={search}
           onChange={e => setSearch(e.target.value)}
           autoFocus
@@ -109,7 +111,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
                 className="flex items-center gap-1 bg-fc-accent/20 text-fc-accent text-xs px-2 py-0.5 rounded-full"
               >
                 {u.username}
-                <button onClick={() => toggle(u)} aria-label={`Retirer ${u.username}`} title={`Retirer ${u.username}`}><X size={10} /></button>
+                <button onClick={() => toggle(u)} aria-label={t('group.remove', { name: u.username })} title={t('group.remove', { name: u.username })}><X size={10} /></button>
               </span>
             ))}
           </div>
@@ -138,7 +140,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
             )
           })}
           {(friends as any[]).length === 0 && (
-            <p className="text-xs text-fc-muted text-center py-2">Aucun ami trouvé</p>
+            <p className="text-xs text-fc-muted text-center py-2">{t('group.noFriend')}</p>
           )}
         </div>
 
@@ -147,7 +149,7 @@ function CreateGroupModal({ onClose }: { onClose: () => void }) {
           disabled={selected.length < 2 || create.isPending}
           className="w-full py-2 bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {create.isPending ? 'Création...' : `Créer (${selected.length} membres)`}
+          {create.isPending ? t('common.creating') : t('group.create', { n: selected.length })}
         </button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { BarChart2, Users, Wifi, MessageSquare, TrendingUp, Hash, UserPlus } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
+import { intlLocale } from '../i18n'
 
 interface Props {
   serverId: string
@@ -27,7 +28,7 @@ interface MetricCardProps {
 }
 
 function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProps) {
-  const displayValue = loading ? 'Chargement' : (value !== undefined ? value.toLocaleString('fr-FR') : '—')
+  const displayValue = loading ? 'Chargement' : (value !== undefined ? value.toLocaleString(intlLocale()) : '—')
   return (
     <div
       className="p-4 bg-fc-channel rounded-lg flex items-center gap-4"
@@ -41,7 +42,7 @@ function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProp
           <div className="h-6 w-16 bg-fc-hover animate-pulse rounded mb-1" />
         ) : (
           <div className="text-xl font-bold text-white">
-            {value !== undefined ? value.toLocaleString('fr-FR') : '—'}
+            {value !== undefined ? value.toLocaleString(intlLocale()) : '—'}
           </div>
         )}
         <div className="text-xs text-fc-muted">{label}</div>
@@ -209,7 +210,7 @@ export default function ServerStatsPage({ serverId }: Props) {
                         />
                       </div>
                       <span className="text-xs text-fc-muted flex-shrink-0 w-16 text-right">
-                        {ch.messages.toLocaleString('fr-FR')} msg
+                        {ch.messages.toLocaleString(intlLocale())} msg
                       </span>
                     </div>
                   )

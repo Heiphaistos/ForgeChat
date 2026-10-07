@@ -5,12 +5,14 @@ import toast from 'react-hot-toast'
 import api, { mediaUrl } from '../../api/client'
 import { useAuth } from '../../store/auth'
 import { Field } from '../settings/shared'
+import { useT } from '../../i18n'
 
 type ImageKind = 'avatar' | 'banner'
 
 /** « Mon profil sur ce serveur » : surnom, avatar, bannière et bio visibles
  *  uniquement ici. Vide = profil du compte. */
 export default function MyServerProfileTab({ serverId }: { serverId: string }) {
+  const t = useT()
   const qc = useQueryClient()
   const me = useAuth(s => s.user)
   const avatarRef = useRef<HTMLInputElement>(null)
@@ -32,14 +34,14 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
     qc.invalidateQueries({ queryKey: ['member', serverId] })
     qc.invalidateQueries({ queryKey: ['members', serverId] })
   }
-  const onError = (e: any) => toast.error(e.response?.data?.error ?? 'Erreur')
+  const onError = (e: any) => toast.error(e.response?.data?.error ?? t('common.error'))
 
   const save = useMutation({
     mutationFn: () => Promise.all([
       api.patch(`/servers/${serverId}/nickname`, { nickname: nickname.trim() || null }),
       api.patch(`/servers/${serverId}/profile`, { bio: bio.trim() || null }),
     ]),
-    onSuccess: () => { refresh(); toast.success('Profil du serveur mis à jour') },
+    onSuccess: () => { refresh(); toast.success(t('myProfile.saved')) },
     onError,
   })
   const upload = useMutation({
@@ -87,11 +89,11 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
   return (
     <div className="space-y-6 max-w-lg">
       <div>
-        <h2 className="text-xl font-bold text-white">Mon profil sur ce serveur</h2>
-        <p className="text-sm text-fc-muted mt-1">Visible seulement sur ce serveur. Laisser vide pour reprendre ton profil de compte.</p>
+        <h2 className="text-xl font-bold text-white">{t('srv.tab.profile')}</h2>
+        <p className="text-sm text-fc-muted mt-1">{t('myProfile.intro')}</p>
       </div>
 
-      <Field label="Bannière" hint="PNG, JPG, GIF ou WEBP · max 10 Mo">
+      <Field label={t('myProfile.banner')} hint={t('myProfile.bannerHint')}>
         <div
           role="button"
           tabIndex={0}
@@ -102,44 +104,46 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
           {banner
             ? <img src={mediaUrl(banner)} alt="" className="w-full h-full object-cover" />
             : <Camera size={20} className="text-fc-muted" />}
-          {member?.server_banner && removeBtn('banner', 'Revenir à la bannière du compte')}
+          {member?.server_banner && removeBtn('banner', t('myProfile.resetBanner'))}
         </div>
         {picker('banner', bannerRef)}
       </Field>
 
-      <Field label="Avatar" hint="PNG, JPG, GIF ou WEBP · max 8 Mo">
+      <Field label={t('myProfile.avatar')} hint={t('myProfile.avatarHint')}>
         <div className="relative w-20 h-20">
           <button
             onClick={() => avatarRef.current?.click()}
-            aria-label="Changer l'avatar de ce serveur"
+            aria-label={t('myProfile.changeAvatar')}
             className="w-20 h-20 rounded-full bg-fc-accent flex items-center justify-center text-3xl font-bold text-white overflow-hidden hover:opacity-80 transition"
           >
             {avatar
               ? <img src={mediaUrl(avatar)} alt="" className="w-full h-full object-cover" />
               : me.username.charAt(0).toUpperCase()}
           </button>
-          {member?.server_avatar && removeBtn('avatar', "Revenir à l'avatar du compte")}
+          {member?.server_avatar && removeBtn('avatar', t('myProfile.resetAvatar'))}
         </div>
         {picker('avatar', avatarRef)}
       </Field>
 
-      <Field label="Surnom" hint="32 caractères max">
+      <Field label={t('myProfile.nickname')} hint={t('myProfile.nicknameHint')}>
         <input
           value={nickname}
           onChange={e => setNickname(e.target.value)}
           maxLength={32}
           placeholder={me.username}
+          aria-label={t('myProfile.nickname')}
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none placeholder-fc-muted"
         />
       </Field>
 
-      <Field label="Bio" hint={`${bio.length}/190 caractères`}>
+      <Field label={t('settings.profile.bio')} hint={t('settings.profile.bioCount', { n: bio.length })}>
         <textarea
           value={bio}
           onChange={e => setBio(e.target.value)}
           maxLength={190}
           rows={3}
-          placeholder={me.bio || 'Bio propre à ce serveur…'}
+          placeholder={me.bio || t('myProfile.bioPh')}
+          aria-label={t('settings.profile.bio')}
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white resize-none focus:border-fc-accent outline-none placeholder-fc-muted"
         />
       </Field>
@@ -149,7 +153,7 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
         disabled={save.isPending}
         className="px-4 py-2 bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 rounded text-white text-sm font-medium transition"
       >
-        Enregistrer
+        {t('common.record')}
       </button>
     </div>
   )
