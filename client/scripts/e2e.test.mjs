@@ -74,3 +74,31 @@ test('paire neuve utilisable', async () => {
   assert.equal(k.extractable, false)
   assert.equal((await c.ecdh(k, d(V.ecdh.pubB))).length, 32)
 })
+
+test('clé de conversation : enveloppe A → B et refus si altérée', async () => {
+  const x = V.convKey
+  const a = await c.importPrivateKey(d(V.ecdh.privA), d(V.ecdh.pubA))
+  const b = await c.importPrivateKey(d(V.ecdh.privB), d(V.ecdh.pubB))
+  assert.deepEqual(await c.wrapConvKey(a, d(V.ecdh.pubB), d(x.key), x.conv, x.epoch, x.member, x.sender, d(x.iv)), x.wrapped)
+  assert.equal(e(await c.unwrapConvKey(b, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch, x.member, x.sender)), x.key)
+  // Autre époque, autre membre, autre émetteur, autre conversation : refusé.
+  await assert.rejects(c.unwrapConvKey(b, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch + 1, x.member, x.sender))
+  await assert.rejects(c.unwrapConvKey(b, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch, x.sender, x.sender))
+  await assert.rejects(c.unwrapConvKey(b, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch, x.member, x.member))
+  await assert.rejects(c.unwrapConvKey(b, d(V.ecdh.pubA), x.wrapped, 'dm:autre', x.epoch, x.member, x.sender))
+})
+
+test('message chiffré : AAD conversation|époque|auteur|id client', async () => {
+  const x = V.message
+  assert.deepEqual(await c.encryptMessage(d(x.key), x.conv, x.epoch, x.author, x.clientMsgId, x.body, d(x.iv)), x.enc)
+  assert.deepEqual(await c.decryptMessage(d(x.key), x.conv, x.enc, x.author, x.clientMsgId), x.body)
+  await assert.rejects(c.decryptMessage(d(x.key), x.conv, x.enc, 'usurpateur', x.clientMsgId))
+  await assert.rejects(c.decryptMessage(d(x.key), x.conv, x.enc, x.author, 'autre-id'))
+  await assert.rejects(c.decryptMessage(d(x.key), x.conv, { ...x.enc, epoch: x.epoch + 1 }, x.author, x.clientMsgId))
+  // Deux chiffrements du même texte : IV différents.
+  const k = d(x.key)
+  const m1 = await c.encryptMessage(k, x.conv, 0, x.author, x.clientMsgId, x.body)
+  const m2 = await c.encryptMessage(k, x.conv, 0, x.author, x.clientMsgId, x.body)
+  assert.notEqual(m1.iv, m2.iv)
+  assert.equal(c.generateConvKey().length, 32)
+})

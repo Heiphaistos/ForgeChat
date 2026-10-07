@@ -179,3 +179,66 @@ export async function unwrapKey(w: WrappedKey, secret: string, aad: string, iter
   if (priv.length !== 32) throw new Error('clé privée invalide')
   return priv
 }
+
+// ─── Clés de conversation et messages (§4.1) ─────────────────────────────────
+/** Clé de conversation enveloppée pour un membre. */
+export interface ConvWrapped { v: 1; iv: string; ct: string }
+/** Contenu chiffré d'un message. */
+export interface EncPayload { v: 1; epoch: number; iv: string; ct: string }
+/** Contenu en clair d'un message, avant chiffrement. */
+export interface MsgBody { t: string; [k: string]: unknown }
+
+/** Identifiant de conversation dans l'AAD : `dm:<id>` ou `group:<id>`. */
+export const convName = (kind: 'dm' | 'group', id: string) => `${kind}:${id}`
+export const ckInfo = (conv: string, epoch: number, member: string) => `forgechat ck v1|${conv}|${epoch}|${member}`
+export const ckAad = (conv: string, epoch: number, member: string, sender: string) => `ck v1|${conv}|${epoch}|${member}|${sender}`
+export const msgAad = (conv: string, epoch: number, author: string, clientMsgId: string) =>
+  `msg v1|${conv}|${epoch}|${author}|${clientMsgId}`
+
+/** Clé symétrique neuve d'une époque. */
+export const generateConvKey = () => randomBytes(AES_KEY_BYTES)
+
+async function ckWrapKey(priv: CryptoKey, otherPub: Uint8Array, conv: string, epoch: number, member: string) {
+  return hkdf(await ecdh(priv, otherPub), new Uint8Array(0), ckInfo(conv, epoch, member))
+}
+
+/** Enveloppe la clé d'époque pour `member` (sa clé publique `memberPub`), IV neuf (fixé pour les vecteurs). */
+export async function wrapConvKey(
+  priv: CryptoKey, memberPub: Uint8Array, key: Uint8Array,
+  conv: string, epoch: number, member: string, sender: string, iv: Uint8Array = randomBytes(IV_BYTES),
+): Promise<ConvWrapped> {
+  const k = await ckWrapKey(priv, memberPub, conv, epoch, member)
+  return { v: 1, iv: b64uEncode(iv), ct: b64uEncode(await aesGcmEncrypt(k, iv, key, ckAad(conv, epoch, member, sender))) }
+}
+
+/** Ouvre une enveloppe reçue (clé publique de l'émetteur `senderPub`) ; lève une erreur si elle a été altérée. */
+export async function unwrapConvKey(
+  priv: CryptoKey, senderPub: Uint8Array, w: ConvWrapped,
+  conv: string, epoch: number, member: string, sender: string,
+): Promise<Uint8Array> {
+  if (w.v !== 1) throw new Error('version inconnue')
+  const k = await ckWrapKey(priv, senderPub, conv, epoch, member)
+  const key = await aesGcmDecrypt(k, b64uDecode(w.iv), b64uDecode(w.ct), ckAad(conv, epoch, member, sender))
+  if (key.length !== AES_KEY_BYTES) throw new Error('clé de conversation invalide')
+  return key
+}
+
+/** Chiffre `body` ({t: texte, ...}) ; IV aléatoire à chaque message (fixé pour les vecteurs). */
+export async function encryptMessage(
+  key: Uint8Array, conv: string, epoch: number, author: string, clientMsgId: string, body: MsgBody,
+  iv: Uint8Array = randomBytes(IV_BYTES),
+): Promise<EncPayload> {
+  const ct = await aesGcmEncrypt(key, iv, utf8(JSON.stringify(body)), msgAad(conv, epoch, author, clientMsgId))
+  return { v: 1, epoch, iv: b64uEncode(iv), ct: b64uEncode(ct) }
+}
+
+/** Déchiffre et vérifie l'AAD (conversation, époque, auteur, id client) ; lève une erreur sinon. */
+export async function decryptMessage(
+  key: Uint8Array, conv: string, enc: EncPayload, author: string, clientMsgId: string,
+): Promise<MsgBody> {
+  if (enc.v !== 1) throw new Error('version inconnue')
+  const pt = await aesGcmDecrypt(key, b64uDecode(enc.iv), b64uDecode(enc.ct), msgAad(conv, enc.epoch, author, clientMsgId))
+  const body = JSON.parse(new TextDecoder().decode(pt)) as MsgBody
+  if (!body || typeof body.t !== 'string') throw new Error('contenu invalide')
+  return body
+}

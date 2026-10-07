@@ -19,6 +19,12 @@ aes.ct = e(await c.aesGcmEncrypt(d(aes.key), d(aes.iv), c.utf8(aes.plaintext), a
 const pb = { password: 'Mot de passe très sûr 42!', salt: e(seq(16, 200)), iterations: ITER }
 pb.key = e(await c.pbkdf2(pb.password, d(pb.salt), ITER))
 const recovery = '7K3QZ-M9XW2-PB4TD-0VH1R'
+const conv = c.convName('group', '0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21')
+const ids = { a: '11111111-1111-4111-8111-111111111111', b: '22222222-2222-4222-8222-222222222222', msg: '33333333-3333-4333-8333-333333333333' }
+const convKey = { conv, epoch: 2, sender: ids.a, member: ids.b, key: e(seq(32, 120)), iv: e(seq(12, 160)) }
+convKey.wrapped = await c.wrapConvKey(await c.importPrivateKey(d(A.priv), d(A.pub)), d(B.pub), d(convKey.key), conv, 2, ids.b, ids.a, d(convKey.iv))
+const message = { conv, epoch: 2, author: ids.a, clientMsgId: ids.msg, key: convKey.key, iv: e(seq(12, 180)), body: { t: 'Réponse chiffrée 🔐 **gras**' } }
+message.enc = await c.encryptMessage(d(message.key), conv, 2, ids.a, ids.msg, message.body, d(message.iv))
 const wrapOpts = { salt: seq(16, 50), iv: seq(12, 70), iterations: ITER }
 
 const vectors = {
@@ -37,6 +43,9 @@ const vectors = {
   },
   fingerprint: { pub: A.pub, fp: e(await c.fingerprint(d(A.pub))) },
   safety: { pubA: A.pub, pubB: B.pub, code: await c.safetyCode(d(A.pub), d(B.pub)) },
+  // Clé d'époque enveloppée par A pour B, puis message chiffré avec cette clé.
+  convKey,
+  message,
   recoveryNormalize: [
     ['7k3qz-m9xw2-pb4td-0vh1r', '7K3QZM9XW2PB4TD0VH1R'],
     [' 7K3QZ M9XW2 PB4TD OVHIR ', '7K3QZM9XW2PB4TD0VH1R'],

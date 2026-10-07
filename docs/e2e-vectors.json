@@ -54,6 +54,36 @@
     "pubB": "BCJDA2NGTYMJQ2WFCNGtsH7czk4ADlFGKe2SFGvecziTTeGblF3OakkgcKxfWVBsE3ajb2Rn8yiuVp3HJCuSP4s",
     "code": "536417775988780375984544557406547644415060060725309335147209"
   },
+  "convKey": {
+    "conv": "group:0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21",
+    "epoch": 2,
+    "sender": "11111111-1111-4111-8111-111111111111",
+    "member": "22222222-2222-4222-8222-222222222222",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "oKGio6Slpqeoqaqr",
+    "wrapped": {
+      "v": 1,
+      "iv": "oKGio6Slpqeoqaqr",
+      "ct": "xsAHcE6REU2iItqAXi0E4SOdFOU3OUDra7SE2_X0HzYViV4r6hvHwtMatyYOjOop"
+    }
+  },
+  "message": {
+    "conv": "group:0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21",
+    "epoch": 2,
+    "author": "11111111-1111-4111-8111-111111111111",
+    "clientMsgId": "33333333-3333-4333-8333-333333333333",
+    "key": "eHl6e3x9fn-AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpc",
+    "iv": "tLW2t7i5uru8vb6_",
+    "body": {
+      "t": "Réponse chiffrée 🔐 **gras**"
+    },
+    "enc": {
+      "v": 1,
+      "epoch": 2,
+      "iv": "tLW2t7i5uru8vb6_",
+      "ct": "Y3CxjRd7pr-rOZgGkpKdGQcWpGA4doPzhS3DuOOg4bJp42sLZxfVdr5-ME8id-v3nhbkb-ZkLe8"
+    }
+  },
   "recoveryNormalize": [
     [
       "7k3qz-m9xw2-pb4td-0vh1r",

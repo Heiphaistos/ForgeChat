@@ -64,3 +64,21 @@ test('paire neuve et base64url', async () => {
   expect(e(c.utf8('ab?'))).toBe('YWI_')
   expect(() => d('ab=c')).toThrow()
 })
+
+test('clé de conversation : mêmes octets que le web, refus si altérée', async () => {
+  const x = V.convKey
+  const privA = d(V.ecdh.privA)
+  const privB = d(V.ecdh.privB)
+  expect(await c.wrapConvKey(privA, d(V.ecdh.pubB), d(x.key), x.conv, x.epoch, x.member, x.sender, d(x.iv))).toEqual(x.wrapped)
+  expect(e(await c.unwrapConvKey(privB, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch, x.member, x.sender))).toBe(x.key)
+  await expect(c.unwrapConvKey(privB, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch + 1, x.member, x.sender)).rejects.toThrow()
+  await expect(c.unwrapConvKey(privB, d(V.ecdh.pubA), x.wrapped, x.conv, x.epoch, x.member, x.member)).rejects.toThrow()
+})
+
+test('message chiffré : mêmes octets que le web, AAD vérifiée', async () => {
+  const x = V.message
+  expect(await c.encryptMessage(d(x.key), x.conv, x.epoch, x.author, x.clientMsgId, x.body, d(x.iv))).toEqual(x.enc)
+  expect(await c.decryptMessage(d(x.key), x.conv, x.enc, x.author, x.clientMsgId)).toEqual(x.body)
+  await expect(c.decryptMessage(d(x.key), x.conv, x.enc, 'usurpateur', x.clientMsgId)).rejects.toThrow()
+  await expect(c.decryptMessage(d(x.key), x.conv, x.enc, x.author, 'autre-id')).rejects.toThrow()
+})
