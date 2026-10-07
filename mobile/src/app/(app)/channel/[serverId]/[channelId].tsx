@@ -6,6 +6,8 @@ import { serversApi } from '@/api/servers'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
+import { useServerPerms } from '@/features/servers/menus'
+import { PERM } from '@/features/servers/perms'
 import { VerificationGate } from '@/features/servers/VerificationGate'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -19,6 +21,7 @@ export default function ChannelScreen() {
     queryFn: () => serversApi.channels(ids.serverId),
     enabled: valid,
   })
+  const perms = useServerPerms(ids.serverId ?? '', valid)
   // Dernier salon consulté de ce serveur : rouvert au prochain appui sur le serveur dans le rail.
   useEffect(() => {
     if (valid) useLastChannel.getState().remember(ids.serverId, ids.channelId)
@@ -26,6 +29,7 @@ export default function ChannelScreen() {
   if (!valid) return <ErrorState message="Lien de salon invalide." />
   const channel = channels.data?.find((c) => c.id === ids.channelId)
   const name = channel?.name ?? text.name ?? 'salon'
+  const isAnnouncement = channel?.type === 'announcement'
 
   return (
     <>
@@ -45,6 +49,13 @@ export default function ChannelScreen() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
+              {isAnnouncement ? (
+                <IconButton
+                  icon="megaphone-outline"
+                  label="Suivre ce salon d’annonces"
+                  onPress={() => router.push({ pathname: '/server/[serverId]/follow', params: { serverId: ids.serverId, channelId: ids.channelId, name } })}
+                />
+              ) : null}
               <IconButton
                 icon="pin-outline"
                 label="Messages épinglés"
@@ -58,6 +69,7 @@ export default function ChannelScreen() {
       />
       <VerificationGate serverId={ids.serverId}>
         <ChatView
+          publishable={isAnnouncement && perms.has(PERM.MANAGE_MESSAGES)}
           conversation={{ kind: 'channel', serverId: ids.serverId, channelId: ids.channelId }}
           placeholder={`Envoyer un message dans #${name}`}
           header={

@@ -7,6 +7,7 @@ import { forumApi } from '@/api/forum'
 import { serversApi } from '@/api/servers'
 import { Sheet } from '@/components/Sheet'
 import { Button, ErrorState, IconButton, Loading, PasswordField, Row, Section, SwitchRow, T, TextField } from '@/components/ui'
+import { ChannelFollows } from '@/features/servers/ChannelFollows'
 import { ChoiceRow } from '@/features/servers/ChoiceRow'
 import { confirmDeleteChannel, useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
@@ -213,6 +214,8 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
           </View>
         </Section>
       ) : null}
+
+      {t === 'text' || t === 'announcement' ? <ChannelFollows channelId={channel.id} isAnnouncement={t === 'announcement'} /> : null}
 
       <Section>
         <Row

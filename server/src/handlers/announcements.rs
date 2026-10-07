@@ -202,7 +202,7 @@ pub async fn crosspost_message(
     // Atomique : deux clics simultanés ne publient pas deux fois.
     let msg = sqlx::query(
         "UPDATE messages SET crossposted_at=NOW()
-         WHERE id=$1 AND channel_id=$2 AND crossposted_at IS NULL AND COALESCE(content, '') <> ''
+         WHERE id=$1 AND channel_id=$2 AND crossposted_at IS NULL AND type <> 'crosspost' AND COALESCE(content, '') <> ''
          RETURNING user_id, content"
     )
     .bind(message_id)

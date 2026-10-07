@@ -10,6 +10,7 @@ import { Avatar } from '@/components/Avatar'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, EmptyState, ErrorState, Loading } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
+import { announcementsApi } from '@/api/announcements'
 import { dmsApi } from '@/api/dms'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
@@ -61,12 +62,15 @@ export function ChatView({
   readOnly,
   readOnlyReason,
   header,
+  publishable,
 }: {
   conversation: ConversationRef
   placeholder: string
   readOnly?: boolean
   readOnlyReason?: string
   header?: React.ReactElement
+  /** Salon d'annonces et droit de gérer les messages : « Publier » vers les salons abonnés. */
+  publishable?: boolean
 }) {
   const me = useAuth((s) => s.user)
   const conv = useConversation(conversation)
@@ -236,6 +240,18 @@ export function ChatView({
             .pin(conversation, m.id, !pinned)
             .then(() => queryClient.invalidateQueries({ queryKey: qk.pins(conv.id) }))
             .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+      })
+    }
+    if (publishable && conversation.kind === 'channel' && !m.pending && hasEditableText(m)) {
+      const { serverId: sid, channelId: cid } = conversation
+      list.push({
+        label: 'Publier aux serveurs abonnés',
+        icon: 'megaphone-outline',
+        onPress: () =>
+          void announcementsApi
+            .publish(sid, cid, m.id)
+            .then((r) => Alert.alert('Annonce publiée', `Envoyée à ${r.delivered} salon${r.delivered > 1 ? 's' : ''} abonné${r.delivered > 1 ? 's' : ''}.`))
+            .catch((e) => Alert.alert('Publication impossible', errorMessage(e))),
       })
     }
     if (channelId && !m.pending) {
