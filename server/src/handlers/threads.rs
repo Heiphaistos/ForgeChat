@@ -534,8 +534,15 @@ pub async fn archive_thread(
 
     use sqlx::Row;
     let creator_id: Uuid = thread_row.get("creator_id");
-    let archived = body["archived"].as_bool().unwrap_or(true);
+    // Champs absents = inchangés (avant : `archived` absent valait true, un renommage aurait archivé).
+    let archived = body["archived"].as_bool();
     let locked = body["locked"].as_bool();
+    let title = body["title"].as_str().map(str::trim);
+    if let Some(t) = title {
+        if t.is_empty() || t.chars().count() > 100 {
+            return Err(AppError::BadRequest("Titre du fil : 1 à 100 caractères".into()));
+        }
+    }
 
     // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
     // Archiver : créateur OU modérateur
@@ -549,24 +556,16 @@ pub async fn archive_thread(
         require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
     }
 
-    let thread = if let Some(locked) = locked {
-        sqlx::query_as::<_, Thread>(
-            "UPDATE threads SET archived = $2, locked = $3 WHERE id = $1 RETURNING *"
-        )
-        .bind(thread_id)
-        .bind(archived)
-        .bind(locked)
-        .fetch_one(&state.db)
-        .await?
-    } else {
-        sqlx::query_as::<_, Thread>(
-            "UPDATE threads SET archived = $2 WHERE id = $1 RETURNING *"
-        )
-        .bind(thread_id)
-        .bind(archived)
-        .fetch_one(&state.db)
-        .await?
-    };
+    let thread = sqlx::query_as::<_, Thread>(
+        "UPDATE threads SET archived = COALESCE($2, archived), locked = COALESCE($3, locked),
+                title = COALESCE($4, title) WHERE id = $1 RETURNING *"
+    )
+    .bind(thread_id)
+    .bind(archived)
+    .bind(locked)
+    .bind(title)
+    .fetch_one(&state.db)
+    .await?;
 
     state.broadcast_to_channel_members(channel_id, serde_json::json!({
         "type": "THREAD_UPDATE",
@@ -575,6 +574,7 @@ pub async fn archive_thread(
         "server_id": server_id,
         "archived": thread.archived,
         "locked": thread.locked,
+        "title": thread.title,
     }).to_string()).await;
 
     Ok(Json(thread))

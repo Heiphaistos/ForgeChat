@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { threadsApi } from '@/api/threads'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, ErrorState, IconButton, Loading, TextField } from '@/components/ui'
@@ -63,18 +63,21 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
   const canModerate = useServerPerms(serverId).has(PERM.MANAGE_MESSAGES)
   const [menu, setMenu] = useState(false)
   // archive_thread : archiver = créateur ou MANAGE_MESSAGES ; verrouiller = MANAGE_MESSAGES.
-  const update = (body: { archived: boolean; locked?: boolean }) =>
+  const [renameText, setRenameText] = useState<string | null>(null)
+  const update = (body: { archived?: boolean; locked?: boolean; title?: string }) =>
     threadsApi
       .update(serverId, channelId, thread.id, body)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.threads(channelId) }))
       .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
   const menuActions: SheetAction[] = []
-  if (canModerate || thread.creatorId === meId)
+  if (canModerate || thread.creatorId === meId) {
+    menuActions.push({ label: 'Renommer le fil', icon: 'create-outline', onPress: () => setRenameText(thread.title) })
     menuActions.push({
       label: thread.archived ? 'Désarchiver le fil' : 'Archiver le fil',
       icon: 'archive-outline',
       onPress: () => void update({ archived: !thread.archived }),
     })
+  }
   if (canModerate)
     menuActions.push({
       label: thread.locked ? 'Déverrouiller le fil' : 'Verrouiller le fil',
@@ -91,6 +94,25 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
         }}
       />
       <Sheet visible={menu} onClose={() => setMenu(false)} title={thread.title} actions={menuActions} />
+      <Modal visible={renameText !== null} transparent animationType="fade" onRequestClose={() => setRenameText(null)}>
+        <View style={styles.renameBackdrop}>
+          <View style={styles.renameBox}>
+            <TextField label="Titre du fil" value={renameText ?? ''} onChangeText={setRenameText} maxLength={100} autoFocus />
+            <View style={styles.renameRow}>
+              <Button title="Annuler" variant="secondary" onPress={() => setRenameText(null)} />
+              <Button
+                title="Renommer"
+                disabled={!renameText?.trim()}
+                onPress={() => {
+                  const t = renameText?.trim()
+                  setRenameText(null)
+                  if (t) void update({ title: t })
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <ReplyThreadView
         messages={messages}
         isLoading={q.isLoading}
@@ -163,6 +185,9 @@ function CreateThread({ serverId, channelId, parent, preview }: { serverId: stri
 }
 
 const styles = StyleSheet.create({
+  renameBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.lg },
+  renameBox: { backgroundColor: colors.bgElevated, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.md },
+  renameRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
   title: { color: colors.text, fontSize: font.xl, fontWeight: '800' },
   muted: { color: colors.textMuted, fontSize: font.sm },
   preview: { backgroundColor: colors.bgAlt, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.primary },

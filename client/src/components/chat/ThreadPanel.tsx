@@ -290,6 +290,18 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   // archive_thread (threads.rs) impose déjà côté serveur qu'un fil archivé/verrouillé
   // refuse tout nouveau message (403) -- mais aucune UI n'a jamais existé pour
   // basculer cet état : PATCH /threads/:id existait sans le moindre appelant.
+  // Renommer : créateur du fil ou modérateur (contrôlé par le serveur).
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const rename = useMutation({
+    mutationFn: (title: string) =>
+      api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}`, { title }),
+    onSuccess: () => {
+      setRenaming(null)
+      qc.invalidateQueries({ queryKey: ['threads', channelId] })
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+  })
+
   const toggleArchive = useMutation({
     mutationFn: () =>
       api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}`, {
@@ -366,7 +378,31 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         <div className="p-3 border-b border-fc-bg bg-fc-accent/5">
           <div className="flex items-center gap-1.5">
             <Hash size={13} className="text-fc-accent" />
-            <span className="text-sm font-medium text-white truncate flex-1">{thread.title}</span>
+            {renaming !== null ? (
+              <input
+                autoFocus
+                value={renaming}
+                maxLength={100}
+                aria-label="Nouveau titre du fil"
+                onChange={e => setRenaming(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && renaming.trim()) rename.mutate(renaming.trim())
+                  if (e.key === 'Escape') setRenaming(null)
+                }}
+                onBlur={() => setRenaming(null)}
+                className="flex-1 min-w-0 px-1.5 py-0.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
+              />
+            ) : (
+              <span className="text-sm font-medium text-white truncate flex-1">{thread.title}</span>
+            )}
+            <button
+              onClick={() => setRenaming(thread.title)}
+              title="Renommer le fil"
+              aria-label="Renommer le fil"
+              className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition flex-shrink-0"
+            >
+              <Pencil size={13} />
+            </button>
             {thread.locked && <Lock size={12} className="text-fc-muted flex-shrink-0" aria-label="Fil verrouillé" />}
             <button
               onClick={() => toggleArchive.mutate()}

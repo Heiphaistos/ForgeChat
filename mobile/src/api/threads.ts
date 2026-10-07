@@ -42,9 +42,9 @@ export const threadsApi = {
     http.upload<Attachment[]>(base(serverId, channelId) + path`/${threadId}/messages/${messageId}/attachments`, uploadForm(files)),
   /**
    * Archiver : créateur du fil ou MANAGE_MESSAGES. Verrouiller (champ `locked`) : MANAGE_MESSAGES
-   * seulement. `archived` est toujours envoyé (le serveur le met à true par défaut).
+   * seulement. Champs absents = inchangés ; `title` renomme (1 à 100 caractères).
    */
-  update: (serverId: string, channelId: string, threadId: string, body: { archived: boolean; locked?: boolean }) =>
+  update: (serverId: string, channelId: string, threadId: string, body: { archived?: boolean; locked?: boolean; title?: string }) =>
     http.patch(base(serverId, channelId) + path`/${threadId}`, body),
   /** Marque le fil lu jusqu'à son dernier message. */
   ack: (serverId: string, channelId: string, threadId: string) => http.post(base(serverId, channelId) + path`/${threadId}/ack`),
