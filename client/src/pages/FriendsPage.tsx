@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  UserPlus, MessageCircle, Check, X, Link, Copy, Search,
+  UserPlus, MessageCircle, Check, X, Link, Copy, Search, LifeBuoy,
   MoreHorizontal, UserX, Shield, User, Wifi, WifiOff,
   Clock, MinusCircle, Upload, Menu, ChevronLeft,
   Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed,
@@ -267,10 +267,10 @@ export default function FriendsPage() {
     onError: () => toast.error(t('friends.unblockError')),
   })
 
-  const openDm = async (userId: string) => {
+  const openDm = async (userId: string, support = false) => {
     try {
       const { data } = await api.post(`/dms/${userId}`)
-      nav(`/dms/${data.dm_id}`)
+      nav(`/dms/${data.dm_id}${support ? '?support=1' : ''}`)
     } catch {
       toast.error(t('friends.dmError'))
     }
@@ -359,6 +359,12 @@ export default function FriendsPage() {
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition"
                 >
                   <User size={14} /> {t('friends.profile')}
+                </button>
+                <button
+                  onClick={() => { openDm(f.friend_id, true); setMenuOpen(null) }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition"
+                >
+                  <LifeBuoy size={14} /> {t('rs.button')}
                 </button>
                 <button
                   onClick={() => { remove.mutate(f.friend_id); setMenuOpen(null) }}

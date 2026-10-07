@@ -18,6 +18,7 @@ import { useT } from '../../i18n'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
+import { RemoteSupportCard } from './RemoteSupport'
 
 export interface MessageRowProps {
   msg: any
@@ -401,6 +402,9 @@ function MessageRow({
                   channelId={channelId}
                 />
               )}
+
+              {/* Support à distance (MP) : carte du contenu chiffré `rs` */}
+              {!serverId && msg.e2e_body?.rs != null && <RemoteSupportCard msg={msg} isOwn={isOwn} />}
 
               {/* Link preview */}
               {linkPreviewEnabled && msg.content && !msg.attachments?.length && !msg.poll_id && (() => {

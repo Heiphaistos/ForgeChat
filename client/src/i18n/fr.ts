@@ -2,10 +2,12 @@
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
 import { profileFr } from './profileFr.ts'
 import { comfortFr } from './comfort.ts'
+import { remoteSupportFr } from './remoteSupport.ts'
 
 export const fr = {
   ...profileFr,
   ...comfortFr,
+  ...remoteSupportFr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
