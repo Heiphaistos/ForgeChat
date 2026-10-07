@@ -663,6 +663,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // E2E Public Key Management
         .route("/users/me/pubkey", post(handlers::users::set_pubkey))
         .route("/users/:id/pubkey", get(handlers::users::get_pubkey))
+        // Clé de compte E2E (docs/CHIFFREMENT-E2E.md §3)
+        .route("/users/me/keys", get(handlers::user_keys::get_my_keys).put(handlers::user_keys::create_my_keys).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/users/me/keys/wrapped", put(handlers::user_keys::rewrap_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/users/me/keys/backup", put(handlers::user_keys::put_my_backup).delete(handlers::user_keys::delete_my_backup).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/users/me/keys/reset", post(handlers::user_keys::reset_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/users/:id/keys/public", get(handlers::user_keys::get_public_key))
         // Unread
         .route("/unread", get(handlers::reads::get_unread_counts))
         .route("/unread/mark-all", post(handlers::reads::mark_all_read))

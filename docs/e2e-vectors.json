@@ -1,0 +1,79 @@
+{
+  "note": "Vecteurs communs web/mobile (client/scripts/e2e-vectors.gen.mjs). Itérations PBKDF2 réduites pour les tests uniquement (production : 600000).",
+  "ecdh": {
+    "privA": "L24splOxTaDPUjoID3CwNoGNy24phnKElhs2cqVYqFY",
+    "pubA": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE",
+    "privB": "zslAYtkIncvKCfnl26J9l9DDHjTo46o2b0ZM7HmGPrw",
+    "pubB": "BCJDA2NGTYMJQ2WFCNGtsH7czk4ADlFGKe2SFGvecziTTeGblF3OakkgcKxfWVBsE3ajb2Rn8yiuVp3HJCuSP4s",
+    "shared": "iuTrNVbGDUG4CNOb0yYr3mFUSCw9FgB-MyzgfwxEf9w",
+    "hkdf": {
+      "salt": "",
+      "info": "forgechat ck v1|conv|0|6f1c2b3a-9d4e-4c5b-8a7f-0e1d2c3b4a59",
+      "length": 32,
+      "okm": "kNzhiB-OdkLLo4f0Jr8ZUECdnpaqkcGrYTnhS1EDiIk"
+    }
+  },
+  "aesgcm": {
+    "key": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+    "iv": "ZGVmZ2hpamtsbW5v",
+    "aad": "msg v1|conv|0|auteur|client-id",
+    "plaintext": "{\"t\":\"Salut ! Ça chiffre ? 🔐\"}",
+    "ct": "G30Hbqug7xiUItu4OQw7u5W_e6OWgJFzxfLd34l-feNd_bICdtAhzDuWj4wNzH1Oi-0"
+  },
+  "pbkdf2": {
+    "password": "Mot de passe très sûr 42!",
+    "salt": "yMnKy8zNzs_Q0dLT1NXW1w",
+    "iterations": 1000,
+    "key": "o-uo_Ty5RfUTdnBjz28seK9V9aFA0f_BOG6U23ZytqQ"
+  },
+  "wrap": {
+    "userId": "6f1c2b3a-9d4e-4c5b-8a7f-0e1d2c3b4a59",
+    "priv": "L24splOxTaDPUjoID3CwNoGNy24phnKElhs2cqVYqFY",
+    "password": "Mot de passe très sûr 42!",
+    "iterations": 1000,
+    "wrapped": {
+      "v": 1,
+      "salt": "MjM0NTY3ODk6Ozw9Pj9AQQ",
+      "iv": "RkdISUpLTE1OT1BR",
+      "ct": "qrP0E2lRj1Ywingccp04DXW4S5WAAuSIkk9t_gGSd6cwf34kTjLUpmyoulia68tZ"
+    },
+    "recoveryCode": "7K3QZ-M9XW2-PB4TD-0VH1R",
+    "backup": {
+      "v": 1,
+      "salt": "MjM0NTY3ODk6Ozw9Pj9AQQ",
+      "iv": "RkdISUpLTE1OT1BR",
+      "ct": "T7rZkdgfVm3_RlZkWQSpbB1KP7Is2QQ23Eq-Cxx2odesrEG7ZqzKCorPxYAw6V91"
+    }
+  },
+  "fingerprint": {
+    "pub": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE",
+    "fp": "8NZ0m7mf9YzfiPUaB20uTbeVS5wS2DkJ5V36XPlhLv4"
+  },
+  "safety": {
+    "pubA": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE",
+    "pubB": "BCJDA2NGTYMJQ2WFCNGtsH7czk4ADlFGKe2SFGvecziTTeGblF3OakkgcKxfWVBsE3ajb2Rn8yiuVp3HJCuSP4s",
+    "code": "536417775988780375984544557406547644415060060725309335147209"
+  },
+  "recoveryNormalize": [
+    [
+      "7k3qz-m9xw2-pb4td-0vh1r",
+      "7K3QZM9XW2PB4TD0VH1R"
+    ],
+    [
+      " 7K3QZ M9XW2 PB4TD OVHIR ",
+      "7K3QZM9XW2PB4TD0VH1R"
+    ],
+    [
+      "7K3QZ-M9XW2-PB4TD-0VHLR",
+      "7K3QZM9XW2PB4TD0VH1R"
+    ],
+    [
+      "7K3QZ-M9XW2-PB4TD-0VH1",
+      null
+    ],
+    [
+      "7K3QZ-M9XW2-PB4TD-0VH1U",
+      null
+    ]
+  ]
+}

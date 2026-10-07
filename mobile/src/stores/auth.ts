@@ -12,6 +12,7 @@ import { useUi } from './ui'
 import { useUnread } from './unread'
 import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
 import { t } from '@/i18n'
+import { clearAccountKey, rememberPassword } from '@/e2e/accountKey'
 
 /**
  * Cycle de vie de la session.
@@ -58,6 +59,7 @@ async function wipeLocal() {
   realtime.stop()
   await Promise.allSettled([...signOutHooks].map(async (h) => h()))
   await tokens.clear()
+  await clearAccountKey()
   queryClient.clear()
   usePresence.getState().reset()
   useUnread.getState().reset()
@@ -106,11 +108,13 @@ export const useAuth = create<AuthState>((set, get) => {
 
     login: async (email, password, totpCode) => {
       const res = await authApi.login(email, password, totpCode)
+      rememberPassword(password)
       await acceptSession(res)
     },
 
     register: async (username, email, password) => {
       const res = await authApi.register(username, email, password)
+      rememberPassword(password)
       await acceptSession(res)
     },
 

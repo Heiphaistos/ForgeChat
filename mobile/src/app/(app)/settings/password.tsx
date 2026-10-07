@@ -7,6 +7,7 @@ import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { passwordStrength } from '@/lib/validation'
 import { useAuth } from '@/stores/auth'
+import { rewrapForNewPassword } from '@/e2e/accountKey'
 import { colors, spacing } from '@/theme'
 
 export default function PasswordScreen() {
@@ -25,7 +26,10 @@ export default function PasswordScreen() {
     setLoading(true)
     setError(null)
     try {
-      await authApi.changePassword(oldPw, newPw)
+      // La clé E2E suit le mot de passe : ré-enveloppée ici, enregistrée par le serveur avec lui.
+      const userId = useAuth.getState().user?.id
+      const wrapped = userId ? await rewrapForNewPassword(userId, newPw) : null
+      await authApi.changePassword(oldPw, newPw, wrapped)
       // Le serveur a déjà révoqué toutes les sessions (et ce jeton) : fin de session locale.
       router.dismissAll()
       await useAuth.getState().signOutLocally(tr('settings.password.changed'))

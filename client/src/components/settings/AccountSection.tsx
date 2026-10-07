@@ -5,6 +5,7 @@ import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import { rewrapForNewPassword } from '../../e2e/accountKey'
 
 interface Props {
   user: any
@@ -27,7 +28,11 @@ export default function AccountSection({ user, updateMe }: Props) {
   })
 
   const changePw = useMutation({
-    mutationFn: () => api.post('/auth/change-password', { old_password: oldPw, new_password: newPw }),
+    mutationFn: async () => {
+      // La clé E2E suit le mot de passe : ré-enveloppée ici, enregistrée par le serveur avec lui.
+      const wrapped = await rewrapForNewPassword(user.id, oldPw, newPw)
+      return api.post('/auth/change-password', { old_password: oldPw, new_password: newPw, wrapped })
+    },
     onSuccess: () => { toast.success(t('settings.account.pwChanged')); setShowPwForm(false); setOldPw(''); setNewPw('') },
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.account.pwWrong')),
   })

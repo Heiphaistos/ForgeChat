@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, lazy, Suspense, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
+import E2EGate from './e2e/E2EGate'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
 import { useGroupCall } from './store/groupCall'
@@ -1158,6 +1159,7 @@ function AppInner() {
         {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}
+        {user && <E2EGate />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
         <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}

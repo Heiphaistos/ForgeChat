@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { t } from '@/i18n'
 import { ApiError, http } from '@/lib/http'
 import type { AuthResponse, Session, User } from '@/types/models'
+import type { WrappedKey } from '@/e2e/crypto'
 
 const userSchema = z
   .object({
@@ -55,8 +56,9 @@ export const authApi = {
   me: () => http.get<User>('/users/me'),
   sessions: () => http.get<Session[]>('/users/me/sessions'),
   revokeSession: (id: string) => http.delete<void>(`/users/me/sessions/${encodeURIComponent(id)}`),
-  changePassword: (oldPassword: string, newPassword: string) =>
-    http.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
+  /** `wrapped` : clé E2E ré-enveloppée avec le nouveau mot de passe (enregistrée dans la même transaction). */
+  changePassword: (oldPassword: string, newPassword: string, wrapped: WrappedKey | null = null) =>
+    http.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword, wrapped }),
 
   /** Réponse identique que le compte existe ou non (le serveur ne révèle rien). */
   forgotPassword: (email: string) => http.post('/auth/forgot-password', { email: email.trim().toLowerCase() }, { auth: false }),

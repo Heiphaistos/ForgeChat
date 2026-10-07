@@ -5,6 +5,7 @@ import { Shield } from 'lucide-react'
 import QRCode from 'qrcode'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import { E2EKeySection } from '../../e2e/E2ESettings'
 
 export default function SecuritySection() {
   const t = useT()
@@ -49,6 +50,7 @@ export default function SecuritySection() {
 
   return (
     <div className="space-y-6">
+      <E2EKeySection />
       <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
         <div className="flex items-center gap-3">
           <Shield size={20} className={is2faEnabled ? 'text-fc-green' : 'text-fc-muted'} />

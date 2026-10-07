@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { SafetyCode } from '../e2e/E2ESettings'
 import { useQuery } from '@tanstack/react-query'
 import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
@@ -361,6 +362,7 @@ export default function UserProfilePage() {
             <MutualServersSection userId={userId} />
           </div>
         )}
+        {!isSelf && userId && <SafetyCode userId={userId} />}
       </div>
     </div>
   )

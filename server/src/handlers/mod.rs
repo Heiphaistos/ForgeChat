@@ -2,6 +2,7 @@ pub mod auth;
 pub mod gifs;
 pub mod password_reset;
 pub mod users;
+pub mod user_keys;
 pub mod servers;
 pub mod channels;
 pub mod channel_access;
