@@ -1,6 +1,7 @@
 import axios from 'axios'
 import api, { baseURL } from '../api/client'
 import { TAURI_KEY } from './localSession'
+import { setOfflineOwner } from './offline'
 
 /**
  * Plusieurs comptes dans la même appli, bascule rapide.
@@ -41,6 +42,7 @@ export const otherAccountIds = () => known.map(a => a.id)
 
 /** Met le compte actif de côté ; la page de connexion permet ensuite d'en ajouter un. */
 export async function stashCurrent(me: SavedAccount): Promise<void> {
+  setOfflineOwner(null)
   if (!isTauri) { await api.post('/auth/accounts/stash'); return }
   const refresh = localStorage.getItem('refresh_token')
   if (!refresh) throw new Error('NO_SESSION')
@@ -65,6 +67,8 @@ export async function switchTo(id: string, me: SavedAccount | null): Promise<voi
     localStorage.setItem('access_token', data.access_token)
     localStorage.setItem('refresh_token', data.refresh_token)
   }
+  // Données hors ligne : celles du compte choisi dès le rechargement.
+  setOfflineOwner(id)
   window.location.assign('/')
 }
 
