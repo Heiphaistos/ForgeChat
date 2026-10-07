@@ -15,6 +15,7 @@ import EmojiPicker from '../components/chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { useTypeToFocus } from '../hooks/useTypeToFocus'
+import { useT } from '../i18n'
 import UserPopup from '../components/UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -31,6 +32,7 @@ interface Props {
 }
 
 function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: string; channelId: string; media?: boolean; onClose: () => void }) {
+  const t = useT()
   const [title, setTitle] = useState('')
   const [mediaFile, setMediaFile] = useState<string | null>(null)
   const [content, setContent] = useState('')
@@ -56,16 +58,16 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['forum', channelId] })
-      toast.success('Post créé !')
+      toast.success(t('forum.created'))
       onClose()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const addTag = () => {
-    const t = tagInput.trim().toLowerCase().replace(/\s+/g, '-')
-    if (t && !tags.includes(t) && tags.length < 5) {
-      setTags([...tags, t])
+    const tag = tagInput.trim().toLowerCase().replace(/\s+/g, '-')
+    if (tag && !tags.includes(tag) && tags.length < 5) {
+      setTags([...tags, tag])
       setTagInput('')
     }
   }
@@ -80,19 +82,19 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
         onClick={e => e.stopPropagation()}
       >
         <div className="p-6 border-b border-fc-bg flex items-start justify-between">
-          <h2 id="create-post-title" className="text-xl font-bold text-white">Nouveau post</h2>
-          <button onClick={onClose} aria-label="Fermer" className="text-fc-muted hover:text-white transition"><X size={20} aria-hidden /></button>
+          <h2 id="create-post-title" className="text-xl font-bold text-white">{t('forum.newPost')}</h2>
+          <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition"><X size={20} aria-hidden /></button>
         </div>
         <div className="p-6 space-y-4">
           {media && (
             <div>
-              <span className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Média *</span>
+              <span className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{t('forum.mediaLabel')}</span>
               {mediaFile ? (
                 <div className="relative">
                   {isVideoUrl(mediaFile)
                     ? <video src={mediaUrl(mediaFile)} controls playsInline className="w-full max-h-64 rounded bg-black" />
                     : <img src={mediaUrl(mediaFile)} alt="" className="w-full max-h-64 object-contain rounded bg-black" />}
-                  <button onClick={() => setMediaFile(null)} aria-label="Retirer le média" className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black"><X size={14} aria-hidden /></button>
+                  <button onClick={() => setMediaFile(null)} aria-label={t('forum.removeMedia')} className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black"><X size={14} aria-hidden /></button>
                 </div>
               ) : (
                 <button
@@ -104,19 +106,19 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
                   className="w-full h-32 border-2 border-dashed border-fc-hover rounded flex flex-col items-center justify-center gap-1 text-fc-muted hover:text-white hover:border-fc-accent transition disabled:opacity-50"
                 >
                   {postUpload.uploading ? <Loader2 size={20} className="animate-spin" aria-hidden /> : <Images size={20} aria-hidden />}
-                  <span className="text-sm">Choisir ou déposer une image / vidéo</span>
+                  <span className="text-sm">{t('forum.pickMedia')}</span>
                 </button>
               )}
             </div>
           )}
           <div>
-            <label htmlFor="fp-title" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{media ? 'Légende *' : 'Titre *'}</label>
+            <label htmlFor="fp-title" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{media ? t('forum.captionLabel') : t('forum.titleLabel')}</label>
             <input
               id="fp-title"
               autoFocus
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder={media ? 'Légende du média...' : 'Titre du post...'}
+              placeholder={media ? t('forum.captionPh') : t('forum.titlePh')}
               maxLength={200}
               enterKeyHint="next"
               autoCapitalize="sentences"
@@ -124,7 +126,7 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
             />
           </div>
           <div>
-            <label htmlFor="fp-content" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Contenu</label>
+            <label htmlFor="fp-content" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{t('forum.content')}</label>
             <textarea
               id="fp-content"
               value={content}
@@ -136,28 +138,28 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
                 if (handleMarkdownShortcut(e, content, setContent)) return
                 if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && title.trim() && !create.isPending) create.mutate()
               }}
-              placeholder="Décrivez votre post... (Ctrl+Entrée pour publier)"
+              placeholder={t('forum.contentPh')}
               rows={5}
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm resize-none"
             />
             <div className="flex items-center gap-1 mt-1">
               <AttachButton uploading={postUpload.uploading} onClick={() => postUpload.pick(url => setContent(c => (c ? c + '\n' : '') + url))} />
-              <span className="text-xs text-fc-muted">Image ou vidéo — insérée dans le contenu, affichée en direct</span>
+              <span className="text-xs text-fc-muted">{t('forum.attachHint')}</span>
             </div>
           </div>
           <div>
-            <label htmlFor="fp-tag" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Tags</label>
+            <label htmlFor="fp-tag" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{t('forum.tags')}</label>
             {officialTags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {officialTags.map(t => (
+                {officialTags.map(tg => (
                   <button
-                    key={t}
+                    key={tg}
                     type="button"
-                    disabled={tags.includes(t) || tags.length >= 5}
-                    onClick={() => setTags([...tags, t])}
+                    disabled={tags.includes(tg) || tags.length >= 5}
+                    onClick={() => setTags([...tags, tg])}
                     className="px-2 py-1 rounded-full text-xs bg-fc-accent/15 text-fc-accent hover:bg-fc-accent/30 transition disabled:opacity-40"
                   >
-                    #{t}
+                    #{tg}
                   </button>
                 ))}
               </div>
@@ -168,22 +170,22 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
                   value={tagInput}
                   onChange={e => setTagInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                  placeholder="Ajouter un tag..."
+                  placeholder={t('forum.addTagPh')}
                   maxLength={20}
                   enterKeyHint="done"
                   autoCapitalize="none"
                   className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                 />
-                <button onClick={addTag} aria-label="Ajouter le tag" className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
+                <button onClick={addTag} aria-label={t('chset.addTag')} className="px-3 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm transition">
                   <Plus size={16} aria-hidden />
                 </button>
               </div>
             )}
             <div className="flex flex-wrap gap-1.5">
-              {tags.map(t => (
-                <span key={t} className="flex items-center gap-1 text-xs px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full">
-                  #{t}
-                  <button onClick={() => setTags(tags.filter(x => x !== t))} aria-label={`Retirer le tag ${t}`} className="hover:text-white">
+              {tags.map(tg => (
+                <span key={tg} className="flex items-center gap-1 text-xs px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full">
+                  #{tg}
+                  <button onClick={() => setTags(tags.filter(x => x !== tg))} aria-label={t('forum.removeTag', { tag: tg })} className="hover:text-white">
                     <X size={10} aria-hidden />
                   </button>
                 </span>
@@ -192,13 +194,13 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
           </div>
         </div>
         <div className="p-4 bg-fc-bg/50 rounded-b-lg flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">Annuler</button>
+          <button onClick={onClose} className="px-4 py-2 text-fc-muted hover:text-white transition text-sm">{t('common.cancel')}</button>
           <button
             onClick={() => title.trim() && (!media || mediaFile) && create.mutate()}
             disabled={!title.trim() || (media && !mediaFile) || create.isPending}
             className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
-            {create.isPending ? 'Publication...' : 'Publier'}
+            {create.isPending ? t('forum.publishing') : t('forum.publish')}
           </button>
         </div>
       </div>
@@ -207,6 +209,7 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
 }
 
 export default function ForumPage({ channel, serverId, channelId, canManageMessages, media }: Props) {
+  const t = useT()
   const [showCreate, setShowCreate] = useState(false)
   const [selectedPost, setSelectedPostState] = useState<ForumPost | null>(null)
   const [urlParams, setUrlParams] = useSearchParams()
@@ -317,7 +320,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour aux canaux"
+          aria-label={t('forum.back')}
         >
           <ChevronLeft size={20} />
         </button>
@@ -334,7 +337,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
           >
-            <Plus size={15} /> {media ? 'Publier' : 'Nouveau post'}
+            <Plus size={15} /> {media ? t('forum.publish') : t('forum.newPost')}
           </button>
         </div>
       </div>
@@ -347,40 +350,40 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); setTagFilter(null); (e.target as HTMLInputElement).blur() } }}
-            placeholder="Rechercher un post..."
-            aria-label="Rechercher un post"
+            placeholder={t('forum.searchPh')}
+            aria-label={t('forum.search')}
             enterKeyHint="search"
             inputMode="search"
             autoComplete="off"
             className="bg-transparent text-sm text-white outline-none flex-1 min-w-0 placeholder-fc-muted"
           />
           {search && (
-            <button onClick={() => setSearch('')} aria-label="Effacer la recherche" className="text-fc-muted hover:text-white transition"><X size={12} aria-hidden /></button>
+            <button onClick={() => setSearch('')} aria-label={t('settings.clearSearch')} className="text-fc-muted hover:text-white transition"><X size={12} aria-hidden /></button>
           )}
         </div>
         {tagFilter && (
           <button
             onClick={() => setTagFilter(null)}
             className="flex items-center gap-1 px-2 py-1 bg-fc-accent/20 text-fc-accent rounded-full text-xs whitespace-nowrap hover:bg-fc-accent/30 transition"
-            title="Retirer le filtre"
+            title={t('forum.removeFilter')}
           >
             #{tagFilter} <X size={10} aria-hidden />
           </button>
         )}
-        <div className="flex rounded-lg overflow-hidden border border-fc-hover flex-shrink-0" role="group" aria-label="Trier les posts">
+        <div className="flex rounded-lg overflow-hidden border border-fc-hover flex-shrink-0" role="group" aria-label={t('forum.sort')}>
           <button
             onClick={() => setSortBy('recent')}
             aria-pressed={sortBy === 'recent'}
             className={`px-2.5 py-1.5 text-xs font-medium transition ${sortBy === 'recent' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
           >
-            Récents
+            {t('forum.recent')}
           </button>
           <button
             onClick={() => setSortBy('active')}
             aria-pressed={sortBy === 'active'}
             className={`px-2.5 py-1.5 text-xs font-medium transition ${sortBy === 'active' ? 'bg-fc-hover text-white' : 'text-fc-muted hover:text-white'}`}
           >
-            Actifs
+            {t('forum.active')}
           </button>
         </div>
       </div>
@@ -389,7 +392,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
         {/* Skeleton au premier chargement (évite le faux « Aucun post ») */}
         {postsLoading && (
-          <div role="status" aria-label="Chargement des posts" className="space-y-3">
+          <div role="status" aria-label={t('forum.loading')} className="space-y-3">
             {[0, 1, 2].map(i => (
               <div key={i} className="bg-fc-hover/20 rounded-lg p-4 border border-fc-hover/30 animate-pulse">
                 <div className="flex items-start gap-3">
@@ -405,18 +408,18 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
           </div>
         )}
         {posts.length === 0 && (search || tagFilter) && allPosts.length > 0 && (
-          <div className="text-center text-fc-muted py-16 text-sm">Aucun post ne correspond à la recherche.</div>
+          <div className="text-center text-fc-muted py-16 text-sm">{t('forum.noMatch')}</div>
         )}
         {!postsLoading && allPosts.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessagesSquare size={48} className="text-fc-muted opacity-30 mb-4" />
-            <p className="text-fc-text font-semibold mb-1">Aucun post pour l'instant</p>
-            <p className="text-fc-muted text-sm mb-4">{media ? 'Partagez la première image ou vidéo !' : 'Soyez le premier à poster dans ce forum !'}</p>
+            <p className="text-fc-text font-semibold mb-1">{t('forum.none')}</p>
+            <p className="text-fc-muted text-sm mb-4">{media ? t('forum.noneMedia') : t('forum.noneForum')}</p>
             <button
               onClick={() => setShowCreate(true)}
               className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
             >
-              Créer un post
+              {t('forum.createPost')}
             </button>
           </div>
         )}
@@ -472,7 +475,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
                   {post.last_reply_at && (
                     <>
                       <span>·</span>
-                      <span>Dernière réponse {formatDate(post.last_reply_at)}</span>
+                      <span>{t('forum.lastReply', { date: formatDate(post.last_reply_at) })}</span>
                     </>
                   )}
                 </div>
@@ -483,19 +486,19 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
                   {post.tags.length > 0 && (
                     <div className="flex items-center gap-1">
                       <Tag size={11} />
-                      {post.tags.slice(0, 3).map(t => (
+                      {post.tags.slice(0, 3).map(tg => (
                         <span
-                          key={t}
-                          onClick={e => { e.stopPropagation(); setTagFilter(cur => cur === t ? null : t) }}
-                          title={`Filtrer par #${t}`}
-                          className={`px-1.5 py-0.5 rounded-full cursor-pointer transition ${tagFilter === t ? 'bg-fc-accent text-white' : 'bg-fc-accent/15 text-fc-accent hover:bg-fc-accent/30'}`}
-                        >#{t}</span>
+                          key={tg}
+                          onClick={e => { e.stopPropagation(); setTagFilter(cur => cur === tg ? null : tg) }}
+                          title={t('forum.filterBy', { tag: tg })}
+                          className={`px-1.5 py-0.5 rounded-full cursor-pointer transition ${tagFilter === tg ? 'bg-fc-accent text-white' : 'bg-fc-accent/15 text-fc-accent hover:bg-fc-accent/30'}`}
+                        >#{tg}</span>
                       ))}
                     </div>
                   )}
                   <div className="flex items-center gap-1 ml-auto">
                     <MessageSquare size={11} />
-                    <span>{post.reply_count} réponse{post.reply_count !== 1 ? 's' : ''}</span>
+                    <span>{t(post.reply_count !== 1 ? 'forum.replies.other' : 'forum.replies.one', { n: post.reply_count })}</span>
                   </div>
                   <ChevronRight size={14} className="text-fc-muted group-hover:text-white transition" />
                 </div>
@@ -511,7 +514,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             disabled={isFetchingNextPage}
             className="w-full py-2 text-sm text-fc-accent hover:underline disabled:opacity-50"
           >
-            {isFetchingNextPage ? 'Chargement…' : 'Afficher plus de posts'}
+            {isFetchingNextPage ? t('forum.loadingShort') : t('forum.more')}
           </button>
         )}
       </div>

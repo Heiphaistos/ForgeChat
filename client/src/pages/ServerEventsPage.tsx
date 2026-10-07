@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
 import CalendarView from '../components/events/CalendarView'
+import { useT, intlLocale, type Key } from '../i18n'
 
 interface Props {
   serverId: string
@@ -40,14 +41,14 @@ function getStatus(event: ServerEvent): 'upcoming' | 'live' | 'ended' {
   return 'ended'
 }
 
-const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  upcoming: { label: 'À venir',  cls: 'bg-blue-500/20 text-blue-300' },
-  live:     { label: 'En cours', cls: 'bg-green-500/20 text-green-300' },
-  ended:    { label: 'Terminé',  cls: 'bg-fc-muted/20 text-fc-muted' },
+const STATUS_BADGE: Record<string, { label: Key; cls: string }> = {
+  upcoming: { label: 'events.upcoming',  cls: 'bg-blue-500/20 text-blue-300' },
+  live:     { label: 'friends.call.ongoing', cls: 'bg-green-500/20 text-green-300' },
+  ended:    { label: 'friends.call.ended',  cls: 'bg-fc-muted/20 text-fc-muted' },
 }
 
 function formatDateFR(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
+  return new Date(dateStr).toLocaleDateString(intlLocale(), {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -79,6 +80,7 @@ interface EventModalProps {
 }
 
 function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalProps) {
+  const t = useT()
   const [form, setForm] = useState<EventFormData>({
     name:        initial?.name        ?? '',
     description: initial?.description ?? '',
@@ -93,7 +95,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim() || !form.start_time) {
-      toast.error('Titre et date de début requis')
+      toast.error(t('events.required'))
       return
     }
     onSubmit(form)
@@ -115,11 +117,11 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
       >
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-fc-hover">
           <h3 id={titleId} className="text-lg font-semibold text-white">
-            {mode === 'create' ? 'Créer un événement' : "Modifier l'événement"}
+            {mode === 'create' ? t('events.create') : t('events.edit')}
           </h3>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('common.close')}
             className="text-fc-muted hover:text-white transition p-2 min-w-[36px] min-h-[36px] flex items-center justify-center rounded hover:bg-fc-hover"
           >
             <X size={18} aria-hidden />
@@ -129,13 +131,13 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-              Titre <span className="text-fc-red">*</span>
+              {t('events.titleLabel')} <span className="text-fc-red">*</span>
             </label>
             <input
               value={form.name}
               onChange={set('name')}
               maxLength={100}
-              placeholder="Nom de l'événement"
+              placeholder={t('events.namePh')}
               enterKeyHint="next"
               autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
@@ -145,14 +147,14 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 
           <div>
             <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-              Description
+              {t('srv.description')}
             </label>
             <textarea
               value={form.description}
               onChange={set('description')}
               maxLength={1000}
               rows={3}
-              placeholder="Décrivez l'événement..."
+              placeholder={t('events.descPh')}
               enterKeyHint="next"
               autoCapitalize="sentences"
               className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none text-sm"
@@ -162,7 +164,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                Début <span className="text-fc-red">*</span>
+                {t('settings.notif.start')} <span className="text-fc-red">*</span>
               </label>
               <input
                 type="datetime-local"
@@ -174,7 +176,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
             </div>
             <div>
               <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
-                Fin
+                {t('settings.notif.end')}
               </label>
               <input
                 type="datetime-local"
@@ -192,14 +194,14 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               onClick={onClose}
               className="flex-1 px-4 py-2 bg-fc-hover text-fc-muted hover:text-white rounded text-sm font-medium transition"
             >
-              Annuler
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Enregistrement...' : mode === 'create' ? 'Créer' : 'Sauvegarder'}
+              {loading ? t('common.recording') : mode === 'create' ? t('common.create') : t('common.save')}
             </button>
           </div>
         </form>
@@ -209,6 +211,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
 }
 
 export default function ServerEventsPage({ serverId }: Props) {
+  const t = useT()
   const qc = useQueryClient()
   const { on } = useWs()
   const { user } = useAuth()
@@ -252,9 +255,9 @@ export default function ServerEventsPage({ serverId }: Props) {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
       setShowCreate(false)
       setCreateDate(null)
-      toast.success('Événement créé')
+      toast.success(t('events.created'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('servers.create.error')),
   })
 
   const updateEvent = useMutation({
@@ -271,9 +274,9 @@ export default function ServerEventsPage({ serverId }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
       setEditing(null)
-      toast.success('Événement mis à jour')
+      toast.success(t('events.updated'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur mise à jour'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('events.updateError')),
   })
 
   const deleteEvent = useMutation({
@@ -281,22 +284,22 @@ export default function ServerEventsPage({ serverId }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server_events', serverId] })
       setDeletingId(null)
-      toast.success('Événement supprimé')
+      toast.success(t('events.deleted'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.adv.deleteError')),
   })
 
   const toggleAttend = useMutation({
     mutationFn: ({ id, rsvp }: { id: string; rsvp: string }) =>
       api.post(`/events/${id}/attend`, { status: rsvp }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['server_events', serverId] }),
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
-  const FILTERS: { id: FilterType; label: string }[] = [
-    { id: 'upcoming', label: 'À venir' },
-    { id: 'past',     label: 'Passés' },
-    { id: 'all',      label: 'Tous' },
+  const FILTERS: { id: FilterType; label: Key }[] = [
+    { id: 'upcoming', label: 'events.upcoming' },
+    { id: 'past',     label: 'events.past' },
+    { id: 'all',      label: 'friends.tab.all' },
   ]
 
   const handleCalendarCreate = (date: Date) => {
@@ -315,12 +318,12 @@ export default function ServerEventsPage({ serverId }: Props) {
         <div>
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">
             <Calendar size={18} className="text-fc-accent" />
-            Événements
+            {t('srv.tab.events')}
           </h3>
-          <p className="text-sm text-fc-muted mt-0.5">Planifiez et gérez les événements du serveur.</p>
+          <p className="text-sm text-fc-muted mt-0.5">{t('events.intro')}</p>
         </div>
         <div className="flex items-center gap-2">
-          <div role="group" aria-label="Mode d'affichage" className="flex items-center bg-fc-hover rounded-lg p-0.5">
+          <div role="group" aria-label={t('events.viewMode')} className="flex items-center bg-fc-hover rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('list')}
               aria-pressed={viewMode === 'list'}
@@ -329,7 +332,7 @@ export default function ServerEventsPage({ serverId }: Props) {
               }`}
             >
               <List size={13} aria-hidden />
-              Liste
+              {t('events.list')}
             </button>
             <button
               onClick={() => setViewMode('calendar')}
@@ -339,7 +342,7 @@ export default function ServerEventsPage({ serverId }: Props) {
               }`}
             >
               <Calendar size={13} aria-hidden />
-              Calendrier
+              {t('events.calendar')}
             </button>
           </div>
 
@@ -348,7 +351,7 @@ export default function ServerEventsPage({ serverId }: Props) {
             className="flex items-center gap-1.5 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition"
           >
             <Plus size={14} />
-            Créer
+            {t('common.create')}
           </button>
         </div>
       </div>
@@ -363,7 +366,7 @@ export default function ServerEventsPage({ serverId }: Props) {
       {/* Vue Liste */}
       {viewMode === 'list' && (
         <>
-          <div role="group" aria-label="Filtrer les événements" className="flex gap-1 flex-wrap">
+          <div role="group" aria-label={t('events.filter')} className="flex gap-1 flex-wrap">
             {FILTERS.map(f => (
               <button
                 key={f.id}
@@ -375,17 +378,17 @@ export default function ServerEventsPage({ serverId }: Props) {
                     : 'text-fc-muted hover:text-white hover:bg-fc-hover'
                 }`}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
 
           {isLoading ? (
-            <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+            <div className="text-center text-fc-muted py-12 text-sm">{t('common.loading')}</div>
           ) : events.length === 0 ? (
             <div className="text-center py-12">
               <Calendar size={40} className="mx-auto text-fc-muted/30 mb-3" />
-              <p className="text-fc-muted text-sm">Aucun événement dans cette catégorie.</p>
+              <p className="text-fc-muted text-sm">{t('events.none')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -399,7 +402,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 w-12 h-12 bg-fc-accent/20 rounded-lg flex flex-col items-center justify-center text-fc-accent">
                         <span className="text-xs font-medium leading-none uppercase">
-                          {new Date(event.start_time).toLocaleDateString('fr-FR', { month: 'short' })}
+                          {new Date(event.start_time).toLocaleDateString(intlLocale(), { month: 'short' })}
                         </span>
                         <span className="text-lg font-bold leading-none">
                           {new Date(event.start_time).getDate()}
@@ -410,7 +413,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <span className="text-white font-semibold text-sm truncate">{event.name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.cls}`}>
-                            {badge.label}
+                            {t(badge.label)}
                           </span>
                         </div>
 
@@ -426,7 +429,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                           </span>
                           <span className="flex items-center gap-1">
                             <Users size={11} />
-                            {event.attendee_count ?? 0} participant{(event.attendee_count ?? 0) !== 1 ? 's' : ''}
+                            {t((event.attendee_count ?? 0) !== 1 ? 'events.participants.other' : 'events.participants.one', { n: event.attendee_count ?? 0 })}
                           </span>
                         </div>
                       </div>
@@ -441,7 +444,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                               : 'bg-fc-hover text-fc-muted hover:text-white'
                           }`}
                         >
-                          {isAttending ? <><Check size={12} /> Inscrit</> : 'Participer'}
+                          {isAttending ? <><Check size={12} /> {t('events.going')}</> : t('events.attend')}
                         </button>
 
                         {canManage && (
@@ -449,7 +452,8 @@ export default function ServerEventsPage({ serverId }: Props) {
                             <button
                               onClick={() => setEditing(event)}
                               className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                              title="Modifier"
+                              title={t('common.edit')}
+                              aria-label={t('common.edit')}
                             >
                               <Edit2 size={13} />
                             </button>
@@ -460,14 +464,14 @@ export default function ServerEventsPage({ serverId }: Props) {
                                   onClick={() => deleteEvent.mutate(event.id)}
                                   disabled={deleteEvent.isPending}
                                   className="p-1.5 text-fc-red hover:bg-fc-red/10 rounded transition"
-                                  aria-label="Confirmer la suppression"
-                                  title="Confirmer"
+                                  aria-label={t('events.confirmDelete')}
+                                  title={t('events.confirm')}
                                 >
                                   <Check size={13} aria-hidden />
                                 </button>
                                 <button
                                   onClick={() => setDeletingId(null)}
-                                  aria-label="Annuler la suppression"
+                                  aria-label={t('events.cancelDelete')}
                                   className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
                                 >
                                   <X size={13} aria-hidden />
@@ -477,7 +481,8 @@ export default function ServerEventsPage({ serverId }: Props) {
                               <button
                                 onClick={() => setDeletingId(event.id)}
                                 className="p-1.5 text-fc-muted hover:text-fc-red hover:bg-fc-hover rounded transition"
-                                title="Supprimer"
+                                title={t('common.delete')}
+                                aria-label={t('common.delete')}
                               >
                                 <Trash2 size={13} />
                               </button>
