@@ -5,7 +5,7 @@ import { RTCView, type MediaStream } from '@livekit/react-native-webrtc'
 import { Avatar } from '@/components/Avatar'
 import type { TileInfo } from '@/features/calls/videoLayout'
 import { useT } from '@/i18n'
-import { colors, font, radius } from '@/theme'
+import { callColors, colors, font, radius } from '@/theme'
 
 /** Tuile d'appel affichable : caméra (ou avatar) d'un participant, ou écran partagé. */
 export interface CallTile extends TileInfo {
@@ -116,7 +116,7 @@ export function VideoTile({
 
 const styles = StyleSheet.create({
   tile: {
-    backgroundColor: '#2b2d31',
+    backgroundColor: callColors.tile,
     borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',

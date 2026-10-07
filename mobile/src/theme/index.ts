@@ -17,6 +17,10 @@ export const isLight = isLightTheme(appearance.theme, appearance.custom)
 export const outlined = isOutlined(appearance.theme, appearance.custom)
 export const outline = outlined ? { borderWidth: 1, borderColor: colors.border } : {}
 
+/** Écrans d'appel : toujours sombres, noir pur en AMOLED. */
+const amoled = outlined && colors.bg === '#000000'
+export const callColors = { bg: amoled ? '#000000' : '#111214', tile: amoled ? '#000000' : '#2b2d31' }
+
 /** Couleurs de présence : voir lib/status.ts (mêmes que le web). */
 export const statusColors: Record<string, string> = {
   online: '#3ba55c',

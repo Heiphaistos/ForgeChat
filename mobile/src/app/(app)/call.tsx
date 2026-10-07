@@ -17,7 +17,7 @@ import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
-import { colors, font, spacing } from '@/theme'
+import { callColors, colors, font, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
 /**
@@ -181,7 +181,7 @@ export default function CallScreen() {
 
 // Écran d'appel toujours sombre (comme Discord) : texte et boutons blancs lisibles quel que soit le thème.
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111214' },
+  container: { flex: 1, backgroundColor: callColors.bg },
   center: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   avatarRing: { borderRadius: 999, borderWidth: 4, borderColor: 'transparent', padding: 4 },
   top: { alignItems: 'center', gap: 4 },
