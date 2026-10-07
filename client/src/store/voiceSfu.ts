@@ -225,6 +225,8 @@ export function addPeer(userId: string, info: Partial<VoicePeer>, ctx: MeshCtx) 
           deafened: false,
           videoEnabled: info.videoEnabled ?? false,
           screenSharing: info.screenSharing ?? false,
+          recording: info.recording ?? false,
+          noRecord: info.noRecord ?? false,
           connectionLost: false,
         }],
   }))

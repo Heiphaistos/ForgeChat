@@ -12,6 +12,7 @@ test('adresses YouTube acceptées (mêmes cas que le serveur)', () => {
     'https://youtu.be/dQw4w9WgXcQ?si=abc',
     'http://YOUTU.BE/dQw4w9WgXcQ/',
     'https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=x',
+    'https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RDAMVM',
   ]) assert.equal(parseYouTubeId(url), 'dQw4w9WgXcQ', url)
 })
 

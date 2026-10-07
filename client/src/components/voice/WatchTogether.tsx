@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ExternalLink, FastForward, Pause, Play, Rewind, SkipForward, Square, Tv, Volume2, X } from 'lucide-react'
+import { ExternalLink, FastForward, Music2, Pause, Play, Rewind, SkipForward, Square, Tv, Volume2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useWs } from '../../store/ws'
 import {
@@ -97,6 +97,9 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
   const [url, setUrl] = useState('')
   const [volume, setVolume] = useState(80)
   const [seekDraft, setSeekDraft] = useState<number | null>(null)
+  // Musique ensemble : lecteur réduit (toujours visible, comme l'exige YouTube), file et commandes en grand.
+  const [audioOnly, setAudioOnly] = useState(() => localStorage.getItem('fc_watch_audio') === 'true')
+  const toggleAudioOnly = () => setAudioOnly(v => { localStorage.setItem('fc_watch_audio', String(!v)); return !v })
   const [, setTick] = useState(0)
 
   // Lecteur créé une fois par salon ; détruit à la fermeture du panneau.
@@ -195,12 +198,16 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
             <ExternalLink size={14} aria-hidden />
           </a>
         )}
+        <button onClick={toggleAudioOnly} className={btn} aria-pressed={audioOnly}
+          title={t('voiceLot.music.toggle')} aria-label={t('voiceLot.music.toggle')}>
+          <Music2 size={14} aria-hidden className={audioOnly ? 'text-fc-accent' : undefined} />
+        </button>
         <button onClick={onClose} className={btn} title={t('watch.hideTitle')} aria-label={t('watch.hide')}>
           <X size={16} aria-hidden />
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 bg-black relative">
+      <div className={`${audioOnly ? 'h-28 w-48 self-center my-2 rounded-lg overflow-hidden' : 'flex-1 min-h-0'} bg-black relative`}>
         <div ref={hostRef} className="absolute inset-0 [&>iframe]:w-full [&>iframe]:h-full" />
         {(!state || failed) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-sm text-fc-muted bg-black">
@@ -251,13 +258,14 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
 
       <form onSubmit={add} className="flex gap-2 px-3 py-2 border-t border-fc-hover">
         <input value={url} onChange={e => setUrl(e.target.value)} maxLength={300} inputMode="url"
-          placeholder="https://www.youtube.com/watch?v=…" aria-label={t('watch.url')}
+          placeholder={audioOnly ? 'https://music.youtube.com/watch?v=…' : 'https://www.youtube.com/watch?v=…'} aria-label={t('watch.url')}
           className="flex-1 min-w-0 bg-fc-input text-fc-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-fc-accent" />
         <button type="submit" disabled={!url.trim()} className="px-3 py-2 rounded-lg bg-fc-accent text-white text-sm font-medium disabled:opacity-40">
           {state ? t('watch.queue') : t('watch.start')}
         </button>
       </form>
 
+      {audioOnly && <div className="flex-1" />}
       {state && state.queue.length > 0 && (
         <div className="flex gap-2 px-3 pb-2 overflow-x-auto" aria-label={t('watch.queueLabel')}>
           {state.queue.map((id, i) => (

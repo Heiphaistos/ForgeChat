@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Volume2 } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { getAudioContext } from '../../lib/audio'
+import { spatialAzimuth, spatialPosition } from '../../lib/spatialAudio'
+import { useSpatial } from '../../store/spatial'
 
 /**
  * Volume au-delà de 100 % (le curseur monte à 200 %, comme Discord).
@@ -13,19 +15,24 @@ import { getAudioContext } from '../../lib/audio'
  */
 // Indexé par « pair:type » et non par flux : chaque piste (re)publiée crée un
 // nouveau MediaStream, et l'ancien graphe (source, gain, <audio>) restait branché.
-const _boosted = new Map<string, { src: MediaStream; out: MediaStream; node: AudioNode; gain: GainNode; keepAlive: HTMLAudioElement }>()
+const _boosted = new Map<string, { src: MediaStream; out: MediaStream; node: AudioNode; gain: GainNode; panner: PannerNode; keepAlive: HTMLAudioElement }>()
 
 function dropBoost(key: string) {
   const b = _boosted.get(key)
   if (!b) return
   b.node.disconnect()
   b.gain.disconnect()
+  b.panner.disconnect()
   b.keepAlive.srcObject = null
   _boosted.delete(key)
 }
 
-function playable(key: string, stream: MediaStream, volume: number): { stream: MediaStream; elementVolume: number } {
-  if (volume <= 1) {
+/**
+ * `azimuth` : voix spatiale (casque), angle du participant (lib/spatialAudio) ; null = son au centre.
+ * Le graphe WebAudio (gain + PannerNode HRTF) n'est monté que si l'un des deux sert.
+ */
+function playable(key: string, stream: MediaStream, volume: number, azimuth: number | null): { stream: MediaStream; elementVolume: number } {
+  if (volume <= 1 && azimuth === null) {
     dropBoost(key)
     return { stream, elementVolume: Math.max(0, volume) }
   }
@@ -36,15 +43,23 @@ function playable(key: string, stream: MediaStream, volume: number): { stream: M
     const gain = ctx.createGain()
     const dst = ctx.createMediaStreamDestination()
     const node = ctx.createMediaStreamSource(stream)
-    node.connect(gain).connect(dst)
+    const panner = ctx.createPanner()
+    panner.panningModel = 'HRTF'
+    panner.distanceModel = 'linear'
+    panner.rolloffFactor = 0 // même volume quelle que soit la place : seule la direction change
+    node.connect(gain).connect(panner).connect(dst)
     const keepAlive = new Audio()
     keepAlive.muted = true
     keepAlive.srcObject = stream
     void keepAlive.play().catch(() => {})
-    b = { src: stream, out: dst.stream, node, gain, keepAlive }
+    b = { src: stream, out: dst.stream, node, gain, panner, keepAlive }
     _boosted.set(key, b)
   }
-  b.gain.gain.value = Math.min(volume, 2)
+  b.gain.gain.value = Math.min(Math.max(volume, 0), 2)
+  const { x, z } = spatialPosition(azimuth ?? 0)
+  b.panner.positionX.value = x
+  b.panner.positionY.value = 0
+  b.panner.positionZ.value = z
   return { stream: b.out, elementVolume: 1 }
 }
 
@@ -71,6 +86,7 @@ export default function PersistentVoiceAudio() {
   const activePrioritySpeaker = useVoice(s => s.activePrioritySpeaker)
   // Orateur prioritaire EN TRAIN DE PARLER (détection du SFU), pas seulement micro ouvert.
   const priorityTalking = useVoice(s => !!s.activePrioritySpeaker && s.sfuSpeakers.includes(s.activePrioritySpeaker))
+  const spatial = useSpatial(s => s.on)
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elementsRef = useRef(new Set<HTMLAudioElement>())
 
@@ -82,10 +98,10 @@ export default function PersistentVoiceAudio() {
 
   if (!joined) return null
 
-  const attach = (el: HTMLAudioElement | null, key: string, stream: MediaStream, volume: number) => {
+  const attach = (el: HTMLAudioElement | null, key: string, stream: MediaStream, volume: number, azimuth: number | null) => {
     if (!el) return
     elementsRef.current.add(el)
-    const out = playable(key, stream, volume)
+    const out = playable(key, stream, volume, azimuth)
     if (el.srcObject !== out.stream) el.srcObject = out.stream
     el.volume = deafened ? 0 : out.elementVolume
     const savedOut = localStorage.getItem('fc_audio_output')
@@ -108,17 +124,18 @@ export default function PersistentVoiceAudio() {
   return (
     <>
       <div style={{ display: 'none' }} aria-hidden="true">
-        {peers.map(p => {
+        {peers.map((p, i) => {
+          const azimuth = spatial ? spatialAzimuth(i, peers.length) : null
           const ducked = priorityTalking && activePrioritySpeaker !== p.userId ? 0.3 : 1
           const micVolume = ((userVolumes[p.userId] ?? 100) / 100) * ducked
           const screenVolume = (screenVolumes[p.userId] ?? 100) / 100
           return (
             <span key={p.userId}>
               {p.stream && p.stream.getAudioTracks().length > 0 && (
-                <audio ref={el => attach(el, `${p.userId}:voice`, p.stream!, micVolume)} autoPlay data-fc-call="voice" />
+                <audio ref={el => attach(el, `${p.userId}:voice`, p.stream!, micVolume, azimuth)} autoPlay data-fc-call="voice" />
               )}
               {p.screenStream && p.screenStream.getAudioTracks().length > 0 && (
-                <audio ref={el => attach(el, `${p.userId}:screen`, p.screenStream!, screenVolume)} autoPlay data-fc-call="screen" />
+                <audio ref={el => attach(el, `${p.userId}:screen`, p.screenStream!, screenVolume, azimuth)} autoPlay data-fc-call="screen" />
               )}
             </span>
           )

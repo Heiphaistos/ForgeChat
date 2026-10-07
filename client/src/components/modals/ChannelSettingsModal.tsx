@@ -49,6 +49,7 @@ interface Channel {
   created_by?: string | null
   is_auto_create?: boolean
   auto_create_name?: string | null
+  waiting_room?: boolean
   bitrate?: number
   default_sort?: string
   require_tag?: boolean
@@ -272,6 +273,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
   const [hasExistingPassword] = useState(!!channel.has_voice_password)
   const [isAutoCreate, setIsAutoCreate] = useState(channel.is_auto_create ?? false)
   const [autoCreateName, setAutoCreateName] = useState(channel.auto_create_name ?? '')
+  const [waitingRoom, setWaitingRoom] = useState(!!channel.waiting_room)
   const [bitrate, setBitrate] = useState(channel.bitrate ?? 64000)
   const [defaultSort, setDefaultSort] = useState(channel.default_sort ?? 'latest_activity')
   const [requireTag, setRequireTag] = useState(channel.require_tag ?? false)
@@ -320,7 +322,13 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
         payload.default_sort = defaultSort
         payload.require_tag = requireTag
       }
-      return api.patch(`/servers/${serverId}/channels/${channel.id}`, payload)
+      return api.patch(`/servers/${serverId}/channels/${channel.id}`, payload).then(async r => {
+        // Salle d'attente : route dédiée (MANAGE_CHANNELS).
+        if (isVoice(channel.type) && waitingRoom !== !!channel.waiting_room) {
+          await api.put(`/servers/${serverId}/channels/${channel.id}/waiting-room`, { enabled: waitingRoom })
+        }
+        return r
+      })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['server', serverId] })
@@ -547,6 +555,13 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
                         <div className="text-xs text-fc-muted">{t('chset.autoCreateDesc')}</div>
                       </div>
                       <Toggle value={isAutoCreate} onChange={setIsAutoCreate} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-white">{t('chset.waitingRoom')}</div>
+                        <div className="text-xs text-fc-muted">{t('chset.waitingRoomDesc')}</div>
+                      </div>
+                      <Toggle value={waitingRoom} onChange={setWaitingRoom} />
                     </div>
                     {isAutoCreate && (
                       <input value={autoCreateName} onChange={e => setAutoCreateName(e.target.value)}
