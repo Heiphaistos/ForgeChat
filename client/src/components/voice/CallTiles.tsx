@@ -1,7 +1,7 @@
 // Tuiles d'appel : caméra (ou avatar) d'un participant, et écran partagé.
 // Elles remplissent leur conteneur ; la taille est décidée par CallStage.
 import { mediaUrl } from '../../api/client'
-import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff } from 'lucide-react'
+import { MicOff, Monitor, Volume2, Maximize2, ExternalLink, Eye, EyeOff, Film } from 'lucide-react'
 import NativeVideo from './NativeVideo'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
@@ -100,11 +100,13 @@ export function PeerTile({
 }
 
 // ─── Screen Tile — flux écran partagé, distinct de la tuile caméra du même peer ──
-export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPopOut, onWatch, onStopWatching, compact = false }: {
+export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPopOut, onWatch, onStopWatching, onClip, compact = false }: {
   stream: MediaStream | null; url?: string | null; label: string; onExpand?: () => void; onVolume?: () => void; onPopOut?: () => void
   /** Stream non regardé : afficher le bouton « Regarder ». */
   onWatch?: () => void
   onStopWatching?: () => void
+  /** Clips activés : enregistrer les dernières secondes du stream. */
+  onClip?: () => void
   compact?: boolean
 }) {
   if (!stream && !url && onWatch) {
@@ -135,6 +137,11 @@ export function ScreenTile({ stream, url = null, label, onExpand, onVolume, onPo
           <span className={`${compact ? 'text-[10px] max-w-[90px]' : 'text-xs max-w-[220px]'} text-white truncate`}>Écran de {label}</span>
         </div>
         <div className="flex items-center gap-1">
+          {onClip && (
+            <button onClick={onClip} aria-label={`Clip des dernières secondes de l'écran de ${label}`} title="Clip (30 dernières secondes)" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
+              <Film size={11} aria-hidden />
+            </button>
+          )}
           {onVolume && (
             <button onClick={onVolume} aria-label={`Volume du partage de ${label}`} title="Volume du partage" className="p-1.5 rounded hover:bg-white/20 text-white/60 hover:text-white min-w-[28px] min-h-[28px] flex items-center justify-center">
               <Volume2 size={11} aria-hidden />

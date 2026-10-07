@@ -23,6 +23,8 @@ import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
 import CallStage, { type ViewMode, type StageTile, type RenderOpts } from '../components/voice/CallStage'
+import ClipDialog from '../components/voice/ClipDialog'
+import { startClipBuffer, useClipsSetting, type ClipBuffer } from '../lib/clipBuffer'
 import { popOut } from '../lib/popout'
 import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
@@ -345,6 +347,38 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   useEffect(() => () => { recorderRef.current?.stop(); useVoice.getState().setRecording(false) }, [])
 
+  // Clips : un tampon par stream affiché (ceux des autres qu'on regarde, et son
+  // propre partage), seulement si l'option est activée. Le tampon s'arrête dès
+  // que le stream disparaît (fin du partage, « Arrêter de regarder », départ).
+  const clipsEnabled = useClipsSetting(s => s.enabled)
+  const [clipBuffers] = useState(() => new Map<string, { stream: MediaStream; buf: ClipBuffer }>())
+  const clipSources = new Map<string, MediaStream>()
+  if (clipsEnabled && isInThisChannel && user) {
+    if (screenSharing && localScreenStream) clipSources.set(user.id, localScreenStream)
+    for (const p of peers) if (p.screenStream) clipSources.set(p.userId, p.screenStream)
+  }
+  useEffect(() => {
+    for (const [id, b] of clipBuffers) if (clipSources.get(id) !== b.stream) { b.buf.stop(); clipBuffers.delete(id) }
+    for (const [id, st] of clipSources) if (!clipBuffers.has(id)) clipBuffers.set(id, { stream: st, buf: startClipBuffer(st) })
+  })
+  useEffect(() => () => { clipBuffers.forEach(b => b.buf.stop()); clipBuffers.clear() }, [clipBuffers])
+
+  const [clip, setClip] = useState<{ blob: Blob; label: string } | null>(null)
+  const takeClip = useCallback(async (userId?: string) => {
+    // Raccourci : le premier stream tamponné.
+    const id = userId ?? clipBuffers.keys().next().value
+    const b = id ? clipBuffers.get(id) : undefined
+    if (!id || !b) { toast.error('Aucun stream à clipper'); return }
+    const blob = await b.buf.clip()
+    if (!blob) { toast.error('Clip indisponible, réessayez dans un instant'); return }
+    setClip({ blob, label: id === user?.id ? user.username : peers.find(p => p.userId === id)?.username ?? 'inconnu' })
+  }, [clipBuffers, user, peers])
+  useEffect(() => {
+    const onClip = () => { void takeClip() }
+    window.addEventListener('fc:clip', onClip)
+    return () => window.removeEventListener('fc:clip', onClip)
+  }, [takeClip])
+
   // Les raccourcis vocaux (caméra, partage, push-to-talk) sont montés au niveau
   // racine dans App.tsx : ici ils mouraient dès qu'on quittait la page d'appel,
   // et ils ignoraient les raccourcis configurés dans les Réglages.
@@ -425,6 +459,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         <ScreenTile stream={t.stream} url={t.url} label={p.username} compact={o.compact}
           onWatch={p.isLocal ? undefined : () => watchStream(p.userId, true)}
           onStopWatching={p.isLocal || autoWatchStreams || !t.stream ? undefined : () => watchStream(p.userId, false)}
+          onClip={t.stream && clipSources.has(p.userId) ? () => void takeClip(p.userId) : undefined}
           onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'screen' })}
           onPopOut={() => detach(p.userId, 'screen', p.username, t.url)}
           onExpand={o.expand ? () => setFullscreenStream({ stream: t.stream!, label: `Écran de ${p.username}` }) : undefined} />
@@ -458,6 +493,12 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               role="status"
             >
               ● REC
+            </span>
+          )}
+          {clipSources.size > 0 && (
+            <span className="text-[11px] text-fc-muted border border-fc-hover rounded px-1.5 py-0.5"
+              title="Clips activés : les dernières secondes des streams affichés restent en mémoire sur cet appareil (Alt+C pour clipper)">
+              Clips
             </span>
           )}
         </div>
@@ -694,6 +735,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
       {fullscreenStream && (
         <FullscreenViewer stream={fullscreenStream.stream} label={fullscreenStream.label} onClose={() => setFullscreenStream(null)} />
+      )}
+      {clip && (
+        <ClipDialog blob={clip.blob} label={clip.label} serverId={serverId} voiceChannelId={channel.id} onClose={() => setClip(null)} />
       )}
       {tileMenu.node}
       {moderation.node}
