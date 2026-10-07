@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
-import { memo, useEffect, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { memo, useEffect, useState, type ReactNode } from 'react'
+import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
 import { formatDay, formatTime } from '@/lib/format'
 import { mentionsUser, previewUrl } from '@/lib/markdown'
-import type { ChatMessage } from '@/types/models'
+import type { ChatMessage, Reaction } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment, isVoiceMessageText, parseSticker, remainingLabel, remoteGif } from '@/features/composer/formats'
 import { openExternalUrl } from '@/lib/links'
@@ -25,7 +25,7 @@ interface Props {
   myId: string
   myName: string
   onLongPress: (m: ChatMessage) => void
-  onReact: (m: ChatMessage, emoji: string) => void
+  onReact: (m: ChatMessage, emoji: string, isSuper?: boolean) => void
   onPressAuthor: (userId: string) => void
   onRetry: (m: ChatMessage) => void
   /** Salon courant (sondages) ; absent en DM et groupe. */
@@ -35,7 +35,7 @@ interface Props {
   thread?: ThreadSummary
   onOpenThread?: (m: ChatMessage) => void
   /** Appui long sur une réaction : qui a réagi (salons et DM). */
-  onReactionLongPress?: (m: ChatMessage, emoji: string) => void
+  onReactionLongPress?: (m: ChatMessage, emoji: string, isSuper?: boolean) => void
   /** Traduction demandée depuis le menu du message. */
   translation?: string
   /** Couleur et icône du rôle de l'auteur (salons). */
@@ -107,6 +107,61 @@ function ReactionEmoji({ emoji }: { emoji: string }) {
   const url = name ? emojis.get(name) : undefined
   if (url) return <Image source={{ uri: url }} style={{ width: 18, height: 18 }} contentFit="contain" accessibilityLabel={emoji} />
   return <Text style={{ fontSize: 15 }}>{emoji}</Text>
+}
+
+/** Super réaction : l'emoji jaillit (agrandi, pivoté) à l'apparition et à chaque changement de `trigger`. */
+function SuperBurst({ trigger, children }: { trigger: string; children: ReactNode }) {
+  const [v] = useState(() => new Animated.Value(0))
+  useEffect(() => {
+    let cancelled = false
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (cancelled || reduce) return
+      v.setValue(0)
+      Animated.timing(v, { toValue: 1, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [trigger, v])
+  const scale = v.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: [1, 1.9, 0.9, 1] })
+  const rotate = v.interpolate({ inputRange: [0, 0.3, 0.6, 1], outputRange: ['0deg', '-12deg', '8deg', '0deg'] })
+  return <Animated.View style={{ transform: [{ scale }, { rotate }] }}>{children}</Animated.View>
+}
+
+/** Pastille de réaction ; une super réaction rejoue son animation au toucher et à chaque nouveau compte. */
+function ReactionChip({
+  m,
+  r,
+  onReact,
+  onReactionLongPress,
+}: {
+  m: ChatMessage
+  r: Reaction
+  onReact: Props['onReact']
+  onReactionLongPress: Props['onReactionLongPress']
+}) {
+  const [replay, setReplay] = useState(0)
+  const isSuper = !!r.is_super
+  return (
+    <Pressable
+      onPressIn={isSuper ? () => setReplay((n) => n + 1) : undefined}
+      onPress={() => onReact(m, r.emoji, isSuper)}
+      onLongPress={onReactionLongPress ? () => onReactionLongPress(m, r.emoji, isSuper) : undefined}
+      accessibilityHint={onReactionLongPress ? 'Appui long pour voir qui a réagi' : undefined}
+      style={[styles.reaction, r.me && styles.reactionMine, isSuper && styles.reactionSuper]}
+      accessibilityRole="button"
+      accessibilityLabel={`${isSuper ? 'Super réaction ' : ''}${r.emoji} ${r.count}${r.me ? ', ta réaction' : ''}`}
+    >
+      {isSuper ? (
+        <SuperBurst trigger={`${r.count}:${replay}`}>
+          <ReactionEmoji emoji={r.emoji} />
+        </SuperBurst>
+      ) : (
+        <ReactionEmoji emoji={r.emoji} />
+      )}
+      <Text style={[styles.reactionCount, r.me && { color: colors.text }]}>{r.count}</Text>
+    </Pressable>
+  )
 }
 
 /** Texte du message, puis l'aperçu de son premier lien (pas pendant l'envoi). */
@@ -240,18 +295,7 @@ export const MessageItem = memo(function MessageItem({
           {m.reactions.length ? (
             <View style={styles.reactions}>
               {m.reactions.map((r) => (
-                <Pressable
-                  key={r.emoji}
-                  onPress={() => onReact(m, r.emoji)}
-                  onLongPress={onReactionLongPress ? () => onReactionLongPress(m, r.emoji) : undefined}
-                  accessibilityHint={onReactionLongPress ? 'Appui long pour voir qui a réagi' : undefined}
-                  style={[styles.reaction, r.me && styles.reactionMine]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${r.emoji} ${r.count}${r.me ? ', ta réaction' : ''}`}
-                >
-                  <ReactionEmoji emoji={r.emoji} />
-                  <Text style={[styles.reactionCount, r.me && { color: colors.text }]}>{r.count}</Text>
-                </Pressable>
+                <ReactionChip key={`${r.is_super ? 's' : 'n'}:${r.emoji}`} m={m} r={r} onReact={onReact} onReactionLongPress={onReactionLongPress} />
               ))}
             </View>
           ) : null}
@@ -260,6 +304,9 @@ export const MessageItem = memo(function MessageItem({
     </View>
   )
 })
+
+/** Couleur des super réactions (même teinte que le web). */
+export const SUPER_COLOR = '#d946ef'
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 2, gap: spacing.md },
@@ -291,6 +338,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   reactionMine: { borderColor: colors.primary, backgroundColor: colors.primary + '33' },
+  reactionSuper: { borderColor: SUPER_COLOR, backgroundColor: SUPER_COLOR + '33' },
   reactionCount: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
   stickerEmoji: { fontSize: 64, lineHeight: 76 },
   stickerImage: { width: 120, height: 120 },

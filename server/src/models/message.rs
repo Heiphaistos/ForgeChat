@@ -60,6 +60,8 @@ pub struct ReactionCount {
     pub emoji: String,
     pub count: i64,
     pub me: bool,
+    /// Super réaction : comptée à part de la réaction normale du même emoji.
+    pub is_super: bool,
 }
 
 #[derive(Debug, Deserialize)]

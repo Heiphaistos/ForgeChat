@@ -140,6 +140,8 @@ export interface Reaction {
   emoji: string
   count: number
   me: boolean
+  /** Super réaction (salons) : pastille à part de la réaction normale du même emoji. */
+  is_super?: boolean
 }
 
 /** Message de salon serveur (MessageWithAuthor côté Rust). */
@@ -292,6 +294,9 @@ export interface Member {
   avatar: string | null
   status?: UserStatus
   nickname?: string | null
+  /** Profil propre à ce serveur ; `avatar` y est déjà substitué par le serveur. */
+  server_banner?: string | null
+  server_bio?: string | null
   is_owner?: boolean
   role_ids?: string[]
   timeout_until?: string | null

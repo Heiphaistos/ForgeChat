@@ -3,6 +3,7 @@ import { Stack, router } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { serversApi } from '@/api/servers'
+import { userRoute } from '@/features/servers/memberProfile'
 import { Avatar } from '@/components/Avatar'
 import { ErrorState, Loading } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
@@ -56,7 +57,7 @@ export default function MembersScreen() {
             onPress={() =>
               manage
                 ? router.push({ pathname: '/server/[serverId]/settings/member/[userId]', params: { serverId: ids.serverId, userId: item.user_id } })
-                : router.push(`/user/${item.user_id}`)
+                : router.push(userRoute(item.user_id, ids.serverId))
             }
             accessibilityRole="button"
             accessibilityLabel={`${item.nickname || item.username}${item.is_owner ? ', propriétaire' : ''}`}

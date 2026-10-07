@@ -464,7 +464,7 @@ export default function MessageList({
   const toggleReaction = useCallback((msgId: string, emoji: string) => {
     const msgs = useChat.getState().messagesByChannel[channelId] ?? []
     const msg = msgs.find(m => m.id === msgId)
-    const reaction = msg?.reactions?.find(r => r.emoji === emoji)
+    const reaction = msg?.reactions?.find(r => r.emoji === emoji && !r.is_super)
     if (reaction?.me) {
       removeReactionMut.mutate({ msgId, emoji })
     } else {
@@ -473,6 +473,21 @@ export default function MessageList({
     setPoppingReaction(`${msgId}:${emoji}`)
     setTimeout(() => setPoppingReaction(null), 300)
   }, [channelId])
+
+  // Super réaction (salons de serveur seulement) : pose ou retire la sienne. Le
+  // serveur diffuse REACTION_ADD/REMOVE `is_super` à tous, nous compris.
+  const toggleSuperReaction = useCallback((msgId: string, emoji: string) => {
+    const msg = (useChat.getState().messagesByChannel[channelId] ?? []).find(m => m.id === msgId)
+    const mine = msg?.reactions?.some(r => r.emoji === emoji && r.is_super && r.me)
+    const url = `/servers/${serverId}/channels/${channelId}/messages/${msgId}/super-reactions/${encodeURIComponent(emoji)}`
+    if (mine) {
+      api.delete(url).catch(() => toast.error('Impossible de retirer la super réaction'))
+      return
+    }
+    api.put(url)
+      .then(r => toast.success(`Super réaction ! Encore ${r.data?.remaining ?? 0} aujourd'hui`))
+      .catch((e: any) => toast.error(e.response?.data?.error ?? 'Impossible de poser la super réaction'))
+  }, [serverId, channelId])
 
   const startLongPress = useCallback((e: React.TouchEvent, msg: any) => {
     const t = e.touches[0]
@@ -543,30 +558,30 @@ export default function MessageList({
   })
 
   const reactionHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fetchReactionUsers = useCallback(async (messageId: string, emoji: string, x: number, y: number) => {
+  const fetchReactionUsers = useCallback(async (messageId: string, emoji: string, x: number, y: number, isSuper = false) => {
     try {
-      const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}`)
+      const res = await api.get(`/reactions?message_id=${messageId}&emoji=${encodeURIComponent(emoji)}${isSuper ? '&is_super=true' : ''}`)
       const users = res.data?.users ?? []
       setReactionPopup({ messageId, emoji, x, y, users })
     } catch {}
   }, [])
-  const handleReactionHover = useCallback((e: React.MouseEvent, messageId: string, emoji: string) => {
+  const handleReactionHover = useCallback((e: React.MouseEvent, messageId: string, emoji: string, isSuper = false) => {
     const { clientX, clientY } = e
     if (reactionHoverTimer.current) clearTimeout(reactionHoverTimer.current)
-    reactionHoverTimer.current = setTimeout(() => fetchReactionUsers(messageId, emoji, clientX, clientY), 300)
+    reactionHoverTimer.current = setTimeout(() => fetchReactionUsers(messageId, emoji, clientX, clientY, isSuper), 300)
   }, [fetchReactionUsers])
   const handleReactionHoverEnd = useCallback(() => setReactionPopup(null), [])
 
   // Long-press mobile sur une réaction → popup "qui a réagi" (hover indisponible)
   const reactionLongPress = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reactionLongPressFired = useRef(false)
-  const startReactionLongPress = useCallback((e: React.TouchEvent, messageId: string, emoji: string) => {
+  const startReactionLongPress = useCallback((e: React.TouchEvent, messageId: string, emoji: string, isSuper = false) => {
     const { clientX, clientY } = e.touches[0]
     reactionLongPressFired.current = false
     reactionLongPress.current = setTimeout(() => {
       reactionLongPressFired.current = true
       if ('vibrate' in navigator) navigator.vibrate(15)
-      fetchReactionUsers(messageId, emoji, clientX, clientY)
+      fetchReactionUsers(messageId, emoji, clientX, clientY, isSuper)
     }, 450)
   }, [fetchReactionUsers])
   const cancelReactionLongPress = useCallback(() => {
@@ -575,10 +590,15 @@ export default function MessageList({
   // Clic sur une pastille de réaction existante : suppression après un long-press
   // mobile (qui vient juste d'ouvrir le popup "qui a réagi") — ne concerne QUE ce
   // point d'entrée, pas le double-tap ❤️ ni les pickers d'ajout.
-  const handleReactionClick = useCallback((msgId: string, emoji: string) => {
+  const handleReactionClick = useCallback((msgId: string, emoji: string, isSuper = false) => {
     if (reactionLongPressFired.current) { reactionLongPressFired.current = false; return }
-    toggleReaction(msgId, emoji)
-  }, [toggleReaction])
+    if (isSuper) toggleSuperReaction(msgId, emoji)
+    else toggleReaction(msgId, emoji)
+  }, [toggleReaction, toggleSuperReaction])
+  const handleAddSuperReaction = useCallback((msgId: string, emoji: string) => {
+    toggleSuperReaction(msgId, emoji)
+    setEmojiPickerFor(null)
+  }, [toggleSuperReaction])
 
   // Lu via ref (pas de dépendance sur translatingId) pour que translateMessage — et donc
   // handleToggleTranslation qui l'appelle — restent des références stables entre renders.
@@ -805,6 +825,7 @@ export default function MessageList({
               onToggleReaction={handleReactionClick}
               onToggleEmojiPicker={handleToggleEmojiPicker}
               onAddQuickReaction={handleAddQuickReaction}
+              onAddSuperReaction={serverId ? handleAddSuperReaction : undefined}
               onPickReaction={handlePickReaction}
               onToggleReactionPicker={handleToggleReactionPicker}
               onReactionHover={handleReactionHover}

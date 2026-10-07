@@ -82,9 +82,10 @@ export const messagesApi = {
     return http.delete(base(ref) + path`/${messageId}`)
   },
 
-  /** Réaction : ajout/retrait explicite pour les salons, bascule pour les DM/groupes. */
-  react(ref: ConversationRef, messageId: string, emoji: string, currentlyMine: boolean) {
-    const p = base(ref) + path`/${messageId}/reactions/${emoji}`
+  /** Réaction : ajout/retrait explicite pour les salons, bascule pour les DM/groupes.
+   *  Super réaction : salons seulement, 10 par 24 h (429 au-delà). */
+  react(ref: ConversationRef, messageId: string, emoji: string, currentlyMine: boolean, isSuper = false) {
+    const p = base(ref) + (isSuper ? path`/${messageId}/super-reactions/${emoji}` : path`/${messageId}/reactions/${emoji}`)
     if (ref.kind === 'channel') return currentlyMine ? http.delete(p) : http.put(p)
     return http.put(p)
   },
@@ -170,8 +171,9 @@ export const messagesApi = {
   },
 
   /** Qui a réagi avec `emoji` (salons et DM 1:1 ; 100 personnes au plus). */
-  async reactionUsers(messageId: string, emoji: string): Promise<ReactionUser[]> {
-    return normalizeReactionUsers(await http.get<unknown>('/reactions', { query: { message_id: messageId, emoji } }))
+  async reactionUsers(messageId: string, emoji: string, isSuper = false): Promise<ReactionUser[]> {
+    const query = isSuper ? { message_id: messageId, emoji, is_super: 'true' } : { message_id: messageId, emoji }
+    return normalizeReactionUsers(await http.get<unknown>('/reactions', { query }))
   },
 
   /** Aperçu d'un lien (titre, description) ; le serveur filtre les adresses privées et les domaines. */

@@ -79,6 +79,11 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
     staleTime: 30_000,
   })
 
+  // Profil propre à ce serveur (avatar, bannière, bio) prioritaire sur celui du compte.
+  const banner = member?.server_banner ?? user?.banner
+  const avatar = member?.server_avatar ?? user?.avatar
+  const bio = member?.server_bio ?? user?.bio
+
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
     onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
@@ -131,8 +136,8 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
     >
       {/* Banner */}
       <div className="h-28 relative" aria-hidden>
-        {user?.banner
-          ? <img src={mediaUrl(user.banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        {banner
+          ? <img src={mediaUrl(banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
               style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
@@ -141,8 +146,8 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         {/* Avatar */}
         <div className="absolute -bottom-12 left-4">
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
-            {user?.avatar
-              ? <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+            {avatar
+              ? <img src={mediaUrl(avatar)} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
           {user && (
@@ -186,10 +191,10 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
               </div>
             )}
 
-            {user.bio && (
+            {bio && (
               <div className="mb-3">
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">À propos</div>
-                <div className="text-sm text-fc-text">{user.bio}</div>
+                <div className="text-sm text-fc-text">{bio}</div>
               </div>
             )}
 

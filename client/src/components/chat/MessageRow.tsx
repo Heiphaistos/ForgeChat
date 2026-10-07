@@ -1,7 +1,7 @@
 import { mediaUrl } from '../../api/client'
 import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState } from 'react'
-import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone } from 'lucide-react'
+import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
 import { format } from 'date-fns'
 import { renderMarkdown } from '../../utils/markdown'
 import ReminderModal from './ReminderModal'
@@ -60,14 +60,16 @@ export interface MessageRowProps {
   onJumpToMessage: (msgId: string) => void
   onOpenEditHistory: (msgId: string) => void
   onOpenLightbox: (images: string[], index: number) => void
-  onToggleReaction: (msgId: string, emoji: string) => void
+  onToggleReaction: (msgId: string, emoji: string, isSuper?: boolean) => void
   onToggleEmojiPicker: (msgId: string) => void
   onAddQuickReaction: (msgId: string, emoji: string) => void
+  /** Salons de serveur seulement (absent en DM). */
+  onAddSuperReaction?: (msgId: string, emoji: string) => void
   onPickReaction: (msgId: string, emoji: string) => void
   onToggleReactionPicker: (msgId: string) => void
-  onReactionHover: (e: React.MouseEvent, msgId: string, emoji: string) => void
+  onReactionHover: (e: React.MouseEvent, msgId: string, emoji: string, isSuper?: boolean) => void
   onReactionHoverEnd: () => void
-  onReactionTouchStart: (e: React.TouchEvent, msgId: string, emoji: string) => void
+  onReactionTouchStart: (e: React.TouchEvent, msgId: string, emoji: string, isSuper?: boolean) => void
   onReactionTouchEnd: () => void
   onSaveMessage: (msgId: string) => void
   onCopyMarkdown: (content: string) => void
@@ -93,7 +95,7 @@ function MessageRow({
   onStartEdit, onConfirmEdit, onCancelEdit, onOpenUserPopup, onAvatarContextMenu,
   onDoubleClick, onContextMenu, onTouchStartRow, onTouchMoveRow, onTouchEndRow,
   onJumpToMessage, onOpenEditHistory, onOpenLightbox, onToggleReaction, onToggleEmojiPicker,
-  onAddQuickReaction, onPickReaction, onToggleReactionPicker, onReactionHover, onReactionHoverEnd,
+  onAddQuickReaction, onAddSuperReaction, onPickReaction, onToggleReactionPicker, onReactionHover, onReactionHoverEnd,
   onReactionTouchStart, onReactionTouchEnd, onSaveMessage, onCopyMarkdown, onCopyLink,
   onForward, onReply, onOpenThread, onPinMessage, onPublishMessage, onToggleTranslation, onToggleReminder,
   onReport, onDeleteRequest,
@@ -388,31 +390,36 @@ function MessageRow({
               {msg.reactions?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {msg.reactions?.map((r: any) => {
-                    const isPopping = poppingEmoji === r.emoji
-                    const isBumped = bumpedEmojis.includes(r.emoji)
+                    const isSuper = !!r.is_super
+                    const isPopping = !isSuper && poppingEmoji === r.emoji
+                    const isBumped = !isSuper && bumpedEmojis.includes(r.emoji)
                     return (
                       <button
-                        key={r.emoji}
+                        key={`${isSuper ? 's' : 'n'}:${r.emoji}`}
                         onClick={(e) => {
                           e.stopPropagation()
-                          onToggleReaction(msg.id, r.emoji)
+                          onToggleReaction(msg.id, r.emoji, isSuper)
                         }}
-                        onMouseEnter={e => onReactionHover(e, msg.id, r.emoji)}
+                        onMouseEnter={e => onReactionHover(e, msg.id, r.emoji, isSuper)}
                         onMouseLeave={onReactionHoverEnd}
-                        onTouchStart={e => { e.stopPropagation(); onReactionTouchStart(e, msg.id, r.emoji) }}
+                        onTouchStart={e => { e.stopPropagation(); onReactionTouchStart(e, msg.id, r.emoji, isSuper) }}
                         onTouchEnd={onReactionTouchEnd}
                         onTouchMove={onReactionTouchEnd}
                         onTouchCancel={onReactionTouchEnd}
                         className={`flex items-center gap-1 px-2 py-1 md:py-0.5 rounded-full text-xs border transition-all duration-150
                           hover:scale-110 hover:shadow-md
                           ${r.me ? 'bg-fc-accent/20 border-fc-accent text-white' : 'bg-fc-hover border-fc-hover text-fc-muted hover:border-fc-accent'}
+                          ${isSuper ? 'super-reaction' : ''}
                           ${isPopping ? 'animate-bounce' : ''}`}
-                        title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi`}
+                        title={`${r.count} ${r.count === 1 ? 'personne a' : 'personnes ont'} réagi${isSuper ? ' (super réaction)' : ''}`}
                       >
-                        {customEmojiMap[r.emoji]
-                          ? <img src={mediaUrl(customEmojiMap[r.emoji])} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
-                          : <span>{r.emoji}</span>
-                        }
+                        {/* Super : la clé suit le compteur, l'animation se rejoue à chaque nouvelle super réaction (et au survol/toucher via le CSS). */}
+                        <span key={isSuper ? r.count : undefined} className={isSuper ? 'super-reaction-emoji' : undefined}>
+                          {customEmojiMap[r.emoji]
+                            ? <img src={mediaUrl(customEmojiMap[r.emoji])} alt={r.emoji} loading="lazy" decoding="async" className="w-4 h-4 object-contain" />
+                            : r.emoji
+                          }
+                        </span>
                         <span className={`transition-transform duration-150 inline-block ${isPopping || isBumped ? 'scale-110' : 'scale-100'}`}>{r.count}</span>
                       </button>
                     )
@@ -464,18 +471,35 @@ function MessageRow({
               </button>
               {showEmojiPicker && (
                 <div
-                  className="absolute bottom-full right-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex gap-1 z-50"
+                  className="absolute bottom-full right-0 mb-1 bg-fc-bg border border-fc-hover rounded-lg shadow-xl p-2 flex flex-col z-50"
                   onClick={e => e.stopPropagation()}
                 >
-                  {quickEmojis.map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => onAddQuickReaction(msg.id, emoji)}
-                      className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+                  <div className="flex gap-1">
+                    {quickEmojis.map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => onAddQuickReaction(msg.id, emoji)}
+                        className="text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                  {onAddSuperReaction && (
+                    <div className="flex gap-1 items-center border-t border-fc-hover mt-1 pt-1">
+                      <Sparkles size={14} className="text-fuchsia-400 mx-1 flex-shrink-0" aria-label="Super réaction" />
+                      {quickEmojis.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => onAddSuperReaction(msg.id, emoji)}
+                          title="Super réaction"
+                          className="super-reaction text-xl hover:scale-125 transition-transform p-1 rounded hover:bg-fc-hover"
+                        >
+                          <span className="super-reaction-emoji">{emoji}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

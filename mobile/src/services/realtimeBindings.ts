@@ -115,11 +115,11 @@ export function bindRealtime(): () => void {
   })
   on('REACTION_ADD', (e) => {
     const cid = str(e.channel_id), mid = str(e.message_id), emoji = str(e.emoji)
-    if (cid && mid && emoji) applyReactionDelta('channel', cid, mid, emoji, 1, e.user_id === getMyId())
+    if (cid && mid && emoji) applyReactionDelta('channel', cid, mid, emoji, 1, e.user_id === getMyId(), e.is_super === true)
   })
   on('REACTION_REMOVE', (e) => {
     const cid = str(e.channel_id), mid = str(e.message_id), emoji = str(e.emoji)
-    if (cid && mid && emoji) applyReactionDelta('channel', cid, mid, emoji, -1, e.user_id === getMyId())
+    if (cid && mid && emoji) applyReactionDelta('channel', cid, mid, emoji, -1, e.user_id === getMyId(), e.is_super === true)
   })
   on('MESSAGE_ATTACHMENT_ADDED', (e) => {
     const cid = str(e.channel_id), mid = str(e.message_id)
@@ -305,7 +305,8 @@ export function bindRealtime(): () => void {
       if (sid) void queryClient.invalidateQueries({ queryKey: qk.members(sid) })
     })
   }
-  for (const t of ['MEMBER_JOIN', 'MEMBER_LEAVE']) {
+  // Surnom et profil par serveur (avatar, bannière, bio) : la liste des membres les porte.
+  for (const t of ['MEMBER_JOIN', 'MEMBER_LEAVE', 'MEMBER_NICKNAME_UPDATE', 'MEMBER_PROFILE_UPDATE']) {
     on(t, (e) => {
       const sid = str(e.server_id)
       if (sid) void queryClient.invalidateQueries({ queryKey: qk.members(sid) })

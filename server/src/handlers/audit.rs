@@ -356,6 +356,9 @@ pub async fn discover_servers(
 pub struct ReactionQuery {
     pub message_id: Uuid,
     pub emoji: String,
+    /// Super réactions (074) : listées à part des réactions normales.
+    #[serde(default)]
+    pub is_super: bool,
 }
 
 #[derive(Serialize)]
@@ -401,11 +404,12 @@ pub async fn get_reaction_detail(
             "SELECT r.user_id, u.username, u.avatar
              FROM reactions r
              JOIN users u ON u.id=r.user_id
-             WHERE r.message_id=$1 AND r.emoji=$2
+             WHERE r.message_id=$1 AND r.emoji=$2 AND r.is_super=$3
              LIMIT 100"
         )
         .bind(q.message_id)
         .bind(&q.emoji)
+        .bind(q.is_super)
         .fetch_all(&state.db)
         .await?
     } else {

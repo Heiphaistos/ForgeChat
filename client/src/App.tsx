@@ -928,10 +928,18 @@ function AppInner() {
         qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
       }
     })
+    // Profil par serveur (avatar, bannière, bio) : même invalidation que le surnom.
+    const offMemberProfileUpdate = on('MEMBER_PROFILE_UPDATE', (d: any) => {
+      if (d.server_id) {
+        qcHook.invalidateQueries({ queryKey: ['member', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members', d.server_id] })
+        qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
+      }
+    })
     return () => {
       offUserUpdate(); offBoost(); offTagAssign(); offTagRemove()
       offMemberTimeout(); offMemberTimeoutLifted(); offRoleCreate(); offRoleDelete(); offRoleUpdate(); offMemberRoleUpdate()
-      offMemberNicknameUpdate()
+      offMemberNicknameUpdate(); offMemberProfileUpdate()
       offServerTagCreate(); offServerTagDelete()
     }
   }, [user?.id])

@@ -7,6 +7,8 @@ pub mod channels;
 pub mod channel_access;
 pub mod channel_backup;
 pub mod messages;
+pub mod super_reactions;
+pub mod member_profile;
 pub mod roles;
 pub mod invites;
 pub mod uploads;

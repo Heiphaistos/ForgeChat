@@ -281,15 +281,7 @@ pub async fn upload_avatar(
             .to_string();
 
         // Valider le content-type — liste blanche stricte pour les avatars
-        let ext = match content_type.as_str() {
-            "image/png" => "png",
-            "image/gif" => "gif",
-            "image/webp" => "webp",
-            "image/jpeg" | "image/jpg" => "jpg",
-            _ => return Err(AppError::BadRequest(
-                "Type de fichier non supporté. Acceptés: PNG, GIF, WEBP, JPEG".into()
-            )),
-        };
+        let ext = crate::handlers::uploads::image_ext(&content_type)?;
 
         let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
 
@@ -360,15 +352,7 @@ pub async fn upload_banner(
             .unwrap_or("image/jpeg")
             .to_string();
 
-        let ext = match content_type.as_str() {
-            "image/png" => "png",
-            "image/gif" => "gif",
-            "image/webp" => "webp",
-            "image/jpeg" | "image/jpg" => "jpg",
-            _ => return Err(AppError::BadRequest(
-                "Type de fichier non supporté. Acceptés: PNG, GIF, WEBP, JPEG".into()
-            )),
-        };
+        let ext = crate::handlers::uploads::image_ext(&content_type)?;
 
         let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
 

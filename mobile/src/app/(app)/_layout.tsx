@@ -50,7 +50,7 @@ export default function AppLayout() {
       <Stack.Screen name="server/[serverId]/invite" options={{ title: 'Inviter', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/channel-create" options={{ title: 'Créer un salon', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/notifications" options={{ title: 'Notifications' }} />
-      <Stack.Screen name="server/[serverId]/nickname" options={{ title: 'Profil de serveur', presentation: 'modal' }} />
+      <Stack.Screen name="server/[serverId]/nickname" options={{ title: 'Mon profil sur ce serveur', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/delete" options={{ title: 'Supprimer le serveur', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/onboarding" options={{ title: 'Mes réponses d’accueil', presentation: 'modal' }} />
       <Stack.Screen name="server/[serverId]/follow" options={{ title: 'Suivre le salon', presentation: 'modal' }} />

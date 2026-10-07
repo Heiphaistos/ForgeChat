@@ -19,6 +19,9 @@ pub enum AppError {
     Conflict(String),
     #[error("Trop de tentatives — réessayez dans 15 minutes")]
     TooManyRequests,
+    /// 429 avec un motif lisible (ex. quota quotidien de super réactions).
+    #[error("{0}")]
+    TooManyRequestsMsg(String),
     #[error("Mode lent actif — attendez {0} secondes")]
     SlowMode(i64),
     #[error("totp_required")]
@@ -39,6 +42,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),
             AppError::Conflict(m) => (StatusCode::CONFLICT, m.clone()),
             AppError::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, self.to_string()),
+            AppError::TooManyRequestsMsg(m) => (StatusCode::TOO_MANY_REQUESTS, m.clone()),
             AppError::SlowMode(secs) => {
                 return (
                     StatusCode::TOO_MANY_REQUESTS,
