@@ -145,3 +145,10 @@ test('fichiers : message {t, f} du web relu, entrées validées', async () => {
   expect(c.fileEntries({ f: [{ ...x.body.f[0], id: 'x' }] })).toEqual([])
   expect(c.safeMime('text/html')).toBe('application/octet-stream')
 })
+
+test('note privée scellée pour soi : mêmes octets que le web', async () => {
+  const x = V.privateNote
+  expect(await c.sealNote(d(x.priv), d(x.pub), x.owner, x.target, x.text, d(x.iv))).toEqual(x.sealed)
+  expect(await c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.target)).toBe(x.text)
+  await expect(c.openNote(d(x.priv), d(x.pub), x.sealed, x.owner, x.owner)).rejects.toThrow()
+})

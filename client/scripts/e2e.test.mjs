@@ -203,3 +203,12 @@ test('fichiers : message {t, f}, entrées validées, types MIME sûrs', async ()
   for (const m of ['text/html', 'image/svg+xml', 'application/xhtml+xml', 'text/xml', 'application/javascript'])
     assert.equal(c.safeMime(m), 'application/octet-stream')
 })
+
+test('note privée scellée pour soi : mêmes octets que le mobile', async () => {
+  const x = V.privateNote
+  const priv = await c.importPrivateKey(d(x.priv), d(x.pub))
+  assert.deepEqual(await c.sealNote(priv, d(x.pub), x.owner, x.target, x.text, d(x.iv)), x.sealed)
+  assert.equal(await c.openNote(priv, d(x.pub), x.sealed, x.owner, x.target), x.text)
+  // Déplacée sur la fiche de quelqu'un d'autre : illisible.
+  await assert.rejects(c.openNote(priv, d(x.pub), x.sealed, x.owner, x.owner))
+})

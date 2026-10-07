@@ -4,6 +4,8 @@ interface ActivityInfo {
   activity_type?: string
   activity_name?: string
   activity_detail?: string
+  /** En appel (salon vocal, appel privé ou de groupe), si l'utilisateur le montre. */
+  in_call?: boolean
 }
 
 interface PresenceState {

@@ -303,6 +303,31 @@ export async function unwrapServerKey(
   return key
 }
 
+// ─── Notes privées sur une personne (lot « Profil et social ») ──────────────
+/**
+ * Note chiffrée pour soi seul : AES-GCM(HKDF(ECDH(ma clé, ma clé publique))), IV
+ * neuf à chaque enregistrement. L'AAD lie la note à son auteur et à la personne
+ * visée : le serveur ne peut ni la lire, ni la déplacer sur une autre fiche.
+ */
+const noteInfo = (owner: string, target: string) => `forgechat note v1|${owner}|${target}`
+const noteAad = (owner: string, target: string) => `note v1|${owner}|${target}`
+
+export async function sealNote(
+  priv: Uint8Array, ownPub: Uint8Array, owner: string, target: string, text: string,
+  iv: Uint8Array = randomBytes(IV_BYTES),
+): Promise<ConvWrapped> {
+  const k = await hkdf(await ecdh(priv, ownPub), new Uint8Array(0), noteInfo(owner, target))
+  return { v: 1, iv: b64uEncode(iv), ct: b64uEncode(await aesGcmEncrypt(k, iv, utf8(text), noteAad(owner, target))) }
+}
+
+export async function openNote(
+  priv: Uint8Array, ownPub: Uint8Array, w: ConvWrapped, owner: string, target: string,
+): Promise<string> {
+  if (w.v !== 1) throw new Error('version inconnue')
+  const k = await hkdf(await ecdh(priv, ownPub), new Uint8Array(0), noteInfo(owner, target))
+  return new TextDecoder().decode(await aesGcmDecrypt(k, b64uDecode(w.iv), b64uDecode(w.ct), noteAad(owner, target)))
+}
+
 // ─── Fichiers et pièces jointes (§12) ───────────────────────────────────────
 /**
  * Un fichier = une clé aléatoire de 32 o (dans le message chiffré) ; découpé en

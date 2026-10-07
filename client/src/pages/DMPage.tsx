@@ -9,6 +9,7 @@ import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
+import RichStatus from '../components/ui/RichStatus'
 import { useAuth } from '../store/auth'
 import { useUnread } from '../store/unread'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -68,6 +69,7 @@ export default function DMPage() {
   const { on } = useWs()
   const presenceStatuses = usePresence(s => s.statuses)
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
+  const presenceActivities = usePresence(s => s.activities)
   const me = useAuth(s => s.user)
   const resetUnread = useUnread(s => s.reset)
   const { formatShort } = useFormatDate()
@@ -126,6 +128,7 @@ export default function DMPage() {
   const partnerName = dmInfo?.username ?? 'Utilisateur'
   const partnerAvatar = dmInfo?.avatar ?? null
   const partnerId = dmInfo?.other_user_id ?? ''
+  const partnerActivity = presenceActivities[partnerId]
   const status = partnerId ? getStatus(partnerId) : 'offline'
 
   useEffect(() => {
@@ -426,12 +429,13 @@ export default function DMPage() {
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLOR[status]}`} />
         </div>
 
-        <div>
+        <div className="min-w-0">
           <div className="font-semibold text-white text-sm leading-none flex items-center gap-1.5">
             {partnerName}
           </div>
-          <div className={`text-xs mt-0.5 ${status === 'online' ? 'text-fc-green' : 'text-fc-muted'}`}>
-            {t(STATUS_LABEL[status] ?? 'presence.offline')}
+          <div className={`text-xs mt-0.5 flex items-center gap-1.5 min-w-0 ${status === 'online' ? 'text-fc-green' : 'text-fc-muted'}`}>
+            <span className="flex-shrink-0">{t(STATUS_LABEL[status] ?? 'presence.offline')}</span>
+            <RichStatus activity={partnerActivity} className="text-fc-muted" />
           </div>
         </div>
 

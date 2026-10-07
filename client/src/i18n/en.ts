@@ -2,9 +2,11 @@
 import type { Key } from './fr'
 
 import { profileEn } from './profileEn.ts'
+import { socialEn } from './socialEn.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
+  ...socialEn,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
