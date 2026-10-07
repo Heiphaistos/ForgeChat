@@ -5,6 +5,7 @@ import { serversApi, type ServerFull } from '@/api/servers'
 import { Button, ErrorState, Loading, Section, SwitchRow, T, TextField } from '@/components/ui'
 import { ChoiceRow } from '@/features/servers/ChoiceRow'
 import { useServerDetail } from '@/features/servers/menus'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -12,11 +13,11 @@ import type { Channel } from '@/types/models'
 import { colors, spacing } from '@/theme'
 
 // Mêmes valeurs que le web (ServerSettingsModal.tsx), en secondes.
-const AFK_TIMEOUTS = [60, 120, 300, 600, 900, 1800, 3600].map((t) => ({ value: t, label: t >= 3600 ? '1 heure' : `${t / 60} min` }))
-const FILTERS = [
-  { value: 'none', label: 'Désactivé' },
-  { value: 'no_role', label: 'Membres sans rôle' },
-  { value: 'all', label: 'Tous les membres' },
+const AFK_TIMEOUTS = [60, 120, 300, 600, 900, 1800, 3600]
+const FILTERS: { value: string; label: Key }[] = [
+  { value: 'none', label: 'serverSettings.disabled' },
+  { value: 'no_role', label: 'serverSettings.adv.filterNoRole' },
+  { value: 'all', label: 'serverSettings.adv.filterAll' },
 ]
 const VANITY = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/
 
@@ -24,7 +25,8 @@ const VANITY = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/
 export default function AdvancedSettingsScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const detail = useServerDetail(ids.serverId ?? '', valid)
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  const t = useT()
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (detail.isLoading) return <Loading />
   if (!detail.data) return <ErrorState message={errorMessage(detail.error)} onRetry={() => void detail.refetch()} />
   const server = detail.data.server as ServerFull
@@ -46,8 +48,9 @@ function AdvancedForm({ server, channels }: { server: ServerFull; channels: Chan
   const [templatePublic, setTemplatePublic] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const t = useT()
 
-  const none = { value: null, label: 'Aucun' }
+  const none = { value: null, label: t('serverSettings.none') }
   const text = [none, ...channels.filter((c) => c.type === 'text' || c.type === 'announcement').map((c) => ({ value: c.id as string | null, label: `# ${c.name}` }))]
   const voice = [none, ...channels.filter((c) => c.type === 'voice' || c.type === 'video').map((c) => ({ value: c.id as string | null, label: c.name }))]
 
@@ -67,7 +70,7 @@ function AdvancedForm({ server, channels }: { server: ServerFull; channels: Chan
 
   const save = () => {
     const v = vanity.trim().toLowerCase()
-    if (v && !VANITY.test(v)) return setError('Adresse personnalisée : 3 à 30 caractères, minuscules, chiffres et tirets (pas en bord).')
+    if (v && !VANITY.test(v)) return setError(t('serverSettings.adv.vanityInvalid'))
     void run(
       'save',
       () =>
@@ -81,45 +84,47 @@ function AdvancedForm({ server, channels }: { server: ServerFull; channels: Chan
           content_filter: filter,
           vanity_url: v || null,
         }),
-      'Réglages enregistrés',
+      t('serverSettings.adv.saved'),
     )
   }
 
   const saveTemplate = () => {
-    if (template.trim().length < 2) return setError('Nom du modèle : 2 à 100 caractères.')
-    void run('template', () => serversApi.saveTemplate(server.id, template, templatePublic).then(() => setTemplate('')), 'Modèle enregistré')
+    if (template.trim().length < 2) return setError(t('serverSettings.adv.templateNameLength'))
+    void run('template', () => serversApi.saveTemplate(server.id, template, templatePublic).then(() => setTemplate('')), t('serverSettings.adv.templateSaved'))
   }
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <Stack.Screen options={{ title: 'Réglages avancés' }} />
-      <Section title="Visibilité" footer="Un serveur public apparaît dans « Explorer ».">
-        <SwitchRow icon="globe-outline" title="Serveur public" value={isPublic} onValueChange={setPublic} />
-        <ChoiceRow icon="eye-off-outline" title="Filtre de contenu" value={filter} options={FILTERS} onChange={setFilter} />
+      <Stack.Screen options={{ title: t('serverSettings.title.advanced') }} />
+      <Section title={t('serverSettings.adv.visibility')} footer={t('serverSettings.adv.visibilityFooter')}>
+        <SwitchRow icon="globe-outline" title={t('serverSettings.adv.public')} value={isPublic} onValueChange={setPublic} />
+        <ChoiceRow icon="eye-off-outline" title={t('serverSettings.adv.filter')} value={filter} options={FILTERS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setFilter} />
       </Section>
-      <Section title="Salons">
-        <ChoiceRow icon="megaphone-outline" title="Salon système" value={systemId} options={text} onChange={setSystemId} />
-        <ChoiceRow icon="book-outline" title="Salon des règles" value={rulesId} options={text} onChange={setRulesId} />
-        <ChoiceRow icon="moon-outline" title="Salon AFK" value={afkId} options={voice} onChange={setAfkId} />
-        {afkId ? <ChoiceRow icon="timer-outline" title="Délai AFK" value={afkTimeout} options={AFK_TIMEOUTS} onChange={setAfkTimeout} /> : null}
+      <Section title={t('serverSettings.channelsLabel')}>
+        <ChoiceRow icon="megaphone-outline" title={t('serverSettings.adv.system')} value={systemId} options={text} onChange={setSystemId} />
+        <ChoiceRow icon="book-outline" title={t('serverSettings.adv.rules')} value={rulesId} options={text} onChange={setRulesId} />
+        <ChoiceRow icon="moon-outline" title={t('serverSettings.adv.afk')} value={afkId} options={voice} onChange={setAfkId} />
+        {afkId ? <ChoiceRow icon="timer-outline" title={t('serverSettings.adv.afkTimeout')}
+            value={afkTimeout}
+            options={AFK_TIMEOUTS.map((s) => ({ value: s, label: s >= 3600 ? t('serverSettings.dur.1h') : t('serverSettings.adv.min', { n: s / 60 }) }))} onChange={setAfkTimeout} /> : null}
       </Section>
-      <Section title="Accueil">
+      <Section title={t('serverSettings.adv.welcomeSection')}>
         <TextField
           value={welcome}
           onChangeText={setWelcome}
-          placeholder="Message de bienvenue"
-          accessibilityLabel="Message de bienvenue"
+          placeholder={t('serverSettings.adv.welcome')}
+          accessibilityLabel={t('serverSettings.adv.welcome')}
           multiline
           maxLength={2000}
           style={{ minHeight: 80, textAlignVertical: 'top', borderRadius: 0 }}
         />
       </Section>
-      <Section title="Adresse personnalisée" footer="Invitation par cette adresse au lieu d'un code ; vide pour la retirer.">
+      <Section title={t('serverSettings.adv.vanity')} footer={t('serverSettings.adv.vanityFooter')}>
         <TextField
           value={vanity}
-          onChangeText={(t) => setVanity(t.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-          placeholder="mon-serveur"
-          accessibilityLabel="Adresse personnalisée"
+          onChangeText={(v) => setVanity(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+          placeholder={t('serverSettings.adv.vanityPlaceholder')}
+          accessibilityLabel={t('serverSettings.adv.vanity')}
           autoCapitalize="none"
           autoCorrect={false}
           maxLength={30}
@@ -127,16 +132,16 @@ function AdvancedForm({ server, channels }: { server: ServerFull; channels: Chan
         />
       </Section>
       {error ? <T variant="error" style={{ marginBottom: spacing.md }}>{error}</T> : null}
-      <Button title="Enregistrer" onPress={save} loading={busy === 'save'} style={{ marginBottom: spacing.xl }} />
+      <Button title={t('serverSettings.save')} onPress={save} loading={busy === 'save'} style={{ marginBottom: spacing.xl }} />
 
-      <Section title="Barrière de vérification" footer="Les nouveaux membres doivent accepter ces règles avant d'écrire.">
-        <SwitchRow icon="checkmark-circle-outline" title="Vérification à l'arrivée" value={verif} onValueChange={setVerif} />
+      <Section title={t('serverSettings.adv.verifGate')} footer={t('serverSettings.adv.verifFooter')}>
+        <SwitchRow icon="checkmark-circle-outline" title={t('serverSettings.adv.verifOnJoin')} value={verif} onValueChange={setVerif} />
         {verif ? (
           <TextField
             value={rules}
             onChangeText={setRules}
-            placeholder="Règles à accepter"
-            accessibilityLabel="Règles à accepter"
+            placeholder={t('serverSettings.adv.rulesToAccept')}
+            accessibilityLabel={t('serverSettings.adv.rulesToAccept')}
             multiline
             maxLength={2000}
             style={{ minHeight: 100, textAlignVertical: 'top', borderRadius: 0 }}
@@ -144,18 +149,18 @@ function AdvancedForm({ server, channels }: { server: ServerFull; channels: Chan
         ) : null}
       </Section>
       <Button
-        title="Enregistrer la vérification"
+        title={t('serverSettings.adv.saveVerif')}
         variant="secondary"
         loading={busy === 'verif'}
-        onPress={() => void run('verif', () => serversApi.updateVerification(server.id, verif, rules.trim() || null), 'Vérification enregistrée')}
+        onPress={() => void run('verif', () => serversApi.updateVerification(server.id, verif, rules.trim() || null), t('serverSettings.adv.verifSaved'))}
         style={{ marginBottom: spacing.xl }}
       />
 
-      <Section title="Modèle" footer="Copie salons, catégories et rôles (sans messages ni membres).">
-        <TextField value={template} onChangeText={setTemplate} placeholder="Nom du modèle" accessibilityLabel="Nom du modèle" maxLength={100} style={{ borderRadius: 0 }} />
-        <SwitchRow title="Modèle public" value={templatePublic} onValueChange={setTemplatePublic} />
+      <Section title={t('serverSettings.adv.template')} footer={t('serverSettings.adv.templateFooter')}>
+        <TextField value={template} onChangeText={setTemplate} placeholder={t('serverSettings.adv.templateName')} accessibilityLabel={t('serverSettings.adv.templateName')} maxLength={100} style={{ borderRadius: 0 }} />
+        <SwitchRow title={t('serverSettings.adv.templatePublic')} value={templatePublic} onValueChange={setTemplatePublic} />
       </Section>
-      <Button title="Enregistrer comme modèle" variant="secondary" icon="copy-outline" loading={busy === 'template'} onPress={saveTemplate} />
+      <Button title={t('serverSettings.adv.saveAsTemplate')} variant="secondary" icon="copy-outline" loading={busy === 'template'} onPress={saveTemplate} />
     </ScrollView>
   )
 }

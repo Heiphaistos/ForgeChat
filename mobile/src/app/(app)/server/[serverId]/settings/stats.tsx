@@ -3,6 +3,7 @@ import { Stack } from 'expo-router'
 import { RefreshControl, ScrollView, View } from 'react-native'
 import { moderationApi } from '@/api/moderation'
 import { ErrorState, Loading, Row, Section, T } from '@/components/ui'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { colors, spacing } from '@/theme'
@@ -11,8 +12,9 @@ import { colors, spacing } from '@/theme'
 export default function StatsScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const sid = ids.serverId ?? ''
+  const t = useT()
   const q = useQuery({ queryKey: ['server-stats', sid], queryFn: () => moderationApi.stats(sid), enabled: valid })
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (q.isLoading) return <Loading />
   if (!q.data) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
   const s = q.data
@@ -26,28 +28,28 @@ export default function StatsScreen() {
       contentContainerStyle={{ padding: spacing.lg }}
       refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.textMuted} />}
     >
-      <Stack.Screen options={{ title: 'Statistiques' }} />
-      <Section title="Membres">
-        <Row icon="people-outline" title="Membres" right={<T>{s.member_count}</T>} />
-        <Row icon="radio-button-on-outline" title="En ligne" right={<T>{s.online_count}</T>} />
-        <Row icon="person-add-outline" title="Arrivées (24 h / 7 j)" right={<T>{`${s.new_members_today} / ${s.new_members_week}`}</T>} />
+      <Stack.Screen options={{ title: t('serverSettings.title.stats') }} />
+      <Section title={t('screen.members')}>
+        <Row icon="people-outline" title={t('screen.members')} right={<T>{s.member_count}</T>} />
+        <Row icon="radio-button-on-outline" title={t('status.online')} right={<T>{s.online_count}</T>} />
+        <Row icon="person-add-outline" title={t('serverSettings.stats.joins')} right={<T>{`${s.new_members_today} / ${s.new_members_week}`}</T>} />
       </Section>
-      <Section title="Activité">
-        <Row icon="chatbubbles-outline" title="Messages (24 h / 7 j)" right={<T>{`${s.message_count_today} / ${s.message_count_week}`}</T>} />
-        <Row icon="list-outline" title="Salons" right={<T>{s.channel_count}</T>} />
+      <Section title={t('serverSettings.stats.activity')}>
+        <Row icon="chatbubbles-outline" title={t('serverSettings.stats.messages')} right={<T>{`${s.message_count_today} / ${s.message_count_week}`}</T>} />
+        <Row icon="list-outline" title={t('serverSettings.channelsLabel')} right={<T>{s.channel_count}</T>} />
       </Section>
-      <Section title="Salons les plus actifs (7 j)">
+      <Section title={t('serverSettings.stats.topChannels')}>
         {s.top_channels.length ? (
           s.top_channels.map((c) => <Row key={c.id} icon="chatbubble-outline" title={c.name} right={<T>{c.messages}</T>} />)
         ) : (
-          <Row title="Aucun message cette semaine" />
+          <Row title={t('serverSettings.stats.noMessagesWeek')} />
         )}
       </Section>
-      <Section title="Messages par heure (24 h)" footer={hours[peak] ? `Pic d'activité vers ${peak} h (heure du serveur).` : undefined}>
+      <Section title={t('serverSettings.stats.perHour')} footer={hours[peak] ? t('serverSettings.stats.peak', { h: peak }) : undefined}>
         <View
           style={{ flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 2, padding: spacing.md }}
           accessible
-          accessibilityLabel={hours[peak] ? `Pic d'activité vers ${peak} heures, ${hours[peak]} messages` : 'Aucune activité'}
+          accessibilityLabel={hours[peak] ? t('serverSettings.stats.peakA11y', { h: peak, n: hours[peak] }) : t('serverSettings.stats.noActivity')}
         >
           {hours.map((n, h) => (
             <View key={h} style={{ flex: 1, height: `${Math.max(2, (n / max) * 100)}%`, backgroundColor: n ? colors.primary : colors.bgHover, borderRadius: 2 }} />

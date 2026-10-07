@@ -8,6 +8,7 @@ import { Button, ErrorState, Loading, Row, Section, SwitchRow, T, TextField } fr
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
 import { PERMISSION_GROUPS, hasBit, roleColorHex, toggleBit } from '@/features/servers/perms'
 import { RoleIcon } from '@/features/servers/roleDecor'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { useRouteParams } from '@/lib/params'
@@ -23,14 +24,16 @@ export default function EditRoleScreen() {
   const sid = ids.serverId ?? ''
   const detail = useServerDetail(sid, valid)
   const role = detail.data?.roles.find((r) => r.id === ids.roleId)
-  if (!valid) return <ErrorState message="Rôle invalide." />
+  const t = useT()
+  if (!valid) return <ErrorState message={t('serverSettings.role.invalid')} />
   if (detail.isLoading) return <Loading />
-  if (!role) return <ErrorState message={detail.error ? errorMessage(detail.error) : 'Rôle introuvable.'} />
+  if (!role) return <ErrorState message={detail.error ? errorMessage(detail.error) : t('serverSettings.role.notFound')} />
   return <RoleForm key={role.id} serverId={sid} role={role} />
 }
 
 function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
   const perms = useServerPerms(sid)
+  const t = useT()
   const [name, setName] = useState(role.name)
   const [color, setColor] = useState(role.color)
   const [bits, setBits] = useState(role.permissions)
@@ -46,7 +49,7 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
   const refresh = () => queryClient.invalidateQueries({ queryKey: qk.server(sid) })
 
   const save = async () => {
-    if (!name.trim()) return setError('Le nom est requis.')
+    if (!name.trim()) return setError(t('serverSettings.role.nameRequired'))
     setSaving(true)
     setError(null)
     try {
@@ -70,44 +73,44 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 })
     const a = res.canceled ? undefined : res.assets[0]
     if (!a) return
-    if (a.fileSize && a.fileSize > 256 * 1024) return Alert.alert('Image trop lourde', 'Maximum 256 Ko.')
+    if (a.fileSize && a.fileSize > 256 * 1024) return Alert.alert(t('serverSettings.imageTooLarge'), t('serverSettings.maxKb', { n: 256 }))
     setUploading(true)
     try {
       const updated = await serversApi.uploadRoleIcon(sid, role.id, { uri: a.uri, name: 'icon.jpg', type: 'image/jpeg' })
       setIcon(updated?.icon ?? '')
       await refresh()
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('serverSettings.uploadFailed'), errorMessage(e))
     } finally {
       setUploading(false)
     }
   }
 
   const remove = () =>
-    Alert.alert(`Supprimer le rôle « ${role.name} » ?`, 'Les membres qui l’ont le perdent.', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('serverSettings.role.deleteTitle', { name: role.name }), t('serverSettings.role.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Supprimer',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: () =>
           void serversApi
             .deleteRole(sid, role.id)
             .then(refresh)
             .then(() => router.back())
-            .catch((e) => Alert.alert('Suppression impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('serverSettings.deleteFailed'), errorMessage(e))),
       },
     ])
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       {role.is_everyone ? (
-        <T variant="muted">@everyone : permissions de base de tous les membres.</T>
+        <T variant="muted">{t('serverSettings.role.everyone')}</T>
       ) : (
         <>
-          <TextField label="Nom du rôle" value={name} onChangeText={setName} maxLength={100} />
+          <TextField label={t('serverSettings.role.name')} value={name} onChangeText={setName} maxLength={100} />
           <View style={{ gap: spacing.sm }}>
-            <T variant="label">Couleur</T>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Couleur du rôle">
+            <T variant="label">{t('serverSettings.role.color')}</T>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel={t('serverSettings.role.colorA11y')}>
               {COLORS.map((c) => {
                 const hex = roleColorHex(c)
                 return (
@@ -115,7 +118,7 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
                     key={c}
                     onPress={() => setColor(c)}
                     accessibilityRole="radio"
-                    accessibilityLabel={hex ?? 'Sans couleur'}
+                    accessibilityLabel={hex ?? t('serverSettings.role.noColor')}
                     accessibilityState={{ selected: color === c }}
                     style={{
                       width: 36,
@@ -131,8 +134,8 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
             </View>
           </View>
           <View style={{ gap: spacing.sm }}>
-            <T variant="label">Dégradé (seconde couleur)</T>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Seconde couleur du dégradé">
+            <T variant="label">{t('serverSettings.role.gradient')}</T>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel={t('serverSettings.role.gradientA11y')}>
               {COLORS.map((c) => {
                 const hex = roleColorHex(c)
                 const value = c ? c : null
@@ -141,7 +144,7 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
                     key={c}
                     onPress={() => setColor2(value)}
                     accessibilityRole="radio"
-                    accessibilityLabel={hex ?? 'Sans dégradé'}
+                    accessibilityLabel={hex ?? t('serverSettings.role.noGradient')}
                     accessibilityState={{ selected: color2 === value }}
                     style={{
                       width: 36,
@@ -157,30 +160,32 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
             </View>
           </View>
           <View style={{ gap: spacing.sm }}>
-            <T variant="label">Icône</T>
+            <T variant="label">{t('serverSettings.role.icon')}</T>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <RoleIcon icon={icon} title={name} size={28} />
               <View style={{ flex: 1 }}>
-                <TextField label="Emoji" value={icon.startsWith('/uploads/') ? '' : icon} onChangeText={setIcon} maxLength={16} />
+                <TextField label={t('serverSettings.role.emoji')} value={icon.startsWith('/uploads/') ? '' : icon} onChangeText={setIcon} maxLength={16} />
               </View>
             </View>
-            <Button title={uploading ? 'Envoi…' : 'Choisir une image'} variant="secondary" icon="image-outline" onPress={() => void pickIcon()} loading={uploading} />
-            {icon ? <Button title="Retirer l'icône" variant="secondary" onPress={() => setIcon('')} /> : null}
+            <Button title={t(uploading ? 'serverSettings.role.uploading' : 'serverSettings.role.pickImage')} variant="secondary" icon="image-outline" onPress={() => void pickIcon()} loading={uploading} />
+            {icon ? <Button title={t('serverSettings.role.removeIcon')} variant="secondary" onPress={() => setIcon('')} /> : null}
           </View>
           <Section>
-            <SwitchRow icon="list-outline" title="Afficher séparément" subtitle="Ses membres forment un groupe dans la liste des membres" value={hoisted} onValueChange={setHoisted} />
-            <SwitchRow icon="at-outline" title="Mentionnable" subtitle="Tout le monde peut écrire @rôle" value={mentionable} onValueChange={setMentionable} />
+            <SwitchRow icon="list-outline" title={t('serverSettings.role.hoist')}
+              subtitle={t('serverSettings.role.hoistSub')} value={hoisted} onValueChange={setHoisted} />
+            <SwitchRow icon="at-outline" title={t('serverSettings.role.mentionable')}
+              subtitle={t('serverSettings.role.mentionableSub')} value={mentionable} onValueChange={setMentionable} />
           </Section>
         </>
       )}
       {PERMISSION_GROUPS.map((g) => (
-        <Section key={g.label} title={g.label}>
+        <Section key={g.label} title={t(g.label)}>
           {g.perms.map((p) => {
             const on = hasBit(bits, p.bit)
             return (
               <SwitchRow
                 key={p.bit}
-                title={p.label}
+                title={t(p.label)}
                 value={on}
                 // Le serveur refuse d'ajouter un droit que l'on n'a pas soi-même (anti-élévation).
                 disabled={!on && !perms.has(p.bit)}
@@ -191,11 +196,11 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
         </Section>
       ))}
       {error ? <T variant="error">{error}</T> : null}
-      <Button title="Enregistrer" onPress={save} loading={saving} />
+      <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
       {role.is_everyone ? null : (
-        <Section title={`Membres${members.data ? ` (${members.data.length})` : ''}`}>
-          {members.isLoading ? <Row title="Chargement…" /> : null}
-          {members.data?.length === 0 ? <Row title="Aucun membre n’a ce rôle" /> : null}
+        <Section title={members.data ? t('serverSettings.membersCount', { n: members.data.length }) : t('screen.members')}>
+          {members.isLoading ? <Row title={t('serverSettings.role.loading')} /> : null}
+          {members.data?.length === 0 ? <Row title={t('serverSettings.role.noMembers')} /> : null}
           {(members.data ?? []).map((m) => (
             <Row
               key={m.id}
@@ -208,7 +213,7 @@ function RoleForm({ serverId: sid, role }: { serverId: string; role: Role }) {
           ))}
         </Section>
       )}
-      {role.is_everyone ? null : <Button title="Supprimer le rôle" variant="danger" icon="trash-outline" onPress={remove} />}
+      {role.is_everyone ? null : <Button title={t('serverSettings.role.delete')} variant="danger" icon="trash-outline" onPress={remove} />}
     </ScrollView>
   )
 }

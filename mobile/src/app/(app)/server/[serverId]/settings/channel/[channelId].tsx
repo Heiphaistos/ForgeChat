@@ -11,23 +11,30 @@ import { ChannelFollows } from '@/features/servers/ChannelFollows'
 import { ChoiceRow } from '@/features/servers/ChoiceRow'
 import { confirmDeleteChannel, useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import type { Category } from '@/types/models'
 import { colors, spacing } from '@/theme'
 
-const SLOWMODE = [0, 5, 10, 15, 30, 60, 120, 300, 600, 3600].map((s) => ({
-  value: s,
-  label: s === 0 ? 'Désactivé' : s < 60 ? `${s} secondes` : s < 3600 ? `${s / 60} minute${s > 60 ? 's' : ''}` : '1 heure',
-}))
-const LIMITS = [0, 2, 5, 10, 25, 50, 99].map((n) => ({ value: n, label: n ? `${n} personnes` : 'Sans limite' }))
+type Tr = ReturnType<typeof useT>
+const slowmodeLabel = (t: Tr, s: number) =>
+  s === 0
+    ? t('serverSettings.disabled')
+    : s < 60
+      ? t('serverSettings.channel.seconds', { n: s })
+      : s < 3600
+        ? t(s > 60 ? 'serverSettings.channel.minutes' : 'serverSettings.channel.minute', { n: s / 60 })
+        : t('serverSettings.dur.1h')
+const SLOWMODE = [0, 5, 10, 15, 30, 60, 120, 300, 600, 3600]
+const LIMITS = [0, 2, 5, 10, 25, 50, 99]
 const BITRATES = [32000, 64000, 96000, 128000, 256000, 384000].map((b) => ({ value: b, label: `${b / 1000} kbps` }))
-const SORTS = [
-  { value: 'latest_activity', label: 'Dernière activité' },
-  { value: 'creation_date', label: 'Date de création' },
-  { value: 'most_replies', label: 'Nombre de réponses' },
-  { value: 'most_reactions', label: 'Nombre de réactions' },
+const SORTS: { value: string; label: Key }[] = [
+  { value: 'latest_activity', label: 'serverSettings.channel.sortLatest' },
+  { value: 'creation_date', label: 'serverSettings.channel.sortCreated' },
+  { value: 'most_replies', label: 'serverSettings.channel.sortReplies' },
+  { value: 'most_reactions', label: 'serverSettings.channel.sortReactions' },
 ]
 const PURGES = [50, 100, 500, 1000]
 const isVoice = (t: string) => t === 'voice' || t === 'video' || t === 'stage'
@@ -40,15 +47,17 @@ export default function EditChannelScreen() {
   const channels = useQuery({ queryKey: qk.channels(sid), queryFn: () => serversApi.channels(sid), enabled: valid })
   const categories = useQuery({ queryKey: qk.categories(sid), queryFn: () => serversApi.categories(sid), enabled: valid })
   const channel = channels.data?.find((c) => c.id === ids.channelId) as ChannelFull | undefined
-  if (!valid) return <ErrorState message="Salon invalide." />
+  const t = useT()
+  if (!valid) return <ErrorState message={t('serverSettings.channel.invalid')} />
   if (channels.isLoading) return <Loading />
-  if (!channel) return <ErrorState message={channels.error ? errorMessage(channels.error) : 'Salon introuvable.'} />
+  if (!channel) return <ErrorState message={channels.error ? errorMessage(channels.error) : t('serverSettings.channel.notFound')} />
   return <ChannelForm key={channel.id} serverId={sid} channel={channel} categories={categories.data ?? []} />
 }
 
 function ChannelForm({ serverId, channel, categories }: { serverId: string; channel: ChannelFull; categories: Category[] }) {
   const perms = useServerPerms(serverId)
-  const t = channel.type
+  const t = useT()
+  const ty = channel.type
   const [name, setName] = useState(channel.name)
   const [topic, setTopic] = useState(channel.topic ?? '')
   const [categoryId, setCategoryId] = useState<string | null>(channel.category_id)
@@ -66,20 +75,20 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
   const [purgeOpen, setPurgeOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const tags = useQuery({ queryKey: qk.forumTags(channel.id), queryFn: () => forumApi.tags(channel.id), enabled: t === 'forum' })
+  const tags = useQuery({ queryKey: qk.forumTags(channel.id), queryFn: () => forumApi.tags(channel.id), enabled: ty === 'forum' })
   const refresh = () => Promise.all([qk.channels(serverId), qk.server(serverId)].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
 
   const save = async () => {
     const n = name.trim()
-    if (n.length < 1 || n.length > 100) return setError('Le nom doit faire entre 1 et 100 caractères.')
+    if (n.length < 1 || n.length > 100) return setError(t('serverSettings.channel.nameLength'))
     const patch: ChannelPatch = { name: n, is_nsfw: nsfw }
-    if (isText(t)) Object.assign(patch, { topic: topic.trim(), slowmode_delay: slowmode })
-    if (isVoice(t)) {
+    if (isText(ty)) Object.assign(patch, { topic: topic.trim(), slowmode_delay: slowmode })
+    if (isVoice(ty)) {
       Object.assign(patch, { user_limit: limit || null, bitrate, is_auto_create: autoCreate, auto_create_name: autoName.trim() || null })
       if (removePassword) patch.remove_voice_password = true
       else if (password) patch.voice_password = password
     }
-    if (t === 'forum') Object.assign(patch, { default_sort: sort, require_tag: requireTag })
+    if (ty === 'forum') Object.assign(patch, { default_sort: sort, require_tag: requireTag })
     setSaving(true)
     setError(null)
     try {
@@ -100,7 +109,7 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
         await refresh()
         after?.(r)
       })
-      .catch((e) => Alert.alert('Action impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 
   const addTag = () => {
     if (!newTag.trim()) return
@@ -114,17 +123,21 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
   }
 
   const purge = (n: number) =>
-    Alert.alert(`Supprimer les ${n} derniers messages ?`, 'Action définitive.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => act(() => channelsApi.purge(channel.id, n), (r) => Alert.alert(`${r.deleted} messages supprimés`)) },
+    Alert.alert(t('serverSettings.channel.purgeTitle', { n }), t('serverSettings.channel.purgeBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: () => act(() => channelsApi.purge(channel.id, n), (r) => Alert.alert(t('serverSettings.channel.purged', { n: r.deleted }))),
+      },
     ])
 
   if (!perms.canEditChannels)
     return (
       <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }}>
-        <T variant="muted">Tu n’as pas le droit de modifier ce salon.</T>
+        <T variant="muted">{t('serverSettings.channel.noRight')}</T>
         {perms.canDeleteChannel(channel.created_by) ? (
-          <Button title="Supprimer le salon" variant="danger" icon="trash-outline" onPress={() => confirmDeleteChannel(serverId, channel, () => router.back())} />
+          <Button title={t('serverSettings.channel.delete')} variant="danger" icon="trash-outline" onPress={() => confirmDeleteChannel(serverId, channel, () => router.back())} />
         ) : null}
       </ScrollView>
     )
@@ -132,13 +145,13 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
   const cats = [...categories].sort((a, b) => a.position - b.position)
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <TextField label="Nom du salon" value={name} onChangeText={setName} maxLength={100} autoCapitalize="none" />
-      {isText(t) ? <TextField label="Sujet" value={topic} onChangeText={setTopic} multiline maxLength={1024} style={{ minHeight: 70, textAlignVertical: 'top' }} /> : null}
+      <TextField label={t('serverSettings.channel.name')} value={name} onChangeText={setName} maxLength={100} autoCapitalize="none" />
+      {isText(ty) ? <TextField label={t('serverSettings.channel.topic')} value={topic} onChangeText={setTopic} multiline maxLength={1024} style={{ minHeight: 70, textAlignVertical: 'top' }} /> : null}
       {cats.length ? (
         <View style={{ gap: spacing.sm }}>
-          <T variant="label">Catégorie</T>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel="Catégorie">
-            {[{ id: null, name: 'Aucune' }, ...cats].map((c) => (
+          <T variant="label">{t('serverSettings.channels.category')}</T>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }} accessibilityRole="radiogroup" accessibilityLabel={t('serverSettings.channels.category')}>
+            {[{ id: null, name: t('serverSettings.channel.noCategory') }, ...cats].map((c) => (
               <Button
                 key={c.id ?? 'none'}
                 title={c.name}
@@ -151,34 +164,44 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
           </View>
         </View>
       ) : null}
-      <Section title="Avancé">
-        {isText(t) ? <ChoiceRow icon="timer-outline" title="Mode lent" value={slowmode} options={SLOWMODE} onChange={setSlowmode} /> : null}
-        <SwitchRow icon="warning-outline" title="Salon NSFW (18+)" value={nsfw} onValueChange={setNsfw} />
-        {isVoice(t) ? (
+      <Section title={t('serverSettings.channel.advanced')}>
+        {isText(ty) ? (
+          <ChoiceRow
+            icon="timer-outline"
+            title={t('serverSettings.channel.slowmode')}
+            value={slowmode}
+            options={SLOWMODE.map((s) => ({ value: s, label: slowmodeLabel(t, s) }))}
+            onChange={setSlowmode}
+          />
+        ) : null}
+        <SwitchRow icon="warning-outline" title={t('serverSettings.channel.nsfw')} value={nsfw} onValueChange={setNsfw} />
+        {isVoice(ty) ? (
           <>
-            <ChoiceRow icon="people-outline" title="Limite d'utilisateurs" value={limit} options={LIMITS} onChange={setLimit} />
-            <ChoiceRow icon="pulse-outline" title="Débit audio" value={bitrate} options={BITRATES} onChange={setBitrate} />
-            <SwitchRow icon="add-circle-outline" title="Créer un salon temporaire en rejoignant" value={autoCreate} onValueChange={setAutoCreate} />
+            <ChoiceRow icon="people-outline" title={t('serverSettings.channel.userLimit')}
+              value={limit}
+              options={LIMITS.map((n) => ({ value: n, label: n ? t('serverSettings.channel.people', { n }) : t('serverSettings.noLimit') }))} onChange={setLimit} />
+            <ChoiceRow icon="pulse-outline" title={t('serverSettings.channel.bitrate')} value={bitrate} options={BITRATES} onChange={setBitrate} />
+            <SwitchRow icon="add-circle-outline" title={t('serverSettings.channel.autoCreate')} value={autoCreate} onValueChange={setAutoCreate} />
           </>
         ) : null}
-        {t === 'forum' ? (
+        {ty === 'forum' ? (
           <>
-            <ChoiceRow icon="swap-vertical-outline" title="Tri par défaut" value={sort} options={SORTS} onChange={setSort} />
-            <SwitchRow icon="pricetag-outline" title="Tag obligatoire" value={requireTag} onValueChange={setRequireTag} />
+            <ChoiceRow icon="swap-vertical-outline" title={t('serverSettings.channel.defaultSort')} value={sort} options={SORTS.map((o) => ({ ...o, label: t(o.label) }))} onChange={setSort} />
+            <SwitchRow icon="pricetag-outline" title={t('serverSettings.channel.requireTag')} value={requireTag} onValueChange={setRequireTag} />
           </>
         ) : null}
       </Section>
-      {isVoice(t) && autoCreate ? (
-        <TextField label="Nom des salons créés" value={autoName} onChangeText={setAutoName} maxLength={100} placeholder="Salon de {username}" />
+      {isVoice(ty) && autoCreate ? (
+        <TextField label={t('serverSettings.channel.autoName')} value={autoName} onChangeText={setAutoName} maxLength={100} placeholder={t('serverSettings.channel.autoNamePlaceholder')} />
       ) : null}
-      {isVoice(t) ? (
+      {isVoice(ty) ? (
         <View style={{ gap: spacing.sm }}>
           {channel.has_voice_password ? (
-            <SwitchRow icon="lock-open-outline" title="Retirer le mot de passe" value={removePassword} onValueChange={setRemovePassword} />
+            <SwitchRow icon="lock-open-outline" title={t('serverSettings.channel.removePassword')} value={removePassword} onValueChange={setRemovePassword} />
           ) : null}
           {removePassword ? null : (
             <PasswordField
-              label={channel.has_voice_password ? 'Nouveau mot de passe vocal' : 'Mot de passe vocal (facultatif)'}
+              label={t(channel.has_voice_password ? 'serverSettings.channel.newPassword' : 'serverSettings.channel.passwordOptional')}
               value={password}
               onChangeText={setPassword}
               maxLength={100}
@@ -187,10 +210,10 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
         </View>
       ) : null}
       {error ? <T variant="error">{error}</T> : null}
-      <Button title="Enregistrer" onPress={save} loading={saving} />
+      <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
 
-      {t === 'forum' ? (
-        <Section title="Tags du forum" footer="20 tags au plus, 32 caractères chacun.">
+      {ty === 'forum' ? (
+        <Section title={t('serverSettings.channel.forumTags')} footer={t('serverSettings.channel.forumTagsFooter')}>
           {(tags.data ?? []).map((tag) => (
             <Row
               key={tag}
@@ -199,7 +222,7 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
               right={
                 <IconButton
                   icon="trash-outline"
-                  label={`Supprimer le tag ${tag}`}
+                  label={t('serverSettings.channel.deleteTag', { name: tag })}
                   color={colors.danger}
                   onPress={() => act(() => channelsApi.deleteTag(channel.id, tag), () => void tags.refetch())}
                 />
@@ -208,41 +231,41 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
           ))}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm }}>
             <View style={{ flex: 1 }}>
-              <TextField value={newTag} onChangeText={setNewTag} placeholder="Nouveau tag" accessibilityLabel="Nouveau tag" maxLength={32} onSubmitEditing={addTag} />
+              <TextField value={newTag} onChangeText={setNewTag} placeholder={t('serverSettings.channel.newTag')} accessibilityLabel={t('serverSettings.channel.newTag')} maxLength={32} onSubmitEditing={addTag} />
             </View>
-            <IconButton icon="add" label="Ajouter le tag" onPress={addTag} />
+            <IconButton icon="add" label={t('serverSettings.channel.addTag')} onPress={addTag} />
           </View>
         </Section>
       ) : null}
 
-      {t === 'text' || t === 'announcement' ? <ChannelFollows channelId={channel.id} isAnnouncement={t === 'announcement'} /> : null}
+      {ty === 'text' || ty === 'announcement' ? <ChannelFollows channelId={channel.id} isAnnouncement={ty === 'announcement'} /> : null}
 
       <Section>
         <Row
           icon="lock-closed-outline"
-          title="Permissions du salon"
-          subtitle="Autoriser ou refuser par rôle ou par membre"
+          title={t('serverSettings.channel.perms')}
+          subtitle={t('serverSettings.channel.permsSub')}
           chevron
           onPress={() => router.push({ pathname: '/server/[serverId]/settings/channel-perms/[channelId]', params: { serverId, channelId: channel.id } })}
         />
         <Row
           icon={channel.archived ? 'archive' : 'archive-outline'}
-          title={channel.archived ? 'Restaurer le salon' : 'Archiver le salon'}
-          subtitle={channel.archived ? 'Archivé : masqué de la liste des salons' : null}
+          title={t(channel.archived ? 'serverSettings.channel.restore' : 'serverSettings.channel.archive')}
+          subtitle={channel.archived ? t('serverSettings.channel.archivedSub') : null}
           onPress={() => act(() => channelsApi.toggleArchive(serverId, channel.id), () => router.back())}
         />
-        {perms.has(PERM.MANAGE_CHANNELS) && isText(t) && t !== 'forum' ? (
-          <Row icon="flame-outline" title="Purger des messages" danger onPress={() => setPurgeOpen(true)} />
+        {perms.has(PERM.MANAGE_CHANNELS) && isText(ty) && ty !== 'forum' ? (
+          <Row icon="flame-outline" title={t('serverSettings.channel.purge')} danger onPress={() => setPurgeOpen(true)} />
         ) : null}
       </Section>
       {perms.canDeleteChannel(channel.created_by) ? (
-        <Button title="Supprimer le salon" variant="danger" icon="trash-outline" onPress={() => confirmDeleteChannel(serverId, channel, () => router.back())} />
+        <Button title={t('serverSettings.channel.delete')} variant="danger" icon="trash-outline" onPress={() => confirmDeleteChannel(serverId, channel, () => router.back())} />
       ) : null}
       <Sheet
         visible={purgeOpen}
         onClose={() => setPurgeOpen(false)}
-        title="Purger les derniers messages"
-        actions={PURGES.map((n) => ({ label: `Les ${n} derniers`, icon: 'flame-outline', danger: true, onPress: () => purge(n) }))}
+        title={t('serverSettings.channel.purgeSheet')}
+        actions={PURGES.map((n) => ({ label: t('serverSettings.channel.purgeLast', { n }), icon: 'flame-outline', danger: true, onPress: () => purge(n) }))}
       />
     </ScrollView>
   )

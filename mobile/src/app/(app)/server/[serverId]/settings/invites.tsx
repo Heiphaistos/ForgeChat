@@ -6,6 +6,7 @@ import { Alert, FlatList } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { Button, EmptyState, ErrorState, IconButton, Loading, Row } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
+import { useT } from '@/i18n'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -18,6 +19,7 @@ export default function InvitesScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const streamer = useAppearance((st) => st.streamerMode)
   const sid = ids.serverId ?? ''
+  const t = useT()
   const invites = useQuery({ queryKey: ['invites', sid], queryFn: () => serversApi.invites(sid), enabled: valid })
   // Retour de l'écran de création : afficher la nouvelle invitation.
   const { refetch } = invites
@@ -26,26 +28,29 @@ export default function InvitesScreen() {
       if (valid) void refetch()
     }, [valid, refetch]),
   )
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (invites.isLoading) return <Loading />
   if (invites.error) return <ErrorState message={errorMessage(invites.error)} onRetry={() => void invites.refetch()} />
 
   const revoke = (inv: Invite) =>
-    Alert.alert(`Révoquer ${inv.code} ?`, 'Le lien cessera de fonctionner.', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('serverSettings.invites.revokeTitle', { code: inv.code }), t('serverSettings.invites.revokeBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Révoquer',
+        text: t('serverSettings.invites.revoke'),
         style: 'destructive',
         onPress: () =>
           void serversApi
             .deleteInvite(sid, inv.code)
             .then(() => invites.refetch())
-            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       },
     ])
 
   const subtitle = (i: Invite) =>
-    [`${i.uses}${i.max_uses ? `/${i.max_uses}` : ''} utilisation${i.uses > 1 ? 's' : ''}`, i.expires_at ? `expire le ${formatShort(i.expires_at)}` : 'sans expiration'].join(' · ')
+    [
+      t(i.uses > 1 ? 'serverSettings.invites.uses' : 'serverSettings.invites.use', { n: `${i.uses}${i.max_uses ? `/${i.max_uses}` : ''}` }),
+      i.expires_at ? t('serverSettings.invites.expires', { date: formatShort(i.expires_at) }) : t('serverSettings.invites.noExpiry'),
+    ].join(' · ')
 
   return (
     <FlatList
@@ -53,9 +58,9 @@ export default function InvitesScreen() {
       data={invites.data ?? []}
       keyExtractor={(i) => i.code}
       ListHeaderComponent={
-        <Button title="Créer une invitation" icon="add" onPress={() => router.push(`/server/${sid}/invite`)} style={{ margin: spacing.lg }} />
+        <Button title={t('serverSettings.invites.create')} icon="add" onPress={() => router.push(`/server/${sid}/invite`)} style={{ margin: spacing.lg }} />
       }
-      ListEmptyComponent={<EmptyState icon="link-outline" title="Aucune invitation active" />}
+      ListEmptyComponent={<EmptyState icon="link-outline" title={t('serverSettings.invites.empty')} />}
       renderItem={({ item }) => (
         <Row
           icon="link-outline"
@@ -63,8 +68,8 @@ export default function InvitesScreen() {
           subtitle={subtitle(item)}
           right={
             <>
-              <IconButton icon="copy-outline" label={`Copier le lien ${item.code}`} onPress={() => void Clipboard.setStringAsync(`${apiOrigin()}/invite/${item.code}`)} />
-              <IconButton icon="trash-outline" label={`Révoquer ${item.code}`} color={colors.danger} onPress={() => revoke(item)} />
+              <IconButton icon="copy-outline" label={t('serverSettings.invites.copyLink', { code: item.code })} onPress={() => void Clipboard.setStringAsync(`${apiOrigin()}/invite/${item.code}`)} />
+              <IconButton icon="trash-outline" label={t('serverSettings.invites.revokeA11y', { code: item.code })} color={colors.danger} onPress={() => revoke(item)} />
             </>
           }
         />

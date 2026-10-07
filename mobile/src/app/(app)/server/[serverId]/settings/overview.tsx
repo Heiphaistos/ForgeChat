@@ -6,6 +6,7 @@ import { serversApi } from '@/api/servers'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading, T, TextField } from '@/components/ui'
 import { useServerDetail } from '@/features/servers/menus'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { resolveMediaUrl } from '@/lib/links'
 import { useRouteParams } from '@/lib/params'
@@ -25,7 +26,8 @@ export default function OverviewScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const detail = useServerDetail(ids.serverId ?? '', valid)
   const server = detail.data?.server
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  const t = useT()
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (detail.isLoading) return <Loading />
   if (!server) return <ErrorState message={errorMessage(detail.error)} onRetry={() => void detail.refetch()} />
   return <OverviewForm key={server.id} server={server} />
@@ -37,11 +39,12 @@ function OverviewForm({ server }: { server: Server }) {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'icon' | 'banner' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const t = useT()
 
   const save = async () => {
     const n = name.trim()
     if (n.length < 2 || n.length > 100) {
-      setError('Le nom doit faire entre 2 et 100 caractères.')
+      setError(t('serverSettings.overview.nameLength'))
       return
     }
     setSaving(true)
@@ -49,7 +52,7 @@ function OverviewForm({ server }: { server: Server }) {
     try {
       await serversApi.update(server.id, { name: n, description: description.trim() })
       await refresh(server.id)
-      Alert.alert('Serveur mis à jour')
+      Alert.alert(t('serverSettings.overview.updated'))
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -68,7 +71,7 @@ function OverviewForm({ server }: { server: Server }) {
     const a = res.canceled ? undefined : res.assets[0]
     if (!a) return
     if (a.fileSize && a.fileSize > MAX_BYTES[kind]) {
-      Alert.alert('Image trop lourde', kind === 'icon' ? 'Maximum 8 Mo.' : 'Maximum 2 Mo.')
+      Alert.alert(t('serverSettings.imageTooLarge'), t('serverSettings.maxMb', { n: kind === 'icon' ? 8 : 2 }))
       return
     }
     setUploading(kind)
@@ -76,7 +79,7 @@ function OverviewForm({ server }: { server: Server }) {
       await serversApi.uploadImage(server.id, kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
       await refresh(server.id)
     } catch (e) {
-      Alert.alert('Envoi impossible', errorMessage(e))
+      Alert.alert(t('serverSettings.uploadFailed'), errorMessage(e))
     } finally {
       setUploading(null)
     }
@@ -87,19 +90,19 @@ function OverviewForm({ server }: { server: Server }) {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg }}>
-        <Pressable onPress={() => void pick('icon')} accessibilityRole="button" accessibilityLabel="Changer l'icône du serveur" disabled={!!uploading}>
+        <Pressable onPress={() => void pick('icon')} accessibilityRole="button" accessibilityLabel={t('serverSettings.overview.changeIconA11y')} disabled={!!uploading}>
           <Avatar uri={server.icon} name={server.name} size={72} rounded={false} />
         </Pressable>
-        <Button title="Changer l'icône" variant="secondary" icon="image-outline" onPress={() => void pick('icon')} loading={uploading === 'icon'} style={{ flex: 1 }} />
+        <Button title={t('serverSettings.overview.changeIcon')} variant="secondary" icon="image-outline" onPress={() => void pick('icon')} loading={uploading === 'icon'} style={{ flex: 1 }} />
       </View>
       {banner ? (
-        <Image source={{ uri: banner }} style={{ height: 96, borderRadius: radius.md }} contentFit="cover" accessibilityLabel="Bannière actuelle" />
+        <Image source={{ uri: banner }} style={{ height: 96, borderRadius: radius.md }} contentFit="cover" accessibilityLabel={t('serverSettings.overview.currentBanner')} />
       ) : null}
-      <Button title={banner ? 'Changer la bannière' : 'Ajouter une bannière'} variant="secondary" icon="images-outline" onPress={() => void pick('banner')} loading={uploading === 'banner'} />
-      <TextField label="Nom du serveur" value={name} onChangeText={setName} maxLength={100} />
-      <TextField label="Description" value={description} onChangeText={setDescription} multiline maxLength={1000} style={{ minHeight: 90, textAlignVertical: 'top' }} />
+      <Button title={t(banner ? 'serverSettings.overview.changeBanner' : 'serverSettings.overview.addBanner')} variant="secondary" icon="images-outline" onPress={() => void pick('banner')} loading={uploading === 'banner'} />
+      <TextField label={t('serverSettings.overview.name')} value={name} onChangeText={setName} maxLength={100} />
+      <TextField label={t('serverSettings.overview.description')} value={description} onChangeText={setDescription} multiline maxLength={1000} style={{ minHeight: 90, textAlignVertical: 'top' }} />
       {error ? <T variant="error">{error}</T> : null}
-      <Button title="Enregistrer" onPress={save} loading={saving} />
+      <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
     </ScrollView>
   )
 }

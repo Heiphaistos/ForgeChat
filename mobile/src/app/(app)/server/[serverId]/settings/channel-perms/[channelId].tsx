@@ -9,15 +9,16 @@ import { Sheet } from '@/components/Sheet'
 import { Button, ErrorState, IconButton, Loading, Row, Section, T, type IconName } from '@/components/ui'
 import { useServerDetail } from '@/features/servers/menus'
 import { CHANNEL_PERMS, overrideState, setOverrideState, type OverrideState } from '@/features/servers/overrides'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 
-const STATES: { state: OverrideState; icon: IconName; label: string; color: string }[] = [
-  { state: 'deny', icon: 'close', label: 'refusé', color: colors.danger },
-  { state: 'inherit', icon: 'remove', label: 'hérité', color: colors.textMuted },
-  { state: 'allow', icon: 'checkmark', label: 'autorisé', color: colors.success },
+const STATES: { state: OverrideState; icon: IconName; label: Key; color: string }[] = [
+  { state: 'deny', icon: 'close', label: 'serverSettings.cp.deny', color: colors.danger },
+  { state: 'inherit', icon: 'remove', label: 'serverSettings.cp.inherit', color: colors.textMuted },
+  { state: 'allow', icon: 'checkmark', label: 'serverSettings.cp.allow', color: colors.success },
 ]
 
 /** Surcharges de permissions d'un salon (GET/PUT/DELETE /channels/:id/permissions). */
@@ -31,8 +32,9 @@ export default function ChannelPermissionsScreen() {
   const [edit, setEdit] = useState<ChannelOverride | null>(null)
   const [picker, setPicker] = useState<'role' | 'member' | null>(null)
   const [saving, setSaving] = useState(false)
+  const t = useT()
 
-  if (!valid) return <ErrorState message="Salon invalide." />
+  if (!valid) return <ErrorState message={t('serverSettings.channel.invalid')} />
   if (overrides.isLoading || detail.isLoading) return <Loading />
   if (overrides.error) return <ErrorState message={errorMessage(overrides.error)} onRetry={() => void overrides.refetch()} />
 
@@ -40,8 +42,8 @@ export default function ChannelPermissionsScreen() {
   const list = overrides.data ?? []
   const nameOf = (o: Pick<ChannelOverride, 'target_id' | 'target_type'>) =>
     o.target_type === 'role'
-      ? (roles.find((r) => r.id === o.target_id)?.name ?? 'Rôle supprimé')
-      : (members.data?.find((m) => m.user_id === o.target_id)?.username ?? 'Ancien membre')
+      ? (roles.find((r) => r.id === o.target_id)?.name ?? t('serverSettings.cp.deletedRole'))
+      : (members.data?.find((m) => m.user_id === o.target_id)?.username ?? t('serverSettings.cp.formerMember'))
   const taken = new Set(list.map((o) => o.target_id))
   const refresh = () => Promise.all([['channel-perms', cid], qk.channels(sid), qk.server(sid)].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
 
@@ -53,24 +55,24 @@ export default function ChannelPermissionsScreen() {
       await refresh()
       setEdit(null)
     } catch (e) {
-      Alert.alert('Enregistrement impossible', errorMessage(e))
+      Alert.alert(t('serverSettings.saveFailed'), errorMessage(e))
     } finally {
       setSaving(false)
     }
   }
 
   const remove = (o: ChannelOverride) =>
-    Alert.alert(`Retirer la surcharge de « ${nameOf(o)} » ?`, 'Ses droits redeviennent ceux du serveur.', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('serverSettings.cp.removeTitle', { name: nameOf(o) }), t('serverSettings.cp.removeBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Retirer',
+        text: t('serverSettings.cp.remove'),
         style: 'destructive',
         onPress: () =>
           void channelsApi
             .deletePermission(cid, o.target_id)
             .then(refresh)
             .then(() => setEdit(null))
-            .catch((e) => Alert.alert('Action impossible', errorMessage(e))),
+            .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
       },
     ])
 
@@ -78,16 +80,19 @@ export default function ChannelPermissionsScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
-      <Stack.Screen options={{ title: 'Permissions du salon' }} />
+      <Stack.Screen options={{ title: t('serverSettings.channel.perms') }} />
       {edit ? (
         <>
-          <Section title={`${nameOf(edit)} · ${edit.target_type === 'role' ? 'rôle' : 'membre'}`} footer="Hérité : le droit du serveur s'applique. Le refus d'un rôle cède devant l'autorisation d'un autre rôle ; le réglage d'un membre prime.">
+          <Section
+            title={`${nameOf(edit)} · ${t(edit.target_type === 'role' ? 'serverSettings.cp.roleLower' : 'serverSettings.cp.memberLower')}`}
+            footer={t('serverSettings.cp.footer')}
+          >
             {CHANNEL_PERMS.map((p) => {
               const current = overrideState(edit, p.bit)
               return (
                 <View key={p.bit} style={styles.permRow}>
-                  <Text style={styles.permLabel}>{p.label}</Text>
-                  <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel={p.label}>
+                  <Text style={styles.permLabel}>{t(p.label)}</Text>
+                  <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel={t(p.label)}>
                     {STATES.map((s) => {
                       const on = current === s.state
                       return (
@@ -95,7 +100,7 @@ export default function ChannelPermissionsScreen() {
                           key={s.state}
                           onPress={() => setEdit((o) => o && { ...o, ...setOverrideState(o, p.bit, s.state) })}
                           accessibilityRole="radio"
-                          accessibilityLabel={`${p.label} : ${s.label}`}
+                          accessibilityLabel={t('serverSettings.cp.stateA11y', { perm: t(p.label), state: t(s.label) })}
                           accessibilityState={{ selected: on }}
                           hitSlop={4}
                           style={[styles.segmentItem, on && { backgroundColor: s.color }]}
@@ -109,33 +114,33 @@ export default function ChannelPermissionsScreen() {
               )
             })}
           </Section>
-          <Button title="Enregistrer" onPress={save} loading={saving} />
-          <Button title="Annuler" variant="secondary" onPress={() => setEdit(null)} />
+          <Button title={t('serverSettings.save')} onPress={save} loading={saving} />
+          <Button title={t('common.cancel')} variant="secondary" onPress={() => setEdit(null)} />
         </>
       ) : (
         <>
-          <Section title="Surcharges" footer="Toucher une ligne pour la modifier.">
-            {list.length ? null : <Row title="Aucune : les droits du serveur s'appliquent." />}
+          <Section title={t('serverSettings.cp.overrides')} footer={t('serverSettings.cp.overridesFooter')}>
+            {list.length ? null : <Row title={t('serverSettings.cp.empty')} />}
             {list.map((o) => (
               <Row
                 key={o.target_id}
                 icon={o.target_type === 'role' ? 'shield-outline' : 'person-outline'}
                 title={nameOf(o)}
-                subtitle={o.target_type === 'role' ? 'Rôle' : 'Membre'}
+                subtitle={t(o.target_type === 'role' ? 'serverSettings.cp.role' : 'serverSettings.cp.member')}
                 onPress={() => setEdit(o)}
-                right={<IconButton icon="trash-outline" label={`Retirer la surcharge de ${nameOf(o)}`} color={colors.danger} onPress={() => remove(o)} />}
+                right={<IconButton icon="trash-outline" label={t('serverSettings.cp.removeA11y', { name: nameOf(o) })} color={colors.danger} onPress={() => remove(o)} />}
               />
             ))}
           </Section>
-          <Button title="Ajouter un rôle" icon="shield-outline" variant="secondary" onPress={() => setPicker('role')} />
-          <Button title="Ajouter un membre" icon="person-add-outline" variant="secondary" onPress={() => setPicker('member')} />
+          <Button title={t('serverSettings.cp.addRole')} icon="shield-outline" variant="secondary" onPress={() => setPicker('role')} />
+          <Button title={t('serverSettings.cp.addMember')} icon="person-add-outline" variant="secondary" onPress={() => setPicker('member')} />
           {members.error ? <T variant="error">{errorMessage(members.error)}</T> : null}
         </>
       )}
       <Sheet
         visible={picker !== null}
         onClose={() => setPicker(null)}
-        title={picker === 'role' ? 'Choisir un rôle' : 'Choisir un membre'}
+        title={t(picker === 'role' ? 'serverSettings.cp.pickRole' : 'serverSettings.cp.pickMember')}
         actions={
           picker === 'role'
             ? roles.filter((r) => !taken.has(r.id)).map((r) => ({ label: r.name, icon: 'shield-outline' as const, onPress: () => start('role', r.id) }))

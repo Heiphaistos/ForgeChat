@@ -1,25 +1,26 @@
+import type { Key } from '@/i18n'
 import { PERM } from './perms'
 
 export type OverrideState = 'allow' | 'deny' | 'inherit'
 type Masks = { allow: number; deny: number }
 
 /** Droits réglables par salon (mêmes que client/src/components/modals/ChannelSettingsModal.tsx). */
-export const CHANNEL_PERMS: { bit: number; label: string }[] = [
-  { bit: PERM.VIEW_CHANNEL, label: 'Voir le salon' },
-  { bit: PERM.SEND_MESSAGES, label: 'Envoyer des messages' },
-  { bit: PERM.READ_HISTORY, label: "Lire l'historique" },
-  { bit: PERM.MANAGE_MESSAGES, label: 'Gérer les messages' },
-  { bit: PERM.ATTACH_FILES, label: 'Joindre des fichiers' },
-  { bit: PERM.ADD_REACTIONS, label: 'Ajouter des réactions' },
-  { bit: PERM.EMBED_LINKS, label: 'Intégrer des liens' },
-  { bit: PERM.MENTION_EVERYONE, label: 'Mentionner @everyone' },
-  { bit: PERM.CONNECT_VOICE, label: 'Rejoindre la voix' },
-  { bit: PERM.SPEAK_VOICE, label: 'Parler' },
-  { bit: PERM.STREAM, label: "Partager l'écran / la caméra" },
-  { bit: PERM.MUTE_MEMBERS, label: 'Rendre muet' },
-  { bit: PERM.DEAFEN_MEMBERS, label: 'Rendre sourd' },
-  { bit: PERM.MOVE_MEMBERS, label: 'Déplacer des membres' },
-  { bit: PERM.PRIORITY_SPEAKER, label: 'Orateur prioritaire' },
+export const CHANNEL_PERMS: { bit: number; label: Key }[] = [
+  { bit: PERM.VIEW_CHANNEL, label: 'serverSettings.perm.viewChannel' },
+  { bit: PERM.SEND_MESSAGES, label: 'serverSettings.perm.send' },
+  { bit: PERM.READ_HISTORY, label: 'serverSettings.perm.readHistory' },
+  { bit: PERM.MANAGE_MESSAGES, label: 'serverSettings.perm.manageMessages' },
+  { bit: PERM.ATTACH_FILES, label: 'serverSettings.perm.attach' },
+  { bit: PERM.ADD_REACTIONS, label: 'serverSettings.perm.react' },
+  { bit: PERM.EMBED_LINKS, label: 'serverSettings.perm.embed' },
+  { bit: PERM.MENTION_EVERYONE, label: 'serverSettings.perm.mentionEveryone' },
+  { bit: PERM.CONNECT_VOICE, label: 'serverSettings.perm.connect' },
+  { bit: PERM.SPEAK_VOICE, label: 'serverSettings.perm.speak' },
+  { bit: PERM.STREAM, label: 'serverSettings.perm.stream' },
+  { bit: PERM.MUTE_MEMBERS, label: 'serverSettings.perm.mute' },
+  { bit: PERM.DEAFEN_MEMBERS, label: 'serverSettings.perm.deafen' },
+  { bit: PERM.MOVE_MEMBERS, label: 'serverSettings.perm.move' },
+  { bit: PERM.PRIORITY_SPEAKER, label: 'serverSettings.perm.priority' },
 ]
 
 // BigInt : STREAM (bit 40) dépasse les 32 bits des opérateurs bit à bit de JS.

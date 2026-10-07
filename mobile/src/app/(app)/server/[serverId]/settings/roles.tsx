@@ -6,6 +6,7 @@ import { Button, ErrorState, IconButton, Loading, Row, Section, TextField } from
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
 import { roleColorHex } from '@/features/servers/perms'
 import { reorderRoleIds } from '@/features/servers/reorder'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -20,12 +21,13 @@ export default function RolesScreen() {
   const [name, setName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  const t = useT()
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (detail.isLoading) return <Loading />
   if (!detail.data) return <ErrorState message={errorMessage(detail.error)} onRetry={() => void detail.refetch()} />
 
   const create = async () => {
-    if (!name.trim()) return setError('Donne un nom au rôle.')
+    if (!name.trim()) return setError(t('serverSettings.roles.nameRequired'))
     setCreating(true)
     setError(null)
     try {
@@ -46,7 +48,7 @@ export default function RolesScreen() {
     void serversApi
       .reorderRoles(sid, order)
       .then(() => queryClient.invalidateQueries({ queryKey: qk.server(sid) }))
-      .catch((e) => Alert.alert('Déplacement impossible', errorMessage(e)))
+      .catch((e) => Alert.alert(t('serverSettings.moveFailed'), errorMessage(e)))
   }
 
   const roles = [...detail.data.roles].sort((a, b) => b.position - a.position)
@@ -54,10 +56,10 @@ export default function RolesScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <View style={{ gap: spacing.sm }}>
-        <TextField label="Nouveau rôle" value={name} onChangeText={setName} maxLength={100} placeholder="Modérateur" error={error} />
-        <Button title="Créer le rôle" icon="add" onPress={create} loading={creating} />
+        <TextField label={t('serverSettings.roles.newRole')} value={name} onChangeText={setName} maxLength={100} placeholder={t('serverSettings.roles.placeholder')} error={error} />
+        <Button title={t('serverSettings.roles.create')} icon="add" onPress={create} loading={creating} />
       </View>
-      <Section title={`${roles.length} rôles`} footer="Tu ne peux modifier et déplacer que les rôles situés sous ton rôle le plus haut.">
+      <Section title={t('serverSettings.roles.count', { n: roles.length })} footer={t('serverSettings.roles.footer')}>
         {roles.map((r) => {
           const editable = perms.roleBelow(r)
           return (
@@ -65,15 +67,15 @@ export default function RolesScreen() {
               key={r.id}
               icon="shield"
               title={r.name}
-              subtitle={editable ? null : 'Au-dessus de ton rôle'}
+              subtitle={editable ? null : t('serverSettings.roles.above')}
               chevron={editable}
               right={
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: roleColorHex(r.color) ?? colors.textMuted }} accessible={false} />
                   {r.is_everyone ? null : (
                     <>
-                      <IconButton icon="chevron-up" label={`Monter ${r.name}`} disabled={!canMove(r.id, -1)} onPress={() => move(r.id, -1)} />
-                      <IconButton icon="chevron-down" label={`Descendre ${r.name}`} disabled={!canMove(r.id, 1)} onPress={() => move(r.id, 1)} />
+                      <IconButton icon="chevron-up" label={t('serverSettings.moveUp', { name: r.name })} disabled={!canMove(r.id, -1)} onPress={() => move(r.id, -1)} />
+                      <IconButton icon="chevron-down" label={t('serverSettings.moveDown', { name: r.name })} disabled={!canMove(r.id, 1)} onPress={() => move(r.id, 1)} />
                     </>
                   )}
                 </View>

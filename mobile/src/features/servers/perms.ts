@@ -1,4 +1,5 @@
 import type { Role, ServerDetail } from '@/types/models'
+import type { Key } from '@/i18n'
 
 /** Bits de permission, identiques à server/src/models/role.rs (STREAM = bit 40 : au-delà des entiers 32 bits). */
 export const PERM = {
@@ -31,51 +32,51 @@ export const PERM = {
 } as const
 
 /** Libellés des cases à cocher (mêmes groupes que client/src/components/modals/RolesTab.tsx). */
-export const PERMISSION_GROUPS: { label: string; perms: { bit: number; label: string }[] }[] = [
+export const PERMISSION_GROUPS: { label: Key; perms: { bit: number; label: Key }[] }[] = [
   {
-    label: 'Administration',
+    label: 'serverSettings.group.admin',
     perms: [
-      { bit: PERM.ADMINISTRATOR, label: 'Administrateur' },
-      { bit: PERM.MANAGE_SERVER, label: 'Gérer le serveur' },
-      { bit: PERM.MANAGE_ROLES, label: 'Gérer les rôles' },
-      { bit: PERM.MANAGE_CHANNELS, label: 'Gérer les salons' },
-      { bit: PERM.CREATE_CHANNELS, label: 'Créer des salons' },
-      { bit: PERM.EDIT_CHANNELS, label: 'Modifier les salons' },
-      { bit: PERM.DELETE_CHANNELS, label: 'Supprimer tous les salons' },
-      { bit: PERM.DELETE_OWN_CHANNELS, label: 'Supprimer ses propres salons' },
+      { bit: PERM.ADMINISTRATOR, label: 'serverSettings.perm.administrator' },
+      { bit: PERM.MANAGE_SERVER, label: 'serverSettings.perm.manageServer' },
+      { bit: PERM.MANAGE_ROLES, label: 'serverSettings.perm.manageRoles' },
+      { bit: PERM.MANAGE_CHANNELS, label: 'serverSettings.perm.manageChannels' },
+      { bit: PERM.CREATE_CHANNELS, label: 'serverSettings.perm.createChannels' },
+      { bit: PERM.EDIT_CHANNELS, label: 'serverSettings.perm.editChannels' },
+      { bit: PERM.DELETE_CHANNELS, label: 'serverSettings.perm.deleteChannels' },
+      { bit: PERM.DELETE_OWN_CHANNELS, label: 'serverSettings.perm.deleteOwnChannels' },
     ],
   },
   {
-    label: 'Gestion des membres',
+    label: 'serverSettings.group.members',
     perms: [
-      { bit: PERM.KICK_MEMBERS, label: 'Expulser des membres' },
-      { bit: PERM.BAN_MEMBERS, label: 'Bannir définitivement' },
-      { bit: PERM.BAN_TEMP, label: 'Bannir temporairement' },
+      { bit: PERM.KICK_MEMBERS, label: 'serverSettings.perm.kick' },
+      { bit: PERM.BAN_MEMBERS, label: 'serverSettings.perm.banForever' },
+      { bit: PERM.BAN_TEMP, label: 'serverSettings.perm.banTemp' },
     ],
   },
   {
-    label: 'Salons texte',
+    label: 'serverSettings.group.text',
     perms: [
-      { bit: PERM.VIEW_CHANNEL, label: 'Voir les salons' },
-      { bit: PERM.READ_HISTORY, label: "Lire l'historique" },
-      { bit: PERM.SEND_MESSAGES, label: 'Envoyer des messages' },
-      { bit: PERM.MANAGE_MESSAGES, label: 'Gérer les messages (et exclure temporairement)' },
-      { bit: PERM.MENTION_EVERYONE, label: 'Mentionner @everyone' },
-      { bit: PERM.ATTACH_FILES, label: 'Joindre des fichiers' },
-      { bit: PERM.EMBED_LINKS, label: 'Intégrer des liens' },
-      { bit: PERM.ADD_REACTIONS, label: 'Ajouter des réactions' },
+      { bit: PERM.VIEW_CHANNEL, label: 'serverSettings.perm.viewChannels' },
+      { bit: PERM.READ_HISTORY, label: 'serverSettings.perm.readHistory' },
+      { bit: PERM.SEND_MESSAGES, label: 'serverSettings.perm.send' },
+      { bit: PERM.MANAGE_MESSAGES, label: 'serverSettings.perm.manageMessagesTimeout' },
+      { bit: PERM.MENTION_EVERYONE, label: 'serverSettings.perm.mentionEveryone' },
+      { bit: PERM.ATTACH_FILES, label: 'serverSettings.perm.attach' },
+      { bit: PERM.EMBED_LINKS, label: 'serverSettings.perm.embed' },
+      { bit: PERM.ADD_REACTIONS, label: 'serverSettings.perm.react' },
     ],
   },
   {
-    label: 'Vocal et vidéo',
+    label: 'serverSettings.group.voice',
     perms: [
-      { bit: PERM.CONNECT_VOICE, label: 'Rejoindre la voix' },
-      { bit: PERM.SPEAK_VOICE, label: 'Parler' },
-      { bit: PERM.STREAM, label: "Partager l'écran / la caméra" },
-      { bit: PERM.PRIORITY_SPEAKER, label: 'Orateur prioritaire' },
-      { bit: PERM.MUTE_MEMBERS, label: 'Rendre muet' },
-      { bit: PERM.DEAFEN_MEMBERS, label: 'Rendre sourd' },
-      { bit: PERM.MOVE_MEMBERS, label: 'Déplacer des membres' },
+      { bit: PERM.CONNECT_VOICE, label: 'serverSettings.perm.connect' },
+      { bit: PERM.SPEAK_VOICE, label: 'serverSettings.perm.speak' },
+      { bit: PERM.STREAM, label: 'serverSettings.perm.stream' },
+      { bit: PERM.PRIORITY_SPEAKER, label: 'serverSettings.perm.priority' },
+      { bit: PERM.MUTE_MEMBERS, label: 'serverSettings.perm.mute' },
+      { bit: PERM.DEAFEN_MEMBERS, label: 'serverSettings.perm.deafen' },
+      { bit: PERM.MOVE_MEMBERS, label: 'serverSettings.perm.move' },
     ],
   },
 ]

@@ -9,6 +9,7 @@ import { Button, ErrorState, Loading, Section, SwitchRow, T } from '@/components
 import { MemberTags, ModNotes, VoiceModeration } from '@/features/servers/MemberAdmin'
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
 import { PERM, memberActions } from '@/features/servers/perms'
+import { useT, type Key } from '@/i18n'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -16,16 +17,16 @@ import { useNow } from '@/lib/useNow'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, spacing } from '@/theme'
 
-const TIMEOUTS = [
-  { label: '5 minutes', minutes: 5 },
-  { label: '1 heure', minutes: 60 },
-  { label: '1 jour', minutes: 1440 },
-  { label: '1 semaine', minutes: 10080 },
+const TIMEOUTS: { label: Key; minutes: number }[] = [
+  { label: 'serverSettings.dur.5min', minutes: 5 },
+  { label: 'serverSettings.dur.1h', minutes: 60 },
+  { label: 'serverSettings.dur.1d', minutes: 1440 },
+  { label: 'serverSettings.dur.1w', minutes: 10080 },
 ]
-const TEMP_BANS = [
-  { label: '1 jour', hours: 24 },
-  { label: '7 jours', hours: 168 },
-  { label: '30 jours', hours: 720 },
+const TEMP_BANS: { label: Key; hours: number }[] = [
+  { label: 'serverSettings.dur.1d', hours: 24 },
+  { label: 'serverSettings.dur.7d', hours: 168 },
+  { label: 'serverSettings.dur.30d', hours: 720 },
 ]
 
 /** Gestion d'un membre : rôles, tags, vocal, notes, exclusion temporaire, expulsion, bannissement. */
@@ -39,10 +40,11 @@ export default function ManageMemberScreen() {
   const [busy, setBusy] = useState<string | null>(null)
   const member = members.data?.find((m) => m.user_id === ids.userId)
   const now = useNow(30_000)
+  const t = useT()
 
-  if (!valid) return <ErrorState message="Membre invalide." />
+  if (!valid) return <ErrorState message={t('serverSettings.member.invalid')} />
   if (members.isLoading || detail.isLoading) return <Loading />
-  if (!member) return <ErrorState message={members.error ? errorMessage(members.error) : 'Ce membre n’est plus sur le serveur.'} />
+  if (!member) return <ErrorState message={members.error ? errorMessage(members.error) : t('serverSettings.member.gone')} />
   const can = memberActions(perms, member)
   const name = member.nickname || member.username
 
@@ -53,7 +55,7 @@ export default function ManageMemberScreen() {
       await queryClient.invalidateQueries({ queryKey: qk.members(sid) })
       done?.()
     } catch (e) {
-      Alert.alert('Action impossible', errorMessage(e))
+      Alert.alert(t('common.actionFailed'), errorMessage(e))
     } finally {
       setBusy(null)
     }
@@ -61,7 +63,7 @@ export default function ManageMemberScreen() {
 
   const confirm = (title: string, label: string, fn: () => Promise<unknown>) =>
     Alert.alert(title, undefined, [
-      { text: 'Annuler', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
       { text: label, style: 'destructive', onPress: () => void run(label, fn, () => router.back()) },
     ])
 
@@ -74,15 +76,29 @@ export default function ManageMemberScreen() {
 
   const sheetActions: SheetAction[] =
     sheet === 'timeout'
-      ? TIMEOUTS.map((t) => ({ label: `Exclure ${t.label}`, icon: 'time-outline', onPress: () => void run('timeout', () => serversApi.timeout(sid, member.user_id, t.minutes)) }))
+      ? TIMEOUTS.map((d) => ({
+          label: t('serverSettings.member.timeoutFor', { duration: t(d.label) }),
+          icon: 'time-outline',
+          onPress: () => void run('timeout', () => serversApi.timeout(sid, member.user_id, d.minutes)),
+        }))
       : [
           ...TEMP_BANS.map((b) => ({
-            label: `Bannir ${b.label}`,
+            label: t('serverSettings.member.banFor', { duration: t(b.label) }),
             icon: 'ban-outline' as const,
-            onPress: () => confirm(`Bannir ${name} ${b.label} ?`, 'Bannir', () => serversApi.ban(sid, member.user_id, undefined, b.hours)),
+            onPress: () =>
+              confirm(t('serverSettings.member.banConfirm', { name, duration: t(b.label) }), t('serverSettings.member.ban'), () =>
+                serversApi.ban(sid, member.user_id, undefined, b.hours),
+              ),
           })),
           ...(can.banForever
-            ? [{ label: 'Bannir définitivement', icon: 'ban' as const, danger: true, onPress: () => confirm(`Bannir ${name} définitivement ?`, 'Bannir', () => serversApi.ban(sid, member.user_id)) }]
+            ? [
+                {
+                  label: t('serverSettings.perm.banForever'),
+                  icon: 'ban' as const,
+                  danger: true,
+                  onPress: () => confirm(t('serverSettings.member.banForeverConfirm', { name }), t('serverSettings.member.ban'), () => serversApi.ban(sid, member.user_id)),
+                },
+              ]
             : []),
         ]
 
@@ -95,11 +111,11 @@ export default function ManageMemberScreen() {
             {name}
           </T>
           {member.nickname ? <T variant="muted">{member.username}</T> : null}
-          {timedOut ? <T variant="muted">Exclu jusqu’au {formatShort(member.timeout_until)}</T> : null}
+          {timedOut ? <T variant="muted">{t('serverSettings.member.timedOutUntil', { date: formatShort(member.timeout_until) })}</T> : null}
         </View>
       </View>
       {can.roles && roles.length ? (
-        <Section title="Rôles">
+        <Section title={t('screen.roles')}>
           {roles.map((r) => (
             <SwitchRow
               key={r.id}
@@ -118,15 +134,19 @@ export default function ManageMemberScreen() {
       {perms.has(PERM.MANAGE_MESSAGES) ? <ModNotes serverId={sid} userId={member.user_id} /> : null}
       {can.timeout ? (
         timedOut ? (
-          <Button title="Lever l’exclusion temporaire" variant="secondary" icon="time-outline" loading={busy === 'untimeout'} onPress={() => void run('untimeout', () => serversApi.removeTimeout(sid, member.user_id))} />
+          <Button title={t('serverSettings.member.untimeout')} variant="secondary" icon="time-outline" loading={busy === 'untimeout'} onPress={() => void run('untimeout', () => serversApi.removeTimeout(sid, member.user_id))} />
         ) : (
-          <Button title="Exclure temporairement" variant="secondary" icon="time-outline" loading={busy === 'timeout'} onPress={() => setSheet('timeout')} />
+          <Button title={t('serverSettings.member.timeout')} variant="secondary" icon="time-outline" loading={busy === 'timeout'} onPress={() => setSheet('timeout')} />
         )
       ) : null}
-      {can.kick ? <Button title={`Expulser ${name}`} variant="danger" icon="exit-outline" onPress={() => confirm(`Expulser ${name} ?`, 'Expulser', () => serversApi.kick(sid, member.user_id))} /> : null}
-      {can.ban ? <Button title={`Bannir ${name}`} variant="danger" icon="ban-outline" onPress={() => setSheet('ban')} /> : null}
-      {!can.roles && !can.timeout && !can.kick && !can.ban && !voice.mute && !voice.deafen && !voice.move ? <T variant="muted">Aucune action possible : ce membre a un rôle égal ou supérieur au tien.</T> : null}
-      <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'timeout' ? 'Exclusion temporaire' : 'Bannissement'} actions={sheetActions} />
+      {can.kick ? <Button title={t('serverSettings.member.kickNamed', { name })}
+          variant="danger"
+          icon="exit-outline"
+          onPress={() => confirm(t('serverSettings.member.kickConfirm', { name }), t('serverSettings.member.kick'), () => serversApi.kick(sid, member.user_id))}
+        /> : null}
+      {can.ban ? <Button title={t('serverSettings.member.banNamed', { name })} variant="danger" icon="ban-outline" onPress={() => setSheet('ban')} /> : null}
+      {!can.roles && !can.timeout && !can.kick && !can.ban && !voice.mute && !voice.deafen && !voice.move ? <T variant="muted">{t('serverSettings.member.noAction')}</T> : null}
+      <Sheet visible={sheet !== null} onClose={() => setSheet(null)} title={t(sheet === 'timeout' ? 'serverSettings.member.timeoutSheet' : 'serverSettings.member.banSheet')} actions={sheetActions} />
     </ScrollView>
   )
 }

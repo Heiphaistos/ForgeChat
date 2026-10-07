@@ -5,6 +5,7 @@ import { FlatList, View } from 'react-native'
 import { moderationApi } from '@/api/moderation'
 import { Avatar } from '@/components/Avatar'
 import { ErrorState, Loading, Row, TextField } from '@/components/ui'
+import { useT } from '@/i18n'
 import { formatShort } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -16,6 +17,7 @@ export default function MembersAdminScreen() {
   const sid = ids.serverId ?? ''
   const q = useQuery({ queryKey: ['members-detailed', sid], queryFn: () => moderationApi.membersDetailed(sid), enabled: valid })
   const [search, setSearch] = useState('')
+  const t = useT()
   const list = useMemo(() => {
     const n = search.trim().toLowerCase()
     return (q.data ?? [])
@@ -23,23 +25,23 @@ export default function MembersAdminScreen() {
       .sort((a, b) => a.username.localeCompare(b.username))
   }, [q.data, search])
 
-  if (!valid) return <ErrorState message="Serveur invalide." />
+  if (!valid) return <ErrorState message={t('serverSettings.invalidServer')} />
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <Stack.Screen options={{ title: `Membres (${q.data?.length ?? 0})` }} />
+      <Stack.Screen options={{ title: t('serverSettings.membersCount', { n: q.data?.length ?? 0 }) }} />
       <View style={{ padding: spacing.md }}>
-        <TextField value={search} onChangeText={setSearch} placeholder="Rechercher un membre" accessibilityLabel="Rechercher un membre" autoCapitalize="none" autoCorrect={false} />
+        <TextField value={search} onChangeText={setSearch} placeholder={t('serverSettings.searchMember')} accessibilityLabel={t('serverSettings.searchMember')} autoCapitalize="none" autoCorrect={false} />
       </View>
       <FlatList
         data={list}
         keyExtractor={(m) => m.user_id}
         renderItem={({ item: m }) => (
           <Row
-            title={`${m.nickname || m.username}${m.is_owner ? ' (propriétaire)' : ''}`}
-            subtitle={[`Arrivé le ${formatShort(m.joined_at)}`, m.roles.map((r) => r.name).join(', '), m.tags.map((t) => `[${t.name}]`).join(' ')]
+            title={m.is_owner ? t('serverSettings.members.owner', { name: m.nickname || m.username }) : m.nickname || m.username}
+            subtitle={[t('serverSettings.members.joined', { date: formatShort(m.joined_at) }), m.roles.map((r) => r.name).join(', '), m.tags.map((tag) => `[${tag.name}]`).join(' ')]
               .filter(Boolean)
               .join(' · ')}
             right={<Avatar uri={m.avatar} name={m.username} size={36} />}
