@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Maximize2, X, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
   Layout, Sparkles, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
-  Focus, GalleryHorizontal,
+  Focus, GalleryHorizontal, Tv,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
@@ -19,6 +19,7 @@ import VolumeSlider from '../components/voice/VolumeSlider'
 import Soundboard from '../components/voice/Soundboard'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
+import WatchTogether, { useWatchTogether } from '../components/voice/WatchTogether'
 import FloatingReactions from '../components/voice/FloatingReactions'
 import toast from 'react-hot-toast'
 import { PeerTile, ScreenTile } from '../components/voice/CallTiles'
@@ -226,6 +227,11 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   }, [])
 
   const isInThisChannel = joined && activeChannelId === channel.id
+  // « Regarder ensemble » : le lecteur s'ouvre de lui-même quand une vidéo démarre.
+  const watch = useWatchTogether(channel.id, isInThisChannel)
+  const [showWatch, setShowWatch] = useState(false)
+  const watchActive = watch !== null
+  useEffect(() => { if (watchActive) setShowWatch(true) }, [watchActive])
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length
 
   // Auto : galerie, et bascule d'elle-même en « stream en grand » dès qu'un écran est partagé.
@@ -549,6 +555,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           </div>
         )}
 
+        {showWatch && (
+          <WatchTogether channelId={channel.id} state={watch} onClose={() => setShowWatch(false)} />
+        )}
+
         {/* Speaker stats panel */}
         {showStats && (
           <SpeakerStats participants={statsParticipants} onClose={() => setShowStats(false)} />
@@ -677,6 +687,16 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
               label="Tableau blanc"
             />
           </div>
+          <button
+            onClick={() => setShowWatch(v => !v)}
+            title="Regarder ensemble (YouTube)"
+            aria-label="Regarder ensemble (YouTube)"
+            aria-pressed={showWatch}
+            className={`relative p-2.5 rounded-xl transition ${showWatch ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
+          >
+            <Tv size={16} aria-hidden />
+            {watchActive && !showWatch && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-fc-green" aria-hidden />}
+          </button>
           <button
             onClick={() => setShowEmojiBar(p => !p)}
             className={`p-2.5 rounded-xl transition ${showEmojiBar ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}
