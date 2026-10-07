@@ -195,8 +195,7 @@ export function isSafeImageUrl(u: unknown): u is string {
 /** Nom affichable : sans caractères de contrôle, 40 caractères au plus. */
 function cleanName(v: unknown, def: string): string {
   if (typeof v !== 'string') return def
-  // eslint-disable-next-line no-control-regex
-  const n = v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40)
+  const n = [...v].filter((ch) => ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) !== 127).join('').trim().slice(0, 40)
   return n || def
 }
 
