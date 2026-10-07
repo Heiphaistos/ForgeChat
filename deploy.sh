@@ -113,6 +113,27 @@ turn_healthcheck() {
 }
 turn_healthcheck
 
+# ── CSP nginx de l'hôte : lecteur « Regarder ensemble » (YouTube) ─────────
+# La CSP servie vient de /etc/nginx/sites-enabled/forgechat (pas du nginx.conf du dépôt).
+# Ajout idempotent de YouTube à script-src et d'un frame-src, sur CE site seulement ;
+# sauvegarde, nginx -t avant rechargement, et retour arrière si le test échoue.
+watch_csp() {
+    local conf=/etc/nginx/sites-enabled/forgechat
+    [[ -f "$conf" ]] || { log "CSP : $conf absent, étape sautée"; return 0; }
+    grep -q "youtube-nocookie" "$conf" && return 0
+    grep -q "script-src 'self' 'unsafe-inline' 'unsafe-eval';" "$conf" || { log "⚠️  CSP : format inattendu, étape sautée"; return 0; }
+    local bak="/root/forgechat-nginx-$(date +%Y%m%d%H%M%S).bak"
+    cp -p "$conf" "$bak"
+    sed -i "s#script-src 'self' 'unsafe-inline' 'unsafe-eval';#script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com;#" "$conf"
+    if nginx -t 2>/dev/null; then
+        systemctl reload nginx && log "✅ CSP : lecteur YouTube autorisé (sauvegarde $bak)"
+    else
+        cp -p "$bak" "$conf"
+        log "❌ CSP : nginx -t a échoué, configuration restaurée"
+    fi
+}
+watch_csp
+
 log ""
 log "✅ ForgeChat déployé sur https://$DOMAIN"
 log "   Logs serveur : docker compose logs -f server"
