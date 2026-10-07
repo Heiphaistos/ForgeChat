@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RTCView, type MediaStream } from '@livekit/react-native-webrtc'
 import { clampOffset, clampZoom } from '@/features/calls/screenShareLogic'
+import { useT } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 
 export interface ViewerSource {
@@ -24,6 +25,7 @@ export interface ViewerSource {
  */
 export function StreamViewer({ sources, initialKey, onClose }: { sources: ViewerSource[]; initialKey: string | null; onClose: () => void }) {
   const insets = useSafeAreaInsets()
+  const t = useT()
   // Source choisie dans la visionneuse (bascule caméra / écran) ; sinon celle demandée.
   const [picked, setPicked] = useState<string | null>(null)
   const [size, setSize] = useState({ w: 1, h: 1 })
@@ -92,7 +94,7 @@ export function StreamViewer({ sources, initialKey, onClose }: { sources: Viewer
     <Modal visible={!!initialKey && !!source} animationType="fade" onRequestClose={close} statusBarTranslucent navigationBarTranslucent>
       <GestureHandlerRootView style={styles.root}>
         <GestureDetector gesture={gesture}>
-          <View style={styles.frame} onLayout={onLayout} accessibilityLabel={source ? `${source.label}, pince pour zoomer` : undefined}>
+          <View style={styles.frame} onLayout={onLayout} accessibilityLabel={source ? t('panel.stream.zoom', { label: source.label }) : undefined}>
             {source ? (
               <Animated.View style={[styles.video, videoStyle]}>
                 <RTCView streamURL={source.stream.toURL()} style={StyleSheet.absoluteFill} objectFit="contain" />
@@ -104,7 +106,7 @@ export function StreamViewer({ sources, initialKey, onClose }: { sources: Viewer
           <Text style={styles.label} numberOfLines={1}>
             {source?.label}
           </Text>
-          <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Fermer la vidéo" hitSlop={8} style={styles.close}>
+          <Pressable onPress={close} accessibilityRole="button" accessibilityLabel={t('panel.stream.close')} hitSlop={8} style={styles.close}>
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
         </View>

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { gifsApi } from '@/api/gifs'
 import { serversApi } from '@/api/servers'
 import type { LocalAttachment } from '@/features/chat/useConversation'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
 import { EMOJI_CATEGORIES, GLOBAL_STICKERS, type QuickReply } from './data'
@@ -19,14 +20,15 @@ import { QUICK_REPLY_LIMITS, useComposerPrefs } from './store'
 /** Panneau en bas d'écran (sélecteurs de la barre de saisie). */
 function BottomPanel({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const insets = useSafeAreaInsets()
+  const t = useT()
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Fermer" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
       <View style={[styles.panel, { paddingBottom: insets.bottom + spacing.sm }]}>
         <View style={styles.grabber} />
         <View style={styles.titleRow}>
           <Text style={styles.title}>{title}</Text>
-          <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Fermer">
+          <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('common.close')}>
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -57,6 +59,18 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { key: T; lab
 
 // ─── Emoji ────────────────────────────────────────────────────────────────────
 
+/** Noms des catégories de data.ts (même ordre), traduits au rendu. */
+const EMOJI_CATEGORY_KEYS: readonly Key[] = [
+  'panel.emoji.smileys',
+  'panel.emoji.gestures',
+  'panel.emoji.hearts',
+  'panel.emoji.animals',
+  'panel.emoji.food',
+  'panel.emoji.sports',
+  'panel.emoji.nature',
+  'panel.emoji.objects',
+]
+
 /** Emojis Unicode (catégories du web), récents, et emojis du serveur insérés en « :nom: ». */
 export function EmojiPanel({
   visible,
@@ -71,10 +85,11 @@ export function EmojiPanel({
 }) {
   const recent = useComposerPrefs((s) => s.recentEmojis)
   const remember = useComposerPrefs((s) => s.rememberEmoji)
+  const t = useT()
   const tabs = [
-    ...(recent.length ? [{ key: 'recent', label: '🕘', a11y: 'Récents' }] : []),
-    ...EMOJI_CATEGORIES.map((c, i) => ({ key: `c${i}`, label: [...c.label][0] ?? '?', a11y: c.label.replace(/^\S+\s/, '') })),
-    ...(customEmojis.size ? [{ key: 'server', label: '⭐', a11y: 'Emojis du serveur' }] : []),
+    ...(recent.length ? [{ key: 'recent', label: '🕘', a11y: t('panel.emoji.recent') }] : []),
+    ...EMOJI_CATEGORIES.map((c, i) => ({ key: `c${i}`, label: [...c.label][0] ?? '?', a11y: EMOJI_CATEGORY_KEYS[i] ? t(EMOJI_CATEGORY_KEYS[i]) : c.label.replace(/^\S+\s/, '') })),
+    ...(customEmojis.size ? [{ key: 'server', label: '⭐', a11y: t('chat.serverEmojis') }] : []),
   ]
   const [tab, setTab] = useState<string>(tabs[0]!.key)
   const current = tabs.some((t) => t.key === tab) ? tab : tabs[0]!.key
@@ -86,7 +101,7 @@ export function EmojiPanel({
     current === 'recent' ? recent : current.startsWith('c') ? (EMOJI_CATEGORIES[Number(current.slice(1))]?.emojis ?? []) : []
 
   return (
-    <BottomPanel visible={visible} onClose={onClose} title="Emoji">
+    <BottomPanel visible={visible} onClose={onClose} title={t('composer.emoji')}>
       <Tabs tabs={tabs} value={current} onChange={setTab} />
       <ScrollView style={styles.gridScroll} contentContainerStyle={styles.grid} keyboardShouldPersistTaps="always">
         {current === 'server'
@@ -116,6 +131,8 @@ export function EmojiPanel({
 // ─── Stickers ─────────────────────────────────────────────────────────────────
 
 const STICKER_CATEGORIES = [...new Set(GLOBAL_STICKERS.map((s) => s.category))]
+/** Catégories de data.ts traduites au rendu (inconnue : nom tel quel). */
+const STICKER_CATEGORY_KEYS: Readonly<Record<string, Key>> = { Réactions: 'panel.sticker.reactions', Animaux: 'panel.emoji.animals' }
 
 /** Stickers du serveur (images) et stickers globaux (emoji en grand), envoyés au format du web. */
 export function StickerPanel({
@@ -129,6 +146,7 @@ export function StickerPanel({
   onSend: (content: string) => void
   serverId?: string
 }) {
+  const t = useT()
   const [tab, setTab] = useState<string>(serverId ? 'server' : STICKER_CATEGORIES[0]!)
   const q = useQuery({
     queryKey: ['stickers', serverId],
@@ -138,15 +156,19 @@ export function StickerPanel({
     select: parseServerStickers,
   })
   const tabs = [
-    ...(serverId ? [{ key: 'server', label: 'Serveur', a11y: 'Stickers du serveur' }] : []),
-    ...STICKER_CATEGORIES.map((c) => ({ key: c, label: c, a11y: c })),
+    ...(serverId ? [{ key: 'server', label: t('panel.server'), a11y: t('panel.sticker.serverA11y') }] : []),
+    ...STICKER_CATEGORIES.map((c) => {
+      const k = STICKER_CATEGORY_KEYS[c]
+      const label = k ? t(k) : c
+      return { key: c, label, a11y: label }
+    }),
   ]
   const send = (content: string) => {
     onClose()
     onSend(content)
   }
   return (
-    <BottomPanel visible={visible} onClose={onClose} title="Stickers">
+    <BottomPanel visible={visible} onClose={onClose} title={t('composer.stickers')}>
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       <ScrollView style={styles.gridScroll} contentContainerStyle={styles.grid}>
         {tab === 'server' ? (
@@ -159,13 +181,13 @@ export function StickerPanel({
                 onPress={() => send(formatSticker({ name: s.name, url: s.url }))}
                 style={styles.stickerCell}
                 accessibilityRole="button"
-                accessibilityLabel={`Sticker ${s.name}`}
+                accessibilityLabel={t('panel.sticker.label', { name: s.name })}
               >
                 <Image source={{ uri: s.src }} style={{ width: 64, height: 64 }} contentFit="contain" />
               </Pressable>
             ))
           ) : (
-            <Text style={styles.empty}>Aucun sticker sur ce serveur.</Text>
+            <Text style={styles.empty}>{t('panel.sticker.empty')}</Text>
           )
         ) : (
           GLOBAL_STICKERS.filter((s) => s.category === tab).map((s) => (
@@ -174,7 +196,7 @@ export function StickerPanel({
               onPress={() => send(formatSticker(s))}
               style={styles.stickerCell}
               accessibilityRole="button"
-              accessibilityLabel={`Sticker ${s.name}`}
+              accessibilityLabel={t('panel.sticker.label', { name: s.name })}
             >
               <Text style={{ fontSize: 44 }}>{s.emoji}</Text>
             </Pressable>
@@ -214,10 +236,11 @@ export function GifPanel({
   serverId?: string
   searchAvailable: boolean
 }) {
+  const t = useT()
   const tabs = [
-    ...(searchAvailable ? [{ key: 'search', label: 'Recherche', a11y: 'Rechercher un GIF' }] : []),
-    ...(serverId ? [{ key: 'server', label: 'Serveur', a11y: 'GIF du serveur' }] : []),
-    { key: 'phone', label: 'Téléphone', a11y: 'GIF du téléphone' },
+    ...(searchAvailable ? [{ key: 'search', label: t('panel.gif.search'), a11y: t('panel.gif.searchA11y') }] : []),
+    ...(serverId ? [{ key: 'server', label: t('panel.server'), a11y: t('panel.gif.serverA11y') }] : []),
+    { key: 'phone', label: t('panel.gif.phone'), a11y: t('panel.gif.phoneA11y') },
   ]
   const [tab, setTab] = useState<string>(tabs[0]!.key)
   const current = tabs.some((t) => t.key === tab) ? tab : tabs[0]!.key
@@ -240,7 +263,7 @@ export function GifPanel({
     const a = res.assets[0]
     const name = (a.name || `gif-${Date.now()}.gif`).replace(/[^\p{L}\p{N}._ -]/gu, '_').replace(/\.[^.]*$/, '') + '.gif'
     if (a.mimeType && a.mimeType !== 'image/gif') {
-      Alert.alert('Pas un GIF', 'Choisis un fichier .gif (les photos se partagent avec le bouton +).')
+      Alert.alert(t('panel.gif.notGif'), t('panel.gif.notGifBody'))
       return
     }
     onClose()
@@ -263,22 +286,22 @@ export function GifPanel({
                 onPress={() => send(formatSticker({ name: s.name, url: s.url }))}
                 style={styles.stickerCell}
                 accessibilityRole="button"
-                accessibilityLabel={`GIF ${s.name}`}
+                accessibilityLabel={t('panel.gif.label', { name: s.name })}
               >
                 <Image source={{ uri: s.src }} style={{ width: 72, height: 72 }} contentFit="contain" autoplay />
               </Pressable>
             ))
           ) : (
-            <Text style={styles.empty}>Aucun GIF ajouté à ce serveur (stickers animés .gif).</Text>
+            <Text style={styles.empty}>{t('panel.gif.serverEmpty')}</Text>
           )}
         </ScrollView>
       ) : (
         <View style={{ padding: spacing.lg, gap: spacing.md }}>
           <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
-            Envoie un fichier GIF de ton téléphone (téléchargements, galerie…). Il reste animé.
+            {t('panel.gif.phoneHint')}
           </Text>
           <Pressable onPress={() => void pickPhoneGif()} style={[styles.button, { backgroundColor: colors.primary, flex: 0 }]} accessibilityRole="button">
-            <Text style={styles.buttonText}>Choisir un GIF</Text>
+            <Text style={styles.buttonText}>{t('panel.gif.pick')}</Text>
           </Pressable>
         </View>
       )}
@@ -289,6 +312,7 @@ export function GifPanel({
 /** Recherche GIF via le serveur ; tendances quand le champ est vide. */
 function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResult) => void }) {
   const source = gifSource(useGifStatus().data)
+  const tr = useT()
   const [text, setText] = useState('')
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<GifResult[]>([])
@@ -339,7 +363,7 @@ function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResul
         placeholder={source.placeholder}
         placeholderTextColor={colors.textFaint}
         style={[styles.input, { marginHorizontal: spacing.md, marginBottom: spacing.sm }]}
-        accessibilityLabel="Rechercher un GIF"
+        accessibilityLabel={tr('panel.gif.searchA11y')}
         returnKeyType="search"
         maxLength={100}
       />
@@ -360,7 +384,7 @@ function GifSearch({ visible, onPick }: { visible: boolean; onPick: (g: GifResul
         ))}
         {loading ? <ActivityIndicator color={colors.primary} style={{ margin: spacing.lg, width: '100%' }} /> : null}
         {error ? <Text style={styles.empty}>{error}</Text> : null}
-        {!loading && !error && !items.length ? <Text style={styles.empty}>Aucun GIF trouvé.</Text> : null}
+        {!loading && !error && !items.length ? <Text style={styles.empty}>{tr('panel.gif.none')}</Text> : null}
       </ScrollView>
       {source.attribution ? <Text style={styles.attribution}>{source.attribution}</Text> : null}
     </View>
@@ -374,6 +398,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
   const replies = useComposerPrefs((s) => s.quickReplies)
   const save = useComposerPrefs((s) => s.setQuickReplies)
   const [editing, setEditing] = useState<QuickReply[] | null>(null)
+  const t = useT()
 
   const close = () => {
     setEditing(null)
@@ -382,7 +407,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
   const update = (i: number, patch: Partial<QuickReply>) => setEditing((l) => l && l.map((r, j) => (j === i ? { ...r, ...patch } : r)))
 
   return (
-    <BottomPanel visible={visible} onClose={close} title="Réponses rapides">
+    <BottomPanel visible={visible} onClose={close} title={t('composer.quickReplies')}>
       {editing ? (
         <ScrollView style={styles.gridScroll} contentContainerStyle={{ padding: spacing.md, gap: spacing.md }} keyboardShouldPersistTaps="handled">
           {editing.map((r, i) => (
@@ -390,29 +415,29 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
               <View style={{ flex: 1, gap: spacing.xs }}>
                 <TextInput
                   value={r.label}
-                  onChangeText={(t) => update(i, { label: t })}
-                  placeholder="Nom (ex. Merci)"
+                  onChangeText={(v) => update(i, { label: v })}
+                  placeholder={t('panel.quick.namePlaceholder')}
                   placeholderTextColor={colors.textFaint}
                   maxLength={QUICK_REPLY_LIMITS.label}
                   style={styles.input}
-                  accessibilityLabel={`Nom de la réponse ${i + 1}`}
+                  accessibilityLabel={t('panel.quick.nameA11y', { n: i + 1 })}
                 />
                 <TextInput
                   value={r.content}
-                  onChangeText={(t) => update(i, { content: t })}
-                  placeholder="Texte inséré"
+                  onChangeText={(v) => update(i, { content: v })}
+                  placeholder={t('panel.quick.textPlaceholder')}
                   placeholderTextColor={colors.textFaint}
                   maxLength={QUICK_REPLY_LIMITS.content}
                   multiline
                   style={[styles.input, { minHeight: 44 }]}
-                  accessibilityLabel={`Texte de la réponse ${i + 1}`}
+                  accessibilityLabel={t('panel.quick.textA11y', { n: i + 1 })}
                 />
               </View>
               <Pressable
                 onPress={() => setEditing((l) => l && l.filter((_, j) => j !== i))}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel={`Supprimer la réponse ${i + 1}`}
+                accessibilityLabel={t('panel.quick.deleteA11y', { n: i + 1 })}
               >
                 <Ionicons name="trash-outline" size={20} color={colors.danger} />
               </Pressable>
@@ -425,7 +450,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
                 style={[styles.button, { backgroundColor: colors.bgHover }]}
                 accessibilityRole="button"
               >
-                <Text style={styles.buttonText}>Ajouter</Text>
+                <Text style={styles.buttonText}>{t('panel.add')}</Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -436,7 +461,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
               style={[styles.button, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
             >
-              <Text style={styles.buttonText}>Enregistrer</Text>
+              <Text style={styles.buttonText}>{t('composer.save')}</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -451,7 +476,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
               }}
               style={({ pressed }) => [styles.replyRow, pressed && { backgroundColor: colors.bgHover }]}
               accessibilityRole="button"
-              accessibilityLabel={`Insérer : ${r.content}`}
+              accessibilityLabel={t('panel.quick.insert', { text: r.content })}
             >
               <Text style={styles.replyLabel}>{r.label}</Text>
               <Text style={styles.replyContent} numberOfLines={2}>
@@ -460,7 +485,7 @@ export function QuickRepliesPanel({ visible, onClose, onPick }: { visible: boole
             </Pressable>
           ))}
           <Pressable onPress={() => setEditing(replies.map((r) => ({ ...r })))} style={styles.replyRow} accessibilityRole="button">
-            <Text style={{ color: colors.link, fontSize: font.md }}>Modifier les réponses rapides</Text>
+            <Text style={{ color: colors.link, fontSize: font.md }}>{t('panel.quick.edit')}</Text>
           </Pressable>
         </ScrollView>
       )}

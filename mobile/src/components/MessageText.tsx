@@ -6,6 +6,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { messagesApi } from '@/api/messages'
 import { safeEmojiUrl, useCustomEmojis } from '@/features/chat/customEmojis'
 import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features/chat/tokens'
+import { t, useLang, useT } from '@/i18n'
 import { openExternalUrl } from '@/lib/links'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
@@ -13,11 +14,12 @@ import { colors, font, isLight, radius, spacing } from '@/theme'
 
 function Spoiler({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState(false)
+  const tr = useT()
   return (
     <Text
       onPress={() => setShown(true)}
       accessibilityRole="button"
-      accessibilityLabel={shown ? undefined : 'Spoiler masqué, toucher pour révéler'}
+      accessibilityLabel={shown ? undefined : tr('panel.text.spoiler')}
       style={shown ? styles.spoilerShown : styles.spoiler}
     >
       {children}
@@ -34,8 +36,9 @@ function RemoteEmoji({ id, name }: { id: string; name: string }) {
 }
 
 function ChannelChip({ id }: { id: string }) {
+  const tr = useT()
   const c = cachedChannel(queryClient, id)
-  if (!c) return <Text style={styles.mention}>#salon-inconnu</Text>
+  if (!c) return <Text style={styles.mention}>{tr('panel.text.unknownChannel')}</Text>
   const serverId = c.server_id
   const open =
     serverId && (c.type === 'text' || c.type === 'announcement')
@@ -120,7 +123,7 @@ function renderInline(nodes: InlineNode[], myName: string | undefined, emojis: R
         const color = roleColor(role?.color)
         return (
           <Text key={key} style={[styles.mention, color ? { color, backgroundColor: `${color}33` } : null]}>
-            @{role?.name ?? 'rôle-supprimé'}
+            @{role?.name ?? t('panel.text.deletedRole')}
           </Text>
         )
       }
@@ -132,7 +135,7 @@ function renderInline(nodes: InlineNode[], myName: string | undefined, emojis: R
         const isMe = n.everyone || (!!myName && !!name && name.toLowerCase() === myName.toLowerCase())
         return (
           <Text key={key} style={[styles.mention, isMe && styles.mentionMe]}>
-            @{name ?? 'membre'}
+            @{name ?? t('panel.text.member')}
           </Text>
         )
       }
@@ -145,6 +148,7 @@ const HEADING = { 1: { fontSize: 22, lineHeight: 28 }, 2: { fontSize: 19, lineHe
 export const MessageText = memo(function MessageText({ content, myName }: { content: string; myName?: string }) {
   const blocks = useMemo(() => parseMarkdown(content), [content])
   const emojis = useCustomEmojis()
+  useLang((s) => s.lang) // rendu à nouveau au changement de langue (libellés de renderInline)
   return (
     <View style={{ gap: 4 }}>
       {blocks.map((b, i) => {

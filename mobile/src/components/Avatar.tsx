@@ -1,5 +1,6 @@
 import { Image } from 'expo-image'
 import { StyleSheet, Text, View } from 'react-native'
+import { useT } from '@/i18n'
 import { resolveMediaUrl } from '@/lib/links'
 import { usePresenceOf } from '@/stores/presence'
 import { statusColor, statusHollow, statusLabel } from '@/lib/status'
@@ -35,6 +36,7 @@ export function Avatar({
   decoration?: string | null
 }) {
   const live = usePresenceOf(showStatus ? userId : undefined, status)
+  const t = useT()
   const src = resolveMediaUrl(uri)
   const r = rounded ? size / 2 : size * 0.3
   const dot = Math.max(10, size * 0.3)
@@ -42,7 +44,7 @@ export function Avatar({
     <View
       style={{ width: size, height: size }}
       accessible
-      accessibilityLabel={showStatus ? `Avatar de ${name}, ${statusLabel(live)}` : `Avatar de ${name}`}
+      accessibilityLabel={showStatus ? t('panel.avatarStatus', { name, status: statusLabel(live) }) : t('panel.avatar', { name })}
     >
       {src ? (
         <Image

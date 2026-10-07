@@ -3,6 +3,7 @@ import { Image } from 'expo-image'
 import { useState } from 'react'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useT } from '@/i18n'
 import { formatBytes } from '@/lib/format'
 import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
 import type { Attachment } from '@/types/models'
@@ -21,6 +22,7 @@ function sourceOf(a: Attachment): string | null {
 /** `onLongPress` : menu du message (sans lui, un appui long sur une image l'ouvrirait). */
 export function Attachments({ items, pending, onLongPress }: { items: Attachment[]; pending?: boolean; onLongPress?: () => void }) {
   const [viewer, setViewer] = useState<string | null>(null)
+  const t = useT()
   if (!items.length) return null
   const images = items.filter((a) => mediaKind(a) === 'image')
   // Vidéo/audio envoyés et servis par le serveur : lecteur intégré. Pendant l'envoi : carte « fichier ».
@@ -43,7 +45,7 @@ export function Attachments({ items, pending, onLongPress }: { items: Attachment
                 onLongPress={onLongPress}
                 delayLongPress={300}
                 accessibilityRole="imagebutton"
-                accessibilityLabel={`Image ${a.filename}`}
+                accessibilityLabel={t('panel.att.image', { name: a.filename })}
               >
                 <Image
                   source={{ uri: src }}
@@ -62,7 +64,7 @@ export function Attachments({ items, pending, onLongPress }: { items: Attachment
         const src = resolveMediaUrl(a.url)!
         if (isVoiceAttachment(a)) return <AudioAttachment key={a.id} src={src} attachment={a} voice onLongPress={onLongPress} />
         return mediaKind(a) === 'video' ? (
-          <VideoAttachment key={a.id} src={src} label={`Vidéo ${a.filename}`} />
+          <VideoAttachment key={a.id} src={src} label={t('panel.att.video', { name: a.filename })} />
         ) : (
           <AudioAttachment key={a.id} src={src} attachment={a} onLongPress={onLongPress} />
         )
@@ -79,14 +81,14 @@ export function Attachments({ items, pending, onLongPress }: { items: Attachment
             onLongPress={onLongPress}
             delayLongPress={300}
             accessibilityRole="button"
-            accessibilityLabel={`Fichier ${a.filename}`}
+            accessibilityLabel={t('panel.att.file', { name: a.filename })}
           >
             <Ionicons name={a.content_type.startsWith('video/') ? 'film-outline' : a.content_type.startsWith('audio/') ? 'musical-notes-outline' : 'document-outline'} size={26} color={colors.primary} />
             <View style={{ flex: 1 }}>
               <Text style={styles.fileName} numberOfLines={1}>
                 {a.filename}
               </Text>
-              <Text style={styles.fileMeta}>{pending ? 'Envoi…' : formatBytes(a.size)}</Text>
+              <Text style={styles.fileMeta}>{pending ? t('panel.att.sending') : formatBytes(a.size)}</Text>
             </View>
             {!pending ? <Ionicons name="open-outline" size={18} color={colors.textMuted} /> : null}
           </Pressable>
@@ -100,6 +102,7 @@ export function Attachments({ items, pending, onLongPress }: { items: Attachment
 
 function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void }) {
   const insets = useSafeAreaInsets()
+  const t = useT()
   return (
     <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.lightbox}>
@@ -108,7 +111,7 @@ function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void })
           onPress={onClose}
           style={[styles.close, { top: insets.top + spacing.md }]}
           accessibilityRole="button"
-          accessibilityLabel="Fermer l'image"
+          accessibilityLabel={t('panel.att.closeImage')}
           hitSlop={12}
         >
           <Ionicons name="close" size={28} color="#fff" />

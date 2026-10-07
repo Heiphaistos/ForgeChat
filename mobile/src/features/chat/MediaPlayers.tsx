@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useT } from '@/i18n'
 import type { Attachment } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { formatDuration } from './media'
@@ -32,7 +33,8 @@ export function AudioAttachment({
   voice?: boolean
   onLongPress?: () => void
 }) {
-  const label = voice ? 'Message vocal' : attachment.filename
+  const t = useT()
+  const label = voice ? t('panel.att.voice') : attachment.filename
   const player = useAudioPlayer(src)
   const status = useAudioPlayerStatus(player)
   const ended = !status.playing && status.duration > 0 && status.currentTime >= status.duration - 0.25
@@ -56,7 +58,7 @@ export function AudioAttachment({
         disabled={!status.isLoaded}
         style={styles.playButton}
         accessibilityRole="button"
-        accessibilityLabel={status.playing ? `Pause ${label}` : `Lire ${label}`}
+        accessibilityLabel={t(status.playing ? 'panel.att.pause' : 'panel.att.play', { label })}
         hitSlop={6}
       >
         {!status.isLoaded ? (
@@ -67,7 +69,7 @@ export function AudioAttachment({
       </Pressable>
       <View style={{ flex: 1, gap: 4 }}>
         <Text style={styles.name} numberOfLines={1}>
-          {voice ? '🎤 Message vocal' : attachment.filename}
+          {voice ? t('panel.att.voiceTitle') : attachment.filename}
         </Text>
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${progress * 100}%` }]} />

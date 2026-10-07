@@ -9,6 +9,7 @@ import {
 } from 'expo-audio'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { t as tr, useT } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { useCall } from '@/stores/call'
 import { useVoice } from '@/stores/voice'
@@ -30,12 +31,12 @@ export function micBusy(): boolean {
  */
 export async function prepareVoiceRecording(): Promise<boolean> {
   if (micBusy()) {
-    Alert.alert('Micro occupé', 'Termine l’appel ou quitte le salon vocal pour enregistrer un message vocal.')
+    Alert.alert(tr('panel.rec.micBusy'), tr('panel.rec.micBusyBody'))
     return false
   }
   const perm = await requestRecordingPermissionsAsync()
   if (!perm.granted) {
-    Alert.alert('Micro refusé', 'Autorise le micro pour ForgeChat dans les réglages du téléphone pour envoyer des messages vocaux.')
+    Alert.alert(tr('panel.rec.micDenied'), tr('panel.rec.micDeniedBody'))
     return false
   }
   return true
@@ -50,6 +51,7 @@ export function VoiceRecorder({ onDone }: { onDone: (result: { uri: string; seco
   const state = useAudioRecorderState(recorder, 250)
   const [ready, setReady] = useState(false)
   const finished = useRef(false)
+  const t = useT()
   const seconds = Math.floor(state.durationMillis / 1000)
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function VoiceRecorder({ onDone }: { onDone: (result: { uri: string; seco
         setReady(true)
       } catch (e) {
         logger.warn('voice-message', 'enregistrement impossible', e)
-        Alert.alert('Enregistrement impossible', 'Le micro n’a pas pu démarrer.')
+        Alert.alert(t('panel.rec.failed'), t('panel.rec.failedBody'))
         onDone(null)
       }
     })()
@@ -87,7 +89,7 @@ export function VoiceRecorder({ onDone }: { onDone: (result: { uri: string; seco
     }
     const uri = recorder.uri
     if (!send || !uri || duration < 1) {
-      if (send && duration < 1) Alert.alert('Trop court', 'Maintiens l’enregistrement au moins une seconde.')
+      if (send && duration < 1) Alert.alert(t('panel.rec.tooShort'), t('panel.rec.tooShortBody'))
       onDone(null)
       return
     }
@@ -106,12 +108,12 @@ export function VoiceRecorder({ onDone }: { onDone: (result: { uri: string; seco
 
   return (
     <View style={styles.bar} accessibilityLiveRegion="polite">
-      <Pressable onPress={() => void finish(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Annuler le message vocal">
+      <Pressable onPress={() => void finish(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('panel.rec.cancel')}>
         <Ionicons name="trash-outline" size={22} color={colors.danger} />
       </Pressable>
       <View style={styles.middle}>
         <View style={[styles.dot, !state.isRecording && { opacity: 0.3 }]} />
-        <Text style={styles.time} accessibilityLabel={`Enregistrement : ${seconds} secondes`}>
+        <Text style={styles.time} accessibilityLabel={t('panel.rec.time', { n: seconds })}>
           {formatDuration(seconds)} / {formatDuration(VOICE_MAX_SECONDS)}
         </Text>
       </View>
@@ -120,7 +122,7 @@ export function VoiceRecorder({ onDone }: { onDone: (result: { uri: string; seco
         disabled={!ready}
         style={[styles.send, !ready && { opacity: 0.4 }]}
         accessibilityRole="button"
-        accessibilityLabel="Envoyer le message vocal"
+        accessibilityLabel={t('panel.rec.send')}
       >
         <Ionicons name="send" size={18} color="#fff" />
       </Pressable>

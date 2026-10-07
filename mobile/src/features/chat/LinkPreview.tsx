@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { messagesApi } from '@/api/messages'
+import { useT } from '@/i18n'
 import { openExternalUrl } from '@/lib/links'
 import { colors, font, radius, spacing } from '@/theme'
 
@@ -10,6 +11,7 @@ import { colors, font, radius, spacing } from '@/theme'
  * hôte quelconque (pixel espion, fuite de l'IP) — même règle que lib/links.resolveMediaUrl.
  */
 export function LinkPreview({ url }: { url: string }) {
+  const t = useT()
   const { data } = useQuery({
     queryKey: ['og', url],
     queryFn: ({ signal }) => messagesApi.linkPreview(url, signal),
@@ -30,7 +32,7 @@ export function LinkPreview({ url }: { url: string }) {
       onPress={() => void openExternalUrl(url)}
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
       accessibilityRole="link"
-      accessibilityLabel={`Aperçu du lien : ${data.title ?? data.siteName ?? host}`}
+      accessibilityLabel={t('panel.link.preview', { title: data.title ?? data.siteName ?? host })}
     >
       {data.siteName ? (
         <Text style={styles.site} numberOfLines={1}>

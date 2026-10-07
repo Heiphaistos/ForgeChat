@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Button, IconButton } from '@/components/ui'
 import { WatchPlayer } from '@/components/WatchPlayer'
+import { t as tr, useT } from '@/i18n'
 import { formatDuration } from '@/lib/format'
 import { realtime } from '@/lib/realtime'
 import { useNow } from '@/lib/useNow'
@@ -17,6 +18,7 @@ import { colors, font, radius, spacing } from '@/theme'
  */
 export function WatchPanel({ channelId, onClose }: { channelId: string; onClose: () => void }) {
   const watch = useWatch((s) => s.watch)
+  const t = useT()
   const now = useNow(1000, !!watch)
   const [url, setUrl] = useState('')
   const [muted, setMuted] = useState(false)
@@ -25,7 +27,7 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
   useEffect(
     () =>
       realtime.on('WATCH_ERROR', (e) => {
-        if (e.channel_id === channelId) Alert.alert('Regarder ensemble', watchErrorMessage(e.reason))
+        if (e.channel_id === channelId) Alert.alert(tr('panel.watch.title'), watchErrorMessage(e.reason))
       }),
     [channelId],
   )
@@ -37,7 +39,7 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
   }
   const add = () => {
     if (!parseYouTubeId(url)) {
-      Alert.alert('Adresse YouTube invalide', 'youtube.com/watch?v=…, youtu.be/… ou youtube.com/shorts/…')
+      Alert.alert(t('panel.watch.badUrl'), t('panel.watch.badUrlBody'))
       return
     }
     send({ type: 'WATCH_ADD', url: url.trim() })
@@ -50,12 +52,12 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
       <View style={styles.head}>
         <Ionicons name="logo-youtube" size={16} color={colors.primary} />
         <Text style={styles.title} numberOfLines={1}>
-          Regarder ensemble{watch?.queue ? ` · ${watch.queue} en file` : ''}
+          {watch?.queue ? t('panel.watch.titleQueue', { n: watch.queue }) : t('panel.watch.title')}
         </Text>
         {watch ? (
-          <IconButton icon="open-outline" label="Ouvrir dans YouTube" size={18} onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)} />
+          <IconButton icon="open-outline" label={t('panel.watch.openYoutube')} size={18} onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)} />
         ) : null}
-        <IconButton icon="close" label="Masquer le lecteur (la vidéo continue pour les autres)" size={18} onPress={onClose} />
+        <IconButton icon="close" label={t('panel.watch.hide')} size={18} onPress={onClose} />
       </View>
 
       {watch && !failed ? (
@@ -69,28 +71,28 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
         <View style={styles.placeholder}>
           <Text style={styles.hint}>
             {failed
-              ? 'Cette vidéo ne peut pas être lue ici (intégration désactivée, privée ou supprimée).'
-              : 'Colle une adresse YouTube : la vidéo démarre pour tout le salon.'}
+              ? t('panel.watch.unplayable')
+              : t('panel.watch.hint')}
           </Text>
           {failed && watch ? (
-            <Button title="Ouvrir dans YouTube" icon="logo-youtube" variant="ghost" onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)} />
+            <Button title={t('panel.watch.openYoutube')} icon="logo-youtube" variant="ghost" onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)} />
           ) : null}
         </View>
       )}
 
       {watch ? (
         <View style={styles.row}>
-          <IconButton icon={watch.playing ? 'pause' : 'play'} label={watch.playing ? 'Pause' : 'Lecture'} onPress={() => setPlayback(!watch.playing, position)} />
-          <IconButton icon="play-back" label="Reculer de 10 secondes" onPress={() => setPlayback(watch.playing, position - 10)} />
-          <IconButton icon="play-forward" label="Avancer de 10 secondes" onPress={() => setPlayback(watch.playing, position + 10)} />
+          <IconButton icon={watch.playing ? 'pause' : 'play'} label={t(watch.playing ? 'panel.watch.pause' : 'panel.watch.play')} onPress={() => setPlayback(!watch.playing, position)} />
+          <IconButton icon="play-back" label={t('panel.watch.back10')} onPress={() => setPlayback(watch.playing, position - 10)} />
+          <IconButton icon="play-forward" label={t('panel.watch.forward10')} onPress={() => setPlayback(watch.playing, position + 10)} />
           <Text style={styles.time}>{formatDuration(position * 1000)}</Text>
           <IconButton
             icon="play-skip-forward"
-            label={watch.queue ? 'Vidéo suivante' : 'Terminer (file vide)'}
+            label={t(watch.queue ? 'panel.watch.next' : 'panel.watch.finish')}
             onPress={() => send({ type: 'WATCH_NEXT', item: watch.item })}
           />
-          <IconButton icon="stop" label="Arrêter pour tout le monde" onPress={() => send({ type: 'WATCH_STOP' })} />
-          <IconButton icon={muted ? 'volume-mute' : 'volume-high'} label={muted ? 'Remettre le son de la vidéo' : 'Couper le son de la vidéo (pour toi seulement)'} active={muted} onPress={() => setMuted((m) => !m)} />
+          <IconButton icon="stop" label={t('panel.watch.stop')} onPress={() => send({ type: 'WATCH_STOP' })} />
+          <IconButton icon={muted ? 'volume-mute' : 'volume-high'} label={t(muted ? 'panel.watch.unmute' : 'panel.watch.mute')} active={muted} onPress={() => setMuted((m) => !m)} />
         </View>
       ) : null}
 
@@ -101,7 +103,7 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
           maxLength={300}
           placeholder="https://www.youtube.com/watch?v=…"
           placeholderTextColor={colors.textFaint}
-          accessibilityLabel="Adresse de la vidéo YouTube"
+          accessibilityLabel={t('panel.watch.urlA11y')}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
@@ -110,7 +112,7 @@ export function WatchPanel({ channelId, onClose }: { channelId: string; onClose:
           style={styles.input}
         />
         <Pressable onPress={add} disabled={!url.trim()} accessibilityRole="button" style={[styles.go, !url.trim() && { opacity: 0.4 }]}>
-          <Text style={styles.goText}>{watch ? 'Ajouter' : 'Lancer'}</Text>
+          <Text style={styles.goText}>{t(watch ? 'panel.add' : 'panel.watch.start')}</Text>
         </Pressable>
       </View>
     </View>
