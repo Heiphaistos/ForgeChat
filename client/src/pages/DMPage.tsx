@@ -28,6 +28,8 @@ import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import { isQueued } from '../lib/offline'
+import { RemoteSupportButton, useSupportSender } from '../components/chat/RemoteSupport'
+import type { SupportPayload } from '../lib/remoteSupport'
 
 /** Message de MP tel que renvoyé par le serveur. */
 type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
@@ -367,13 +369,13 @@ export default function DMPage() {
 
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
-    mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: PreparedFiles }) =>
+    mutationFn: ({ content, replyTo, files, extra }: { content: string | null; replyTo?: string; files?: PreparedFiles; extra?: Record<string, unknown> }) =>
       withSeal('dm', dmId!, content ?? '', body => api.post(`/dms/${dmId}/messages`, {
         ...body,
         content: body.content ?? '',
         reply_to: replyTo,
         has_attachments: !!files?.count,
-      }), null, { extra: filesExtra(files) }),
+      }), null, { extra: { ...filesExtra(files), ...extra } }),
     onSuccess: async (res, vars) => {
       const msg = res.data
       if (msg && me && dmId) {
@@ -385,7 +387,7 @@ export default function DMPage() {
           // Chiffré : le serveur ne renvoie pas le texte, on garde celui saisi.
           content: msg.enc ? vars.content : msg.content,
           // Clés des fichiers envoyés : gardées pour afficher mes pièces jointes sans recharger.
-          ...(msg.enc ? { e2e: 'ok', e2e_body: { t: vars.content ?? '', ...filesExtra(vars.files) } } : {}),
+          ...(msg.enc ? { e2e: 'ok', e2e_body: { t: vars.content ?? '', ...filesExtra(vars.files), ...vars.extra } } : {}),
           channel_id: dmId,
           author_id: me.id,
           author_username: me.username,
@@ -408,10 +410,17 @@ export default function DMPage() {
     onError: (e, vars) => {
       if (isQueued(e)) { toast(t('offline.queued')); return }
       toast.error(sendErrorText(e, t('dm.sendError')))
-      // Restaurer le texte comme brouillon pour ne pas le perdre
-      if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)
+      // Restaurer le texte comme brouillon pour ne pas le perdre (pas le texte d'une carte de support)
+      if (vars.content && dmId && !vars.extra) useDraft.getState().setDraft(dmId, vars.content)
     },
   })
+
+  // Support à distance : les cartes et le bouton d'en-tête envoient par ce même chemin chiffré.
+  const sendSupport = useCallback(
+    (rs: SupportPayload) => sendDm.mutateAsync({ content: t(`rs.text.${rs.k}` as Key), extra: { rs } }).then(() => {}),
+    [sendDm.mutateAsync, t],
+  )
+  useSupportSender(dmId, sendSupport)
 
   if (!dmId) return null
 
@@ -449,6 +458,7 @@ export default function DMPage() {
         <div className="ml-auto flex items-center gap-1">
           <E2EBadge kind="dm" id={dmId} />
           <DisappearingControl kind="dm" id={dmId} />
+          <RemoteSupportButton dmId={dmId} autoOpen={searchParams.get('support') === '1'} />
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }

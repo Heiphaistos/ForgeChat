@@ -18,6 +18,8 @@ import type { RoleDecor } from '@/features/servers/perms'
 import { Attachments } from './Attachments'
 import { LinkPreview } from './LinkPreview'
 import { PollCard } from './PollCard'
+import { SupportCard } from './SupportCard'
+import type { SupportPayload } from '@/lib/remoteSupport'
 import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 import { displayAttachments } from '@/e2e/files'
@@ -44,6 +46,9 @@ interface Props {
   translation?: string
   /** Couleur et icône du rôle de l'auteur (salons). */
   decor?: RoleDecor
+  /** MP : identifiant de la conversation (cartes de support à distance) et réponse déjà donnée. */
+  dmId?: string
+  supportReply?: SupportPayload['k']
 }
 
 /**
@@ -202,6 +207,8 @@ export const MessageItem = memo(function MessageItem({
   onReactionLongPress,
   translation,
   decor,
+  dmId,
+  supportReply,
 }: Props) {
   const t = useT()
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
@@ -277,6 +284,7 @@ export const MessageItem = memo(function MessageItem({
           {m.content && !m.system && !(isVoiceMessageText(m.content) && displayAttachments(m.attachments, m.files).some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
               {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview m={m} myName={myName} />}
+              {m.support && dmId ? <SupportCard m={m} dmId={dmId} mine={m.authorId === myId} reply={supportReply} /> : null}
             </View>
           ) : null}
 

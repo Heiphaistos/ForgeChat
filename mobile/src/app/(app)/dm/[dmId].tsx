@@ -7,6 +7,7 @@ import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
+import { sendSupport } from '@/features/chat/SupportCard'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
 import { rememberConvName } from '@/e2e/searchIndex'
@@ -39,6 +40,17 @@ export default function DmScreen() {
   const startCall = useCall((s) => s.start)
 
   if (!valid) return <ErrorState message={t('conv.invalidDm')} />
+
+  // Support à distance : Android ne fait qu'aider (visionneuse web), il ne partage pas son écran.
+  const support = () =>
+    Alert.alert(t('rs.button'), undefined, [
+      {
+        text: t('rs.help'),
+        onPress: () => void sendSupport(ids.dmId, { v: 1, k: 'offer' }, t('rs.text.offer')).catch((e) => Alert.alert(t('rs.sendError'), errorMessage(e))),
+      },
+      { text: t('rs.ask'), onPress: () => Alert.alert(t('rs.button'), t('rs.androidHost')) },
+      { text: t('common.cancel'), style: 'cancel' },
+    ])
 
   const call = async (type: CallType) => {
     if (!otherId) return
@@ -84,6 +96,7 @@ export default function DmScreen() {
                 label={t('conv.pins')}
                 onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })}
               />
+              <IconButton icon="help-buoy-outline" label={t('rs.button')} onPress={support} />
               <IconButton icon="search-outline" label={t('conv.search')} onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })} />
               {otherId ? (
                 <>

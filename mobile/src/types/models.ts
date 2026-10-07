@@ -289,6 +289,8 @@ export interface ChatMessage {
   preview?: LinkPreviewData | null
   /** Message système du lot communauté : carte de bienvenue ou référence du starboard. */
   system?: { kind: 'welcome' | 'starboard'; meta: Record<string, unknown> }
+  /** MP : carte « Support à distance » (contenu chiffré `rs`, validé). */
+  support?: import('@/lib/remoteSupport').SupportPayload | null
 }
 
 export type ConversationRef =

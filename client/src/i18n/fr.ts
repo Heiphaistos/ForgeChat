@@ -6,6 +6,7 @@ import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
+import { remoteSupportFr } from './remoteSupport.ts'
 
 export const fr = {
   ...profileFr,
@@ -13,6 +14,7 @@ export const fr = {
   ...comfortFr,
   ...voiceLotFr,
   ...messaging.fr,
+  ...remoteSupportFr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

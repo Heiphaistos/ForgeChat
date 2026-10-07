@@ -13,6 +13,7 @@ import * as lotSocial from './parts/lotSocial'
 import * as voiceLot from './parts/voiceLot'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
+import * as remoteSupport from './parts/remoteSupport'
 
 export const fr = {
   ...settings.fr,
@@ -27,6 +28,7 @@ export const fr = {
   ...voiceLot.fr,
   ...messaging.fr,
   ...comfort.fr,
+  ...remoteSupport.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

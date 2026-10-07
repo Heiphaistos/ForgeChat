@@ -7,6 +7,7 @@ import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
+import { remoteSupportEn } from './remoteSupport.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
@@ -14,6 +15,7 @@ export const en: Partial<Record<Key, string>> = {
   ...comfortEn,
   ...voiceLotEn,
   ...messaging.en,
+  ...remoteSupportEn,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

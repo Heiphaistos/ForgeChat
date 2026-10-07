@@ -39,6 +39,9 @@
           "forgechat"
         ]
       }
+    },
+    "shell": {
+      "open": "^((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(ghosthanddesk://(share|connect)\\?)).+"
     }
   },
   "bundle": {

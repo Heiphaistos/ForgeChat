@@ -12,6 +12,7 @@ import * as lotSocial from './parts/lotSocial'
 import * as voiceLot from './parts/voiceLot'
 import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
+import * as remoteSupport from './parts/remoteSupport'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -26,6 +27,7 @@ export const en: Partial<Record<Key, string>> = {
   ...voiceLot.en,
   ...messaging.en,
   ...comfort.en,
+  ...remoteSupport.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
