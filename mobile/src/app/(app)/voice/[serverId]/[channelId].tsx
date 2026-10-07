@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Stack, router } from 'expo-router'
 import { useState } from 'react'
-import { Alert, FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { RTCView } from '@livekit/react-native-webrtc'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
@@ -9,13 +9,13 @@ import { Sheet, type SheetAction } from '@/components/Sheet'
 import { StreamViewer, type ViewerSource } from '@/components/StreamViewer'
 import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
-import { watchLink } from '@/lib/watchTogether'
 import { useRouteParams } from '@/lib/params'
 import { isScreenShareCancel } from '@/features/calls/screenShareLogic'
 import { useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
 import { SoundboardSheet } from '@/features/voice/SoundboardSheet'
 import { StagePanel } from '@/features/voice/StagePanel'
+import { WatchPanel } from '@/features/voice/WatchPanel'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
@@ -44,6 +44,7 @@ export default function VoiceScreen() {
   const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
   const [more, setMore] = useState(false)
   const [sounds, setSounds] = useState(false)
+  const [watching, setWatching] = useState(false)
   const perms = useServerPerms(ids.serverId ?? '', valid)
   const watch = useWatch((s) => s.watch)
   if (!valid) return <ErrorState message="Lien de salon vocal invalide." />
@@ -166,19 +167,21 @@ export default function VoiceScreen() {
         <>
           {v.error ? <Banner text={v.error} tone="danger" onPress={v.dismiss} /> : v.notice ? <Banner text={v.notice} tone="info" onPress={v.dismiss} /> : null}
           {status ? <Banner text={status} tone="warning" /> : null}
-          {watch && !v.stage ? (
-            // « Regarder ensemble » lancé depuis le web : pas de lecteur intégré, ouverture dans YouTube au bon moment.
+          {watching && !v.stage && v.channelId ? (
+            <WatchPanel channelId={v.channelId} onClose={() => setWatching(false)} />
+          ) : watch && !v.stage ? (
+            // « Regarder ensemble » en cours, lecteur masqué : un appui le rouvre.
             <Pressable
               style={[styles.banner, { backgroundColor: colors.primary }]}
-              onPress={() => void Linking.openURL(watchLink(watch, Date.now())).catch(() => undefined)}
-              accessibilityRole="link"
-              accessibilityHint="Ouvre la vidéo dans YouTube au moment où en est le salon"
+              onPress={() => setWatching(true)}
+              accessibilityRole="button"
+              accessibilityHint="Ouvre le lecteur synchronisé avec le salon"
             >
               <Ionicons name="logo-youtube" size={16} color="#fff" />
               <Text style={[styles.bannerText, { color: '#fff' }]} numberOfLines={2}>
                 {watch.by === myId ? 'Tu regardes' : `${v.peers.find((p) => p.userId === watch.by)?.username ?? 'Le salon'} regarde`} : youtu.be/
                 {watch.videoId}
-                {watch.playing ? '' : ' (en pause)'} — Ouvrir
+                {watch.playing ? '' : ' (en pause)'} — Regarder
               </Text>
             </Pressable>
           ) : null}
@@ -262,6 +265,9 @@ export default function VoiceScreen() {
             <Control icon={v.speaker ? 'volume-high' : 'ear-outline'} label="Haut-parleur" onPress={v.toggleSpeaker} />
             {v.stage ? null : <Control icon="musical-notes" label="Soundboard" onPress={() => setSounds(true)} />}
             {v.stage ? null : (
+              <Control icon="logo-youtube" label="Regarder ensemble" onPress={() => setWatching((w) => !w)} active={watching} dot={!!watch} />
+            )}
+            {v.stage ? null : (
               <Control icon="ellipsis-horizontal" label="Plus d’options" onPress={() => setMore(true)} active={v.handRaised || v.screenSharing} />
             )}
             <Control
@@ -306,7 +312,7 @@ function Banner({ text, tone, onPress }: { text: string; tone: 'danger' | 'info'
   )
 }
 
-function Control({ icon, label, onPress, active, danger, dim }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean; dim?: boolean }) {
+function Control({ icon, label, onPress, active, danger, dim, dot }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean; dim?: boolean; dot?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
@@ -316,6 +322,8 @@ function Control({ icon, label, onPress, active, danger, dim }: { icon: IconName
       style={[styles.ctrl, active && { backgroundColor: colors.text }, danger && { backgroundColor: colors.danger }, dim && { opacity: 0.5 }]}
     >
       <Ionicons name={icon} size={24} color={active ? colors.bgDeep : '#fff'} />
+      {/* Point vert : une vidéo tourne dans le salon. */}
+      {dot ? <View style={styles.dot} /> : null}
     </Pressable>
   )
 }
@@ -352,5 +360,6 @@ const styles = StyleSheet.create({
   tileName: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },
   reactions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bgAlt },
   controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: colors.bgAlt },
+  dot: { position: 'absolute', top: 4, right: 4, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.bgAlt },
   ctrl: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.bgHover, alignItems: 'center', justifyContent: 'center' },
 })
