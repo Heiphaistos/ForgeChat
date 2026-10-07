@@ -302,3 +302,165 @@ export async function unwrapServerKey(
   if (key.length !== 32) throw new Error('clé de serveur invalide')
   return key
 }
+
+// ─── Fichiers et pièces jointes (§12) ───────────────────────────────────────
+/**
+ * Un fichier = une clé aléatoire de 32 o (dans le message chiffré) ; découpé en
+ * morceaux de 64 Kio chiffrés chacun en AES-256-GCM. IV = 4 octets nuls + numéro
+ * du morceau sur 8 octets (gros-boutiste) : la clé ne sert qu'à ce fichier, l'IV
+ * ne se répète donc jamais. AAD = id du fichier + numéro + drapeau « dernier » :
+ * un morceau déplacé, retiré ou une fin tronquée ne se déchiffre pas.
+ */
+export const FILE_CHUNK = 64 * 1024
+const FILE_TAG = 16
+/** Taille d'un morceau chiffré complet. */
+export const FILE_CT_CHUNK = FILE_CHUNK + FILE_TAG
+export const fileChunkAad = (fileId: string, index: number, last: boolean) => `file v1|${fileId}|${index}|${last ? 1 : 0}`
+
+export function fileChunkIv(index: number): Uint8Array {
+  if (!Number.isSafeInteger(index) || index < 0) throw new Error('morceau invalide')
+  const iv = new Uint8Array(IV_BYTES)
+  const v = new DataView(iv.buffer)
+  v.setUint32(4, Math.floor(index / 2 ** 32))
+  v.setUint32(8, index >>> 0)
+  return iv
+}
+
+/** Taille du fichier chiffré (un morceau au moins, même vide). */
+export const encryptedFileSize = (size: number) => size + Math.max(1, Math.ceil(size / FILE_CHUNK)) * FILE_TAG
+
+export interface FileCipher {
+  encrypt(fileId: string, index: number, last: boolean, plain: Uint8Array): Promise<Uint8Array>
+  decrypt(fileId: string, index: number, last: boolean, ct: Uint8Array): Promise<Uint8Array>
+}
+
+/** Chiffreur des morceaux d'un fichier (même interface que le web). */
+export async function fileCipher(key: Uint8Array): Promise<FileCipher> {
+  if (key.length !== AES_KEY_BYTES) throw new Error('clé AES invalide')
+  const g = (fileId: string, i: number, last: boolean) => gcm(key, fileChunkIv(i), utf8(fileChunkAad(fileId, i, last)))
+  return {
+    encrypt: async (fileId, i, last, plain) => g(fileId, i, last).encrypt(plain),
+    decrypt: async (fileId, i, last, ct) => g(fileId, i, last).decrypt(ct),
+  }
+}
+
+/** Déchiffrement en flux : octets reçus au fil du réseau, morceaux en clair rendus dans l'ordre. */
+export class FileDecryptor {
+  private pending = new Uint8Array(0)
+  private index = 0
+  private total = 0
+  private readonly c: FileCipher
+  private readonly fileId: string
+  private readonly size: number
+  constructor(c: FileCipher, fileId: string, size: number) {
+    this.c = c
+    this.fileId = fileId
+    this.size = size
+  }
+
+  /** Ajoute des octets chiffrés ; rend les morceaux en clair complets (jamais le dernier). */
+  async push(data: Uint8Array): Promise<Uint8Array[]> {
+    const merged = new Uint8Array(this.pending.length + data.length)
+    merged.set(this.pending)
+    merged.set(data, this.pending.length)
+    const out: Uint8Array[] = []
+    let off = 0
+    // Strictement plus qu'un morceau en attente : celui-ci n'est pas le dernier.
+    while (merged.length - off > FILE_CT_CHUNK) {
+      out.push(await this.open(merged.subarray(off, off + FILE_CT_CHUNK), false))
+      off += FILE_CT_CHUNK
+    }
+    this.pending = merged.slice(off)
+    return out
+  }
+
+  /** Dernier morceau ; lève une erreur si le fichier est tronqué, altéré ou n'a pas la taille annoncée. */
+  async end(): Promise<Uint8Array> {
+    if (this.pending.length < FILE_TAG) throw new Error('fichier tronqué')
+    const last = await this.open(this.pending, true)
+    if (this.total !== this.size) throw new Error('taille du fichier invalide')
+    return last
+  }
+
+  private async open(ct: Uint8Array, last: boolean) {
+    const pt = await this.c.decrypt(this.fileId, this.index++, last, ct)
+    this.total += pt.length
+    if (this.total > this.size) throw new Error('taille du fichier invalide')
+    return pt
+  }
+}
+
+/** Chiffre un fichier tenu en mémoire (vecteurs, petits fichiers). */
+export async function encryptFileBytes(key: Uint8Array, fileId: string, data: Uint8Array): Promise<Uint8Array> {
+  const c = await fileCipher(key)
+  const out = new Uint8Array(encryptedFileSize(data.length))
+  let o = 0
+  for (let i = 0, off = 0; ; i++, off += FILE_CHUNK) {
+    const last = off + FILE_CHUNK >= data.length
+    const ct = await c.encrypt(fileId, i, last, data.subarray(off, off + FILE_CHUNK))
+    out.set(ct, o)
+    o += ct.length
+    if (last) return out
+  }
+}
+
+/** Déchiffre un fichier tenu en mémoire ; lève une erreur s'il est altéré, tronqué ou d'une autre taille. */
+export async function decryptFileBytes(key: Uint8Array, fileId: string, data: Uint8Array, size: number): Promise<Uint8Array> {
+  const d = new FileDecryptor(await fileCipher(key), fileId, size)
+  const parts = [...(await d.push(data)), await d.end()]
+  const out = new Uint8Array(size)
+  let o = 0
+  for (const p of parts) { out.set(p, o); o += p.length }
+  return out
+}
+
+/**
+ * Description d'un fichier dans le contenu chiffré du message (`f: [...]`) :
+ * id (blob `<id>.enc` sur le serveur), clé, nom, type MIME, taille, dimensions,
+ * durée (s), miniature JPEG (base64url) ; `u` = adresse du blob quand elle est
+ * connue avant l'envoi (publications de forum et de salon média).
+ */
+export interface FileEntry {
+  id: string; k: string; n: string; m: string; s: number
+  w?: number; h?: number; d?: number; th?: string; u?: string
+}
+export const MAX_FILES = 10
+/** Miniature JPEG en base64url : 6 Kio au plus (elle voyage dans chaque message). */
+export const MAX_THUMB_B64 = 8 * 1024
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/** Liste `f` d'un contenu déchiffré, validée (entrées invalides ignorées). */
+export function fileEntries(body: { f?: unknown } | null | undefined): FileEntry[] {
+  if (!Array.isArray(body?.f)) return []
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined)
+  const out: FileEntry[] = []
+  for (const raw of body.f.slice(0, MAX_FILES)) {
+    const e = raw as Record<string, unknown> | null
+    if (!e || typeof e.id !== 'string' || !UUID_RE.test(e.id) || typeof e.k !== 'string' || typeof e.n !== 'string' || typeof e.m !== 'string') continue
+    if (typeof e.s !== 'number' || !Number.isSafeInteger(e.s) || e.s < 0) continue
+    try { if (b64uDecode(e.k).length !== AES_KEY_BYTES) continue } catch { continue }
+    const entry: FileEntry = { id: e.id, k: e.k, n: e.n.replace(/[/\\\0]/g, '_').slice(0, 255) || 'fichier', m: e.m.slice(0, 127), s: e.s }
+    const w = num(e.w), h = num(e.h), d = num(e.d)
+    if (w !== undefined) entry.w = w
+    if (h !== undefined) entry.h = h
+    if (d !== undefined) entry.d = d
+    if (typeof e.th === 'string' && e.th.length <= MAX_THUMB_B64 && /^[A-Za-z0-9_-]+$/.test(e.th)) entry.th = e.th
+    if (typeof e.u === 'string' && /^\/uploads\/[0-9a-f-]{36}\.enc$/.test(e.u)) entry.u = e.u
+    out.push(entry)
+  }
+  return out
+}
+
+/** Nom du blob chiffré d'une entrée sur le serveur. */
+export const blobName = (fileId: string) => `${fileId}.enc`
+
+/**
+ * Type MIME sûr pour afficher un fichier déchiffré : le type annoncé vient de
+ * l'expéditeur et une adresse blob: hérite de l'origine de l'appli ; tout ce qui
+ * pourrait s'exécuter (HTML, SVG, XML…) devient un fichier opaque.
+ */
+export function safeMime(m: string): string {
+  const t = m.toLowerCase().split(';')[0]!.trim()
+  return /^(image\/(png|jpeg|gif|webp|avif|bmp)|video\/(mp4|webm|quicktime|ogg)|audio\/(mpeg|mp3|mp4|m4a|x-m4a|aac|flac|ogg|wav|x-wav|webm|opus)|application\/pdf|text\/plain)$/.test(t)
+    ? t : 'application/octet-stream'
+}

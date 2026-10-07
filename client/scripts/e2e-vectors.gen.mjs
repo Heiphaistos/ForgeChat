@@ -51,6 +51,24 @@ serverKey.iterations = ITER
 const serverEpoch = { conv: c.convName('channel', chan), epoch: 3, sender: ids.a, member: c.serverMember(serverId), key: convKey.key, iv: e(seq(12, 230)) }
 serverEpoch.wrapped = await c.wrapConvKey(aPriv, d(B.pub), d(serverEpoch.key), serverEpoch.conv, 3, serverEpoch.member, ids.a, d(serverEpoch.iv))
 
+// Fichiers (§12) : petit fichier complet, puis gros fichier (2 morceaux) vérifié par empreinte.
+const fileId = '77777777-7777-4777-8777-777777777777'
+const fileSmall = { fileId, key: e(seq(32, 40)), plaintext: 'Bonjour fichier chiffré 🔐', chunk: c.FILE_CHUNK }
+fileSmall.ct = e(await c.encryptFileBytes(d(fileSmall.key), fileId, c.utf8(fileSmall.plaintext)))
+const pattern = n => Uint8Array.from({ length: n }, (_, i) => (i * 7 + 3) & 255)
+const fileLarge = { fileId, key: e(seq(32, 60)), length: c.FILE_CHUNK + 1000, pattern: '(i * 7 + 3) & 255' }
+const largeCt = await c.encryptFileBytes(d(fileLarge.key), fileId, pattern(fileLarge.length))
+Object.assign(fileLarge, {
+  ctLength: largeCt.length, ctSha256: e(await c.sha256(largeCt)),
+  lastChunk: e(largeCt.subarray(c.FILE_CT_CHUNK)), iv1: e(c.fileChunkIv(1)), aadLast: c.fileChunkAad(fileId, 1, true),
+})
+// Message portant un fichier : {t, f:[{id, k, n, m, s, w, h, th}]}.
+const fileMessage = {
+  conv, epoch: 2, author: ids.a, clientMsgId: ids.msg, key: convKey.key, iv: e(seq(12, 240)),
+  body: { t: '', f: [{ id: fileId, k: fileSmall.key, n: 'note.txt', m: 'text/plain', s: c.utf8(fileSmall.plaintext).length }] },
+}
+fileMessage.enc = await c.encryptMessage(d(fileMessage.key), conv, 2, ids.a, ids.msg, fileMessage.body, d(fileMessage.iv))
+
 const vectors = {
   note: 'Vecteurs communs web/mobile (client/scripts/e2e-vectors.gen.mjs). Itérations PBKDF2 réduites pour les tests uniquement (production : 600000).',
   ecdh: {
@@ -78,6 +96,10 @@ const vectors = {
   // Clé du serveur enveloppée pour le propriétaire et par le code ; époque de salon pour la clé du serveur.
   serverKey,
   serverEpoch,
+  // Fichiers chiffrés par morceaux et message qui les décrit.
+  fileSmall,
+  fileLarge,
+  fileMessage,
   recoveryNormalize: [
     ['7k3qz-m9xw2-pb4td-0vh1r', '7K3QZM9XW2PB4TD0VH1R'],
     [' 7K3QZ M9XW2 PB4TD OVHIR ', '7K3QZM9XW2PB4TD0VH1R'],
