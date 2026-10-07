@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 REPO = os.environ.get("FORGECHAT_REPO", "Heiphaistos/ForgeChat")
@@ -45,8 +46,25 @@ def log(msg):
     print(msg, flush=True)
 
 
+# Dépôt privé : jeton GitHub en lecture seule (Contents: read, ce seul dépôt), fichier root 600.
+TOKEN_FILE = os.environ.get("FORGECHAT_GITHUB_TOKEN_FILE", "/etc/forgechat/releases-token")
+
+
+def token():
+    try:
+        with open(TOKEN_FILE, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except FileNotFoundError:
+        return None
+
+
 def get(url, accept="application/json"):
-    req = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "forgechat-releases-sync"})
+    headers = {"Accept": accept, "User-Agent": "forgechat-releases-sync", "X-GitHub-Api-Version": "2022-11-28"}
+    t = token()
+    # Le jeton ne part que vers l'API GitHub : la redirection des fichiers (stockage signé) se suit sans lui.
+    if t and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = "Bearer " + t
+    req = urllib.request.Request(url, headers=headers)
     return urllib.request.urlopen(req, timeout=60)
 
 
@@ -64,9 +82,33 @@ def latest_releases():
     return {k: (".".join(map(str, v[0])), v[1]) for k, v in best.items()}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def asset_location(url):
+    """Asset d'API : GitHub répond 302 vers un stockage signé. urllib renverrait le jeton à cet
+    autre hôte (refusé, et fuite) : on lit la redirection nous-mêmes puis on suit SANS jeton."""
+    headers = {"Accept": "application/octet-stream", "User-Agent": "forgechat-releases-sync"}
+    t = token()
+    if t:
+        headers["Authorization"] = "Bearer " + t
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(urllib.request.Request(url, headers=headers), timeout=60):
+            return url  # 200 direct (rare) : relu par get(), jeton compris
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+            return e.headers["Location"]
+        raise
+
+
 def download(url, path):
     h = hashlib.sha256()
     size = 0
+    if url.startswith("https://api.github.com/"):
+        url = asset_location(url)
     with get(url, "application/octet-stream") as r, open(path, "wb") as f:
         while chunk := r.read(1 << 20):
             size += len(chunk)
@@ -111,7 +153,7 @@ def fetch_release(rel, version, wanted):
                     digest = hashlib.file_digest(f, "sha256").hexdigest()
                 size = os.path.getsize(final)
             else:
-                digest, size = download(assets[name]["browser_download_url"], part)
+                digest, size = download(assets[name]["url"], part)
             if digest != sums[name]:
                 raise ValueError(name + " : empreinte " + digest + " au lieu de " + sums[name])
             if not os.path.exists(final):
