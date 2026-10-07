@@ -372,7 +372,8 @@ export default function DMPage() {
           ...msg,
           // Chiffré : le serveur ne renvoie pas le texte, on garde celui saisi.
           content: msg.enc ? vars.content : msg.content,
-          ...(msg.enc ? { e2e: 'ok' } : {}),
+          // Clés des fichiers envoyés : gardées pour afficher mes pièces jointes sans recharger.
+          ...(msg.enc ? { e2e: 'ok', e2e_body: { t: vars.content ?? '', ...filesExtra(vars.files) } } : {}),
           channel_id: dmId,
           author_id: me.id,
           author_username: me.username,
