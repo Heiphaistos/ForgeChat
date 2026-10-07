@@ -36,7 +36,7 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Exceptions **en clair et marquées `unencrypted: true`** (affichées « non chiffré ») : messages de webhooks entrants, de bots, messages système. Les bots ne peuvent pas lire les salons chiffrés.
 
 ### 4.2 Fichiers
-- Chiffrés sur l'appareil avant envoi : clé aléatoire par fichier, AES-GCM par blocs de 64 Kio (IV = préfixe 4 o aléatoire + compteur 8 o), le serveur stocke un blob opaque (`application/octet-stream`). Clé, nom, type MIME, dimensions, miniature (petite image chiffrée elle aussi) dans le contenu chiffré du message.
+- Chiffrés sur l'appareil avant envoi : clé aléatoire par fichier, AES-GCM par blocs de 64 Kio (IV = 4 octets nuls + compteur 8 o, détails au §12), le serveur stocke un blob opaque (`application/octet-stream`). Clé, nom, type MIME, dimensions, miniature (petite image chiffrée elle aussi) dans le contenu chiffré du message.
 - Mobile : chiffrement en flux par blocs (pas tout en mémoire). Limite initiale 100 Mo pour un fichier chiffré sur mobile (le web garde 500 Mo) ; au-delà, message clair d'erreur.
 
 ### 4.3 Ce que le serveur faisait avec le contenu → côté appli
@@ -66,7 +66,7 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 1. Primitives + vecteurs communs + clé de compte (création, mot de passe, code de récupération, changement de mot de passe, oubli) — web, mobile, serveur.
 2. MP 1:1 et groupes chiffrés (texte), refus du clair côté serveur pour ces conversations, rechiffrement de l'historique des MP.
 3. Salons de serveur : clés par époque, demandes de clés, rotation, permissions ; mentions en métadonnées ; recherche locale ; AutoMod côté appli ; clé de récupération du serveur pour son propriétaire (ajout du 2026-10-07). Réalisée : §10 et §11.
-4. Fichiers chiffrés (web + mobile, flux par blocs).
+4. Fichiers chiffrés (web + mobile, flux par blocs). Réalisée : §12.
 5. Vocal/appels/écran E2EE (LiveKit).
 6. Purge J+30, pages légales, codes de sécurité, tests de bout en bout (deux comptes, trois appareils, rotation).
 
@@ -185,3 +185,60 @@ But : le **propriétaire d'un serveur** peut toujours déchiffrer et récupérer
 - « Récupérer le contenu du serveur » : l'appli du propriétaire ouvre la clé du serveur (par sa clé de compte, sinon par le code, puis la ré-enveloppe pour lui), ouvre toutes les époques de tous les salons et déchiffre les messages SUR L'APPAREIL pour les lire ou les exporter (JSON / texte) ; rien n'est renvoyé en clair à la plateforme.
 - Transfert de propriété : la requête de transfert porte `server_key_owner_wrapped` = clé du serveur ré-enveloppée par l'ancien propriétaire pour le nouveau (ECDH clé du serveur ↔ clé de compte du nouveau, même formule) ; à défaut, le nouveau propriétaire saisit le code de récupération.
 - Limite : un membre qui crée une époque pourrait déposer une enveloppe de serveur invalide (le serveur ne peut pas la vérifier) ; l'époque resterait alors illisible pour la récupération, pas pour les membres. Une enveloppe valide déjà déposée n'est jamais remplacée.
+
+## 12. Étape 4 réalisée : fichiers et pièces jointes
+
+Tous les fichiers joints à une conversation chiffrée (salons, fils, réponses et publications de forum, salons médias, MP, groupes ; images, vidéos, sons, messages vocaux, clips, documents) sont chiffrés sur l'appareil. Le serveur ne reçoit qu'un blob opaque.
+
+### Format (vecteurs `fileSmall`, `fileLarge`, `fileMessage` dans `docs/e2e-vectors.json`)
+- Une clé aléatoire de 32 octets **par fichier**, un identifiant de fichier (UUID tiré par l'appli).
+- Découpage en morceaux de **64 Kio** de clair, chacun chiffré en AES-256-GCM : IV = 4 octets nuls + numéro du morceau sur 8 octets gros-boutiste (la clé ne sert qu'à ce fichier : l'IV ne se répète jamais, d'où l'abandon du préfixe aléatoire envisagé au §4.2) ; AAD `file v1|<id du fichier>|<numéro>|<1 si dernier morceau, sinon 0>`. Un morceau déplacé, retiré, un fichier tronqué (même à une frontière de morceau), un blob d'un autre fichier ou une taille différente de celle annoncée sont refusés.
+- Blob = concaténation des morceaux chiffrés : taille = clair + 16 octets par morceau (un morceau au moins, même pour un fichier vide).
+- Description dans le contenu **chiffré** du message : `f: [{ id, k, n, m, s, w?, h?, d?, th?, u? }]` = id, clé (base64url), nom, type MIME, taille, largeur/hauteur, durée (s), miniature JPEG ≤ 96 px (base64url, 8 Kio au plus, faite par le web et le bureau), adresse du blob `u` quand elle est connue avant l'envoi (médias des publications). 10 fichiers au plus par message. Contenu chiffré d'un message porté à 128 Kio (base64url) côté serveur pour les accueillir.
+- Le blob part sous le nom `<id du fichier>.enc` ; le serveur le range sous un nom aléatoire `/uploads/<uuid>.enc`, type `application/octet-stream`. L'appli relie blob et description par ce nom (`displayAttachments`) ; un blob sans description lisible s'affiche « Fichier chiffré : clé en attente ».
+- Implémentations identiques à l'octet : `client/src/e2e/crypto.ts` (WebCrypto), `mobile/src/e2e/crypto.ts` (noble), `mobile/modules/call-service/.../FileCrypto.java` (javax.crypto, chiffrement natif Android), tous vérifiés sur les mêmes vecteurs.
+
+### Serveur (aucune migration : les colonnes de `attachments` suffisent)
+- `uploads::file_mode` : les fichiers d'un message chiffré doivent être des blobs `<uuid>.enc` (sinon 400 `PLAINTEXT_REFUSED`) ; un fichier en clair est refusé (400 `PLAINTEXT_REFUSED`) exactement là où le texte en clair l'est : salon, fil, réponse de forum quand l'auteur a une clé de compte ; MP et groupe quand tous les membres en ont une. Bots (sans clé de compte) et webhooks (autre route) ne sont pas concernés.
+- Médias de forum et de salon média (`forum-uploads`, adresse collée dans la publication) : blob chiffré obligatoire dès que l'auteur a une clé.
+- Les envois de fichiers des MP et des groupes passent désormais par `store_attachments` (mêmes validations, durée de vie bornée à 30 jours comme les salons).
+- Métadonnées visibles du serveur : taille du blob (≈ taille du fichier), nombre de fichiers, heure d'envoi. Nom, type, dimensions, durée et contenu ne lui parviennent jamais. Conséquence : la recherche serveur `has:image` ne trouve plus les images chiffrées (`has:fichier` oui).
+
+### Web et bureau (même code)
+- `client/src/e2e/files.ts` : `prepareFiles` (chiffrement morceau par morceau avec `File.slice`, miniature par `createImageBitmap` ou image de la vidéo, durée des sons), `filesExtra` (entrées à mettre dans le contenu chiffré), `uploadPrepared`, `displayAttachments`, `decryptedUrl` (téléchargement et déchiffrement **en flux** avec `FileDecryptor`), `saveDecrypted` (enregistrement sous le vrai nom).
+- `E2EAttachment.tsx` : miniature tout de suite, image/son/vidéo déchiffrés d'office jusqu'à 20 Mo, au-delà « Lire / Afficher (taille) » à la demande, documents « Déchiffrer et enregistrer ». Affichage par adresse `blob:` avec un **type MIME sûr** (`safeMime` : HTML, SVG, XML, scripts deviennent `application/octet-stream`, une adresse `blob:` héritant de l'origine de l'appli).
+- Écrans branchés : messages de salon, MP, groupes, fils (premier message compris), réponses et publications de forum, salons médias (couverture et médias dans le texte), messages vocaux, clips, enregistrés, export texte de conversation (vrais noms), récupération du serveur par son propriétaire.
+- CSP : `img-src` et `media-src` acceptent déjà `blob:` (et `data:` pour les miniatures) dans `nginx.conf` et `desktop/src-tauri/tauri.conf.json`, `connect-src 'self'` / l'hôte du serveur couvre le téléchargement des blobs : rien à changer.
+
+### Android (et iOS pour la compilation)
+- `mobile/src/e2e/files.ts` : le fichier choisi est chiffré **dans le cache de l'appli** puis seul le blob part ; Android chiffre et déchiffre en flux en natif (`ForgeCallService.encryptFile` / `decryptFile`, `FileCrypto.java`, AES-GCM matériel, rien en mémoire), ailleurs (iOS, ancien binaire) même calcul en JavaScript morceau par morceau via le module natif FileSystem d'expo (déjà lié dans l'appli, aucune dépendance ajoutée).
+- **Limite de 100 Mo par fichier chiffré sur mobile** (le web garde 500 Mo) : au-delà, message « Fichier trop gros pour être chiffré sur mobile (100 Mo au plus) : envoie-le depuis ForgeChat sur ordinateur. ».
+- Réception : blob téléchargé dans le cache, déchiffré dans un fichier temporaire lu par les lecteurs intégrés (image, vidéo, son, message vocal), blob chiffré effacé aussitôt ; images, sons et vidéos ≤ 10 Mo déchiffrés d'office, le reste au toucher ; un document déchiffré s'enregistre dans un dossier choisi (sélecteur du système). Le dossier `cache/e2e-files` est vidé au démarrage et à la déconnexion. Blobs chiffrés de l'envoi effacés après l'envoi.
+- Écrans branchés : conversations (salons, MP, groupes, messages vocaux), fils, réponses de forum, publications de salon média (couverture : miniature embarquée si le web l'a faite, sinon cadenas), récupération du serveur (noms et clés des fichiers dans l'export).
+
+### Clé de récupération du serveur
+- La clé de chaque fichier est dans le message chiffré : la récupération du propriétaire (§11) déchiffre le message puis relie ses blobs. Web : bouton « Fichiers déchiffrés » qui télécharge, déchiffre et enregistre chaque fichier sous son vrai nom ; l'export JSON (web et mobile) contient l'adresse et l'entrée (`entry`, clé comprise) de chaque fichier, l'export texte leurs noms. **L'export JSON est donc aussi sensible que le contenu lui-même.**
+
+### Ce qui reste en clair (choix assumé)
+- Avatars, bannières, icônes de rôles, emojis, autocollants et sons du soundboard des serveurs : publics par nature (vus par tout le monde, y compris hors du serveur), non chiffrés.
+- Ancien contenu en clair : aucune purge ajoutée ici (décision du propriétaire, autre chantier).
+
+### Anciennes applis
+- Envoi d'un fichier en clair dans une conversation chiffrée : refusé avec « PLAINTEXT_REFUSED : … mets à jour ForgeChat pour y écrire. ».
+- Réception : un fichier chiffré s'affiche comme un fichier `<uuid>.enc` sans nom ni aperçu (le télécharger ne donne que le blob chiffré).
+- **Le binaire Android doit être reconstruit** (module natif `encryptFile`/`decryptFile`) ; un binaire plus ancien avec le nouveau JavaScript chiffre en JavaScript (lent : quelques Mo/s).
+
+### Tests (2026-10-07)
+- Vecteurs communs : `client/scripts/e2e.test.mjs` (3 tests fichiers : vecteurs, troncature, réordonnancement, autre fichier, autre taille, flux découpé au hasard, entrées validées, `safeMime`), `mobile/__tests__/e2e-crypto.test.ts` (mêmes vecteurs), `FileCrypto.java` vérifié sur la JVM contre les mêmes vecteurs (troncature, taille fausse, fichier vide, taille multiple de 64 Kio).
+- `mobile/__tests__/e2e-files.test.ts` : chiffrement dans le cache, blob relu par les primitives communes, aucun octet en clair dans le blob, blob altéré refusé sans fichier laissé, transition en clair, limite de 100 Mo, chemin natif Android (clé, id, taille transmis), liaison blob ↔ entrée, média de publication, miniature.
+- Rust : `uploads::tests` (nom de blob chiffré, `file_mode`).
+- Parcours réel local : `client/scripts/e2e-files.api.mjs` contre le serveur avec Postgres 18 et Redis jetables : MP et salon, fichier en clair refusé, nom en clair refusé sur un message chiffré, blob rangé en `application/octet-stream` sous un nom aléatoire, destinataire qui relit et déchiffre à l'identique, média de forum en clair refusé et chiffré accepté ; puis `pg_dump` et dossier des envois fouillés : ni le marqueur en clair des fichiers, ni leurs noms (`notes.txt`, `photo.png`), ni leurs types n'y figurent.
+
+### Limites connues
+- Pas encore essayé sur un vrai téléphone ni dans l'appli de bureau construite (WebView2, WebKitGTK) : vérifier envoi, aperçu et lecture d'une vidéo chiffrée sur deux appareils réels.
+- Le module natif Android n'a pas été compilé localement (pas de chaîne Gradle ici) : `FileCrypto.java` est vérifié sur la JVM, la liaison Kotlin le sera par la prochaine construction EAS.
+- Mobile : pas de miniature ni de dimensions produites (pas de bibliothèque d'image) ; les miniatures du web s'affichent. Ouvrir un document déchiffré dans une autre appli n'est pas possible (cache privé) : on l'enregistre dans un dossier.
+- Web : un gros fichier est chiffré en mémoire du navigateur avant l'envoi (Blob de morceaux) ; les adresses `blob:` déchiffrées restent en mémoire pendant la session (au plus 20 Mo par fichier ouvert d'office).
+- Un message transféré ne transporte pas ses fichiers (comme avant) ; les messages programmés n'ont pas de fichiers.
+- Messages vocaux d'un groupe sur le web : le composer les envoie à la route des MP (défaut antérieur, non corrigé ici).
+- Un client modifié peut toujours envoyer un blob « .enc » qui n'est pas chiffré (comme il pourrait mettre du clair dans `enc`) : le serveur ne peut pas le vérifier.
