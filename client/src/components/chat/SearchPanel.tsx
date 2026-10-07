@@ -8,6 +8,7 @@ import api, { mediaUrl } from '../../api/client'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { messageLink } from '../../utils/searchLink'
+import { useT } from '../../i18n'
 
 const FILTER_HELP = [
   ['from:pseudo', 'messages de cet auteur'],
@@ -22,10 +23,13 @@ interface Props {
   channelId: string
   channelName: string
   onClose: () => void
+  /** Conversation chiffrée : le serveur ne peut pas chercher, on filtre les messages déjà déchiffrés. */
+  localMessages?: readonly { id: string; content: string | null; created_at: string; author_username?: string; author_avatar?: string | null; e2e?: string }[]
 }
 
-export default function SearchPanel({ serverId, channelId, channelName, onClose }: Props) {
+export default function SearchPanel({ serverId, channelId, channelName, onClose, localMessages }: Props) {
   useEscapePanel(onClose)
+  const t = useT()
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
   // Portée : ce salon/DM, ou partout (salons visibles, DM et groupes).
@@ -54,10 +58,18 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
     }).then(r => r.data as { messages: any[]; next_cursor: string | null }),
     initialPageParam: '',
     getNextPageParam: last => last.next_cursor ?? undefined,
-    enabled: search.trim().length >= 2,
+    enabled: search.trim().length >= 2 && !(localMessages && !everywhere),
   })
-  const results = useMemo(() => data?.pages.flatMap(p => p.messages) ?? [], [data])
   const highlightText = useMemo(() => search.split(/\s+/).filter(w => !/^[a-z]+:\S+/i.test(w)).join(' '), [search])
+  const results = useMemo(() => {
+    if (!localMessages || everywhere) return data?.pages.flatMap(p => p.messages) ?? []
+    const q = highlightText.trim().toLowerCase()
+    if (q.length < 2) return []
+    return localMessages
+      .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
+      .map(m => ({ ...m, kind: 'dm', channel_id: channelId }))
+      .reverse()
+  }, [data, localMessages, everywhere, highlightText, channelId])
 
   // Réinitialiser la sélection à chaque nouvelle liste de résultats
   useEffect(() => { setSelIdx(-1) }, [results])
@@ -127,6 +139,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose 
           <input type="checkbox" checked={everywhere} onChange={e => setEverywhere(e.target.checked)} className="accent-fc-accent" />
           Chercher partout (salons, messages privés, groupes)
         </label>
+        {localMessages && !everywhere && <p className="mt-1.5 text-xs text-fc-muted">{t('e2e.search.local')}</p>}
         {search && (
           <div className="flex items-center gap-1 mt-1.5 text-xs text-fc-muted">
             <Hash size={10} aria-hidden />

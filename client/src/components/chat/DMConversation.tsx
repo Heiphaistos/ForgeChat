@@ -19,6 +19,7 @@ import MessageInput from './MessageInput'
 import type { FileWithTtl } from './MessageInput'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { openText, sendErrorText, withSeal } from '../../e2e/conversations'
 
 const EMPTY_MESSAGES: any[] = []
 
@@ -239,9 +240,15 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
   // Écoute WS pour les edits/deletes DM
   const { updateMessage, deleteMessage: storeDeleteMessage, addReaction, removeReaction, mergeAttachments } = useChat()
   useEffect(() => {
-    const offEdit = on('DM_MESSAGE_UPDATE', (d: any) => {
+    const offEdit = on('DM_MESSAGE_UPDATE', async (d: any) => {
       if (d.dm_id !== dmId) return
-      updateMessage(dmId, d.message_id, { content: d.content, edited_at: d.edited_at })
+      let content = d.content
+      if (d.enc) {
+        const author = useChat.getState().messagesByChannel[dmId]?.find(m => m.id === d.message_id)?.author_id
+        content = author ? await openText('dm', dmId, d.enc, author, d.client_msg_id) : null
+        if (content === null) return
+      }
+      updateMessage(dmId, d.message_id, { content, edited_at: d.edited_at })
     })
     const offDelete = on('DM_MESSAGE_DELETE', (d: any) => {
       if (d.dm_id !== dmId) return
@@ -274,10 +281,12 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
   }, [dmId])
 
   const handleEditMessage = useCallback(async (msgId: string, content: string) => {
+    // Même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message en clair.
+    const prev = useChat.getState().messagesByChannel[dmId]?.find(m => m.id === msgId) as { client_msg_id?: string | null } | undefined
     try {
-      await api.patch(`/dms/${dmId}/messages/${msgId}`, { content })
-    } catch {
-      toast.error('Impossible de modifier ce message')
+      await withSeal('dm', dmId, content, body => api.patch(`/dms/${dmId}/messages/${msgId}`, body), prev?.client_msg_id ?? crypto.randomUUID())
+    } catch (e) {
+      toast.error(sendErrorText(e, 'Impossible de modifier ce message'))
     }
   }, [dmId])
 

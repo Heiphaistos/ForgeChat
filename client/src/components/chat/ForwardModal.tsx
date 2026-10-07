@@ -10,6 +10,8 @@ interface Props {
   messageId: string
   sourceChannelId: string
   sourceServerId: string
+  /** Message chiffré : texte déchiffré à copier (le salon cible n'est pas chiffré). */
+  plaintext?: string | null
   onClose: () => void
 }
 
@@ -26,7 +28,7 @@ interface Channel {
   server_id: string
 }
 
-export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, onClose }: Props) {
+export default function ForwardModal({ messageId, sourceChannelId, sourceServerId, plaintext, onClose }: Props) {
   const t = useT()
   useEscapeKey(onClose)
   const [search, setSearch] = useState('')
@@ -67,6 +69,7 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
     mutationFn: (destChannelId: string) =>
       api.post(`/messages/${messageId}/forward`, {
         channel_id: destChannelId,
+        content: plaintext ?? undefined,
       }),
     onSuccess: () => {
       toast.success(t('forward.done'))
@@ -121,6 +124,8 @@ export default function ForwardModal({ messageId, sourceChannelId, sourceServerI
             <X size={16} />
           </button>
         </div>
+
+        {plaintext != null && <p className="px-4 pt-3 text-xs text-fc-yellow">{t('e2e.forward.notice')}</p>}
 
         {/* Barre de recherche */}
         <div className="px-4 py-2 border-b border-fc-hover flex-shrink-0">

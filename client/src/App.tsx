@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, lazy, Suspense, type ReactNod
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import E2EGate from './e2e/E2EGate'
+import { openText } from './e2e/conversations'
 import { useWs } from './store/ws'
 import { useCallStore } from './store/call'
 import { useGroupCall } from './store/groupCall'
@@ -692,9 +693,13 @@ function AppInner() {
       const cache = qcHook.getQueryData<any[]>(['dms'])
       return cache?.find(dm => dm.id === dmId)?.is_muted ?? false
     }
-    const offDm = on('DM_MESSAGE', (d: any) => {
-      const msg = d.message
-      if (!msg) return
+    // Aperçu d'un message chiffré : déchiffré ici, sur l'appareil.
+    const preview = async (kind: 'dm' | 'group', id: string, msg: any) =>
+      msg.enc ? (await openText(kind, id, msg.enc, msg.sender_id, msg.client_msg_id)) ?? tr('e2e.conv.encrypted') : msg.content
+    const offDm = on('DM_MESSAGE', async (d: any) => {
+      const raw = d.message
+      if (!raw) return
+      const msg = { ...raw, content: await preview('dm', d.dm_id, raw) }
       // Rafraîchir la liste DMs sidebar (dernier message + ordre) pour sender ET recipient
       qcHook.invalidateQueries({ queryKey: ['dms'] })
       if (msg.sender_id === user.id) return
@@ -725,9 +730,10 @@ function AppInner() {
         }
       }
     })
-    const offGroupMsg = on('GROUP_DM_MESSAGE', (d: any) => {
-      const msg = d.message
-      if (!msg) return
+    const offGroupMsg = on('GROUP_DM_MESSAGE', async (d: any) => {
+      const raw = d.message
+      if (!raw) return
+      const msg = { ...raw, content: await preview('group', d.group_id, raw) }
       qcHook.invalidateQueries({ queryKey: ['dms'] })
       if (msg.sender_id === user.id) return
       const currentPath = window.location.pathname

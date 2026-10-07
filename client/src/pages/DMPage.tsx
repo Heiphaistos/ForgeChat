@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import NativeVideo from '../components/voice/NativeVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Search, Lock, LockOpen, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
+import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
 import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
@@ -10,17 +10,32 @@ import { useWs } from '../store/ws'
 import { usePresence } from '../store/presence'
 import { useAuth } from '../store/auth'
 import { useUnread } from '../store/unread'
-import { useE2E } from '../hooks/useE2E'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { useCallStore } from '../store/call'
 import { useFormatDate } from '../hooks/useFormatDate'
 import DMConversation from '../components/chat/DMConversation'
 import SearchPanel from '../components/chat/SearchPanel'
 import toast from 'react-hot-toast'
-import { renderMarkdown } from '../utils/markdown'
-import { handleMarkdownShortcut } from '../utils/mdShortcuts'
 import { useMobile } from '../contexts/MobileContext'
-import { useT, type Key } from '../i18n'
+import { useT, t as tr, type Key } from '../i18n'
+import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
+import type { EncPayload } from '../e2e/crypto'
+import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+
+/** Message de MP tel que renvoyé par le serveur. */
+type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
+
+/** Déchiffre un MP et l'aperçu du message auquel il répond. */
+async function openDm(dmId: string, m: RawDm) {
+  const o = await openMessage('dm', dmId, m)
+  const r = m.reply_to
+  if (r?.enc) {
+    const text = await openText('dm', dmId, r.enc, r.sender_id, r.client_msg_id)
+    return { ...o, reply_to: { ...r, content: text ?? tr('e2e.msg.locked') } }
+  }
+  return o
+}
+
 
 const STATUS_LABEL: Record<string, Key> = {
   online: 'presence.online',
@@ -38,16 +53,6 @@ const STATUS_COLOR: Record<string, string> = {
   offline: 'bg-fc-muted',
 }
 
-interface E2eMsg {
-  id: string
-  content: string
-  sender_id: string
-  sender_username: string
-  sender_avatar: string | null
-  sender_avatar_decoration?: string | null
-  created_at: string
-}
-
 export default function DMPage() {
   const t = useT()
   const { dmId } = useParams<{ dmId: string }>()
@@ -63,14 +68,7 @@ export default function DMPage() {
   const me = useAuth(s => s.user)
   const resetUnread = useUnread(s => s.reset)
   const { formatShort } = useFormatDate()
-  const { generateAndStoreKeyPair, getSharedKey, encrypt, decrypt } = useE2E()
-
-
-  const [e2eMode, setE2eMode] = useState(false)
-  const [e2eMessages, setE2eMessages] = useState<E2eMsg[]>([])
-  const [e2eInput, setE2eInput] = useState('')
-  const [e2eSending, setE2eSending] = useState(false)
-  const e2eBottomRef = useRef<HTMLDivElement>(null)
+  const { encrypted } = useConvEncrypted('dm', dmId)
   const [showSearch, setShowSearch] = useState(false)
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
@@ -82,8 +80,9 @@ export default function DMPage() {
     if (msgs.length === 0) return false
     const oldestId = msgs[0].id
     try {
-      const { data } = await api.get(`/dms/${dmId}/messages?before=${oldestId}&limit=50`)
-      if (data.length === 0) { setHasMoreDM(false); return false }
+      const { data: raw } = await api.get<RawDm[]>(`/dms/${dmId}/messages?before=${oldestId}&limit=50`)
+      if (raw.length === 0) { setHasMoreDM(false); return false }
+      const data = await Promise.all(raw.map(m => openDm(dmId, m)))
       const normalized = data.map((m: any) => ({
         ...m,
         channel_id: dmId,
@@ -153,13 +152,18 @@ export default function DMPage() {
     message_id: string
     pinned_at: string
     pinned_by: string
-    message: { content: string | null; sender_name: string; created_at: string }
+    message: { content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_name: string; created_at: string }
   }
   const [showPins, setShowPins] = useState(false)
   const { data: dmPins = [] } = useQuery<DmPin[]>({
     queryKey: ['dm_pins', dmId],
-    queryFn: () => api.get(`/dms/${dmId}/pins`).then(r => r.data),
-    enabled: !!dmId && !e2eMode,
+    queryFn: async () => {
+      const pins: DmPin[] = (await api.get(`/dms/${dmId}/pins`)).data
+      return Promise.all(pins.map(async p => p.message.enc
+        ? { ...p, message: { ...p.message, content: await openText('dm', dmId!, p.message.enc, p.message.sender_id, p.message.client_msg_id) ?? tr('e2e.msg.locked') } }
+        : p))
+    },
+    enabled: !!dmId,
     staleTime: 30_000,
   })
 
@@ -228,22 +232,17 @@ export default function DMPage() {
   const { data: messages = [], isError: dmMessagesError, refetch: refetchDmMessages } = useQuery({
     queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
     queryFn: async () => {
+      const open = (list: RawDm[]) => Promise.all(list.map(m => openDm(dmId!, m)))
       if (highlightMessageId) {
         try {
           const res = await api.get(`/dms/${dmId}/messages?around=${highlightMessageId}&limit=50`)
-          if (res.data?.length > 0) return res.data
+          if (res.data?.length > 0) return open(res.data)
         } catch {}
       }
-      return api.get(`/dms/${dmId}/messages`).then(r => r.data)
+      return api.get(`/dms/${dmId}/messages`).then(r => open(r.data))
     },
-    enabled: !!dmId && !e2eMode,
+    enabled: !!dmId,
     staleTime: highlightMessageId ? 0 : 30_000,
-  })
-
-  const { data: rawE2eMessages = [] } = useQuery({
-    queryKey: ['e2e_messages', dmId],
-    queryFn: () => api.get(`/dms/${dmId}/e2e`).then(r => r.data),
-    enabled: !!dmId && e2eMode,
   })
 
   // Refléter l'état épinglé sur les messages du store (chargés avant/après les pins)
@@ -280,52 +279,6 @@ export default function DMPage() {
     }
   }, [messages])
 
-  // Decrypt E2E messages when they arrive
-  useEffect(() => {
-    if (!e2eMode || !partnerId || rawE2eMessages.length === 0) return
-    let cancelled = false
-
-    async function decryptAll() {
-      const key = await getSharedKey(partnerId)
-      if (!key || cancelled) return
-
-      const decrypted = await Promise.all(
-        rawE2eMessages.map(async (msg: any) => {
-          try {
-            const content = await decrypt(msg.ciphertext, key)
-            return {
-              id: msg.id,
-              content,
-              sender_id: msg.sender_id,
-              sender_username: msg.sender_username ?? partnerName,
-              sender_avatar: msg.sender_avatar ?? null,
-              created_at: msg.created_at,
-            } as E2eMsg
-          } catch {
-            return {
-              id: msg.id,
-              content: t('dm.undecryptable'),
-              sender_id: msg.sender_id,
-              sender_username: msg.sender_username ?? partnerName,
-              sender_avatar: msg.sender_avatar ?? null,
-              created_at: msg.created_at,
-            } as E2eMsg
-          }
-        })
-      )
-
-      if (!cancelled) setE2eMessages(decrypted)
-    }
-
-    decryptAll()
-    return () => { cancelled = true }
-  }, [rawE2eMessages, e2eMode, partnerId])
-
-  // Auto-scroll to bottom when new E2E messages arrive
-  useEffect(() => {
-    if (e2eMode) e2eBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [e2eMessages, e2eMode])
-
   // Reset pagination quand on change de conversation
   useEffect(() => { setHasMoreDM(true) }, [dmId])
   useEffect(() => { if (highlightMessageId) setHasMoreDM(true) }, [highlightMessageId])
@@ -349,11 +302,12 @@ export default function DMPage() {
     return () => window.removeEventListener('focus', markRead)
   }, [dmId])
 
-  // Normal DM WebSocket listener
+  // Nouveaux messages (déchiffrés sur l'appareil)
   useEffect(() => {
-    if (!dmId || e2eMode) return
-    const off = on('DM_MESSAGE', (d: any) => {
-      if (d.dm_id === dmId && !d.pending_attachments) {
+    if (!dmId) return
+    const off = on('DM_MESSAGE', async (raw: any) => {
+      if (raw.dm_id === dmId && !raw.pending_attachments) {
+        const d = { ...raw, message: await openDm(dmId, raw.message) }
         addMessage({
           ...d.message,
           channel_id: dmId,
@@ -373,8 +327,15 @@ export default function DMPage() {
         })
       }
     })
-    return off
-  }, [dmId, e2eMode])
+    // Clés reçues : les messages en attente s'ouvrent.
+    const offKeys = on('E2E_KEYS', async (d: any) => {
+      if (d.conv_id !== dmId) return
+      const opened = await reopenLocked('dm', dmId, useChat.getState().messagesByChannel[dmId] ?? [])
+      opened.forEach((o, id) => updateMessage(dmId, id, { content: o.content, e2e: 'ok' } as never))
+      qc.invalidateQueries({ queryKey: ['dm_pins', dmId] })
+    })
+    return () => { off(); offKeys() }
+  }, [dmId])
 
   // Le serveur diffuse DM_PIN_TOGGLE aux deux participants (pin_dm_message/
   // unpin_dm_message, dm_extras.rs) -- sans ce listener, seul l'auteur du clic
@@ -390,57 +351,34 @@ export default function DMPage() {
     return off
   }, [dmId])
 
-  // E2E WebSocket listener (incoming encrypted messages from partner)
-  useEffect(() => {
-    if (!dmId || !e2eMode) return
-    const off = on('DM_E2E_MESSAGE', async (d: any) => {
-      if (d.dm_id !== dmId) return
-      const key = await getSharedKey(d.message.sender_id)
-      if (!key) return
-      try {
-        const content = await decrypt(d.message.ciphertext, key)
-        setE2eMessages(prev => [...prev, {
-          id: d.message.id,
-          content,
-          sender_id: d.message.sender_id,
-          sender_username: d.message.sender_username ?? partnerName,
-          sender_avatar: d.message.sender_avatar ?? null,
-          created_at: d.message.created_at,
-        }])
-      } catch {
-        toast.error(t('dm.e2eDecryptError'))
-      }
-    })
-    return off
-  }, [dmId, e2eMode, partnerId])
-
-  const editDm = useMutation({
-    mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
-      api.patch(`/dms/${dmId}/messages/${msgId}`, { content }),
-    onError: () => toast.error(t('dm.editError')),
-  })
-
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
     mutationFn: ({ content, replyTo, files }: { content: string | null; replyTo?: string; files?: import('../components/chat/MessageInput').FileWithTtl[] }) =>
-      api.post(`/dms/${dmId}/messages`, {
-        content: content ?? '',
+      withSeal('dm', dmId!, content ?? '', body => api.post(`/dms/${dmId}/messages`, {
+        ...body,
+        content: body.content ?? '',
         reply_to: replyTo,
         has_attachments: !!files?.length,
-      }),
+      })),
     onSuccess: async (res, vars) => {
       const msg = res.data
       if (msg && me && dmId) {
+        const reply = msg.reply_to?.enc
+          ? { ...msg.reply_to, content: useChat.getState().messagesByChannel[dmId]?.find(m => m.id === msg.reply_to.id)?.content ?? null }
+          : msg.reply_to
         addMessage({
           ...msg,
+          // Chiffré : le serveur ne renvoie pas le texte, on garde celui saisi.
+          content: msg.enc ? vars.content : msg.content,
+          ...(msg.enc ? { e2e: 'ok' } : {}),
           channel_id: dmId,
           author_id: me.id,
           author_username: me.username,
           author_avatar: me.avatar ?? null,
           author_discriminator: '0000',
           reply_to: msg.reply_to_id ?? null,
-          reply_to_content: msg.reply_to?.content ?? null,
-          reply_to_username: msg.reply_to?.sender_username ?? null,
+          reply_to_content: reply?.content ?? null,
+          reply_to_username: reply?.sender_username ?? null,
           attachments: msg.attachments ?? [],
           reactions: msg.reactions ?? [],
           type: 'default',
@@ -459,73 +397,19 @@ export default function DMPage() {
         }
       }
     },
-    onError: (_e, vars) => {
-      toast.error(t('dm.sendError'))
+    onError: (e, vars) => {
+      toast.error(sendErrorText(e, t('dm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.content && dmId) useDraft.getState().setDraft(dmId, vars.content)
     },
   })
-
-  // Toggle E2E mode — generate keypair if needed, verify partner has one
-  const toggleE2e = useCallback(async () => {
-    if (e2eMode) {
-      setE2eMode(false)
-      setE2eMessages([])
-      return
-    }
-    if (!partnerId) {
-      toast.error(t('dm.notLoaded'))
-      return
-    }
-    try {
-      await generateAndStoreKeyPair()
-      const key = await getSharedKey(partnerId)
-      if (!key) {
-        toast.error(t('dm.partnerNoE2e', { name: partnerName }))
-        return
-      }
-      setE2eMode(true)
-      toast.success(t('dm.e2eOn'), { icon: '🔐' })
-    } catch {
-      toast.error(t('dm.e2eOnError'))
-    }
-  }, [e2eMode, partnerId, partnerName, generateAndStoreKeyPair, getSharedKey, t])
-
-  // Send an E2E-encrypted message
-  const sendE2e = useCallback(async () => {
-    if (!e2eInput.trim() || !partnerId || e2eSending) return
-    setE2eSending(true)
-    const plaintext = e2eInput.trim()
-    try {
-      const key = await getSharedKey(partnerId)
-      if (!key) throw new Error('Clé non disponible')
-      const ciphertext = await encrypt(plaintext, key)
-      const { data } = await api.post(`/dms/${dmId}/e2e`, { ciphertext })
-      // Optimistic add — server does not echo back to sender
-      setE2eMessages(prev => [...prev, {
-        id: data.id ?? crypto.randomUUID(),
-        content: plaintext,
-        sender_id: data.sender_id ?? me?.id ?? '',
-        sender_username: data.sender_username ?? me?.username ?? t('dm.me'),
-        sender_avatar: data.sender_avatar ?? me?.avatar ?? null,
-        created_at: data.created_at ?? new Date().toISOString(),
-      }])
-      setE2eInput('')
-    } catch {
-      toast.error(t('dm.e2eSendError'))
-    } finally {
-      setE2eSending(false)
-    }
-  }, [e2eInput, partnerId, e2eSending, encrypt, getSharedKey, dmId, me, t])
 
   if (!dmId) return null
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={`fc-chat-header flex items-center gap-3 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] transition-colors ${
-        e2eMode ? 'border-green-600/40 bg-green-900/10' : 'border-fc-bg'
-      }`}>
+      <div className="fc-chat-header flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0 min-h-[48px] transition-colors">
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
@@ -546,11 +430,6 @@ export default function DMPage() {
         <div>
           <div className="font-semibold text-white text-sm leading-none flex items-center gap-1.5">
             {partnerName}
-            {e2eMode && (
-              <span className="text-green-400 text-[10px] font-normal bg-green-900/40 px-1.5 py-0.5 rounded">
-                {t('dm.e2eBadge')}
-              </span>
-            )}
           </div>
           <div className={`text-xs mt-0.5 ${status === 'online' ? 'text-fc-green' : 'text-fc-muted'}`}>
             {t(STATUS_LABEL[status] ?? 'presence.offline')}
@@ -558,19 +437,7 @@ export default function DMPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={toggleE2e}
-            title={e2eMode ? t('dm.e2eOffTitle') : t('dm.e2eOnTitle')}
-            aria-label={e2eMode ? t('dm.e2eOffLabel') : t('dm.e2eOnLabel')}
-            aria-pressed={e2eMode}
-            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${
-              e2eMode
-                ? 'text-green-400 bg-green-900/30 hover:bg-green-900/50 hover:text-green-300'
-                : 'text-fc-muted hover:text-white hover:bg-fc-hover'
-            }`}
-          >
-            {e2eMode ? <Lock size={18} /> : <LockOpen size={18} />}
-          </button>
+          <E2EBadge kind="dm" id={dmId} />
           <button
             onClick={() => {
               if (isThisCallActive) { hangup(); return }
@@ -608,17 +475,15 @@ export default function DMPage() {
           >
             <Search size={18} />
           </button>
-          {!e2eMode && (
-            <button
-              onClick={() => setShowPins(p => !p)}
-              className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showPins ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
-              title={t('dm.pins')}
-              aria-label={t('dm.pins')}
-              aria-pressed={showPins}
-            >
-              <Pin size={18} />
-            </button>
-          )}
+          <button
+            onClick={() => setShowPins(p => !p)}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showPins ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={t('dm.pins')}
+            aria-label={t('dm.pins')}
+            aria-pressed={showPins}
+          >
+            <Pin size={18} />
+          </button>
         </div>
       </div>
 
@@ -709,7 +574,8 @@ export default function DMPage() {
       {/* Panneau de recherche DM */}
       {showSearch && dmId && (
         <div className="border-b border-fc-bg">
-          <SearchPanel channelId={dmId} serverId="" channelName={t('dm.direct')} onClose={() => setShowSearch(false)} />
+          <SearchPanel channelId={dmId} serverId="" channelName={t('dm.direct')} onClose={() => setShowSearch(false)}
+            localMessages={encrypted ? (useChat.getState().messagesByChannel[dmId] ?? []) : undefined} />
         </div>
       )}
 
@@ -762,98 +628,27 @@ export default function DMPage() {
         </div>
       )}
 
-      {/* E2E mode: custom encrypted chat area */}
-      {e2eMode ? (
-        <>
-          <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3">
-            {e2eMessages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-fc-muted gap-3 pt-12">
-                <Lock size={40} className="text-green-500/60" />
-                <p className="text-sm font-medium text-green-400">{t('dm.e2eEmpty')}</p>
-                <p className="text-xs text-center max-w-xs">
-                  {t('dm.e2eEmptyLine1')}<br/>
-                  {t('dm.e2eEmptyLine2')}
-                </p>
-              </div>
-            ) : (
-              e2eMessages.map(msg => (
-                <div key={msg.id} className="flex items-start gap-2.5 group">
-                  <div className="w-8 h-8 rounded-full bg-fc-accent flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                    {msg.sender_avatar
-                      ? <img src={mediaUrl(msg.sender_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                      : msg.sender_username.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-white">{msg.sender_username}</span>
-                      <span className="text-xs text-fc-muted">
-                        {formatShort(msg.created_at)}
-                      </span>
-                      <Lock size={9} className="text-green-500/70 mb-0.5" />
-                    </div>
-                    <div className="text-sm text-fc-text mt-0.5 break-words leading-relaxed">{renderMarkdown(msg.content)}</div>
-                  </div>
-                </div>
-              ))
-            )}
-            <div ref={e2eBottomRef} />
-          </div>
-
-          {/* E2E input */}
-          <div className="px-4 pb-4 flex-shrink-0">
-            <div className="flex items-center gap-2 bg-fc-input rounded-lg px-3 py-2.5 border border-green-600/30 focus-within:border-green-500/60 transition-colors">
-              <Lock size={14} className="text-green-500 flex-shrink-0" />
-              <input
-                autoFocus
-                className="flex-1 bg-transparent text-sm text-fc-text outline-none placeholder:text-fc-muted"
-                placeholder={t('dm.e2ePlaceholder', { name: partnerName })}
-                value={e2eInput}
-                onChange={e => setE2eInput(e.target.value)}
-                onKeyDown={e => {
-                  if (handleMarkdownShortcut(e, e2eInput, setE2eInput)) return
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    sendE2e()
-                  }
-                }}
-                enterKeyHint="send"
-                disabled={e2eSending}
-              />
-              <button
-                onClick={sendE2e}
-                disabled={!e2eInput.trim() || e2eSending}
-                className="text-xs px-2.5 py-1 rounded-md bg-green-700 hover:bg-green-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {e2eSending ? '…' : t('friends.send')}
-              </button>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          {highlightMessageId && (
-            <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
-              <span className="text-xs text-fc-accent">{t('dm.context')}</span>
-              <button
-                onClick={() => nav(`/dms/${dmId}`)}
-                className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
-              >
-                {t('channel.latest')}
-              </button>
-            </div>
-          )}
-          <DMConversation
-            dmId={dmId}
-            partnerName={partnerName}
-            onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
-            onLoadMore={loadMoreDM}
-            initialHighlightId={highlightMessageId}
-            loadError={dmMessagesError}
-            onRetryLoad={() => refetchDmMessages()}
-            onPinMessage={(msgId, pinned) => togglePin.mutate({ msgId, pinned })}
-          />
-        </>
+      {highlightMessageId && (
+        <div className="flex items-center justify-between gap-2 px-4 py-1.5 bg-fc-accent/10 border-b border-fc-accent/20 flex-shrink-0">
+          <span className="text-xs text-fc-accent">{t('dm.context')}</span>
+          <button
+            onClick={() => nav(`/dms/${dmId}`)}
+            className="text-xs text-fc-accent hover:underline font-medium flex-shrink-0"
+          >
+            {t('channel.latest')}
+          </button>
+        </div>
       )}
+      <DMConversation
+        dmId={dmId}
+        partnerName={partnerName}
+        onSend={(content, replyTo, files) => sendDm.mutate({ content: content || null, replyTo, files })}
+        onLoadMore={loadMoreDM}
+        initialHighlightId={highlightMessageId}
+        loadError={dmMessagesError}
+        onRetryLoad={() => refetchDmMessages()}
+        onPinMessage={(msgId, pinned) => togglePin.mutate({ msgId, pinned })}
+      />
     </div>
   )
 }

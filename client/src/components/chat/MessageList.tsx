@@ -420,6 +420,11 @@ export default function MessageList({
   const [dblClickPopover, setDblClickPopover] = useState<{ msgId: string; x: number; y: number } | null>(null)
   const [reminderFor, setReminderFor] = useState<string | null>(null)
   const [reportingMsg, setReportingMsg] = useState<string | null>(null)
+  // MP chiffré : le texte déchiffré (connu seulement de l'appli) accompagne transfert et signalement.
+  const encryptedText = (id: string) => {
+    const m = messages.find(x => x.id === id) as { content: string | null; enc?: unknown; e2e?: string } | undefined
+    return m?.enc && m.e2e === 'ok' ? m.content : undefined
+  }
   const [translations, setTranslations] = useState<Record<string, string>>({})
   const [translatingId, setTranslatingId] = useState<string | null>(null)
   const density = useMemo(() => localStorage.getItem('fc_density') ?? 'normal', [])
@@ -981,6 +986,7 @@ export default function MessageList({
       {forwardingMsg && (
         <ForwardModal
           messageId={forwardingMsg.id}
+          plaintext={encryptedText(forwardingMsg.id)}
           sourceChannelId={channelId}
           sourceServerId={serverId}
           onClose={() => setForwardingMsg(null)}
@@ -1015,6 +1021,7 @@ export default function MessageList({
       {reportingMsg && (
         <ReportModal
           messageId={reportingMsg}
+          plaintext={encryptedText(reportingMsg)}
           onClose={() => setReportingMsg(null)}
         />
       )}

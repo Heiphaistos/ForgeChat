@@ -4,12 +4,14 @@ import { useEffect, useState } from 'react'
 import { Copy, Download, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../store/auth'
+import { useWs } from '../store/ws'
 import { useT } from '../i18n'
 import { formatRecoveryCode } from './crypto'
 import {
   createAccountKey, hasTypedPassword, initAccountKey, resetAccountKey,
   unlockWithPassword, unlockWithRecovery, useAccountKey,
 } from './accountKey'
+import { answerKeyRequest, forgetConv, reencryptLegacy } from './conversations'
 
 const inputCls = 'w-full px-3 py-2 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent'
 const btnCls = 'w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50'
@@ -158,6 +160,18 @@ export default function E2EGate() {
     // Erreur réseau : on réessaiera au prochain chargement, l'appli reste utilisable.
     initAccountKey(userId).catch(() => {})
   }, [userId])
+
+  // Conversations chiffrées : clés demandées par d'autres membres, clés reçues,
+  // et rechiffrement de mes anciens messages dès que ma clé est prête.
+  const on = useWs(s => s.on)
+  useEffect(() => {
+    if (status !== 'ready') return
+    void reencryptLegacy()
+    const offReq = on('KEY_REQUEST', (d: any) => { void answerKeyRequest(d) })
+    const offKeys = on('E2E_KEYS', (d: any) => forgetConv(d.conv_kind, d.conv_id))
+    return () => { offReq(); offKeys() }
+  }, [status, on])
+  useEffect(() => { if (!userId) forgetConv() }, [userId])
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />

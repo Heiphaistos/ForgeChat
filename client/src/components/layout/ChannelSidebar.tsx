@@ -375,7 +375,9 @@ export default function ChannelSidebar() {
 
   const { data: dms = [], isLoading: dmsLoading } = useQuery({
     queryKey: ['dms'],
-    queryFn: () => api.get('/dms').then(r => r.data),
+    // Dernier message chiffré : le serveur n'a pas le texte, on l'indique simplement.
+    queryFn: () => api.get('/dms').then(r => r.data.map((d: any) =>
+      d.last_message_encrypted && d.last_message_content == null ? { ...d, last_message_content: `🔒 ${t('e2e.conv.encrypted')}` } : d)),
     enabled: !serverId,
     staleTime: 30_000,
   })

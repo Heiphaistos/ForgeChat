@@ -14,10 +14,12 @@ const REASONS: { value: string; label: Key }[] = [
 
 interface Props {
   messageId: string
+  /** Message chiffré : texte déchiffré joint au signalement (le serveur ne peut pas le lire). */
+  plaintext?: string | null
   onClose: () => void
 }
 
-export default function ReportModal({ messageId, onClose }: Props) {
+export default function ReportModal({ messageId, plaintext, onClose }: Props) {
   const t = useT()
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
@@ -31,6 +33,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
       await api.post(`/messages/${messageId}/report`, {
         reason,
         comment: comment.trim() || undefined,
+        content: plaintext ?? undefined,
       })
       toast.success(t('report.sent'))
       onClose()
@@ -64,6 +67,7 @@ export default function ReportModal({ messageId, onClose }: Props) {
         <p className="text-xs text-fc-muted mb-4">
           {t('report.intro')}
         </p>
+        {plaintext != null && <p className="text-xs text-fc-yellow mb-4">{t('e2e.report.notice')}</p>}
 
         <div className="grid grid-cols-2 gap-2 mb-4">
           {REASONS.map(r => (

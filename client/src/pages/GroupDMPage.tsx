@@ -21,7 +21,10 @@ import { renderMarkdown } from '../utils/markdown'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
-import { useT, dateLocale } from '../i18n'
+import { useT, dateLocale, t as tr } from '../i18n'
+import { openMessage, openText, reopenLocked, sendErrorText, withSeal } from '../e2e/conversations'
+import type { EncPayload } from '../e2e/crypto'
+import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 
@@ -56,8 +59,25 @@ interface GDMMessage {
   reply_to?: string | null
   reply_to_username?: string | null
   reply_to_content?: string | null
+  reply_to_enc?: EncPayload | null
+  reply_to_client_msg_id?: string | null
+  reply_to_sender_id?: string | null
+  enc?: EncPayload | null
+  client_msg_id?: string | null
+  purged?: boolean
+  e2e?: 'ok' | 'locked'
   reactions?: GDMReaction[]
   attachments?: GDMAttachment[]
+}
+
+/** Déchiffre un message de groupe et l'aperçu du message auquel il répond. */
+async function openGdm(groupId: string, m: GDMMessage): Promise<GDMMessage> {
+  const o = await openMessage('group', groupId, m)
+  if (m.reply_to_enc && m.reply_to_sender_id) {
+    const text = await openText('group', groupId, m.reply_to_enc, m.reply_to_sender_id, m.reply_to_client_msg_id)
+    return { ...o, reply_to_content: text ?? tr('e2e.msg.locked') }
+  }
+  return o
 }
 
 interface GDMMember {
@@ -105,6 +125,8 @@ export default function GroupDMPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
   const [allMessages, setAllMessages] = useState<GDMMessage[]>([])
+  const allMessagesRef = useRef(allMessages)
+  allMessagesRef.current = allMessages
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [newMsgCount, setNewMsgCount] = useState(0)
@@ -159,7 +181,10 @@ export default function GroupDMPage() {
   // Messages épinglés du groupe
   const { data: groupPins = [] } = useQuery<{ id: string; content: string | null; created_at: string; sender_username: string }[]>({
     queryKey: ['group-dm-pins', groupId],
-    queryFn: () => api.get(`/dms/groups/${groupId}/pins`).then(r => r.data),
+    queryFn: async () => {
+      const pins: (GDMMessage & { sender_id: string })[] = (await api.get(`/dms/groups/${groupId}/pins`)).data
+      return Promise.all(pins.map(p => openMessage('group', groupId!, p)))
+    },
     enabled: !!groupId && showPins,
   })
   const togglePin = useMutation({
@@ -177,20 +202,31 @@ export default function GroupDMPage() {
       if (highlightMsgId) {
         try {
           const res = await api.get(`/dms/groups/${groupId}/messages?around=${highlightMsgId}&limit=50`)
-          if (res.data?.length > 0) return res.data
+          if (res.data?.length > 0) return Promise.all(res.data.map((m: GDMMessage) => openGdm(groupId!, m)))
         } catch {}
       }
-      return api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => r.data)
+      return api.get(`/dms/groups/${groupId}/messages?limit=50`).then(r => Promise.all(r.data.map((m: GDMMessage) => openGdm(groupId!, m))))
     },
     enabled: !!groupId,
     staleTime: highlightMsgId ? 0 : 30_000,
   })
 
-  const { data: searchResults = [], isFetching: searchFetching } = useQuery<GDMMessage[]>({
+  // Groupe chiffré : le serveur ne peut pas chercher, on filtre les messages déjà déchiffrés.
+  const { encrypted } = useConvEncrypted('group', groupId)
+  const { data: serverResults = [], isFetching: searchFetching } = useQuery<GDMMessage[]>({
     queryKey: ['group-dm-search', groupId, searchQuery],
     queryFn: () => api.get(`/dms/groups/${groupId}/messages/search?q=${encodeURIComponent(searchQuery)}`).then(r => r.data),
-    enabled: !!groupId && searchQuery.trim().length >= 2,
+    enabled: !!groupId && searchQuery.trim().length >= 2 && !encrypted,
   })
+  const searchResults = useMemo(() => {
+    if (!encrypted) return serverResults
+    const q = searchQuery.trim().toLowerCase()
+    if (q.length < 2) return []
+    return allMessages
+      .filter(m => m.e2e !== 'locked' && (m.content ?? '').toLowerCase().includes(q))
+      .map(m => ({ ...m, author_username: m.sender_username, author_avatar: m.sender_avatar }))
+      .reverse()
+  }, [encrypted, serverResults, searchQuery, allMessages])
 
   // Initialiser les messages une seule fois par groupId
   useEffect(() => {
@@ -252,8 +288,9 @@ export default function GroupDMPage() {
 
   // Écouter les nouveaux messages, suppressions et éditions via WS
   useEffect(() => {
-    const offNew = on('GROUP_DM_MESSAGE', (d: any) => {
-      if (d.group_id !== groupId || d.pending_attachments) return
+    const offNew = on('GROUP_DM_MESSAGE', async (raw: any) => {
+      if (raw.group_id !== groupId || raw.pending_attachments) return
+      const d = { ...raw, message: await openGdm(groupId!, raw.message) }
       setAllMessages(prev => {
         if (prev.find(m => m.id === d.message.id)) return prev
         return [...prev, d.message]
@@ -263,11 +300,26 @@ export default function GroupDMPage() {
       if (d.group_id !== groupId) return
       setAllMessages(prev => prev.filter(m => m.id !== d.message_id))
     })
-    const offEdit = on('GROUP_DM_MESSAGE_EDIT', (d: any) => {
+    const offEdit = on('GROUP_DM_MESSAGE_EDIT', async (d: any) => {
       if (d.group_id !== groupId) return
+      let content = d.content
+      if (d.enc) {
+        const author = allMessagesRef.current.find(m => m.id === d.message_id)?.sender_id
+        content = author ? await openText('group', groupId!, d.enc, author, d.client_msg_id) : null
+        if (content === null) return
+      }
       setAllMessages(prev => prev.map(m =>
-        m.id === d.message_id ? { ...m, content: d.content, edited_at: new Date().toISOString() } : m
+        m.id === d.message_id
+          ? { ...m, content, enc: d.enc ?? null, client_msg_id: d.client_msg_id ?? m.client_msg_id, e2e: d.enc ? 'ok' : m.e2e, edited_at: new Date().toISOString() }
+          : m
       ))
+    })
+    // Clés reçues : les messages en attente s'ouvrent.
+    const offKeys = on('E2E_KEYS', async (d: any) => {
+      if (d.conv_id !== groupId) return
+      const opened = await reopenLocked('group', groupId!, allMessagesRef.current)
+      if (opened.size) setAllMessages(prev => prev.map(m => (opened.get(m.id) as GDMMessage | undefined) ?? m))
+      queryClient.invalidateQueries({ queryKey: ['group-dm-pins', groupId] })
     })
     const offReact = on('GROUP_DM_REACTION_TOGGLE', (d: any) => {
       if (d.group_id !== groupId) return
@@ -351,7 +403,7 @@ export default function GroupDMPage() {
         return { ...prev, [d.user_id]: { username: d.username, timer } }
       })
     })
-    return () => { offNew(); offDelete(); offEdit(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename(); offOwner(); offPin() }
+    return () => { offNew(); offDelete(); offEdit(); offKeys(); offReact(); offAttach(); offTyping(); offLeave(); offAdd(); offRemove(); offRename(); offOwner(); offPin() }
   }, [groupId, on, user?.id])
 
   // Tracker si l'utilisateur est en bas du scroll
@@ -431,7 +483,7 @@ export default function GroupDMPage() {
     try {
       const oldest = allMessages[0]
       const res = await api.get(`/dms/groups/${groupId}/messages?before=${oldest.id}&limit=50`)
-      const older: GDMMessage[] = res.data
+      const older: GDMMessage[] = await Promise.all(res.data.map((m: GDMMessage) => openGdm(groupId, m)))
       if (older.length < 50) setHasMore(false)
       if (older.length > 0) {
         setAllMessages(prev => {
@@ -454,11 +506,11 @@ export default function GroupDMPage() {
 
   const sendMsg = useMutation({
     mutationFn: ({ text, files, replyToId }: { text: string; files: File[]; replyToId?: string }) =>
-      api.post(`/dms/groups/${groupId}/messages`, {
-        content: text || null,
+      withSeal('group', groupId!, text, body => api.post(`/dms/groups/${groupId}/messages`, {
+        ...body,
         has_attachments: files.length > 0,
         reply_to: replyToId ?? null,
-      }),
+      })),
     onSuccess: async (res, vars) => {
       if (vars.files.length > 0 && res.data?.id) {
         const fd = new FormData()
@@ -467,18 +519,20 @@ export default function GroupDMPage() {
         await postWithUploadProgress(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, fd, totalBytes).catch(() => null)
       }
     },
-    onError: (_e, vars) => {
-      toast.error(t('gdm.sendError'))
+    onError: (e, vars) => {
+      toast.error(sendErrorText(e, t('gdm.sendError')))
       // Restaurer le texte comme brouillon pour ne pas le perdre
       if (vars.text && groupId) useDraft.getState().setDraft(groupId, vars.text)
     },
   })
 
   const editMsg = useMutation({
+    // Même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message en clair.
     mutationFn: ({ msgId, content }: { msgId: string; content: string }) =>
-      api.patch(`/dms/groups/${groupId}/messages/${msgId}`, { content }),
+      withSeal('group', groupId!, content, body => api.patch(`/dms/groups/${groupId}/messages/${msgId}`, body),
+        allMessages.find(m => m.id === msgId)?.client_msg_id ?? crypto.randomUUID()),
     onSuccess: () => { setEditingMsgId(null); toast.success(t('gdm.edited')) },
-    onError: () => toast.error(t('gdm.editError')),
+    onError: (e) => toast.error(sendErrorText(e, t('gdm.editError'))),
   })
 
   const toggleReaction = useCallback(async (msgId: string, emoji: string) => {
@@ -548,6 +602,7 @@ export default function GroupDMPage() {
             <h2 className="text-white font-semibold text-sm truncate">{group.name}</h2>
             <p className="text-xs text-fc-muted">{t('explore.members.other', { n: group.members.length })}</p>
           </div>
+          <E2EBadge kind="group" id={group.id} />
           <button
             onClick={() => void joinGroupCall(group.id, 'voice')}
             className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded hover:bg-fc-hover transition text-fc-muted hover:text-white"
