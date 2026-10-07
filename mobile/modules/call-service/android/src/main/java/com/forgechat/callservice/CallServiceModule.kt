@@ -1,10 +1,13 @@
 package com.forgechat.callservice
 
 import android.content.Intent
+import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
@@ -52,6 +55,36 @@ class CallServiceModule : Module() {
       val ctx = appContext.reactContext ?: return@Function null
       ctx.stopService(Intent(ctx, KeepAliveService::class.java))
       null
+    }
+
+    // PBKDF2-HMAC-SHA256 natif (chiffrement de bout en bout, src/e2e/crypto.ts) : 600 000
+    // itérations prennent plusieurs minutes en JavaScript pur, environ une seconde ici. Calcul sur
+    // les octets bruts (base64 standard en entrée et en sortie) : mêmes octets que WebCrypto.
+    AsyncFunction("pbkdf2") { secretB64: String, saltB64: String, iterations: Int, length: Int ->
+      require(iterations in 1..10_000_000 && length in 1..64) { "paramètres PBKDF2 invalides" }
+      val secret = Base64.decode(secretB64, Base64.NO_WRAP)
+      val salt = Base64.decode(saltB64, Base64.NO_WRAP)
+      val mac = Mac.getInstance("HmacSHA256")
+      // Clé HMAC vide = octets nuls (complétée par des zéros) : un octet nul est équivalent.
+      mac.init(SecretKeySpec(if (secret.isEmpty()) ByteArray(1) else secret, "HmacSHA256"))
+      val out = ByteArray(length)
+      var block = 1
+      var offset = 0
+      while (offset < length) {
+        mac.update(salt)
+        mac.update(byteArrayOf((block ushr 24).toByte(), (block ushr 16).toByte(), (block ushr 8).toByte(), block.toByte()))
+        var u = mac.doFinal()
+        val t = u.copyOf()
+        for (i in 1 until iterations) {
+          u = mac.doFinal(u)
+          for (j in t.indices) t[j] = (t[j].toInt() xor u[j].toInt()).toByte()
+        }
+        val n = minOf(t.size, length - offset)
+        System.arraycopy(t, 0, out, offset, n)
+        offset += n
+        block++
+      }
+      Base64.encodeToString(out, Base64.NO_WRAP)
     }
 
     // Relance l'activité de lancement dans une tâche neuve puis termine le processus : le JS

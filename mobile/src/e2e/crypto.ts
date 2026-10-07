@@ -6,6 +6,7 @@ import { p256 } from '@noble/curves/nist.js'
 import { hkdf as nobleHkdf } from '@noble/hashes/hkdf.js'
 import { pbkdf2Async } from '@noble/hashes/pbkdf2.js'
 import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js'
+import { requireOptionalNativeModule } from 'expo'
 import { getRandomBytes } from 'expo-crypto'
 
 export const PBKDF2_ITERATIONS = 600_000
@@ -62,8 +63,28 @@ export async function hkdf(ikm: Uint8Array, salt: Uint8Array, info: string, leng
 }
 
 /** PBKDF2-SHA256 → 32 octets ; asynchrone par tranches pour ne pas geler l'interface. */
+// Android : PBKDF2 natif (modules/call-service) ; ailleurs (iOS, tests) : noble en JS.
+const nativeCrypto = requireOptionalNativeModule<{ pbkdf2(secret: string, salt: string, iterations: number, length: number): Promise<string> }>('ForgeCallService')
+
 export async function pbkdf2(secret: string, salt: Uint8Array, iterations = PBKDF2_ITERATIONS): Promise<Uint8Array> {
+  if (nativeCrypto?.pbkdf2) {
+    const out = await nativeCrypto.pbkdf2(b64Std(utf8(secret)), b64Std(salt), iterations, AES_KEY_BYTES)
+    return b64StdDecode(out)
+  }
   return pbkdf2Async(nobleSha256, utf8(secret), salt, { c: iterations, dkLen: AES_KEY_BYTES, asyncTick: 16 })
+}
+
+function b64Std(bytes: Uint8Array): string {
+  let s = ''
+  for (const b of bytes) s += String.fromCharCode(b)
+  return btoa(s)
+}
+
+function b64StdDecode(s: string): Uint8Array {
+  const bin = atob(s)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
 }
 
 // ─── AES-256-GCM, AAD obligatoire ────────────────────────────────────────────
