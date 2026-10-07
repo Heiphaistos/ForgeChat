@@ -12,6 +12,7 @@ import { Button, EmptyState, ErrorState, Loading } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
 import { announcementsApi } from '@/api/announcements'
 import { dmsApi } from '@/api/dms'
+import { forwardText } from '@/e2e/conversations'
 import { messagesApi, type ReportReason } from '@/api/messages'
 import { serversApi } from '@/api/servers'
 import { threadsApi } from '@/api/threads'
@@ -216,10 +217,13 @@ export function ChatView({
   const report = useCallback((m: ChatMessage) => {
     const send = (reason: ReportReason) =>
       messagesApi
-        .report(m.id, reason)
+        .report(m.id, reason, undefined, m.e2e === 'ok' ? m.content : null)
         .then(() => Alert.alert(t('chat.thanks'), t('chat.reportSent')))
         .catch((e) => Alert.alert(t('chat.reportFailed'), errorMessage(e)))
-    Alert.alert(t('chat.reportTitle'), t('chat.reportReason'), [
+    // MP chiffré : on prévient que le texte déchiffré part avec le signalement.
+    Alert.alert(t('chat.reportTitle'), m.e2e === 'ok' ? `${t('chat.reportReason')}
+
+${t('e2e.report.notice')}` : t('chat.reportReason'), [
       { text: t('chat.spam'), onPress: () => void send('spam') },
       { text: t('chat.harassment'), onPress: () => void send('harassment') },
       { text: t('chat.inappropriate'), onPress: () => void send('nsfw') },
@@ -270,7 +274,15 @@ export function ChatView({
     }
     if (extras && !m.pending) {
       const messageId = m.id
-      list.push({ label: t('chat.forward'), icon: 'arrow-redo-outline', onPress: () => router.push({ pathname: '/forward', params: { messageId } }) })
+      list.push({
+        label: t('chat.forward'),
+        icon: 'arrow-redo-outline',
+        onPress: () => {
+          // MP chiffré : le texte déchiffré reste en mémoire pour l'écran de transfert.
+          if (m.e2e === 'ok' && m.content) forwardText.set(messageId, m.content)
+          router.push({ pathname: '/forward', params: { messageId } })
+        },
+      })
       const isSaved = savedIds.has(m.id)
       list.push({
         label: t(isSaved ? 'chat.unsave' : 'chat.save'),
@@ -283,7 +295,8 @@ export function ChatView({
       list.push({ label: t('chat.remind'), icon: 'alarm-outline', onPress: () => router.push({ pathname: '/remind', params: { messageId } }) })
       if (m.editedAt) list.push({ label: t('chat.editHistory'), icon: 'time-outline', onPress: () => router.push({ pathname: '/edits', params: { messageId } }) })
     }
-    if (!m.pending && supportsTranslate(conversation) && hasEditableText(m)) {
+    // Traduction : le serveur ne lit pas un message chiffré (désactivée, §4.3).
+    if (!m.pending && !m.e2e && supportsTranslate(conversation) && hasEditableText(m)) {
       list.push(
         translations[m.id]
           ? { label: t('chat.hideTranslation'), icon: 'language-outline', onPress: () => setTranslations(({ [m.id]: _, ...rest }) => rest) }

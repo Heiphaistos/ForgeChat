@@ -86,9 +86,10 @@ export function isVoiceAttachment(a: { filename: string; content_type: string })
  * Le message a-t-il un vrai texte, que l'auteur peut modifier ou copier ? Non pour un message vocal,
  * un sticker, un GIF seul ou une pièce jointe sans texte.
  */
-export function hasEditableText(m: { content: string | null; attachments: readonly { filename: string; content_type: string }[] }): boolean {
+export function hasEditableText(m: { content: string | null; attachments: readonly { filename: string; content_type: string }[]; e2e?: string }): boolean {
   const c = m.content?.trim()
-  if (!c) return false
+  // Message chiffré en attente d'une clé : le texte affiché n'est qu'un avis.
+  if (!c || m.e2e === 'locked') return false
   if (isVoiceMessageText(c) && m.attachments.some(isVoiceAttachment)) return false
   if (parseSticker(c) || tenorGifUrl(c)) return false
   return true

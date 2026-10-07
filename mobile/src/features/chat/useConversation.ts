@@ -23,6 +23,13 @@ import {
   type MessagesData,
 } from './cache'
 import { AttachmentUploadError } from './sendErrors'
+import { e2eErrorText } from '@/e2e/conversations'
+
+/** Erreur de chiffrement (clé en attente, verrouillée, appli à mettre à jour) en texte lisible. */
+const withE2EMessage = (e: unknown) => {
+  const text = e2eErrorText(e)
+  return text ? new Error(text) : e
+}
 
 export interface LocalAttachment extends UploadFile {
   size: number | null
@@ -178,7 +185,7 @@ export function useConversation(ref: ConversationRef) {
         // Le composer récupère le texte et les fichiers (sendErrors.restoreAfterSendError) :
         // on retire la bulle pour ne pas les afficher en double.
         removeMessage(stableRef.kind, id, tempId)
-        throw e
+        throw withE2EMessage(e)
       }
       confirmMessage(stableRef.kind, id, tempId, { ...real, awaitingAttachments: files.length > 0 })
 
@@ -214,15 +221,17 @@ export function useConversation(ref: ConversationRef) {
       if (!text) throw new Error('Le message ne peut pas être vide')
       if (text.length > LIMITS.messageMaxChars) throw new Error('Message trop long')
       let previous: string | null = null
+      let clientMsgId: string | null = null
       patchMessage(stableRef.kind, id, messageId, (m) => {
         previous = m.content
+        clientMsgId = m.clientMsgId ?? null
         return { ...m, content: text, editedAt: new Date().toISOString() }
       })
       try {
-        await messagesApi.edit(stableRef, messageId, text)
+        await messagesApi.edit(stableRef, messageId, text, clientMsgId)
       } catch (e) {
         patchMessage(stableRef.kind, id, messageId, (m) => ({ ...m, content: previous }))
-        throw e
+        throw withE2EMessage(e)
       }
     },
     [stableRef, id],

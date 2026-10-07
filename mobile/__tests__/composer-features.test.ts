@@ -165,7 +165,13 @@ describe('envoi d’un message éphémère (protocole du serveur)', () => {
   const post = jest.fn().mockResolvedValue({ id: 'm1', content: 'x', created_at: '2026-10-05T12:00:00Z', author_id: 'u', author_username: 'u' })
   beforeAll(() => {
     jest.resetModules()
-    jest.doMock('@/lib/http', () => ({ http: { post: (...a: unknown[]) => post(...a) }, path: (s: TemplateStringsArray, ...v: string[]) => s.reduce((acc, p, i) => acc + p + (v[i] ?? ''), '') }))
+    // MP/groupe : conversation pas encore chiffrée (un membre sans clé) → envoi en clair, observable ici.
+    const keys = { current_epoch: null, rotate_needed: false, all_keyed: false, envelopes: [] }
+    jest.doMock('@/lib/http', () => ({
+      ApiError: class extends Error {},
+      http: { post: (...a: unknown[]) => post(...a), get: () => Promise.resolve(keys) },
+      path: (s: TemplateStringsArray, ...v: string[]) => s.reduce((acc, p, i) => acc + p + (v[i] ?? ''), ''),
+    }))
   })
   afterAll(() => jest.dontMock('@/lib/http'))
 
@@ -176,8 +182,9 @@ describe('envoi d’un message éphémère (protocole du serveur)', () => {
     expect(post.mock.calls[0]![1]).toMatchObject({ content: 'x', expires_at_seconds: 300 })
     await messagesApi.send({ kind: 'channel', serverId: 's', channelId: 'c' }, { content: 'x', expiresInSeconds: null })
     expect(post.mock.calls[1]![1]).not.toHaveProperty('expires_at_seconds')
-    await messagesApi.send({ kind: 'dm', dmId: 'd' }, { content: 'x', expiresInSeconds: 300 }).catch(() => undefined)
-    await messagesApi.send({ kind: 'group', groupId: 'g' }, { content: 'x', expiresInSeconds: 300 }).catch(() => undefined)
+    await messagesApi.send({ kind: 'dm', dmId: 'd' }, { content: 'x', expiresInSeconds: 300 })
+    await messagesApi.send({ kind: 'group', groupId: 'g' }, { content: 'x', expiresInSeconds: 300 })
+    expect(post.mock.calls).toHaveLength(4)
     for (const call of post.mock.calls.slice(2)) expect(call[1]).not.toHaveProperty('expires_at_seconds')
   })
 })

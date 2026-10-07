@@ -8,11 +8,12 @@ import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState } from '@/components/ui'
 import { conversationId } from '@/features/chat/adapters'
 import { conversationRefFromParams, useScrollTarget } from '@/features/chat/pins'
-import { SEARCH_DEBOUNCE_MS, searchQuery, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
+import { SEARCH_DEBOUNCE_MS, searchQuery, withLocalResults, type SearchChannel, type SearchMessage, type SearchUser } from '@/features/search/search'
+import { flattenNewestFirst, messagesKey, type MessagesData } from '@/features/chat/cache'
 import { formatShort } from '@/lib/format'
 import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
-import { qk } from '@/lib/queryClient'
+import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 
 type Item = { kind: 'message'; v: SearchMessage } | { kind: 'user'; v: SearchUser } | { kind: 'channel'; v: SearchChannel }
@@ -58,7 +59,13 @@ export default function SearchScreen() {
 
   const results = useQuery({
     queryKey: [...qk.search(debounced ?? ''), scopeId],
-    queryFn: ({ signal }) => searchApi.global(debounced!, signal, scope),
+    queryFn: async ({ signal }) => {
+      const r = await searchApi.global(debounced!, signal, scope)
+      if (!scope || scope.kind === 'channel') return r
+      // MP/groupe chiffré : recherche locale dans les messages déchiffrés sur l'appareil.
+      const cached = flattenNewestFirst(queryClient.getQueryData<MessagesData>(messagesKey(scope.kind, scopeId)))
+      return { ...r, messages: withLocalResults(r.messages, cached, debounced!, scope, t('social.search.here')) }
+    },
     enabled: !!debounced,
     placeholderData: keepPreviousData,
     staleTime: 30_000,

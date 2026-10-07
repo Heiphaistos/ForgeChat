@@ -10,6 +10,7 @@ import { t as tr, useT, type Key } from '@/i18n'
 import { ApiError } from '@/lib/http'
 import { useAuth } from '@/stores/auth'
 import { colors, radius, spacing } from '@/theme'
+import { forgetConv, reencryptLegacy } from './conversations'
 import { formatRecoveryCode } from './crypto'
 import {
   createAccountKey, hasTypedPassword, initAccountKey, resetAccountKey,
@@ -137,7 +138,13 @@ export default function E2EGate() {
   useEffect(() => {
     // Erreur réseau : on réessaiera à la prochaine ouverture, l'appli reste utilisable.
     if (userId) initAccountKey(userId).catch(() => {})
+    else forgetConv()
   }, [userId])
+
+  // Clé prête : rechiffrement en arrière-plan de mes anciens messages en clair (par lots).
+  useEffect(() => {
+    if (status === 'ready') void reencryptLegacy()
+  }, [status])
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />

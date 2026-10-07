@@ -190,6 +190,9 @@ export interface DmMessage {
   reply_to?: { id: string; content: string | null; sender_id: string; sender_username: string } | null
   attachments?: Attachment[]
   reactions?: Reaction[]
+  client_msg_id?: string | null
+  /** Posé par e2e/conversations.openRaw. */
+  e2e?: 'ok' | 'locked'
 }
 
 /** Message de groupe privé (handlers/group_dms.rs). */
@@ -207,6 +210,9 @@ export interface GroupMessage {
   reply_to_content?: string | null
   attachments?: Attachment[]
   reactions?: Reaction[]
+  client_msg_id?: string | null
+  /** Posé par e2e/conversations.openRaw. */
+  e2e?: 'ok' | 'locked'
 }
 
 /** Représentation unifiée utilisée par l'UI de chat. */
@@ -234,6 +240,10 @@ export interface ChatMessage {
   expiresAt?: string | null
   /** Sondage attaché (salons uniquement). */
   pollId?: string | null
+  /** MP/groupe chiffré : id client lié à l'AAD (réutilisé à l'édition). */
+  clientMsgId?: string | null
+  /** MP/groupe chiffré : déchiffré sur l'appareil ('ok') ou en attente d'une clé ('locked'). */
+  e2e?: 'ok' | 'locked'
 }
 
 export type ConversationRef =
@@ -251,6 +261,8 @@ export interface DmSummary {
   status: UserStatus
   last_message_at: string | null
   last_message_content: string | null
+  /** Dernier message chiffré de bout en bout : le serveur n'en a pas le texte. */
+  last_message_encrypted?: boolean
   is_muted: boolean
   is_archived: boolean
 }
@@ -262,6 +274,8 @@ export interface GroupSummary {
   member_count: number
   last_message_at: string | null
   last_message_content: string | null
+  /** Dernier message chiffré de bout en bout : le serveur n'en a pas le texte. */
+  last_message_encrypted?: boolean
   last_message_author?: string | null
   is_muted: boolean
   is_archived: boolean

@@ -6,6 +6,7 @@ import { Avatar } from '@/components/Avatar'
 import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
+import { E2EBadge } from '@/e2e/E2EBadge'
 import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
@@ -65,6 +66,7 @@ export default function DmScreen() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
+              <E2EBadge kind="dm" id={ids.dmId} />
               <IconButton
                 icon="pin-outline"
                 label={t('conv.pins')}

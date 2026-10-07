@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { hasPushToken, setupNotificationChannels } from '@/services/push'
+import { openRaw } from '@/e2e/conversations'
 import { getMyId, registerSignOutHook, useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
@@ -110,9 +111,15 @@ function context() {
 
 /** Notifications locales en arrière-plan, et relance du service après un appel. */
 export function bindKeepAlive(): () => void {
-  const onMessage = (e: RealtimeEvent) => {
+  const onMessage = async (e: RealtimeEvent) => {
     if (!background()) return
-    const n = noticeFor(e, context())
+    // Aperçu d'un MP/groupe chiffré : déchiffré ici, sur l'appareil.
+    const kind = e.type === 'DM_MESSAGE' ? 'dm' : e.type === 'GROUP_DM_MESSAGE' ? 'group' : null
+    const id = kind === 'dm' ? e.dm_id : e.group_id
+    const ev = kind && typeof id === 'string' && e.message && typeof e.message === 'object'
+      ? { ...e, message: await openRaw(kind, id, e.message as Record<string, unknown>) }
+      : e
+    const n = noticeFor(ev, context())
     if (n) show(n, 'messages')
   }
   const offs = ['DM_MESSAGE', 'GROUP_DM_MESSAGE', 'MENTION_CREATE'].map((t) => realtime.on(t, onMessage))

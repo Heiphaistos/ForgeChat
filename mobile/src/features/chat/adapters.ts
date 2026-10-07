@@ -49,7 +49,13 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
     pinned: false,
+    ...e2eFields(m),
   }
+}
+
+/** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`). */
+function e2eFields(m: { client_msg_id?: string | null; e2e?: 'ok' | 'locked' }) {
+  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}) }
 }
 
 export function fromGroupMessage(m: GroupMessage): ChatMessage {
@@ -70,6 +76,7 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     attachments: m.attachments ?? [],
     reactions: m.reactions ?? [],
     pinned: false,
+    ...e2eFields(m),
   }
 }
 

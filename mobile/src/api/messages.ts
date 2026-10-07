@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto'
 import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
@@ -18,6 +19,7 @@ import {
 import { normalizeBotCommands, type SlashCommand } from '@/features/composer/commands'
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
+import { forwardText, openRawList, withSeal } from '@/e2e/conversations'
 
 /**
  * API de messagerie unifiée : un seul contrat quel que soit le type de
@@ -45,6 +47,18 @@ export interface UploadFile {
   size?: number | null
 }
 
+/** MP et groupes : conversation chiffrable de bout en bout. */
+function e2eConv(ref: ConversationRef): ['dm' | 'group', string] | null {
+  return ref.kind === 'dm' ? ['dm', ref.dmId] : ref.kind === 'group' ? ['group', ref.groupId] : null
+}
+
+/** Messages bruts déchiffrés sur l'appareil (MP et groupes), puis adaptés. */
+async function adaptList(ref: ConversationRef, raw: unknown): Promise<ChatMessage[]> {
+  const list = Array.isArray(raw) ? raw : []
+  const conv = e2eConv(ref)
+  return (conv ? await openRawList(conv[0], conv[1], list) : list).map((m) => adaptMessage(ref, m))
+}
+
 export const messagesApi = {
   /** Page de messages, ordre chronologique croissant. */
   async list(ref: ConversationRef, before?: string, signal?: AbortSignal): Promise<ChatMessage[]> {
@@ -52,31 +66,37 @@ export const messagesApi = {
       query: { limit: LIMITS.pageSize, before },
       signal,
     })
-    return (Array.isArray(raw) ? raw : []).map((m) => adaptMessage(ref, m))
+    return adaptList(ref, raw)
   },
 
   /** Messages autour d'un message ancien (?around=, moitié avant, moitié après), ordre chronologique. */
   async around(ref: ConversationRef, messageId: string): Promise<ChatMessage[]> {
-    const raw = await http.get<unknown[]>(base(ref), { query: { around: messageId, limit: LIMITS.pageSize } })
-    return (Array.isArray(raw) ? raw : []).map((m) => adaptMessage(ref, m))
+    return adaptList(ref, await http.get<unknown[]>(base(ref), { query: { around: messageId, limit: LIMITS.pageSize } }))
   },
 
   async send(
     ref: ConversationRef,
     input: { content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null },
   ): Promise<ChatMessage> {
-    const raw = await http.post<unknown>(base(ref), {
-      content: input.content,
+    const extra = {
       reply_to: input.replyTo ?? undefined,
       has_attachments: input.hasAttachments ?? false,
       // Messages éphémères : seuls les salons les gèrent côté serveur (comme le web).
       ...(ref.kind === 'channel' && input.expiresInSeconds ? { expires_at_seconds: input.expiresInSeconds } : {}),
-    })
-    return adaptMessage(ref, raw)
+    }
+    const conv = e2eConv(ref)
+    if (!conv) return adaptMessage(ref, await http.post<unknown>(base(ref), { content: input.content, ...extra }))
+    // MP/groupe : chiffré sur l'appareil ; le serveur ne renvoie pas le texte, on garde celui saisi.
+    const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }))
+    const m = adaptMessage(ref, raw)
+    return raw?.enc ? { ...m, content: input.content, e2e: 'ok' } : m
   },
 
-  edit(ref: ConversationRef, messageId: string, content: string) {
-    return http.patch(base(ref) + path`/${messageId}`, { content })
+  /** Édition ; MP/groupe chiffré : même id client que le message (lié à l'AAD), ou un nouveau pour un ancien message. */
+  edit(ref: ConversationRef, messageId: string, content: string, clientMsgId?: string | null) {
+    const conv = e2eConv(ref)
+    if (!conv) return http.patch(base(ref) + path`/${messageId}`, { content })
+    return withSeal(conv[0], conv[1], content, (body) => http.patch(base(ref) + path`/${messageId}`, body), clientMsgId ?? Crypto.randomUUID())
   },
 
   remove(ref: ConversationRef, messageId: string) {
@@ -135,12 +155,19 @@ export const messagesApi = {
         : ref.kind === 'dm'
           ? path`/dms/${ref.dmId}/pins`
           : path`/dms/groups/${ref.groupId}/pins`
-    return normalizePins(ref.kind, await http.get<unknown>(p))
+    const raw = await http.get<unknown>(p)
+    const conv = e2eConv(ref)
+    if (!conv || !Array.isArray(raw)) return normalizePins(ref.kind, raw)
+    // MP : { message: {...} } ; groupe : le message lui-même.
+    if (ref.kind === 'group') return normalizePins(ref.kind, await openRawList('group', conv[1], raw))
+    const msgs = await openRawList('dm', conv[1], raw.map((r) => (r as { message?: unknown }).message ?? null))
+    return normalizePins(ref.kind, raw.map((r, i) => ({ ...(r as object), message: msgs[i] })))
   },
 
   /** Copie le message (salon ou DM) dans un salon textuel ; le serveur applique les règles d'envoi du salon cible. */
   forward(messageId: string, channelId: string) {
-    return http.post(path`/messages/${messageId}/forward`, { channel_id: channelId })
+    // MP chiffré : texte déchiffré mémorisé par l'écran de conversation (le salon cible n'est pas chiffré).
+    return http.post(path`/messages/${messageId}/forward`, { channel_id: channelId, content: forwardText.get(messageId) })
   },
 
   /** Rappel livré par l'événement temps réel REMINDER à l'échéance (reminders.rs). */
@@ -199,7 +226,8 @@ export const messagesApi = {
   cancelScheduled: (id: string) => http.delete(path`/scheduled/${id}`),
 
   /** Signalement (messages de salon uniquement côté serveur). */
-  report(messageId: string, reason: ReportReason, comment?: string) {
-    return http.post(path`/messages/${messageId}/report`, { reason, comment })
+  report(messageId: string, reason: ReportReason, comment?: string, plaintext?: string | null) {
+    // MP chiffré : le signaleur joint le texte déchiffré (seul moyen de modérer).
+    return http.post(path`/messages/${messageId}/report`, { reason, comment, content: plaintext ?? undefined })
   },
 }

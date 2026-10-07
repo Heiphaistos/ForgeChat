@@ -1,8 +1,12 @@
+import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
 import type { ConversationSummary, GroupDetails } from '@/types/models'
 
 export const dmsApi = {
-  list: () => http.get<ConversationSummary[]>('/dms'),
+  /** Dernier message chiffré : le serveur n'a pas le texte, on l'indique simplement. */
+  list: async () =>
+    (await http.get<ConversationSummary[]>('/dms')).map((c) =>
+      c.last_message_encrypted && c.last_message_content == null ? { ...c, last_message_content: `🔒 ${t('e2e.conv.encrypted')}` } : c),
   open: (userId: string) => http.post<{ dm_id: string }>(path`/dms/${userId}`),
   group: (groupId: string) => http.get<GroupDetails>(path`/dms/groups/${groupId}`),
   /** name null → le serveur nomme le groupe « Groupe ». */

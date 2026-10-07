@@ -1,5 +1,5 @@
 import { isUuid } from '@/lib/params'
-import type { ConversationRef } from '@/types/models'
+import type { ChatMessage, ConversationRef } from '@/types/models'
 
 /** Bornes de handlers/search.rs (min 2 caractères) ; au-delà de 100, inutile d'interroger le serveur. */
 export const SEARCH_MIN = 2
@@ -97,4 +97,19 @@ export function normalizeSearch(raw: unknown): SearchResults {
     channels.push({ id: id.toLowerCase(), name, type: str(c.type) ?? 'text', serverId: serverId.toLowerCase(), serverName: str(c.server_name) ?? '' })
   }
   return { messages, users, channels }
+}
+
+/**
+ * MP et groupes chiffrés : le serveur ne peut pas chercher dans le texte. On complète ses
+ * résultats (anciens messages en clair) par les messages déjà déchiffrés sur l'appareil.
+ */
+export function withLocalResults(server: SearchMessage[], cached: readonly ChatMessage[], q: string, scope: ConversationRef, channelName: string): SearchMessage[] {
+  const needle = q.trim().toLowerCase()
+  const known = new Set(server.map((m) => m.id))
+  const local = cached
+    .filter((m) => m.e2e === 'ok' && !known.has(m.id) && (m.content ?? '').toLowerCase().includes(needle))
+    .map((m): SearchMessage => ({
+      id: m.id, content: m.content, createdAt: m.createdAt, authorName: m.authorName, authorAvatar: m.authorAvatar, channelName, conversation: scope,
+    }))
+  return [...server, ...local].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }

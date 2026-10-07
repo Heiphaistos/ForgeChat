@@ -1,4 +1,6 @@
 import { usersApi } from '@/api/users'
+import { answerKeyRequest, forgetConv, openRaw, openText } from '@/e2e/conversations'
+import type { EncPayload } from '@/e2e/crypto'
 import {
   appendMessage,
   applyReactionDelta,
@@ -186,25 +188,46 @@ export function bindRealtime(): () => void {
     if (cid && uid && uid !== getMyId()) useTyping.getState().add(cid, uid, str(e.username) ?? '…')
   })
 
+  // ── Chiffrement de bout en bout (MP et groupes) ─────────────────────────────
+  // Texte d'une édition chiffrée, déchiffré ici ; null si illisible (on garde l'ancien).
+  const editedText = async (kind: 'dm' | 'group', id: string, e: RealtimeEvent): Promise<string | null> => {
+    if (!isObj(e.enc)) return typeof e.content === 'string' ? e.content : null
+    const author = str(e.sender_id)
+    return author ? openText(kind, id, e.enc as unknown as EncPayload, author, str(e.client_msg_id)) : null
+  }
+  on('KEY_REQUEST', (e) => void answerKeyRequest(e))
+  on('E2E_KEYS', (e) => {
+    const kind = e.conv_kind === 'dm' || e.conv_kind === 'group' ? e.conv_kind : null
+    const id = str(e.conv_id)
+    if (!kind || !id) return
+    // Clés reçues : on relit la conversation, les messages en attente s'ouvrent.
+    forgetConv(kind, id)
+    void queryClient.invalidateQueries({ queryKey: ['messages', kind, id] })
+    void queryClient.invalidateQueries({ queryKey: qk.pins(id) })
+  })
+
   // ── DM 1:1 ────────────────────────────────────────────────────────────────
-  on('DM_MESSAGE', (e) => {
+  on('DM_MESSAGE', async (e) => {
     const dmId = str(e.dm_id)
     if (!dmId || !isObj(e.message)) return
-    const msg = { ...fromDmMessage(e.message as unknown as DmMessage), awaitingAttachments: e.pending_attachments === true }
+    const raw = await openRaw('dm', dmId, e.message)
+    const msg = { ...fromDmMessage(raw as unknown as DmMessage), awaitingAttachments: e.pending_attachments === true }
     if (!str(msg.id)) return
     appendMessage('dm', dmId, msg)
     touchConversation(dmId, msg.content, msg.createdAt)
     if (msg.authorId !== getMyId()) useUnread.getState().increment(dmId, null)
     useTyping.getState().remove(dmId, msg.authorId)
   })
-  on('DM_MESSAGE_UPDATE', (e) => {
+  on('DM_MESSAGE_UPDATE', async (e) => {
     const dmId = str(e.dm_id), mid = str(e.message_id)
-    if (dmId && mid)
-      patchMessage('dm', dmId, mid, (m) => ({
-        ...m,
-        content: typeof e.content === 'string' ? e.content : m.content,
-        editedAt: str(e.edited_at) ?? new Date().toISOString(),
-      }))
+    if (!dmId || !mid) return
+    const text = await editedText('dm', dmId, e)
+    patchMessage('dm', dmId, mid, (m) => ({
+      ...m,
+      content: text ?? m.content,
+      clientMsgId: str(e.client_msg_id) ?? m.clientMsgId,
+      editedAt: str(e.edited_at) ?? new Date().toISOString(),
+    }))
   })
   on('DM_MESSAGE_DELETE', (e) => {
     const dmId = str(e.dm_id), mid = str(e.message_id)
@@ -225,24 +248,27 @@ export function bindRealtime(): () => void {
   })
 
   // ── Groupes ───────────────────────────────────────────────────────────────
-  on('GROUP_DM_MESSAGE', (e) => {
+  on('GROUP_DM_MESSAGE', async (e) => {
     const gid = str(e.group_id)
     if (!gid || !isObj(e.message)) return
-    const msg = { ...fromGroupMessage(e.message as unknown as GroupMessage), awaitingAttachments: e.pending_attachments === true }
+    const raw = await openRaw('group', gid, e.message)
+    const msg = { ...fromGroupMessage(raw as unknown as GroupMessage), awaitingAttachments: e.pending_attachments === true }
     if (!str(msg.id)) return
     appendMessage('group', gid, msg)
     touchConversation(gid, msg.content, msg.createdAt, msg.authorName)
     if (msg.authorId !== getMyId()) useUnread.getState().increment(gid, null)
     useTyping.getState().remove(gid, msg.authorId)
   })
-  on('GROUP_DM_MESSAGE_EDIT', (e) => {
+  on('GROUP_DM_MESSAGE_EDIT', async (e) => {
     const gid = str(e.group_id), mid = str(e.message_id)
-    if (gid && mid)
-      patchMessage('group', gid, mid, (m) => ({
-        ...m,
-        content: typeof e.content === 'string' ? e.content : m.content,
-        editedAt: new Date().toISOString(),
-      }))
+    if (!gid || !mid) return
+    const text = await editedText('group', gid, e)
+    patchMessage('group', gid, mid, (m) => ({
+      ...m,
+      content: text ?? m.content,
+      clientMsgId: str(e.client_msg_id) ?? m.clientMsgId,
+      editedAt: new Date().toISOString(),
+    }))
   })
   on('GROUP_DM_MESSAGE_DELETE', (e) => {
     const gid = str(e.group_id), mid = str(e.message_id)

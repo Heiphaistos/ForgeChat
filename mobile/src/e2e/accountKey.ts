@@ -22,10 +22,12 @@ interface E2EState {
   recoveryToShow: string | null
   /** Écran de déverrouillage ouvert (reste ouvert pendant le calcul, fermé par « Plus tard »). */
   prompt: boolean
+  /** Compte auquel appartient la clé (lu par les conversations chiffrées). */
+  userId: string | null
 }
 
 export const useAccountKey = create<E2EState>()(() => ({
-  status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false,
+  status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false, userId: null,
 }))
 
 const STORE_KEY = 'fc_e2e_account_key'
@@ -70,7 +72,7 @@ async function activate(userId: string, priv: Uint8Array, pub: Uint8Array) {
   const pubB64 = c.b64uEncode(pub)
   await SecureStore.setItemAsync(STORE_KEY, JSON.stringify({ userId, priv: c.b64uEncode(priv), pub: pubB64 }), OPTS)
   typedPassword = null
-  useAccountKey.setState({ status: 'ready', priv, pub: pubB64 })
+  useAccountKey.setState({ status: 'ready', priv, pub: pubB64, userId })
 }
 
 async function newKeyMaterial(userId: string, password: string) {
@@ -99,7 +101,7 @@ export async function initAccountKey(userId: string) {
   const stored = await loadStored(userId)
   if (stored) {
     typedPassword = null
-    useAccountKey.setState({ status: 'ready', priv: c.b64uDecode(stored.priv), pub: stored.pub })
+    useAccountKey.setState({ status: 'ready', priv: c.b64uDecode(stored.priv), pub: stored.pub, userId })
     return
   }
   const keys = await fetchKeys()
@@ -168,7 +170,7 @@ export async function rewrapForNewPassword(userId: string, newPw: string): Promi
 /** Déconnexion : plus aucune clé sur cet appareil. */
 export async function clearAccountKey() {
   typedPassword = null
-  useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false })
+  useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false, userId: null })
   await SecureStore.deleteItemAsync(STORE_KEY, OPTS).catch(() => {})
 }
 
