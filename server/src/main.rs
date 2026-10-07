@@ -133,6 +133,7 @@ async fn main() -> anyhow::Result<()> {
             )
             .execute(&unban_state.db)
             .await;
+            handlers::profile_custom::expire_custom_statuses(&unban_state).await;
         }
     });
 
@@ -547,8 +548,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/data-export", get(handlers::privacy::export_user_data))
         .route("/users/me/stats", get(handlers::users::get_my_stats))
         .route("/users/me/login-history", get(handlers::users::get_login_history))
-        .route("/users/me/avatar", post(handlers::users::upload_avatar))
-        .route("/users/me/banner", post(handlers::users::upload_banner))
+        .route("/users/me/avatar", post(handlers::profile_custom::upload_avatar))
+        .route("/users/me/banner", post(handlers::profile_custom::upload_banner))
+        .route("/users/styles", get(handlers::profile_custom::name_styles))
         .route("/users/:id", get(handlers::users::get_user))
         .route("/users/search", get(handlers::users::search_users))
         // Servers

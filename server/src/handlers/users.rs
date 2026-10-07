@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State, Multipart},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Extension, Json,
 };
@@ -8,8 +8,9 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::servers::require_member,
+    handlers::{password_reset::over_limit, servers::require_member},
     middleware::auth::Claims,
+    handlers::profile_custom::ProfileCustom,
     models::user::{UpdateProfileRequest, UserPublic},
     state::AppState,
 };
@@ -126,6 +127,11 @@ pub async fn update_me(
     // CustomStatusModal.tsx) limitaient la taille, trivialement contournables par
     // un appel direct à l'API. Confirmé en direct : PATCH avec un bio de 50000
     // caractères était accepté et stocké tel quel avant ce fix.
+    if let Some(ref banner) = body.banner {
+        if !crate::models::profile_style::valid_banner_ref(banner) {
+            return Err(AppError::BadRequest("Bannière : envoyez l'image via /users/me/banner".into()));
+        }
+    }
     if let Some(ref bio) = body.bio {
         if bio.chars().count() > 190 {
             return Err(AppError::BadRequest("Bio : 190 caractères max".into()));
@@ -146,6 +152,10 @@ pub async fn update_me(
     }
 
     body.validate_cosmetics().map_err(|e| AppError::BadRequest(e.into()))?;
+    let custom = ProfileCustom::from_request(&body)?;
+    if over_limit(&state, &format!("profile_patch:{}", claims.sub), 60, 600).await {
+        return Err(AppError::TooManyRequests);
+    }
 
     let (birthday_val, birthday_clear): (Option<chrono::NaiveDate>, bool) = match &body.birthday {
         None => (None, false),
@@ -174,6 +184,11 @@ pub async fn update_me(
             profile_color_primary = CASE WHEN $14::INT IS NULL THEN profile_color_primary WHEN $14 < 0 THEN NULL ELSE $14 END,
             profile_color_accent = CASE WHEN $15::INT IS NULL THEN profile_color_accent WHEN $15 < 0 THEN NULL ELSE $15 END,
             profile_effect = CASE WHEN $16::VARCHAR IS NOT NULL THEN NULLIF($16, '') ELSE profile_effect END,
+            display_name = CASE WHEN $17 THEN $18 ELSE display_name END,
+            name_style = CASE WHEN $19 THEN $20 ELSE name_style END,
+            profile_tag = CASE WHEN $21 THEN $22 ELSE profile_tag END,
+            profile_links = CASE WHEN $23 THEN $24 ELSE profile_links END,
+            custom_status_expires_at = CASE WHEN $4::TEXT IS NOT NULL THEN $25 ELSE custom_status_expires_at END,
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -193,6 +208,15 @@ pub async fn update_me(
     .bind(body.profile_color_primary)
     .bind(body.profile_color_accent)
     .bind(body.profile_effect.as_deref())
+    .bind(custom.display_name.is_some())
+    .bind(custom.display_name.flatten())
+    .bind(custom.name_style.is_some())
+    .bind(custom.name_style.flatten())
+    .bind(custom.profile_tag.is_some())
+    .bind(custom.profile_tag.flatten())
+    .bind(custom.profile_links.is_some())
+    .bind(custom.profile_links.flatten())
+    .bind(custom.status_expires_at)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -275,124 +299,6 @@ pub async fn update_me(
     }
 
     Ok(Json(user.into_self_public()))
-}
-
-pub async fn upload_avatar(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    mut multipart: Multipart,
-) -> Result<Json<UserPublic>> {
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let name = field.name().unwrap_or("").to_string();
-        if name != "avatar" { continue; }
-
-        let content_type = field.content_type()
-            .unwrap_or("image/jpeg")
-            .to_string();
-
-        // Valider le content-type — liste blanche stricte pour les avatars
-        let ext = crate::handlers::uploads::image_ext(&content_type)?;
-
-        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-
-        if data.len() > 8 * 1024 * 1024 {
-            return Err(AppError::BadRequest("Fichier trop grand (max 8 MB)".into()));
-        }
-
-        let filename = format!("avatars/{}.{}", Uuid::new_v4(), ext);
-        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
-
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await
-                .map_err(|e| AppError::Internal(e.into()))?;
-        }
-
-        tokio::fs::write(&path, &data).await
-            .map_err(|e| AppError::Internal(e.into()))?;
-
-        let avatar_url = format!("/uploads/{}", filename);
-
-        let user = sqlx::query_as::<_, crate::models::user::User>(
-            "UPDATE users SET avatar=$2, updated_at=NOW() WHERE id=$1 RETURNING *"
-        )
-        .bind(claims.sub)
-        .bind(&avatar_url)
-        .fetch_one(&state.db)
-        .await?;
-
-        // Notifier les membres des serveurs communs du nouvel avatar (1 query)
-        let event = serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) });
-        let event_str = event.to_string();
-        state.broadcast_to_user(claims.sub, event_str.clone()).await;
-        let visible_to: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT DISTINCT sm2.user_id
-             FROM server_members sm1
-             JOIN server_members sm2 ON sm2.server_id = sm1.server_id
-             WHERE sm1.user_id = $1 AND sm2.user_id != $1"
-        )
-        .bind(claims.sub)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
-        {
-            let clients = state.clients.read().await;
-            for uid in visible_to {
-                if let Some(tx) = clients.get(&uid) {
-                    let _ = tx.send(event_str.clone());
-                }
-            }
-        }
-
-        return Ok(Json(user.into()));
-    }
-
-    Err(AppError::BadRequest("Champ 'avatar' manquant".into()))
-}
-
-pub async fn upload_banner(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    mut multipart: Multipart,
-) -> Result<Json<serde_json::Value>> {
-    while let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let name = field.name().unwrap_or("").to_string();
-        if name != "banner" { continue; }
-
-        let content_type = field.content_type()
-            .unwrap_or("image/jpeg")
-            .to_string();
-
-        let ext = crate::handlers::uploads::image_ext(&content_type)?;
-
-        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-
-        if data.len() > 10 * 1024 * 1024 {
-            return Err(AppError::BadRequest("Fichier trop grand (max 10 MB)".into()));
-        }
-
-        let filename = format!("banners/{}.{}", Uuid::new_v4(), ext);
-        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
-
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await
-                .map_err(|e| AppError::Internal(e.into()))?;
-        }
-
-        tokio::fs::write(&path, &data).await
-            .map_err(|e| AppError::Internal(e.into()))?;
-
-        let banner_url = format!("/uploads/{}", filename);
-
-        sqlx::query("UPDATE users SET banner=$2, updated_at=NOW() WHERE id=$1")
-            .bind(claims.sub)
-            .bind(&banner_url)
-            .execute(&state.db)
-            .await?;
-
-        return Ok(Json(serde_json::json!({ "banner": banner_url })));
-    }
-
-    Err(AppError::BadRequest("Champ 'banner' manquant".into()))
 }
 
 pub async fn delete_account(
@@ -564,7 +470,8 @@ pub async fn get_user_profile(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
                 custom_status_emoji, activity_type, activity_name, activity_detail,
                 is_verified, created_at, avatar_decoration, profile_color_primary,
-                profile_color_accent, profile_effect
+                profile_color_accent, profile_effect, pronouns, display_name, name_style,
+                profile_tag, profile_links, custom_status_expires_at
          FROM users WHERE id=$1"
     )
     .bind(user_id)
@@ -591,6 +498,12 @@ pub async fn get_user_profile(
         "profile_color_primary": user.get::<Option<i32>, _>("profile_color_primary"),
         "profile_color_accent": user.get::<Option<i32>, _>("profile_color_accent"),
         "profile_effect":       user.get::<Option<String>, _>("profile_effect"),
+        "pronouns":             user.get::<Option<String>, _>("pronouns"),
+        "display_name":         user.get::<Option<String>, _>("display_name"),
+        "name_style":           user.get::<Option<serde_json::Value>, _>("name_style"),
+        "profile_tag":          user.get::<Option<String>, _>("profile_tag"),
+        "profile_links":        user.get::<Option<serde_json::Value>, _>("profile_links"),
+        "custom_status_expires_at": user.get::<Option<chrono::DateTime<chrono::Utc>>, _>("custom_status_expires_at"),
         "relationship":         "none",
         "is_favorite":          false,
     });
@@ -740,6 +653,8 @@ pub struct UpdateStatusRequest {
     pub status: Option<String>,
     pub custom_status: Option<String>,
     pub custom_status_emoji: Option<String>,
+    /// Effacer le statut personnalisé après N minutes (0 = jamais).
+    pub clear_after_minutes: Option<i64>,
 }
 
 /// PATCH /api/user/status — statut choisi et/ou statut personnalisé.
@@ -757,6 +672,7 @@ pub async fn update_status(
 
     let custom_status = req.custom_status.map(|s| s.trim().chars().take(128).collect::<String>());
     let custom_status_emoji = req.custom_status_emoji.map(|s| s.trim().chars().take(8).collect::<String>());
+    let expires = crate::handlers::profile_custom::status_expiry(req.clear_after_minutes)?;
 
     // P1-9 — `COALESCE` empêchait d'effacer : une chaîne vide vaut désormais NULL.
     let row = sqlx::query(
@@ -764,18 +680,21 @@ pub async fn update_status(
             preferred_status = COALESCE($1, preferred_status),
             custom_status = CASE WHEN $2::TEXT IS NOT NULL THEN NULLIF($2, '') ELSE custom_status END,
             custom_status_emoji = CASE WHEN $3::TEXT IS NOT NULL THEN NULLIF($3, '') ELSE custom_status_emoji END,
+            custom_status_expires_at = CASE WHEN $2::TEXT IS NOT NULL OR $3::TEXT IS NOT NULL THEN $5 ELSE custom_status_expires_at END,
             updated_at = NOW()
          WHERE id = $4
-         RETURNING preferred_status, custom_status, custom_status_emoji"
+         RETURNING preferred_status, custom_status, custom_status_emoji, custom_status_expires_at"
     )
     .bind(&req.status)
     .bind(&custom_status)
     .bind(&custom_status_emoji)
     .bind(claims.sub)
+    .bind(expires)
     .fetch_one(&state.db)
     .await?;
 
     use sqlx::Row;
+    let expires: Option<chrono::DateTime<chrono::Utc>> = row.get("custom_status_expires_at");
     let preferred: String = row.get("preferred_status");
     let custom_status: Option<String> = row.get("custom_status");
     let custom_status_emoji: Option<String> = row.get("custom_status_emoji");
@@ -786,30 +705,14 @@ pub async fn update_status(
 
     // Statut personnalisé : membres des serveurs communs + ses autres sessions.
     // Le statut en direct passe par presence::refresh (jamais « invisible » ici).
-    let event = serde_json::json!({
-        "type": "PRESENCE_UPDATE",
-        "user_id": claims.sub,
-        "custom_status": &custom_status,
-        "custom_status_emoji": &custom_status_emoji,
-    })
-    .to_string();
-    let server_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT server_id FROM server_members WHERE user_id=$1"
-    )
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-    for sid in server_ids {
-        state.broadcast_to_server_members(sid, event.clone()).await;
-    }
-    state.broadcast_to_user(claims.sub, event).await;
+    crate::handlers::profile_custom::broadcast_custom_status(&state, claims.sub, custom_status.as_deref(), custom_status_emoji.as_deref(), expires).await;
 
     Ok(Json(serde_json::json!({
         "ok": true,
         "status": preferred,
         "custom_status": custom_status,
         "custom_status_emoji": custom_status_emoji,
+        "custom_status_expires_at": expires,
     })))
 }
 

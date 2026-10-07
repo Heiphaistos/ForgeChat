@@ -4,4 +4,5 @@ pub mod channel;
 pub mod message;
 pub mod role;
 pub mod serde_helpers;
+pub mod profile_style;
 
