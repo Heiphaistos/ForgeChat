@@ -132,7 +132,7 @@ def fetch_release(rel, version, wanted):
     assets = {a["name"]: a for a in rel.get("assets", [])}
     if "SHA256SUMS.txt" not in assets:
         raise ValueError("SHA256SUMS.txt absent")
-    with get(assets["SHA256SUMS.txt"]["browser_download_url"], "application/octet-stream") as r:
+    with get(asset_location(assets["SHA256SUMS.txt"]["url"]), "application/octet-stream") as r:
         sums = {}
         for line in r.read().decode().splitlines():
             parts = line.split()
