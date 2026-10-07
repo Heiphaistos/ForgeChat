@@ -102,6 +102,8 @@ interface VoiceState {
   e2eeOutdated: string[]
   /** Qualité de notre connexion au SFU (excellent, good, poor, lost). */
   quality: string | null
+  /** Qualité de connexion de chaque participant, nous compris. */
+  qualities: Record<string, string>
   error: string | null
   /** Information non bloquante (enregistrement, modération…). */
   notice: string | null
@@ -114,6 +116,8 @@ interface VoiceState {
   toggleSpeaker: () => void
   toggleCamera: () => Promise<void>
   switchCamera: () => void
+  /** Caméra regardée en grand (épinglée, plein écran) : reçue en haute qualité, les autres en moyenne. */
+  focusCamera: (userId: string | null) => void
   shareScreen: () => Promise<void>
   stopScreenShare: () => void
   setPeerVolume: (userId: string, volume: number) => void
@@ -134,6 +138,8 @@ interface VoiceState {
 
 let room: Room | null = null
 let roomName: string | null = null
+/** Caméra regardée en grand (focusCamera) : reçue en haute qualité. */
+let focusedCamera: string | null = null
 /** Droits donnés par le serveur : parole (can_speak), muet et sourdine imposés par un modérateur. */
 let canSpeak = true
 let serverMuted = false
@@ -307,7 +313,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     }
     r.on(RoomEvent.TrackSubscribed, (_t, pub, p) => {
       // Caméras en qualité moyenne (tuiles), écrans en pleine qualité (texte lisible).
-      if (pub.source === Track.Source.Camera) pub.setVideoQuality?.(VideoQuality.MEDIUM)
+      if (pub.source === Track.Source.Camera) pub.setVideoQuality?.(p.identity === focusedCamera ? VideoQuality.HIGH : VideoQuality.MEDIUM)
       rebuildPeer(p)
     })
       .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => rebuildPeer(p))
@@ -321,6 +327,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       .on(RoomEvent.Reconnected, () => set({ mediaStatus: 'connected' }))
       .on(RoomEvent.ConnectionQualityChanged, (q, p) => {
         if (p === r.localParticipant) set({ quality: q })
+        set((s) => ({ qualities: { ...s.qualities, [p.identity]: q } }))
       })
       .on(RoomEvent.LocalTrackPublished, () => refreshLocalVideo())
       .on(RoomEvent.LocalTrackUnpublished, (pub) => {
@@ -666,6 +673,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     volumes: {},
     mediaStatus: 'idle',
     quality: null,
+    qualities: {},
     e2ee: false,
     e2eeOutdated: [],
     error: null,
@@ -705,6 +713,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         reactions: {},
         mediaStatus: 'idle',
         quality: null,
+        qualities: {},
         e2ee: false,
         e2eeOutdated: [],
       })
@@ -750,6 +759,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         speakLocked: false,
         mediaStatus: 'idle',
         quality: null,
+        qualities: {},
         e2ee: false,
         e2eeOutdated: [],
         notice: null,
@@ -824,6 +834,13 @@ export const useVoice = create<VoiceState>((set, get) => {
       set({ video: true })
       refreshLocalVideo()
       broadcastState()
+    },
+
+    focusCamera: (userId) => {
+      focusedCamera = userId
+      for (const p of room?.remoteParticipants.values() ?? []) {
+        p.getTrackPublication(Track.Source.Camera)?.setVideoQuality?.(p.identity === userId ? VideoQuality.HIGH : VideoQuality.MEDIUM)
+      }
     },
 
     switchCamera: () => {

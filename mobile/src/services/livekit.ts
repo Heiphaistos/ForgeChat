@@ -141,6 +141,19 @@ export const callAudio = {
       logger.warn('livekit', 'sortie audio', e)
     }
   },
+  /** Sorties disponibles (Android : speaker, earpiece, headset, bluetooth). */
+  outputs: (): Promise<string[]> => AudioSession.getAudioOutputs().catch(() => []),
+  /** Choix explicite d'une sortie (sélecteur haut-parleur / écouteur / casque / Bluetooth). */
+  async selectOutput(output: string) {
+    try {
+      await AudioSession.selectAudioOutput(output)
+      proximity(output === 'earpiece')
+    } catch (e) {
+      logger.warn('livekit', 'sortie audio', e)
+    }
+  },
+  /** iOS : sélecteur de sortie du système (AirPods, haut-parleur…). */
+  showRoutePicker: () => AudioSession.showAudioRoutePicker().catch((e: unknown) => logger.warn('livekit', 'sélecteur audio', e)),
 }
 
 /** Piste d'écran native : son service au premier plan (notification) ne s'arrête qu'à sa libération. */
