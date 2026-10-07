@@ -24,6 +24,9 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom'],
   },
+  // Workers en modules ES : le moteur d'IA sur l'appareil (src/ai/engine.worker.ts)
+  // embarque transformers.js, qui lit import.meta.url.
+  worker: { format: 'es' },
   server: {
     port: 5173,
     proxy: {
@@ -34,6 +37,8 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // ai-engine.html : page moteur de l'IA sur l'appareil pour l'appli Android (src/ai/bridge.ts).
+      input: { main: 'index.html', 'ai-engine': 'ai-engine.html' },
       output: {
         manualChunks: (id: string) => {
           if (id.includes('node_modules')) {
