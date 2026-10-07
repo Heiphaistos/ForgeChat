@@ -60,6 +60,14 @@ interface CallState {
   localVideo: MediaStream | null
   /** Vidéo du correspondant : son écran partagé s'il y en a un, sinon sa caméra. */
   remoteVideo: MediaStream | null
+  /** remoteVideo est son écran partagé (affiché en entier plutôt que recadré). */
+  remoteScreen: boolean
+  /** Micro du correspondant coupé. */
+  partnerMuted: boolean
+  /** Qualité de connexion du correspondant (excellent, good, poor, lost). */
+  partnerQuality: string | null
+  /** Identités qui parlent (nous compris). */
+  speaking: string[]
   micMuted: boolean
   camOff: boolean
   /** Notre écran est diffusé à la place de la caméra (appel vidéo uniquement). */
@@ -151,6 +159,10 @@ export const useCall = create<CallState>((set, get) => {
       facing: 'user',
       localVideo: null,
       remoteVideo: null,
+      remoteScreen: false,
+      partnerMuted: false,
+      partnerQuality: null,
+      speaking: [],
       micMuted: false,
       camOff: false,
       screenSharing: false,
@@ -167,8 +179,9 @@ export const useCall = create<CallState>((set, get) => {
     const rp = pid ? room?.remoteParticipants.get(pid) : undefined
     const screen = rp?.getTrackPublication(Track.Source.ScreenShare)
     const cam = rp?.getTrackPublication(Track.Source.Camera)
-    const video = (screen?.isSubscribed && !screen.isMuted ? streamOf(screen.track) : null) ?? (cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null)
-    set({ remoteVideo: video })
+    const screenVideo = screen?.isSubscribed && !screen.isMuted ? streamOf(screen.track) : null
+    const video = screenVideo ?? (cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null)
+    set({ remoteVideo: video, remoteScreen: !!screenVideo, partnerMuted: !!rp && !rp.isMicrophoneEnabled })
   }
 
   const refreshLocal = () => {
@@ -231,6 +244,8 @@ export const useCall = create<CallState>((set, get) => {
       .on(RoomEvent.TrackUnsubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
       .on(RoomEvent.TrackMuted, () => refreshRemote())
       .on(RoomEvent.TrackUnmuted, () => refreshRemote())
+      .on(RoomEvent.ActiveSpeakersChanged, (sp) => set({ speaking: sp.map((p) => p.identity) }))
+      .on(RoomEvent.ConnectionQualityChanged, (q, p) => p.identity === get().partnerId && set({ partnerQuality: q }))
       .on(RoomEvent.LocalTrackPublished, () => refreshLocal())
       .on(RoomEvent.LocalTrackUnpublished, (pub) => {
         // Partage arrêté depuis la notification système (ou par Android) : même nettoyage.
@@ -244,7 +259,7 @@ export const useCall = create<CallState>((set, get) => {
       })
       .on(RoomEvent.ParticipantDisconnected, (p) => {
         if (!isPartner(p)) return
-        set({ remoteVideo: null })
+        set({ remoteVideo: null, remoteScreen: false })
         partnerGoneTimer = setTimeout(() => {
           if (room === r) cleanup(t('store.call.ended'))
         }, PARTNER_GONE_MS)
@@ -430,6 +445,10 @@ export const useCall = create<CallState>((set, get) => {
     warning: null,
     localVideo: null,
     remoteVideo: null,
+    remoteScreen: false,
+    partnerMuted: false,
+    partnerQuality: null,
+    speaking: [],
     micMuted: false,
     camOff: false,
     screenSharing: false,

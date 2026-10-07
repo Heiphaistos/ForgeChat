@@ -526,6 +526,11 @@ export const en: Partial<Record<Key, string>> = {
   'voice.tile.stopWatching': 'Stop watching',
   'voice.tile.popOutScreen': "Open {name}'s screen in a window",
   'voice.tile.expandScreen': 'Enlarge the shared screen',
+  'voice.tile.dblclickHint': 'Double-click: full screen',
+  'voice.tile.pin': 'Pin {name} large',
+  'voice.tile.unpin': 'Unpin {name}',
+  'voice.fullscreen.fit': 'Fit: whole video',
+  'voice.fullscreen.fill': 'Fill the screen',
   // --- Notifications toast globales et bannière de connexion ---
   'toast.othersCount': '{names} and {n} other(s)',
   'toast.messagesFrom': '💬 {n} messages from {from}',

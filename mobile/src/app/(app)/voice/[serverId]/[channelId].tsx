@@ -1,28 +1,32 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Stack, router } from 'expo-router'
-import { useState } from 'react'
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
-import { RTCView } from '@livekit/react-native-webrtc'
+import { useEffect, useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Avatar } from '@/components/Avatar'
+import { CallButton, useAudioRoute } from '@/components/call/CallControls'
+import { CallVideoView } from '@/components/call/CallVideoView'
+import { PipView } from '@/components/call/PipView'
+import { VideoStage } from '@/components/call/VideoStage'
+import type { CallTile } from '@/components/call/VideoTile'
 import { Sheet, type SheetAction } from '@/components/Sheet'
-import { StreamViewer, type ViewerSource } from '@/components/StreamViewer'
 import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
 import { isScreenShareCancel } from '@/features/calls/screenShareLogic'
+import { mainVideoTile } from '@/features/calls/videoLayout'
 import { useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
 import { SoundboardSheet } from '@/features/voice/SoundboardSheet'
 import { StagePanel } from '@/features/voice/StagePanel'
 import { WatchPanel } from '@/features/voice/WatchPanel'
+import { defaultRatio, useCallPip } from '@/services/callWindow'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
 import { useVoice, type VoicePeer } from '@/stores/voice'
 import { useWatch } from '@/stores/watch'
-import { t as tr, useT, type Key } from '@/i18n'
+import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
@@ -42,14 +46,76 @@ export default function VoiceScreen() {
   const me = useAuth((s) => s.user)
   const insets = useSafeAreaInsets()
   const [password, setPassword] = useState('')
-  // Visionneuse plein écran : pair affiché et source choisie (caméra ou écran).
-  const [viewing, setViewing] = useState<{ userId: string; key: string } | null>(null)
+  // Vidéo ouverte en plein écran et tuile épinglée en grand (clés de tuile).
+  const [open, setOpen] = useState<string | null>(null)
+  const [pinned, setPinned] = useState<string | null>(null)
   const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
   const [more, setMore] = useState(false)
   const [sounds, setSounds] = useState(false)
   const [watching, setWatching] = useState(false)
   const perms = useServerPerms(ids.serverId ?? '', valid)
   const watch = useWatch((s) => s.watch)
+  const route = useAudioRoute(v.speaker, v.toggleSpeaker, (on) => useVoice.setState({ speaker: on }))
+
+  const myId = me?.id ?? 'me'
+  const tiles: CallTile[] = [
+    {
+      key: 'me',
+      userId: myId,
+      self: true,
+      screen: false,
+      hasVideo: !!v.localVideo,
+      name: me?.username ?? t('voice.me'),
+      avatar: me?.avatar ?? null,
+      stream: v.localVideo,
+      mirror: v.facing === 'user',
+      muted: v.muted,
+      speaking: v.speaking.includes(myId),
+      quality: v.quality,
+      badges: <TileBadges handRaised={v.handRaised} reaction={v.reactions[myId]} />,
+    },
+  ]
+  for (const p of v.peers) {
+    const camera = p.video && p.stream?.getVideoTracks().length ? p.stream : null
+    tiles.push({
+      key: p.userId,
+      userId: p.userId,
+      self: false,
+      screen: false,
+      hasVideo: !!camera,
+      name: p.username,
+      avatar: p.avatar,
+      stream: camera,
+      muted: p.muted,
+      speaking: v.speaking.includes(p.userId),
+      quality: v.qualities[p.userId] ?? null,
+      badges: <TileBadges handRaised={p.handRaised} recording={p.recording} reaction={v.reactions[p.userId]} volume={v.volumes[p.userId]} />,
+    })
+    if (p.screenStream?.getVideoTracks().length) {
+      tiles.push({
+        key: `${p.userId}:screen`,
+        userId: p.userId,
+        self: false,
+        screen: true,
+        hasVideo: true,
+        name: t('voice.screenOf', { name: p.username }),
+        avatar: p.avatar,
+        stream: p.screenStream,
+        quality: v.qualities[p.userId] ?? null,
+        badges: p.recording ? <TileBadges recording /> : undefined,
+      })
+    }
+  }
+  const videos = tiles.filter((x) => x.hasVideo)
+  const fullscreen = open && videos.some((x) => x.key === open) ? open : null
+  const big = tiles.find((x) => x.key === (fullscreen ?? pinned))
+  const pipTile = (fullscreen ? big : null) ?? mainVideoTile(tiles, pinned, v.speaking)
+  const inPip = useCallPip(!v.stage && pipTile ? defaultRatio(pipTile.screen) : null)
+  // Caméra regardée en grand : reçue en haute qualité (les tuiles restent en qualité moyenne).
+  const focusCamera = v.focusCamera
+  const focusedCamera = big && !big.self && !big.screen ? big.userId : null
+  useEffect(() => focusCamera(focusedCamera), [focusCamera, focusedCamera])
+
   if (!valid) return <ErrorState message={t('voice.invalid')} />
 
   // Salon auto-création : channelId devient le salon temporaire, entryChannelId reste celui choisi.
@@ -90,31 +156,6 @@ export default function VoiceScreen() {
     }
   }
 
-  const viewedPeer = viewing ? v.peers.find((p) => p.userId === viewing.userId) : undefined
-  const viewerSources: ViewerSource[] = viewedPeer ? peerSources(viewedPeer) : []
-
-  type Tile = {
-    key: string
-    peer: Pick<VoicePeer, 'userId' | 'username' | 'avatar' | 'muted' | 'handRaised' | 'recording'>
-    stream: VoicePeer['stream']
-    screen: boolean
-    self: boolean
-  }
-  const myId = me?.id ?? 'me'
-  const tiles: Tile[] = [
-    {
-      key: 'me',
-      peer: { userId: myId, username: me?.username ?? t('voice.me'), avatar: me?.avatar ?? null, muted: v.muted, handRaised: v.handRaised, recording: false },
-      stream: v.localVideo,
-      screen: false,
-      self: true,
-    },
-  ]
-  for (const p of v.peers) {
-    tiles.push({ key: p.userId, peer: p, stream: p.video && p.stream?.getVideoTracks().length ? p.stream : null, screen: false, self: false })
-    if (p.screenStream?.getVideoTracks().length) tiles.push({ key: `${p.userId}:screen`, peer: p, stream: p.screenStream, screen: true, self: false })
-  }
-
   const status =
     v.mediaStatus === 'reconnecting'
       ? t('voice.reconnecting')
@@ -140,10 +181,59 @@ export default function VoiceScreen() {
       : []),
   ]
 
+  const leave = () => {
+    v.leave()
+    router.back()
+  }
+  const header = <Stack.Screen options={{ title: `${isStage ? '📻' : '🔊'} ${name}`, headerShown: !(here && (inPip || fullscreen)) }} />
+  if (here && inPip) {
+    return (
+      <>
+        {header}
+        <PipView tile={pipTile} />
+      </>
+    )
+  }
+  if (here && fullscreen) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {header}
+        <CallVideoView
+          sources={videos}
+          current={fullscreen}
+          onCurrent={setOpen}
+          vignette={tiles[0]}
+          onVignettePress={() => setOpen('me')}
+          immersive
+          onClose={() => setOpen(null)}
+          controls={
+            <>
+              <CallButton
+                icon={v.muted ? 'mic-off' : 'mic'}
+                label={t(v.muted ? 'voice.unmuteMic' : 'voice.muteMic')}
+                onPress={v.toggleMute}
+                active={v.muted}
+                dim={v.speakLocked || v.listenOnly}
+              />
+              <CallButton icon={v.deafened ? 'volume-mute' : 'headset'} label={t('voice.deafen')} onPress={v.toggleDeafen} active={v.deafened} />
+              {!v.listenOnly ? (
+                <CallButton icon={v.video ? 'videocam' : 'videocam-off'} label={t(v.video ? 'voice.cameraOff' : 'voice.cameraOn')} onPress={() => void v.toggleCamera()} />
+              ) : null}
+              {v.video ? <CallButton icon="camera-reverse" label={t('voice.switchCamera')} onPress={v.switchCamera} /> : null}
+              <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
+              <CallButton icon="call" label={t('voice.leave')} onPress={leave} danger />
+            </>
+          }
+        />
+        {route.sheet}
+      </View>
+    )
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgDeep }}>
-      <Stack.Screen options={{ title: `${isStage ? '📻' : '🔊'} ${name}` }} />
-      <StreamViewer sources={viewerSources} initialKey={viewing && viewerSources.length ? viewing.key : null} onClose={() => setViewing(null)} />
+      {header}
+      {route.sheet}
       <Sheet visible={!!volumeOf} onClose={() => setVolumeOf(null)} title={volumeOf ? t('voice.volumeOf', { name: volumeOf.username }) : undefined} actions={volumeActions} />
       <Sheet visible={more} onClose={() => setMore(false)} actions={moreActions} />
       {here ? <SoundboardSheet serverId={ids.serverId} canManage={perms.has(PERM.MANAGE_SERVER)} visible={sounds} onClose={() => setSounds(false)} /> : null}
@@ -198,51 +288,14 @@ export default function VoiceScreen() {
             </View>
           ) : (
             <>
-              <FlatList
-                data={tiles}
-                keyExtractor={(t) => t.key}
-                numColumns={2}
-                contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
-                columnWrapperStyle={{ gap: spacing.md }}
-                renderItem={({ item }) => {
-                  const label = item.screen ? t('voice.screenOf', { name: item.peer.username }) : item.peer.username
-                  const open = item.stream && !item.self ? () => setViewing({ userId: item.peer.userId, key: item.screen ? 'screen' : 'camera' }) : undefined
-                  const speaking = !item.screen && v.speaking.includes(item.peer.userId)
-                  const reaction = item.screen ? undefined : v.reactions[item.peer.userId]
-                  const peer = item.self || item.screen ? undefined : v.peers.find((p) => p.userId === item.peer.userId)
-                  const volume = v.volumes[item.peer.userId]
-                  return (
-                    <Pressable
-                      style={[styles.tile, speaking && styles.speaking]}
-                      onPress={open}
-                      onLongPress={peer ? () => setVolumeOf(peer) : undefined}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${label}${speaking ? t('voice.speaking') : ''}${item.peer.handRaised ? t('voice.handRaised') : ''}`}
-                      accessibilityHint={peer ? t('voice.volumeHint') : undefined}
-                    >
-                      {item.stream ? (
-                        <RTCView
-                          streamURL={item.stream.toURL()}
-                          style={StyleSheet.absoluteFill}
-                          objectFit={item.screen ? 'contain' : 'cover'}
-                          mirror={item.self && v.facing === 'user'}
-                        />
-                      ) : (
-                        <Avatar uri={item.peer.avatar} name={item.peer.username} size={64} />
-                      )}
-                      {reaction ? <Text style={styles.reaction}>{reaction}</Text> : null}
-                      <View style={styles.tileLabel}>
-                        {item.screen ? <Ionicons name="tv-outline" size={12} color="#fff" /> : null}
-                        {!item.screen && item.peer.muted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
-                        {!item.screen && item.peer.handRaised ? <Text style={styles.tileName}>✋</Text> : null}
-                        {item.peer.recording ? <Ionicons name="radio-button-on" size={12} color={colors.danger} accessibilityLabel={t('voice.recording')} /> : null}
-                        {volume !== undefined && volume !== 1 ? <Ionicons name={volume === 0 ? 'volume-mute' : 'volume-high'} size={12} color={colors.warning} /> : null}
-                        <Text style={styles.tileName} numberOfLines={1}>
-                          {item.self ? t('voice.you', { name: label }) : label}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  )
+              <VideoStage
+                tiles={tiles}
+                pinned={pinned}
+                onPin={setPinned}
+                onOpen={setOpen}
+                onLongPress={(tile) => {
+                  const peer = tile.self || tile.screen ? undefined : v.peers.find((p) => p.userId === tile.userId)
+                  if (peer) setVolumeOf(peer)
                 }}
               />
               <View style={styles.reactions}>
@@ -266,7 +319,7 @@ export default function VoiceScreen() {
             {!v.listenOnly && !v.stage ? (
               <Control icon={v.video ? 'videocam' : 'videocam-off'} label={t(v.video ? 'voice.cameraOff' : 'voice.cameraOn')} onPress={() => void v.toggleCamera()} active={v.video} />
             ) : null}
-            <Control icon={v.speaker ? 'volume-high' : 'ear-outline'} label={t('voice.speaker')} onPress={v.toggleSpeaker} />
+            <Control icon={route.icon} label={route.label} onPress={route.open} />
             {v.stage ? null : <Control icon="musical-notes" label={t('voice.soundboard')} onPress={() => setSounds(true)} />}
             {v.stage ? null : (
               <Control icon="logo-youtube" label={t('voice.watchTogether')} onPress={() => setWatching((w) => !w)} active={watching} dot={!!watch} />
@@ -278,10 +331,7 @@ export default function VoiceScreen() {
               icon="call"
               label={t('voice.leave')}
               danger
-              onPress={() => {
-                v.leave()
-                router.back()
-              }}
+              onPress={leave}
             />
           </View>
         </>
@@ -290,12 +340,22 @@ export default function VoiceScreen() {
   )
 }
 
-/** Sources plein écran d'un pair : caméra et/ou écran partagé. */
-function peerSources(p: VoicePeer): ViewerSource[] {
-  const out: ViewerSource[] = []
-  if (p.video && p.stream?.getVideoTracks().length) out.push({ key: 'camera', label: tr('voice.cameraOf', { name: p.username }), stream: p.stream })
-  if (p.screenStream?.getVideoTracks().length) out.push({ key: 'screen', label: tr('voice.screenOf', { name: p.username }), stream: p.screenStream })
-  return out
+/** Indicateurs d'une tuile du salon : main levée, enregistrement, volume réglé, réaction. */
+function TileBadges({ handRaised, recording, volume, reaction }: { handRaised?: boolean; recording?: boolean; volume?: number; reaction?: string }) {
+  const t = useT()
+  const louder = volume !== undefined && volume !== 1
+  return (
+    <>
+      {reaction ? <Text style={styles.reaction}>{reaction}</Text> : null}
+      {handRaised || recording || louder ? (
+        <View style={styles.badges} pointerEvents="none">
+          {handRaised ? <Text accessibilityLabel={t('voice.handRaised')}>✋</Text> : null}
+          {recording ? <Ionicons name="radio-button-on" size={14} color={colors.danger} accessibilityLabel={t('voice.recording')} /> : null}
+          {louder ? <Ionicons name={volume === 0 ? 'volume-mute' : 'volume-high'} size={14} color={colors.warning} /> : null}
+        </View>
+      ) : null}
+    </>
+  )
 }
 
 function Banner({ text, tone, onPress }: { text: string; tone: 'danger' | 'info' | 'warning'; onPress?: () => void }) {
@@ -348,21 +408,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   bannerText: { flex: 1, fontSize: font.sm, fontWeight: '600' },
-  tile: {
-    flex: 1,
-    aspectRatio: 1,
-    backgroundColor: colors.bgAlt,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  speaking: { borderColor: colors.success },
-  reaction: { position: 'absolute', top: 6, right: 8, fontSize: 28 },
-  tileLabel: { position: 'absolute', left: 8, bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  tileName: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },
+  reaction: { position: 'absolute', top: 44, right: 8, fontSize: 28 },
+  badges: { position: 'absolute', top: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   reactions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.bgAlt },
   controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm, paddingHorizontal: spacing.sm, backgroundColor: colors.bgAlt },
   dot: { position: 'absolute', top: 4, right: 4, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.bgAlt },

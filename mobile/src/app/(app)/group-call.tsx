@@ -1,27 +1,36 @@
-import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
-import { useEffect } from 'react'
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
-import { RTCView } from '@livekit/react-native-webrtc'
+import { useEffect, useState } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { dmsApi } from '@/api/dms'
-import { Avatar } from '@/components/Avatar'
-import type { IconName } from '@/components/ui'
+import { CallButton, useAudioRoute } from '@/components/call/CallControls'
+import { CallVideoView } from '@/components/call/CallVideoView'
+import { PipView } from '@/components/call/PipView'
+import { VideoStage } from '@/components/call/VideoStage'
+import type { CallTile } from '@/components/call/VideoTile'
+import { mainVideoTile } from '@/features/calls/videoLayout'
 import { useT } from '@/i18n'
 import { qk } from '@/lib/queryClient'
+import { defaultRatio, useCallPip } from '@/services/callWindow'
 import { useAuth } from '@/stores/auth'
 import { useGroupCall } from '@/stores/groupCall'
-import { colors, font, radius, spacing } from '@/theme'
+import { font, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
-/** Appel de groupe en cours : une tuile par participant (caméra ou avatar), contrôles en bas. */
+/**
+ * Appel de groupe en cours : grille qui remplit l'écran (ou focus sur la personne épinglée),
+ * toucher une vidéo l'ouvre en plein écran, image dans l'image en quittant l'app.
+ */
 export default function GroupCallScreen() {
   const t = useT()
   const s = useGroupCall()
   const me = useAuth((st) => st.user)
   const insets = useSafeAreaInsets()
   const group = useQuery({ queryKey: qk.group(s.groupId ?? ''), queryFn: () => dmsApi.group(s.groupId ?? ''), enabled: !!s.groupId })
+  const [pinned, setPinned] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
+  const route = useAudioRoute(s.speaker, s.toggleSpeaker, (on) => useGroupCall.setState({ speaker: on }))
 
   // Appel terminé (raccroché, erreur) : fermer l'écran, le motif reste lisible un instant.
   useEffect(() => {
@@ -33,13 +42,75 @@ export default function GroupCallScreen() {
   const members = new Map((group.data?.members ?? []).map((m) => [m.id, m]))
   const others = (s.groupId ? (s.active[s.groupId] ?? []) : []).filter((id) => id !== me?.id)
   for (const id of Object.keys(s.remotes)) if (!others.includes(id)) others.push(id)
-  const tiles = [{ id: me?.id ?? 'me', self: true }, ...others.map((id) => ({ id, self: false }))]
+  const myId = me?.id ?? 'me'
+  const tiles: CallTile[] = [
+    {
+      key: myId,
+      userId: myId,
+      self: true,
+      screen: false,
+      hasVideo: !!s.localVideo,
+      name: me?.username ?? t('call.you'),
+      avatar: me?.avatar ?? null,
+      stream: s.localVideo,
+      mirror: true,
+      muted: s.micMuted,
+      speaking: s.speaking.includes(myId),
+    },
+    ...others.map((id) => ({
+      key: id,
+      userId: id,
+      self: false,
+      screen: false,
+      hasVideo: !!s.remotes[id],
+      name: members.get(id)?.username ?? '…',
+      avatar: members.get(id)?.avatar ?? null,
+      stream: s.remotes[id] ?? null,
+      muted: !!s.mutedPeers[id],
+      speaking: s.speaking.includes(id),
+      quality: s.qualities[id] ?? null,
+    })),
+  ]
+  const videos = tiles.filter((x) => x.hasVideo)
+  const fullscreen = open && videos.some((x) => x.key === open) ? open : null
+  const pipTile = (fullscreen ? videos.find((x) => x.key === fullscreen) : null) ?? mainVideoTile(tiles, pinned, s.speaking)
+  const inPip = useCallPip(pipTile ? defaultRatio(pipTile.screen) : null)
+  if (inPip) return <PipView tile={pipTile} />
 
-  const status = s.status === 'connecting'
+  const status =
+    s.status === 'connecting'
       ? t('voice.connecting')
       : s.status === 'reconnecting'
         ? t('call.reconnecting')
         : (s.error ?? t(tiles.length > 1 ? 'call.participantsMany' : 'call.participants', { n: tiles.length }))
+
+  const controls = (
+    <>
+      <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
+      <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label={t(s.camOff ? 'voice.cameraOn' : 'voice.cameraOff')} onPress={() => void s.toggleCam()} active={!s.camOff} />
+      {!s.camOff ? <CallButton icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} /> : null}
+      <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
+      <CallButton icon="call" label={t('call.leave')} onPress={s.leave} danger />
+    </>
+  )
+
+  if (fullscreen) {
+    return (
+      <View style={styles.container}>
+        <CallVideoView
+          sources={videos}
+          current={fullscreen}
+          onCurrent={setOpen}
+          vignette={tiles[0]}
+          onVignettePress={() => setOpen(myId)}
+          immersive
+          onClose={() => setOpen(null)}
+          controls={controls}
+        />
+        {route.sheet}
+      </View>
+    )
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
@@ -48,56 +119,10 @@ export default function GroupCallScreen() {
       </Text>
       <Text style={styles.status}>{status}</Text>
       <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.map((id) => members.get(id)?.username ?? '…')} />
-      <FlatList
-        data={tiles}
-        keyExtractor={(t) => t.id}
-        numColumns={2}
-        contentContainerStyle={{ padding: spacing.md, gap: spacing.md }}
-        columnWrapperStyle={{ gap: spacing.md }}
-        renderItem={({ item }) => {
-          const stream = item.self ? s.localVideo : s.remotes[item.id]
-          const m = item.self ? me : members.get(item.id)
-          const name = item.self ? t('call.you') : (m?.username ?? '…')
-          const speaking = s.speaking.includes(item.id)
-          return (
-            <View style={[styles.tile, speaking && { borderColor: colors.success }]} accessibilityLabel={`${name}${speaking ? ', parle' : ''}`}>
-              {stream ? (
-                <RTCView streamURL={stream.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" mirror={item.self} />
-              ) : (
-                <Avatar uri={m?.avatar ?? null} name={name} size={64} />
-              )}
-              <View style={styles.label}>
-                {item.self && s.micMuted ? <Ionicons name="mic-off" size={12} color={colors.danger} /> : null}
-                <Text style={styles.labelText} numberOfLines={1}>
-                  {name}
-                </Text>
-              </View>
-            </View>
-          )
-        }}
-      />
-      <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <Btn icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
-        <Btn icon={s.camOff ? 'videocam-off' : 'videocam'} label={t(s.camOff ? 'voice.cameraOn' : 'voice.cameraOff')} onPress={() => void s.toggleCam()} active={!s.camOff} />
-        {!s.camOff ? <Btn icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} /> : null}
-        <Btn icon={s.speaker ? 'volume-high' : 'volume-low'} label={t('voice.speaker')} onPress={s.toggleSpeaker} active={s.speaker} />
-        <Btn icon="call" label={t('call.leave')} onPress={s.leave} danger />
-      </View>
+      <VideoStage tiles={tiles} pinned={pinned} onPin={setPinned} onOpen={setOpen} />
+      <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>{controls}</View>
+      {route.sheet}
     </View>
-  )
-}
-
-function Btn({ icon, label, onPress, active, danger }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: !!active }}
-      style={[styles.btn, active && { backgroundColor: colors.text }, danger && { backgroundColor: colors.danger }]}
-    >
-      <Ionicons name={icon} size={26} color={active ? colors.bgDeep : '#fff'} />
-    </Pressable>
   )
 }
 
@@ -106,9 +131,5 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111214' },
   title: { color: '#f2f3f5', fontSize: font.xl, fontWeight: '800', textAlign: 'center', paddingHorizontal: spacing.lg },
   status: { color: '#949ba4', fontSize: font.sm, textAlign: 'center', marginTop: 4 },
-  tile: { flex: 1, aspectRatio: 1, backgroundColor: '#2b2d31', borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'transparent' },
-  label: { position: 'absolute', left: 8, bottom: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  labelText: { color: '#fff', fontSize: font.xs, fontWeight: '700', flexShrink: 1 },
   controls: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.md, paddingHorizontal: spacing.sm },
-  btn: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 })

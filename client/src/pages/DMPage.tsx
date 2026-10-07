@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import NativeVideo from '../components/voice/NativeVideo'
+import FullscreenVideo from '../components/voice/FullscreenVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X } from 'lucide-react'
+import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2 } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
 import { useChat, useDraft } from '../store/chat'
 import { postWithUploadProgress } from '../utils/uploadProgress'
@@ -75,6 +76,8 @@ export default function DMPage() {
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  // Vidéo du correspondant en plein écran (double-clic ou bouton).
+  const [videoFullscreen, setVideoFullscreen] = useState(false)
 
   const loadMoreDM = useCallback(async (): Promise<boolean> => {
     if (!dmId || !hasMoreDM) return false
@@ -489,7 +492,9 @@ export default function DMPage() {
       {isThisCallActive && (
         <div className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
           {callType === 'video' ? (
-            <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+            <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center"
+              onDoubleClick={remoteStream || remoteVideoUrl ? () => setVideoFullscreen(true) : undefined}
+              title={remoteStream || remoteVideoUrl ? t('voice.tile.dblclickHint') : undefined}>
               {/* muted OBLIGATOIRE : PersistentDmCallAudio joue déjà ce même remoteStream
                   hors de cette page (pour que le son survive à la navigation). Sans ça, la
                   voix du correspondant sort deux fois — volume doublé et écho métallique
@@ -509,6 +514,15 @@ export default function DMPage() {
                 >
                   {callDuration}
                 </span>
+              )}
+              {(remoteStream || remoteVideoUrl) && (
+                <button onClick={() => setVideoFullscreen(true)} aria-label={t('voice.tile.expandVideo')} title={t('voice.tile.expandVideo')}
+                  className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white min-w-[32px] min-h-[32px] flex items-center justify-center">
+                  <Maximize2 size={14} aria-hidden />
+                </button>
+              )}
+              {videoFullscreen && (remoteStream || remoteVideoUrl) && (
+                <FullscreenVideo stream={remoteStream} url={remoteVideoUrl} label={partnerName} onClose={() => setVideoFullscreen(false)} />
               )}
               {!remoteStream && !remoteVideoUrl && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">

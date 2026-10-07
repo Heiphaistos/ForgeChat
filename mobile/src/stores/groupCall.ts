@@ -41,6 +41,10 @@ interface GroupCallState {
   camOff: boolean
   speaker: boolean
   speaking: string[]
+  /** Participants au micro coupé (id utilisateur → true). */
+  mutedPeers: Record<string, boolean>
+  /** Qualité de connexion de chaque participant (excellent, good, poor, lost). */
+  qualities: Record<string, string>
   /** group_id → participants de l'appel en cours (GROUP_CALL_UPDATE). */
   active: Record<string, string[]>
   ring: GroupRing | null
@@ -76,7 +80,10 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
 
   const refresh = (p: RemoteParticipant) => {
     const cam = p.getTrackPublication(Track.Source.Camera)
-    set((s) => ({ remotes: { ...s.remotes, [p.identity]: cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null } }))
+    set((s) => ({
+      remotes: { ...s.remotes, [p.identity]: cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null },
+      mutedPeers: { ...s.mutedPeers, [p.identity]: !p.isMicrophoneEnabled },
+    }))
   }
 
   const refreshLocal = () => {
@@ -90,7 +97,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     room = null
     if (r) void leaveRoom(r)
     if (get().status !== 'idle') void callAudio.stop()
-    set({ groupId: null, groupName: null, status: 'idle', remotes: {}, localVideo: null, micMuted: false, camOff: false, speaking: [], error, e2ee: false, e2eeOutdated: [] })
+    set({ groupId: null, groupName: null, status: 'idle', remotes: {}, localVideo: null, micMuted: false, camOff: false, speaking: [], mutedPeers: {}, qualities: {}, error, e2ee: false, e2eeOutdated: [] })
   }
 
   const connect = async (raw: unknown) => {
@@ -141,6 +148,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
       .on(RoomEvent.LocalTrackPublished, refreshLocal)
       .on(RoomEvent.LocalTrackUnpublished, refreshLocal)
       .on(RoomEvent.ActiveSpeakersChanged, (sp) => set({ speaking: sp.map((p) => p.identity) }))
+      .on(RoomEvent.ConnectionQualityChanged, (q, p) => set((s) => ({ qualities: { ...s.qualities, [p.identity]: q } })))
       .on(RoomEvent.Reconnecting, () => set({ status: 'reconnecting' }))
       .on(RoomEvent.Reconnected, () => set({ status: 'connected' }))
       .on(RoomEvent.Disconnected, (reason) => {
@@ -231,6 +239,8 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     camOff: false,
     speaker: true,
     speaking: [],
+    mutedPeers: {},
+    qualities: {},
     active: {},
     ring: null,
     error: null,

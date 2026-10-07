@@ -4,7 +4,10 @@
 //   zone visible au format 16:9 (plus de chevauchement, plus de bande vide).
 // - Dès qu'un écran est partagé (mode Auto), il passe en grand et les participants
 //   deviennent des miniatures en bandeau, de taille réglable (S/M/L), façon Discord.
+// - Épingler une tuile (bouton punaise) la met en grand ; la désépingler revient à la grille.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { Pin, PinOff } from 'lucide-react'
+import { useT } from '../../i18n'
 
 export type ViewMode = 'auto' | 'grid' | 'spotlight' | 'sidebar' | 'focus' | 'filmstrip'
 export type ThumbSize = 's' | 'm' | 'l'
@@ -66,14 +69,41 @@ function useBox<T extends HTMLElement>() {
   return [ref, box] as const
 }
 
-function Gallery({ tiles, render, compact }: { tiles: StageTile[]; render: (t: StageTile, o: RenderOpts) => ReactNode; compact?: boolean }) {
+/** Bouton punaise posé sur une tuile : épingler en grand, ou désépingler. */
+function PinButton({ tile, pinned, onClick }: { tile: StageTile; pinned: boolean; onClick: () => void }) {
+  const t = useT()
+  const label = t(pinned ? 'voice.tile.unpin' : 'voice.tile.pin', { name: tile.username })
+  return (
+    <button onClick={e => { e.stopPropagation(); onClick() }} aria-pressed={pinned} aria-label={label} title={label}
+      className={`absolute top-2 left-2 z-10 p-1.5 rounded-full min-w-[28px] min-h-[28px] flex items-center justify-center ${pinned ? 'bg-white text-black' : 'bg-black/50 text-white/80 hover:text-white hover:bg-black/70'}`}>
+      {pinned ? <PinOff size={12} aria-hidden /> : <Pin size={12} aria-hidden />}
+    </button>
+  )
+}
+
+function Gallery({ tiles, render, compact, onPin }: {
+  tiles: StageTile[]; render: (t: StageTile, o: RenderOpts) => ReactNode; compact?: boolean; onPin: (key: string) => void
+}) {
   const [ref, box] = useBox<HTMLDivElement>()
   const { w, h } = fitTiles(box.w, box.h, tiles.length)
   return (
     <div ref={ref} className="w-full h-full min-h-0 flex flex-wrap content-center justify-center gap-2 overflow-hidden">
       {w > 0 && tiles.map(t => (
-        <div key={t.key} style={{ width: w, height: h }} className="flex-shrink-0">{render(t, { compact, expand: true })}</div>
+        <div key={t.key} style={{ width: w, height: h }} className="flex-shrink-0 relative">
+          {render(t, { compact, expand: true })}
+          {tiles.length > 1 && <PinButton tile={t} pinned={false} onClick={() => onPin(t.key)} />}
+        </div>
       ))}
+    </div>
+  )
+}
+
+/** Tuile mise en avant, avec la punaise pour revenir à la grille quand elle est épinglée. */
+function Featured({ tile, pinned, onUnpin, render }: { tile: StageTile; pinned: boolean; onUnpin: () => void; render: (t: StageTile, o: RenderOpts) => ReactNode }) {
+  return (
+    <div className="relative w-full h-full min-h-0">
+      {render(tile, { expand: true })}
+      {pinned && <PinButton tile={tile} pinned onClick={onUnpin} />}
     </div>
   )
 }
@@ -118,7 +148,8 @@ export default function CallStage({ tiles, mode, featuredKey, onFeature, render,
   tiles: StageTile[]
   mode: ViewMode
   featuredKey: string | null
-  onFeature: (key: string) => void
+  /** Épingler une tuile (null : désépingler). */
+  onFeature: (key: string | null) => void
   render: (t: StageTile, o: RenderOpts) => ReactNode
   activeSpeakerId: string | null
 }) {
@@ -138,10 +169,11 @@ export default function CallStage({ tiles, mode, featuredKey, onFeature, render,
     ?? tiles.find(t => !t.isLocal)
     ?? tiles[0]
 
-  const effective: ViewMode = mode === 'auto' ? (screens.length > 0 ? 'spotlight' : 'grid') : mode
+  const pinned = byKey(featuredKey)
+  const effective: ViewMode = mode === 'auto' ? (screens.length > 0 || pinned ? 'spotlight' : 'grid') : mode
 
   if (effective === 'grid') {
-    return <div className="h-full p-3"><Gallery tiles={tiles} render={render} /></div>
+    return <div className="h-full p-3"><Gallery tiles={tiles} render={render} onPin={onFeature} /></div>
   }
 
   if (effective === 'filmstrip') {
@@ -158,7 +190,7 @@ export default function CallStage({ tiles, mode, featuredKey, onFeature, render,
   if (effective === 'sidebar') {
     return (
       <div className="flex h-full min-h-0">
-        <div className="flex-1 min-w-0 p-3">{render(featured, { expand: true })}</div>
+        <div className="flex-1 min-w-0 p-3"><Featured tile={featured} pinned={featured === pinned} onUnpin={() => onFeature(null)} render={render} /></div>
         <div className="flex flex-col gap-2 p-2 border-l border-fc-hover bg-fc-sidebar/50 min-h-0">
           <ThumbSizePicker size={thumb} onChange={changeThumb} />
           <Strip tiles={others} size={thumb} onPick={onFeature} render={render} vertical />
@@ -170,7 +202,7 @@ export default function CallStage({ tiles, mode, featuredKey, onFeature, render,
   // spotlight et focus : grand au centre, miniatures dessous
   return (
     <div className="flex flex-col h-full min-h-0 p-3 gap-2">
-      <div className="flex-1 min-h-0">{render(featured, { expand: true })}</div>
+      <div className="flex-1 min-h-0"><Featured tile={featured} pinned={featured === pinned} onUnpin={() => onFeature(null)} render={render} /></div>
       {others.length > 0 && (
         <>
           <div className="flex justify-end"><ThumbSizePicker size={thumb} onChange={changeThumb} /></div>

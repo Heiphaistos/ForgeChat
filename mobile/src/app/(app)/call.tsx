@@ -1,42 +1,39 @@
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
-import { RTCView } from '@livekit/react-native-webrtc'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
-import { StreamViewer } from '@/components/StreamViewer'
+import { CallButton, useAudioRoute } from '@/components/call/CallControls'
+import { CallVideoView } from '@/components/call/CallVideoView'
+import { PipView } from '@/components/call/PipView'
+import { QualityIcon, type CallTile } from '@/components/call/VideoTile'
 import { canShareInCall, isScreenShareCancel } from '@/features/calls/screenShareLogic'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
+import { defaultRatio, useCallPip } from '@/services/callWindow'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
+import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { colors, font, spacing } from '@/theme'
-import type { IconName } from '@/components/ui'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 
-function CallButton({ icon, label, onPress, active, danger }: { icon: IconName; label: string; onPress: () => void; active?: boolean; danger?: boolean }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: !!active }}
-      style={[styles.btn, active && { backgroundColor: colors.text }, danger && { backgroundColor: colors.danger }]}
-    >
-      <Ionicons name={icon} size={26} color={active ? colors.bgDeep : '#fff'} />
-    </Pressable>
-  )
-}
-
+/**
+ * Appel privé. En vidéo, la vidéo du correspondant occupe tout l'écran (zoom, remplir / ajuster),
+ * ma caméra en vignette déplaçable (un appui échange les deux), commandes masquées après quelques
+ * secondes, bouton plein écran immersif (rotation suivie) et image dans l'image en quittant l'app.
+ */
 export default function CallScreen() {
   const t = useT()
   const s = useCall()
+  const me = useAuth((st) => st.user)
   const insets = useSafeAreaInsets()
   const now = useNow(1000, s.phase === 'connected')
-  const [viewer, setViewer] = useState(false)
+  const [immersive, setImmersive] = useState(false)
+  const [swapped, setSwapped] = useState(false)
+  const route = useAudioRoute(s.speaker, s.toggleSpeaker, (on) => useCall.setState({ speaker: on }))
 
   const toggleShare = async () => {
     if (s.screenSharing) {
@@ -60,9 +57,45 @@ export default function CallScreen() {
     }
   }, [s.phase, s.incoming, s.endReason])
 
-  const remoteVideo = s.remoteVideo
+  const partnerName = s.partnerName ?? s.endedWith?.name ?? '?'
+  const partnerSpeaking = !!s.partnerId && s.speaking.includes(s.partnerId)
+  const remote: CallTile | null = s.remoteVideo
+    ? {
+        key: 'remote',
+        userId: s.partnerId ?? 'remote',
+        self: false,
+        screen: s.remoteScreen,
+        hasVideo: true,
+        name: s.remoteScreen ? t('voice.screenOf', { name: partnerName }) : partnerName,
+        avatar: s.partnerAvatar,
+        stream: s.remoteVideo,
+        muted: s.partnerMuted,
+        speaking: partnerSpeaking,
+        quality: s.partnerQuality,
+      }
+    : null
   // Pendant un partage d'écran, la caméra n'est plus envoyée : pas d'aperçu trompeur (géré par le store).
   const localVideo = s.callType === 'video' ? s.localVideo : null
+  const local: CallTile | null = localVideo
+    ? {
+        key: 'local',
+        userId: me?.id ?? 'me',
+        self: true,
+        screen: false,
+        hasVideo: true,
+        name: me?.username ?? t('call.you'),
+        avatar: me?.avatar ?? null,
+        stream: localVideo,
+        mirror: s.facing === 'user',
+        muted: s.micMuted,
+        speaking: !!me && s.speaking.includes(me.id),
+      }
+    : null
+  const main = (swapped && local) || remote || local
+  const vignette = main === remote ? local : remote
+  const inPip = useCallPip(main ? defaultRatio(main.screen) : null)
+  if (inPip) return <PipView tile={main} />
+
   const label =
     s.phase === 'calling'
       ? t('call.calling')
@@ -72,62 +105,76 @@ export default function CallScreen() {
           ? formatDuration(now - s.connectedAt)
           : (s.endReason ?? '')
 
+  const controls = (
+    <>
+      <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
+      {s.callType === 'video' ? (
+        <>
+          <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label={t('call.camera')} onPress={s.toggleCam} active={s.camOff} />
+          <CallButton icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} />
+          {screenShareSupported && canShareInCall(s.phase, s.callType) ? (
+            <CallButton
+              icon="tv-outline"
+              label={t(s.screenSharing ? 'voice.stopShare' : 'voice.share')}
+              onPress={() => void toggleShare()}
+              active={s.screenSharing}
+            />
+          ) : null}
+        </>
+      ) : null}
+      <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
+      <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
+    </>
+  )
+
+  const info = (
+    <>
+      <View style={styles.nameRow}>
+        {s.partnerMuted ? <Ionicons name="mic-off" size={16} color={colors.danger} accessibilityLabel={t('call.micOff')} /> : null}
+        <QualityIcon quality={s.partnerQuality} size={16} />
+        <Text style={styles.name} numberOfLines={1}>
+          {partnerName}
+        </Text>
+      </View>
+      <Text style={styles.status}>{label}</Text>
+      <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.length ? [s.partnerName ?? '…'] : []} />
+      {s.warning && s.phase !== 'idle' ? <Text style={styles.warning}>{s.warning}</Text> : null}
+    </>
+  )
+
+  if (main) {
+    return (
+      <View style={styles.container}>
+        <CallVideoView
+          sources={[main]}
+          current={main.key}
+          onCurrent={() => undefined}
+          vignette={vignette}
+          onVignettePress={() => setSwapped((v) => !v)}
+          immersive={immersive}
+          onImmersive={setImmersive}
+          // Sous le bandeau « Partage d'écran en cours » quand il est affiché.
+          header={<View style={[styles.videoInfo, s.screenSharing && { marginTop: 40 }]}>{info}</View>}
+          controls={controls}
+        />
+        {route.sheet}
+      </View>
+    )
+  }
+
   return (
     <View style={styles.container}>
-      {remoteVideo ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => setViewer(true)}
-          accessibilityRole="button"
-          accessibilityLabel={t('call.fullscreen')}
-        >
-          <RTCView streamURL={remoteVideo.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" zOrder={0} />
-        </Pressable>
-      ) : (
-        <View style={styles.center}>
-          <Avatar uri={s.partnerAvatar ?? s.endedWith?.avatar ?? null} name={s.partnerName ?? s.endedWith?.name ?? '?'} size={120} />
+      <View style={styles.center}>
+        <View style={[styles.avatarRing, partnerSpeaking && { borderColor: colors.success }]}>
+          <Avatar uri={s.partnerAvatar ?? s.endedWith?.avatar ?? null} name={partnerName} size={120} />
         </View>
-      )}
-
-      <StreamViewer
-        sources={remoteVideo ? [{ key: 'remote', label: s.partnerName ?? t('call.video'), stream: remoteVideo }] : []}
-        initialKey={viewer && remoteVideo ? 'remote' : null}
-        onClose={() => setViewer(false)}
-      />
-
+      </View>
       {/* Sous le bandeau « Partage d'écran en cours » quand il est affiché. */}
       <View style={[styles.top, { paddingTop: insets.top + spacing.lg + (s.screenSharing ? 48 : 0) }]} pointerEvents="none">
-        <Text style={styles.name}>{s.partnerName ?? s.endedWith?.name}</Text>
-        <Text style={styles.status}>{label}</Text>
-        <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.length ? [s.partnerName ?? '…'] : []} />
-        {s.warning && s.phase !== 'idle' ? <Text style={styles.warning}>{s.warning}</Text> : null}
+        {info}
       </View>
-
-      {localVideo ? (
-        <View style={[styles.pip, { top: insets.top + 90 }]}>
-          <RTCView streamURL={localVideo.toURL()} style={{ flex: 1 }} objectFit="cover" mirror={s.facing === 'user'} zOrder={1} />
-        </View>
-      ) : null}
-
-      <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
-        {s.callType === 'video' ? (
-          <>
-            <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label={t('call.camera')} onPress={s.toggleCam} active={s.camOff} />
-            <CallButton icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} />
-            {screenShareSupported && canShareInCall(s.phase, s.callType) ? (
-              <CallButton
-                icon="tv-outline"
-                label={t(s.screenSharing ? 'voice.stopShare' : 'voice.share')}
-                onPress={() => void toggleShare()}
-                active={s.screenSharing}
-              />
-            ) : null}
-          </>
-        ) : null}
-        <CallButton icon={s.speaker ? 'volume-high' : 'volume-low'} label={t('voice.speaker')} onPress={s.toggleSpeaker} active={s.speaker} />
-        <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
-      </View>
+      <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>{controls}</View>
+      {route.sheet}
     </View>
   )
 }
@@ -136,12 +183,13 @@ export default function CallScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111214' },
   center: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  avatarRing: { borderRadius: 999, borderWidth: 4, borderColor: 'transparent', padding: 4 },
   top: { alignItems: 'center', gap: 4 },
-  name: { color: '#fff', fontSize: font.xxl, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 6 },
+  videoInfo: { alignItems: 'flex-start', gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
+  name: { color: '#fff', fontSize: font.xxl, fontWeight: '800', textShadowColor: '#000', textShadowRadius: 6, flexShrink: 1 },
   status: { color: '#dbdee1', fontSize: font.md, textShadowColor: '#000', textShadowRadius: 6 },
   warning: { color: colors.warning, fontSize: font.sm, textAlign: 'center', paddingHorizontal: spacing.lg, textShadowColor: '#000', textShadowRadius: 6 },
-  pip: { position: 'absolute', right: spacing.lg, width: 110, height: 160, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
   // Jusqu'à 6 boutons (appel vidéo) : passage à la ligne sur les écrans étroits.
   controls: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm },
-  btn: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 })
