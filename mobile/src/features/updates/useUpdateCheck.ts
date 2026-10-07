@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking'
 import { useEffect } from 'react'
 import { Alert } from 'react-native'
 import { APP_VERSION, UPDATES_MANIFEST_URL } from '@/config/env'
+import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { useSettings } from '@/stores/settings'
 import { fetchAvailableUpdate, isDue, type AvailableUpdate } from './updateCheck'
@@ -9,15 +10,12 @@ import { fetchAvailableUpdate, isDue, type AvailableUpdate } from './updateCheck
 /** Propose la mise à jour : l'APK se télécharge depuis le serveur ForgeChat, Android l'installe. */
 export function proposeUpdate(update: AvailableUpdate) {
   Alert.alert(
-    'Nouvelle version disponible',
-    `ForgeChat ${update.version} est disponible (tu as la ${APP_VERSION}).\n\n` +
-      'Le téléchargement se fait depuis le serveur ForgeChat. Ouvre le fichier une fois téléchargé : ' +
-      'Android l’installe par-dessus l’app actuelle (tes données sont conservées).\n\n' +
-      `Empreinte SHA-256 : ${update.sha256.slice(0, 16)}…`,
+    t('store.update.title'),
+    t('store.update.body', { version: update.version, current: APP_VERSION, sha: update.sha256.slice(0, 16) }),
     [
-      { text: 'Ignorer cette version', onPress: () => useSettings.getState().set({ updateSkippedVersion: update.version }) },
-      { text: 'Plus tard', style: 'cancel' },
-      { text: 'Télécharger', onPress: () => void Linking.openURL(update.url).catch(() => undefined) },
+      { text: t('store.update.skip'), onPress: () => useSettings.getState().set({ updateSkippedVersion: update.version }) },
+      { text: t('store.update.later'), style: 'cancel' },
+      { text: t('store.update.download'), onPress: () => void Linking.openURL(update.url).catch(() => undefined) },
     ],
   )
 }
@@ -55,8 +53,8 @@ export async function checkForUpdateNow() {
   try {
     const update = await fetchAvailableUpdate(UPDATES_MANIFEST_URL, APP_VERSION)
     if (update) proposeUpdate(update)
-    else Alert.alert('À jour', `Tu as la dernière version (${APP_VERSION}).`)
+    else Alert.alert(t('store.update.upToDate'), t('store.update.upToDateBody', { version: APP_VERSION }))
   } catch {
-    Alert.alert('Vérification impossible', 'Le serveur ForgeChat ne répond pas. Réessaie plus tard.')
+    Alert.alert(t('store.update.checkFailed'), t('store.update.checkFailedBody'))
   }
 }

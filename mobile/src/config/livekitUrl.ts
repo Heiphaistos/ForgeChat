@@ -61,7 +61,7 @@ export interface LiveKitAccess {
 export function parseLiveKitAccess(v: unknown, policy: LiveKitUrlPolicy): { access: LiveKitAccess } | { error: string } {
   const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>
   if (typeof o.token !== 'string' || o.token.length < 10 || o.token.length > 8192) {
-    return { error: 'Serveur audio/vidéo indisponible.' }
+    return { error: t('store.livekit.unavailable') }
   }
   const url = checkLiveKitUrl(o.url, policy)
   if (!url.ok) return { error: url.reason }

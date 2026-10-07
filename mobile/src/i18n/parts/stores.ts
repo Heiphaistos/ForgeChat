@@ -131,6 +131,19 @@ export const fr = {
   'store.livekit.cleartext': 'Serveur audio/vidéo refusé : connexion non chiffrée.',
   'store.livekit.unexpected': 'Serveur audio/vidéo refusé : adresse inattendue.',
   'store.livekit.lanOnly': 'Serveur audio/vidéo refusé : ws:// seulement vers une IP du réseau local.',
+
+  // --- Mises à jour (useUpdateCheck.ts) ---
+  'store.update.title': 'Nouvelle version disponible',
+  'store.update.body':
+    'ForgeChat {version} est disponible (tu as la {current}).\n\nLe téléchargement se fait depuis le serveur ForgeChat. Ouvre le fichier une fois téléchargé : Android l’installe par-dessus l’app actuelle (tes données sont conservées).\n\nEmpreinte SHA-256 : {sha}…',
+  'store.update.skip': 'Ignorer cette version',
+  'store.update.later': 'Plus tard',
+  'store.update.download': 'Télécharger',
+  'store.update.upToDate': 'À jour',
+  'store.update.upToDateBody': 'Tu as la dernière version ({version}).',
+  'store.update.checkFailed': 'Vérification impossible',
+  'store.update.checkFailedBody': 'Le serveur ForgeChat ne répond pas. Réessaie plus tard.',
+  'store.livekit.unavailable': 'Serveur audio/vidéo indisponible.',
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -253,4 +266,17 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'store.livekit.cleartext': 'Audio/video server rejected: unencrypted connection.',
   'store.livekit.unexpected': 'Audio/video server rejected: unexpected address.',
   'store.livekit.lanOnly': 'Audio/video server rejected: ws:// only to a local network IP.',
+
+  // --- Mises à jour (useUpdateCheck.ts) ---
+  'store.update.title': 'New version available',
+  'store.update.body':
+    'ForgeChat {version} is available (you have {current}).\n\nThe download comes from the ForgeChat server. Open the file once downloaded: Android installs it over the current app (your data is kept).\n\nSHA-256 fingerprint: {sha}…',
+  'store.update.skip': 'Skip this version',
+  'store.update.later': 'Later',
+  'store.update.download': 'Download',
+  'store.update.upToDate': 'Up to date',
+  'store.update.upToDateBody': 'You have the latest version ({version}).',
+  'store.update.checkFailed': 'Check failed',
+  'store.update.checkFailedBody': 'The ForgeChat server isn’t responding. Try again later.',
+  'store.livekit.unavailable': 'Audio/video server unavailable.',
 }
