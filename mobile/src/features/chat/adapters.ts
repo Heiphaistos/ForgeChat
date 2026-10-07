@@ -15,6 +15,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     authorId: m.author_id,
     authorName: m.author_username,
     authorAvatar: m.author_avatar,
+    authorDecoration: m.author_avatar_decoration ?? null,
     authorIsBot: !!m.author_is_bot,
     reply: m.reply_to
       ? { id: m.reply_to, authorName: m.reply_to_username, content: m.reply_to_content }

@@ -4,6 +4,7 @@ import { resolveMediaUrl } from '@/lib/links'
 import { usePresenceOf } from '@/stores/presence'
 import { statusColor, statusHollow, statusLabel } from '@/lib/status'
 import { colors } from '@/theme'
+import { AvatarDecoration } from './ProfileDecor'
 
 const PALETTE = ['#5865f2', '#3ba55c', '#faa61a', '#ed4245', '#eb459e', '#9b59b6', '#1abc9c']
 
@@ -21,6 +22,7 @@ export function Avatar({
   status,
   showStatus,
   rounded = true,
+  decoration,
 }: {
   uri: string | null | undefined
   name: string
@@ -29,12 +31,14 @@ export function Avatar({
   status?: string
   showStatus?: boolean
   rounded?: boolean
+  /** Décoration d'avatar (catalogue features/account/profileDecor). */
+  decoration?: string | null
 }) {
   const live = usePresenceOf(showStatus ? userId : undefined, status)
   const src = resolveMediaUrl(uri)
   const r = rounded ? size / 2 : size * 0.3
   const dot = Math.max(10, size * 0.3)
-  return (
+  const body = (
     <View
       style={{ width: size, height: size }}
       accessible
@@ -56,6 +60,13 @@ export function Avatar({
       )}
       {showStatus ? <StatusDot status={live} size={dot} /> : null}
     </View>
+  )
+  return decoration ? (
+    <AvatarDecoration id={decoration} size={size}>
+      {body}
+    </AvatarDecoration>
+  ) : (
+    body
   )
 }
 

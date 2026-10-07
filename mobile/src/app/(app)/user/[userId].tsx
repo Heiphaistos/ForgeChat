@@ -8,6 +8,7 @@ import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
+import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
@@ -16,7 +17,7 @@ import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
-import { colors, font, spacing } from '@/theme'
+import { colors, font, radius, spacing } from '@/theme'
 
 export default function UserScreen() {
   const { valid, ids, text } = useRouteParams(['userId'] as const, ['serverId'])
@@ -34,6 +35,8 @@ export default function UserScreen() {
   const u = q.data
   const shown = shownProfile(u, members.data?.find((m) => m.user_id === u.id))
   const isMe = u.id === me?.id
+  // Thème du profil : texte clair sur le voile sombre de la fiche colorée.
+  const themed = u.profile_color_primary != null || u.profile_color_accent != null
   const relation = relationWith(u.id, [blocked.data?.friends, accepted.data?.friends, pending.data?.friends])
 
   const run = (fn: () => Promise<unknown>, ok: string) =>
@@ -46,16 +49,19 @@ export default function UserScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
-      <ProfileBanner uri={shown.banner} name={u.username} />
-      <View style={styles.header}>
-        <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus />
-        <Text style={styles.name}>{shown.name}</Text>
-        <Text style={styles.tag}>
-          {u.username}#{u.discriminator}
-          {u.pronouns ? ` · ${u.pronouns}` : ''}
-        </Text>
-        {u.custom_status ? <Text style={styles.status}>{u.custom_status}</Text> : null}
-      </View>
+      <ProfileThemeCard primary={u.profile_color_primary} accent={u.profile_color_accent} style={themed ? styles.themed : null}>
+        <ProfileEffect id={u.profile_effect} />
+        <ProfileBanner uri={shown.banner} name={u.username} />
+        <View style={styles.header}>
+          <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} />
+          <Text style={[styles.name, themed && styles.onTheme]}>{shown.name}</Text>
+          <Text style={[styles.tag, themed && styles.onThemeMuted]}>
+            {u.username}#{u.discriminator}
+            {u.pronouns ? ` · ${u.pronouns}` : ''}
+          </Text>
+          {u.custom_status ? <Text style={[styles.status, themed && styles.onThemeMuted]}>{u.custom_status}</Text> : null}
+        </View>
+      </ProfileThemeCard>
 
       {shown.bio ? (
         <Section title="À propos">
@@ -214,4 +220,7 @@ const styles = StyleSheet.create({
   tag: { color: colors.textMuted },
   status: { color: colors.textSecondary, marginTop: spacing.sm },
   relation: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },
+  themed: { borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.xl },
+  onTheme: { color: '#fff' },
+  onThemeMuted: { color: 'rgba(255,255,255,0.8)' },
 })

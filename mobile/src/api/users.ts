@@ -8,6 +8,11 @@ export interface UpdateProfile {
   pronouns?: string
   /** AAAA-MM-JJ ; null = effacer. */
   birthday?: string | null
+  /** "" = retirer ; -1 = couleur par défaut. */
+  avatar_decoration?: string
+  profile_color_primary?: number
+  profile_color_accent?: number
+  profile_effect?: string
 }
 
 export interface LoginEntry {
