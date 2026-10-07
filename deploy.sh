@@ -134,6 +134,55 @@ watch_csp() {
 }
 watch_csp
 
+# ── Journaux minimaux : ni accès nginx (IP, URL) ni journal coturn ─────────
+# Même prudence que watch_csp : idempotent (marqueur), sauvegarde, test avant
+# rechargement, retour arrière si échec. Seul le site forgechat est touché.
+anon_logs() {
+    local conf=/etc/nginx/sites-enabled/forgechat mark="# forgechat-anonymat"
+    if [[ -f "$conf" ]] && ! grep -q "$mark" "$conf"; then
+        local bak="/root/forgechat-nginx-$(date +%Y%m%d%H%M%S).bak"
+        cp -p "$conf" "$bak"
+        # Après chaque server_name : niveau du bloc server (HTTP et HTTPS).
+        sed -i "/^[[:space:]]*server_name[[:space:]]/a\    access_log off; $mark" "$conf"
+        if nginx -t 2>/dev/null; then
+            systemctl reload nginx && log "✅ nginx : journal d'accès coupé (sauvegarde $bak)"
+        else
+            cp -p "$bak" "$conf"
+            log "❌ nginx : nginx -t a échoué, configuration restaurée"
+        fi
+    fi
+
+    # coturn : plus aucun journal (il y écrivait IP et nom de chaque relais).
+    local tc=/etc/turnserver.conf
+    [[ -f "$tc" ]] || return 0
+    grep -q "^log-file=/dev/null" "$tc" && return 0
+    # Jamais démarrer un coturn arrêté exprès : seulement s'il tourne déjà.
+    systemctl is-active --quiet coturn || { log "coturn inactif : journaux laissés tels quels"; return 0; }
+    local tbak="/root/forgechat-turnserver-$(date +%Y%m%d%H%M%S).bak"
+    cp -p "$tc" "$tbak"
+    # Les anciennes destinations de journal sont commentées, pas supprimées.
+    sed -i -E 's/^[[:space:]]*(log-file|syslog|verbose|Verbose)\b/#&/' "$tc"
+    {
+        echo ""
+        echo "$mark : aucun journal"
+        echo "no-stdout-log"
+        grep -q "^simple-log" "$tc" || echo "simple-log"
+        echo "log-file=/dev/null"
+    } >> "$tc"
+    local host="${turn_host:-127.0.0.1}" port="${turn_port:-3478}"
+    systemctl restart coturn
+    sleep 2
+    if systemctl is-active --quiet coturn \
+        && timeout 5 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null; then
+        log "✅ coturn : journaux coupés, répond sur $host:$port (sauvegarde $tbak)"
+    else
+        cp -p "$tbak" "$tc"
+        systemctl restart coturn
+        log "❌ coturn ne répondait plus : configuration restaurée ($tbak)"
+    fi
+}
+anon_logs
+
 log ""
 log "✅ ForgeChat déployé sur https://$DOMAIN"
 log "   Logs serveur : docker compose logs -f server"
