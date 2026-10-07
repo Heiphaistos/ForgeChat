@@ -27,8 +27,15 @@ export function cachedRole(id: string): RoleLike | undefined {
 }
 
 /** Salon <#id> : cherché dans les listes de salons déjà chargées (tous serveurs). */
-export function cachedChannel(id: string): { id: string; name: string; server_id?: string } | undefined {
-  for (const [, list] of queryClient.getQueriesData<{ id: string; name: string; server_id?: string }[]>({ queryKey: ['channels'] })) {
+type ChannelLike = { id: string; name: string; server_id?: string }
+export function cachedChannel(id: string): ChannelLike | undefined {
+  // Fiches serveur (['server', id] : champ channels) et listes de salons déjà chargées.
+  for (const [, data] of queryClient.getQueriesData<{ channels?: ChannelLike[] } | ChannelLike[]>({ queryKey: ['server'] })) {
+    const list = Array.isArray(data) ? data : data?.channels
+    const hit = Array.isArray(list) ? list.find(c => c.id === id) : undefined
+    if (hit) return hit
+  }
+  for (const [, list] of queryClient.getQueriesData<ChannelLike[]>({ queryKey: ['server_channels_list'] })) {
     const hit = Array.isArray(list) ? list.find(c => c.id === id) : undefined
     if (hit) return hit
   }
