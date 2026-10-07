@@ -79,16 +79,8 @@ interface SlashCommand {
   botName?: string
 }
 
-const BUILTIN_COMMANDS: SlashCommand[] = [
-  { name: 'me', description: 'Envoie une action en italique', usage: '/me [texte]' },
-  { name: 'shrug', description: 'Envoie ¯\\_(ツ)_/¯', usage: '/shrug' },
-  { name: 'tableflip', description: 'Table flip !', usage: '/tableflip' },
-  { name: 'unflip', description: 'Remet la table', usage: '/unflip' },
-  { name: 'lenny', description: 'Visage Lenny', usage: '/lenny' },
-  { name: 'clap', description: 'Applaudissements 👏 entre les mots', usage: '/clap [texte]' },
-  { name: 'spoiler', description: 'Cache le texte en spoiler', usage: '/spoiler [texte]' },
-  { name: 'giphy', description: 'Cherche un GIF avec Giphy', usage: '/giphy [query]' },
-]
+// Description et syntaxe : clés slash.<nom> et slash.<nom>.usage.
+const BUILTIN_COMMANDS = ['me', 'shrug', 'tableflip', 'unflip', 'lenny', 'clap', 'spoiler', 'giphy'] as const
 
 function executeSlashCommand(
   name: string,
@@ -312,7 +304,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
 
   // Fusion builtin + bot commands
   const allSlashCommands: SlashCommand[] = [
-    ...BUILTIN_COMMANDS,
+    ...BUILTIN_COMMANDS.map(name => ({ name, description: t(`slash.${name}`), usage: t(`slash.${name}.usage`) })),
     ...botCommandsRaw.map(bc => ({
       name: bc.name,
       description: bc.description,
@@ -781,7 +773,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       const parts = trimmed.slice(1).split(' ')
       const cmdName = parts[0].toLowerCase()
       const args = parts.slice(1).join(' ')
-      const isBuiltin = BUILTIN_COMMANDS.some(c => c.name === cmdName)
+      const isBuiltin = BUILTIN_COMMANDS.some(c => c === cmdName)
       if (isBuiltin) {
         const executed = executeSlashCommand(cmdName, args, setContent, setShowGifPicker, (msg) => {
           onSend(msg, replyTo?.id)
@@ -830,7 +822,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       const mins = Math.floor(duration / 60)
       const secs = duration % 60
       const durationStr = `${mins}:${String(secs).padStart(2, '0')}`
-      const content = `🎤 Message vocal (${durationStr})`
+      const content = `🎤 ${tr('input.voiceMessage', { d: durationStr })}`
       // En DM (serverId="") : POST /dms/:id/messages + /dms/:id/messages/:id/attachments
       // -- même contrat (id renvoyé, endpoint d'attachment équivalent) que côté serveur,
       // ce chemin retournait juste tôt avant sans jamais appeler l'API en DM.
@@ -920,7 +912,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
         <div className="absolute bottom-full left-4 right-4 mb-2 bg-fc-channel border border-fc-hover rounded-lg shadow-2xl overflow-hidden z-50 max-h-64 overflow-y-auto overscroll-contain">
           <div className="px-3 py-1.5 text-xs font-semibold text-fc-muted uppercase tracking-wide border-b border-fc-hover flex items-center gap-1.5">
             <Slash size={10} />
-            Commandes{slashQuery ? ` — /${slashQuery}` : ''}
+            {t('slash.title')}{slashQuery ? ` — /${slashQuery}` : ''}
           </div>
           {filteredSlashCommands.map((cmd, idx) => (
             <button
@@ -979,7 +971,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   <div>
                     <div className="text-sm font-medium">@{opt.name}</div>
                     <div className="text-xs text-fc-muted">
-                      {opt.kind === 'role' ? 'Rôle' : opt.name === 'everyone' ? 'Tous les membres du salon' : 'Membres en ligne du salon'}
+                      {opt.kind === 'role' ? t('mention.role') : opt.name === 'everyone' ? t('mention.everyone') : t('mention.here')}
                     </div>
                   </div>
                 </>
@@ -1082,7 +1074,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           {hasVideos && (
             <div className="flex items-center gap-1 text-xs text-fc-muted self-start mt-1">
               <Clock size={10} />
-              <span>TTL vidéos configuré par fichier</span>
+              <span>{t('input.ttlPerFile')}</span>
             </div>
           )}
         </div>
@@ -1091,7 +1083,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       {/* Indicateur drag */}
       {isDragActive && (
         <div className="absolute inset-0 bg-fc-accent/10 border-2 border-dashed border-fc-accent rounded-lg flex items-center justify-center z-10 pointer-events-none">
-          <span className="text-fc-accent font-semibold text-sm">Déposer les fichiers ici</span>
+          <span className="text-fc-accent font-semibold text-sm">{t('input.dropHere')}</span>
         </div>
       )}
 
@@ -1316,7 +1308,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 <div className="px-4 py-3 border-b border-fc-hover">
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
                     <CalendarClock size={14} className="text-fc-accent" />
-                    Programmer un message
+                    {t('sched.title')}
                   </div>
                 </div>
 
@@ -1328,7 +1320,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     </div>
                   )}
                   {!content.trim() && (
-                    <p className="text-xs text-fc-muted">Écris un message dans l'input avant de programmer.</p>
+                    <p className="text-xs text-fc-muted">{t('sched.empty')}</p>
                   )}
 
                   {/* Sélecteur date/heure */}
@@ -1338,18 +1330,19 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                     onChange={e => setScheduledAt(e.target.value)}
                     min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
                     className="w-full fc-input text-sm"
+                    aria-label={t('sched.when')}
                   />
 
                   <button
                     onClick={() => {
-                      if (!content.trim()) { toast.error('Message vide'); return }
-                      if (!scheduledAt) { toast.error('Choisir une date'); return }
+                      if (!content.trim()) { toast.error(t('sched.emptyToast')); return }
+                      if (!scheduledAt) { toast.error(t('sched.pickDate')); return }
                       createScheduled.mutate({ content: content.trim(), send_at: new Date(scheduledAt).toISOString() })
                     }}
                     disabled={createScheduled.isPending || !content.trim() || !scheduledAt}
                     className="w-full btn-primary text-sm disabled:opacity-40"
                   >
-                    {createScheduled.isPending ? 'Programmation...' : 'Programmer'}
+                    {createScheduled.isPending ? t('sched.scheduling') : t('sched.submit')}
                   </button>
                 </div>
 
@@ -1357,7 +1350,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 {scheduledMessages.length > 0 && (
                   <div className="border-t border-fc-hover px-4 py-3 space-y-2 max-h-48 overflow-y-auto overscroll-contain">
                     <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">
-                      En attente
+                      {t('friends.tab.pending')}
                     </div>
                     {scheduledMessages.map((sm: any) => (
                       <div key={sm.id} className="flex items-start gap-2 bg-fc-bg rounded-lg px-2 py-2">
@@ -1370,7 +1363,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                         <button
                           onClick={() => deleteScheduled.mutate(sm.id)}
                           className="p-1 text-fc-muted hover:text-fc-red rounded transition flex-shrink-0"
-                          title="Annuler"
+                          title={t('common.cancel')}
+                          aria-label={t('common.cancel')}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -1406,7 +1400,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                 <div className="px-4 py-3 border-b border-fc-hover">
                   <div className="text-sm font-semibold text-white flex items-center gap-2">
                     <BarChart3 size={14} className="text-fc-accent" />
-                    Créer un sondage
+                    {t('poll.title')}
                   </div>
                 </div>
 
@@ -1414,7 +1408,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                   <input
                     value={pollQuestion}
                     onChange={e => setPollQuestion(e.target.value)}
-                    placeholder="Question du sondage..."
+                    placeholder={t('poll.question')}
+                    aria-label={t('poll.question')}
                     maxLength={300}
                     className="w-full fc-input text-sm"
                   />
@@ -1425,7 +1420,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                         <input
                           value={opt}
                           onChange={e => setPollOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
-                          placeholder={`Option ${i + 1}`}
+                          placeholder={t('poll.option', { n: i + 1 })}
+                          aria-label={t('poll.option', { n: i + 1 })}
                           maxLength={100}
                           className="flex-1 fc-input text-sm"
                         />
@@ -1433,7 +1429,8 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                           <button
                             onClick={() => setPollOptions(prev => prev.filter((_, idx) => idx !== i))}
                             className="p-1 text-fc-muted hover:text-fc-red rounded transition flex-shrink-0"
-                            title="Retirer cette option"
+                            title={t('poll.removeOption')}
+                            aria-label={t('poll.removeOption')}
                           >
                             <X size={14} />
                           </button>
@@ -1445,7 +1442,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                         onClick={() => setPollOptions(prev => [...prev, ''])}
                         className="text-xs text-fc-accent hover:underline"
                       >
-                        + Ajouter une option
+                        {t('poll.addOption')}
                       </button>
                     )}
                   </div>
@@ -1457,20 +1454,20 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
                       onChange={e => setPollMultiple(e.target.checked)}
                       className="accent-fc-accent"
                     />
-                    Choix multiple autorisé
+                    {t('poll.multiple')}
                   </label>
 
                   <button
                     onClick={() => {
                       const validOptions = pollOptions.map(o => o.trim()).filter(Boolean)
-                      if (!pollQuestion.trim()) { toast.error('Question requise'); return }
-                      if (validOptions.length < 2) { toast.error('Au moins 2 options requises'); return }
+                      if (!pollQuestion.trim()) { toast.error(t('poll.questionRequired')); return }
+                      if (validOptions.length < 2) { toast.error(t('poll.twoOptions')); return }
                       createPoll.mutate()
                     }}
                     disabled={createPoll.isPending || !pollQuestion.trim()}
                     className="w-full btn-primary text-sm disabled:opacity-40"
                   >
-                    {createPoll.isPending ? 'Création...' : 'Créer le sondage'}
+                    {createPoll.isPending ? t('common.creating') : t('poll.submit')}
                   </button>
                 </div>
               </PickerShell>

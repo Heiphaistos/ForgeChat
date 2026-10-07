@@ -5,6 +5,7 @@ import { useWs } from '../../store/ws'
 import {
   expectedPosition, needsResync, parseWatchState, parseYouTubeId, youtubeLink, type WatchState,
 } from '../../lib/watchTogether'
+import { useT, t as tr, type Key } from '../../i18n'
 
 // « Regarder ensemble » : lecteur YouTube (iframe officielle youtube-nocookie +
 // API IFrame Player) synchronisé par le WebSocket, voir server/src/handlers/watch.rs.
@@ -46,10 +47,10 @@ function loadYouTubeApi(): Promise<YTNamespace> {
   return apiPromise
 }
 
-const ERRORS: Record<string, string> = {
-  rate_limited: 'Doucement : 5 actions au plus toutes les 10 secondes.',
-  invalid_url: 'Adresse YouTube invalide.',
-  queue_full: 'La file d’attente est pleine (20 vidéos).',
+const ERRORS: Record<string, Key> = {
+  rate_limited: 'watch.err.rateLimited',
+  invalid_url: 'watch.err.invalidUrl',
+  queue_full: 'watch.err.queueFull',
 }
 
 /** État de l'activité du salon : écoute WATCH_*, et le redemande à l'ouverture de la page. */
@@ -66,7 +67,7 @@ export function useWatchTogether(channelId: string, enabled: boolean) {
       }),
       on('WATCH_STOP', (d: any) => { if (d?.channel_id === channelId) setState(null) }),
       on('WATCH_ERROR', (d: any) => {
-        if (d?.channel_id === channelId) toast.error(ERRORS[d.reason] ?? 'Action refusée.')
+        if (d?.channel_id === channelId) toast.error(tr(ERRORS[d.reason] ?? 'watch.err.refused'))
       }),
     ]
     send({ type: 'WATCH_SYNC', channel_id: channelId })
@@ -84,6 +85,7 @@ const fmt = (s: number) => {
 interface Props { channelId: string; state: WatchState | null; onClose: () => void }
 
 export default function WatchTogether({ channelId, state, onClose }: Props) {
+  const t = useT()
   const { send } = useWs()
   const hostRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YTPlayer | null>(null)
@@ -117,10 +119,10 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
             // Fin de vidéo : chaque client le signale, le serveur n'avance qu'une fois (item).
             if (e.data === ENDED && s) send({ type: 'WATCH_NEXT', channel_id: channelId, item: s.item })
           },
-          onError: () => setFailed('Cette vidéo ne peut pas être lue ici (intégration désactivée, privée ou supprimée).'),
+          onError: () => setFailed(tr('watch.cannotPlay')),
         },
       })
-    }).catch(() => setFailed('Impossible de charger le lecteur YouTube.'))
+    }).catch(() => setFailed(tr('watch.loadError')))
     return () => {
       cancelled = true
       playerRef.current?.destroy()
@@ -173,7 +175,7 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
   const add = (e: React.FormEvent) => {
     e.preventDefault()
     if (!parseYouTubeId(url)) {
-      toast.error('Adresse YouTube invalide : youtube.com/watch?v=…, youtu.be/… ou youtube.com/shorts/…')
+      toast.error(t('watch.invalidHelp'))
       return
     }
     send({ type: 'WATCH_ADD', channel_id: channelId, url: url.trim() })
@@ -186,14 +188,14 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
     <div className="absolute inset-0 z-20 bg-fc-bg flex flex-col">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-fc-hover">
         <Tv size={16} className="text-fc-accent flex-shrink-0" aria-hidden />
-        <span className="text-sm font-semibold text-white truncate flex-1">{title ?? 'Regarder ensemble'}</span>
+        <span className="text-sm font-semibold text-white truncate flex-1">{title ?? t('watch.title')}</span>
         {state && (
           <a href={youtubeLink(state.videoId, current)} target="_blank" rel="noopener noreferrer"
-            className={btn} title="Ouvrir sur YouTube" aria-label="Ouvrir sur YouTube">
+            className={btn} title={t('watch.openYt')} aria-label={t('watch.openYt')}>
             <ExternalLink size={14} aria-hidden />
           </a>
         )}
-        <button onClick={onClose} className={btn} title="Masquer (la vidéo continue pour les autres)" aria-label="Masquer le lecteur">
+        <button onClick={onClose} className={btn} title={t('watch.hideTitle')} aria-label={t('watch.hide')}>
           <X size={16} aria-hidden />
         </button>
       </div>
@@ -202,10 +204,10 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
         <div ref={hostRef} className="absolute inset-0 [&>iframe]:w-full [&>iframe]:h-full" />
         {(!state || failed) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-sm text-fc-muted bg-black">
-            {failed ?? 'Colle une adresse YouTube ci-dessous : la vidéo démarre pour tout le salon.'}
+            {failed ?? t('watch.empty')}
             {failed && state && (
               <a href={youtubeLink(state.videoId, current)} target="_blank" rel="noopener noreferrer" className="text-fc-accent underline">
-                Ouvrir sur YouTube
+                {t('watch.openYt')}
               </a>
             )}
           </div>
@@ -215,13 +217,13 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
       {state && (
         <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t border-fc-hover">
           <button className={btn} onClick={() => setPlayback(!state.playing, current)}
-            aria-label={state.playing ? 'Pause' : 'Lecture'} title={state.playing ? 'Pause' : 'Lecture'}>
+            aria-label={state.playing ? t('watch.pause') : t('watch.play')} title={state.playing ? t('watch.pause') : t('watch.play')}>
             {state.playing ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />}
           </button>
-          <button className={btn} onClick={() => setPlayback(state.playing, current - 10)} aria-label="Reculer de 10 s" title="-10 s">
+          <button className={btn} onClick={() => setPlayback(state.playing, current - 10)} aria-label={t('watch.back10')} title="-10 s">
             <Rewind size={16} aria-hidden />
           </button>
-          <button className={btn} onClick={() => setPlayback(state.playing, current + 10)} aria-label="Avancer de 10 s" title="+10 s">
+          <button className={btn} onClick={() => setPlayback(state.playing, current + 10)} aria-label={t('watch.fwd10')} title="+10 s">
             <FastForward size={16} aria-hidden />
           </button>
           <span className="text-xs text-fc-muted font-mono">{fmt(seekDraft ?? current)}</span>
@@ -229,37 +231,37 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
             value={Math.floor(seekDraft ?? current)} disabled={!duration}
             onChange={e => setSeekDraft(Number(e.target.value))}
             onPointerUp={commitSeek} onKeyUp={commitSeek}
-            aria-label="Position dans la vidéo" className="flex-1 min-w-[120px] accent-fc-accent" />
+            aria-label={t('watch.position')} className="flex-1 min-w-[120px] accent-fc-accent" />
           <span className="text-xs text-fc-muted font-mono">{fmt(duration)}</span>
           <button className={btn} onClick={() => send({ type: 'WATCH_NEXT', channel_id: channelId, item: state.item })}
-            aria-label="Vidéo suivante" title={state.queue.length ? 'Vidéo suivante' : 'Terminer (file vide)'}>
+            aria-label={t('watch.next')} title={state.queue.length ? t('watch.next') : t('watch.finish')}>
             <SkipForward size={16} aria-hidden />
           </button>
           <button className={btn} onClick={() => send({ type: 'WATCH_STOP', channel_id: channelId })}
-            aria-label="Arrêter pour tout le monde" title="Arrêter pour tout le monde">
+            aria-label={t('watch.stopAll')} title={t('watch.stopAll')}>
             <Square size={14} aria-hidden />
           </button>
-          <label className="flex items-center gap-1 text-fc-muted" title="Volume (pour vous seulement)">
+          <label className="flex items-center gap-1 text-fc-muted" title={t('watch.volumeTitle')}>
             <Volume2 size={14} aria-hidden />
             <input type="range" min={0} max={100} value={volume} onChange={e => setVolume(Number(e.target.value))}
-              aria-label="Volume de la vidéo" className="w-20 accent-fc-accent" />
+              aria-label={t('watch.volume')} className="w-20 accent-fc-accent" />
           </label>
         </div>
       )}
 
       <form onSubmit={add} className="flex gap-2 px-3 py-2 border-t border-fc-hover">
         <input value={url} onChange={e => setUrl(e.target.value)} maxLength={300} inputMode="url"
-          placeholder="https://www.youtube.com/watch?v=…" aria-label="Adresse de la vidéo YouTube"
+          placeholder="https://www.youtube.com/watch?v=…" aria-label={t('watch.url')}
           className="flex-1 min-w-0 bg-fc-input text-fc-text text-sm rounded-lg px-3 py-2 outline-none focus:ring-1 focus:ring-fc-accent" />
         <button type="submit" disabled={!url.trim()} className="px-3 py-2 rounded-lg bg-fc-accent text-white text-sm font-medium disabled:opacity-40">
-          {state ? 'Ajouter à la file' : 'Lancer'}
+          {state ? t('watch.queue') : t('watch.start')}
         </button>
       </form>
 
       {state && state.queue.length > 0 && (
-        <div className="flex gap-2 px-3 pb-2 overflow-x-auto" aria-label="File d’attente">
+        <div className="flex gap-2 px-3 pb-2 overflow-x-auto" aria-label={t('watch.queueLabel')}>
           {state.queue.map((id, i) => (
-            <img key={`${i}-${id}`} src={`https://i.ytimg.com/vi/${id}/mqdefault.jpg`} alt={`Vidéo ${i + 1} de la file`}
+            <img key={`${i}-${id}`} src={`https://i.ytimg.com/vi/${id}/mqdefault.jpg`} alt={t('watch.queueItem', { n: i + 1 })}
               className="h-12 rounded flex-shrink-0" loading="lazy" />
           ))}
         </div>

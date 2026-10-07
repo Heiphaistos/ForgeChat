@@ -1,6 +1,7 @@
 import { mediaUrl } from '../../api/client'
 import { useMemo } from 'react'
 import { Mic, MicOff, Volume2 } from 'lucide-react'
+import { useT } from '../../i18n'
 
 interface Participant {
   userId: string
@@ -35,6 +36,7 @@ function Avatar({ participant }: { participant: Participant }) {
 }
 
 export default function SpeakerStats({ participants, onClose }: Props) {
+  const t = useT()
   const sorted = useMemo(
     () => [...participants].sort((a, b) => b.totalSpeakingMs - a.totalSpeakingMs),
     [participants]
@@ -46,23 +48,23 @@ export default function SpeakerStats({ participants, onClose }: Props) {
   return (
     <div
       role="dialog"
-      aria-label="Statistiques des orateurs"
+      aria-label={t('speakers.title')}
       className="absolute bottom-20 right-4 w-72 bg-fc-sidebar/95 backdrop-blur-sm rounded-2xl border border-fc-hover shadow-xl overflow-hidden"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Volume2 size={14} className="text-fc-accent" aria-hidden /> Statistiques orateurs
+          <Volume2 size={14} className="text-fc-accent" aria-hidden /> {t('speakers.heading')}
         </div>
-        <button onClick={onClose} aria-label="Fermer les statistiques orateurs" className="text-fc-muted hover:text-white transition text-xs">
+        <button onClick={onClose} aria-label={t('speakers.close')} className="text-fc-muted hover:text-white transition text-xs">
           <span aria-hidden>✕</span>
         </button>
       </div>
 
       <div className="p-3 space-y-2 max-h-72 overflow-y-auto overscroll-contain">
         {sorted.length === 0 ? (
-          <p role="status" className="text-center text-fc-muted text-sm py-4">Aucun participant</p>
+          <p role="status" className="text-center text-fc-muted text-sm py-4">{t('speakers.none')}</p>
         ) : sorted.map((p, idx) => {
-          const micLabel = p.isMuted ? 'micro coupé' : p.isSpeaking ? 'parle' : 'micro actif'
+          const micLabel = p.isMuted ? t('speakers.mutedLower') : p.isSpeaking ? t('speakers.speakingLower') : t('speakers.activeLower')
           const durPct = Math.round((p.totalSpeakingMs / maxMs) * 100)
           return (
             <div key={p.userId} className="space-y-1">
@@ -76,8 +78,8 @@ export default function SpeakerStats({ participants, onClose }: Props) {
                     </span>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       {p.isMuted
-                        ? <MicOff size={12} className="text-fc-red" aria-label="Micro coupé" />
-                        : <Mic size={12} className={p.isSpeaking ? 'text-fc-green' : 'text-fc-muted'} aria-label={p.isSpeaking ? 'Parle en ce moment' : 'Micro actif'} />}
+                        ? <MicOff size={12} className="text-fc-red" aria-label={t('speakers.muted')} />
+                        : <Mic size={12} className={p.isSpeaking ? 'text-fc-green' : 'text-fc-muted'} aria-label={p.isSpeaking ? t('speakers.speaking') : t('speakers.active')} />}
                       <span className="text-xs text-fc-muted">{formatDuration(p.totalSpeakingMs)}</span>
                     </div>
                   </div>
@@ -88,11 +90,11 @@ export default function SpeakerStats({ participants, onClose }: Props) {
               <div className="ml-10 h-1 bg-fc-hover rounded-full overflow-hidden">
                 <div
                   role="progressbar"
-                  aria-label={`Temps de parole de ${p.username}`}
+                  aria-label={t('speakers.time', { name: p.username })}
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={durPct}
-                  aria-valuetext={`${formatDuration(p.totalSpeakingMs)} (${durPct}% du maximum) — ${micLabel}`}
+                  aria-valuetext={t('speakers.valuetext', { d: formatDuration(p.totalSpeakingMs), pct: durPct, mic: micLabel })}
                   className={`h-full rounded-full transition-all ${p.isSpeaking ? 'bg-fc-green' : 'bg-fc-accent/60'}`}
                   style={{ width: `${durPct}%` }}
                 />

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useWs } from '../../store/ws'
+import { useT } from '../../i18n'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Sound {
@@ -36,6 +37,7 @@ function UploadForm({
   onDone: () => void
   onCancel: () => void
 }) {
+  const t = useT()
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
@@ -45,7 +47,7 @@ function UploadForm({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!file || !name.trim()) throw new Error('Nom et fichier requis')
+      if (!file || !name.trim()) throw new Error(t('sb.required'))
       const form = new FormData()
       form.append('name', name.trim())
       if (emoji.trim()) form.append('emoji', emoji.trim())
@@ -54,11 +56,11 @@ function UploadForm({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['soundboard', serverId] })
-      toast.success('Son ajouté !')
+      toast.success(t('sb.added'))
       onDone()
     },
     onError: (err: any) => {
-      toast.error(err?.message ?? "Erreur lors de l'upload")
+      toast.error(err?.message ?? t('sb.uploadError'))
     },
   })
 
@@ -67,12 +69,12 @@ function UploadForm({
     const f = e.target.files?.[0]
     if (!f) return
     if (f.size > MAX_FILE_SIZE) {
-      setFileError('Fichier trop volumineux (max 2 Mo)')
+      setFileError(t('sb.tooBig'))
       return
     }
     const ext = '.' + f.name.split('.').pop()?.toLowerCase()
     if (!ALLOWED_FORMATS.includes(f.type) && !ALLOWED_EXTS.includes(ext)) {
-      setFileError('Format non supporté (mp3, wav, ogg)')
+      setFileError(t('sb.badFormat'))
       return
     }
     setFile(f)
@@ -81,11 +83,12 @@ function UploadForm({
 
   return (
     <div className="mt-3 p-3 bg-fc-bg rounded-lg border border-fc-hover space-y-2">
-      <p className="text-xs font-semibold text-white">Nouveau son</p>
+      <p className="text-xs font-semibold text-white">{t('sb.new')}</p>
 
       <input
         type="text"
-        placeholder="Nom du son"
+        placeholder={t('sb.name')}
+        aria-label={t('sb.name')}
         value={name}
         onChange={e => setName(e.target.value)}
         maxLength={32}
@@ -94,7 +97,8 @@ function UploadForm({
 
       <input
         type="text"
-        placeholder="Emoji (optionnel)"
+        placeholder={t('sb.emoji')}
+        aria-label={t('sb.emoji')}
         value={emoji}
         onChange={e => setEmoji(e.target.value)}
         maxLength={2}
@@ -108,7 +112,7 @@ function UploadForm({
           className="flex items-center gap-2 w-full text-xs bg-fc-hover hover:bg-fc-accent/20 text-fc-muted hover:text-white border border-dashed border-fc-hover hover:border-fc-accent rounded px-2 py-2 transition"
         >
           <Upload size={12} />
-          {file ? file.name : 'Choisir un fichier (mp3 / wav / ogg, max 2 Mo)'}
+          {file ? file.name : t('sb.pick')}
         </button>
         <input
           ref={fileRef}
@@ -125,14 +129,14 @@ function UploadForm({
           onClick={onCancel}
           className="text-xs text-fc-muted hover:text-white px-2 py-1 rounded hover:bg-fc-hover transition"
         >
-          Annuler
+          {t('common.cancel')}
         </button>
         <button
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !file || !name.trim()}
           className="text-xs bg-fc-accent hover:bg-fc-accent/80 text-white px-3 py-1 rounded transition disabled:opacity-50"
         >
-          {mutation.isPending ? 'Upload...' : 'Ajouter'}
+          {mutation.isPending ? t('srv.uploading') : t('chset.add')}
         </button>
       </div>
     </div>
@@ -154,6 +158,7 @@ function SoundButton({
   /** Absent pour les sons d'un autre serveur (pas supprimables d'ici). */
   onDelete?: (id: string) => void
 }) {
+  const t = useT()
   const { send } = useWs()
   const [playing, setPlaying] = useState(false)
 
@@ -189,7 +194,8 @@ function SoundButton({
         <button
           onClick={e => { e.stopPropagation(); onDelete(sound.id) }}
           className="absolute top-1 right-1 p-0.5 rounded bg-fc-red/80 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
-          title="Supprimer"
+          title={t('common.delete')}
+          aria-label={t('common.delete')}
         >
           <Trash2 size={9} />
         </button>
@@ -200,6 +206,7 @@ function SoundButton({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Soundboard({ serverId, channelId, onClose }: Props) {
+  const t = useT()
   const qc = useQueryClient()
   const [volume, setVolume] = useState<number>(() => {
     const stored = localStorage.getItem(VOLUME_KEY)
@@ -228,9 +235,9 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       api.delete(`/servers/${serverId}/soundboard/${soundId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['soundboard', serverId] })
-      toast.success('Son supprimé')
+      toast.success(t('sb.deleted'))
     },
-    onError: () => toast.error('Erreur suppression'),
+    onError: () => toast.error(t('settings.adv.deleteError')),
   })
 
   const handleVolumeChange = (val: number) => {
@@ -248,7 +255,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
         </div>
         <button
           onClick={onClose}
-          aria-label="Fermer le soundboard"
+          aria-label={t('sb.close')}
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
         >
           <X size={14} aria-hidden />
@@ -264,7 +271,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
           max={100}
           value={volume}
           onChange={e => handleVolumeChange(Number(e.target.value))}
-          aria-label="Volume du soundboard"
+          aria-label={t('sb.volume')}
           className="flex-1 h-1 accent-fc-accent cursor-pointer"
         />
         <span className="text-[10px] text-fc-muted w-8 text-right">{volume}%</span>
@@ -274,17 +281,17 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       <div className="min-h-[80px] max-h-64 overflow-y-auto overscroll-contain">
         {isLoading && (
           <div className="flex items-center justify-center h-16 text-xs text-fc-muted">
-            Chargement...
+            {t('common.loading')}
           </div>
         )}
         {isError && (
           <div className="flex items-center justify-center h-16 text-xs text-fc-red">
-            Erreur de chargement
+            {t('gdm.loadError')}
           </div>
         )}
         {!isLoading && !isError && sounds.length === 0 && (
           <div className="flex items-center justify-center h-16 text-xs text-fc-muted">
-            Aucun son. Ajoutez-en !
+            {t('sb.none')}
           </div>
         )}
         {!isLoading && sounds.length > 0 && (
@@ -328,7 +335,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
           onClick={() => setShowUpload(true)}
           className="mt-3 w-full flex items-center justify-center gap-2 text-xs text-fc-muted hover:text-white bg-fc-hover hover:bg-fc-accent/20 border border-dashed border-fc-hover hover:border-fc-accent rounded-lg py-2 transition"
         >
-          <Plus size={12} /> Ajouter un son
+          <Plus size={12} /> {t('sb.add')}
         </button>
       )}
     </div>

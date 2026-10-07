@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Mic, Square, Send, X } from 'lucide-react'
+import { useT } from '../../i18n'
 
 interface Props {
   onSend: (blob: Blob, duration: number) => void
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
+  const t = useT()
   const [state, setState] = useState<'recording' | 'preview'>('recording')
   const [duration, setDuration] = useState(0)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -92,7 +94,7 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
   return (
     <div
       role="group"
-      aria-label={state === 'recording' ? 'Enregistrement vocal en cours' : 'Aperçu du message vocal'}
+      aria-label={state === 'recording' ? t('rec.recording') : t('rec.preview')}
       className="flex items-center gap-3 px-3 py-2 bg-fc-channel rounded-xl border border-fc-hover"
     >
       {state === 'recording' ? (
@@ -101,7 +103,7 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
           <span
             role="timer"
             aria-live="off"
-            aria-label={`Durée : ${fmt(duration)}`}
+            aria-label={t('rec.duration', { d: fmt(duration) })}
             className="text-fc-red text-sm font-mono w-10 flex-shrink-0"
           >
             {fmt(duration)}
@@ -109,10 +111,10 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
           <div className="flex-1 h-1 bg-fc-hover rounded-full overflow-hidden" aria-hidden>
             <div className="h-full bg-fc-red/50 rounded-full" style={{ width: `${(duration / 120) * 100}%` }} />
           </div>
-          <button onClick={stop} aria-label="Arrêter l'enregistrement" className="p-1.5 bg-fc-red/20 rounded-lg text-fc-red hover:bg-fc-red/30">
+          <button onClick={stop} aria-label={t('rec.stop')} className="p-1.5 bg-fc-red/20 rounded-lg text-fc-red hover:bg-fc-red/30">
             <Square size={14} aria-hidden />
           </button>
-          <button onClick={handleCancel} aria-label="Annuler l'enregistrement" className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white">
+          <button onClick={handleCancel} aria-label={t('rec.cancel')} className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white">
             <X size={14} aria-hidden />
           </button>
         </>
@@ -123,15 +125,15 @@ export default function VoiceMessageRecorder({ onSend, onCancel }: Props) {
             <audio
               src={blobUrl}
               controls
-              aria-label={`Message vocal — durée ${fmt(duration)}`}
+              aria-label={t('rec.message', { d: fmt(duration) })}
               className="h-7 flex-1 min-w-0"
               style={{ colorScheme: 'dark' }}
             />
           )}
-          <button onClick={handleSend} aria-label="Envoyer le message vocal" className="p-1.5 bg-fc-accent rounded-lg text-white hover:bg-fc-accent/80 flex-shrink-0">
+          <button onClick={handleSend} aria-label={t('rec.send')} className="p-1.5 bg-fc-accent rounded-lg text-white hover:bg-fc-accent/80 flex-shrink-0">
             <Send size={14} aria-hidden />
           </button>
-          <button onClick={handleCancel} aria-label="Annuler et supprimer le message vocal" className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white flex-shrink-0">
+          <button onClick={handleCancel} aria-label={t('rec.discard')} className="p-1.5 bg-fc-hover rounded-lg text-fc-muted hover:text-white flex-shrink-0">
             <X size={14} aria-hidden />
           </button>
         </>
