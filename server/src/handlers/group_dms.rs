@@ -589,9 +589,13 @@ pub async fn edit_group_message(
     }
 
     let rows = if let Some(enc) = &enc {
+        // L'AAD lie le chiffré à l'id client : celui du message, ou un nouveau pour un ancien message en clair.
+        if body.client_msg_id.is_none() {
+            return Err(AppError::BadRequest("client_msg_id requis".into()));
+        }
         sqlx::query(
-            "UPDATE group_dm_messages SET enc=$1, content=NULL, client_msg_id=COALESCE(client_msg_id, $5), edited_at=NOW()
-             WHERE id=$2 AND sender_id=$3 AND dm_id=$4 AND (client_msg_id IS NOT NULL OR $5::uuid IS NOT NULL)"
+            "UPDATE group_dm_messages SET enc=$1, content=NULL, client_msg_id=$5, edited_at=NOW()
+             WHERE id=$2 AND sender_id=$3 AND dm_id=$4 AND (client_msg_id IS NULL OR client_msg_id=$5)"
         )
         .bind(enc.to_json()).bind(msg_id).bind(claims.sub).bind(group_id).bind(body.client_msg_id)
         .execute(&state.db)
@@ -619,6 +623,7 @@ pub async fn edit_group_message(
         "message_id": msg_id,
         "content": if enc.is_some() { serde_json::Value::Null } else { serde_json::Value::String(content) },
         "enc": enc.as_ref().map(e2e_conv::Enc::to_json),
+        "client_msg_id": body.client_msg_id,
     }).to_string();
 
     for uid in all_members {

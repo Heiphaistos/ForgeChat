@@ -429,7 +429,13 @@ pub async fn post_envelopes(
     Path((kind, id)): Path<(String, Uuid)>,
     Json(body): Json<PostEnvelopes>,
 ) -> Result<Json<Value>> {
-    store_envelopes(&state.db, Conv::parse(&kind, id)?, claims.sub, &body).await?;
+    let conv = Conv::parse(&kind, id)?;
+    store_envelopes(&state.db, conv, claims.sub, &body).await?;
+    // Les destinataires en attente rechargent leurs clés et rouvrent les messages verrouillés.
+    let event = json!({ "type": "E2E_KEYS", "conv_kind": conv.kind(), "conv_id": conv.id(), "epoch": body.epoch }).to_string();
+    for e in body.envelopes.iter().filter(|e| e.member_id != claims.sub) {
+        state.broadcast_to_user(e.member_id, event.clone()).await;
+    }
     Ok(Json(json!({ "ok": true, "epoch": body.epoch })))
 }
 
