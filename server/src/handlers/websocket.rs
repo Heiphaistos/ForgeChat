@@ -335,6 +335,8 @@ pub(crate) async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Opti
 
         // Si canal temporaire et dernier participant → supprimer automatiquement
         if remaining.is_empty() {
+            // « Regarder ensemble » : plus personne pour regarder.
+            state.watch.lock().await.purge(channel_id);
             // N1 — fenêtre de grâce : un canal auto-create vient peut-être
             // d'être créé et le VOICE_JOIN de redirection n'est pas encore
             // arrivé. Le supprimer ici détruit le canal avant son premier
@@ -1002,6 +1004,8 @@ async fn handle_ws_message(
                     ),
                 },
             }).to_string()).await;
+            // « Regarder ensemble » déjà en cours : l'arrivant rejoint au bon moment.
+            crate::handlers::watch::send_current(state, user_id, effective_channel_id).await;
 
             // Récupérer les infos du rejoignant
             if let Ok(Some(row)) = sqlx::query(
@@ -1712,6 +1716,10 @@ async fn handle_ws_message(
                     state.broadcast_to_channel_members(cid, event.to_string()).await;
                 }
             }
+        }
+
+        Some("WATCH_ADD") | Some("WATCH_STATE") | Some("WATCH_NEXT") | Some("WATCH_STOP") | Some("WATCH_SYNC") => {
+            crate::handlers::watch::handle(state, user_id, &msg).await;
         }
 
         _ => {}

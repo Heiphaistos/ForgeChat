@@ -13,6 +13,7 @@ pub mod roles;
 pub mod invites;
 pub mod uploads;
 pub mod websocket;
+pub mod watch;
 pub mod presence;
 pub mod reminders;
 pub mod voice_moderation;

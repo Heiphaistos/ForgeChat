@@ -82,6 +82,8 @@ pub struct AppState {
     // et instant. Son VOICE_JOIN suivant vers ce salon passe outre mot de passe
     // et limite de places, comme un déplacement Discord / TeamSpeak.
     pub voice_move_grants: Arc<RwLock<HashMap<Uuid, (Uuid, Instant)>>>,
+    // « Regarder ensemble » : vidéo synchronisée par salon vocal (mémoire seule).
+    pub watch: Arc<Mutex<crate::handlers::watch::WatchStore>>,
     // Client HTTP partagé (pool de connexions réutilisé)
     pub http_client: reqwest::Client,
     /// URL fournies par les utilisateurs (flux RSS, aperçus) : voir `net_guard`.
@@ -124,6 +126,7 @@ impl AppState {
             group_calls: Arc::new(RwLock::new(HashMap::new())),
             idle_sessions: Arc::new(RwLock::new(HashMap::new())),
             voice_move_grants: Arc::new(RwLock::new(HashMap::new())),
+            watch: Arc::new(Mutex::new(Default::default())),
             http_client,
             public_http: crate::net_guard::public_client(3, &format!("ForgeChat/{} (+https://forgechat.heiphaistos.org)", APP_VERSION))
                 .build()
