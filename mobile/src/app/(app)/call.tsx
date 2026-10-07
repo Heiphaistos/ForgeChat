@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
 import { StreamViewer } from '@/components/StreamViewer'
 import { canShareInCall, isScreenShareCancel } from '@/features/calls/screenShareLogic'
+import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { confirmScreenShare, screenShareSupported } from '@/services/screenCapture'
 import { formatDuration } from '@/lib/format'
@@ -30,6 +31,7 @@ function CallButton({ icon, label, onPress, active, danger }: { icon: IconName; 
 }
 
 export default function CallScreen() {
+  const t = useT()
   const s = useCall()
   const insets = useSafeAreaInsets()
   const now = useNow(1000, s.phase === 'connected')
@@ -45,15 +47,15 @@ export default function CallScreen() {
       await s.shareScreen()
     } catch (e) {
       // Refus dans le dialogue système : pas d'alerte (choix volontaire).
-      if (!isScreenShareCancel(e)) Alert.alert('Partage impossible', errorMessage(e))
+      if (!isScreenShareCancel(e)) Alert.alert(t('voice.shareFailed'), errorMessage(e))
     }
   }
 
   // Fin d'appel : fermer l'écran.
   useEffect(() => {
     if (s.phase === 'idle' && !s.incoming) {
-      const t = setTimeout(() => (router.canGoBack() ? router.back() : router.replace('/')), s.endReason ? 1200 : 0)
-      return () => clearTimeout(t)
+      const timer = setTimeout(() => (router.canGoBack() ? router.back() : router.replace('/')), s.endReason ? 1200 : 0)
+      return () => clearTimeout(timer)
     }
   }, [s.phase, s.incoming, s.endReason])
 
@@ -62,9 +64,9 @@ export default function CallScreen() {
   const localVideo = s.callType === 'video' ? s.localVideo : null
   const label =
     s.phase === 'calling'
-      ? 'Appel en cours…'
+      ? t('call.calling')
       : s.phase === 'connecting'
-        ? 'Connexion…'
+        ? t('voice.connecting')
         : s.phase === 'connected' && s.connectedAt
           ? formatDuration(now - s.connectedAt)
           : (s.endReason ?? '')
@@ -76,7 +78,7 @@ export default function CallScreen() {
           style={StyleSheet.absoluteFill}
           onPress={() => setViewer(true)}
           accessibilityRole="button"
-          accessibilityLabel="Afficher la vidéo en plein écran (zoom possible)"
+          accessibilityLabel={t('call.fullscreen')}
         >
           <RTCView streamURL={remoteVideo.toURL()} style={StyleSheet.absoluteFill} objectFit="cover" zOrder={0} />
         </Pressable>
@@ -87,7 +89,7 @@ export default function CallScreen() {
       )}
 
       <StreamViewer
-        sources={remoteVideo ? [{ key: 'remote', label: s.partnerName ?? 'Vidéo', stream: remoteVideo }] : []}
+        sources={remoteVideo ? [{ key: 'remote', label: s.partnerName ?? t('call.video'), stream: remoteVideo }] : []}
         initialKey={viewer && remoteVideo ? 'remote' : null}
         onClose={() => setViewer(false)}
       />
@@ -106,23 +108,23 @@ export default function CallScreen() {
       ) : null}
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={s.micMuted ? 'Réactiver le micro' : 'Couper le micro'} onPress={s.toggleMic} active={s.micMuted} />
+        <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
         {s.callType === 'video' ? (
           <>
-            <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label="Caméra" onPress={s.toggleCam} active={s.camOff} />
-            <CallButton icon="camera-reverse" label="Changer de caméra" onPress={s.switchCamera} />
+            <CallButton icon={s.camOff ? 'videocam-off' : 'videocam'} label={t('call.camera')} onPress={s.toggleCam} active={s.camOff} />
+            <CallButton icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} />
             {screenShareSupported && canShareInCall(s.phase, s.callType) ? (
               <CallButton
                 icon="tv-outline"
-                label={s.screenSharing ? 'Arrêter le partage d’écran' : 'Partager l’écran'}
+                label={t(s.screenSharing ? 'voice.stopShare' : 'voice.share')}
                 onPress={() => void toggleShare()}
                 active={s.screenSharing}
               />
             ) : null}
           </>
         ) : null}
-        <CallButton icon={s.speaker ? 'volume-high' : 'volume-low'} label="Haut-parleur" onPress={s.toggleSpeaker} active={s.speaker} />
-        <CallButton icon="call" label="Raccrocher" onPress={s.hangup} danger />
+        <CallButton icon={s.speaker ? 'volume-high' : 'volume-low'} label={t('voice.speaker')} onPress={s.toggleSpeaker} active={s.speaker} />
+        <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
       </View>
     </View>
   )

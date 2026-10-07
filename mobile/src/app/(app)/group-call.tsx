@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
 import type { IconName } from '@/components/ui'
+import { useT } from '@/i18n'
 import { qk } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { useGroupCall } from '@/stores/groupCall'
@@ -15,6 +16,7 @@ import { colors, font, radius, spacing } from '@/theme'
 
 /** Appel de groupe en cours : une tuile par participant (caméra ou avatar), contrôles en bas. */
 export default function GroupCallScreen() {
+  const t = useT()
   const s = useGroupCall()
   const me = useAuth((st) => st.user)
   const insets = useSafeAreaInsets()
@@ -32,12 +34,16 @@ export default function GroupCallScreen() {
   for (const id of Object.keys(s.remotes)) if (!others.includes(id)) others.push(id)
   const tiles = [{ id: me?.id ?? 'me', self: true }, ...others.map((id) => ({ id, self: false }))]
 
-  const status = s.status === 'connecting' ? 'Connexion…' : s.status === 'reconnecting' ? 'Reconnexion…' : (s.error ?? `${tiles.length} participant${tiles.length > 1 ? 's' : ''}`)
+  const status = s.status === 'connecting'
+      ? t('voice.connecting')
+      : s.status === 'reconnecting'
+        ? t('call.reconnecting')
+        : (s.error ?? t(tiles.length > 1 ? 'call.participantsMany' : 'call.participants', { n: tiles.length }))
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
       <Text style={styles.title} numberOfLines={1}>
-        {s.groupName ?? group.data?.name ?? 'Appel de groupe'}
+        {s.groupName ?? group.data?.name ?? t('call.group')}
       </Text>
       <Text style={styles.status}>{status}</Text>
       <FlatList
@@ -49,7 +55,7 @@ export default function GroupCallScreen() {
         renderItem={({ item }) => {
           const stream = item.self ? s.localVideo : s.remotes[item.id]
           const m = item.self ? me : members.get(item.id)
-          const name = item.self ? 'Toi' : (m?.username ?? '…')
+          const name = item.self ? t('call.you') : (m?.username ?? '…')
           const speaking = s.speaking.includes(item.id)
           return (
             <View style={[styles.tile, speaking && { borderColor: colors.success }]} accessibilityLabel={`${name}${speaking ? ', parle' : ''}`}>
@@ -69,11 +75,11 @@ export default function GroupCallScreen() {
         }}
       />
       <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>
-        <Btn icon={s.micMuted ? 'mic-off' : 'mic'} label={s.micMuted ? 'Réactiver le micro' : 'Couper le micro'} onPress={s.toggleMic} active={s.micMuted} />
-        <Btn icon={s.camOff ? 'videocam-off' : 'videocam'} label={s.camOff ? 'Activer la caméra' : 'Couper la caméra'} onPress={() => void s.toggleCam()} active={!s.camOff} />
-        {!s.camOff ? <Btn icon="camera-reverse" label="Changer de caméra" onPress={s.switchCamera} /> : null}
-        <Btn icon={s.speaker ? 'volume-high' : 'volume-low'} label="Haut-parleur" onPress={s.toggleSpeaker} active={s.speaker} />
-        <Btn icon="call" label="Quitter l’appel" onPress={s.leave} danger />
+        <Btn icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
+        <Btn icon={s.camOff ? 'videocam-off' : 'videocam'} label={t(s.camOff ? 'voice.cameraOn' : 'voice.cameraOff')} onPress={() => void s.toggleCam()} active={!s.camOff} />
+        {!s.camOff ? <Btn icon="camera-reverse" label={t('voice.switchCamera')} onPress={s.switchCamera} /> : null}
+        <Btn icon={s.speaker ? 'volume-high' : 'volume-low'} label={t('voice.speaker')} onPress={s.toggleSpeaker} active={s.speaker} />
+        <Btn icon="call" label={t('call.leave')} onPress={s.leave} danger />
       </View>
     </View>
   )
