@@ -145,6 +145,8 @@ pub async fn update_me(
         }
     }
 
+    body.validate_cosmetics().map_err(|e| AppError::BadRequest(e.into()))?;
+
     let (birthday_val, birthday_clear): (Option<chrono::NaiveDate>, bool) = match &body.birthday {
         None => (None, false),
         Some(serde_json::Value::Null) => (None, true),
@@ -168,6 +170,10 @@ pub async fn update_me(
             activity_detail = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($9, '') ELSE activity_detail END,
             birthday = CASE WHEN $11 THEN NULL WHEN $10::DATE IS NOT NULL THEN $10 ELSE birthday END,
             pronouns = COALESCE($12, pronouns),
+            avatar_decoration = CASE WHEN $13::VARCHAR IS NOT NULL THEN NULLIF($13, '') ELSE avatar_decoration END,
+            profile_color_primary = CASE WHEN $14::INT IS NULL THEN profile_color_primary WHEN $14 < 0 THEN NULL ELSE $14 END,
+            profile_color_accent = CASE WHEN $15::INT IS NULL THEN profile_color_accent WHEN $15 < 0 THEN NULL ELSE $15 END,
+            profile_effect = CASE WHEN $16::VARCHAR IS NOT NULL THEN NULLIF($16, '') ELSE profile_effect END,
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -183,6 +189,10 @@ pub async fn update_me(
     .bind(birthday_val)
     .bind(birthday_clear)
     .bind(body.pronouns.as_deref())
+    .bind(body.avatar_decoration.as_deref())
+    .bind(body.profile_color_primary)
+    .bind(body.profile_color_accent)
+    .bind(body.profile_effect.as_deref())
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -582,7 +592,8 @@ pub async fn get_user_profile(
     let user = sqlx::query(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
                 custom_status_emoji, activity_type, activity_name, activity_detail,
-                is_verified, created_at
+                is_verified, created_at, avatar_decoration, profile_color_primary,
+                profile_color_accent, profile_effect
          FROM users WHERE id=$1"
     )
     .bind(user_id)
@@ -605,6 +616,10 @@ pub async fn get_user_profile(
         "activity_detail":      user.get::<Option<String>, _>("activity_detail"),
         "verified":             user.get::<bool, _>("is_verified"),
         "created_at":           user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+        "avatar_decoration":    user.get::<Option<String>, _>("avatar_decoration"),
+        "profile_color_primary": user.get::<Option<i32>, _>("profile_color_primary"),
+        "profile_color_accent": user.get::<Option<i32>, _>("profile_color_accent"),
+        "profile_effect":       user.get::<Option<String>, _>("profile_effect"),
         "relationship":         "none",
         "is_favorite":          false,
     });

@@ -302,6 +302,7 @@ pub async fn bot_send_message(
         author_username: user.get("username"),
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
+        author_avatar_decoration: None,
         author_is_bot: true,
         author_verified: false,
         attachments: vec![],

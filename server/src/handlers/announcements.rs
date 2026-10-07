@@ -260,6 +260,7 @@ pub async fn crosspost_message(
             author_username: display.clone(),
             author_discriminator: author.get("discriminator"),
             author_avatar: icon.clone(),
+            author_avatar_decoration: None,
             author_is_bot: false,
             author_verified: false,
             attachments: vec![],
