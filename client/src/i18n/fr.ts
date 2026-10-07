@@ -525,7 +525,28 @@ export const fr = {
   'voice.tile.stopWatching': 'Arrêter de regarder',
   'voice.tile.popOutScreen': "Ouvrir l'écran de {name} dans une fenêtre",
   'voice.tile.expandScreen': "Agrandir l'écran partagé",
-//@@FR
+  // --- Notifications toast globales et bannière de connexion ---
+  'toast.othersCount': '{names} et {n} autre(s)',
+  'toast.messagesFrom': '💬 {n} messages de {from}',
+  'toast.friendRequest': "👋 Nouvelle demande d'ami de {name}",
+  'toast.someone': "quelqu'un",
+  'toast.Someone': "Quelqu'un",
+  'toast.friendAccepted': "{name} a accepté ta demande d'ami !",
+  'toast.groupCreated': 'Groupe créé : {name}',
+  'toast.missedCall': '📵 Appel manqué de {name}',
+  'toast.contactOffline': 'Votre contact est hors ligne',
+  'toast.callRateLimited': "Trop d'appels rapprochés — réessaie dans une minute",
+  'toast.privateMessage': 'Message privé',
+  'toast.timedOut': "Vous avez été mis en sourdine jusqu'à {time}",
+  'toast.timeoutLifted': 'Votre timeout a été levé',
+  'toast.reminder': 'Rappel !',
+  'toast.aMember': 'Un membre',
+  'toast.boosted': '{name} a boosté le serveur !',
+  'toast.kicked': 'Vous avez été expulsé du serveur',
+  'toast.banned': 'Vous avez été banni du serveur',
+  'toast.allRead': 'Tout marqué comme lu',
+  'conn.reconnecting': 'Reconnexion à ForgeChat...',
+  'conn.offline': 'Hors ligne — vérifiez votre connexion',
 } as const
 
 export type Key = keyof typeof fr

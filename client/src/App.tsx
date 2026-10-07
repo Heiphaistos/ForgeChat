@@ -178,8 +178,8 @@ function AppInner() {
         const senders = [...new Set(notifs.map(n => n.title))]
         const label = senders.length <= 2
           ? senders.join(' & ')
-          : `${senders.slice(0, 2).join(', ')} et ${senders.length - 2} autre(s)`
-        toast(`💬 ${notifs.length} messages de ${label}`, {
+          : tr('toast.othersCount', { names: senders.slice(0, 2).join(', '), n: senders.length - 2 })
+        toast(tr('toast.messagesFrom', { n: notifs.length, from: label }), {
           duration: 6000,
           style: { cursor: 'pointer', maxWidth: '360px' },
           // Naviguer vers la conversation la plus récente (le curseur pointer le suggérait déjà)
@@ -601,21 +601,21 @@ function AppInner() {
     if (!user) return
     const offReq = on('FRIEND_REQUEST', (d: any) => {
       qcHook.invalidateQueries({ queryKey: ['friends'] })
-      toast(`👋 Nouvelle demande d'ami de ${d.from_username ?? 'quelqu\'un'}`, {
+      toast(tr('toast.friendRequest', { name: d.from_username ?? tr('toast.someone') }), {
         duration: 5000,
         icon: '🤝',
       })
     })
     const offAcc = on('FRIEND_ACCEPTED', (d: any) => {
       qcHook.invalidateQueries({ queryKey: ['friends'] })
-      toast.success(`${d.from_username ?? 'Quelqu\'un'} a accepté ta demande d'ami !`)
+      toast.success(tr('toast.friendAccepted', { name: d.from_username ?? tr('toast.Someone') }))
     })
     const offRemoved = on('FRIEND_REMOVED', () => {
       qcHook.invalidateQueries({ queryKey: ['friends'] })
     })
     const offGroupDm = on('GROUP_DM_CREATE', (d: any) => {
       qcHook.invalidateQueries({ queryKey: ['dms'] })
-      if (d.group?.name) toast(`Groupe créé : ${d.group.name}`, { icon: '👥', duration: 5000 })
+      if (d.group?.name) toast(tr('toast.groupCreated', { name: d.group.name }), { icon: '👥', duration: 5000 })
     })
     return () => { offReq(); offAcc(); offRemoved(); offGroupDm() }
   }, [user?.id])
@@ -653,7 +653,7 @@ function AppInner() {
       // Modal encore affiché = l'appel a sonné ici sans être décroché → manqué
       const ringing = isRinging(d)
       if (ringing) {
-        toast(`📵 Appel manqué de ${ringing.fromUsername}`, {
+        toast(tr('toast.missedCall', { name: ringing.fromUsername }), {
           duration: 8000,
           style: { cursor: 'pointer' },
           onClick: () => nav(`/dms/${ringing.dmId}`),
@@ -668,9 +668,9 @@ function AppInner() {
     })
     const offCallError = on('DM_CALL_ERROR', (d: any) => {
       if (d.reason === 'offline') {
-        toast('Votre contact est hors ligne', { icon: '📵', duration: 4000 })
+        toast(tr('toast.contactOffline'), { icon: '📵', duration: 4000 })
       } else if (d.reason === 'rate_limited') {
-        toast('Trop d\'appels rapprochés — réessaie dans une minute', { icon: '⏳', duration: 5000 })
+        toast(tr('toast.callRateLimited'), { icon: '⏳', duration: 5000 })
       }
     })
     return () => { offIncoming(); offEnded(); offDeclined(); offCallError() }
@@ -707,7 +707,7 @@ function AppInner() {
         if (!user.focus_mode) playMessage()
         if (document.hasFocus()) {
           // Fenêtre focusée mais sur une autre page → toast cliquable
-          toast(`${msg.sender_username ?? 'Message privé'}: ${msg.content ? msg.content.slice(0, 60) : '📎 Pièce jointe'}`, {
+          toast(`${msg.sender_username ?? tr('toast.privateMessage')}: ${msg.content ? msg.content.slice(0, 60) : tr('common.attachment')}`, {
             duration: 4000,
             style: { cursor: 'pointer', maxWidth: '320px' },
             onClick: () => nav(`/dms/${d.dm_id}`),
@@ -748,9 +748,9 @@ function AppInner() {
           else playMessage()
         }
         const goTo = () => nav(`/dms/groups/${d.group_id}`)
-        const preview = content ? contentClean.slice(0, 60) : '📎 Pièce jointe'
+        const preview = content ? contentClean.slice(0, 60) : tr('common.attachment')
         if (document.hasFocus()) {
-          toast(`${msg.sender_username ?? 'Groupe'}: ${preview}`, {
+          toast(`${msg.sender_username ?? tr('dms.group')}: ${preview}`, {
             duration: mentionedMe ? 7000 : 4000,
             style: { cursor: 'pointer', maxWidth: '320px' },
             onClick: goTo,
@@ -853,10 +853,10 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offTimeout = on('USER_TIMEOUT', (d: any) => {
-      toast.error(`Vous avez été mis en sourdine jusqu'à ${new Date(d.expires_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}${d.reason ? ` — ${d.reason}` : ''}`, { duration: 8000 })
+      toast.error(`${tr('toast.timedOut', { time: new Date(d.expires_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) })}${d.reason ? ` — ${d.reason}` : ''}`, { duration: 8000 })
     })
     const offLift = on('USER_TIMEOUT_LIFTED', () => {
-      toast.success('Votre timeout a été levé', { duration: 4000 })
+      toast.success(tr('toast.timeoutLifted'), { duration: 4000 })
     })
     return () => { offTimeout(); offLift() }
   }, [user?.id])
@@ -865,7 +865,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offReminder = on('REMINDER', (d: any) => {
-      toast(d.content ?? 'Rappel !', { icon: '⏰', duration: 10000 })
+      toast(d.content ?? tr('toast.reminder'), { icon: '⏰', duration: 10000 })
     })
     const offReorder = on('CHANNELS_REORDER', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['server', d.server_id] })
@@ -884,7 +884,7 @@ function AppInner() {
       qcHook.invalidateQueries({ queryKey: ['user', u.id] })
     })
     const offBoost = on('SERVER_BOOST', (d: any) => {
-      toast.success(`${d.username ?? 'Un membre'} a boosté le serveur !`, { duration: 5000, icon: '🚀' })
+      toast.success(tr('toast.boosted', { name: d.username ?? tr('toast.aMember') }), { duration: 5000, icon: '🚀' })
     })
     const offTagAssign = on('MEMBER_TAG_ASSIGN', (d: any) => {
       if (d.server_id) qcHook.invalidateQueries({ queryKey: ['members_detailed', d.server_id] })
@@ -957,7 +957,7 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offKicked = on('MEMBER_KICKED', (d: any) => {
-      toast.error('Vous avez été expulsé du serveur', { duration: 6000 })
+      toast.error(tr('toast.kicked'), { duration: 6000 })
       if (d.server_id) {
         qcHook.invalidateQueries({ queryKey: ['servers'] })
         qcHook.removeQueries({ queryKey: ['server', d.server_id] })
@@ -966,7 +966,7 @@ function AppInner() {
       nav('/')
     })
     const offBanned = on('MEMBER_BANNED', (d: any) => {
-      toast.error('Vous avez été banni du serveur', { duration: 6000 })
+      toast.error(tr('toast.banned'), { duration: 6000 })
       if (d.server_id) {
         qcHook.invalidateQueries({ queryKey: ['servers'] })
         qcHook.removeQueries({ queryKey: ['server', d.server_id] })
@@ -1036,7 +1036,7 @@ function AppInner() {
         e.preventDefault()
         useUnread.getState().markAllRead()
         qcHook.invalidateQueries({ queryKey: ['user_mentions'] })
-        toast.success('Tout marqué comme lu')
+        toast.success(tr('toast.allRead'))
       }
       // Ctrl+Shift+M — couper/réactiver le micro (vocal)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'm' || e.key === 'M')) {
@@ -1197,7 +1197,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
-import { useLang } from './i18n'
+import { t as tr, useLang } from './i18n'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo

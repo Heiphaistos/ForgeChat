@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { WifiOff, RefreshCw } from 'lucide-react'
 import { useWs } from '../../store/ws'
+import { useT } from '../../i18n'
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb)
@@ -16,6 +17,7 @@ function subscribeOnline(cb: () => void) {
 // reconnexions instantanées du WS
 export default function ConnectionBanner() {
   const wsConnected = useWs(s => s.connected)
+  const tr = useT()
   const browserOnline = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
   const disconnected = !wsConnected || !browserOnline
   const [visible, setVisible] = useState(false)
@@ -37,12 +39,12 @@ export default function ConnectionBanner() {
       {browserOnline ? (
         <>
           <RefreshCw size={13} className="animate-spin" aria-hidden />
-          Reconnexion à ForgeChat...
+          {tr('conn.reconnecting')}
         </>
       ) : (
         <>
           <WifiOff size={13} aria-hidden />
-          Hors ligne — vérifiez votre connexion
+          {tr('conn.offline')}
         </>
       )}
     </div>
