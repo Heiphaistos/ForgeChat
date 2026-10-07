@@ -7,6 +7,7 @@ import { useVoice } from '../../store/voice'
 import { usePresence } from '../../store/presence'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 
 const STATUS_COLORS: Record<string, string> = {
   online: 'bg-fc-green',
@@ -16,16 +17,18 @@ const STATUS_COLORS: Record<string, string> = {
   offline: 'bg-fc-muted',
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  online: 'En ligne',
-  idle: 'Absent',
-  dnd: 'Ne pas déranger',
-  invisible: 'Invisible',
-}
+const STATUS_KEYS = {
+  online: 'presence.online',
+  idle: 'presence.idle',
+  dnd: 'presence.dnd',
+  invisible: 'presence.invisible',
+} as const
+const statusKey = (s: string) => STATUS_KEYS[s as keyof typeof STATUS_KEYS]
 
 const STATUS_ORDER = ['online', 'idle', 'dnd', 'invisible'] as const
 
 function QuickStatusPopup({ onClose }: { onClose: () => void }) {
+  const tr = useT()
   const { user, updateMe } = useAuth()
   const nav = useNavigate()
   const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
@@ -143,7 +146,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
               ${user?.status === s ? 'bg-fc-hover ring-1 ring-fc-accent/40' : ''}`}
           >
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[s]}`} />
-            <span className="text-xs text-fc-text truncate">{STATUS_LABELS[s]}</span>
+            <span className="text-xs text-fc-text truncate">{tr(statusKey(s))}</span>
           </button>
         ))}
       </div>
@@ -211,6 +214,7 @@ interface UserPanelProps {
 }
 
 export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
+  const tr = useT()
   const { user, updateMe } = useAuth()
   const nav = useNavigate()
   const { joined, muted, deafened, toggleMute, toggleDeafen } = useVoice()
@@ -258,7 +262,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           <div className="text-sm font-semibold text-white truncate">{user.username}</div>
           <div className="text-xs text-fc-muted truncate">
             {user.custom_status_emoji && <span className="mr-0.5">{user.custom_status_emoji}</span>}
-            {user.custom_status || STATUS_LABELS[shownStatus] || <span className="streamer-blur">#{user.discriminator}</span>}
+            {user.custom_status || (statusKey(shownStatus) ? tr(statusKey(shownStatus)) : '') || <span className="streamer-blur">#{user.discriminator}</span>}
           </div>
         </div>
       </button>
