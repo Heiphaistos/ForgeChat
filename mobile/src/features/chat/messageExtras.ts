@@ -15,6 +15,7 @@ export function supportsMessageExtras(ref: ConversationRef): boolean {
  * Corps de POST /saved (saved.rs::SaveMessageBody). En DM, `channel_id` est l'id du DM et
  * `server_id` vaut null (le serveur vérifie alors l'appartenance au DM). Le contenu et l'auteur
  * sont figés côté serveur : ils restent lisibles si le message d'origine est supprimé.
+ * Message chiffré : jamais de copie du texte (l'appli déchiffre l'original à la lecture).
  */
 export function savedBody(ref: ConversationRef, m: ChatMessage) {
   if (ref.kind === 'group') throw new Error('Messages de groupe non enregistrables')
@@ -22,7 +23,7 @@ export function savedBody(ref: ConversationRef, m: ChatMessage) {
     message_id: m.id,
     channel_id: ref.kind === 'channel' ? ref.channelId : ref.dmId,
     server_id: ref.kind === 'channel' ? ref.serverId : null,
-    content: m.content,
+    content: m.e2e ? null : m.content,
     author_username: m.authorName,
     author_avatar: m.authorAvatar,
   }

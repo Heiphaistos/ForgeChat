@@ -1,4 +1,6 @@
 import type { ChatMessage, ConversationRef, DmMessage, GroupMessage, ServerMessage } from '@/types/models'
+import { firstUrl } from '@/e2e/channelText'
+import { normalizeOg } from './messageExtras'
 
 /**
  * Le serveur expose 3 formats de message (salon, DM 1:1, groupe). L'UI n'en
@@ -26,6 +28,10 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     pinned: !!m.pinned,
     expiresAt: m.expires_at ?? null,
     pollId: m.poll_id ?? null,
+    ...e2eFields(m),
+    ...(m.unencrypted === true ? { unencrypted: true } : {}),
+    // Aperçu de lien du message chiffré : celui de l'expéditeur, sans appel à /og.
+    ...(m.e2e === 'ok' ? { preview: normalizeOg(m.e2e_body?.p, firstUrl(m.content ?? '') ?? '') } : {}),
   }
 }
 
@@ -108,6 +114,10 @@ export function fromThreadMessage(raw: unknown): ChatMessage | null {
     attachments: Array.isArray(m.attachments) ? (m.attachments as ChatMessage['attachments']) : [],
     reactions: Array.isArray(m.reactions) ? (m.reactions as ChatMessage['reactions']) : [],
     pinned: false,
+    // Fil ou forum chiffré (déchiffré par e2e/conversations.openRaw avec la portée du fil ou de la publication).
+    clientMsgId: s(m.client_msg_id),
+    ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}),
+    ...(m.unencrypted === true ? { unencrypted: true } : {}),
   }
 }
 

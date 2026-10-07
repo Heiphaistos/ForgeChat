@@ -97,3 +97,71 @@ export async function serverKeyForNewOwner(serverId: string, newOwnerId: string)
     return null // sans clé de compte chez le nouveau propriétaire : il saisira le code
   }
 }
+
+interface RecoveryEnvelope { epoch: number; wrapped: c.ConvWrapped; wrapped_by: string | null; wrapped_by_pub: string }
+interface RecoveryChannel { channel_id: string; name: string; type: string; epochs: RecoveryEnvelope[] }
+interface RawChannelMessage {
+  id: string; content: string | null; enc?: c.EncPayload | null; client_msg_id?: string | null
+  author_id: string; author_username: string; created_at: string
+}
+export interface RecoveredMessage { id: string; author: string; created_at: string; text: string | null; encrypted: boolean }
+export interface RecoveredChannel { channel_id: string; name: string; messages: RecoveredMessage[] }
+
+const PAGE = 100
+const yieldUi = () => new Promise<void>((r) => setTimeout(r, 0))
+
+/**
+ * « Récupérer le contenu du serveur » : ouvre toutes les époques de tous les salons
+ * avec la clé du serveur, puis déchiffre leurs messages SUR L'APPAREIL (même logique
+ * que le web). Rien n'est renvoyé en clair à la plateforme.
+ */
+export async function recoverServer(
+  serverId: string, code?: string, onProgress?: (done: number, total: number) => void,
+): Promise<RecoveredChannel[]> {
+  const { priv } = await openServerKey(serverId, code)
+  try {
+    const data = await http.get<{ channels: RecoveryChannel[] }>(path`/servers/${serverId}/e2e/recovery`)
+    const out: RecoveredChannel[] = []
+    for (const [i, ch] of data.channels.entries()) {
+      onProgress?.(i, data.channels.length)
+      const conv = c.convName('channel', ch.channel_id)
+      const keys = new Map<number, Uint8Array>()
+      for (const e of ch.epochs) {
+        if (!e.wrapped_by) continue
+        try {
+          keys.set(e.epoch, await c.unwrapConvKey(priv, c.b64uDecode(e.wrapped_by_pub), e.wrapped, conv, e.epoch, c.serverMember(serverId), e.wrapped_by))
+        } catch { /* enveloppe altérée : les messages de cette époque restent illisibles */ }
+        await yieldUi()
+      }
+      const messages: RecoveredMessage[] = []
+      for (let before: string | undefined; ;) {
+        const page = await http.get<RawChannelMessage[]>(path`/servers/${serverId}/channels/${ch.channel_id}/messages`, {
+          query: { limit: PAGE, before },
+        })
+        for (const m of [...page].reverse()) {
+          let text = m.content
+          if (m.enc && m.client_msg_id) {
+            const key = keys.get(m.enc.epoch)
+            text = key ? await c.decryptMessage(key, conv, m.enc, m.author_id, m.client_msg_id).then((b) => b.t).catch(() => null) : null
+          }
+          messages.push({ id: m.id, author: m.author_username, created_at: m.created_at, text, encrypted: !!m.enc })
+        }
+        await yieldUi()
+        if (page.length < PAGE || !page[0]) break
+        before = page[0].id
+      }
+      out.push({ channel_id: ch.channel_id, name: ch.name, messages: messages.reverse() })
+    }
+    onProgress?.(data.channels.length, data.channels.length)
+    return out
+  } finally {
+    priv.fill(0)
+  }
+}
+
+/** Export texte lisible : un bloc par salon, une ligne par message (illisible : `unreadable`). */
+export function recoveredAsText(channels: readonly RecoveredChannel[], unreadable: string): string {
+  return channels
+    .map((ch) => [`# ${ch.name}`, ...ch.messages.map((m) => `[${m.created_at}] ${m.author}: ${m.text ?? unreadable}`)].join('\n'))
+    .join('\n\n')
+}

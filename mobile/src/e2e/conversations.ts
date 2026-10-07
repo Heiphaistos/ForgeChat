@@ -432,8 +432,11 @@ export async function reencryptLegacy() {
   }
 }
 
-/** Texte déchiffré d'un MP à transférer (mémoire seulement, posé par l'écran de conversation). */
-export const forwardText = new Map<string, string>()
+/**
+ * Texte d'un message à transférer (mémoire seulement, posé par l'écran de conversation) :
+ * rechiffré pour un salon cible chiffré, ou joint en clair si la source était chiffrée.
+ */
+export const forwardText = new Map<string, { text: string; encrypted: boolean }>()
 
 /** Message d'erreur d'envoi lisible (chiffrement en attente, clé verrouillée…) ; null sinon. */
 export function e2eErrorText(e: unknown): string | null {

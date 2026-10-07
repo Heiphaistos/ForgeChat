@@ -13,8 +13,8 @@ describe('normalizeThreads', () => {
       { id: 'x', parent_message_id: P },
     ])
     expect(list).toEqual([
-      { id: T, parentMessageId: P, title: 'Sujet', creatorId: U, messageCount: 3, unreadCount: 1, archived: false, locked: true },
-      { id: U, parentMessageId: null, title: 'Libre', creatorId: null, messageCount: 1, unreadCount: 0, archived: false, locked: false },
+      { id: T, parentMessageId: P, title: 'Sujet', creatorId: U, messageCount: 3, unreadCount: 1, archived: false, locked: true, clientId: null, titleEncrypted: false },
+      { id: U, parentMessageId: null, title: 'Libre', creatorId: null, messageCount: 1, unreadCount: 0, archived: false, locked: false, clientId: null, titleEncrypted: false },
     ])
     const map = threadsByParent(list)
     expect(map.get(P)?.id).toBe(T)

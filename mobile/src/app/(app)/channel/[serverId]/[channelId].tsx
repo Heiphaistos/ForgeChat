@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { serversApi } from "@/api/servers";
 import { ErrorState, IconButton } from "@/components/ui";
+import { ChannelLock } from "@/e2e/ChannelLock";
 import { ChatView } from "@/features/chat/ChatView";
 import { pinsParams } from "@/features/chat/pins";
 import { useServerPerms } from "@/features/servers/menus";
@@ -66,6 +67,7 @@ export default function ChannelScreen() {
           ),
           headerRight: () => (
             <View style={{ flexDirection: "row" }}>
+              <ChannelLock serverId={ids.serverId} channelId={ids.channelId} />
               {isAnnouncement ? (
                 <IconButton
                   icon="megaphone-outline"

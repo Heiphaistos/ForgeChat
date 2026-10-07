@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import { memo, useEffect, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
 import { useT } from '@/i18n'
@@ -167,13 +167,17 @@ function ReactionChip({
   )
 }
 
-/** Texte du message, puis l'aperçu de son premier lien (pas pendant l'envoi). */
-function TextWithPreview({ content, myName, pending }: { content: string; myName: string; pending?: boolean }) {
-  const url = pending ? null : previewUrl(content)
+/**
+ * Texte du message, puis l'aperçu de son premier lien (pas pendant l'envoi). Message chiffré :
+ * seulement l'aperçu joint par l'expéditeur, jamais de requête /og.
+ */
+function TextWithPreview({ m, myName }: { m: ChatMessage; myName: string }) {
+  const content = m.content ?? ''
+  const url = m.pending || m.e2e === 'locked' ? null : previewUrl(content)
   return (
     <>
       <MessageText content={content} myName={myName} />
-      {url ? <LinkPreview url={url} /> : null}
+      {url ? <LinkPreview url={url} given={m.e2e ? (m.preview ?? null) : undefined} /> : null}
     </>
   )
 }
@@ -234,6 +238,17 @@ export const MessageItem = memo(function MessageItem({
               <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />
               {m.authorIsBot ? <Text style={styles.bot}>BOT</Text> : null}
               <Text style={styles.time}>{formatTime(m.createdAt)}</Text>
+              {m.unencrypted ? (
+                <Text
+                  style={styles.unencrypted}
+                  onPress={() => Alert.alert(t('e2e.unencrypted'), t('e2e.unencrypted.title'))}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('e2e.unencrypted')}
+                  accessibilityHint={t('e2e.unencrypted.title')}
+                >
+                  <Ionicons name="lock-open-outline" size={10} color={colors.textFaint} /> {t('e2e.unencrypted')}
+                </Text>
+              ) : null}
             </View>
           )}
 
@@ -251,7 +266,7 @@ export const MessageItem = memo(function MessageItem({
 
           {m.content && !(isVoiceMessageText(m.content) && m.attachments.some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
-              {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview content={m.content} myName={myName} pending={m.pending} />}
+              {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview m={m} myName={myName} />}
             </View>
           ) : null}
 
@@ -321,6 +336,7 @@ const styles = StyleSheet.create({
   author: { color: colors.text, fontWeight: '700', fontSize: font.md, flexShrink: 1 },
   bot: { backgroundColor: colors.primary, color: '#fff', fontSize: 9, fontWeight: '800', paddingHorizontal: 4, borderRadius: 3, overflow: 'hidden' },
   time: { color: colors.textFaint, fontSize: font.xs },
+  unencrypted: { color: colors.textFaint, fontSize: 10 },
   reply: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   replyText: { color: colors.textMuted, fontSize: font.sm, flex: 1 },
   forward: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },

@@ -1,4 +1,8 @@
+import * as Crypto from 'expo-crypto'
 import { LIMITS } from '@/config/env'
+import { checkAutomod, openPost, sealPost, sendChannelText } from '@/e2e/channels'
+import { completeChannelKeys, mustEncrypt, openRawList } from '@/e2e/conversations'
+import { postScope } from '@/e2e/crypto'
 import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizePost, normalizePosts, type ForumPost } from '@/features/forum/forum'
 import { http, path } from '@/lib/http'
@@ -7,37 +11,65 @@ import type { UploadFile } from './messages'
 import { uploadForm } from './threads'
 
 const base = (serverId: string, channelId: string) => path`/servers/${serverId}/channels/${channelId}/posts`
+/** Portée AAD des réponses d'une publication (clé du salon). */
+const replyScope = (channelId: string, post: ForumPost) => (post.clientMsgId ? postScope(channelId, post.clientMsgId) : undefined)
 
 /** Salons forum (handlers/forum.rs, tags : channels.rs::get_channel_tags). */
 export const forumApi = {
+  /** Publications chiffrées : titre et contenu déchiffrés sur l'appareil. */
   async posts(serverId: string, channelId: string, before?: string): Promise<ForumPost[]> {
-    return normalizePosts(await http.get<unknown>(base(serverId, channelId), { query: { limit: LIMITS.pageSize, before } }))
+    const raw = await http.get<unknown>(base(serverId, channelId), { query: { limit: LIMITS.pageSize, before } })
+    const opened: unknown[] = []
+    for (const p of Array.isArray(raw) ? raw : []) opened.push(p && typeof p === 'object' ? await openPost(channelId, p as Record<string, unknown>) : p)
+    return normalizePosts(opened)
   },
   /** Publication + page de réponses la plus récente (ou antérieure à `before`), en ordre chronologique. */
   async post(serverId: string, channelId: string, postId: string, before?: string): Promise<{ post: ForumPost | null; replies: ChatMessage[] }> {
     const raw = await http.get<{ post?: unknown; replies?: unknown }>(base(serverId, channelId) + path`/${postId}`, { query: { limit: LIMITS.pageSize, before } })
-    const replies = Array.isArray(raw?.replies) ? raw.replies.flatMap((r) => fromThreadMessage(r) ?? []) : []
-    return { post: normalizePost(raw?.post), replies }
+    const rawPost = raw?.post && typeof raw.post === 'object' ? await openPost(channelId, raw.post as Record<string, unknown>) : null
+    const post = normalizePost(rawPost)
+    // Réponses : clé du salon, portée de la publication.
+    const scope = post?.clientMsgId ? postScope(channelId, post.clientMsgId) : undefined
+    const replies = Array.isArray(raw?.replies) ? (await openRawList('channel', channelId, raw.replies, scope)).flatMap((r) => fromThreadMessage(r) ?? []) : []
+    return { post, replies }
   },
-  create: (serverId: string, channelId: string, body: { title: string; content?: string; tags: string[]; media_url?: string }) => http.post(base(serverId, channelId), body),
+  /** Titre et contenu chiffrés ensemble dès que j'ai une clé (AutoMod appliqué avant). */
+  async create(serverId: string, channelId: string, body: { title: string; content?: string; tags: string[]; media_url?: string }) {
+    const text = `${body.title}\n${body.content ?? ''}`.trim()
+    if (await mustEncrypt('channel', channelId)) await checkAutomod(serverId, text)
+    const cmid = Crypto.randomUUID()
+    const sealed = await sealPost(channelId, body.title, body.content ?? '', cmid)
+    if (!sealed) return http.post(base(serverId, channelId), body)
+    void completeChannelKeys(channelId)
+    return http.post(base(serverId, channelId), { ...body, title: '', content: null, enc: sealed.enc, client_msg_id: cmid })
+  },
+  /** Nouveau texte d'une publication (créateur) : chiffré avec son id client (titre compris) dès que j'ai une clé. */
+  async editPost(serverId: string, channelId: string, post: ForumPost, content: string) {
+    const sealed = post.clientMsgId ? await sealPost(channelId, post.title, content, post.clientMsgId) : null
+    return http.patch(base(serverId, channelId) + path`/${post.id}`, sealed ? { enc: sealed.enc } : { content })
+  },
   /** Image ou vidéo d'une publication de salon média (uploads.rs::forum_upload) ; renvoie son URL. */
   async uploadMedia(serverId: string, channelId: string, file: UploadFile): Promise<string | null> {
     const r = await http.upload<{ url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm([file]))
     return typeof r?.url === 'string' ? r.url : null
   },
   /** Renvoie l'id de la réponse créée (pour y joindre ensuite des fichiers). */
-  async reply(serverId: string, channelId: string, postId: string, content: string, hasAttachments = false): Promise<string | null> {
-    const r = await http.post<{ reply?: { id?: unknown } }>(base(serverId, channelId) + path`/${postId}/replies`, { content, has_attachments: hasAttachments })
+  async reply(serverId: string, channelId: string, post: ForumPost, content: string, hasAttachments = false): Promise<string | null> {
+    const { result: r } = await sendChannelText(serverId, channelId, content, (body) =>
+      http.post<{ reply?: { id?: unknown } }>(base(serverId, channelId) + path`/${post.id}/replies`, { ...body, content: body.content ?? '', has_attachments: hasAttachments }),
+    { scope: replyScope(channelId, post) })
     return typeof r?.reply?.id === 'string' ? r.reply.id : null
   },
-  /** `content` : créateur seulement ; `pinned` / `locked` : MANAGE_MESSAGES. */
-  updatePost: (serverId: string, channelId: string, postId: string, patch: { content?: string; pinned?: boolean; locked?: boolean }) =>
+  /** `pinned` / `locked` : MANAGE_MESSAGES (le texte passe par `editPost`). */
+  updatePost: (serverId: string, channelId: string, postId: string, patch: { pinned?: boolean; locked?: boolean }) =>
     http.patch(base(serverId, channelId) + path`/${postId}`, patch),
   /** Créateur ou MANAGE_MESSAGES. */
   deletePost: (serverId: string, channelId: string, postId: string) => http.delete(base(serverId, channelId) + path`/${postId}`),
-  /** Auteur seulement. */
-  editReply: (serverId: string, channelId: string, postId: string, replyId: string, content: string) =>
-    http.patch(base(serverId, channelId) + path`/${postId}/replies/${replyId}`, { content }),
+  /** Auteur seulement ; même id client que la réponse, ou un nouveau pour une ancienne réponse en clair. */
+  editReply: (serverId: string, channelId: string, post: ForumPost, m: ChatMessage, content: string) =>
+    sendChannelText(serverId, channelId, content, (body) =>
+      http.patch(base(serverId, channelId) + path`/${post.id}/replies/${m.id}`, { ...body, content: body.content ?? '' }),
+    { scope: replyScope(channelId, post), clientMsgId: m.clientMsgId ?? Crypto.randomUUID(), edit: true }),
   /** Auteur ou MANAGE_MESSAGES. */
   deleteReply: (serverId: string, channelId: string, postId: string, replyId: string) =>
     http.delete(base(serverId, channelId) + path`/${postId}/replies/${replyId}`),
