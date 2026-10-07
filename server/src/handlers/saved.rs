@@ -62,6 +62,13 @@ pub async fn save_message(
             return Err(AppError::Forbidden);
         }
     }
+    // MP chiffré de bout en bout : aucune copie du texte en clair côté serveur.
+    let encrypted: bool = body.server_id.is_none()
+        && sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND enc IS NOT NULL)")
+            .bind(body.message_id)
+            .fetch_one(&state.db)
+            .await?;
+    let content = if encrypted { None } else { body.content };
     sqlx::query(
         "INSERT INTO saved_messages (user_id, message_id, channel_id, server_id, content, author_username, author_avatar)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -71,7 +78,7 @@ pub async fn save_message(
     .bind(body.message_id)
     .bind(body.channel_id)
     .bind(body.server_id)
-    .bind(body.content)
+    .bind(content)
     .bind(body.author_username)
     .bind(body.author_avatar)
     .execute(&state.db)

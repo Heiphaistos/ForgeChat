@@ -624,6 +624,7 @@ pub async fn edit_group_message(
         "content": if enc.is_some() { serde_json::Value::Null } else { serde_json::Value::String(content) },
         "enc": enc.as_ref().map(e2e_conv::Enc::to_json),
         "client_msg_id": body.client_msg_id,
+        "sender_id": claims.sub,
     }).to_string();
 
     for uid in all_members {

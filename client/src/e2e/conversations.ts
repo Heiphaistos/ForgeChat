@@ -21,8 +21,9 @@ const asked = new Map<string, number>()
 
 const myId = () => useAuth.getState().user?.id ?? null
 const base = (kind: ConvKind, id: string) => `/e2e/conversations/${kind}/${id}`
+/** Code d'erreur du serveur (premier mot du message : « EPOCH_STALE », « PLAINTEXT_REFUSED »…). */
 export const errorCode = (e: unknown): string | undefined =>
-  (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+  (e as { response?: { data?: { error?: string } } })?.response?.data?.error?.split(' ')[0]
 
 /** Oublie les clés (déconnexion, nouvelles enveloppes reçues). */
 export function forgetConv(kind?: ConvKind, id?: string) {

@@ -26,6 +26,9 @@ use crate::{
 
 /// Texte chiffré d'un message, base64url : 4000 caractères (≤ 16 000 o) + JSON + tag.
 const MAX_CT_B64: usize = 24 * 1024;
+/// Refus du texte en clair : code puis explication pour les anciennes applis.
+pub const PLAINTEXT_REFUSED: &str =
+    "PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire.";
 /// Enveloppes acceptées par requête (groupes de 10 membres au plus).
 const MAX_ENVELOPES: usize = 50;
 
@@ -113,7 +116,8 @@ impl KeyWrap {
 /// Texte en clair : refusé dès que tous les membres ont une clé de compte.
 pub fn plaintext_allowed(all_keyed: bool) -> Result<()> {
     if all_keyed {
-        return Err(AppError::BadRequest("PLAINTEXT_REFUSED".into()));
+        // Code en tête (lu par les applis), phrase lisible pour les anciennes versions qui l'affichent.
+        return Err(AppError::BadRequest(PLAINTEXT_REFUSED.into()));
     }
     Ok(())
 }
@@ -529,8 +533,9 @@ async fn encrypt_legacy(db: &PgPool, conv: Conv, user: Uuid, msg_id: Uuid, body:
     if done.rows_affected() == 0 {
         return Err(AppError::Conflict("NOT_LEGACY".into()));
     }
-    // L'historique des éditions gardait aussi le texte en clair.
+    // L'historique des éditions et les messages enregistrés gardaient aussi le texte en clair.
     sqlx::query("DELETE FROM message_edits WHERE message_id=$1").bind(msg_id).execute(db).await?;
+    sqlx::query("UPDATE saved_messages SET content=NULL WHERE message_id=$1").bind(msg_id).execute(db).await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -566,6 +571,8 @@ pub async fn purge_legacy(db: &PgPool) {
            AND m.enc IS NULL AND m.content IS NOT NULL",
         "DELETE FROM message_edits e USING dm_messages m
          WHERE e.message_id = m.id AND (m.purged OR m.enc IS NOT NULL)",
+        "UPDATE saved_messages s SET content=NULL FROM dm_messages m
+         WHERE s.message_id = m.id AND s.content IS NOT NULL AND (m.purged OR m.enc IS NOT NULL)",
     ];
     let mut n = 0;
     for sql in SQL {
@@ -619,7 +626,7 @@ mod tests {
 
     #[test]
     fn plaintext_refused_when_everyone_has_a_key() {
-        assert_eq!(code(plaintext_allowed(true).unwrap_err()), "PLAINTEXT_REFUSED");
+        assert!(code(plaintext_allowed(true).unwrap_err()).starts_with("PLAINTEXT_REFUSED "));
         assert!(plaintext_allowed(false).is_ok());
     }
 
@@ -742,7 +749,7 @@ mod db_tests {
         // Transition : b sans clé → le clair passe encore.
         assert!(check_message(&db, conv, &mem, true, None).await.unwrap().is_none());
         set_key(&db, b, &format!("fp-b-{b}")).await;
-        assert_eq!(err(check_message(&db, conv, &mem, true, None).await), "PLAINTEXT_REFUSED");
+        assert_eq!(err(check_message(&db, conv, &mem, true, None).await), PLAINTEXT_REFUSED);
         // Pièce jointe seule : rien en clair, accepté.
         assert!(check_message(&db, conv, &mem, false, None).await.is_ok());
         // Aucune époque encore : tout chiffré est périmé.
