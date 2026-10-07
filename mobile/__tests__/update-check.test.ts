@@ -95,6 +95,12 @@ describe('vérification automatique au démarrage', () => {
     jest.doMock('expo-linking', () => ({ openURL: jest.fn().mockResolvedValue(true) }))
     jest.doMock('@/lib/logger', () => ({ logger: { debug: jest.fn() } }))
     jest.doMock('@/config/env', () => env)
+    // react-native réduit à Alert : l'i18n réelle (SecureStore) ne se charge pas ; français pur.
+    jest.doMock('@/i18n', () => {
+      const { translate } = jest.requireActual('@/i18n/translate') as typeof import('@/i18n/translate')
+      const { fr } = jest.requireActual('@/i18n/fr') as typeof import('@/i18n/fr')
+      return { t: (key: string, vars?: Record<string, string | number>) => translate(fr, fr, key, vars) }
+    })
     const settings: Record<string, unknown> = { updateCheck: true, updateLastCheckAt: 0, updateSkippedVersion: null }
     settings.set = (patch: Record<string, unknown>) => Object.assign(settings, patch)
     jest.doMock('@/stores/settings', () => ({ useSettings: { getState: () => settings } }))
