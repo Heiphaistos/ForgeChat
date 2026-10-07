@@ -28,6 +28,9 @@ export const settingsApi = {
   get: () => http.get<ServerSideSettings>('/user/settings'),
   /** Seuls les champs envoyés sont modifiés. */
   update: (patch: Partial<ServerSideSettings>) => http.put<ServerSideSettings>('/user/settings', patch),
+  /** Thème partagé avec le web et le bureau (null : jamais choisi). */
+  theme: () => http.get<{ theme: string | null }>('/user/theme'),
+  setTheme: (theme: string) => http.put<{ ok: boolean }>('/user/theme', { theme }),
   emailPrefs: () => http.get<{ dm_unread_notify: boolean }>('/user/email-prefs'),
   setEmailPrefs: (dmUnreadNotify: boolean) =>
     http.put<{ dm_unread_notify: boolean }>('/user/email-prefs', { dm_unread_notify: dmUnreadNotify }),

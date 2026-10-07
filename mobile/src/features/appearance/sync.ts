@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { requireOptionalNativeModule } from 'expo'
 import { useEffect } from 'react'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
-import { isHexColor } from '@/theme/palettes'
+import { isHexColor, THEMES } from '@/theme/palettes'
 import { saveAppearance, useAppearance, type AppearancePrefs } from '@/theme/prefs'
 
 /** Réglages du compte (web) → préférences locales ; seuls les champs qui diffèrent sont rendus. */
@@ -25,11 +25,17 @@ export function serverAppearancePatch(s: Partial<ServerSideSettings>, local: App
  */
 export function useAppearanceSync() {
   const { data } = useQuery({ queryKey: settingsKey, queryFn: settingsApi.get })
+  const theme = useQuery({ queryKey: ['user-theme'], queryFn: settingsApi.theme })
   useEffect(() => {
     if (!data) return
     const patch = serverAppearancePatch(data, useAppearance.getState())
     if (Object.keys(patch).length) saveAppearance(patch)
   }, [data])
+  // Thème choisi sur le web ou le bureau : appliqué au prochain lancement (couleurs lues au démarrage).
+  useEffect(() => {
+    const t = theme.data?.theme
+    if (t && t !== useAppearance.getState().theme && THEMES.some((x) => x.id === t)) saveAppearance({ theme: t })
+  }, [theme.data])
 }
 
 const nativeApp = requireOptionalNativeModule<{ restart(): void }>('ForgeCallService')

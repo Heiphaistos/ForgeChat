@@ -193,6 +193,17 @@ function AppInner() {
     document.documentElement.setAttribute('data-theme', saved)
   }, [])
 
+  // Thème du compte (choisi sur un autre appareil) : il remplace celui de ce navigateur.
+  useEffect(() => {
+    if (!user) return
+    api.get('/user/theme').then(({ data }) => {
+      const t = typeof data?.theme === 'string' ? data.theme : null
+      if (!t || t === localStorage.getItem('fc_theme')) return
+      localStorage.setItem('fc_theme', t)
+      document.documentElement.setAttribute('data-theme', t)
+    }).catch(() => {})
+  }, [user])
+
   // Synchroniser la barre de statut mobile (meta theme-color) avec le fond du
   // thème actif — recalculé à chaque changement de data-theme, sans mapping manuel
   useEffect(() => {

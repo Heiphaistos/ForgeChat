@@ -160,6 +160,8 @@ export default function AppearanceSection() {
     setActiveTheme(id)
     localStorage.setItem('fc_theme', id)
     document.documentElement.setAttribute('data-theme', id)
+    // Partagé avec le bureau et le téléphone.
+    api.put('/user/theme', { theme: id }).catch(() => {})
     // Effacer l'override custom pour que la CSS du thème prenne effet
     document.documentElement.style.removeProperty('--fc-accent-rgb')
     setAccentColor('')

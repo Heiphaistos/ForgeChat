@@ -46,7 +46,10 @@ export default function AppearanceScreen() {
             return (
               <Pressable
                 key={t.id}
-                onPress={() => saveAppearance({ theme: t.id })}
+                onPress={() => {
+                  saveAppearance({ theme: t.id })
+                  settingsApi.setTheme(t.id).catch(() => undefined)
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={`Thème ${t.label}`}
                 accessibilityState={{ selected }}

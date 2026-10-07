@@ -727,3 +727,55 @@ pub async fn put_server_layout(
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
+
+// ─── Thème d'interface (partagé web / bureau / mobile) ──────────────────────
+
+fn valid_theme(t: &str) -> bool {
+    !t.is_empty() && t.len() <= 40 && t.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+}
+
+pub async fn get_theme(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    let theme: Option<String> = sqlx::query_scalar("SELECT theme FROM user_settings WHERE user_id = $1")
+        .bind(claims.sub)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten();
+    Ok(Json(serde_json::json!({ "theme": theme })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ThemeBody {
+    pub theme: String,
+}
+
+pub async fn put_theme(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<ThemeBody>,
+) -> Result<Json<serde_json::Value>> {
+    if !valid_theme(&body.theme) {
+        return Err(AppError::BadRequest("Thème invalide".into()));
+    }
+    sqlx::query(
+        "INSERT INTO user_settings (user_id, theme) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET theme = EXCLUDED.theme",
+    )
+    .bind(claims.sub)
+    .bind(&body.theme)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod theme_tests {
+    use super::valid_theme;
+    #[test]
+    fn theme_ids() {
+        assert!(valid_theme("dark") && valid_theme("tokyo-night") && valid_theme("rose_pine"));
+        assert!(!valid_theme("") && !valid_theme("Dark") && !valid_theme("a b") && !valid_theme(&"x".repeat(41)));
+    }
+}
