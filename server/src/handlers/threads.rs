@@ -174,10 +174,10 @@ pub async fn create_thread(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let first_msg = body.first_message.clone();
-    let enc = check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
+    let enc = check_content(&state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
     // Fil chiffré : titre chiffré lui aussi (lié au fil par `client_id`), jamais en clair.
     let title_enc = match (&enc, body.title_enc.as_ref().filter(|v| !v.is_null())) {
-        (Some(_), Some(t)) => check_content(&state.db, channel_id, claims.sub, false, Some(t), body.client_id, false).await?,
+        (Some(_), Some(t)) => check_content(&state.db, channel_id, false, Some(t), body.client_id, false).await?,
         (None, None) => None,
         _ => return Err(AppError::BadRequest("Titre et message du fil : chiffrés tous les deux ou aucun".into())),
     };
@@ -449,7 +449,7 @@ pub async fn send_thread_message(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let enc = check_content(
-        &state.db, channel_id, claims.sub, !content_trimmed.is_empty(), body.enc.as_ref(), body.client_msg_id, false,
+        &state.db, channel_id, !content_trimmed.is_empty(), body.enc.as_ref(), body.client_msg_id, false,
     ).await?;
 
     // Vérifier le timeout (sourdine)
@@ -582,7 +582,7 @@ pub async fn archive_thread(
 
     // Vérifier que l'utilisateur est le créateur du thread OU a la permission MANAGE_MESSAGES
     let thread_row = sqlx::query(
-        "SELECT creator_id FROM threads WHERE id = $1 AND channel_id = $2"
+        "SELECT creator_id, client_id FROM threads WHERE id = $1 AND channel_id = $2"
     )
     .bind(thread_id)
     .bind(channel_id)
@@ -595,12 +595,14 @@ pub async fn archive_thread(
     // Champs absents = inchangés (avant : `archived` absent valait true, un renommage aurait archivé).
     let archived = body["archived"].as_bool();
     let locked = body["locked"].as_bool();
-    let title = body["title"].as_str().map(str::trim);
-    if let Some(t) = title {
-        if t.is_empty() || t.chars().count() > 100 {
-            return Err(AppError::BadRequest("Titre du fil : 1 à 100 caractères".into()));
-        }
+    // Renommage : titre chiffré seulement (`title_enc`, id client = `client_id` du fil).
+    if body["title"].as_str().is_some_and(|t| !t.trim().is_empty()) {
+        return Err(AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()));
     }
+    let title_enc = match body.get("title_enc").filter(|v| !v.is_null()) {
+        Some(t) => check_content(&state.db, channel_id, false, Some(t), Some(thread_row.get("client_id")), false).await?,
+        None => None,
+    };
 
     // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
     // Archiver : créateur OU modérateur
@@ -616,12 +618,13 @@ pub async fn archive_thread(
 
     let thread = sqlx::query_as::<_, Thread>(
         "UPDATE threads SET archived = COALESCE($2, archived), locked = COALESCE($3, locked),
-                title = COALESCE($4, title) WHERE id = $1 RETURNING *"
+                title_enc = COALESCE($4, title_enc), title = CASE WHEN $4 IS NULL THEN title ELSE '' END
+         WHERE id = $1 RETURNING *"
     )
     .bind(thread_id)
     .bind(archived)
     .bind(locked)
-    .bind(title)
+    .bind(title_enc)
     .fetch_one(&state.db)
     .await?;
 
@@ -664,7 +667,7 @@ pub async fn edit_thread_message(
         .await?
         .flatten();
     let cmid = existing.or(body.client_msg_id);
-    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
+    let enc = check_content(&state.db, channel_id, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
     if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }

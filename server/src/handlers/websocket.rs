@@ -478,17 +478,13 @@ async fn accept_dm_call(
     // Accès au SFU pour les deux interlocuteurs, délivré seulement après
     // la vérification de la conversation privée commune ci-dessus.
     let room = crate::livekit::room_for_dm(user_id, to);
-    // Médias chiffrés de bout en bout dès que la conversation privée l'est (§5).
-    // Conversation retrouvée par la paire : jamais le `dm_id` fourni par le client.
+    // Médias toujours chiffrés de bout en bout (§5), avec la clé de la conversation
+    // privée, retrouvée par la paire : jamais le `dm_id` fourni par le client.
     let dm: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM dm_channels WHERE (user1_id=$1 AND user2_id=$2) OR (user1_id=$2 AND user2_id=$1) LIMIT 1"
     )
     .bind(user_id).bind(to)
     .fetch_optional(&state.db).await.ok().flatten();
-    let e2ee = match dm {
-        Some(dm) => crate::handlers::e2e_conv::media_e2ee(&state.db, "dm", dm).await,
-        None => false,
-    };
     // L'appli de l'appelant a annoncé le chiffrement dans son DM_CALL_INIT.
     let caller_e2ee: bool = {
         use redis::AsyncCommands;
@@ -500,7 +496,7 @@ async fn accept_dm_call(
         "room": room,
         "token": crate::livekit::join_token(lk, &room, &uid.to_string(), name,
             crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false }, claims_e2ee),
-        "e2ee": e2ee,
+        "e2ee": true,
         "conv_id": dm,
     }));
     let caller_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
@@ -1024,7 +1020,7 @@ async fn handle_ws_message(
                         msg["e2ee"].as_bool() == Some(true),
                     ),
                     // Salon vocal = conversation `channel` (clé du salon, §5).
-                    "e2ee": crate::handlers::e2e_conv::media_e2ee(&state.db, "channel", effective_channel_id).await,
+                    "e2ee": true,
                 },
             }).to_string()).await;
             // « Regarder ensemble » déjà en cours : l'arrivant rejoint au bon moment.

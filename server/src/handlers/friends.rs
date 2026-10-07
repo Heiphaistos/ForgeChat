@@ -774,11 +774,9 @@ pub async fn send_dm(
     }
     let has_attachments = body["has_attachments"].as_bool().unwrap_or(false);
 
-    // Chiffrement de bout en bout : `enc` remplace `content` ; le clair est refusé
-    // dès que les deux participants ont une clé de compte.
+    // Chiffrement de bout en bout obligatoire : `enc` remplace `content`, le clair est refusé.
     let conv = e2e_conv::Conv::Dm(dm_id);
-    let members = e2e_conv::members(&state.db, conv).await?;
-    let enc = e2e_conv::check_message(&state.db, conv, &members, !content_raw.is_empty(), body.get("enc")).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, !content_raw.is_empty(), body.get("enc")).await?;
     let client_msg_id = e2e_conv::parse_client_msg_id(&body["client_msg_id"]);
     if enc.is_some() && client_msg_id.is_none() {
         return Err(AppError::BadRequest("client_msg_id requis".into()));
@@ -1827,8 +1825,7 @@ pub async fn edit_dm_message(
         return Err(crate::error::AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let conv = e2e_conv::Conv::Dm(dm_id);
-    let members = e2e_conv::members(&state.db, conv).await?;
-    let enc = e2e_conv::check_message(&state.db, conv, &members, !content.is_empty(), body.enc.as_ref()).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, !content.is_empty(), body.enc.as_ref()).await?;
     if content.is_empty() && enc.is_none() {
         return Err(crate::error::AppError::BadRequest("Contenu vide".into()));
     }

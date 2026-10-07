@@ -64,7 +64,7 @@ pub async fn create_poll(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
     let has_text = !body.question.trim().is_empty() || body.options.iter().any(|o| !o.trim().is_empty());
     let enc = crate::handlers::e2e_channel::check_content(
-        &state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false,
+        &state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, false,
     ).await?;
     let cmid = enc.as_ref().and(body.client_msg_id);
 

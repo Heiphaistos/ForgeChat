@@ -242,7 +242,7 @@ pub async fn send_message(
         }
     }
 
-    // Chiffrement de bout en bout : clair refusé si l'auteur a une clé (sauf commande
+    // Chiffrement de bout en bout obligatoire : clair toujours refusé (sauf commande
     // de bot), époque courante exigée. Avant le slowmode : la nouvelle tentative
     // après EPOCH_STALE ne doit pas être bloquée par lui.
     let exempt = match body.content.as_deref() {
@@ -250,7 +250,7 @@ pub async fn send_message(
         _ => false,
     };
     let enc = e2e_channel::check_content(
-        &state.db, channel_id, claims.sub, !content_empty, body.enc.as_ref(), body.client_msg_id, exempt,
+        &state.db, channel_id, !content_empty, body.enc.as_ref(), body.client_msg_id, exempt,
     ).await?;
 
     // Enforcement du slowmode
@@ -488,7 +488,7 @@ pub async fn edit_message(
     }
     // Édition chiffrée : même `client_msg_id` que le message (lié à l'AAD).
     let cmid = existing_cmid.or(body.client_msg_id);
-    let enc = e2e_channel::check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), cmid, false).await?;
+    let enc = e2e_channel::check_content(&state.db, channel_id, has_text, body.enc.as_ref(), cmid, false).await?;
     if !has_text && enc.is_none() {
         return Err(AppError::BadRequest("Contenu vide".into()));
     }
@@ -980,7 +980,7 @@ pub async fn forward_message(
     crate::handlers::servers::require_can_post(&state, claims.sub, dest_server_id, body.channel_id, false).await?;
     // Salon cible chiffré : l'appli envoie une copie chiffrée pour lui (clair refusé si j'ai une clé).
     let enc = e2e_channel::check_content(
-        &state.db, body.channel_id, claims.sub, src_content.is_some(), body.enc.as_ref(), body.client_msg_id, false,
+        &state.db, body.channel_id, src_content.is_some(), body.enc.as_ref(), body.client_msg_id, false,
     ).await?;
     if src_content.is_none() && enc.is_none() {
         return Err(AppError::BadRequest("Message vide".into()));

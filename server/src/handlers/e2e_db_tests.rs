@@ -72,14 +72,23 @@ async fn e2e_conversations() {
     let conv = Conv::Dm(dm);
     let mem = members(&db, conv).await.unwrap();
 
-    // Transition : b sans clé → le clair passe encore.
-    assert!(check_message(&db, conv, &mem, true, None).await.unwrap().is_none());
-    set_key(&db, b, &format!("fp-b-{b}")).await;
-    assert_eq!(err(check_message(&db, conv, &mem, true, None).await), PLAINTEXT_REFUSED);
+    // Chiffrement obligatoire : clair refusé même si b n'a pas encore de clé.
+    assert_eq!(err(check_message(&db, conv, true, None).await), PLAINTEXT_REFUSED);
     // Pièce jointe seule : rien en clair, accepté.
-    assert!(check_message(&db, conv, &mem, false, None).await.is_ok());
+    assert!(check_message(&db, conv, false, None).await.is_ok());
     // Aucune époque encore : tout chiffré est périmé.
-    assert_eq!(err(check_message(&db, conv, &mem, false, Some(&enc(0))).await), "EPOCH_STALE");
+    assert_eq!(err(check_message(&db, conv, false, Some(&enc(0))).await), "EPOCH_STALE");
+    // a chiffre seul (b sans clé) ; b reçoit l'époque après avoir créé sa clé (`missing`).
+    store_envelopes(&db, conv, a, &body(&db, 0, true, &[a], 9).await).await.unwrap();
+    assert!(check_message(&db, conv, false, Some(&enc(0))).await.unwrap().is_some());
+    assert!(missing_members(&db, conv, &mem, Some((0, false))).await.unwrap().is_empty());
+    set_key(&db, b, &format!("fp-b-{b}")).await;
+    assert_eq!(missing_members(&db, conv, &mem, Some((0, false))).await.unwrap(), vec![b]);
+    store_envelopes(&db, conv, a, &body(&db, 0, false, &[b], 9).await).await.unwrap();
+    assert!(missing_members(&db, conv, &mem, Some((0, false))).await.unwrap().is_empty());
+    // Remise à zéro pour la suite du scénario (création à deux).
+    sqlx::query("DELETE FROM conversation_keys WHERE conv_kind='dm' AND conv_id=$1").bind(dm).execute(&db).await.unwrap();
+    sqlx::query("DELETE FROM conversation_epochs WHERE conv_kind='dm' AND conv_id=$1").bind(dm).execute(&db).await.unwrap();
 
     // Création de l'époque 0 : un étranger ne peut rien déposer.
     assert_eq!(err(store_envelopes(&db, conv, x, &body(&db, 0, true, &[a, b], 9).await).await), "FORBIDDEN");
@@ -99,9 +108,9 @@ async fn e2e_conversations() {
     assert_eq!(mine[0]["wrapped_by"], json!(a));
     assert!(my_envelopes(&db, conv, x).await.unwrap().is_empty());
 
-    assert!(check_message(&db, conv, &mem, false, Some(&enc(0))).await.unwrap().is_some());
-    assert_eq!(err(check_message(&db, conv, &mem, false, Some(&enc(1))).await), "EPOCH_STALE");
-    assert!(check_message(&db, conv, &mem, true, Some(&enc(0))).await.is_err()); // clair + chiffré
+    assert!(check_message(&db, conv, false, Some(&enc(0))).await.unwrap().is_some());
+    assert_eq!(err(check_message(&db, conv, false, Some(&enc(1))).await), "EPOCH_STALE");
+    assert!(check_message(&db, conv, true, Some(&enc(0))).await.is_err()); // clair + chiffré
 
     // Nouvelle clé de b : son enveloppe périmée peut être remplacée, pas une enveloppe valide.
     assert_eq!(
@@ -137,14 +146,13 @@ async fn e2e_conversations() {
     store_envelopes(&db, gconv, a, &body(&db, 0, true, &[a, b, c], 5).await).await.unwrap();
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2").bind(g).bind(c).execute(&db).await.unwrap();
     member_left(&db, g, c).await;
-    let gm = members(&db, gconv).await.unwrap();
-    assert_eq!(err(check_message(&db, gconv, &gm, false, Some(&enc(0))).await), "EPOCH_STALE");
+    assert_eq!(err(check_message(&db, gconv, false, Some(&enc(0))).await), "EPOCH_STALE");
     assert!(my_envelopes(&db, gconv, c).await.unwrap().is_empty());
     // L'exclu ne reçoit pas la nouvelle époque.
     assert_eq!(err(store_envelopes(&db, gconv, b, &body(&db, 1, true, &[a, b, c], 6).await).await), "FORBIDDEN");
     store_envelopes(&db, gconv, b, &body(&db, 1, true, &[a, b], 6).await).await.unwrap();
-    assert!(check_message(&db, gconv, &gm, false, Some(&enc(1))).await.unwrap().is_some());
-    assert_eq!(err(check_message(&db, gconv, &gm, false, Some(&enc(0))).await), "EPOCH_STALE");
+    assert!(check_message(&db, gconv, false, Some(&enc(1))).await.unwrap().is_some());
+    assert_eq!(err(check_message(&db, gconv, false, Some(&enc(0))).await), "EPOCH_STALE");
     // Arrivée : redistribution des anciennes époques au nouveau membre.
     let d = user(&db, true).await;
     sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)").bind(g).bind(d).execute(&db).await.unwrap();
@@ -153,14 +161,16 @@ async fn e2e_conversations() {
     assert_eq!(my_envelopes(&db, gconv, d).await.unwrap().len(), 2);
     assert_eq!(err(store_envelopes(&db, gconv, a, &body(&db, 2, false, &[d], 4).await).await), "EPOCH_STALE");
 
-    // Mes messages encore en clair, seulement là où tout le monde a une clé.
+    // Mes messages encore en clair, même si un membre n'a pas de clé ; rien pour un ancien membre.
     let old: Uuid = sqlx::query_scalar("INSERT INTO group_dm_messages (dm_id, sender_id, content) VALUES ($1, $2, 'vieux') RETURNING id")
         .bind(g).bind(b).fetch_one(&db).await.unwrap();
-    let legacy = legacy_messages(&db, b, 50).await.unwrap();
-    assert!(legacy.iter().any(|m| m["id"] == json!(old) && m["conv_kind"] == "group"));
     let e = user(&db, false).await;
     sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)").bind(g).bind(e).execute(&db).await.unwrap();
-    assert!(!legacy_messages(&db, b, 50).await.unwrap().iter().any(|m| m["id"] == json!(old)));
+    let legacy = legacy_messages(&db, b, 50).await.unwrap();
+    assert!(legacy.iter().any(|m| m["id"] == json!(old) && m["conv_kind"] == "group"));
+    let left: Uuid = sqlx::query_scalar("INSERT INTO group_dm_messages (dm_id, sender_id, content) VALUES ($1, $2, 'parti') RETURNING id")
+        .bind(g).bind(c).fetch_one(&db).await.unwrap();
+    assert!(!legacy_messages(&db, c, 50).await.unwrap().iter().any(|m| m["id"] == json!(left)));
     purge_legacy(&db).await; // déploiement d'aujourd'hui : rien à purger
     let still: Option<String> = sqlx::query_scalar("SELECT content FROM group_dm_messages WHERE id=$1").bind(old).fetch_one(&db).await.unwrap();
     assert_eq!(still.as_deref(), Some("vieux"));
@@ -187,7 +197,7 @@ fn with_server(mut b: Value, fp: &str) -> PostEnvelopes {
 #[tokio::test]
 #[ignore]
 async fn e2e_channels() {
-    use crate::handlers::{e2e_channel as ch, e2e_server_key as sk};
+    use crate::handlers::{e2e_channel as ch, e2e_legacy as lg, e2e_server_key as sk};
     let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
     let db = PgPool::connect(&url).await.unwrap();
     sqlx::migrate!("./migrations").run(&db).await.unwrap();
@@ -210,13 +220,13 @@ async fn e2e_channels() {
     want.sort();
     assert_eq!(mem, want);
 
-    // Clair refusé dès que l'AUTEUR a une clé ; permis sans clé (transition) et pour une commande de bot.
+    // Clair toujours refusé (même à un membre sans clé), sauf commande de bot.
     let cid = Some(Uuid::new_v4());
-    assert_eq!(err(ch::check_content(&db, chan, a, true, None, None, false).await), PLAINTEXT_REFUSED);
-    assert!(ch::check_content(&db, chan, b, true, None, None, false).await.unwrap().is_none());
-    assert!(ch::check_content(&db, chan, a, true, None, None, true).await.unwrap().is_none());
-    assert_eq!(err(ch::check_content(&db, chan, a, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
-    assert!(ch::check_content(&db, chan, a, false, Some(&enc(0)), None, false).await.is_err()); // sans client_msg_id
+    assert_eq!(err(ch::check_content(&db, chan, true, None, None, false).await), PLAINTEXT_REFUSED);
+    assert!(ch::check_content(&db, chan, true, None, None, true).await.unwrap().is_none());
+    assert!(ch::check_content(&db, chan, false, None, None, false).await.unwrap().is_none()); // pièce jointe seule
+    assert_eq!(err(ch::check_content(&db, chan, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
+    assert!(ch::check_content(&db, chan, false, Some(&enc(0)), None, false).await.is_err()); // sans client_msg_id
 
     // Époque 0 : le créateur s'inclut, les autres par lots ; un non-membre ne fait rien.
     assert_eq!(err(store_envelopes(&db, conv, x, &body(&db, 0, true, &[x], 9).await).await), "FORBIDDEN");
@@ -228,17 +238,17 @@ async fn e2e_channels() {
     assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, false, &[x], 9).await).await), "FORBIDDEN");
     assert_eq!(my_envelopes(&db, conv, c).await.unwrap().len(), 1);
     assert!(my_envelopes(&db, conv, b).await.unwrap().is_empty());
-    assert!(ch::check_content(&db, chan, a, false, Some(&enc(0)), cid, false).await.unwrap().is_some());
+    assert!(ch::check_content(&db, chan, false, Some(&enc(0)), cid, false).await.unwrap().is_some());
 
     // Salon rendu privé pour c (surcharge) : rotation au prochain envoi, c exclu de la suivante.
     sqlx::query("INSERT INTO channel_permissions (channel_id, target_id, target_type, deny) VALUES ($1, $2, 'member', $3)")
         .bind(chan).bind(c).bind(crate::models::role::Permissions::VIEW_CHANNEL).execute(&db).await.unwrap();
-    assert_eq!(err(ch::check_content(&db, chan, a, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
+    assert_eq!(err(ch::check_content(&db, chan, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
     assert_eq!(err(store_envelopes(&db, conv, c, &body(&db, 1, true, &[c], 8).await).await), "FORBIDDEN");
     assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 1, true, &[a, c], 8).await).await), "FORBIDDEN");
     store_envelopes(&db, conv, a, &body(&db, 1, true, &[a, o], 8).await).await.unwrap();
-    assert!(ch::check_content(&db, chan, a, false, Some(&enc(1)), cid, false).await.unwrap().is_some());
-    assert_eq!(err(ch::check_content(&db, chan, a, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
+    assert!(ch::check_content(&db, chan, false, Some(&enc(1)), cid, false).await.unwrap().is_some());
+    assert_eq!(err(ch::check_content(&db, chan, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
 
     // Clé de récupération du serveur : créée par le propriétaire seul, lue en entier par lui seul.
     let key: sk::CreateServerKey = serde_json::from_value(json!({
@@ -258,7 +268,7 @@ async fn e2e_channels() {
 
     // a quitte le serveur : rotation, et la nouvelle époque exige l'enveloppe du serveur.
     sqlx::query("DELETE FROM server_members WHERE server_id=$1 AND user_id=$2").bind(s).bind(a).execute(&db).await.unwrap();
-    assert_eq!(err(ch::check_content(&db, chan, o, false, Some(&enc(1)), cid, false).await), "EPOCH_STALE");
+    assert_eq!(err(ch::check_content(&db, chan, false, Some(&enc(1)), cid, false).await), "EPOCH_STALE");
     let b2 = json!({ "epoch": 2, "create": true, "envelopes": [
         { "member_id": o, "member_fp": fp(&db, o).await, "wrapped": wrap(7) } ] });
     assert_eq!(err(store_envelopes(&db, conv, o, &serde_json::from_value(b2.clone()).unwrap()).await), "SERVER_KEY_REQUIRED");
@@ -270,27 +280,78 @@ async fn e2e_channels() {
     let epochs: Vec<i64> = rec["channels"][0]["epochs"].as_array().unwrap().iter().map(|e| e["epoch"].as_i64().unwrap()).collect();
     assert_eq!(epochs, vec![1, 2]);
 
-    // Rechiffrement par l'auteur seulement, puis purge J+30 (webhooks gardés).
+    // Rechiffrement de l'ancien contenu (jamais purgé) : auteur, propriétaire ou modérateur seulement.
+    let d = user(&db, true).await; // membre ordinaire muni d'une clé
+    let m = user(&db, true).await; // modérateur (MANAGE_MESSAGES)
+    let mod_role: Uuid = sqlx::query_scalar("INSERT INTO roles (server_id, name, permissions) VALUES ($1, 'modo', $2) RETURNING id")
+        .bind(s).bind(crate::models::role::Permissions::MANAGE_MESSAGES).fetch_one(&db).await.unwrap();
+    for u in [d, m] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id) VALUES ($1, $2)").bind(u).bind(s).execute(&db).await.unwrap();
+    }
+    sqlx::query("INSERT INTO member_roles (user_id, server_id, role_id) VALUES ($1, $2, $3)").bind(m).bind(s).bind(mod_role)
+        .execute(&db).await.unwrap();
     let mine: Uuid = sqlx::query_scalar("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'ancien') RETURNING id")
         .bind(chan).bind(o).fetch_one(&db).await.unwrap();
-    assert!(ch::legacy_items(&db, o, 50).await.unwrap().iter().any(|m| m["id"] == json!(mine) && m["item"] == "message"));
-    let req = || serde_json::from_value::<ch::EncryptItemBody>(json!({ "enc": enc(2), "client_msg_id": Uuid::new_v4() })).unwrap();
-    assert_eq!(err(ch::encrypt_item(&db, b, ch::Item::Message, mine, req()).await), "NOT_LEGACY");
-    ch::encrypt_item(&db, o, ch::Item::Message, mine, req()).await.unwrap();
-    let gone: Option<String> = sqlx::query_scalar("SELECT content FROM messages WHERE id=$1").bind(mine).fetch_one(&db).await.unwrap();
-    assert!(gone.is_none());
     let old: Uuid = sqlx::query_scalar(
         "INSERT INTO messages (channel_id, user_id, content, created_at) VALUES ($1, $2, 'vieux', NOW() - INTERVAL '45 days') RETURNING id")
-        .bind(chan).bind(b).fetch_one(&db).await.unwrap();
+        .bind(chan).bind(d).fetch_one(&db).await.unwrap();
     let hook: Uuid = sqlx::query_scalar(
         "INSERT INTO messages (channel_id, user_id, content, type, webhook_display_name, created_at)
          VALUES ($1, $2, 'webhook', 'webhook', 'CI', NOW() - INTERVAL '45 days') RETURNING id")
         .bind(chan).bind(o).fetch_one(&db).await.unwrap();
-    sqlx::query("UPDATE e2e_rollout SET channels_started_at = NOW() - INTERVAL '40 days'").execute(&db).await.unwrap();
-    crate::handlers::e2e_channel::purge_legacy(&db).await;
-    sqlx::query("UPDATE e2e_rollout SET channels_started_at = NOW()").execute(&db).await.unwrap();
-    let (c1, p1): (Option<String>, bool) = sqlx::query_as("SELECT content, purged FROM messages WHERE id=$1").bind(old).fetch_one(&db).await.unwrap();
-    assert!(c1.is_none() && p1);
-    let c2: Option<String> = sqlx::query_scalar("SELECT content FROM messages WHERE id=$1").bind(hook).fetch_one(&db).await.unwrap();
-    assert_eq!(c2.as_deref(), Some("webhook"));
+    let th: Uuid = sqlx::query_scalar("INSERT INTO threads (channel_id, title, creator_id) VALUES ($1, 'sujet', $2) RETURNING id")
+        .bind(chan).bind(d).fetch_one(&db).await.unwrap();
+    let th_cid: Uuid = sqlx::query_scalar("SELECT client_id FROM threads WHERE id=$1").bind(th).fetch_one(&db).await.unwrap();
+    let poll: Uuid = sqlx::query_scalar(
+        "INSERT INTO polls (channel_id, server_id, creator_id, question) VALUES ($1, $2, $3, 'pizza ?') RETURNING id")
+        .bind(chan).bind(s).bind(d).fetch_one(&db).await.unwrap();
+    for (i, t) in ["oui", "non"].iter().enumerate() {
+        sqlx::query("INSERT INTO poll_options (poll_id, text, position) VALUES ($1, $2, $3)").bind(poll).bind(t).bind(i as i32)
+            .execute(&db).await.unwrap();
+    }
+    let ids = |v: Vec<Value>| v.iter().map(|m| m["id"].as_str().unwrap().parse::<Uuid>().unwrap()).collect::<Vec<_>>();
+    // Mes anciens textes (auteur), partout.
+    assert!(ids(lg::my_items(&db, o, 50).await.unwrap()).contains(&mine));
+    // Membre ordinaire : seulement les siens ; modérateur et propriétaire : tous (jamais le webhook).
+    let seen_d = ids(lg::channel_items(&db, d, chan, None, 50).await.unwrap());
+    assert!(seen_d.contains(&old) && seen_d.contains(&th) && seen_d.contains(&poll) && !seen_d.contains(&mine));
+    let seen_m = ids(lg::channel_items(&db, m, chan, None, 50).await.unwrap());
+    assert!(seen_m.contains(&old) && seen_m.contains(&mine) && !seen_m.contains(&hook));
+    let all = lg::server_items(&db, o, s, None, 50).await.unwrap();
+    assert!(ids(all.clone()).contains(&mine) && !ids(all.clone()).contains(&hook));
+    let p = all.iter().find(|m| m["id"] == json!(poll)).unwrap();
+    assert_eq!(p["options"], json!(["oui", "non"]));
+    assert_eq!(p["author_id"], json!(d));
+    assert_eq!(err(lg::server_items(&db, m, s, None, 50).await), "FORBIDDEN");
+    assert_eq!(err(lg::channel_items(&db, x, chan, None, 50).await), "FORBIDDEN");
+    // Pagination par curseur.
+    let first = ids(lg::server_items(&db, o, s, None, 1).await.unwrap());
+    assert_eq!(first.len(), 1);
+    assert!(!ids(lg::server_items(&db, o, s, Some(first[0]), 50).await.unwrap()).contains(&first[0]));
+
+    let req = |id: Uuid| serde_json::from_value::<lg::EncryptItemBody>(json!({ "enc": enc(2), "client_msg_id": id })).unwrap();
+    // Le texte d'autrui : interdit à un membre ordinaire, permis au modérateur, une seule fois.
+    assert_eq!(err(lg::encrypt_item(&db, d, lg::Item::Message, mine, req(Uuid::new_v4())).await), "FORBIDDEN");
+    assert_eq!(err(lg::encrypt_item(&db, d, lg::Item::Message, hook, req(Uuid::new_v4())).await), "NOT_LEGACY");
+    lg::encrypt_item(&db, m, lg::Item::Message, mine, req(Uuid::new_v4())).await.unwrap();
+    assert_eq!(err(lg::encrypt_item(&db, o, lg::Item::Message, mine, req(Uuid::new_v4())).await), "NOT_LEGACY");
+    let gone: Option<String> = sqlx::query_scalar("SELECT content FROM messages WHERE id=$1").bind(mine).fetch_one(&db).await.unwrap();
+    assert!(gone.is_none());
+    // Le propriétaire rechiffre le titre du fil (id client imposé) et le sondage d'un membre.
+    assert_eq!(err(lg::encrypt_item(&db, o, lg::Item::ThreadTitle, th, req(Uuid::new_v4())).await), "NOT_LEGACY");
+    lg::encrypt_item(&db, o, lg::Item::ThreadTitle, th, req(th_cid)).await.unwrap();
+    lg::encrypt_item(&db, o, lg::Item::Poll, poll, req(Uuid::new_v4())).await.unwrap();
+    let texts: Vec<String> = sqlx::query_scalar("SELECT text FROM poll_options WHERE poll_id=$1").bind(poll).fetch_all(&db).await.unwrap();
+    assert!(texts.iter().all(String::is_empty));
+    let (title, q): (String, String) = sqlx::query_as("SELECT t.title, p.question FROM threads t, polls p WHERE t.id=$1 AND p.id=$2")
+        .bind(th).bind(poll).fetch_one(&db).await.unwrap();
+    assert!(title.is_empty() && q.is_empty());
+    // L'auteur lui-même ; jamais de purge des salons, même 40 jours après le déploiement.
+    sqlx::query("UPDATE e2e_rollout SET channels_started_at = NOW() - INTERVAL '40 days', started_at = NOW() - INTERVAL '40 days'")
+        .execute(&db).await.unwrap();
+    purge_legacy(&db).await;
+    sqlx::query("UPDATE e2e_rollout SET channels_started_at = NOW(), started_at = NOW()").execute(&db).await.unwrap();
+    let kept: Option<String> = sqlx::query_scalar("SELECT content FROM messages WHERE id=$1").bind(old).fetch_one(&db).await.unwrap();
+    assert_eq!(kept.as_deref(), Some("vieux"));
+    lg::encrypt_item(&db, d, lg::Item::Message, old, req(Uuid::new_v4())).await.unwrap();
 }
