@@ -142,21 +142,30 @@ function UnlockScreen({ userId, onLater }: { userId: string; onLater: () => void
 }
 
 /** Monté à la racine de l'appli connectée. */
+const LATER_KEY = 'fc_e2e_later'
+
 export default function E2EGate() {
   const userId = useAuth(s => s.user?.id)
   const status = useAccountKey(s => s.status)
   const recovery = useAccountKey(s => s.recoveryToShow)
-  const [later, setLater] = useState(false)
+  // « Plus tard » vaut pour la session du navigateur (pas de rappel à chaque page).
+  const [later, setLater] = useState(() => {
+    try { return sessionStorage.getItem(LATER_KEY) === '1' } catch { return false }
+  })
 
   useEffect(() => {
     if (!userId) return
-    setLater(false)
     // Erreur réseau : on réessaiera au prochain chargement, l'appli reste utilisable.
     initAccountKey(userId).catch(() => {})
   }, [userId])
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />
-  if (status === 'locked' && !later) return <UnlockScreen userId={userId} onLater={() => setLater(true)} />
+  if (status === 'locked' && !later) {
+    return <UnlockScreen userId={userId} onLater={() => {
+      setLater(true)
+      try { sessionStorage.setItem(LATER_KEY, '1') } catch { /* session seule */ }
+    }} />
+  }
   return null
 }
