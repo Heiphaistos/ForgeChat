@@ -112,20 +112,21 @@ class CallServiceModule : Module() {
       }
     }
 
-    Function("canInstallUpdate") {
-      val ctx = appContext.reactContext ?: return@Function false
-      UpdateInstaller.canInstall(ctx)
-    }
-
-    Function("openInstallSettings") {
-      val ctx = appContext.currentActivity ?: appContext.reactContext ?: return@Function null
-      UpdateInstaller.openInstallSettings(ctx)
-      null
-    }
-
-    Function("installUpdate") {
-      val ctx = appContext.currentActivity ?: appContext.reactContext ?: return@Function false
-      UpdateInstaller.install(ctx)
+    // Copie de l'APK dans Téléchargements sur un fil dédié (plusieurs dizaines de Mo).
+    AsyncFunction("installUpdate") { promise: Promise ->
+      val ctx = appContext.currentActivity ?: appContext.reactContext
+      if (ctx == null) {
+        promise.reject("ERR_UPDATE", "contexte indisponible", null)
+      } else {
+        Thread {
+          try {
+            promise.resolve(UpdateInstaller.install(ctx))
+          } catch (e: Exception) {
+            Log.w("ForgeUpdate", "remise de l'APK impossible", e)
+            promise.reject("ERR_UPDATE", e.message ?: "remise de l'APK impossible", e)
+          }
+        }.start()
+      }
     }
 
     Function("discardUpdate") {

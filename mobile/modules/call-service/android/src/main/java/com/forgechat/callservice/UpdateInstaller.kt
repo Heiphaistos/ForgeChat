@@ -1,11 +1,12 @@
 package com.forgechat.callservice
 
+import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
-import androidx.core.content.FileProvider
+import android.provider.MediaStore
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -13,14 +14,15 @@ import java.net.URL
 import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
-/** FileProvider propre au module : deux bibliothèques ne peuvent pas déclarer la même classe de fournisseur. */
-class UpdateFileProvider : FileProvider()
-
 /**
  * Mise à jour de l'APK depuis le serveur ForgeChat (src/features/updates) : téléchargement dans le cache
- * de l'app avec calcul du SHA-256, puis installeur Android. L'installation n'est lancée que si
- * l'empreinte du fichier téléchargé est celle annoncée par le manifeste ; Android refuse en plus
- * tout APK signé avec une autre clé que l'app installée.
+ * de l'app avec calcul du SHA-256 ; l'APK n'est remis à l'utilisateur que si l'empreinte est celle
+ * annoncée par le manifeste (Android refuse en plus tout APK signé avec une autre clé).
+ *
+ * Pas de permission REQUEST_INSTALL_PACKAGES : HyperOS 3 (Android 17) refuse la PREMIÈRE
+ * installation d'une app qui la demande (« Application non installée », Xiaomi 15T Pro, 2026-10-07).
+ * L'APK vérifié est donc déposé dans Téléchargements et c'est le gestionnaire de fichiers, qui a
+ * déjà ce droit, qui l'installe en un appui.
  */
 object UpdateInstaller {
   private const val MAX_BYTES = 400L * 1024 * 1024
@@ -30,7 +32,10 @@ object UpdateInstaller {
 
   private fun apk(ctx: Context): File = File(File(ctx.cacheDir, "updates").apply { mkdirs() }, "forgechat-update.apk")
 
-  private fun authority(ctx: Context) = "${ctx.packageName}.forgechat.updates"
+  private const val PUBLIC_NAME = "ForgeChat-mise-a-jour.apk"
+
+  /** Adresse du dernier APK téléchargé : repli navigateur avant Android 10. */
+  @Volatile private var lastUrl: String? = null
 
   private fun hex(bytes: ByteArray) = bytes.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
 
@@ -41,6 +46,7 @@ object UpdateInstaller {
   fun download(ctx: Context, url: String, expectedSha: String, onProgress: (Long, Long) -> Unit): String {
     val target = apk(ctx)
     verifiedSha = null
+    lastUrl = url
     target.delete()
     val source = URL(url)
     if (source.protocol != "https") throw IOException("HTTPS obligatoire")
@@ -84,26 +90,41 @@ object UpdateInstaller {
     }
   }
 
-  /** Android 8+ : l'utilisateur doit autoriser ForgeChat à installer des applications. */
-  fun canInstall(ctx: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || ctx.packageManager.canRequestPackageInstalls()
-
-  fun openInstallSettings(ctx: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    ctx.startActivity(
-      Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-    )
-  }
-
-  /** Lance l'installeur Android sur l'APK vérifié ; false si aucun fichier vérifié n'est prêt. */
+  /**
+   * Remet l'APK vérifié à l'utilisateur : copie dans Téléchargements (MediaStore, sans permission)
+   * puis ouverture de la liste des téléchargements. Bloquant (copie) : hors du thread UI.
+   * false si aucun fichier vérifié n'est prêt (cache vidé par Android : retélécharger).
+   */
   fun install(ctx: Context): Boolean {
     val file = apk(ctx)
     if (verifiedSha == null || !file.exists()) return false
-    val uri = FileProvider.getUriForFile(ctx, authority(ctx), file)
-    ctx.startActivity(
-      Intent(Intent.ACTION_VIEW)
-        .setDataAndType(uri, "application/vnd.android.package-archive")
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
-    )
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+      // Android 7 à 9 : écrire dans Téléchargements demanderait une permission de stockage.
+      val url = lastUrl ?: return false
+      ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      return true
+    }
+    val resolver = ctx.contentResolver
+    val downloads = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    // Nos copies précédentes (une app ne peut supprimer que ses propres entrées).
+    resolver.delete(downloads, "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?", arrayOf("ForgeChat-mise-a-jour%"))
+    val values = ContentValues().apply {
+      put(MediaStore.MediaColumns.DISPLAY_NAME, PUBLIC_NAME)
+      put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive")
+      put(MediaStore.MediaColumns.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(downloads, values) ?: throw IOException("Téléchargements inaccessible")
+    try {
+      (resolver.openOutputStream(uri) ?: throw IOException("Téléchargements inaccessible")).use { out ->
+        file.inputStream().use { it.copyTo(out, 64 * 1024) }
+      }
+      resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+    } catch (e: Exception) {
+      resolver.delete(uri, null, null)
+      throw e
+    }
+    file.delete()
+    ctx.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     return true
   }
 

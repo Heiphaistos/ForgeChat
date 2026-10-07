@@ -4,7 +4,7 @@ import { APP_VERSION, UPDATES_MANIFEST_URL } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { useSettings } from '@/stores/settings'
-import { resumeAfterPermission, updateNative } from './installer'
+import { updateNative } from './installer'
 import { fetchAvailableUpdate, isDue, type AvailableUpdate } from './updateCheck'
 import { offerUpdate } from './updateStore'
 
@@ -46,7 +46,6 @@ export function useUpdateCheck() {
     void runAutomaticUpdateCheck()
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return
-      resumeAfterPermission()
       void runAutomaticUpdateCheck()
     })
     return () => sub.remove()

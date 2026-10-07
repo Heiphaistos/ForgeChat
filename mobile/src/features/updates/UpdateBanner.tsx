@@ -6,7 +6,7 @@ import { APP_VERSION } from '@/config/env'
 import { useT } from '@/i18n'
 import { useSettings } from '@/stores/settings'
 import { colors, font, radius, spacing } from '@/theme'
-import { startUpdate, updateNative } from './installer'
+import { startUpdate } from './installer'
 import { useUpdate } from './updateStore'
 
 function Action({ label, onPress, primary }: { label: string; onPress: () => void; primary?: boolean }) {
@@ -39,16 +39,6 @@ export function UpdateBanner() {
     case 'downloading':
       title = t('store.update.downloading', { version, percent: progress === null ? '' : `${Math.round(progress * 100)} %` })
       actions = <Action label={t('store.update.later')} onPress={later} />
-      break
-    case 'permission':
-      title = t('store.update.permission')
-      body = t('store.update.permissionBody')
-      actions = (
-        <>
-          <Action label={t('store.update.later')} onPress={later} />
-          <Action label={t('store.update.openSettings')} onPress={() => updateNative?.openInstallSettings()} primary />
-        </>
-      )
       break
     case 'ready':
       title = t('store.update.ready', { version })

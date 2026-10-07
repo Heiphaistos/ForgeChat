@@ -5,11 +5,10 @@ import type { AvailableUpdate } from './updateCheck'
  * Mise à jour proposée (bannière UpdateBanner) et avancement de son installation (installer.ts).
  *  - available   : proposée, rien de téléchargé ;
  *  - downloading : APK en cours de téléchargement (`progress` de 0 à 1, null si taille inconnue) ;
- *  - permission  : Android attend l'autorisation « installer des applications » ;
- *  - ready       : installeur Android ouvert (ou refermé sans installer : on peut le rouvrir) ;
+ *  - ready       : APK vérifié déposé dans Téléchargements, à installer d'un appui ;
  *  - error       : téléchargement en échec (`error` = réseau) ou fichier refusé (`error` = sha).
  */
-export type UpdatePhase = 'available' | 'downloading' | 'permission' | 'ready' | 'error'
+export type UpdatePhase = 'available' | 'downloading' | 'ready' | 'error'
 
 interface UpdateState {
   update: AvailableUpdate | null

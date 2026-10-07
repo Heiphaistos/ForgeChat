@@ -98,7 +98,7 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     jest.doMock('@/lib/logger', () => ({ logger: { debug: jest.fn(), warn: jest.fn() } }))
     jest.doMock('@/config/env', () => env)
     jest.doMock('@/i18n', () => ({ t: (key: string) => key }))
-    jest.doMock('@/features/updates/installer', () => ({ updateNative: { discardUpdate: mockDiscard }, resumeAfterPermission: jest.fn() }))
+    jest.doMock('@/features/updates/installer', () => ({ updateNative: { discardUpdate: mockDiscard } }))
     const settings: Record<string, unknown> = { updateCheck: true, updateLastCheckAt: 0, updateSkippedVersion: null }
     settings.set = (patch: Record<string, unknown>) => Object.assign(settings, patch)
     jest.doMock('@/stores/settings', () => ({ useSettings: { getState: () => settings } }))
@@ -191,20 +191,18 @@ describe('téléchargement et installation dans l’app', () => {
     const { useUpdate, offerUpdate } = require('@/features/updates/updateStore') as typeof import('@/features/updates/updateStore')
     /* eslint-enable @typescript-eslint/no-require-imports */
     offerUpdate(UPDATE)
-    return { startUpdate: installer.startUpdate, resumeAfterPermission: installer.resumeAfterPermission, useUpdate }
+    return { startUpdate: installer.startUpdate, useUpdate }
   }
 
   type Progress = (e: { received: number; total: number }) => void
-  function fakeNative(downloadedSha: string, canInstall = true) {
+  function fakeNative(downloadedSha: string) {
     const listeners: Progress[] = []
     return {
       downloadUpdate: jest.fn(async (_url: string, _sha: string) => {
         listeners.forEach((fn) => fn({ received: 50, total: 100 }))
         return downloadedSha
       }),
-      canInstallUpdate: jest.fn(() => canInstall),
-      openInstallSettings: jest.fn(),
-      installUpdate: jest.fn(() => true),
+      installUpdate: jest.fn(async () => true),
       discardUpdate: jest.fn(),
       addListener: jest.fn((_event: 'onUpdateProgress', fn: Progress) => {
         listeners.push(fn)
@@ -241,17 +239,22 @@ describe('téléchargement et installation dans l’app', () => {
     expect(useUpdate.getState()).toMatchObject({ phase: 'error', error: 'sha' })
   })
 
-  it('« sources inconnues » non autorisées : réglage ouvert, puis reprise au retour', async () => {
-    const { startUpdate, resumeAfterPermission, useUpdate } = load()
-    const native = fakeNative(SHA, false)
+  it('fichier déjà remis : un nouvel appui retélécharge et le redépose', async () => {
+    const { startUpdate, useUpdate } = load()
+    const native = fakeNative(SHA)
     await startUpdate(native)
-    expect(native.openInstallSettings).toHaveBeenCalled()
-    expect(native.installUpdate).not.toHaveBeenCalled()
-    expect(useUpdate.getState().phase).toBe('permission')
-    native.canInstallUpdate.mockReturnValue(true)
-    resumeAfterPermission(native)
-    expect(native.installUpdate).toHaveBeenCalledTimes(1)
     expect(useUpdate.getState().phase).toBe('ready')
+    await startUpdate(native)
+    expect(native.downloadUpdate).toHaveBeenCalledTimes(2)
+    expect(native.installUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('dépôt dans Téléchargements impossible : erreur, réessayable', async () => {
+    const { startUpdate, useUpdate } = load()
+    const native = fakeNative(SHA)
+    native.installUpdate.mockRejectedValueOnce(new Error('Téléchargements inaccessible'))
+    await startUpdate(native)
+    expect(useUpdate.getState()).toMatchObject({ phase: 'error', error: 'network' })
   })
 
   it('échec du téléchargement : erreur réseau, réessayable', async () => {

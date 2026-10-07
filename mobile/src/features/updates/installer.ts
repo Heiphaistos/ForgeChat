@@ -8,9 +8,8 @@ import { useUpdate } from './updateStore'
 /** Fonctions natives de modules/call-service (UpdateInstaller.kt). */
 export interface UpdateNative {
   downloadUpdate(url: string, sha256: string): Promise<string>
-  canInstallUpdate(): boolean
-  openInstallSettings(): void
-  installUpdate(): boolean
+  /** Dépose l'APK vérifié dans Téléchargements et ouvre la liste (false : plus de fichier vérifié). */
+  installUpdate(): Promise<boolean>
   discardUpdate(): void
   addListener(event: 'onUpdateProgress', fn: (e: { received: number; total: number }) => void): { remove(): void }
 }
@@ -19,15 +18,18 @@ const mod = Platform.OS === 'android' ? requireOptionalNativeModule<UpdateNative
 /** null : iOS, ou build sans le module natif à jour (repli : téléchargement par le navigateur). */
 export const updateNative: UpdateNative | null = mod && typeof mod.downloadUpdate === 'function' ? mod : null
 
-/** Ouvre l'installeur Android, ou le réglage « installer des applications » s'il n'est pas encore accordé. */
-function install(native: UpdateNative) {
-  if (!native.canInstallUpdate()) {
-    useUpdate.setState({ phase: 'permission' })
-    native.openInstallSettings()
-    return
+/**
+ * Remet l'APK vérifié dans Téléchargements ; l'utilisateur l'installe d'un appui depuis le gestionnaire
+ * de fichiers (pas de permission REQUEST_INSTALL_PACKAGES : HyperOS 3 refuse alors l'installation).
+ */
+async function install(native: UpdateNative) {
+  try {
+    // false : plus de fichier vérifié dans le cache (vidé par Android) : retélécharger.
+    useUpdate.setState({ phase: (await native.installUpdate()) ? 'ready' : 'available', progress: null })
+  } catch (e) {
+    logger.warn('mise à jour', 'remise de l’APK impossible', e)
+    useUpdate.setState({ phase: 'error', error: 'network', progress: null })
   }
-  // false : plus de fichier vérifié dans le cache (vidé par Android) : retélécharger.
-  useUpdate.setState({ phase: native.installUpdate() ? 'ready' : 'available', progress: null })
 }
 
 /**
@@ -41,7 +43,10 @@ export async function startUpdate(native: UpdateNative | null = updateNative): P
     void Linking.openURL(update.url).catch(() => undefined)
     return
   }
-  if (phase === 'ready' || phase === 'permission') return install(native)
+  if (phase === 'ready') {
+    // Fichier déjà remis : un nouvel appui retélécharge (la copie a pu être supprimée).
+    useUpdate.setState({ phase: 'available' })
+  }
   useUpdate.setState({ phase: 'downloading', progress: 0, error: null })
   const sub = native.addListener('onUpdateProgress', ({ received, total }) =>
     useUpdate.setState({ progress: total > 0 ? Math.min(1, received / total) : null }),
@@ -53,16 +58,11 @@ export async function startUpdate(native: UpdateNative | null = updateNative): P
       useUpdate.setState({ phase: 'error', error: 'sha', progress: null })
       return
     }
-    install(native)
+    await install(native)
   } catch (e) {
     logger.warn('mise à jour', 'téléchargement impossible', e)
     useUpdate.setState({ phase: 'error', error: 'network', progress: null })
   } finally {
     sub.remove()
   }
-}
-
-/** Retour au premier plan après le réglage « installer des applications » : l'installation reprend. */
-export function resumeAfterPermission(native: UpdateNative | null = updateNative) {
-  if (native && useUpdate.getState().phase === 'permission' && native.canInstallUpdate()) install(native)
 }
