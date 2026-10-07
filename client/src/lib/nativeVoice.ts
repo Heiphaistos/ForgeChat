@@ -46,8 +46,12 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args)
 }
 
+/** Clé de média de bout en bout (e2e/media.ts) : chaîne donnée à LiveKit et index dans l'anneau. */
+export interface NativeMediaKey { key: string; index: number }
+
 export async function nativeConnect(
   owner: NativeOwner, url: string, token: string, ice: RTCIceServer[], mic: boolean, micOpen: boolean, h: NativeHandlers,
+  e2ee: NativeMediaKey | null = null,
 ): Promise<void> {
   // L'autre usage perd sa session (le natif la ferme en se connectant) : il nettoie
   // son état sans fermer la nôtre — avant, quitter le salon vocal coupait l'appel.
@@ -69,7 +73,7 @@ export async function nativeConnect(
   // Une panne dans le processus natif (panique d'un thread) laisse la commande sans
   // réponse : au bout de 30 s on le dit, au lieu d'afficher « Connexion… » à vie.
   await Promise.race([
-    tauriInvoke('nv_connect', { url, token, ice, mic, micOpen }),
+    tauriInvoke('nv_connect', { url, token, ice, mic, micOpen, e2ee }),
     new Promise((_, reject) => setTimeout(() => reject(new Error('le module audio/vidéo ne répond pas')), 30_000)),
   ])
 }
@@ -83,6 +87,8 @@ export async function nativeDisconnect(owner: NativeOwner): Promise<void> {
   await tauriInvoke('nv_disconnect').catch(e => console.warn('[voice] déconnexion native', e))
 }
 
+/** Nouvelle époque pendant l'appel : nouvelle clé de média. */
+export const nativeSetKey = (k: NativeMediaKey) => tauriInvoke('nv_set_key', { key: k.key, index: k.index })
 export const nativeSetMic = (open: boolean) => tauriInvoke('nv_set_mic', { open })
 export const nativeSetDeafen = (deafened: boolean) => tauriInvoke('nv_set_deafen', { deafened })
 export const nativeSetPeerAudio = (identity: string, enabled: boolean) => tauriInvoke('nv_set_peer_audio', { identity, enabled })

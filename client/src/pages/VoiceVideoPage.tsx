@@ -32,6 +32,7 @@ import { MobileContext } from '../contexts/MobileContext'
 import { useContextMenu } from '../components/ui/ContextMenu'
 import { useMemberModeration } from '../components/chat/MemberModeration'
 import { t as tr, useT, type Key } from '../i18n'
+import { E2ECallBadge } from '../e2e/E2ECallBadge'
 
 
 interface Props {
@@ -75,6 +76,19 @@ function CallQualityIndicator() {
   return (
     <div className={`flex items-center gap-1 text-xs ${view.color}`} title={t('voice.q.title', { q: view.label || t('voice.q.unknown') })} role="status">
       {view.icon}{view.label && <span>{view.label}</span>}
+    </div>
+  )
+}
+
+// ─── Chiffrement de bout en bout du salon (§5) ────────────────────────────────
+function VoiceE2EBadge() {
+  const e2ee = useVoice(s => s.e2ee)
+  const outdated = useVoice(s => s.e2eeOutdated)
+  const peers = useVoice(s => s.peers)
+  if (!e2ee) return null
+  return (
+    <div className="py-1 bg-fc-sidebar border-b border-fc-hover flex-shrink-0">
+      <E2ECallBadge encrypted outdatedNames={outdated.map(id => peers.find(p => p.userId === id)?.username ?? '…')} />
     </div>
   )
 }
@@ -542,6 +556,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
           <span className="text-xs text-fc-muted md:hidden">{allPeers.length}</span>
         </div>
       </div>
+      <VoiceE2EBadge />
 
       {/* Main area */}
       <div className="flex-1 overflow-hidden relative">

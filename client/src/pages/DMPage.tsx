@@ -21,6 +21,7 @@ import { useT, t as tr, type Key } from '../i18n'
 import { openMessage, openText, reopenLocked, withSeal, sendErrorText, type RawMsg } from '../e2e/conversations'
 import type { EncPayload } from '../e2e/crypto'
 import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
+import { E2ECallBadge } from '../e2e/E2ECallBadge'
 
 /** Message de MP tel que renvoyé par le serveur. */
 type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
@@ -141,7 +142,7 @@ export default function DMPage() {
   const {
     dmId: activeCallDmId, callState, callType, localStream, remoteStream, remoteVideoUrl, localVideoUrl, micMuted, camOff,
     startCall, acceptCall, hangup, toggleMic, toggleCam,
-    pendingAccept, setPendingAccept,
+    pendingAccept, setPendingAccept, e2ee: callE2ee, e2eeOutdated,
   } = useCallStore()
   const isThisCallActive = callState !== 'idle' && activeCallDmId === dmId
   const callBusyElsewhere = callState !== 'idle' && activeCallDmId !== dmId
@@ -538,6 +539,7 @@ export default function DMPage() {
               </p>
             </div>
           )}
+          <E2ECallBadge encrypted={callE2ee} outdatedNames={e2eeOutdated.length ? [partnerName] : []} />
           <div className="flex items-center gap-3">
             {callType === 'video' && (
               <button

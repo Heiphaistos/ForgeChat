@@ -7,6 +7,7 @@ import { useGroupCall } from '../../store/groupCall'
 import { useAuth } from '../../store/auth'
 import CallStage, { type StageTile, type RenderOpts } from './CallStage'
 import { PeerTile } from './CallTiles'
+import { E2ECallBadge } from '../../e2e/E2ECallBadge'
 
 interface Member { id: string; username: string; avatar?: string | null }
 
@@ -14,7 +15,7 @@ const hasLiveVideo = (s: MediaStream | null) => !!s?.getVideoTracks().some(t => 
 
 export default function GroupCallPanel({ groupId, members }: { groupId: string; members: Member[] }) {
   const me = useAuth(s => s.user)
-  const { groupId: callGroup, status, localStream, remotes, micMuted, camOff, activeSpeakerId, active, join, leave, toggleMic, toggleCam } = useGroupCall()
+  const { groupId: callGroup, status, localStream, remotes, micMuted, camOff, activeSpeakerId, active, join, leave, toggleMic, toggleCam, e2ee, e2eeOutdated } = useGroupCall()
   const [featured, setFeatured] = useState<string | null>(null)
   const inCall = callGroup === groupId
   const participants = active[groupId] ?? []
@@ -62,6 +63,7 @@ export default function GroupCallPanel({ groupId, members }: { groupId: string; 
           ? <div className="h-full flex items-center justify-center text-fc-muted text-sm animate-pulse">Connexion…</div>
           : <CallStage tiles={tiles} mode="auto" featuredKey={featured} onFeature={setFeatured} render={render} activeSpeakerId={activeSpeakerId} />}
       </div>
+      <E2ECallBadge encrypted={e2ee} outdatedNames={e2eeOutdated.map(id => byId.get(id)?.username ?? '…')} />
       <div className="flex items-center justify-center gap-3 py-2">
         <button onClick={toggleMic} aria-label={micMuted ? 'Activer le micro' : 'Couper le micro'} aria-pressed={micMuted}
           className={`p-3 rounded-full ${micMuted ? 'bg-fc-red text-white' : 'bg-fc-hover text-white hover:bg-fc-input'}`}>

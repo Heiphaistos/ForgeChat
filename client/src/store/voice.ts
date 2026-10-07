@@ -19,6 +19,7 @@ import {
 import { maybeBlur } from '../utils/backgroundBlur'
 import type { ConnectionQuality } from 'livekit-client'
 import { initVoiceModeration } from './voiceModeration'
+import { e2eeClaim } from '../e2e/media'
 
 export { getRoom } from './voiceSfu'
 export type { MediaStatus }
@@ -97,6 +98,9 @@ interface VoiceStore {
   /** État de la connexion au serveur média (SFU), distinct de la présence WebSocket. */
   mediaStatus: MediaStatus
   mediaQuality: ConnectionQuality | null
+  /** Médias du salon chiffrés de bout en bout (§5) ; participants dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
   /** Application Linux : aperçus locaux et orateurs actifs fournis par le natif. */
   localVideoUrl: string | null
   localScreenUrl: string | null
@@ -292,7 +296,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
 
   const sendJoin = (channelId: string, listenOnly: boolean) => {
     _awaitingPeers = true
-    useWs.getState().send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(_password ? { password: _password } : {}) })
+    useWs.getState().send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...e2eeClaim(), ...(_password ? { password: _password } : {}) })
   }
 
   /** Média perdu alors qu'on est toujours dans le salon. */
@@ -429,6 +433,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
     noiseEngine: getNoiseEngine(),
     mediaStatus: 'idle',
     mediaQuality: null,
+    e2ee: false,
+    e2eeOutdated: [],
     localVideoUrl: null,
     localScreenUrl: null,
     nativeSpeakers: [],
@@ -681,7 +687,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
             return
           }
           // Sans effet si la connexion au SFU tient déjà (reconnexion du seul WebSocket).
-          await connectMedia(lk.url, lk.token, lk.room, ctx, d.can_speak !== false)
+          await connectMedia(lk.url, lk.token, lk.room, ctx, d.can_speak !== false, lk.e2ee ? String(d.channel_id) : null)
           if (get().mediaStatus === 'connected') clearRejoin()
         })
 

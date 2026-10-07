@@ -9,6 +9,8 @@ import { useWs } from './ws'
 import { useCallStore, callAudioConstraints, callVideoConstraints } from './call'
 import { useVoice } from './voice'
 import { webrtcMissing } from '../lib/webrtcSupport'
+import { t } from '../i18n'
+import { e2eeClaim, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated } from '../e2e/media'
 
 export interface GroupRing { groupId: string; fromUsername: string; callType: 'voice' | 'video'; expiresAt: number }
 
@@ -24,6 +26,9 @@ interface GroupCallStore {
   /** group_id → participants de l'appel en cours (GROUP_CALL_UPDATE). */
   active: Record<string, string[]>
   ring: GroupRing | null
+  /** Médias chiffrés de bout en bout (§5) ; participants dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
 
   initGlobalListeners: () => () => void
   setActive: (groupId: string, participants: string[]) => void
@@ -61,14 +66,36 @@ function _cleanup(set: Set) {
   _audioEls.clear()
   set(s => {
     s.localStream?.getTracks().forEach(t => t.stop())
-    return { groupId: null, status: 'idle', localStream: null, remotes: {}, micMuted: false, camOff: false, activeSpeakerId: null }
+    return { groupId: null, status: 'idle', localStream: null, remotes: {}, micMuted: false, camOff: false, activeSpeakerId: null, e2ee: false, e2eeOutdated: [] }
   })
 }
 
-async function _connect(lk: { url: string; token: string }, set: Set, get: () => GroupCallStore) {
+async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set: Set, get: () => GroupCallStore) {
   if (_room) return
-  const room = new Room({ adaptiveStream: true, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false })
+  const groupId = get().groupId
+  // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
+  let e2ee = null
+  if (lk.e2ee && groupId) {
+    try {
+      e2ee = await openMediaE2EE('group', groupId)
+    } catch (e) {
+      toast.error(t(mediaE2EEError(e)))
+      useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
+      _cleanup(set)
+      return
+    }
+    if (_room || get().groupId !== groupId) { e2ee.stop(); return }
+  }
+  const room = new Room({
+    adaptiveStream: true, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false,
+    ...(e2ee ? { encryption: e2ee.encryption } : {}),
+  })
   _room = room
+  set({ e2ee: !!e2ee })
+  if (e2ee) {
+    await enableMediaE2EE(room, e2ee)
+    watchOutdated(room, ids => set({ e2eeOutdated: ids }))
+  }
   room
     .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub, rp) => {
       // Son joué par un <audio> hors de tout composant : il continue quand on change de page.
@@ -151,6 +178,8 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
   activeSpeakerId: null,
   active: {},
   ring: null,
+  e2ee: false,
+  e2eeOutdated: [],
 
   initGlobalListeners: () => {
     const ws = useWs.getState()
@@ -203,7 +232,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
       }).catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' }))
       if (get().groupId !== groupId) { stream.getTracks().forEach(t => t.stop()); return }
       set({ localStream: stream })
-      useWs.getState().send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: type })
+      useWs.getState().send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: type, ...e2eeClaim() })
     } catch {
       toast.error('Accès au micro refusé')
       _cleanup(set)

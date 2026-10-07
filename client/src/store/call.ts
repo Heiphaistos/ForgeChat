@@ -11,6 +11,8 @@ import {
 } from 'livekit-client'
 import { maybeBlur } from '../utils/backgroundBlur'
 import toast from 'react-hot-toast'
+import { t } from '../i18n'
+import { e2eeClaim, enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, watchOutdated } from '../e2e/media'
 
 export interface IncomingCallInfo {
   fromUserId: string
@@ -53,6 +55,9 @@ interface CallStore {
   // la durée affichée reste correcte si on quitte la conversation et qu'on y revient
   // pendant que l'appel est toujours actif, au lieu de repartir de 0.
   connectedAt: number | null
+  /** Médias chiffrés de bout en bout (§5) ; correspondant dont l'appli ne chiffre pas. */
+  e2ee: boolean
+  e2eeOutdated: string[]
 
   initGlobalListeners: () => () => void
   startCall: (dmId: string, partnerId: string, type: 'voice' | 'video') => Promise<void>
@@ -79,6 +84,11 @@ let _micPub: LocalTrackPublication | null = null
 let _mySessionId: string | null = null
 /** Appel porté par le vocal natif Linux. */
 let _native = false
+/** Suivi de la clé de média du vocal natif (nouvelles époques). */
+let _stopNativeKeys: (() => void) | null = null
+
+/** Accès au SFU joint par le serveur ; `e2ee` : la salle exige des médias chiffrés. */
+interface LkAccess { url: string; token: string; e2ee?: boolean; conv_id?: string | null }
 
 type SetFn = (fn: (s: CallStore) => Partial<CallStore>) => void
 
@@ -91,12 +101,14 @@ function _cleanup(set: SetFn) {
   _camPub = _micPub = null
   void room?.disconnect(true)
   if (_native) { _native = false; void nativeDisconnect('call') }
+  _stopNativeKeys?.()
+  _stopNativeKeys = null
   set(s => {
     s.localStream?.getTracks().forEach(t => t.stop())
     return {
       dmId: null, partnerId: null, callState: 'idle',
       localStream: null, remoteStream: null, remoteVideoUrl: null, localVideoUrl: null,
-      micMuted: false, camOff: false, connectedAt: null,
+      micMuted: false, camOff: false, connectedAt: null, e2ee: false, e2eeOutdated: [],
     }
   })
 }
@@ -121,12 +133,15 @@ function _rebuildRemote(p: RemoteParticipant, set: SetFn, get: () => CallStore) 
 
 /** Connexion au SFU avec le jeton délivré par le serveur à l'acceptation. */
 /** Application Linux : le processus natif porte micro, caméra et son. */
-async function _connectNative(lk: { url: string; token: string }, set: SetFn, get: () => CallStore) {
+async function _connectNative(lk: LkAccess, set: SetFn, get: () => CallStore) {
   if (_native) return
   _native = true
   const partner = () => get().partnerId
   const res = await api.get('/voice/ice-config').catch(() => null)
   try {
+    const conv = lk.conv_id ?? get().dmId
+    const keys = lk.e2ee && conv ? await nativeMediaKey('dm', conv) : null
+    _stopNativeKeys = keys?.stop ?? null
     await nativeConnect('call', lk.url, lk.token, res?.data.ice_servers ?? [], true, !get().micMuted, {
       onTrack: e => {
         if (e.identity !== partner()) return
@@ -145,7 +160,7 @@ async function _connectNative(lk: { url: string; token: string }, set: SetFn, ge
         toast('Appel privé terminé : vous avez rejoint un salon vocal.')
         _endCall(set, get)
       },
-    })
+    }, keys?.first ?? null)
     if (get().callType === 'video') {
       const url = await nativeSetCamera(true).catch(() => null)
       set(() => ({ localVideoUrl: url, camOff: !url }))
@@ -157,11 +172,33 @@ async function _connectNative(lk: { url: string; token: string }, set: SetFn, ge
   }
 }
 
-async function _connect(lk: { url: string; token: string }, set: SetFn, get: () => CallStore) {
+async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
+  set(() => ({ e2ee: !!lk.e2ee }))
   if (isNativeVoice()) return _connectNative(lk, set, get)
   if (_room) return
-  const room = new Room({ adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false })
+  // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
+  const conv = lk.conv_id ?? get().dmId
+  let e2ee = null
+  if (lk.e2ee) {
+    try {
+      if (!conv) throw new Error('E2E_WAITING')
+      e2ee = await openMediaE2EE('dm', conv)
+    } catch (e) {
+      toast.error(t(mediaE2EEError(e)))
+      _endCall(set, get)
+      return
+    }
+    if (_room || get().callState === 'idle') { e2ee.stop(); return }
+  }
+  const room = new Room({
+    adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false,
+    ...(e2ee ? { encryption: e2ee.encryption } : {}),
+  })
   _room = room
+  if (e2ee) {
+    await enableMediaE2EE(room, e2ee)
+    watchOutdated(room, ids => set(() => ({ e2eeOutdated: ids })))
+  }
   const partner = () => get().partnerId
   room
     .on(RoomEvent.TrackSubscribed, (_t, _p, rp) => { if (rp.identity === partner()) _rebuildRemote(rp, set, get) })
@@ -297,6 +334,8 @@ export const useCallStore = create<CallStore>((set, get) => ({
   camOff: false,
   deafened: false,
   connectedAt: null,
+  e2ee: false,
+  e2eeOutdated: [],
 
   initGlobalListeners: () => {
     const ws = useWs.getState()
@@ -380,7 +419,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       const stream = isNativeVoice() ? null : await _getCallMedia(type)
       // Caméra indisponible : appel en audio seul, bouton caméra prêt à la rallumer.
       set({ localStream: stream, camOff: type === 'video' && !!stream && !stream.getVideoTracks().length })
-      useWs.getState().send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type })
+      useWs.getState().send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: type, ...e2eeClaim() })
       set({ callState: 'calling' })
       // Auto-annulation après 45 secondes sans réponse
       _callTimeout = setTimeout(() => {
@@ -400,7 +439,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       // Appels croisés : on appelle déjà cette personne, décrocher son appel.
       if (s.callState === 'calling' && s.partnerId === fromUserId && s.dmId === dmId) {
         if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
-        useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
+        useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId, ...e2eeClaim() })
         set({ callState: 'ringing' })
       } else {
         toast.error('Terminez d\'abord l\'appel en cours.')
@@ -418,7 +457,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       // Linux natif : micro et caméra capturés par le processus Rust.
       const stream = isNativeVoice() ? null : await _getCallMedia(type)
       set({ localStream: stream, camOff: type === 'video' && !!stream && !stream.getVideoTracks().length })
-      useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId })
+      useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId, ...e2eeClaim() })
       set({ callState: 'ringing' })
     } catch {
       // Micro inaccessible : décliner proprement pour que l'appelant ne sonne pas dans le vide

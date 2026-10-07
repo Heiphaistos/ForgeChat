@@ -22,6 +22,8 @@ import {
   isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic,
   type NativeTrackEvent, type NativeStateEvent,
 } from '../lib/nativeVoice'
+import { t } from '../i18n'
+import { enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, watchOutdated } from '../e2e/media'
 
 export function warn(ctx: string, e: unknown) {
   console.warn(`[voice] ${ctx}`, e)
@@ -59,6 +61,8 @@ let _whisper: string[] | null = null
 let _ctx: MeshCtx | null = null
 /** Salle ouverte par le vocal natif Linux (pas d'objet Room côté JS). */
 let _nativeRoom: string | null = null
+/** Suivi de la clé de média du vocal natif (nouvelles époques du salon). */
+let _stopNativeKeys: (() => void) | null = null
 
 export const getLocalStream = () => _localStream
 export const getRawMicTrack = () => _rawMicTrack
@@ -312,11 +316,16 @@ function onNativeState(e: NativeStateEvent, ctx: MeshCtx) {
   ctx.set({ mediaStatus: e.status === 'failed' ? 'failed' : e.status, ...(e.quality ? { mediaQuality: e.quality } : {}), ...(e.status === 'connected' ? { error: null } : {}) })
 }
 
-async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak: boolean) {
+async function connectNative(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak: boolean, e2eeChannel: string | null) {
   const ice = (await getIceConfig())?.iceServers ?? []
   const s = ctx.get()
   _nativeRoom = roomName
   try {
+    // Salon chiffré : clé du salon donnée au SDK natif, jamais de connexion en clair.
+    const keys = e2eeChannel ? await nativeMediaKey('channel', e2eeChannel).catch((e: unknown) => {
+      throw new Error(t(mediaE2EEError(e)))
+    }) : null
+    _stopNativeKeys = keys?.stop ?? null
     // Sans droit de parole, le jeton refuse le micro : ne pas le demander, sinon
     // la connexion entière échouait et on ne pouvait même pas écouter.
     await nativeConnect('voice', url, token, ice, !s.listenOnly && canSpeak && !s.serverMuted && !s.serverDeafened, _micOpen, {
@@ -329,7 +338,7 @@ async function connectNative(url: string, token: string, roomName: string, ctx: 
         _nativeUrls.clear()
         ctx.onMediaLost?.('evicted')
       },
-    })
+    }, keys?.first ?? null)
     report('connected', { native: true })
   } catch (e) {
     _nativeRoom = null
@@ -339,18 +348,33 @@ async function connectNative(url: string, token: string, roomName: string, ctx: 
   }
 }
 
-export async function connectMedia(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak = true) {
+/** `e2eeChannel` : id du salon quand le serveur exige des médias chiffrés (clé du salon, §5). */
+export async function connectMedia(url: string, token: string, roomName: string, ctx: MeshCtx, canSpeak = true, e2eeChannel: string | null = null) {
   _ctx = ctx
   if (isConnectedTo(roomName)) return
   await disconnectMedia()
-  if (isNativeVoice()) return connectNative(url, token, roomName, ctx, canSpeak)
+  ctx.set({ e2ee: !!e2eeChannel, e2eeOutdated: [] })
+  if (isNativeVoice()) return connectNative(url, token, roomName, ctx, canSpeak, e2eeChannel)
 
   if (typeof RTCPeerConnection === 'undefined') {
     ctx.set({ mediaStatus: 'failed', error: 'Ce moteur d\'affichage ne gère pas WebRTC : le vocal y est impossible. Utilisez la version web dans Chrome, Edge ou Firefox.' })
     return
   }
 
+  // Salon chiffré : jamais de connexion en clair, même si la clé manque.
+  let e2ee = null
+  if (e2eeChannel) {
+    try {
+      e2ee = await openMediaE2EE('channel', e2eeChannel)
+    } catch (e) {
+      ctx.set({ mediaStatus: 'failed', error: t(mediaE2EEError(e)) })
+      return
+    }
+    if (_room || !ctx.get().joined) { e2ee.stop(); return }
+  }
+
   const room = new Room({
+    ...(e2ee ? { encryption: e2ee.encryption } : {}),
     // Les flux sont lus par nos propres <video>/<audio> (volumes, sortie, PiP,
     // fenêtres détachées) : pas de suivi de visibilité par le SDK.
     adaptiveStream: false,
@@ -364,6 +388,10 @@ export async function connectMedia(url: string, token: string, roomName: string,
   _roomName = roomName
   expose()
   ctx.set({ mediaStatus: 'connecting' })
+  if (e2ee) {
+    await enableMediaE2EE(room, e2ee)
+    watchOutdated(room, ids => ctx.set({ e2eeOutdated: ids }))
+  }
 
   room
     .on(RoomEvent.TrackPublished, (pub, p) => {
@@ -460,6 +488,8 @@ async function publishMic(room: Room) {
 }
 
 export async function disconnectMedia() {
+  _stopNativeKeys?.()
+  _stopNativeKeys = null
   if (_nativeRoom !== null) {
     _nativeRoom = null
     _nativeUrls.clear()
