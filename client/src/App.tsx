@@ -6,6 +6,7 @@ import type { EncPayload } from './e2e/crypto'
 import { openText } from './e2e/conversations'
 import { channelPreview } from './e2e/channels'
 import { useWs } from './store/ws'
+import { useCommunityRealtime } from './components/community/useCommunityRealtime'
 import { useCallStore } from './store/call'
 import { useGroupCall } from './store/groupCall'
 import { GroupCallRinger } from './components/voice/GroupCallPanel'
@@ -874,6 +875,8 @@ function AppInner() {
     })
     return () => { offTimeout(); offLift() }
   }, [user?.id])
+
+  useCommunityRealtime(user?.id)
 
   // Rappels programmés
   useEffect(() => {

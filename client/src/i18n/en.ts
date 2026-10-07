@@ -1,5 +1,6 @@
 // Traduction anglaise. Une clé absente ici s'affiche en français (repli).
 import type { Key } from './fr'
+import { communityEn } from './community.ts'
 
 export const en: Partial<Record<Key, string>> = {
   // --- Connexion, inscription, mot de passe oublié ---
@@ -2183,4 +2184,5 @@ export const en: Partial<Record<Key, string>> = {
   'e2e.serverKey.recovered': '{n} channels decrypted',
   'e2e.serverKey.ownerOnly': 'Server owner only.',
   'e2e.serverKey.unreadable': '[unreadable: missing key]',
+  ...communityEn,
 }

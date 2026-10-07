@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import {
   ScrollText, UserPlus, UserMinus, UserX, ShieldOff, ShieldCheck,
-  Hash, Trash2, Crown, MessageSquareX, Settings,
+  Hash, Trash2, Crown, MessageSquareX, Settings, Download, Lock, Unlock, Ticket,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useT, t as tr, type Key } from '../../i18n'
+import { downloadText, toCsv } from '../community/format'
 
 interface Server {
   id: string
@@ -26,12 +28,8 @@ interface Props {
   server: Server
 }
 
-type ActionFilter = 'all' | string
-
 // Les clés DOIVENT matcher exactement les chaînes passées à log_event() côté backend
-// (server/src/handlers/*.rs) -- toutes en MAJUSCULES_SNAKE_CASE. Un mismatch de casse
-// ici faisait que le journal entier retombait silencieusement sur l'icône/label
-// générique pour CHAQUE entrée, jamais un seul match réel. Libellés : clés audit.<ACTION>.
+// (server/src/handlers/*.rs) -- toutes en MAJUSCULES_SNAKE_CASE. Libellés : clés audit.<ACTION>.
 const ACTION_CONFIG: Record<string, { color: string; Icon: any }> = {
   MEMBER_JOIN:     { color: 'text-fc-green',   Icon: UserPlus },
   MEMBER_LEAVE:    { color: 'text-fc-muted',   Icon: UserMinus },
@@ -48,9 +46,13 @@ const ACTION_CONFIG: Record<string, { color: string; Icon: any }> = {
   MESSAGE_UNPIN:   { color: 'text-fc-muted',   Icon: Hash },
   SERVER_UPDATE:   { color: 'text-blue-400',   Icon: Settings },
   OWNER_TRANSFER:  { color: 'text-red-400',    Icon: Crown },
+  LOCKDOWN_ON:     { color: 'text-fc-red',     Icon: Lock },
+  LOCKDOWN_OFF:    { color: 'text-fc-green',   Icon: Unlock },
+  TICKET_OPEN:     { color: 'text-blue-400',   Icon: Ticket },
+  TICKET_STATUS:   { color: 'text-fc-muted',   Icon: Ticket },
 }
 
-const ACTION_OPTIONS = ['all', ...Object.keys(ACTION_CONFIG)]
+const PAGE = 50
 
 function timeAgo(dateStr: string): string {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
@@ -60,19 +62,57 @@ function timeAgo(dateStr: string): string {
   return tr('audit.dAgo', { n: Math.floor(diff / 86400) })
 }
 
+const inputCls = 'px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm'
+
 export default function AuditLogTab({ server }: Props) {
   const t = useT()
   const actionLabel = (a: string) => (a === 'all' ? t('audit.all') : ACTION_CONFIG[a] ? t(`audit.${a}` as Key) : a)
-  const [filter, setFilter] = useState<ActionFilter>('all')
+  const [action, setAction] = useState('all')
+  const [userId, setUserId] = useState('')
+  const [q, setQ] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
-  const { data: entries = [], isLoading } = useQuery<AuditEntry[]>({
-    queryKey: ['audit', server.id],
-    queryFn: () => api.get(`/servers/${server.id}/audit`).then(r => r.data),
-    refetchInterval: 30_000,
+  const { data: facets } = useQuery<{ actions: string[]; users: { user_id: string; username: string | null }[] }>({
+    queryKey: ['audit_facets', server.id],
+    queryFn: () => api.get(`/servers/${server.id}/audit/facets`).then(r => r.data),
     retry: false,
   })
 
-  const filtered = filter === 'all' ? entries : entries.filter(e => e.action === filter)
+  // Dates saisies en heure locale, envoyées en UTC ; « au » inclut toute la journée.
+  const params = (extra: Record<string, string | number>) => {
+    const p = new URLSearchParams()
+    if (action !== 'all') p.set('action', action)
+    if (userId) p.set('user_id', userId)
+    if (q.trim()) p.set('q', q.trim())
+    if (from) p.set('from', new Date(`${from}T00:00:00`).toISOString())
+    if (to) p.set('to', new Date(`${to}T23:59:59`).toISOString())
+    for (const [k, v] of Object.entries(extra)) p.set(k, String(v))
+    return p.toString()
+  }
+
+  const query = useInfiniteQuery<AuditEntry[]>({
+    queryKey: ['audit', server.id, action, userId, q, from, to],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => api.get(`/servers/${server.id}/audit?${params(pageParam ? { limit: PAGE, before: pageParam as string } : { limit: PAGE })}`).then(r => r.data),
+    getNextPageParam: last => (last.length === PAGE ? last[last.length - 1].created_at : undefined),
+    refetchInterval: 30_000,
+    retry: false,
+  })
+  const entries = query.data?.pages.flat() ?? []
+  const actions = ['all', ...new Set([...(facets?.actions ?? []), ...Object.keys(ACTION_CONFIG)])]
+
+  const exportAs = async (format: 'csv' | 'json') => {
+    try {
+      const { data } = await api.get<AuditEntry[]>(`/servers/${server.id}/audit?${params({ limit: 1000 })}`)
+      const stamp = new Date().toISOString().slice(0, 10)
+      if (format === 'json') downloadText(`audit-${stamp}.json`, JSON.stringify(data, null, 2), 'application/json')
+      else downloadText(`audit-${stamp}.csv`, toCsv(data as unknown as Record<string, unknown>[], ['created_at', 'action', 'username', 'user_id', 'target_name', 'target_id', 'details']), 'text/csv')
+      toast.success(t('community.audit.exported', { n: data.length }))
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -83,35 +123,36 @@ export default function AuditLogTab({ server }: Props) {
         </h3>
         <p className="text-sm text-fc-muted mb-4">{t('audit.intro')}</p>
 
-        {/* Filtre */}
-        <select
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          aria-label={t('audit.filter')}
-          className="px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm mb-5"
-        >
-          {ACTION_OPTIONS.map(a => (
-            <option key={a} value={a}>{actionLabel(a)}</option>
-          ))}
-        </select>
+        {/* Filtres : action, auteur, période, recherche ; export de ce qui est filtré */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+          <select value={action} onChange={e => setAction(e.target.value)} aria-label={t('audit.filter')} className={inputCls}>
+            {actions.map(a => <option key={a} value={a}>{actionLabel(a)}</option>)}
+          </select>
+          <select value={userId} onChange={e => setUserId(e.target.value)} aria-label={t('community.audit.who')} className={inputCls}>
+            <option value="">{t('community.audit.everyone')}</option>
+            {(facets?.users ?? []).map(u => <option key={u.user_id} value={u.user_id}>{u.username ?? u.user_id}</option>)}
+          </select>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} aria-label={t('community.audit.from')} className={inputCls} />
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} aria-label={t('community.audit.to')} className={inputCls} />
+          <input value={q} onChange={e => setQ(e.target.value)} maxLength={100} placeholder={t('community.audit.search')}
+            aria-label={t('community.audit.search')} className={`${inputCls} sm:col-span-2`} />
+        </div>
+        <div className="flex gap-2 mb-5">
+          <button onClick={() => exportAs('csv')} className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-hover text-white rounded text-sm"><Download size={13} aria-hidden /> CSV</button>
+          <button onClick={() => exportAs('json')} className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-hover text-white rounded text-sm"><Download size={13} aria-hidden /> JSON</button>
+        </div>
 
         {/* Timeline */}
-        {isLoading ? (
+        {query.isLoading ? (
           <div role="status" aria-label={t('audit.loading')} className="text-center text-fc-muted py-10 text-sm">{t('common.loading')}</div>
-        ) : filtered.length === 0 ? (
+        ) : entries.length === 0 ? (
           <div role="status" className="text-center text-fc-muted py-10 text-sm">{t('audit.none')}</div>
         ) : (
           <div className="relative">
-            {/* Ligne verticale */}
             <div aria-hidden className="absolute left-4 top-0 bottom-0 w-px bg-fc-hover" />
-
             <ul role="list" aria-label={t('audit.entries')} className="space-y-1">
-              {filtered.map(entry => {
-                const cfg = ACTION_CONFIG[entry.action] ?? {
-                  color: 'text-fc-muted',
-                  Icon: ScrollText,
-                }
-                const { color, Icon } = cfg
+              {entries.map(entry => {
+                const { color, Icon } = ACTION_CONFIG[entry.action] ?? { color: 'text-fc-muted', Icon: ScrollText }
                 const label = actionLabel(entry.action)
                 const actor = entry.username ?? t('audit.unknownUser')
                 const entryLabel = entry.target_name
@@ -119,12 +160,9 @@ export default function AuditLogTab({ server }: Props) {
                   : `${actor} — ${label} (${timeAgo(entry.created_at)})`
                 return (
                   <li key={entry.id} aria-label={entryLabel} className="flex gap-4 pl-2 py-2 group hover:bg-fc-hover/20 rounded-lg transition">
-                    {/* Icône sur la timeline */}
                     <div aria-hidden className={`w-6 h-6 rounded-full bg-fc-channel flex items-center justify-center flex-shrink-0 z-10 border-2 border-fc-bg ${color}`}>
                       <Icon size={11} />
                     </div>
-
-                    {/* Contenu */}
                     <div className="flex-1 min-w-0 pt-0.5" aria-hidden>
                       <div className="flex items-baseline gap-1.5 flex-wrap">
                         <span className="text-white text-sm font-medium">{actor}</span>
@@ -139,14 +177,19 @@ export default function AuditLogTab({ server }: Props) {
                         </div>
                       )}
                     </div>
-
-                    <div className="text-xs text-fc-muted flex-shrink-0 pt-0.5" aria-hidden>
+                    <div className="text-xs text-fc-muted flex-shrink-0 pt-0.5" aria-hidden title={new Date(entry.created_at).toLocaleString()}>
                       {timeAgo(entry.created_at)}
                     </div>
                   </li>
                 )
               })}
             </ul>
+            {query.hasNextPage && (
+              <button onClick={() => query.fetchNextPage()} disabled={query.isFetchingNextPage}
+                className="mt-3 w-full py-2 text-sm text-fc-accent hover:bg-fc-hover/30 rounded">
+                {t('community.audit.more')}
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Users, Radio, MessageSquare, Hash, Loader2 } from 'lucide-react'
 import api from '../../api/client'
 import { useT, intlLocale } from '../../i18n'
+import StatsHistory from '../community/StatsHistory'
 
 interface Props {
   serverId: string
@@ -126,6 +127,7 @@ export default function StatsTab({ serverId }: Props) {
           </div>
         </div>
       )}
+      <StatsHistory serverId={serverId} />
     </div>
   )
 }

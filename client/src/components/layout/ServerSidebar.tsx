@@ -6,7 +6,6 @@ import DeleteServerModal from '../modals/DeleteServerModal'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
-import ServerTemplateModal from '../modals/ServerTemplateModal'
 import ServerNotifModal from '../modals/ServerNotifModal'
 import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
@@ -47,74 +46,6 @@ function genFolderId() {
   return `folder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 }
 
-// ─── Built-in Templates ─────────────────────────────────────
-
-// name / description : clés i18n (traduites à l'affichage).
-const BUILTIN_TEMPLATES: { id: string; name: Key; description: Key; template_data: any }[] = [
-  {
-    id: '__gaming__',
-    name: 'tpl.gaming',
-    description: 'tpl.gaming.desc',
-    template_data: {
-      categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
-      channels: [
-        { id: '__c1__', name: 'général', type: 'text', position: 0, category_id: '__cat1__' },
-        { id: '__c2__', name: 'stratégie', type: 'text', position: 1, category_id: '__cat1__' },
-        { id: '__c3__', name: 'recrutement', type: 'text', position: 2, category_id: '__cat1__' },
-        { id: '__c4__', name: 'Gaming', type: 'voice', position: 0, category_id: '__cat2__' },
-        { id: '__c5__', name: 'AFK', type: 'voice', position: 1, category_id: '__cat2__' },
-      ],
-      roles: [],
-    },
-  },
-  {
-    id: '__community__',
-    name: 'tpl.community',
-    description: 'tpl.community.desc',
-    template_data: {
-      categories: [{ id: '__cat1__', name: 'Info', position: 0 }, { id: '__cat2__', name: 'Discussion', position: 1 }],
-      channels: [
-        { id: '__c1__', name: 'accueil', type: 'text', position: 0, category_id: '__cat1__' },
-        { id: '__c2__', name: 'règles', type: 'text', position: 1, category_id: '__cat1__' },
-        { id: '__c3__', name: 'général', type: 'text', position: 0, category_id: '__cat2__' },
-        { id: '__c4__', name: 'événements', type: 'text', position: 1, category_id: '__cat2__' },
-        { id: '__c5__', name: 'Salon principal', type: 'voice', position: 0, category_id: null },
-      ],
-      roles: [],
-    },
-  },
-  {
-    id: '__study__',
-    name: 'tpl.study',
-    description: 'tpl.study.desc',
-    template_data: {
-      categories: [{ id: '__cat1__', name: 'Texte', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
-      channels: [
-        { id: '__c1__', name: 'général', type: 'text', position: 0, category_id: '__cat1__' },
-        { id: '__c2__', name: 'ressources', type: 'text', position: 1, category_id: '__cat1__' },
-        { id: '__c3__', name: 'entraide', type: 'text', position: 2, category_id: '__cat1__' },
-        { id: '__c4__', name: 'Révisions ensemble', type: 'voice', position: 0, category_id: '__cat2__' },
-      ],
-      roles: [],
-    },
-  },
-  {
-    id: '__team__',
-    name: 'tpl.team',
-    description: 'tpl.team.desc',
-    template_data: {
-      categories: [{ id: '__cat1__', name: 'Général', position: 0 }, { id: '__cat2__', name: 'Vocal', position: 1 }],
-      channels: [
-        { id: '__c1__', name: 'annonces', type: 'announcement', position: 0, category_id: '__cat1__' },
-        { id: '__c2__', name: 'général', type: 'text', position: 1, category_id: '__cat1__' },
-        { id: '__c3__', name: 'tâches', type: 'text', position: 2, category_id: '__cat1__' },
-        { id: '__c4__', name: 'Standup', type: 'voice', position: 0, category_id: '__cat2__' },
-      ],
-      roles: [],
-    },
-  },
-]
-
 // ─── ServerSidebar ──────────────────────────────────────────
 
 export default function ServerSidebar() {
@@ -136,7 +67,7 @@ export default function ServerSidebar() {
   // Mentions non lues par serveur (pastille rouge chiffrée, même serveur en sourdine)
   const serverMentionCounts = useUnread(s => s.serverMentionCounts)
   const [showCreate, setShowCreate] = useState(false)
-  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [createStep, setCreateStep] = useState<Step>('choice')
   const [folders, setFolders] = useState<FoldersMap>(loadFolders)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{
@@ -166,35 +97,13 @@ export default function ServerSidebar() {
     staleTime: 30_000,
   })
 
+  // Modèle intégré : le serveur crée toute la structure (POST /servers {template}) ;
+  // modèle enregistré ou public : POST /templates/:id/use.
   const createServer = useMutation({
-    mutationFn: (payload: { name: string; template_data?: any }) => {
-      if (payload.template_data) {
-        return api.post('/servers', { name: payload.name }).then(async res => {
-          const newServerId = res.data.id
-          const tdata = payload.template_data
-          const catMap: Record<string, string> = {}
-          for (const cat of (tdata.categories ?? [])) {
-            try {
-              const cr = await api.post(`/servers/${newServerId}/categories`, { name: cat.name, position: cat.position })
-              catMap[cat.id] = cr.data.id
-            } catch { /* ignore */ }
-          }
-          for (const ch of (tdata.channels ?? [])) {
-            const newCatId = ch.category_id ? catMap[ch.category_id] : undefined
-            try {
-              await api.post(`/servers/${newServerId}/channels`, {
-                name: ch.name,
-                type: ch.type,
-                position: ch.position,
-                category_id: newCatId ?? null,
-              })
-            } catch { /* ignore */ }
-          }
-          return res
-        })
-      }
-      return api.post('/servers', { name: payload.name })
-    },
+    mutationFn: (payload: { name: string; template?: PickedTemplate | null }) =>
+      payload.template?.source === 'saved'
+        ? api.post<{ id: string }>(`/templates/${payload.template.id}/use`, { name: payload.name } as Record<string, unknown>)
+        : api.post<{ id: string }>('/servers', { name: payload.name, template: payload.template?.id } as Record<string, unknown>),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['servers'] })
       nav(`/servers/${res.data.id}`)
@@ -609,7 +518,7 @@ export default function ServerSidebar() {
 
       {/* Créer serveur */}
       <button
-        onClick={() => setShowCreate(true)}
+        onClick={() => { setCreateStep('choice'); setShowCreate(true) }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-green rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-green hover:text-white"
         title={t('servers.create')}
         aria-label={t('servers.create')}
@@ -619,7 +528,7 @@ export default function ServerSidebar() {
 
       {/* Utiliser un template */}
       <button
-        onClick={() => setShowTemplateModal(true)}
+        onClick={() => { setCreateStep('template-grid'); setShowCreate(true) }}
         className="w-12 h-12 bg-fc-channel hover:bg-fc-accent rounded-full flex items-center justify-center transition-all hover:rounded-2xl text-fc-muted hover:text-white"
         title={t('servers.useTemplate')}
         aria-label={t('servers.createFromTemplate')}
@@ -774,16 +683,14 @@ export default function ServerSidebar() {
       {showCreate && (
         <CreateServerModal
           onClose={() => setShowCreate(false)}
-          onCreate={(name, templateData) => createServer.mutate({ name, template_data: templateData })}
+          onCreate={(name, template) => createServer.mutate({ name, template })}
           isPending={createServer.isPending}
+          initialStep={createStep}
         />
       )}
 
       {notifServer && (
         <ServerNotifModal serverId={notifServer.id} serverName={notifServer.name} onClose={() => setNotifServer(null)} />
-      )}
-      {showTemplateModal && (
-        <ServerTemplateModal onClose={() => setShowTemplateModal(false)} />
       )}
     </div>
   )
@@ -793,8 +700,10 @@ export default function ServerSidebar() {
 
 type Step = 'choice' | 'template-grid' | 'name'
 
-interface BuiltinTemplate {
+/** Modèle choisi : intégré (créé par le serveur) ou enregistré/public. */
+interface PickedTemplate {
   id: string
+  source: 'builtin' | 'saved'
   name: string
   description: string
   template_data: any
@@ -804,36 +713,46 @@ function CreateServerModal({
   onClose,
   onCreate,
   isPending,
+  initialStep = 'choice',
 }: {
   onClose: () => void
-  onCreate: (name: string, templateData?: any) => void
+  onCreate: (name: string, template?: PickedTemplate | null) => void
   isPending: boolean
+  initialStep?: Step
 }) {
   const t = useT()
   const nav = useNavigate()
-  const [step, setStep] = useState<Step>('choice')
+  const [step, setStep] = useState<Step>(initialStep)
   const [name, setName] = useState('')
-  const [selectedTemplate, setSelectedTemplate] = useState<BuiltinTemplate | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<PickedTemplate | null>(null)
 
-  // Templates côté serveur (DB)
-  const { data: remoteTemplates } = useQuery<{ public: any[]; mine: any[] }>({
+  // Modèles intégrés (structure tenue par le serveur), publics et personnels.
+  const { data: remoteTemplates } = useQuery<{ builtin?: { id: string; template_data: any }[]; public: any[]; mine: any[] }>({
     queryKey: ['server-templates'],
     queryFn: () => api.get('/templates').then(r => r.data),
     enabled: step === 'template-grid',
   })
 
-  const allPublicTemplates = [
-    ...BUILTIN_TEMPLATES.map(b => ({ ...b, name: t(b.name), description: t(b.description) })),
+  const allPublicTemplates: PickedTemplate[] = [
+    ...(remoteTemplates?.builtin ?? []).map(b => ({
+      id: b.id,
+      source: 'builtin' as const,
+      name: t(`tpl.${b.id}` as Key),
+      description: t(`tpl.${b.id}.desc` as Key),
+      template_data: b.template_data,
+    })),
     ...(remoteTemplates?.public ?? []).map((tp: any) => ({
       id: tp.id,
+      source: 'saved' as const,
       name: tp.name,
       description: tp.description ?? t('servers.create.used', { n: tp.usage_count }),
       template_data: tp.template_data,
     })),
   ]
 
-  const myRemoteTemplates = (remoteTemplates?.mine ?? []).map((tp: any) => ({
+  const myRemoteTemplates: PickedTemplate[] = (remoteTemplates?.mine ?? []).map((tp: any) => ({
     id: tp.id,
+    source: 'saved' as const,
     name: tp.name,
     description: tp.description ?? t('servers.create.createdOn', { date: new Date(tp.created_at).toLocaleDateString(intlLocale()) }),
     template_data: tp.template_data,
@@ -841,7 +760,7 @@ function CreateServerModal({
 
   const handleCreate = () => {
     if (!name.trim()) return
-    onCreate(name.trim(), selectedTemplate?.template_data)
+    onCreate(name.trim(), selectedTemplate)
   }
 
   return (
@@ -924,7 +843,9 @@ function CreateServerModal({
                     <div className="font-medium text-white text-sm group-hover:text-fc-accent transition">{tp.name}</div>
                     <div className="text-xs text-fc-muted mt-0.5 leading-snug line-clamp-2">{tp.description}</div>
                     <div className="text-[10px] text-fc-muted/60 mt-1">
-                      {t('servers.create.channels', { n: tp.template_data.channels?.length ?? 0 })}
+                      {tp.template_data.channels?.length
+                        ? t('servers.create.channels', { n: tp.template_data.channels.length })
+                        : t('community.tpl.categoriesOnly', { n: tp.template_data.categories?.length ?? 0 })}
                     </div>
                   </button>
                 ))}
@@ -965,7 +886,9 @@ function CreateServerModal({
             </div>
             {selectedTemplate && (
               <p className="text-xs text-fc-muted mb-3 ml-6">
-                {t('servers.create.willCreate', { n: selectedTemplate.template_data.channels?.length ?? 0 })}
+                {selectedTemplate.template_data.channels?.length
+                  ? t('servers.create.willCreate', { n: selectedTemplate.template_data.channels.length })
+                  : t('community.tpl.categoriesOnly', { n: selectedTemplate.template_data.categories?.length ?? 0 })}
               </p>
             )}
             <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1 mt-3">
