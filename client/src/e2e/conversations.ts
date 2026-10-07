@@ -1,6 +1,7 @@
 // Messages chiffrés des MP, groupes et salons côté web (docs/CHIFFREMENT-E2E.md §4.1, §6, §10).
 // Clés d'époque gardées EN MÉMOIRE seulement (jamais stockées) : rechargées
 // depuis les enveloppes du serveur et ouvertes avec la clé de compte.
+import { create } from 'zustand'
 import api from '../api/client'
 import { t } from '../i18n'
 import { useAuth } from '../store/auth'
@@ -14,9 +15,9 @@ interface Envelope { epoch: number; wrapped: c.ConvWrapped; wrapped_by: string |
 export interface ServerKeyInfo { server_id: string; public: string; fingerprint: string }
 interface KeysResponse {
   current_epoch: number | null; rotate_needed: boolean; all_keyed: boolean; envelopes: Envelope[]
-  /** « Il faut chiffrer » : MP/groupe quand tous ont une clé, salon dès que j'en ai une. */
+  /** « Il faut chiffrer » : j'ai une clé de compte (chiffrement obligatoire partout). */
   encrypt?: boolean
-  /** Salon : membres munis d'une clé auxquels l'époque courante manque. */
+  /** Membres munis d'une clé auxquels l'époque courante manque (arrivés, ou clé créée depuis). */
   missing?: string[]
   server_key?: ServerKeyInfo | null
   /** Salon : époques que je détiens, pas encore enveloppées pour la clé du serveur. */
@@ -81,10 +82,12 @@ async function load(kind: ConvKind, id: string, force = false): Promise<ConvStat
   }
   const st = await p
   cache.set(name, st)
+  // MP et groupes : un membre a créé sa clé depuis, on lui donne les époques (salons : completeChannelKeys).
+  if (kind !== 'channel' && st.missing.length && st.keys.size) void completeKeys(kind, id)
   return st
 }
 
-/** Faut-il chiffrer ici ? (salon : dès que j'ai une clé de compte). */
+/** Faut-il chiffrer ici ? (dès que j'ai une clé de compte : sans elle, on ne peut pas écrire). */
 export async function mustEncrypt(kind: ConvKind, id: string): Promise<boolean> {
   return (await load(kind, id)).encrypt
 }
@@ -155,9 +158,8 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
   const priv = useAccountKey.getState().priv
   const me = myId()
   if (!priv || !me) throw new Error('E2E_LOCKED')
-  const members = await getAllMembers(kind, id)
-  if (kind !== 'channel' && members.some(m => !m.public || !m.fingerprint)) throw new Error('E2E_MEMBERS')
-  const keyed = keyedOnly(members)
+  // Les membres sans clé recevront l'époque après avoir créé la leur (`missing`).
+  const keyed = keyedOnly(await getAllMembers(kind, id))
   const epoch = st.current === null ? 0 : st.current + 1
   const key = c.generateConvKey()
   const conv = c.convName(kind, id)
@@ -211,17 +213,18 @@ export async function currentKey(kind: ConvKind, id: string): Promise<{ epoch: n
   return { epoch, key, me }
 }
 
-/** Options d'un contenu de salon : portée dans l'AAD (fil, publication, sondage) et id client imposé. */
-export interface SealOpts { clientMsgId?: string | null; scope?: string }
+/**
+ * Options d'un contenu de salon : portée dans l'AAD (fil, publication, sondage), id client
+ * imposé, et auteur d'origine (rechiffrement de l'ancien texte d'un autre membre).
+ */
+export interface SealOpts { clientMsgId?: string | null; scope?: string; author?: string }
 
-/** Chiffre `body` si la conversation l'exige ; null = texte en clair permis (transition). */
+/** Chiffre `body` (toujours : chiffrement obligatoire ; E2E_LOCKED sans clé de compte). */
 export async function sealBody(kind: ConvKind, id: string, body: c.MsgBody, opts: SealOpts = {}):
-  Promise<{ enc: c.EncPayload; client_msg_id: string } | null> {
-  const st = await load(kind, id)
-  if (!st.encrypt) return null
+  Promise<{ enc: c.EncPayload; client_msg_id: string }> {
   const { epoch, key, me } = await currentKey(kind, id)
   const cmid = opts.clientMsgId ?? crypto.randomUUID()
-  const enc = await c.encryptMessage(key, opts.scope ?? c.convName(kind, id), epoch, me, cmid, body)
+  const enc = await c.encryptMessage(key, opts.scope ?? c.convName(kind, id), epoch, opts.author ?? me, cmid, body)
   return { enc, client_msg_id: cmid }
 }
 
@@ -230,8 +233,8 @@ export const seal = (kind: ConvKind, id: string, text: string, clientMsgId?: str
   sealBody(kind, id, { t: text }, { clientMsgId })
 
 /**
- * Envoie `text` chiffré si la conversation l'exige ; une seule nouvelle tentative
- * après un refus lié à l'état (époque périmée, clair refusé). `extra` complète le
+ * Envoie `text` chiffré ; une seule nouvelle tentative après un refus lié à
+ * l'état (époque périmée, clair refusé). `extra` complète le
  * contenu chiffré (aperçu de lien `p`, titre…) ; `scope` : portée de salon.
  */
 export async function withSeal<T>(
@@ -353,26 +356,27 @@ export async function answerKeyRequest(d: { conv_kind?: string; conv_id?: string
 }
 
 /**
- * Salon : complète les clés qui manquent (au plus une fois par minute) — membres
- * arrivés ou ayant gagné l'accès depuis l'époque courante, et époques pas encore
- * enveloppées pour la clé de récupération du serveur.
+ * Complète les clés qui manquent (au plus une fois par minute) — membres arrivés,
+ * ayant gagné l'accès ou créé leur clé depuis l'époque courante, et (salon)
+ * époques pas encore enveloppées pour la clé de récupération du serveur.
  */
-export async function completeChannelKeys(channelId: string) {
-  const name = c.convName('channel', channelId)
+async function completeKeys(kind: ConvKind, id: string) {
+  const name = c.convName(kind, id)
   if (Date.now() - (completed.get(name) ?? 0) < 60_000) return
   completed.set(name, Date.now())
   const priv = useAccountKey.getState().priv
   const me = myId()
   if (!priv || !me) return
   try {
-    const st = await load('channel', channelId, true)
+    const st = await load(kind, id, true)
     if (st.missing.length && st.keys.size) {
       const wanted = new Set(st.missing)
-      const targets = keyedOnly(await getAllMembers('channel', channelId)).filter(m => wanted.has(m.user_id))
-      for (const [epoch, key] of st.keys) await postBatches('channel', channelId, epoch, key, targets)
+      const targets = keyedOnly(await getAllMembers(kind, id)).filter(m => wanted.has(m.user_id))
+      for (const [epoch, key] of st.keys) await postBatches(kind, id, epoch, key, targets)
     }
-    const sk = st.serverKey
+    const sk = kind === 'channel' ? st.serverKey : null
     if (sk) {
+      const channelId = id
       const conv = c.convName('channel', channelId)
       for (const epoch of st.serverMissing) {
         const key = st.keys.get(epoch)
@@ -385,29 +389,93 @@ export async function completeChannelKeys(channelId: string) {
   } catch { /* hors ligne : au prochain passage */ }
 }
 
+/**
+ * Salon ouvert : complète ses clés et rechiffre en arrière-plan l'ancien texte en
+ * clair que j'ai le droit de rechiffrer (le mien, ou tout si je modère).
+ */
+export async function completeChannelKeys(channelId: string) {
+  const name = c.convName('channel', channelId)
+  const first = Date.now() - (completed.get(name) ?? 0) >= 60_000
+  await completeKeys('channel', channelId)
+  if (first) void reencryptPages(`/e2e/legacy/channels/${channelId}`)
+}
+
 // ─── Rechiffrement de l'historique (§6) ─────────────────────────────────────
 interface Legacy { conv_kind: ConvKind; conv_id: string; id: string; content: string }
-/** Ancien texte d'un salon : message, message de fil, réponse ou publication de forum. */
+/** Ancien texte d'un salon (jamais purgé) : l'AAD garde son auteur d'origine. */
 interface ChannelLegacy extends Legacy {
-  item: 'message' | 'thread_message' | 'forum_reply' | 'forum_post'
+  item: 'message' | 'thread_message' | 'forum_reply' | 'forum_post' | 'thread_title' | 'poll'
+  author_id: string
   title: string | null
   scope_id: string | null
+  options: string[] | null
 }
 let reencrypting = false
+const PAGE = 50
 
-/** Contenu chiffré d'un ancien texte de salon, avec la portée de son fil ou de sa publication. */
+/** Contenu chiffré d'un ancien texte de salon, avec la portée de son fil, de sa publication ou de son sondage. */
 async function sealLegacyItem(m: ChannelLegacy) {
   const ch = m.conv_id
+  const author = m.author_id
   switch (m.item) {
-    case 'message': return seal('channel', ch, m.content)
-    case 'thread_message': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.threadScope(ch, m.scope_id) }) : null
-    case 'forum_reply': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.postScope(ch, m.scope_id) }) : null
+    case 'message': return sealBody('channel', ch, { t: m.content }, { author })
+    case 'thread_message': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.threadScope(ch, m.scope_id), author }) : null
+    case 'forum_reply': return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.postScope(ch, m.scope_id), author }) : null
     case 'forum_post':
       // La publication garde son id client : ses réponses y sont liées.
       return m.scope_id
-        ? sealBody('channel', ch, { t: m.content, title: m.title ?? '' }, { scope: c.postScope(ch, m.scope_id), clientMsgId: m.scope_id })
+        ? sealBody('channel', ch, { t: m.content, title: m.title ?? '' }, { scope: c.postScope(ch, m.scope_id), clientMsgId: m.scope_id, author })
         : null
+    case 'thread_title':
+      return m.scope_id ? sealBody('channel', ch, { t: m.content }, { scope: c.threadScope(ch, m.scope_id), clientMsgId: m.scope_id, author }) : null
+    case 'poll': {
+      const cmid = crypto.randomUUID()
+      return sealBody('channel', ch, { t: m.content, o: m.options ?? [] }, { scope: c.pollScope(ch, cmid), clientMsgId: cmid, author })
+    }
   }
+}
+
+async function putChannelLegacy(m: ChannelLegacy): Promise<boolean> {
+  const sealed = await sealLegacyItem(m)
+  if (!sealed) return false
+  await api.put(`/e2e/legacy/channel/${m.item}/${m.id}`, sealed)
+  return true
+}
+
+/** Avancement du rechiffrement d'un serveur par son propriétaire (affichage discret). */
+export const useReencryptProgress = create<{ serverId: string | null; done: number }>(() => ({ serverId: null, done: 0 }))
+const runningPages = new Set<string>()
+const serversStarted = new Set<string>()
+
+/** Parcourt une liste d'anciens textes page par page (curseur) ; un échec est sauté, repris au prochain passage. */
+async function reencryptPages(url: string, onDone?: () => void) {
+  if (runningPages.has(url) || useAccountKey.getState().status !== 'ready') return
+  runningPages.add(url)
+  try {
+    for (let after: string | undefined; ;) {
+      const { data } = await api.get<ChannelLegacy[]>(url, { params: { limit: PAGE, after } })
+      for (const m of data) {
+        try {
+          if (await putChannelLegacy(m)) onDone?.()
+        } catch { /* clé en attente, déjà rechiffré : au prochain passage */ }
+      }
+      if (data.length < PAGE) return
+      after = data[data.length - 1]?.id
+      await new Promise(r => setTimeout(r, 300))
+    }
+  } catch { /* hors ligne : reprise à la prochaine ouverture */ } finally {
+    runningPages.delete(url)
+  }
+}
+
+/** Propriétaire : rechiffre en arrière-plan tout l'ancien contenu du serveur (salons, fils, forums, sondages). */
+export async function reencryptServer(serverId: string) {
+  if (serversStarted.has(serverId)) return // une fois par session ; reprise à la suivante
+  serversStarted.add(serverId)
+  useReencryptProgress.setState({ serverId, done: 0 })
+  await reencryptPages(`/e2e/legacy/servers/${serverId}`,
+    () => useReencryptProgress.setState(s => ({ done: s.done + 1 })))
+  useReencryptProgress.setState({ serverId: null, done: 0 })
 }
 
 async function reencryptRounds<T extends Legacy>(url: string, put: (m: T) => Promise<boolean>) {
@@ -436,12 +504,7 @@ export async function reencryptLegacy() {
       await api.put(`${path}/messages/${m.id}/encrypt`, sealed)
       return true
     })
-    await reencryptRounds<ChannelLegacy>('/e2e/legacy/channels', async m => {
-      const sealed = await sealLegacyItem(m)
-      if (!sealed) return false
-      await api.put(`/e2e/legacy/channel/${m.item}/${m.id}`, sealed)
-      return true
-    })
+    await reencryptRounds<ChannelLegacy>('/e2e/legacy/channels', putChannelLegacy)
   } catch { /* hors ligne : reprise au prochain démarrage */ } finally {
     reencrypting = false
   }

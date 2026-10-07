@@ -20,7 +20,7 @@ interface E2EState {
   pub: string | null
   /** Code de récupération à afficher UNE fois, puis oublié. */
   recoveryToShow: string | null
-  /** Écran de déverrouillage ouvert (reste ouvert pendant le calcul, fermé par « Plus tard »). */
+  /** Écran de clé ouvert : bloquant jusqu'à ce que la clé soit prête (reste ouvert pendant le calcul). */
   prompt: boolean
   /** Compte auquel appartient la clé (lu par les conversations chiffrées). */
   userId: string | null

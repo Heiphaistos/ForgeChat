@@ -1,9 +1,11 @@
 //! Chiffrement de bout en bout des MP, groupes et salons (docs/CHIFFREMENT-E2E.md §4.1, §6, §10).
 //!
 //! Chaque conversation a des époques ; la clé d'une époque est enveloppée sur
-//! l'appareil de l'émetteur pour chaque membre. Le serveur ne fait que ranger
-//! ces enveloppes, contrôler qui y a accès, refuser le texte en clair quand
-//! tous les membres ont une clé et refuser les envois sur une époque périmée.
+//! l'appareil de l'émetteur pour chaque membre muni d'une clé de compte. Le
+//! serveur ne fait que ranger ces enveloppes, contrôler qui y a accès, refuser
+//! TOUT texte en clair d'un utilisateur (chiffrement obligatoire) et refuser les
+//! envois sur une époque périmée. Un membre sans clé reçoit les époques après
+//! avoir créé la sienne (`missing`, KEY_REQUEST).
 
 use std::collections::{HashMap, HashSet};
 
@@ -33,6 +35,8 @@ pub const PLAINTEXT_REFUSED: &str =
 const MAX_ENVELOPES: usize = 200;
 /// Membres renvoyés par page (`GET …/members`).
 const MEMBERS_PAGE: i64 = 1000;
+/// Membres munis d'une clé auxquels l'époque courante manque, renvoyés à l'émetteur.
+const MISSING_PAGE: i64 = 200;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Conv {
@@ -122,13 +126,10 @@ impl KeyWrap {
 
 // ─── Règles pures (testées plus bas) ────────────────────────────────────────
 
-/// Texte en clair : refusé dès que tous les membres ont une clé de compte.
-pub fn plaintext_allowed(all_keyed: bool) -> Result<()> {
-    if all_keyed {
-        // Code en tête (lu par les applis), phrase lisible pour les anciennes versions qui l'affichent.
-        return Err(AppError::BadRequest(PLAINTEXT_REFUSED.into()));
-    }
-    Ok(())
+/// Texte en clair d'un utilisateur : toujours refusé (chiffrement obligatoire).
+/// Code en tête (lu par les applis), phrase lisible pour les anciennes versions qui l'affichent.
+pub fn plaintext_refused() -> AppError {
+    AppError::BadRequest(PLAINTEXT_REFUSED.into())
 }
 
 /// Un message doit être chiffré avec l'époque courante, sans rotation en attente.
@@ -217,18 +218,31 @@ pub async fn all_keyed(db: &PgPool, members: &[Uuid]) -> Result<bool> {
     Ok(!members.is_empty() && fingerprints(db, members).await?.len() == members.len())
 }
 
-/// Les médias (vocal, appel, caméra, écran) de cette conversation doivent être
-/// chiffrés de bout en bout : même règle que le texte (tous les membres ont une
-/// clé de compte). Générique sur `kind` : `dm`, `group`, et tout autre type de
-/// conversation reconnu par `Conv::parse` (salons de serveur). Type inconnu :
-/// pas de clé de conversation, donc média en clair. Erreur de base : chiffré
-/// (les applis échouent proprement plutôt que de parler en clair).
-pub async fn media_e2ee(db: &PgPool, kind: &str, id: Uuid) -> bool {
-    let Ok(conv) = Conv::parse(kind, id) else { return false };
-    match members(db, conv).await {
-        Ok(m) => all_keyed(db, &m).await.unwrap_or(true),
-        Err(_) => true,
-    }
+pub async fn has_key(db: &PgPool, user: Uuid) -> Result<bool> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM user_keys WHERE user_id=$1)")
+        .bind(user)
+        .fetch_one(db)
+        .await?)
+}
+
+/// Membres munis d'une clé auxquels l'époque courante manque (arrivés, ou clé
+/// créée depuis) : l'appli d'un détenteur la leur enveloppe.
+pub async fn missing_members(db: &PgPool, conv: Conv, members: &[Uuid], current: Option<(i32, bool)>) -> Result<Vec<Uuid>> {
+    let Some((epoch, false)) = current else { return Ok(vec![]) };
+    Ok(sqlx::query_scalar(
+        "SELECT k.user_id FROM user_keys k
+         WHERE k.user_id = ANY($1) AND NOT EXISTS(
+             SELECT 1 FROM conversation_keys ck WHERE ck.conv_kind=$2 AND ck.conv_id=$3
+               AND ck.epoch=$4 AND ck.member_id=k.user_id AND ck.member_fp=k.fingerprint)
+         LIMIT $5",
+    )
+    .bind(members)
+    .bind(conv.kind())
+    .bind(conv.id())
+    .bind(epoch)
+    .bind(MISSING_PAGE)
+    .fetch_all(db)
+    .await?)
 }
 
 pub(crate) async fn current_epoch(db: &PgPool, conv: Conv) -> Result<Option<(i32, bool)>> {
@@ -240,14 +254,8 @@ pub(crate) async fn current_epoch(db: &PgPool, conv: Conv) -> Result<Option<(i32
 }
 
 /// Contrôle le contenu d'un envoi ou d'une édition : rend le chiffré validé, ou
-/// None pour du clair (permis seulement pendant la transition).
-pub async fn check_message(
-    db: &PgPool,
-    conv: Conv,
-    members: &[Uuid],
-    has_text: bool,
-    enc: Option<&Value>,
-) -> Result<Option<Enc>> {
+/// None sans texte (pièces jointes seules) ; tout texte en clair est refusé.
+pub async fn check_message(db: &PgPool, conv: Conv, has_text: bool, enc: Option<&Value>) -> Result<Option<Enc>> {
     match enc.filter(|v| !v.is_null()) {
         Some(raw) => {
             if has_text {
@@ -257,12 +265,8 @@ pub async fn check_message(
             check_epoch(current_epoch(db, conv).await?, e.epoch)?;
             Ok(Some(e))
         }
-        None => {
-            if has_text {
-                plaintext_allowed(all_keyed(db, members).await?)?;
-            }
-            Ok(None)
-        }
+        None if has_text => Err(plaintext_refused()),
+        None => Ok(None),
     }
 }
 
@@ -340,17 +344,17 @@ pub async fn get_my_envelopes(
         _ => current_epoch(&state.db, conv).await?,
     };
     let envelopes = my_envelopes(&state.db, conv, claims.sub).await?;
-    let keyed = all_keyed(&state.db, &members).await?;
     let mut out = json!({
         "current_epoch": current.map(|c| c.0),
         "rotate_needed": current.map(|c| c.1).unwrap_or(false),
-        "all_keyed": keyed,
-        // « Il faut chiffrer » : MP et groupes quand tous ont une clé, salon dès que j'en ai une.
-        "encrypt": keyed,
+        "all_keyed": all_keyed(&state.db, &members).await?,
+        // Chiffrement obligatoire : il faut chiffrer dès que j'ai une clé (sans clé, je ne peux pas écrire).
+        "encrypt": has_key(&state.db, claims.sub).await?,
+        "missing": missing_members(&state.db, conv, &members, current).await?,
         "envelopes": envelopes,
     });
     if let Conv::Channel(c) = conv {
-        crate::handlers::e2e_channel::extend_keys(&state.db, c, claims.sub, &members, current, &mut out).await?;
+        crate::handlers::e2e_channel::extend_keys(&state.db, c, claims.sub, &mut out).await?;
     }
     Ok(Json(out))
 }
@@ -564,8 +568,8 @@ pub struct LegacyQuery {
     limit: Option<i64>,
 }
 
-/// GET /e2e/legacy — mes messages encore en clair dans les conversations
-/// désormais chiffrables (tous les membres ont une clé), à rechiffrer par lots.
+/// GET /e2e/legacy — mes messages encore en clair dans les MP et les groupes
+/// dont je suis encore membre, à rechiffrer par lots.
 pub async fn my_legacy_messages(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -577,17 +581,12 @@ pub async fn my_legacy_messages(
 pub async fn legacy_messages(db: &PgPool, user: Uuid, limit: i64) -> Result<Vec<Value>> {
     let rows: Vec<(String, Uuid, Uuid, String)> = sqlx::query_as(
         "(SELECT 'dm', m.dm_channel_id, m.id, m.content FROM dm_messages m
-          JOIN dm_channels dc ON dc.id = m.dm_channel_id
           WHERE m.sender_id=$1 AND m.enc IS NULL AND m.content IS NOT NULL
-            AND EXISTS(SELECT 1 FROM user_keys WHERE user_id=dc.user1_id)
-            AND EXISTS(SELECT 1 FROM user_keys WHERE user_id=dc.user2_id)
           ORDER BY m.created_at LIMIT $2)
          UNION ALL
          (SELECT 'group', m.dm_id, m.id, m.content FROM group_dm_messages m
           WHERE m.sender_id=$1 AND m.enc IS NULL AND m.content IS NOT NULL
             AND EXISTS(SELECT 1 FROM group_dm_members gm WHERE gm.dm_id=m.dm_id AND gm.user_id=$1)
-            AND NOT EXISTS(SELECT 1 FROM group_dm_members gm WHERE gm.dm_id=m.dm_id
-                           AND NOT EXISTS(SELECT 1 FROM user_keys k WHERE k.user_id=gm.user_id))
           ORDER BY m.created_at LIMIT $2)
          LIMIT $2",
     )
@@ -662,7 +661,9 @@ pub async fn encrypt_group_message(
 }
 
 /// Tâche horaire : 30 jours après le déploiement (`e2e_rollout`), le texte en
-/// clair antérieur encore présent est effacé. Seul le nombre est journalisé.
+/// clair antérieur encore présent dans les MP et groupes est effacé (nombre seul
+/// journalisé). Les salons de serveur ne sont JAMAIS purgés : leur ancien
+/// contenu est rechiffré par les applis (`e2e_legacy`).
 pub async fn purge_legacy(db: &PgPool) {
     const SQL: &[&str] = &[
         "UPDATE dm_messages m SET content=NULL, purged=TRUE FROM e2e_rollout r
@@ -686,7 +687,6 @@ pub async fn purge_legacy(db: &PgPool) {
     if n > 0 {
         tracing::info!("Purge du clair E2E : {n} lignes effacées");
     }
-    crate::handlers::e2e_channel::purge_legacy(db).await;
 }
 
 #[cfg(test)]
@@ -728,9 +728,8 @@ mod tests {
     }
 
     #[test]
-    fn plaintext_refused_when_everyone_has_a_key() {
-        assert!(code(plaintext_allowed(true).unwrap_err()).starts_with("PLAINTEXT_REFUSED "));
-        assert!(plaintext_allowed(false).is_ok());
+    fn plaintext_always_refused() {
+        assert!(code(plaintext_refused()).starts_with("PLAINTEXT_REFUSED "));
     }
 
     #[test]

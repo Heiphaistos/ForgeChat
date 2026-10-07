@@ -1,6 +1,7 @@
 // Écrans de la clé de compte E2E (mobile) : code de récupération affiché une
 // fois, déverrouillage (mot de passe ou code), nouvelle clé en dernier recours,
 // indicateur « Préparation du chiffrement… » pendant PBKDF2 (lent en JS).
+// Chiffrement obligatoire : sans clé prête, l'écran bloque l'accès aux conversations.
 import { Ionicons } from '@expo/vector-icons'
 import * as Clipboard from 'expo-clipboard'
 import { useEffect, useState } from 'react'
@@ -64,9 +65,14 @@ export function RecoveryCodeModal({ code, onDone, texts }: {
   )
 }
 
-/** « Déverrouiller tes messages » : nouvel appareil, données effacées ou mot de passe réinitialisé. */
-function UnlockModal({ userId, onLater }: { userId: string; onLater: () => void }) {
+/**
+ * Création de la clé (compte sans clé, session déjà ouverte) ou déverrouillage
+ * (nouvel appareil, données effacées, mot de passe réinitialisé). Bloquant :
+ * seule issue autre que la clé, la déconnexion.
+ */
+function UnlockModal({ userId }: { userId: string }) {
   const t = useT()
+  const logout = useAuth((st) => st.logout)
   const mode = useAccountKey((st) => st.mode)
   const busy = useAccountKey((st) => st.status === 'working')
   const [tab, setTab] = useState<Tab>('password')
@@ -91,7 +97,7 @@ function UnlockModal({ userId, onLater }: { userId: string; onLater: () => void 
 
   const tabs: [Tab, Key][] = [['password', 'e2e.unlock.tabPassword'], ['code', 'e2e.unlock.tabCode'], ['reset', 'e2e.unlock.tabReset']]
   return (
-    <Modal visible animationType="slide" onRequestClose={onLater}>
+    <Modal visible animationType="slide" onRequestClose={() => undefined}>
       <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
         <T variant="title">{t(mode === 'setup' ? 'e2e.setup.title' : 'e2e.unlock.title')}</T>
         <T variant="muted">{t(mode === 'setup' ? 'e2e.setup.desc' : 'e2e.unlock.desc')}</T>
@@ -127,7 +133,7 @@ function UnlockModal({ userId, onLater }: { userId: string; onLater: () => void 
           onPress={() => void submit()}
         />
         {busy ? <T variant="muted" style={{ textAlign: 'center' }}>{t('e2e.preparing')}</T> : null}
-        <Button variant="ghost" title={t('e2e.unlock.later')} onPress={onLater} disabled={busy} />
+        <Button variant="ghost" title={t('e2e.unlock.logout')} onPress={() => void logout()} disabled={busy} />
       </ScrollView>
     </Modal>
   )
@@ -154,7 +160,8 @@ export default function E2EGate() {
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />
-  if (prompt && status !== 'ready') return <UnlockModal userId={userId} onLater={() => useAccountKey.setState({ prompt: false })} />
+  // Reste ouvert pendant le calcul (statut « working ») : l'erreur éventuelle s'y affiche.
+  if (prompt && status !== 'ready') return <UnlockModal userId={userId} />
   if (status === 'working') return <Preparing label={t('e2e.preparing')} />
   return null
 }

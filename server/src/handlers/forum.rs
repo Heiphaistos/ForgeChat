@@ -190,7 +190,7 @@ pub async fn create_post(
         if s.chars().count() > 8000 { s.chars().take(8000).collect() } else { s.to_string() }
     });
     let has_text = !title.is_empty() || content_str.is_some();
-    let enc = check_content(&state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
+    let enc = check_content(&state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, false).await?;
 
     let tags = body.tags.unwrap_or_default();
 
@@ -438,7 +438,7 @@ pub async fn reply_to_post(
         return Err(AppError::BadRequest("Message trop long (max 4000 caractères)".into()));
     }
     let content = content_raw;
-    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), body.client_msg_id, false).await?;
+    let enc = check_content(&state.db, channel_id, !content.is_empty(), body.enc.as_ref(), body.client_msg_id, false).await?;
 
     // Jamais vérifié sur ce chemin -- une réponse de forum contournait entièrement le
     // filtre AutoMod du serveur. Fait avant d'ouvrir la transaction ci-dessous pour ne
@@ -524,7 +524,7 @@ pub async fn update_post(
         .fetch_optional(&state.db)
         .await?;
     let enc = if content.is_some() || body.get("enc").is_some_and(|v| !v.is_null()) {
-        check_content(&state.db, channel_id, claims.sub, content.is_some_and(|c| !c.trim().is_empty()), body.get("enc"), cmid, false).await?
+        check_content(&state.db, channel_id, content.is_some_and(|c| !c.trim().is_empty()), body.get("enc"), cmid, false).await?
     } else {
         None
     };
@@ -644,7 +644,7 @@ pub async fn edit_reply(
         .await?
         .flatten();
     let cmid = existing.or(body.client_msg_id);
-    let enc = check_content(&state.db, channel_id, claims.sub, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
+    let enc = check_content(&state.db, channel_id, !content.is_empty(), body.enc.as_ref(), cmid, false).await?;
     if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }

@@ -165,21 +165,30 @@ describe('envoi d’un message éphémère (protocole du serveur)', () => {
   const post = jest.fn().mockResolvedValue({ id: 'm1', content: 'x', created_at: '2026-10-05T12:00:00Z', author_id: 'u', author_username: 'u' })
   beforeAll(() => {
     jest.resetModules()
-    // MP/groupe : conversation pas encore chiffrée (un membre sans clé) → envoi en clair, observable ici.
-    const keys = { current_epoch: null, rotate_needed: false, all_keyed: false, envelopes: [] }
     jest.doMock('@/lib/http', () => ({
       ApiError: class extends Error {},
-      http: { post: (...a: unknown[]) => post(...a), get: () => Promise.resolve(keys) },
+      http: { post: (...a: unknown[]) => post(...a), get: () => Promise.resolve([]) },
       path: (s: TemplateStringsArray, ...v: string[]) => s.reduce((acc, p, i) => acc + p + (v[i] ?? ''), ''),
     }))
+    // Chiffrement obligatoire : contenu scellé factice (seuls les champs du protocole comptent ici).
+    jest.doMock('@/e2e/conversations', () => ({
+      ...jest.requireActual('@/e2e/conversations'),
+      mustEncrypt: () => Promise.resolve(false),
+      completeChannelKeys: () => Promise.resolve(),
+      withSeal: (_k: string, _i: string, _t: string, send: (b: object) => Promise<unknown>) =>
+        send({ content: null, enc: { v: 1, epoch: 0, iv: 'iv', ct: 'ct' }, client_msg_id: 'c' }),
+    }))
   })
-  afterAll(() => jest.dontMock('@/lib/http'))
+  afterAll(() => {
+    jest.dontMock('@/lib/http')
+    jest.dontMock('@/e2e/conversations')
+  })
 
   it('salon : expires_at_seconds envoyé ; message privé et groupe : jamais (non géré par le serveur)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { messagesApi } = require('@/api/messages') as typeof import('@/api/messages')
     await messagesApi.send({ kind: 'channel', serverId: 's', channelId: 'c' }, { content: 'x', expiresInSeconds: 300 })
-    expect(post.mock.calls[0]![1]).toMatchObject({ content: 'x', expires_at_seconds: 300 })
+    expect(post.mock.calls[0]![1]).toMatchObject({ content: null, expires_at_seconds: 300 })
     await messagesApi.send({ kind: 'channel', serverId: 's', channelId: 'c' }, { content: 'x', expiresInSeconds: null })
     expect(post.mock.calls[1]![1]).not.toHaveProperty('expires_at_seconds')
     await messagesApi.send({ kind: 'dm', dmId: 'd' }, { content: 'x', expiresInSeconds: 300 })

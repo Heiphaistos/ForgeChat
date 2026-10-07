@@ -35,7 +35,7 @@ import ChannelNotifModal from '../components/modals/ChannelNotifModal'
 import { completeChannelKeys, openBody, openMessage, openMessages, reopenLocked } from '../e2e/conversations'
 import { channelSendError, editMessage, postMessage, useChannelEncrypted } from '../e2e/channels'
 import { ChannelLock } from '../e2e/ChannelBadge'
-import { ServerKeyPrompt } from '../e2e/ServerKeySettings'
+import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -674,8 +674,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         </div>
 
         {/* Propriétaire d'un serveur sans clé de récupération : invite une fois par session. */}
+        {/* Propriétaire : rechiffrement de l'ancien contenu de tout le serveur, en arrière-plan. */}
         {!isSplit && serverData?.server?.owner_id === meId && (
-          <ServerKeyPrompt serverId={serverId} serverName={server?.name ?? ''} />
+          <>
+            <ServerKeyPrompt serverId={serverId} serverName={server?.name ?? ''} />
+            <ServerReencrypt serverId={serverId} />
+          </>
         )}
 
         {/* Onglets Messages / Tâches */}

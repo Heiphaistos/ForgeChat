@@ -27,7 +27,7 @@ jest.mock('@/e2e/accountKey', () => {
 })
 jest.mock('@/i18n', () => ({ t: (k: string) => k }))
 
-import { forgetConv, keyChanges, openRaw, seal } from '@/e2e/conversations'
+import { forgetConv, keyChanges, openRaw, seal, sealBody } from '@/e2e/conversations'
 
 beforeEach(() => {
   forgetConv()
@@ -69,9 +69,29 @@ test('envoi : chiffré pour l\'époque courante, relisible', async () => {
   expect(back.content).toBe('Bonjour')
 })
 
-test('transition : un membre sans clé, texte en clair permis', async () => {
-  mockGet.mockResolvedValue({ current_epoch: null, rotate_needed: false, all_keyed: false, envelopes: [] })
-  expect(await seal('dm', groupId, 'Salut')).toBeNull()
+test('chiffrement obligatoire : un membre sans clé ne bloque pas, l\'époque est créée pour les membres munis d\'une clé', async () => {
+  mockGet.mockImplementation(async (url: string) => url.endsWith('/members')
+    ? [
+        { user_id: mockIds.b, username: 'moi', public: mockV.ecdh.pubB, fingerprint: 'fp-b' },
+        { user_id: mockIds.a, username: 'sans-cle', public: null, fingerprint: null },
+      ]
+    : { current_epoch: null, rotate_needed: false, all_keyed: false, encrypt: true, envelopes: [] })
+  const sealed = await seal('dm', groupId, 'Salut')
+  expect(sealed.enc.epoch).toBe(0)
+  const [url, body] = mockPost.mock.calls[0] as [string, { create: boolean; envelopes: { member_id: string }[] }]
+  expect(url).toBe(`/e2e/conversations/dm/${groupId}/keys`)
+  expect(body.create).toBe(true)
+  expect(body.envelopes.map((e) => e.member_id)).toEqual([mockIds.b])
+  const back = await openRaw('dm', groupId, { id: 'w', sender_id: mockIds.b, client_msg_id: sealed.client_msg_id, enc: sealed.enc })
+  expect(back.content).toBe('Salut')
+})
+
+test("rechiffrement de l'ancien texte d'un autre membre : l'AAD garde son auteur d'origine", async () => {
+  const sealed = await sealBody('group', groupId, { t: 'ancien' }, { author: mockIds.a })
+  const raw = { id: 'old', client_msg_id: sealed.client_msg_id, enc: sealed.enc }
+  expect((await openRaw('group', groupId, { ...raw, sender_id: mockIds.a })).content).toBe('ancien')
+  // Attribué à celui qui a rechiffré (moi) : refusé.
+  expect((await openRaw('group', groupId, { ...raw, sender_id: mockIds.b })).e2e).toBe('locked')
 })
 
 test('alerte de changement de clé', () => {

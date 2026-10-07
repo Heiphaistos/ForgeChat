@@ -90,13 +90,12 @@ pub async fn join(
         crate::livekit::Publish { microphone: true, camera: true, screen: true, deafened: false },
         msg["e2ee"].as_bool() == Some(true),
     );
-    // Médias chiffrés de bout en bout dès que la conversation l'est (§5).
-    let e2ee = crate::handlers::e2e_conv::media_e2ee(&state.db, "group", group_id).await;
+    // Médias toujours chiffrés de bout en bout (§5).
     state.broadcast_to_user(user_id, serde_json::json!({
         "type": "GROUP_CALL_MEDIA",
         "group_id": group_id,
         "session_id": session_id,
-        "livekit": { "url": lk.public_url, "room": room, "token": token, "e2ee": e2ee },
+        "livekit": { "url": lk.public_url, "room": room, "token": token, "e2ee": true },
     }).to_string()).await;
     broadcast_update(state, group_id).await;
 

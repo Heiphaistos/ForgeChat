@@ -1,6 +1,6 @@
 # Chiffrement de bout en bout — conception (2026-10-07)
 
-Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) ne doit jamais pouvoir lire une conversation**, avec une **clé de récupération** comme Forge Audio. Choix validés : salons de serveur chiffrés (fonctions refaites côté appli), historique en clair rechiffré par les applis puis purgé, vocal/appels/écran chiffrés de bout en bout.
+Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) ne doit jamais pouvoir lire une conversation**, avec une **clé de récupération** comme Forge Audio. Choix validés : salons de serveur chiffrés (fonctions refaites côté appli), historique en clair rechiffré par les applis, vocal/appels/écran chiffrés de bout en bout. **Décisions du 2026-10-07 (§12) : chiffrement OBLIGATOIRE et automatique partout, sans option ni mode de transition ; contenu des serveurs JAMAIS purgé (rechiffré par les applis) ; purge J+30 gardée pour les seuls MP et groupes.**
 
 ## 1. Modèle de menace
 - Protégé : lecture de la base, des fichiers, des journaux, de la mémoire du serveur ; administrateur du VPS ; fuite de sauvegarde.
@@ -53,13 +53,14 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - LiveKit E2EE (trames chiffrées AES-GCM, insertable streams / frame cryptor) avec un fournisseur de clé externe : clé de média = HKDF(clé de conversation de l'époque courante, info "forgechat media v1|<conv>|<epoch>"). Nouvelle époque = nouvelle clé, nouvel index dans l'anneau de LiveKit.
 - Livré à l'étape 5 : détails au §10.
 
-## 6. Historique existant (rechiffrement puis purge)
-- Le serveur garde les anciens messages en clair marqués `legacy`.
-- L'appli de **l'auteur** rechiffre en arrière-plan ses anciens messages (par lots) dès qu'elle a la clé de conversation : `PUT /messages/:id/encrypt {enc}` accepté seulement si le message est encore `legacy` et l'appelant en est l'auteur → le serveur écrase le texte (UPDATE puis VACUUM programmé).
-- À J+30 du déploiement, tout texte `legacy` restant est purgé (remplacé par « message ancien supprimé »), journalisé en nombre seulement.
+## 6. Historique existant (rechiffrement ; purge des seuls MP et groupes)
+- Le serveur garde les anciens messages en clair (`content` présent, `enc` NULL).
+- L'appli de **l'auteur** rechiffre en arrière-plan ses anciens messages (par lots) dès qu'elle a la clé de conversation : accepté seulement si le message est encore en clair → le serveur écrase le texte (une seule fois : `enc` NULL → `enc`).
+- **MP et groupes** : à J+30 du déploiement, tout ancien texte restant est purgé (remplacé par « message ancien supprimé »), journalisé en nombre seulement.
+- **Salons de serveur (fils, forums, sondages compris) : JAMAIS purgés.** En plus de l'auteur, le propriétaire du serveur et les modérateurs rechiffrent l'ancien contenu des autres (§12).
 
 ## 7. Déploiement sans casse
-- Serveur compatible deux modes pendant la transition ; une conversation passe en mode chiffré dès que ses membres ont une clé de compte. Anciennes applis : « Ce message est chiffré : mets à jour ForgeChat » (jamais d'erreur).
+- ~~Serveur compatible deux modes pendant la transition~~ (abandonné le 2026-10-07, §12) : tout texte en clair d'un utilisateur est refusé, partout. Anciennes applis : « Ce message est chiffré : mets à jour ForgeChat » (jamais d'erreur).
 - Mises à jour mobile/bureau publiées AVANT d'activer l'obligation côté serveur ; version minimale imposée ensuite.
 
 ## 8. Étapes
@@ -68,7 +69,8 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 3. Salons de serveur : clés par époque, demandes de clés, rotation, permissions ; mentions en métadonnées ; recherche locale ; AutoMod côté appli ; clé de récupération du serveur pour son propriétaire (ajout du 2026-10-07). Réalisée : §10 et §11.
 4. Fichiers chiffrés (web + mobile, flux par blocs).
 5. Vocal/appels/écran E2EE (LiveKit).
-6. Purge J+30, pages légales, codes de sécurité, tests de bout en bout (deux comptes, trois appareils, rotation).
+6. Purge J+30 (MP et groupes seulement), pages légales, codes de sécurité, tests de bout en bout (deux comptes, trois appareils, rotation).
+7. Chiffrement obligatoire, contenu des serveurs jamais purgé et rechiffré par les applis (2026-10-07) : §12.
 
 ## 9. Étape 2 réalisée : MP 1:1 et groupes (texte)
 
@@ -85,15 +87,15 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - `POST /e2e/conversations/:kind/:id/keys/request` : diffuse `KEY_REQUEST {conv_kind, conv_id, member_id}` (aussi émis à l'ajout d'un membre).
 - `GET /e2e/conversations/:kind/:id/members` : membres, clés publiques, empreintes.
 - `GET /e2e/legacy` + `PUT /dms/:id/messages/:mid/encrypt`, `PUT /dms/groups/:id/messages/:mid/encrypt` `{enc, client_msg_id}` : rechiffrement par l'auteur seulement, message encore en clair seulement (sinon 409 NOT_LEGACY) ; efface aussi l'historique d'éditions et la copie des messages enregistrés.
-- Envoi/édition : `enc` + `client_msg_id` ; clair refusé si tous les membres ont une clé (400 `PLAINTEXT_REFUSED : …phrase…`), époque périmée ou rotation en attente : 409 EPOCH_STALE. Départ/exclusion d'un groupe : `rotate_needed`, enveloppes du partant supprimées.
-- Purge horaire : 30 jours après `e2e_rollout.started_at`, le clair des messages ANTÉRIEURS au déploiement devient NULL + `purged` (nombre seul journalisé). Les messages en clair postérieurs (membre sans clé, transition) ne sont pas purgés ; ils sont rechiffrés par leur auteur dès que tous ont une clé.
+- Envoi/édition : `enc` + `client_msg_id` ; clair toujours refusé depuis le §12 (400 `PLAINTEXT_REFUSED : …phrase…`), époque périmée ou rotation en attente : 409 EPOCH_STALE. Départ/exclusion d'un groupe : `rotate_needed`, enveloppes du partant supprimées.
+- Purge horaire : 30 jours après `e2e_rollout.started_at`, le clair des messages ANTÉRIEURS au déploiement devient NULL + `purged` (nombre seul journalisé). Les messages en clair postérieurs (envoyés pendant l'ancienne transition) ne sont pas purgés ; ils sont rechiffrés par leur auteur (§12 : même si un membre n'a pas encore de clé).
 - Recherche serveur : ne trouve plus les messages chiffrés (pas de texte) ; les applis cherchent dans les messages déchiffrés. Signalement et transfert d'un MP chiffré : texte fourni par l'appli (`content`). Traduction : impossible (404). Messages enregistrés : pas de copie du texte pour un MP chiffré.
 - Push serveur (Expo, Web Push) : corps « Message chiffré » ; l'aperçu n'est déchiffré que par l'appli ouverte ou le mode « sans Google ».
 - Anciennes routes de l'essai précédent (`/dms/:id/e2e`, `/users/me/pubkey`, `/users/:id/pubkey`) retirées ; tables `user_pubkeys` et `dm_e2e_messages` laissées en place (à supprimer après accord).
 
 ### Anciennes applis
 - Web : servie par le serveur, toujours à jour au rechargement.
-- Mobile/bureau d'avant cette étape : un message chiffré arrive avec `content = null` et s'affiche comme une bulle vide (auteur et heure, sans texte, aucune erreur). L'envoi de texte dans une conversation dont tous les membres ont une clé échoue avec le message du serveur « PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire. ». Tant qu'un membre n'a pas de clé (appli ancienne jamais connectée avec la nouvelle version), la conversation reste en clair.
+- Mobile/bureau d'avant cette étape : un message chiffré arrive avec `content = null` et s'affiche comme une bulle vide (auteur et heure, sans texte, aucune erreur). L'envoi de texte dans une conversation dont tous les membres ont une clé échoue avec le message du serveur « PLAINTEXT_REFUSED : cette conversation est chiffrée de bout en bout, mets à jour ForgeChat pour y écrire. ». Depuis le §12, plus de repli en clair : un membre sans clé ne lit qu'après avoir créé la sienne.
 
 ## 10. Étape 5 réalisée : vocal, appels, caméra, partage d'écran
 
@@ -106,7 +108,7 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Chiffrés : micro, caméra, partage d'écran et son du partage (toutes les pistes publiées), et les paquets du canal de données LiveKit (option `encryption`, réactions…).
 
 ### Serveur
-- L'accès LiveKit joint au client porte `e2ee: true` quand la conversation de la salle est chiffrée (même règle que le texte : tous ses membres ont une clé de compte, `e2e_conv::media_e2ee`) : `VOICE_EXISTING_PEERS.livekit` (conversation `channel:<salon>`), `GROUP_CALL_MEDIA.livekit` (`group`), `DM_CALL_ACCEPTED/DM_CALL_MEDIA.livekit` (`dm`, plus `conv_id` : la conversation privée retrouvée par la paire d'utilisateurs, jamais l'id envoyé par le client). Erreur de base : `e2ee: true` (échec propre plutôt que clair).
+- L'accès LiveKit joint au client porte `e2ee: true` **toujours** depuis le §12 (avant : quand tous les membres avaient une clé) : `VOICE_EXISTING_PEERS.livekit` (conversation `channel:<salon>`), `GROUP_CALL_MEDIA.livekit` (`group`), `DM_CALL_ACCEPTED/DM_CALL_MEDIA.livekit` (`dm`, plus `conv_id` : la conversation privée retrouvée par la paire d'utilisateurs, jamais l'id envoyé par le client). Erreur de base : `e2ee: true` (échec propre plutôt que clair).
 - Générique sur `kind` : tant que le type `channel` n'existe pas côté serveur (`Conv::parse` le refuse), les salons vocaux restent en clair ; ils passent en chiffré **sans autre changement** dès que `channel` est ajouté à `Conv` (membres = VIEW_CHANNEL) et que les applis savent créer ses époques.
 - Les applis à jour annoncent `e2ee: true` dans `VOICE_JOIN`, `GROUP_CALL_JOIN`, `DM_CALL_INIT`, `DM_CALL_ACCEPT` ; le jeton LiveKit porte alors l'attribut de participant `e2ee = "1"` (pour l'appelant d'un MP, l'annonce est gardée 60 s dans Redis `call_e2ee:<appelant>:<appelé>` jusqu'au décroché).
 
@@ -142,8 +144,8 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Grands serveurs : une nouvelle époque de salon est créée avec l'enveloppe du créateur (+ un premier lot) ; le reste est distribué par lots de 200 (redistribution `create: false`). O(n) enveloppes par époque. `GET …/members` est paginé (`?after=<uuid>`, 1000 par page, salons : seulement les membres munis d'une clé ; `?member=<uuid>` pour un seul).
 - `GET …/keys` d'un salon ajoute `encrypt` (j'ai une clé : il faut chiffrer), `missing`, `server_key` (clé de récupération du serveur, §11) et `server_missing` (mes époques pas encore enveloppées pour elle).
 
-### Transition : on chiffre dès que l'émetteur a une clé
-Contrairement aux MP (clair permis tant qu'un membre n'a pas de clé), un salon chiffre **dès que l'auteur a une clé de compte** : sur un serveur public avec beaucoup de membres sans clé, attendre bloquerait tout. Les membres sans clé de compte voient « 🔒 Message chiffré : crée ta clé de chiffrement pour le lire » ; ils en créent une à leur prochaine connexion avec une appli à jour (écran de clé) et reçoivent alors les époques (`missing`, `KEY_REQUEST`). Un membre sans clé (appli ancienne) peut encore écrire en clair ; ce message est marqué `unencrypted` (« non chiffré ») et sera rechiffré par son auteur quand il aura une clé.
+### ~~Transition : on chiffre dès que l'émetteur a une clé~~ (remplacé par le §12 : chiffrement obligatoire)
+Historique : contrairement aux MP (clair permis tant qu'un membre n'a pas de clé), un salon chiffre **dès que l'auteur a une clé de compte** : sur un serveur public avec beaucoup de membres sans clé, attendre bloquerait tout. Les membres sans clé de compte voient « 🔒 Message chiffré : crée ta clé de chiffrement pour le lire » ; ils en créent une à leur prochaine connexion avec une appli à jour (écran de clé) et reçoivent alors les époques (`missing`, `KEY_REQUEST`). Un membre sans clé (appli ancienne) peut encore écrire en clair ; ce message est marqué `unencrypted` (« non chiffré ») et sera rechiffré par son auteur quand il aura une clé.
 
 ### Formats (vecteurs `threadMessage`, `forumPost`, `poll`, `serverKey`, `serverEpoch` dans `docs/e2e-vectors.json`)
 - Message de salon : `enc = {v:1, epoch, iv, ct}`, AAD `msg v1|channel:<salon>|<epoch>|<auteur>|<client_msg_id>`, clair `{t, p?}` (`p` = aperçu de lien calculé par l'expéditeur).
@@ -162,14 +164,14 @@ Contrairement aux MP (clair permis tant qu'un membre n'a pas de clé), un salon 
 - Recherche serveur : seulement le texte en clair et les métadonnées (`from:`, `in:`, `has:fichier/image`, `before:`, `after:`) ; les applis cherchent dans les messages déchiffrés chargés. Traduction impossible (pas de texte) et masquée. Publication dans les salons abonnés refusée pour un message chiffré (409). Signalement : texte déchiffré fourni par le signaleur, marqué `encrypted` dans la liste des signalements (non vérifiable par le serveur). Enregistrés, épingles, mentions non lues, sauvegarde d'un salon avant suppression et export RGPD : forme chiffrée (ou `encrypted: true`), jamais de copie du texte.
 - Édition chiffrée : l'historique des éditions et la copie des enregistrés sont effacés (aucun ancien texte gardé) ; une édition en clair d'un message chiffré est refusée.
 - Rechiffrement de l'historique par l'AUTEUR : `GET /e2e/legacy/channels` (mes anciens messages, messages de fil, réponses et publications de forum, dans les salons que je vois encore ; route séparée pour que les applis de l'étape 2 ne les reçoivent pas) puis `PUT /e2e/legacy/channel/:item/:id {enc, client_msg_id}` (`item` = `message`, `thread_message`, `forum_reply`, `forum_post` ; une publication garde son `client_msg_id`). 409 NOT_LEGACY si ce n'est pas un ancien texte de l'appelant.
-- Purge horaire, 30 jours après `channels_started_at` : le clair ANTÉRIEUR restant devient NULL + `purged` (messages, fils, forums, titres de fils, sondages). Gardés (non chiffrés par nature) : webhooks, bots, flux, annonces suivies et **historique importé de Discord** (auteur affiché par `webhook_display_name`). Nombre seul journalisé.
+- ~~Purge horaire, 30 jours après `channels_started_at`~~ : **supprimée le 2026-10-07** (§12), le contenu des serveurs n'est jamais purgé. Le rechiffrement est décrit au §12.
 - Suppression d'un salon : ses enveloppes sont supprimées.
 
 ### Applis (web et mobile)
 - Modules cœur : `e2e/conversations.ts` (kind `channel`, `sealBody` avec portée, distribution par lots, `completeChannelKeys`, rechiffrement de l'historique des salons), `e2e/channelText.ts` (mentions en métadonnées, AutoMod, première URL ; fonctions pures testées à l'identique des deux côtés), `e2e/serverKey.ts` (§11).
 - Aperçus de liens : l'expéditeur demande `/og` (le serveur voit l'URL un instant, ne la stocke pas) et met l'aperçu dans le contenu chiffré ; les destinataires ne demandent rien au serveur pour un message chiffré.
 - Écrans branchés (web et mobile) : messages, réponses, éditions, épingles, fils (titres compris), forums et salons médias, sondages, messages programmés, enregistrés, mentions, recherche locale, transfert (rechiffré pour un salon cible chiffré), signalement, badge « non chiffré », cadenas d'en-tête, onglet « Chiffrement » des réglages du serveur (§11), invitation du propriétaire, transfert de propriété.
-- Limites connues : renommer un fil chiffré est masqué (le serveur ne renomme qu'en clair) ; l'AutoMod de l'appli ne vérifie pas les options de sondage ni le titre d'une publication, ni l'édition sur mobile ; un message programmé chiffré ne notifie pas ses mentions (le serveur le recopie sans métadonnées) ; une publication de forum chiffrée n'a pas d'aperçu de lien ; la récupération du serveur ne couvre que les messages des salons (pas les fils, forums ni sondages) et l'export mobile passe par la feuille de partage (taille bornée, export salon par salon au-delà).
+- Limites connues : ~~renommer un fil chiffré est masqué~~ (renommage chiffré depuis le §12, web) ; l'AutoMod de l'appli ne vérifie pas les options de sondage ni le titre d'une publication, ni l'édition sur mobile ; un message programmé chiffré ne notifie pas ses mentions (le serveur le recopie sans métadonnées) ; une publication de forum chiffrée n'a pas d'aperçu de lien ; la récupération du serveur ne couvre que les messages des salons (pas les fils, forums ni sondages) et l'export mobile passe par la feuille de partage (taille bornée, export salon par salon au-delà).
 
 ### Anciennes applis
 - Web : servie par le serveur, à jour au rechargement.
@@ -185,3 +187,35 @@ But : le **propriétaire d'un serveur** peut toujours déchiffrer et récupérer
 - « Récupérer le contenu du serveur » : l'appli du propriétaire ouvre la clé du serveur (par sa clé de compte, sinon par le code, puis la ré-enveloppe pour lui), ouvre toutes les époques de tous les salons et déchiffre les messages SUR L'APPAREIL pour les lire ou les exporter (JSON / texte) ; rien n'est renvoyé en clair à la plateforme.
 - Transfert de propriété : la requête de transfert porte `server_key_owner_wrapped` = clé du serveur ré-enveloppée par l'ancien propriétaire pour le nouveau (ECDH clé du serveur ↔ clé de compte du nouveau, même formule) ; à défaut, le nouveau propriétaire saisit le code de récupération.
 - Limite : un membre qui crée une époque pourrait déposer une enveloppe de serveur invalide (le serveur ne peut pas la vérifier) ; l'époque resterait alors illisible pour la récupération, pas pour les membres. Une enveloppe valide déjà déposée n'est jamais remplacée.
+
+## 12. Chiffrement obligatoire et contenu des serveurs jamais purgé (2026-10-07)
+
+Décisions du propriétaire de la plateforme, non négociables : (1) le chiffrement de bout en bout est **obligatoire et automatique**, sans réglage pour s'en passer, pour toutes les conversations (MP, groupes, salons, fils, forums, sondages) et tous les appels ; (2) le contenu des serveurs n'est **jamais purgé** ; (3) l'ancien contenu en clair des serveurs est **rechiffré par les applis**.
+
+### Clé de compte
+- Créée automatiquement à l'inscription et à la connexion avec le mot de passe saisi (déjà le cas, §3) ; seule l'étape « code de récupération noté » reste à l'écran.
+- Compte sans clé sur l'appareil et sans mot de passe en mémoire (session déjà ouverte) : écran **bloquant** (création ou déverrouillage) ; plus de « Plus tard » (`fc_e2e_later` retiré sur le web, `prompt` ne se referme plus sur mobile). Seule autre issue : « Me déconnecter ».
+
+### Serveur
+- Tout texte en clair d'un utilisateur est refusé (400 `PLAINTEXT_REFUSED`) dans les MP, groupes, salons, fils, forums, sondages, messages programmés et transferts, même si un membre n'a pas encore de clé. Exceptions conservées : bots (route `Bot <token>`), webhooks, flux, annonces suivies, messages système et commandes de bot enregistrées (marqués `unencrypted`). Pièces jointes seules (sans texte) : inchangé ici, leur chiffrement est l'étape 4.
+- Un membre sans clé ne reçoit simplement pas l'enveloppe : l'époque d'un MP/groupe est créée pour les seuls membres munis d'une clé (`covers` sur les membres munis d'une clé, inchangé) ; `GET …/keys` renvoie `missing` pour **tous** les types de conversation (avant : salons seulement), l'appli d'un détenteur complète dès qu'il a créé sa clé (au chargement de la conversation, une fois par minute au plus), en plus de `KEY_REQUEST`. `encrypt` vaut « j'ai une clé ».
+- Appels : `e2ee: true` toujours (`media_e2ee` supprimé). Un membre sans clé ne rejoint pas : son appli refuse de se connecter (« Crée ou déverrouille ta clé de chiffrement pour écrire ou appeler ici. »).
+- Renommage d'un fil : `PATCH …/threads/:id {title_enc}` seulement (titre chiffré avec la portée et le `client_id` du fil, auteur = créateur du fil) ; un `title` en clair est refusé.
+- Purge J+30 des salons (`e2e_channel::purge_legacy`) **supprimée** ; celle des MP et groupes (`e2e_conv::purge_legacy`) gardée. `legacy_messages` (MP/groupes) ne demande plus que tous les membres aient une clé.
+
+### Rechiffrement de l'ancien contenu des serveurs (`server/src/handlers/e2e_legacy.rs`)
+- Éléments : `message`, `thread_message`, `forum_reply`, `forum_post`, `thread_title` (`{t}`, portée du fil, id client = `client_id` du fil), `poll` (`{t: question, o: options}` dans l'ordre de `position`, portée `poll:<nouvel id client>` ; options vidées et aperçu `📊 …` du message lié effacé). Exclus : bots, webhooks (`webhook_display_name`, dont l'historique importé de Discord), types autres que `default` (flux, annonces suivies, sondage, système).
+- `GET /e2e/legacy/channels` : mes anciens textes, partout où je vois encore le salon (auteur).
+- `GET /e2e/legacy/channels/:channel_id?after=<uuid>&limit=` : à l'ouverture d'un salon (et d'un forum) ; tous les anciens textes si l'appelant est propriétaire, ADMINISTRATOR ou MANAGE_MESSAGES, sinon les siens. Curseur par identifiant : un échec est sauté et repris à la prochaine ouverture.
+- `GET /e2e/legacy/servers/:server_id?after=<uuid>&limit=` : propriétaire seulement, tout le serveur ; son appli le parcourt en arrière-plan une fois par session (web : pastille discrète « Chiffrement de l'historique du serveur… N éléments »), reprise naturelle après interruption (ce qui est fait n'est plus listé).
+- `PUT /e2e/legacy/channel/:item/:id {enc, client_msg_id}` : par l'auteur, ou par le propriétaire / un modérateur pour le texte d'autrui (sinon 403) ; l'appelant doit voir le salon ; époque courante exigée ; **une seule fois** (`enc` NULL → `enc`, sinon 409 NOT_LEGACY) ; historique d'éditions et copie des enregistrés effacés. **Sécurité** : le serveur ne peut pas vérifier que le chiffré correspond au texte d'origine, d'où la restriction aux modérateurs ; l'AAD garde l'**auteur d'origine** (une appli qui chiffrerait sous son propre identifiant produirait un message illisible, jamais un faux attribué) ; journal serveur sans contenu (`target: e2e_audit`, acteur, auteur, salon, élément) pour chaque rechiffrement du texte d'autrui.
+- Applis : `sealBody(…, { author })` ; `completeChannelKeys` lance le rechiffrement du salon ; `reencryptServer` côté propriétaire (web `ServerReencrypt` dans `ChannelPage`, mobile `ChannelLock`).
+
+### Ordre de déploiement
+Le serveur refuse désormais ce que les anciennes applis envoient (texte en clair d'un membre sans clé, renommage de fil en clair) : **publier d'abord les applis mobile et bureau à jour** (et laisser le temps aux mises à jour), **puis** déployer le serveur, qui sert en même temps le web à jour. Aucune migration de base n'est nécessaire.
+
+### Limites
+- Un modérateur malveillant peut remplacer l'ancien texte en clair d'un autre membre par autre chose (limite inhérente, journalisée) ; pas un message déjà chiffré.
+- L'historique importé de Discord et les messages de webhooks restent en clair (non rechiffrables : pas d'auteur humain).
+- Mobile : pas d'indicateur d'avancement chez le propriétaire ; pas de renommage de fil (il n'existait pas).
+- Pièces jointes : chiffrées à l'étape 4 (branche séparée) ; tant qu'elle n'est pas fusionnée, un fichier joint seul n'est pas refusé.

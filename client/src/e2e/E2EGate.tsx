@@ -1,5 +1,6 @@
 // Écrans de la clé de compte E2E : code de récupération affiché une fois,
 // déverrouillage (mot de passe ou code), nouvelle clé en dernier recours.
+// Chiffrement obligatoire : sans clé prête, l'écran bloque l'accès aux conversations.
 import { useEffect, useState } from 'react'
 import { Copy, Download, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -72,9 +73,14 @@ function errorText(e: any, t: ReturnType<typeof useT>, tab: Tab): string {
   return t(tab === 'code' ? 'e2e.unlock.badCode' : 'e2e.unlock.wrong')
 }
 
-/** « Déverrouiller tes messages » : nouvel appareil, données effacées ou mot de passe réinitialisé. */
-function UnlockScreen({ userId, onLater }: { userId: string; onLater: () => void }) {
+/**
+ * Création de la clé (compte sans clé, session déjà ouverte) ou déverrouillage
+ * (nouvel appareil, données effacées, mot de passe réinitialisé). Bloquant :
+ * seule issue autre que la clé, la déconnexion.
+ */
+function UnlockScreen({ userId }: { userId: string }) {
   const t = useT()
+  const logout = useAuth(s => s.logout)
   const mode = useAccountKey(s => s.mode)
   const [tab, setTab] = useState<Tab>('password')
   const [pw, setPw] = useState('')
@@ -142,22 +148,16 @@ function UnlockScreen({ userId, onLater }: { userId: string; onLater: () => void
           {busy ? t('e2e.preparing') : t(mode === 'setup' ? 'e2e.setup.submit' : tab === 'reset' ? 'e2e.unlock.resetSubmit' : 'e2e.unlock.submit')}
         </button>
       </form>
-      <button type="button" onClick={onLater} className="w-full mt-3 text-xs text-fc-muted hover:text-white">{t('e2e.unlock.later')}</button>
+      <button type="button" onClick={() => void logout()} className="w-full mt-3 text-xs text-fc-muted hover:text-white">{t('e2e.unlock.logout')}</button>
     </Overlay>
   )
 }
 
 /** Monté à la racine de l'appli connectée. */
-const LATER_KEY = 'fc_e2e_later'
-
 export default function E2EGate() {
   const userId = useAuth(s => s.user?.id)
   const status = useAccountKey(s => s.status)
   const recovery = useAccountKey(s => s.recoveryToShow)
-  // « Plus tard » vaut pour la session du navigateur (pas de rappel à chaque page).
-  const [later, setLater] = useState(() => {
-    try { return sessionStorage.getItem(LATER_KEY) === '1' } catch { return false }
-  })
 
   useEffect(() => {
     if (!userId) return
@@ -181,11 +181,6 @@ export default function E2EGate() {
 
   if (!userId) return null
   if (recovery) return <RecoveryCodeModal code={recovery} onDone={() => useAccountKey.setState({ recoveryToShow: null })} />
-  if (status === 'locked' && !later) {
-    return <UnlockScreen userId={userId} onLater={() => {
-      setLater(true)
-      try { sessionStorage.setItem(LATER_KEY, '1') } catch { /* session seule */ }
-    }} />
-  }
+  if (status === 'locked') return <UnlockScreen userId={userId} />
   return null
 }

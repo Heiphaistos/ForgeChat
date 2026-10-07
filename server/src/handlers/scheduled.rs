@@ -46,7 +46,7 @@ pub async fn create_scheduled(
 
     let has_text = !body.content.trim().is_empty();
     let enc = crate::handlers::e2e_channel::check_content(
-        &state.db, channel_id, claims.sub, has_text, body.enc.as_ref(), body.client_msg_id, false,
+        &state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, false,
     ).await?;
     if !has_text && enc.is_none() {
         return Err(AppError::BadRequest("Contenu vide".into()));

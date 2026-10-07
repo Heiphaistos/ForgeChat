@@ -5,6 +5,7 @@ pub mod users;
 pub mod user_keys;
 pub mod e2e_channel;
 pub mod e2e_conv;
+pub mod e2e_legacy;
 pub mod e2e_server_key;
 pub mod servers;
 pub mod channels;

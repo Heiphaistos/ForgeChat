@@ -402,7 +402,7 @@ pub async fn send_group_message(
         .filter(|s| !s.is_empty());
     let conv = e2e_conv::Conv::Group(group_id);
     let members = e2e_conv::members(&state.db, conv).await?;
-    let enc = e2e_conv::check_message(&state.db, conv, &members, content.is_some(), body.enc.as_ref()).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, content.is_some(), body.enc.as_ref()).await?;
     if enc.is_some() && body.client_msg_id.is_none() {
         return Err(AppError::BadRequest("client_msg_id requis".into()));
     }
@@ -583,7 +583,7 @@ pub async fn edit_group_message(
     }
     let conv = e2e_conv::Conv::Group(group_id);
     let all_members = e2e_conv::members(&state.db, conv).await?;
-    let enc = e2e_conv::check_message(&state.db, conv, &all_members, !content.is_empty(), body.enc.as_ref()).await?;
+    let enc = e2e_conv::check_message(&state.db, conv, !content.is_empty(), body.enc.as_ref()).await?;
     if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }

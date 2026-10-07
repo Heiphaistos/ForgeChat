@@ -107,13 +107,38 @@ export function ConfidentialitePage() {
       intro={
         <p>
           En bref : ForgeChat est une messagerie avec compte. Le serveur conserve ce qu'il faut pour faire fonctionner le service (compte, messages,
-          fichiers), <strong className="text-white">sans publicité, sans revente, sans mesure d'audience</strong>. Les messages ne sont pas chiffrés de
-          bout en bout : techniquement, l'administrateur du serveur peut y accéder.
+          fichiers), <strong className="text-white">sans publicité, sans revente, sans mesure d'audience</strong>. Toutes les conversations et tous
+          les appels sont <strong className="text-white">chiffrés de bout en bout, obligatoirement</strong> : le serveur ne garde que du contenu
+          chiffré, illisible pour lui comme pour son administrateur.
         </p>
       }
     >
       <Block title="Responsable de traitement">
         <p>L'éditeur du site (voir les <Link to="/mentions-legales" className="text-fc-accent hover:underline">mentions légales</Link>), joignable à <Mail />.</p>
+      </Block>
+      <Block title="Chiffrement de bout en bout">
+        <p>
+          Messages privés, groupes, salons de serveur, fils, forums, sondages, messages programmés, ainsi que la voix, la vidéo et le partage d'écran
+          sont chiffrés sur vos appareils, sans option pour s'en passer. Votre clé de chiffrement est créée sur votre appareil ; le serveur n'en
+          garde qu'une copie chiffrée par votre mot de passe et une autre chiffrée par votre code de récupération, affiché une seule fois. Sans
+          mot de passe ni code de récupération, l'ancien contenu chiffré devient illisible, y compris pour nous. Le propriétaire d'un serveur peut
+          créer une clé de récupération de son serveur pour relire ses salons.
+        </p>
+        <p>
+          Restent visibles du serveur, parce qu'il en a besoin pour fonctionner : qui écrit dans quelle conversation et quand, les noms des serveurs
+          et salons, les pseudos, les réactions, les personnes et rôles mentionnés (pour les notifier), les votes des sondages et la taille des
+          fichiers. Restent en clair, et marqués « non chiffré » : les messages des bots, des webhooks, des flux et les messages système, ainsi que
+          les commandes adressées à un bot. Quand vous signalez un message, son texte déchiffré est joint au signalement pour la modération.
+        </p>
+        <p>
+          Limite : un serveur modifié pour mentir sur les clés des membres pourrait s'interposer ; les codes de sécurité affichés sur les profils
+          permettent de le vérifier entre deux personnes.
+        </p>
+        <p>
+          Contenu envoyé avant le chiffrement : les applications le rechiffrent en arrière-plan. Dans les salons de serveur, il n'est jamais effacé ;
+          l'auteur, le propriétaire du serveur et ses modérateurs peuvent le rechiffrer. Dans les messages privés et les groupes, l'ancien texte
+          que son auteur n'a pas rechiffré 30 jours après la mise en service du chiffrement est effacé.
+        </p>
       </Block>
       <Block title="Compte">
         <p>
@@ -162,7 +187,8 @@ export function ConfidentialitePage() {
       </Block>
       <Block title="Appels vocaux et vidéo">
         <p>
-          Les appels passent par le serveur de visioconférence de ForgeChat, hébergé sur la même machine. Ils ne sont pas enregistrés. Le relais
+          Les appels passent par le serveur de visioconférence de ForgeChat, hébergé sur la même machine, chiffrés de bout en bout (le serveur ne
+          relaie que des trames chiffrées). Ils ne sont pas enregistrés. Le relais
           réseau (TURN), utilisé quand une connexion directe est impossible, reçoit un identifiant aléatoire valable une heure, jamais celui de
           votre compte, et ne tient aucun journal. Les mesures de qualité d'appel envoyées au serveur ne contiennent ni votre compte ni votre
           navigateur.
@@ -180,8 +206,8 @@ export function ConfidentialitePage() {
             reçoit votre recherche et votre adresse IP.
           </li>
           <li>
-            <strong className="text-white">Traduction</strong> : traduire un message envoie son texte, depuis le serveur, au service MyMemory (Translated
-            srl, Italie). Votre adresse IP n'est pas transmise.
+            <strong className="text-white">Traduction</strong> : possible seulement pour un message non chiffré (bot, webhook) ; son texte est envoyé,
+            depuis le serveur, au service MyMemory (Translated srl, Italie). Votre adresse IP n'est pas transmise.
           </li>
           <li>
             <strong className="text-white">QR code d'invitation</strong> : l'image est générée par api.qrserver.com (goQR.me, Allemagne), qui reçoit le
@@ -201,6 +227,10 @@ export function ConfidentialitePage() {
       <Block title="Durées de conservation">
         <ul className="list-disc pl-5 space-y-2">
           <li>Compte, messages, fichiers : jusqu'à leur suppression (voir plus haut).</li>
+          <li>
+            Ancien texte en clair des messages privés et des groupes, jamais rechiffré par son auteur : 30 jours après la mise en service du
+            chiffrement. Celui des salons de serveur n'est jamais effacé (il est rechiffré).
+          </li>
           <li>Sessions : jusqu'à la déconnexion, ou 30 jours sans activité.</li>
           <li>Inscriptions non confirmées et liens de réinitialisation du mot de passe : jusqu'à leur expiration (30 minutes pour un lien).</li>
           <li>Téléphones enregistrés pour les notifications : 60 jours sans activité.</li>

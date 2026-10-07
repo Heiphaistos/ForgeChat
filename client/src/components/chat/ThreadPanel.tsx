@@ -19,6 +19,7 @@ import toast from 'react-hot-toast'
 import { dateLocale, t as tr } from '../../i18n'
 import { channelSendError } from '../../e2e/channels'
 import { createThread as createThreadE2E, openThreadMessages, openThreads, sendScoped, threadScopeOf } from '../../e2e/channelScopes'
+import { sealBody } from '../../e2e/conversations'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 
 interface Props {
@@ -309,16 +310,21 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   // archive_thread (threads.rs) impose déjà côté serveur qu'un fil archivé/verrouillé
   // refuse tout nouveau message (403) -- mais aucune UI n'a jamais existé pour
   // basculer cet état : PATCH /threads/:id existait sans le moindre appelant.
-  // Renommer : créateur du fil ou modérateur (contrôlé par le serveur).
+  // Renommer : créateur du fil ou modérateur (contrôlé par le serveur). Titre chiffré
+  // comme à la création (portée et id client du fil, auteur = créateur du fil).
   const [renaming, setRenaming] = useState<string | null>(null)
   const rename = useMutation({
-    mutationFn: (title: string) =>
-      api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}`, { title }),
+    mutationFn: async (title: string) => {
+      if (!thread?.client_id) throw new Error('E2E_WAITING')
+      const sealed = await sealBody('channel', channelId, { t: title },
+        { scope: scope(), clientMsgId: thread.client_id, author: thread.creator_id })
+      return api.patch(`/servers/${serverId}/channels/${channelId}/threads/${threadId}`, { title_enc: sealed.enc })
+    },
     onSuccess: () => {
       setRenaming(null)
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
   })
 
   const toggleArchive = useMutation({
@@ -414,8 +420,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
             ) : (
               <span className="text-sm font-medium text-white truncate flex-1">{thread.title}</span>
             )}
-            {/* Titre chiffré : le serveur ne sait renommer qu'en clair, pas de nouveau titre lisible par lui. */}
-            {!thread.title_enc && (
+            {thread.client_id && (
               <button
                 onClick={() => setRenaming(thread.title)}
                 title="Renommer le fil"
