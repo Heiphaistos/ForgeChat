@@ -210,6 +210,11 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        // Plusieurs comptes dans le même navigateur : jetons des autres comptes en cookies HttpOnly.
+        .route("/api/auth/accounts", get(handlers::accounts::list))
+        .route("/api/auth/accounts/stash", post(handlers::accounts::stash).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/switch", post(handlers::accounts::switch).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/accounts/forget", post(handlers::accounts::forget).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/reset-password", post(handlers::password_reset::reset_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
@@ -849,6 +854,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/theme-studio", get(handlers::user_settings::get_theme_studio).put(handlers::user_settings::put_theme_studio).layer(DefaultBodyLimit::max(handlers::user_settings::MAX_THEME_STUDIO_BYTES + 4096)))
         .route("/user/keybindings", get(handlers::user_settings::get_keybindings))
         .route("/user/keybindings", post(handlers::user_settings::set_keybinding))
+        .route("/user/keybindings", delete(handlers::user_settings::reset_all_keybindings))
         .route("/user/keybindings/:action", delete(handlers::user_settings::reset_keybinding))
         // Email preferences
         .route("/user/email-prefs", get(handlers::user_settings::get_email_prefs))

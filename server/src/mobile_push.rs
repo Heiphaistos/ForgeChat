@@ -29,6 +29,8 @@ use crate::{error::{AppError, Result}, middleware::auth::Claims, state::AppState
 const EXPO_PUSH_URL: &str = "https://exp.host/--/api/v2/push/send";
 /// Au-delà, les appareils les moins récemment vus de l'utilisateur sont retirés.
 const MAX_DEVICES_PER_USER: i64 = 10;
+/// Comptes d'une même appli qui partagent les notifications d'un téléphone.
+pub const MAX_ACCOUNTS_PER_DEVICE: usize = 5;
 const PREVIEW_MAX_CHARS: usize = 140;
 
 pub struct MobilePushConfig {
@@ -88,6 +90,9 @@ pub struct RegisterDeviceBody {
     pub device_name: Option<String>,
     /// Secret aléatoire de l'installation de l'app (16 à 128 caractères), jamais montré.
     pub device_id: Option<String>,
+    /// Autres comptes connectés dans cette appli (plusieurs comptes) : ils gardent leurs
+    /// notifications sur ce téléphone. Absent (anciennes applis) : le jeton suit le dernier compte.
+    pub other_accounts: Option<Vec<Uuid>>,
 }
 
 /// Empreinte du secret d'installation : `None` si absent, erreur si mal formé.
@@ -140,18 +145,30 @@ pub async fn register_device(
 
     let key_hash = device_key_hash(body.device_id.as_deref())?;
 
-    // Un jeton identifie un téléphone : il suit le dernier compte connecté dessus, mais seulement
-    // si la demande vient de la même installation (même secret). Sans ce contrôle, un compte qui
-    // connaît le jeton d'un autre téléphone le détournait. Une ligne sans secret (app antérieure)
-    // ne se laisse reprendre que par une demande sans secret, comme avant.
+    // Un jeton identifie un téléphone. Il sert à tous les comptes connectés dans l'appli
+    // (`other_accounts`) ; les lignes des autres comptes de la MÊME installation (même secret)
+    // sont effacées. Un jeton déjà lié à une autre installation est refusé : sans ce contrôle,
+    // un compte qui connaît le jeton d'un autre téléphone le détournait. Une ligne sans secret
+    // (app antérieure) ne se laisse reprendre que par une demande sans secret, comme avant.
+    let keep: Vec<Uuid> = body.other_accounts.unwrap_or_default().into_iter().take(MAX_ACCOUNTS_PER_DEVICE).collect();
+    sqlx::query(
+        "DELETE FROM push_devices WHERE token = $1 AND user_id <> $2 AND NOT (user_id = ANY($3))
+             AND device_key_hash IS NOT DISTINCT FROM $4"
+    )
+    .bind(&body.token)
+    .bind(claims.sub)
+    .bind(&keep)
+    .bind(&key_hash)
+    .execute(&state.db)
+    .await?;
     let kept = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO push_devices (user_id, token, platform, show_preview, device_name, device_key_hash)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform,
+         SELECT $1, $2, $3, $4, $5, $6
+         WHERE NOT EXISTS (SELECT 1 FROM push_devices WHERE token = $2 AND user_id <> $1
+                           AND device_key_hash IS DISTINCT FROM $6)
+         ON CONFLICT (user_id, token) DO UPDATE SET platform = EXCLUDED.platform,
              show_preview = EXCLUDED.show_preview, device_name = EXCLUDED.device_name, last_seen_at = NOW(),
              device_key_hash = COALESCE(EXCLUDED.device_key_hash, push_devices.device_key_hash)
-         WHERE push_devices.user_id = EXCLUDED.user_id
-            OR push_devices.device_key_hash IS NOT DISTINCT FROM EXCLUDED.device_key_hash
          RETURNING id"
     )
     .bind(claims.sub)
@@ -269,7 +286,10 @@ fn clean(s: &str, max: usize) -> String {
 }
 
 /// Messages au format de l'API Expo, un par appareil `(jeton, aperçu autorisé)`.
-fn build_messages(n: &Notice, devices: &[(String, bool)]) -> Vec<serde_json::Value> {
+/// `uid` : compte destinataire (l'appli bascule dessus s'il n'est pas le compte actif).
+fn build_messages(n: &Notice, devices: &[(String, bool)], user_id: Uuid) -> Vec<serde_json::Value> {
+    let mut data = n.target.data();
+    data["uid"] = json!(user_id);
     devices
         .iter()
         .map(|(token, show_preview)| {
@@ -277,7 +297,7 @@ fn build_messages(n: &Notice, devices: &[(String, bool)]) -> Vec<serde_json::Val
                 "to": token,
                 "title": n.title,
                 "body": if *show_preview { &n.preview } else { &n.generic },
-                "data": n.target.data(),
+                "data": data,
                 "sound": "default",
                 "priority": "high",
                 "channelId": "messages",
@@ -327,7 +347,7 @@ pub async fn send(state: &AppState, user_id: Uuid, n: &Notice) {
         return;
     }
     let tokens: Vec<String> = devices.iter().map(|(t, _)| t.clone()).collect();
-    if let Err(e) = deliver(state, &cfg, &build_messages(n, &devices), &tokens).await {
+    if let Err(e) = deliver(state, &cfg, &build_messages(n, &devices, user_id), &tokens).await {
         tracing::warn!("push mobile : envoi à {user_id} échoué : {e}");
     }
 }
@@ -398,7 +418,8 @@ mod tests {
     fn preview_only_on_devices_that_allow_it() {
         let dm = Uuid::new_v4();
         let n = Notice::new("bob", "le code secret est 1234", "Nouveau message privé", Target::Dm(dm));
-        let msgs = build_messages(&n, &[("ExponentPushToken[a]".into(), false), ("ExponentPushToken[b]".into(), true)]);
+        let uid = Uuid::new_v4();
+        let msgs = build_messages(&n, &[("ExponentPushToken[a]".into(), false), ("ExponentPushToken[b]".into(), true)], uid);
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[0]["to"], "ExponentPushToken[a]");
         assert_eq!(msgs[0]["body"], "Nouveau message privé");
@@ -408,7 +429,7 @@ mod tests {
             assert_eq!(m["title"], "bob");
             assert_eq!(m["channelId"], "messages");
             assert_eq!(m["priority"], "high");
-            assert_eq!(m["data"], json!({ "kind": "dm", "dm_id": dm }));
+            assert_eq!(m["data"], json!({ "kind": "dm", "dm_id": dm, "uid": uid }));
         }
     }
 

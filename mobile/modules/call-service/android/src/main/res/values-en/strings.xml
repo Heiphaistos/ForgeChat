@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="forge_widget_messages_label">ForgeChat · Latest messages</string>
+    <string name="forge_widget_messages_desc">Your latest ForgeChat conversations</string>
+    <string name="forge_widget_voice_label">ForgeChat · In voice</string>
+    <string name="forge_widget_voice_desc">Who is in voice on your servers</string>
+    <string name="forge_widget_empty">Open ForgeChat to fill this widget.</string>
+</resources>

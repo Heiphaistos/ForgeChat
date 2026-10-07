@@ -37,6 +37,7 @@ import { channelSendError, editMessage, postMessage, useChannelEncrypted } from 
 import { ChannelLock } from '../e2e/ChannelBadge'
 import { ServerKeyPrompt, ServerReencrypt } from '../e2e/ServerKeySettings'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import { isQueued } from '../lib/offline'
 
 function channelIcon(type: string, size = 18) {
   const cls = `flex-shrink-0`
@@ -289,6 +290,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, expires_at_seconds, has_attachments: !!files?.count }),
       filesExtra(files)),
     onError: (e: any) => {
+      if (isQueued(e)) { toast(t('offline.queued')); return }
       if (e?.response?.status === 429) {
         const delay = e?.response?.data?.retry_after ?? currentChannel?.slowmode_delay ?? 30
         startSlowmodeCooldown(delay)

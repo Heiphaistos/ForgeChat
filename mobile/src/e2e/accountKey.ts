@@ -30,7 +30,9 @@ export const useAccountKey = create<E2EState>()(() => ({
   status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false, userId: null,
 }))
 
-const STORE_KEY = 'fc_e2e_account_key'
+// Une clé par compte (plusieurs comptes dans l'appli) ; l'ancienne entrée unique est relue une fois.
+const LEGACY_KEY = 'fc_e2e_account_key'
+const storeKey = (userId: string) => `fc_e2e_account_key.${userId}`
 const OPTS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   keychainService: 'org.heiphaistos.forgechat.e2e',
@@ -70,7 +72,7 @@ async function activate(userId: string, priv: Uint8Array, pub: Uint8Array) {
   // Le scalaire déchiffré doit correspondre à la publique annoncée par le serveur.
   if (c.b64uEncode(c.publicFromPrivate(priv)) !== c.b64uEncode(pub)) throw new Error('KEY_MISMATCH')
   const pubB64 = c.b64uEncode(pub)
-  await SecureStore.setItemAsync(STORE_KEY, JSON.stringify({ userId, priv: c.b64uEncode(priv), pub: pubB64 }), OPTS)
+  await SecureStore.setItemAsync(storeKey(userId), JSON.stringify({ userId, priv: c.b64uEncode(priv), pub: pubB64 }), OPTS)
   typedPassword = null
   useAccountKey.setState({ status: 'ready', priv, pub: pubB64, userId })
 }
@@ -88,9 +90,15 @@ async function newKeyMaterial(userId: string, password: string) {
 
 async function loadStored(userId: string): Promise<{ priv: string; pub: string } | null> {
   try {
-    const raw = await SecureStore.getItemAsync(STORE_KEY, OPTS)
+    const raw = (await SecureStore.getItemAsync(storeKey(userId), OPTS)) ?? (await SecureStore.getItemAsync(LEGACY_KEY, OPTS))
     const v = raw ? (JSON.parse(raw) as { userId: string; priv: string; pub: string }) : null
-    return v?.userId === userId ? v : null
+    if (v?.userId !== userId) return null
+    // Ancienne entrée unique : déplacée sous le nom propre au compte.
+    if (!(await SecureStore.getItemAsync(storeKey(userId), OPTS))) {
+      await SecureStore.setItemAsync(storeKey(userId), JSON.stringify(v), OPTS)
+      await SecureStore.deleteItemAsync(LEGACY_KEY, OPTS).catch(() => {})
+    }
+    return v
   } catch {
     return null
   }
@@ -167,11 +175,14 @@ export async function rewrapForNewPassword(userId: string, newPw: string): Promi
   return priv ? working(() => c.wrapKey(priv, newPw, c.keyAad(userId))) : null
 }
 
-/** Déconnexion : plus aucune clé sur cet appareil. */
-export async function clearAccountKey() {
+/** Déconnexion : plus de clé pour ce compte sur cet appareil. `keep` (changement de compte) :
+ *  la clé reste rangée, seule la mémoire est vidée. */
+export async function clearAccountKey(userId?: string | null, keep = false) {
   typedPassword = null
   useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false, userId: null })
-  await SecureStore.deleteItemAsync(STORE_KEY, OPTS).catch(() => {})
+  if (keep) return
+  if (userId) await SecureStore.deleteItemAsync(storeKey(userId), OPTS).catch(() => {})
+  await SecureStore.deleteItemAsync(LEGACY_KEY, OPTS).catch(() => {})
 }
 
 /** Code de sécurité entre ma clé et celle d'un autre utilisateur ; null si l'un n'en a pas. */
