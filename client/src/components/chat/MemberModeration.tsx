@@ -8,6 +8,7 @@ import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { confirm } from '../ui/ConfirmModal'
 import type { ContextMenuEntry } from '../ui/ContextMenu'
+import { t as tr } from '../../i18n'
 
 /**
  * Actions de modération sur un membre (audit P1-9 / P2-2) : expulser, bannir,
@@ -197,7 +198,7 @@ export function useMemberModeration(serverId?: string) {
   const moderateVoice = (userId: string, body: object, done: string) => {
     api.patch(`/servers/${serverId}/members/${userId}/voice`, body)
       .then(() => { toast.success(done); refresh() })
-      .catch(e => toast.error(errorOf(e, 'Action refusée')))
+      .catch(e => toast.error(errorOf(e, tr('mod.refused'))))
   }
 
   /** Muet / sourdine imposés, déplacer, déconnecter (MUTE / DEAFEN / MOVE_MEMBERS). */
@@ -212,20 +213,20 @@ export function useMemberModeration(serverId?: string) {
     const deafened = live?.serverDeafened ?? m.voice_deafened ?? false
     const items: ContextMenuEntry[] = []
     if (perms.has(PERM.MUTE_MEMBERS)) {
-      items.push({ label: muted ? 'Rétablir le micro (serveur)' : 'Rendre muet (serveur)',
-        onClick: () => moderateVoice(userId, { mute: !muted }, muted ? 'Micro rétabli' : 'Membre rendu muet') })
+      items.push({ label: muted ? tr('mod.unmute') : tr('mod.mute'),
+        onClick: () => moderateVoice(userId, { mute: !muted }, muted ? tr('mod.unmuted') : tr('mod.muted')) })
     }
     if (perms.has(PERM.DEAFEN_MEMBERS)) {
-      items.push({ label: deafened ? 'Lever la sourdine (serveur)' : 'Mettre en sourdine (serveur)',
-        onClick: () => moderateVoice(userId, { deafen: !deafened }, deafened ? 'Sourdine levée' : 'Membre mis en sourdine') })
+      items.push({ label: deafened ? tr('mod.undeafen') : tr('mod.deafen'),
+        onClick: () => moderateVoice(userId, { deafen: !deafened }, deafened ? tr('mod.undeafened') : tr('mod.deafened')) })
     }
     if (current && perms.has(PERM.MOVE_MEMBERS)) {
-      items.push({ label: 'Déconnecter du vocal', danger: true,
-        onClick: () => moderateVoice(userId, { disconnect: true }, 'Membre déconnecté du vocal') })
+      items.push({ label: tr('mod.disconnect'), danger: true,
+        onClick: () => moderateVoice(userId, { disconnect: true }, tr('mod.disconnected')) })
       for (const c of voiceChannels) {
         if (c.id === current) continue
-        items.push({ label: `Déplacer vers « ${c.name} »`,
-          onClick: () => moderateVoice(userId, { channel_id: c.id }, `Déplacé vers « ${c.name} »`) })
+        items.push({ label: tr('mod.moveTo', { name: c.name }),
+          onClick: () => moderateVoice(userId, { channel_id: c.id }, tr('mod.movedTo', { name: c.name })) })
       }
     }
     return items.length ? [{ separator: true }, ...items] : []
@@ -241,27 +242,27 @@ export function useMemberModeration(serverId?: string) {
     const timedOut = !!m.timeout_until && new Date(m.timeout_until) > new Date()
     const items: ContextMenuEntry[] = []
     if (above && perms.has(PERM.KICK_MEMBERS)) {
-      items.push({ label: 'Expulser', danger: true, onClick: async () => {
-        if (!(await confirm({ message: `Expulser ${name} ?`, danger: true, confirmLabel: 'Expulser' }))) return
+      items.push({ label: tr('mod.kick'), danger: true, onClick: async () => {
+        if (!(await confirm({ message: tr('mod.kickConfirm', { name }), danger: true, confirmLabel: tr('mod.kick') }))) return
         api.post(`/servers/${serverId}/members/${userId}/kick`)
-          .then(() => { toast.success(`${name} a été expulsé`); refresh() })
-          .catch(e => toast.error(errorOf(e, 'Expulsion refusée')))
+          .then(() => { toast.success(tr('mod.kicked', { name })); refresh() })
+          .catch(e => toast.error(errorOf(e, tr('mod.kickRefused'))))
       } })
     }
     if (above && perms.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) {
-      items.push({ label: 'Bannir…', danger: true, onClick: () => setDialog({ kind: 'ban', member: m }) })
+      items.push({ label: tr('mod.ban'), danger: true, onClick: () => setDialog({ kind: 'ban', member: m }) })
     }
     if (above && moderator) {
       items.push(timedOut
-        ? { label: 'Lever le timeout', onClick: () => {
+        ? { label: tr('mod.liftTimeout'), onClick: () => {
             api.delete(`/servers/${serverId}/members/${userId}/timeout`)
-              .then(() => { toast.success('Timeout levé'); refresh() })
-              .catch(e => toast.error(errorOf(e, 'Action refusée')))
+              .then(() => { toast.success(tr('mod.timeoutLifted')); refresh() })
+              .catch(e => toast.error(errorOf(e, tr('mod.refused'))))
           } }
-        : { label: 'Timeout…', onClick: () => setDialog({ kind: 'timeout', member: m }) })
+        : { label: tr('mod.timeout'), onClick: () => setDialog({ kind: 'timeout', member: m }) })
     }
     if (moderator) {
-      items.push({ label: 'Notes de modération', onClick: () => setDialog({ kind: 'notes', member: m }) })
+      items.push({ label: tr('mod.notes'), onClick: () => setDialog({ kind: 'notes', member: m }) })
     }
     return [...(items.length ? [{ separator: true } as const, ...items] : []), ...voiceItemsFor(userId)]
   }

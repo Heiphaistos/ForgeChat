@@ -11,6 +11,7 @@ import UserPopup from '../UserPopup'
 import { useMemberModeration } from './MemberModeration'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 import { AvatarDecoration } from '../ui/ProfileDecor'
+import { t as tr, useT, type Key } from '../../i18n'
 
 interface Props {
   serverId: string
@@ -36,21 +37,22 @@ const STATUS_COLORS: Record<string, string> = {
   invisible: 'bg-fc-muted',
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  online: 'En ligne',
-  idle: 'Absent',
-  dnd: 'Ne pas déranger',
-  offline: 'Hors ligne',
-  invisible: 'Invisible',
+const STATUS_LABELS: Record<string, Key> = {
+  online: 'presence.online',
+  idle: 'presence.idle',
+  dnd: 'presence.dnd',
+  offline: 'presence.offline',
+  invisible: 'presence.invisible',
 }
 
 function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; decor?: RoleDecor; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
-  const statusLabel = STATUS_LABELS[m.liveStatus] ?? 'Hors ligne'
+  const t = useT()
+  const statusLabel = t(STATUS_LABELS[m.liveStatus] ?? 'presence.offline')
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   return (
     <div
       role="listitem"
-      aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? ' (propriétaire)' : ''}`}
+      aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? t('members.owner') : ''}`}
       style={{ height: ROW_H }}
       className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover group cursor-pointer transition"
       onClick={onClick}
@@ -88,7 +90,7 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
         {m.activity_type && m.activity_name ? (
-          <div className="text-xs text-fc-muted truncate flex items-center gap-1" aria-label={`${m.activity_type === 'playing' ? 'Joue à' : m.activity_type === 'listening' ? 'Écoute' : m.activity_type === 'watching' ? 'Regarde' : 'Activité'} ${m.activity_name}`}>
+          <div className="text-xs text-fc-muted truncate flex items-center gap-1" aria-label={`${t(m.activity_type === 'playing' ? 'members.playing' : m.activity_type === 'listening' ? 'members.listening' : m.activity_type === 'watching' ? 'members.watching' : 'members.activity')} ${m.activity_name}`}>
             <span aria-hidden>
               {m.activity_type === 'playing' ? '🎮' :
                m.activity_type === 'listening' ? '🎵' :
@@ -106,6 +108,7 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
 }
 
 export default function MemberList({ serverId, onClose }: Props) {
+  const t = useT()
   const { data: members = [] } = useQuery({
     queryKey: ['members', serverId],
     queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
@@ -147,17 +150,17 @@ export default function MemberList({ serverId, onClose }: Props) {
   }, [members, presenceStatuses, presenceActivities])
 
   const menuItems = (m: any) => [
-    { label: 'Voir le profil', onClick: () => nav(`/users/${m.user_id}`) },
-    { label: 'Envoyer un message', onClick: () => {
+    { label: tr('dms.viewProfile'), onClick: () => nav(`/users/${m.user_id}`) },
+    { label: tr('msg.sendMessage'), onClick: () => {
       // Route réelle : POST /dms/:user_id (id en path, pas de body), réponse
       // { dm_id } -- l'ancien code postait sur /dms (route inexistante, seul
       // GET /dms existe) et lisait r.data.id (jamais présent) : le clic
       // n'ouvrait jamais de DM, sans le moindre message d'erreur (catch muet).
       api.post(`/dms/${m.user_id}`)
         .then(r => nav(`/dms/${r.data.dm_id}`))
-        .catch(() => toast.error("Impossible d'ouvrir la conversation"))
+        .catch(() => toast.error(tr('msg.openDmFailed')))
     }},
-    { label: 'Mentionner', onClick: () => {
+    { label: tr('members.mention'), onClick: () => {
       const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
       if (el) {
         const pos = el.selectionStart ?? el.value.length
@@ -175,7 +178,7 @@ export default function MemberList({ serverId, onClose }: Props) {
       }
     }},
     { separator: true as const },
-    { label: 'Copier l\'ID', onClick: () => navigator.clipboard.writeText(m.user_id) },
+    { label: tr('servers.copyId'), onClick: () => navigator.clipboard.writeText(m.user_id) },
     ...moderation.itemsFor(m.user_id),
   ]
 
@@ -193,18 +196,18 @@ export default function MemberList({ serverId, onClose }: Props) {
   const { items, offsets, totalHeight } = useMemo(() => {
     const items: ListItem[] = []
     if (filteredOnline.length > 0) {
-      items.push({ kind: 'header', key: 'h-online', label: `En ligne — ${filteredOnline.length}` })
+      items.push({ kind: 'header', key: 'h-online', label: t('members.onlineCount', { n: filteredOnline.length }) })
       for (const m of filteredOnline) items.push({ kind: 'member', key: m.user_id, m })
     }
     if (filteredOffline.length > 0) {
-      items.push({ kind: 'header', key: 'h-offline', label: `Hors ligne — ${filteredOffline.length}` })
+      items.push({ kind: 'header', key: 'h-offline', label: t('members.offlineCount', { n: filteredOffline.length }) })
       for (const m of filteredOffline) items.push({ kind: 'member', key: m.user_id, m })
     }
     const offsets: number[] = []
     let y = 0
     for (const it of items) { offsets.push(y); y += it.kind === 'header' ? HEADER_H : ROW_H }
     return { items, offsets, totalHeight: y }
-  }, [filteredOnline, filteredOffline])
+  }, [filteredOnline, filteredOffline, t])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -237,15 +240,15 @@ export default function MemberList({ serverId, onClose }: Props) {
       ref={scrollRef}
       onScroll={measure}
       role="complementary"
-      aria-label="Liste des membres"
+      aria-label={t('channel.members')}
       className="absolute inset-0 z-10 lg:relative lg:inset-auto lg:z-auto w-full lg:w-60 bg-fc-channel flex-shrink-0 overflow-y-auto overscroll-y-contain p-2 panel-slide-right"
     >
       {/* Header mobile avec fermeture (la liste est un overlay plein écran) */}
       <div className="lg:hidden flex items-center justify-between px-2 py-2 border-b border-fc-bg mb-2">
-        <span className="font-semibold text-white text-sm">Membres</span>
+        <span className="font-semibold text-white text-sm">{t('members.title')}</span>
         <button
           onClick={onClose}
-          aria-label="Fermer la liste des membres"
+          aria-label={t('members.close')}
           className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
         >
           <X size={16} aria-hidden />
@@ -254,14 +257,14 @@ export default function MemberList({ serverId, onClose }: Props) {
       <div className="px-1 pb-2">
         <input
           type="search"
-          placeholder="Rechercher un membre…"
+          placeholder={t('members.search')}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          aria-label="Rechercher un membre"
+          aria-label={t('members.searchLabel')}
           className="w-full bg-fc-bg/60 text-fc-text placeholder-fc-muted text-xs px-2.5 py-1.5 rounded outline-none focus:ring-1 focus:ring-fc-accent/50 transition"
         />
       </div>
-      <div ref={listRef} role="list" aria-label="Membres" style={{ position: 'relative', height: totalHeight }}>
+      <div ref={listRef} role="list" aria-label={t('members.title')} style={{ position: 'relative', height: totalHeight }}>
         {visible.map(i => {
           const it = items[i]
           return (
@@ -282,7 +285,7 @@ export default function MemberList({ serverId, onClose }: Props) {
         })}
       </div>
       {query && filteredOnline.length === 0 && filteredOffline.length === 0 && (
-        <p className="text-xs text-fc-muted px-2 py-4 text-center">Aucun membre trouvé</p>
+        <p className="text-xs text-fc-muted px-2 py-4 text-center">{t('members.noMatch')}</p>
       )}
       {ctxMenu.node}
       {moderation.node}
