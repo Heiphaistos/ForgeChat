@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Bell, Bot, Heart, Lock, MessageSquare, Mic, Palette, Search, Server, Shield, Video } from 'lucide-react'
+import { Bell, Bot, Heart, Lock, MessageSquare, Mic, Palette, Search, Server, Shield, Sparkles, Tv, Video } from 'lucide-react'
 import SiteLayout from './SiteLayout'
 import Cinema from './Cinema'
 import { dateFr, useDesktopRelease, useMobileRelease } from './releases'
@@ -7,10 +7,12 @@ import { dateFr, useDesktopRelease, useMobileRelease } from './releases'
 const FONCTIONS = [
   { icone: <MessageSquare size={22} />, titre: 'Salons et messages privés', texte: 'Serveurs, salons texte, fils, forums, réactions, épingles, mentions, réponses, messages éphémères, messages vocaux.' },
   { icone: <Mic size={22} />, titre: 'Salons vocaux', texte: 'Rejoignez un salon vocal d’un clic, depuis le web, le bureau ou le téléphone : tout le monde s’entend, quel que soit l’appareil.' },
-  { icone: <Video size={22} />, titre: 'Appels vidéo et partage d’écran', texte: 'Appels privés et de groupe, caméra, partage d’écran jusqu’en 1080p, même depuis Android.' },
+  { icone: <Video size={22} />, titre: 'Appels vidéo et partage d’écran', texte: 'Appels privés et de groupe, caméra, partage d’écran jusqu’en 4K, flou d’arrière-plan, clips des 30 dernières secondes, même depuis Android.' },
+  { icone: <Tv size={22} />, titre: 'Regarder ensemble', texte: 'Une vidéo YouTube synchronisée pour tout le salon vocal : lecture, pause et avance partagées, comme si vous étiez dans le même canapé.' },
+  { icone: <Sparkles size={22} />, titre: 'Tout le premium, gratuit', texte: 'Ce qui est payant ailleurs est offert ici : super réactions, décorations d’avatar, thème et profil par serveur, envois de 500 Mo, emojis et sons de tous vos serveurs.' },
   { icone: <Lock size={22} />, titre: 'Vie privée', texte: 'Aucun pistage, aucune publicité. Messages privés chiffrés de bout en bout, serveur hébergé en France.' },
   { icone: <Shield size={22} />, titre: 'Sécurité', texte: 'Double authentification, sessions révocables, appareils connectés visibles, protection contre le hameçonnage des liens.' },
-  { icone: <Palette size={22} />, titre: '38 thèmes', texte: 'Sombre, clair, cyberpunk, everforest, kanagawa… et vos emojis, stickers et sons personnalisés.' },
+  { icone: <Palette size={22} />, titre: 'Des dizaines de thèmes', texte: 'Sombre, clair, AMOLED, cyberpunk, everforest, kanagawa… les mêmes sur le web, le bureau et le téléphone.' },
   { icone: <Bot size={22} />, titre: 'Bots et webhooks', texte: 'Automatisez vos serveurs : webhooks, bots, flux RSS, notifications GitHub, tickets, classements.' },
   { icone: <Search size={22} />, titre: 'Recherche', texte: 'Retrouvez n’importe quel message, fichier ou lien, avec filtres par auteur, salon et date.' },
   { icone: <Bell size={22} />, titre: 'Notifications fines', texte: 'Par serveur, par salon, par conversation ; mode Ne pas déranger ; @everyone ignorable.' },
