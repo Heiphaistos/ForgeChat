@@ -178,8 +178,6 @@ export const fr = {
   'panel.watch.start': 'Lancer',
 
   // --- Visionneuse de flux et avatar ---
-  'panel.stream.zoom': '{label}, pince pour zoomer',
-  'panel.stream.close': 'Fermer la vidéo',
   'panel.avatar': 'Avatar de {name}',
   'panel.avatarStatus': 'Avatar de {name}, {status}',
 
@@ -376,8 +374,6 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'panel.watch.start': 'Start',
 
   // --- Visionneuse de flux et avatar ---
-  'panel.stream.zoom': '{label}, pinch to zoom',
-  'panel.stream.close': 'Close video',
   'panel.avatar': 'Avatar of {name}',
   'panel.avatarStatus': 'Avatar of {name}, {status}',
 
